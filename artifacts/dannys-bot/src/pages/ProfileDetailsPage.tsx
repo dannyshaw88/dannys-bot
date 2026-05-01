@@ -4,6 +4,7 @@ import { useProfile, useUpdateProfile, useUpdateAccountStatus, useProfiles } fro
 import { useTools } from "@/hooks/use-tools";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
+import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
@@ -11,7 +12,7 @@ import {
   CheckCircle2, XCircle, Loader2, ShieldCheck,
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown,
   Tag, Calendar, FileText, Server, X, Clock, Copy,
-  UserPlus, UserMinus, Heart, MessageSquare
+  UserPlus
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -786,46 +787,16 @@ export function ProfileDetailsPage() {
 
         <Tabs.Content value="follow" className="outline-none animate-in fade-in duration-300">
           {getTool('follow')
-            ? <ToolConfigPanel tool={getTool('follow')!} profile={profile} hideHumanSession />
+            ? <ToolConfigPanel tool={getTool('follow')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
           }
         </Tabs.Content>
 
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
-          <Tabs.Root defaultValue="unfollow" className="w-full">
-            <Tabs.List className="flex border-b border-border mb-6 overflow-x-auto">
-              <Tabs.Trigger value="unfollow" className="px-5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center gap-2 whitespace-nowrap">
-                <UserMinus className="w-4 h-4" /> Unfollow Tool
-              </Tabs.Trigger>
-              <Tabs.Trigger value="like" className="px-5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center gap-2 whitespace-nowrap">
-                <Heart className="w-4 h-4" /> Like Tool
-              </Tabs.Trigger>
-              <Tabs.Trigger value="dm" className="px-5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center gap-2 whitespace-nowrap">
-                <MessageSquare className="w-4 h-4" /> DM Tool
-              </Tabs.Trigger>
-            </Tabs.List>
-
-            <Tabs.Content value="unfollow" className="outline-none animate-in fade-in duration-300">
-              {getTool('unfollow')
-                ? <ToolConfigPanel tool={getTool('unfollow')!} profile={profile} />
-                : <p className="text-sm text-muted-foreground py-8">Loading…</p>
-              }
-            </Tabs.Content>
-
-            <Tabs.Content value="like" className="outline-none animate-in fade-in duration-300">
-              {getTool('like')
-                ? <ToolConfigPanel tool={getTool('like')!} profile={profile} />
-                : <p className="text-sm text-muted-foreground py-8">Loading…</p>
-              }
-            </Tabs.Content>
-
-            <Tabs.Content value="dm" className="outline-none animate-in fade-in duration-300">
-              {getTool('dm')
-                ? <ToolConfigPanel tool={getTool('dm')!} profile={profile} />
-                : <p className="text-sm text-muted-foreground py-8">Loading…</p>
-              }
-            </Tabs.Content>
-          </Tabs.Root>
+          {getTool('follow')
+            ? <HumanSessionPanel tool={getTool('follow')!} profile={profile} />
+            : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
+          }
         </Tabs.Content>
 
       </Tabs.Root>

@@ -1,0 +1,449 @@
+import { useState, useEffect, useRef } from "react";
+import { useUpdateTool } from "@/hooks/use-tools";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
+  MessageSquare, Repeat2, AtSign,
+} from "lucide-react";
+import { type Tool, type Profile } from "@shared/schema";
+
+interface HumanSessionPanelProps {
+  tool: Tool;
+  profile: Profile;
+}
+
+export function HumanSessionPanel({ tool, profile: _profile }: HumanSessionPanelProps) {
+  const updateToolMutation = useUpdateTool();
+
+  const [settings, setSettings] = useState(() => {
+    const def: Record<string, any> = {
+      humanToolsDelayMin: 30,
+      humanToolsDelayMax: 60,
+      humanToolsEnabled: true,
+      viewTimelineFeedEnabled: true,
+      viewTimelineFeedMin: 3,
+      viewTimelineFeedMax: 8,
+      viewTimelineFeedOrderMin: 5,
+      viewTimelineFeedOrderMax: 10,
+      viewTimelineFeedNotUsedMin: 0,
+      viewTimelineFeedNotUsedMax: 0,
+      humanSessionEnabled: true,
+      humanSessionOrderMin: 0,
+      humanSessionOrderMax: 0,
+      humanSessionNotUsedMin: 0,
+      humanSessionNotUsedMax: 0,
+      checkTimelineReelsEnabled: true,
+      checkTimelineReelsMin: 3,
+      checkTimelineReelsMax: 8,
+      checkTimelineReelsOrderMin: 0,
+      checkTimelineReelsOrderMax: 0,
+      checkTimelineReelsNotUsedMin: 0,
+      checkTimelineReelsNotUsedMax: 0,
+      checkTimelineStoriesEnabled: true,
+      checkTimelineStoriesMin: 3,
+      checkTimelineStoriesMax: 8,
+      checkTimelineStoriesOrderMin: 0,
+      checkTimelineStoriesOrderMax: 0,
+      checkTimelineStoriesNotUsedMin: 0,
+      checkTimelineStoriesNotUsedMax: 0,
+      checkDmEnabled: true,
+      checkDmMin: 5,
+      checkDmMax: 15,
+      checkDmOrderMin: 0,
+      checkDmOrderMax: 0,
+      checkDmNotUsedMin: 0,
+      checkDmNotUsedMax: 0,
+      repostEnabled: false,
+      repostSourceUsername: "",
+      repostOrderMin: 0,
+      repostOrderMax: 0,
+      repostNotUsedMin: 0,
+      repostNotUsedMax: 0,
+      repostDisableAtPostCount: 0,
+      repostDisableWhenExhausted: true,
+    };
+    return { ...def, ...(tool.settings as object || {}) };
+  });
+
+  const isMounted = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, settings });
+    }, 600);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [settings]);
+
+  const pctInputs = (minKey: string, maxKey: string) => (
+    <>
+      <div className="flex items-center gap-1.5">
+        <Label className="text-xs text-muted-foreground">Min</Label>
+        <div className="relative">
+          <Input type="number" min="0" max="100" className="w-14 h-7 text-xs pr-5"
+            value={settings[minKey] ?? 0}
+            onChange={(e) => setSettings({ ...settings, [minKey]: Math.min(100, Math.max(0, Number(e.target.value))) })}
+          />
+          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Label className="text-xs text-muted-foreground">Max</Label>
+        <div className="relative">
+          <Input type="number" min="0" max="100" className="w-14 h-7 text-xs pr-5"
+            value={settings[maxKey] ?? 0}
+            onChange={(e) => setSettings({ ...settings, [maxKey]: Math.min(100, Math.max(0, Number(e.target.value))) })}
+          />
+          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      {/* Master Enable + Title */}
+      <div className="flex items-center gap-3 px-1">
+        <Switch
+          checked={!!settings.humanToolsEnabled}
+          onCheckedChange={(v) => setSettings({ ...settings, humanToolsEnabled: v })}
+        />
+        <div>
+          <p className="text-sm font-semibold">Human Session Tools</p>
+          <p className="text-[11px] text-muted-foreground">Enable the timer and tools below to simulate human behaviour.</p>
+        </div>
+      </div>
+
+      {/* ── Timer ─────────────────────────────────────────────── */}
+      <div className="border border-border rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="font-semibold text-sm">Human Session Tools Timer</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">How often the tools below run, independent of the follow session timer.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Every (min)</span>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
+                value={settings.humanToolsDelayMin ?? 30}
+                onChange={(e) => setSettings({ ...settings, humanToolsDelayMin: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
+                value={settings.humanToolsDelayMax ?? 60}
+                onChange={(e) => setSettings({ ...settings, humanToolsDelayMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── View Timeline Feed ─────────────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2 pt-0.5">
+            <input type="checkbox" id="viewTimelineFeedEnabled"
+              checked={!!settings.viewTimelineFeedEnabled}
+              onChange={(e) => setSettings({ ...settings, viewTimelineFeedEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="viewTimelineFeedEnabled" className="font-semibold text-sm cursor-pointer select-none">View Timeline Feed</label>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("viewTimelineFeedOrderMin", "viewTimelineFeedOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+              {pctInputs("viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax")}
+            </div>
+          </div>
+        </div>
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to View</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="100" className="w-16 h-7 text-xs"
+                value={settings.viewTimelineFeedMin ?? 3}
+                onChange={(e) => setSettings({ ...settings, viewTimelineFeedMin: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="100" className="w-16 h-7 text-xs"
+                value={settings.viewTimelineFeedMax ?? 8}
+                onChange={(e) => setSettings({ ...settings, viewTimelineFeedMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Human Session (Notifications / Own Profile / etc.) ─── */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-2 pt-0.5">
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="humanSessionEnabled"
+                checked={!!settings.humanSessionEnabled}
+                onChange={(e) => setSettings({ ...settings, humanSessionEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+              <label htmlFor="humanSessionEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
+                <User className="w-4 h-4 text-violet-500" />
+                Human Session
+              </label>
+            </div>
+            <div className={`flex items-center gap-1.5 flex-wrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-orange-600 font-medium"><Bell className="w-3 h-3" />Notifications</span>
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-600 font-medium"><User className="w-3 h-3" />Own Profile</span>
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-cyan-50 border border-cyan-200 text-cyan-600 font-medium"><RefreshCw className="w-3 h-3" />Refresh Profile</span>
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-gray-600 font-medium"><Settings className="w-3 h-3" />Settings & Activity</span>
+            </div>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("humanSessionOrderMin", "humanSessionOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+              {pctInputs("humanSessionNotUsedMin", "humanSessionNotUsedMax")}
+            </div>
+          </div>
+        </div>
+        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40' : ''}`}>
+          Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity. Set execution order &gt; 0% to enable.
+        </p>
+      </div>
+
+      {/* ── Check Reels from Timeline ──────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2 pt-0.5">
+            <input type="checkbox" id="checkTimelineReelsEnabled"
+              checked={!!settings.checkTimelineReelsEnabled}
+              onChange={(e) => setSettings({ ...settings, checkTimelineReelsEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="checkTimelineReelsEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
+              <PlaySquare className="w-4 h-4 text-rose-500" />
+              Check Reels from Timeline
+            </label>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("checkTimelineReelsOrderMin", "checkTimelineReelsOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+              {pctInputs("checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax")}
+            </div>
+          </div>
+        </div>
+        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40' : ''}`}>
+          Scrolls through the Reels tab feed and marks reels as watched. Set execution order &gt; 0% to enable.
+        </p>
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels to Watch</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+                value={settings.checkTimelineReelsMin ?? 3}
+                onChange={(e) => setSettings({ ...settings, checkTimelineReelsMin: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+                value={settings.checkTimelineReelsMax ?? 8}
+                onChange={(e) => setSettings({ ...settings, checkTimelineReelsMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Check Stories from Timeline ────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2 pt-0.5">
+            <input type="checkbox" id="checkTimelineStoriesEnabled"
+              checked={!!settings.checkTimelineStoriesEnabled}
+              onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="checkTimelineStoriesEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
+              <BookOpen className="w-4 h-4 text-sky-500" />
+              Check Stories from Timeline
+            </label>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("checkTimelineStoriesOrderMin", "checkTimelineStoriesOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+              {pctInputs("checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")}
+            </div>
+          </div>
+        </div>
+        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40' : ''}`}>
+          Watches stories from the top of Instagram's home feed tray. Set execution order &gt; 0% to enable.
+        </p>
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Stories to Watch</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+                value={settings.checkTimelineStoriesMin ?? 3}
+                onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMin: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+                value={settings.checkTimelineStoriesMax ?? 8}
+                onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Check Direct Messages ──────────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2 pt-0.5">
+            <input type="checkbox" id="checkDmEnabled"
+              checked={!!settings.checkDmEnabled}
+              onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
+              <MessageSquare className="w-4 h-4 text-teal-500" />
+              Check Direct Messages
+            </label>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("checkDmOrderMin", "checkDmOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+              {pctInputs("checkDmNotUsedMin", "checkDmNotUsedMax")}
+            </div>
+          </div>
+        </div>
+        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkDmEnabled ? 'opacity-40' : ''}`}>
+          Calls <code className="bg-muted px-1 rounded text-[10px]">getDirectMessagesInternal</code> to simulate checking the inbox. Set execution order &gt; 0% to enable.
+        </p>
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">DMs to Check</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="100" className="w-16 h-7 text-xs"
+                value={settings.checkDmMin ?? 5}
+                onChange={(e) => setSettings({ ...settings, checkDmMin: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="100" className="w-16 h-7 text-xs"
+                value={settings.checkDmMax ?? 15}
+                onChange={(e) => setSettings({ ...settings, checkDmMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Repost ────────────────────────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-2 pt-0.5">
+            <input type="checkbox" id="repostEnabled"
+              checked={!!settings.repostEnabled}
+              onChange={(e) => setSettings({ ...settings, repostEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="repostEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
+              <Repeat2 className="w-4 h-4 text-green-500" />
+              Repost
+            </label>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.repostEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("repostOrderMin", "repostOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Run Chance</span>
+              {pctInputs("repostNotUsedMin", "repostNotUsedMax")}
+            </div>
+          </div>
+        </div>
+
+        <div className={`space-y-3 transition-opacity ${!settings.repostEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Repost from account <span className="text-muted-foreground/60">(without @)</span></Label>
+              <div className="relative max-w-[220px]">
+                <AtSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="username"
+                  className="h-8 text-xs pl-7"
+                  value={settings.repostSourceUsername ?? ""}
+                  onChange={(e) => setSettings({ ...settings, repostSourceUsername: e.target.value.replace(/^@/, '') })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
+              <Input
+                type="number" min="0" className="w-20 h-8 text-xs"
+                value={settings.repostDisableAtPostCount ?? 0}
+                onChange={(e) => setSettings({ ...settings, repostDisableAtPostCount: Math.max(0, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="repostDisableWhenExhausted"
+              checked={!!settings.repostDisableWhenExhausted}
+              onChange={(e) => setSettings({ ...settings, repostDisableWhenExhausted: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="repostDisableWhenExhausted" className="text-xs text-muted-foreground cursor-pointer select-none">
+              Auto-disable when no more unique posts are found from the source account
+            </label>
+          </div>
+
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            During each session, picks the latest unreposted post from the source account and reposts it with the original caption.
+            <br />
+            <strong>Disable at post count</strong> reads the post count from this profile's Instagram bio to stop reposting once the goal is reached.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
