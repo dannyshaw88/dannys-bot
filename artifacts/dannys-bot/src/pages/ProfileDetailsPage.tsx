@@ -32,6 +32,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
+import { userAgents } from "@shared/userAgents";
 
 const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementType; pill: string; dot: string }> = {
   pending:            { label: "Pending",           icon: Clock,       pill: "bg-slate-50  text-slate-600  border-slate-200",  dot: "bg-slate-400"  },
@@ -231,6 +232,28 @@ export function ProfileDetailsPage() {
       setVerifyStatus("fail");
       toast({ title: "Error", description: "Could not reach server.", variant: "destructive" });
     }
+  };
+
+  const handleResetDeviceIds = () => {
+    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    const patch = {
+      userAgentApi: randomUA.api,
+      userAgentEmbedded: randomUA.embedded,
+      credentialsDirty: true,
+      accountStatus: "pending" as AccountStatus,
+    };
+    updateProfileMutation.mutate(
+      { id: profileId, ...patch },
+      {
+        onSuccess: () => {
+          setFormData((prev: any) => ({ ...prev, userAgentApi: randomUA.api, userAgentEmbedded: randomUA.embedded }));
+          setVerifyStatus("idle");
+          queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
+          toast({ title: "Device IDs Reset", description: "New device fingerprint assigned. Account set to Pending." });
+        },
+        onError: () => toast({ title: "Error", description: "Failed to reset device IDs.", variant: "destructive" }),
+      }
+    );
   };
 
   if (profileLoading || toolsLoading) {
@@ -436,6 +459,15 @@ export function ProfileDetailsPage() {
                       )}
                     </div>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={handleResetDeviceIds}
+                    disabled={updateProfileMutation.isPending}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50 text-left w-fit"
+                  >
+                    Reset Device IDs
+                  </button>
 
                   <div className="space-y-4 pt-4 border-t border-border mt-4">
                     <h4 className="text-sm font-bold mb-2 flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
