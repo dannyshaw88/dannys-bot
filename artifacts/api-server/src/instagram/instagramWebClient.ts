@@ -702,6 +702,39 @@ export class InstagramWebClient {
     }, `Check DMs (inbox, limit=${count})`);
   }
 
+  // Like getDirectMessages but returns thread content for auto-reply scanning.
+  // Returns up to `count` threads, each with recent messages from the other user.
+  async getDMThreadsWithContent(count: number = 10): Promise<{
+    threadId: string;
+    username: string;
+    userId: string;
+    items: { itemId: string; text: string; fromMe: boolean }[];
+  }[]> {
+    return this.timed("GetDMThreadsContent", async () => {
+      const j = await this.mobileGet(
+        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=10&cursor=&limit=${count}`
+      );
+      const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
+      return threads.map((thread: any) => {
+        const otherUser = (thread.users ?? [])[0];
+        const myUserId = String(thread.viewer_id ?? thread.viewerId ?? "");
+        const items: { itemId: string; text: string; fromMe: boolean }[] = (thread.items ?? [])
+          .filter((item: any) => item?.item_type === "text" && item?.text)
+          .map((item: any) => ({
+            itemId: String(item.item_id ?? ""),
+            text: String(item.text ?? ""),
+            fromMe: String(item.user_id) === myUserId,
+          }));
+        return {
+          threadId: String(thread.thread_id ?? ""),
+          username: String(otherUser?.username ?? ""),
+          userId: String(otherUser?.pk ?? ""),
+          items,
+        };
+      }).filter(t => t.threadId && t.username);
+    }, `Check DMs with content (limit=${count})`);
+  }
+
   // ── Like posts from the home timeline feed ───────────────────────────────
   // Fetches the home feed and likes up to `count` posts.
   // If a post is a reel/video (media_type === 2), it is marked as watched

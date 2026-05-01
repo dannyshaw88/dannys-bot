@@ -87,6 +87,7 @@ export interface IStorage {
   updateContactPendingMessage(id: number, updates: Partial<Pick<ContactPendingMessage, 'status' | 'sentAt' | 'dmThreadId' | 'dmItemId' | 'unsendAt'>>): Promise<void>;
   deleteContactPendingMessage(id: number): Promise<void>;
   isContactAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
+  isAutoReplyAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
   getContactMessagesForUnsend(profileId: number): Promise<ContactPendingMessage[]>;
 }
 
@@ -384,6 +385,18 @@ export class DatabaseStorage implements IStorage {
       .from(contactPendingMessages)
       .where(and(
         eq(contactPendingMessages.profileId, profileId),
+        sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`
+      ))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async isAutoReplyAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean> {
+    const rows = await db.select({ id: contactPendingMessages.id })
+      .from(contactPendingMessages)
+      .where(and(
+        eq(contactPendingMessages.profileId, profileId),
+        eq(contactPendingMessages.messageType, "auto_reply"),
         sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`
       ))
       .limit(1);

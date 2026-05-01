@@ -598,6 +598,63 @@ class AutomationEngine {
     }
   }
 
+  // ── Auto Reply: scan DM threads for trigger words and enqueue replies ────────
+  private async runAutoReplyCheck(profile: Profile, client: InstagramWebClient): Promise<void> {
+    const tools = await storage.getToolsByProfile(profile.id);
+    const contactTool = tools.find(t => t.type === "contact");
+    if (!contactTool?.enabled) return;
+
+    const s = contactTool.settings as any;
+    if (!s.autoReplyEnabled) return;
+
+    const rules: { word: string; reply: string }[] = Array.isArray(s.autoReplies) ? s.autoReplies : [];
+    if (!rules.length) return;
+
+    const threads = await client.getDMThreadsWithContent(20);
+    if (!threads.length) return;
+
+    let queued = 0;
+    for (const thread of threads) {
+      if (!thread.username || !thread.userId) continue;
+
+      // Only look at messages NOT sent by the account (fromMe === false)
+      const incomingMessages = thread.items.filter(i => !i.fromMe);
+      if (!incomingMessages.length) continue;
+
+      // Already queued an auto-reply to this user? Skip.
+      if (await storage.isAutoReplyAlreadyQueued(profile.id, thread.username)) continue;
+
+      // Check each trigger word against all incoming message texts
+      let matched = false;
+      for (const rule of rules) {
+        if (!rule.word.trim() || !rule.reply.trim()) continue;
+        const triggerLower = rule.word.trim().toLowerCase();
+        const hit = incomingMessages.some(msg => msg.text.toLowerCase().includes(triggerLower));
+        if (hit) {
+          const text = this.applySpintax(rule.reply);
+          await storage.createContactPendingMessage({
+            profileId: profile.id,
+            instagramUsername: thread.username,
+            instagramUserId: thread.userId,
+            messageType: "auto_reply",
+            messageText: text,
+            status: "pending",
+            queuedAt: new Date().toISOString(),
+          });
+          console.log(`[engine] @${profile.username}: auto-reply queued for @${thread.username} (trigger: "${rule.word}")`);
+          queued++;
+          matched = true;
+          break; // one reply per thread per scan
+        }
+      }
+      if (matched) continue; // move to next thread
+    }
+
+    if (queued > 0) {
+      console.log(`[engine] @${profile.username}: queued ${queued} auto-replies to pending`);
+    }
+  }
+
   // ── Proxy URL resolver ────────────────────────────────────────────────────
   private async buildProxyUrl(profile: Profile): Promise<string | undefined> {
     if (profile.proxyId) {
@@ -1210,6 +1267,12 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked direct messages inbox (${dmCount} threads)`);
       } catch (e: any) {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
+      }
+      // Auto-reply scan — runs after every DM check if the contact tool has auto-reply rules
+      try {
+        await this.runAutoReplyCheck(profile, client);
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
       }
     }
 

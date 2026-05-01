@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { Users, UserPlus } from "lucide-react";
+import { Users, UserPlus, MessageSquare } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
 import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
+import { AutoReplyPanel } from "./AutoReplyPanel";
 
 interface Props {
   tool: Tool;
   profile: Profile;
 }
 
-type SubTab = "new-followers" | "contact-users";
+type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
 export function ContactToolPanel({ tool, profile }: Props) {
   const [activeTab, setActiveTab] = useState<SubTab>("new-followers");
@@ -33,6 +34,10 @@ export function ContactToolPanel({ tool, profile }: Props) {
           <Users className="w-3.5 h-3.5" />
           Contact Users
         </button>
+        <button className={triggerClass("auto-reply")} onClick={() => setActiveTab("auto-reply")}>
+          <MessageSquare className="w-3.5 h-3.5" />
+          Auto Reply
+        </button>
       </div>
 
       {/* Panel content */}
@@ -41,6 +46,9 @@ export function ContactToolPanel({ tool, profile }: Props) {
       )}
       {activeTab === "contact-users" && (
         <ContactUsersPanel tool={tool} profile={profile} />
+      )}
+      {activeTab === "auto-reply" && (
+        <AutoReplyPanel tool={tool} profile={profile} />
       )}
     </div>
   );
