@@ -1,17 +1,20 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
+import { useProfiles } from "@/hooks/use-profiles";
 import { useSources, useCreateSource, useDeleteSource, useImportSources, parseJarveeHashtagFile } from "@/hooks/use-sources";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, Check, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign } from "lucide-react";
+import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign } from "lucide-react";
 import { useRef } from "react";
 import { type Tool, type Profile, type FollowedUser } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
+import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
+import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 interface ToolConfigPanelProps {
   tool: Tool;
   profile: Profile;
@@ -205,55 +208,43 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     enabled: showFollowedUsers,
   });
   const [showCopyModal, setShowCopyModal] = useState(false);
-  const [selectedProfileIds, setSelectedProfileIds] = useState<Set<number>>(new Set());
-  const [copying, setCopying] = useState(false);
-
-  const { data: allProfiles = [] } = useQuery<Profile[]>({
-    queryKey: ['/api/profiles'],
-    enabled: showCopyModal,
-  });
+  const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
-  const toggleProfile = (id: number) => {
-    setSelectedProfileIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  // ── Follow Tool copy option groups ──────────────────────────────
+  const FOLLOW_TOOL_KEY_MAP: Record<string, string[]> = {
+    followDelays:      ["delayMin","delayMax","delayAfterFollowMin","delayAfterFollowMax","delayAfterUnfollowMin","delayAfterUnfollowMax"],
+    followLimits:      ["maxPerDayMin","maxPerDayMax","maxPerHourMin","maxPerHourMax","processMin","processMax"],
+    scraping:          ["abortScrapeAfterMin","abortScrapeAfterMax","executionOrderMin","executionOrderMax","minFollowAgeDays","skipIndianUsers"],
+    likeSettings:      ["likeChanceMin","likeChanceMax","likeProcessMin","likeProcessMax","likeMaxPerDayMin","likeMaxPerDayMax","likeMaxPerHourMin","likeMaxPerHourMax","likeBeforeMin","likeBeforeMax","likeDelayMin","likeDelayMax"],
+    viewReels:         ["viewReelsChanceMin","viewReelsChanceMax","viewReelsProcessMin","viewReelsProcessMax","viewReelsMaxPerDayMin","viewReelsMaxPerDayMax","viewReelsMaxPerHourMin","viewReelsMaxPerHourMax","viewReelsBeforeMin","viewReelsBeforeMax","viewReelsDelayMin","viewReelsDelayMax"],
+    viewStories:       ["viewStoriesChanceMin","viewStoriesChanceMax","viewStoriesProcessMin","viewStoriesProcessMax","viewStoriesMaxPerDayMin","viewStoriesMaxPerDayMax","viewStoriesMaxPerHourMin","viewStoriesMaxPerHourMax","viewStoriesBeforeMin","viewStoriesBeforeMax","viewStoriesDelayMin","viewStoriesDelayMax"],
+    viewHighlights:    ["viewHighlightsChanceMin","viewHighlightsChanceMax","viewHighlightsProcessMin","viewHighlightsProcessMax","viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax","viewHighlightsMaxPerHourMin","viewHighlightsMaxPerHourMax","viewHighlightsBeforeMin","viewHighlightsBeforeMax","viewHighlightsDelayMin","viewHighlightsDelayMax"],
+    contextualActions: ["contextualActionsEnabled","contextualActionsMin","contextualActionsMax","contextualActionsDelayMin","contextualActionsDelayMax","discoverPagePercentageMin","discoverPagePercentageMax"],
+    dmMessages:        ["dmMessages"],
   };
+  const FOLLOW_TOOL_COPY_GROUPS: CopyOptionGroup[] = [
+    { label: "Follow", options: [
+      { key: "followDelays", label: "Follow Delays", description: "Action, post-follow, and post-unfollow delay ranges" },
+      { key: "followLimits", label: "Follow Limits", description: "Daily/hourly limits and session size" },
+      { key: "scraping",     label: "Scraping & Filters", description: "Abort threshold, execution order, age filter, region filter" },
+    ]},
+    { label: "Contextual Actions", options: [
+      { key: "likeSettings",      label: "Like Settings",       description: "Chance, process count, limits, delay, before-follow" },
+      { key: "viewReels",         label: "View Reels",          description: "Chance, process, limits, delay, before-follow" },
+      { key: "viewStories",       label: "View Stories",        description: "Chance, process, limits, delay, before-follow" },
+      { key: "viewHighlights",    label: "View Highlights",     description: "Chance, process, limits, delay, before-follow" },
+      { key: "contextualActions", label: "Contextual Action Mix", description: "Discover page %, combined action limits and delay" },
+    ]},
+    { label: "DM", options: [
+      { key: "dmMessages", label: "DM Messages", description: "Message templates sent after following" },
+    ]},
+  ];
 
-  const handleCopyConfig = async () => {
-    if (selectedProfileIds.size === 0) return;
-    setCopying(true);
-    let successCount = 0;
-    let failCount = 0;
-    for (const profileId of selectedProfileIds) {
-      try {
-        const res = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
-        const profileTools: Tool[] = await res.json();
-        const match = profileTools.find(t => t.type === tool.type);
-        if (match) {
-          const upd = await fetch(`/api/tools/${match.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ settings }),
-            credentials: "include",
-          });
-          upd.ok ? successCount++ : failCount++;
-        } else {
-          failCount++;
-        }
-      } catch {
-        failCount++;
-      }
-    }
-    setCopying(false);
-    setShowCopyModal(false);
-    setSelectedProfileIds(new Set());
-    toast({
-      title: `Configuration Copied`,
-      description: `Copied to ${successCount} profile${successCount !== 1 ? "s" : ""}${failCount ? `, ${failCount} failed` : ""}.`,
-    });
+  const handleFollowToolCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
+    const keysToSend = [...selectedKeys].flatMap(k => FOLLOW_TOOL_KEY_MAP[k] ?? []);
+    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend);
+    toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 
   const handleToggleEnable = (enabled: boolean) => {
@@ -981,7 +972,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 className="w-full mt-4 gap-2"
                 onClick={() => setShowCopyModal(true)}
               >
-                <Copy className="w-3.5 h-3.5" /> Copy Configuration
+                <Copy className="w-3.5 h-3.5" /> Copy Settings
               </Button>
           </div>
         </div>
@@ -1083,77 +1074,15 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
       </div>
 
-      {showCopyModal && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCopyModal(false)} />
-          <div className="relative bg-background border border-border rounded-xl shadow-2xl w-full max-w-md flex flex-col" style={{ maxHeight: "80vh" }}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div>
-                <h2 className="font-semibold text-base">Copy Configuration</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Select profiles to copy these settings to</p>
-              </div>
-              <button onClick={() => setShowCopyModal(false)} className="text-muted-foreground hover:text-foreground p-1 rounded">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Select All / None */}
-            <div className="flex items-center gap-3 px-5 py-2 border-b border-border/50 bg-muted/10">
-              <button
-                className="text-xs text-primary hover:underline font-medium"
-                onClick={() => setSelectedProfileIds(new Set(otherProfiles.map(p => p.id)))}
-              >Select All</button>
-              <span className="text-muted-foreground text-xs">·</span>
-              <button
-                className="text-xs text-muted-foreground hover:underline"
-                onClick={() => setSelectedProfileIds(new Set())}
-              >Select None</button>
-              <span className="ml-auto text-xs text-muted-foreground">{selectedProfileIds.size} selected</span>
-            </div>
-
-            {/* Profile list */}
-            <div className="overflow-y-auto flex-1 px-2 py-2">
-              {otherProfiles.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No other profiles found.</p>
-              ) : (
-                otherProfiles.map(profile => (
-                  <label
-                    key={profile.id}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent/40 cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 accent-primary"
-                      checked={selectedProfileIds.has(profile.id)}
-                      onChange={() => toggleProfile(profile.id)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{profile.username}</p>
-                      {profile.tags && <p className="text-xs text-muted-foreground truncate">{profile.tags}</p>}
-                    </div>
-                    {selectedProfileIds.has(profile.id) && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
-                  </label>
-                ))
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center gap-3 px-5 py-4 border-t border-border">
-              <Button variant="outline" className="flex-1" onClick={() => setShowCopyModal(false)}>
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 gap-2"
-                disabled={selectedProfileIds.size === 0 || copying}
-                onClick={handleCopyConfig}
-              >
-                {copying ? "Copying..." : <><Copy className="w-3.5 h-3.5" /> Copy to {selectedProfileIds.size} Profile{selectedProfileIds.size !== 1 ? "s" : ""}</>}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CopySettingsDialog
+        key={showCopyModal ? "open" : "closed"}
+        open={showCopyModal}
+        onOpenChange={setShowCopyModal}
+        title="Copy Follow Tool Settings"
+        profiles={otherProfiles}
+        optionGroups={FOLLOW_TOOL_COPY_GROUPS}
+        onCopy={handleFollowToolCopy}
+      />
     </div>
   </div>
   );

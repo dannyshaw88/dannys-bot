@@ -7,6 +7,7 @@ import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
 import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
+import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
@@ -28,9 +29,6 @@ import { queryClient } from "@/lib/queryClient";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose
-} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
@@ -70,17 +68,27 @@ export function ProfileDetailsPage() {
   const initialLoadRef = useRef(false);
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
-  const [copyTargets, setCopyTargets] = useState<Set<number>>(new Set());
-  const [copyOptions, setCopyOptions] = useState({ apiLimits: true, activeTimer: true, profileSync: false });
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done">("idle");
 
-  const toggleCopyTarget = (id: number) => {
-    setCopyTargets(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const ACCOUNT_COPY_GROUPS: CopyOptionGroup[] = [
+    {
+      label: "API & Performance",
+      options: [
+        { key: "apiLimits", label: "API Limits & Control", description: "Min/max calls and interval settings" },
+      ],
+    },
+    {
+      label: "Scheduling",
+      options: [
+        { key: "activeTimer", label: "Active Timer", description: "Enabled state, start & end times" },
+      ],
+    },
+    {
+      label: "Profile Sync",
+      options: [
+        { key: "profileSync", label: "Profile Sync", description: "Auto sync toggle, interval and HikerAPI option" },
+      ],
+    },
+  ];
 
   const [syncNowStatus, setSyncNowStatus] = useState<"idle" | "syncing" | "done" | "fail">("idle");
   const handleSyncNow = async () => {
@@ -105,43 +113,30 @@ export function ProfileDetailsPage() {
 
   const otherProfiles = allProfiles?.filter(p => p.id !== profileId) ?? [];
 
-  const handleCopySettings = async () => {
-    if (!copyTargets.size || !formData) return;
+  const handleAccountCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
+    if (!formData) return;
     const patch: Record<string, any> = {};
-    if (copyOptions.apiLimits) patch.apiLimits = formData.apiLimits;
-    if (copyOptions.activeTimer) {
+    if (selectedKeys.has("apiLimits")) patch.apiLimits = formData.apiLimits;
+    if (selectedKeys.has("activeTimer")) {
       patch.activeTimerEnabled = formData.activeTimerEnabled;
       patch.activeTimerStart = formData.activeTimerStart;
       patch.activeTimerEnd = formData.activeTimerEnd;
     }
-    if (copyOptions.profileSync) {
+    if (selectedKeys.has("profileSync")) {
       patch.syncEnabled = formData.syncEnabled;
       patch.syncIntervalMin = formData.syncIntervalMin;
       patch.syncIntervalMax = formData.syncIntervalMax;
       patch.syncUseHiker = formData.syncUseHiker;
     }
-    setCopyStatus("copying");
-    try {
-      await Promise.all(
-        [...copyTargets].map(targetId =>
-          new Promise<void>((resolve, reject) =>
-            updateProfileMutation.mutate(
-              { id: targetId, ...patch },
-              { onSuccess: () => resolve(), onError: reject }
-            )
-          )
+    await Promise.all(
+      targetIds.map(id =>
+        new Promise<void>((resolve, reject) =>
+          updateProfileMutation.mutate({ id, ...patch }, { onSuccess: () => resolve(), onError: reject })
         )
-      );
-      setCopyStatus("done");
-      const names = [...copyTargets]
-        .map(id => "@" + (otherProfiles.find(p => p.id === id)?.username ?? id))
-        .join(", ");
-      toast({ title: "Settings copied", description: `Applied to ${names}.` });
-      setTimeout(() => { setCopyStatus("idle"); setCopyDialogOpen(false); }, 1200);
-    } catch {
-      setCopyStatus("idle");
-      toast({ title: "Copy failed", description: "Could not update one or more profiles.", variant: "destructive" });
-    }
+      )
+    );
+    const names = targetIds.map(id => "@" + (otherProfiles.find(p => p.id === id)?.username ?? id)).join(", ");
+    toast({ title: "Settings copied", description: `Applied to ${names}.` });
   };
 
   useEffect(() => {
@@ -339,7 +334,7 @@ export function ProfileDetailsPage() {
               variant="outline"
               size="sm"
               className="flex items-center gap-2 h-8 text-xs"
-              onClick={() => { setCopyTargets(new Set()); setCopyOptions({ apiLimits: true, activeTimer: true, profileSync: false }); setCopyStatus("idle"); setCopyDialogOpen(true); }}
+              onClick={() => setCopyDialogOpen(true)}
               disabled={otherProfiles.length === 0}
             >
               <Copy className="w-3.5 h-3.5" />
@@ -359,109 +354,15 @@ export function ProfileDetailsPage() {
             </div>
           </div>
 
-          {/* Copy Settings Dialog */}
-          <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Copy className="w-4 h-4 text-primary" /> Copy Settings to Another Profile
-                </DialogTitle>
-              </DialogHeader>
-
-              <div className="space-y-5 py-2">
-                {/* Target profiles — checkbox list */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</Label>
-                    {otherProfiles.length > 1 && (
-                      <button
-                        className="text-[11px] text-primary hover:underline"
-                        onClick={() => {
-                          if (copyTargets.size === otherProfiles.length) {
-                            setCopyTargets(new Set());
-                          } else {
-                            setCopyTargets(new Set(otherProfiles.map(p => p.id)));
-                          }
-                        }}
-                      >
-                        {copyTargets.size === otherProfiles.length ? "Deselect all" : "Select all"}
-                      </button>
-                    )}
-                  </div>
-                  <div className="rounded-lg border border-border divide-y divide-border/50 max-h-48 overflow-y-auto">
-                    {otherProfiles.map(p => (
-                      <label key={p.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors">
-                        <Checkbox
-                          checked={copyTargets.has(p.id)}
-                          onCheckedChange={() => toggleCopyTarget(p.id)}
-                        />
-                        <span className="text-sm font-mono">@{p.username}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {copyTargets.size > 0 && (
-                    <p className="text-[11px] text-muted-foreground">{copyTargets.size} profile{copyTargets.size > 1 ? "s" : ""} selected</p>
-                  )}
-                </div>
-
-                {/* What to copy */}
-                <div className="space-y-3">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Settings to Copy</Label>
-                  <div className="space-y-3 rounded-lg border border-border p-4">
-                    <label className="flex items-center gap-3 cursor-pointer select-none">
-                      <Checkbox
-                        id="copy-api-limits"
-                        checked={copyOptions.apiLimits}
-                        onCheckedChange={v => setCopyOptions(o => ({ ...o, apiLimits: !!v }))}
-                      />
-                      <div>
-                        <p className="text-sm font-medium leading-none">API Limits &amp; Control</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Min/max calls and interval settings</p>
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-3 cursor-pointer select-none">
-                      <Checkbox
-                        id="copy-active-timer"
-                        checked={copyOptions.activeTimer}
-                        onCheckedChange={v => setCopyOptions(o => ({ ...o, activeTimer: !!v }))}
-                      />
-                      <div>
-                        <p className="text-sm font-medium leading-none">Active Timer</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Enabled state, start &amp; end times</p>
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-3 cursor-pointer select-none">
-                      <Checkbox
-                        id="copy-profile-sync"
-                        checked={copyOptions.profileSync}
-                        onCheckedChange={v => setCopyOptions(o => ({ ...o, profileSync: !!v }))}
-                      />
-                      <div>
-                        <p className="text-sm font-medium leading-none">Profile Sync</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Auto sync toggle, interval and HikerAPI option</p>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <DialogFooter className="gap-2">
-                <DialogClose asChild>
-                  <Button variant="outline" size="sm">Cancel</Button>
-                </DialogClose>
-                <Button
-                  size="sm"
-                  disabled={!copyTargets.size || (!copyOptions.apiLimits && !copyOptions.activeTimer && !copyOptions.profileSync) || copyStatus === "copying" || copyStatus === "done"}
-                  onClick={handleCopySettings}
-                  className="min-w-[100px]"
-                >
-                  {copyStatus === "copying" && <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Copying…</>}
-                  {copyStatus === "done" && <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-green-500" /> Copied!</>}
-                  {copyStatus === "idle" && <><Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Settings</>}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <CopySettingsDialog
+            key={copyDialogOpen ? "open" : "closed"}
+            open={copyDialogOpen}
+            onOpenChange={setCopyDialogOpen}
+            title="Copy Account Settings"
+            profiles={otherProfiles}
+            optionGroups={ACCOUNT_COPY_GROUPS}
+            onCopy={handleAccountCopy}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="border-none shadow-none !bg-transparent">

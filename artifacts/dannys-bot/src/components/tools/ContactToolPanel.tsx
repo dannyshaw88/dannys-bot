@@ -1,9 +1,14 @@
 import { useState } from "react";
-import { Users, UserPlus, MessageSquare } from "lucide-react";
+import { Users, UserPlus, MessageSquare, Copy } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
 import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
 import { AutoReplyPanel } from "./AutoReplyPanel";
+import { Button } from "@/components/ui/button";
+import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
+import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
+import { useProfiles } from "@/hooks/use-profiles";
+import { useToast } from "@/hooks/use-toast";
 
 interface Props {
   tool: Tool;
@@ -12,8 +17,50 @@ interface Props {
 
 type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
+const CONTACT_KEY_MAP: Record<string, string[]> = {
+  contactNewFollowers: [
+    "contactOnlyAppFollowed",
+    "contactMessage",
+    "contactCheckIntervalMin","contactCheckIntervalMax",
+    "contactUsersPerCheckMin","contactUsersPerCheckMax",
+    "contactApiSource",
+  ],
+  contactUsers: [
+    "contactUsersWaitMin","contactUsersWaitMax",
+    "contactUsersSendCountMin","contactUsersSendCountMax",
+    "contactUsersDelayBetweenMin","contactUsersDelayBetweenMax",
+    "contactUsersPickRandom",
+    "contactUsersUnsendEnabled",
+    "contactUsersUnsendMin","contactUsersUnsendMax",
+  ],
+  autoReply: ["autoReplyEnabled","autoReplies"],
+};
+
+const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
+  { label: "Contact Settings", options: [
+    { key: "contactNewFollowers", label: "Contact New Followers", description: "Message template, check interval, per-check limit, API source" },
+    { key: "contactUsers",        label: "Contact Users",         description: "Wait time, send count, delay between, random pick, unsend settings" },
+    { key: "autoReply",           label: "Auto Reply",            description: "Enabled state and trigger-word / reply pairs" },
+  ]},
+];
+
 export function ContactToolPanel({ tool, profile }: Props) {
   const [activeTab, setActiveTab] = useState<SubTab>("new-followers");
+  const [copyOpen, setCopyOpen] = useState(false);
+  const { data: allProfiles = [] } = useProfiles();
+  const { toast } = useToast();
+  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
+
+  const handleContactCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
+    const keysToSend = [...selectedKeys].flatMap(k => CONTACT_KEY_MAP[k] ?? []);
+    await copyToolSettingsToProfiles(
+      (tool.settings as Record<string, unknown>) ?? {},
+      tool.type,
+      targetIds,
+      keysToSend,
+    );
+    toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
+  };
 
   const triggerClass = (tab: SubTab) =>
     `flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap cursor-pointer ${
@@ -24,8 +71,8 @@ export function ContactToolPanel({ tool, profile }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Sub-tab bar */}
-      <div className="flex border-b border-border -mx-1">
+      {/* Sub-tab bar + Copy button */}
+      <div className="flex items-center border-b border-border -mx-1">
         <button className={triggerClass("new-followers")} onClick={() => setActiveTab("new-followers")}>
           <UserPlus className="w-3.5 h-3.5" />
           Contact New Followers
@@ -38,6 +85,17 @@ export function ContactToolPanel({ tool, profile }: Props) {
           <Users className="w-3.5 h-3.5" />
           Contact Users
         </button>
+        <div className="ml-auto pr-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            disabled={otherProfiles.length === 0}
+            onClick={() => setCopyOpen(true)}
+          >
+            <Copy className="w-3.5 h-3.5" /> Copy Settings
+          </Button>
+        </div>
       </div>
 
       {/* Panel content */}
@@ -50,6 +108,16 @@ export function ContactToolPanel({ tool, profile }: Props) {
       {activeTab === "auto-reply" && (
         <AutoReplyPanel tool={tool} profile={profile} />
       )}
+
+      <CopySettingsDialog
+        key={copyOpen ? "open" : "closed"}
+        open={copyOpen}
+        onOpenChange={setCopyOpen}
+        title="Copy Contact Tool Settings"
+        profiles={otherProfiles}
+        optionGroups={CONTACT_COPY_GROUPS}
+        onCopy={handleContactCopy}
+      />
     </div>
   );
 }

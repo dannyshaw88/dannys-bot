@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
+import { useProfiles } from "@/hooks/use-profiles";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -8,11 +9,14 @@ import { Button } from "@/components/ui/button";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart,
+  ChevronDown, ChevronUp, Heart, Copy,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost } from "@shared/schema";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
+import { useToast } from "@/hooks/use-toast";
+import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
+import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 
 interface HumanSessionPanelProps {
   tool: Tool;
@@ -22,7 +26,42 @@ interface HumanSessionPanelProps {
 export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const updateToolMutation = useUpdateTool();
   const { navigateTo } = useBrowserWindows();
+  const { toast } = useToast();
   const [showReposted, setShowReposted] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const { data: allProfiles = [] } = useProfiles();
+  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
+
+  const HUMAN_KEY_MAP: Record<string, string[]> = {
+    humanToolsDelay:    ["humanToolsDelayMin","humanToolsDelayMax"],
+    viewTimelineFeed:   ["viewTimelineFeedEnabled","viewTimelineFeedMin","viewTimelineFeedMax","viewTimelineFeedOrderMin","viewTimelineFeedOrderMax","viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"],
+    humanSession:       ["humanSessionEnabled","humanSessionOrderMin","humanSessionOrderMax","humanSessionNotUsedMin","humanSessionNotUsedMax"],
+    checkReels:         ["checkTimelineReelsEnabled","checkTimelineReelsMin","checkTimelineReelsMax","checkTimelineReelsOrderMin","checkTimelineReelsOrderMax","checkTimelineReelsNotUsedMin","checkTimelineReelsNotUsedMax"],
+    checkStories:       ["checkTimelineStoriesEnabled","checkTimelineStoriesMin","checkTimelineStoriesMax","checkTimelineStoriesOrderMin","checkTimelineStoriesOrderMax","checkTimelineStoriesNotUsedMin","checkTimelineStoriesNotUsedMax"],
+    checkDm:            ["checkDmEnabled","checkDmMin","checkDmMax","checkDmOrderMin","checkDmOrderMax","checkDmNotUsedMin","checkDmNotUsedMax"],
+    likeTimelinePosts:  ["likeTimelinePostsEnabled","likeTimelinePostsMin","likeTimelinePostsMax","likeTimelinePostsOrderMin","likeTimelinePostsOrderMax","likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"],
+    repost:             ["repostEnabled","repostSourceUsername","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
+  };
+  const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
+    { label: "Timing", options: [
+      { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs" },
+    ]},
+    { label: "Actions", options: [
+      { key: "viewTimelineFeed",  label: "View Timeline Feed",  description: "Enabled state, duration range, order and cool-down" },
+      { key: "humanSession",      label: "Human Session (Visit Profile)", description: "Enabled, order and cool-down" },
+      { key: "checkReels",        label: "Check Timeline Reels", description: "Enabled, duration, order and cool-down" },
+      { key: "checkStories",      label: "Check Timeline Stories", description: "Enabled, duration, order and cool-down" },
+      { key: "checkDm",           label: "Check DMs",            description: "Enabled, duration, order and cool-down" },
+      { key: "likeTimelinePosts", label: "Like Timeline Posts",  description: "Enabled, count range, order and cool-down" },
+      { key: "repost",            label: "Repost",               description: "Enabled, source account, order, cool-down, stop conditions" },
+    ]},
+  ];
+
+  const handleHumanCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
+    const keysToSend = [...selectedKeys].flatMap(k => HUMAN_KEY_MAP[k] ?? []);
+    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend);
+    toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
+  };
 
   const { data: repostedPostsList, isLoading: repostedPostsLoading } = useQuery<RepostedPost[]>({
     queryKey: [`/api/profiles/${tool.profileId}/reposted-posts`],
@@ -594,6 +633,25 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           )}
         </div>
       </div>
+
+      <Button
+        variant="outline"
+        className="w-full gap-2"
+        disabled={otherProfiles.length === 0}
+        onClick={() => setCopyOpen(true)}
+      >
+        <Copy className="w-3.5 h-3.5" /> Copy Settings
+      </Button>
+
+      <CopySettingsDialog
+        key={copyOpen ? "open" : "closed"}
+        open={copyOpen}
+        onOpenChange={setCopyOpen}
+        title="Copy Human Session Settings"
+        profiles={otherProfiles}
+        optionGroups={HUMAN_COPY_GROUPS}
+        onCopy={handleHumanCopy}
+      />
     </div>
   );
 }
