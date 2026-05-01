@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ImportProfilesDialog } from "@/components/ImportProfilesDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
@@ -76,6 +77,7 @@ export function ProfilesPage() {
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
 
   const handleCreate = () => {
     createProfileMutation.mutate({
@@ -106,17 +108,20 @@ export function ProfilesPage() {
     }
   }, [profiles, selectedProfileIds]);
 
-  const handleBulkDelete = useCallback(async () => {
+  const handleBulkDelete = useCallback(() => {
     if (selectedProfileIds.length === 0) return;
-    if (!confirm(`Delete ${selectedProfileIds.length} profile(s)?`)) return;
+    setDeleteConfirm({ ids: [...selectedProfileIds] });
+  }, [selectedProfileIds]);
+
+  const performDelete = useCallback(async (ids: number[]) => {
     try {
-      for (const id of selectedProfileIds) await deleteProfileMutation.mutateAsync(id);
-      setSelectedProfileIds([]);
-      toast({ title: "Profiles Deleted", description: `${selectedProfileIds.length} accounts removed.` });
+      for (const id of ids) await deleteProfileMutation.mutateAsync(id);
+      setSelectedProfileIds(prev => prev.filter(id => !ids.includes(id)));
+      toast({ title: "Profiles Deleted", description: `${ids.length} account${ids.length !== 1 ? "s" : ""} removed.` });
     } catch {
       toast({ title: "Error", description: "Failed to delete some profiles.", variant: "destructive" });
     }
-  }, [selectedProfileIds, deleteProfileMutation, toast]);
+  }, [deleteProfileMutation, toast]);
 
   const handleBulkResetDeviceIds = useCallback(async () => {
     if (selectedProfileIds.length === 0) return;
@@ -409,9 +414,7 @@ export function ProfilesPage() {
                     variant="ghost"
                     size="sm"
                     className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => {
-                      if (confirm("Delete this profile?")) deleteProfileMutation.mutate(profile.id);
-                    }}
+                    onClick={() => setDeleteConfirm({ ids: [profile.id] })}
                     data-testid={`button-delete-${profile.id}`}
                   >
                     <Trash2 className="w-3 h-3" />
@@ -424,6 +427,29 @@ export function ProfilesPage() {
       )}
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={open => { if (!open) setDeleteConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteConfirm?.ids.length === 1 ? "Profile" : `${deleteConfirm?.ids.length} Profiles`}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConfirm?.ids.length === 1
+                ? "This account will be permanently removed."
+                : `${deleteConfirm?.ids.length} accounts will be permanently removed.`}
+              {" "}This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteConfirm) { performDelete(deleteConfirm.ids); setDeleteConfirm(null); } }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
