@@ -255,7 +255,7 @@ export function ProfilesPage() {
                       className="font-bold text-sm text-foreground truncate hover:text-primary cursor-pointer block"
                       data-testid={`text-username-${profile.id}`}
                     >
-                      @{profile.username}
+                      {profile.accountLabel || `@${profile.username}`}
                     </span>
                   </Link>
                 </div>

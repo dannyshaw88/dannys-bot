@@ -43,6 +43,7 @@ export type Profile = {
   apiLimits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | null;
   browserDirectConnection: boolean | null;
   credentialsDirty: boolean | null;
+  accountLabel: string | null;
   tags: string | null;
   dateOfBirth: string | null;
   notes: string | null;
