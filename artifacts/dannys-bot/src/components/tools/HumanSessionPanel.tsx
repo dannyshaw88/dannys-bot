@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Heart,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost } from "@shared/schema";
@@ -67,6 +67,13 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       checkDmOrderMax: 0,
       checkDmNotUsedMin: 0,
       checkDmNotUsedMax: 0,
+      likeTimelinePostsEnabled: true,
+      likeTimelinePostsMin: 2,
+      likeTimelinePostsMax: 5,
+      likeTimelinePostsOrderMin: 0,
+      likeTimelinePostsOrderMax: 0,
+      likeTimelinePostsNotUsedMin: 0,
+      likeTimelinePostsNotUsedMax: 0,
       repostEnabled: false,
       repostSourceUsername: "",
       repostOrderMin: 0,
@@ -379,6 +386,55 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               <Input type="number" min="1" max="100" className="w-16 h-7 text-xs"
                 value={settings.checkDmMax ?? 15}
                 onChange={(e) => setSettings({ ...settings, checkDmMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Like Posts from Timeline ──────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2 pt-0.5">
+            <input type="checkbox" id="likeTimelinePostsEnabled"
+              checked={!!settings.likeTimelinePostsEnabled}
+              onChange={(e) => setSettings({ ...settings, likeTimelinePostsEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="likeTimelinePostsEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
+              <Heart className="w-4 h-4 text-pink-500" />
+              Like Posts from Timeline
+            </label>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("likeTimelinePostsOrderMin", "likeTimelinePostsOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+              {pctInputs("likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax")}
+            </div>
+          </div>
+        </div>
+        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40' : ''}`}>
+          Likes posts from the home timeline feed. If a post is a reel, it is marked as watched before liking. Set execution order &gt; 0% to enable.
+        </p>
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Like</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+                value={settings.likeTimelinePostsMin ?? 2}
+                onChange={(e) => setSettings({ ...settings, likeTimelinePostsMin: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+                value={settings.likeTimelinePostsMax ?? 5}
+                onChange={(e) => setSettings({ ...settings, likeTimelinePostsMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
           </div>

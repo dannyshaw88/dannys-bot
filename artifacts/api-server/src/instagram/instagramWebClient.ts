@@ -702,6 +702,56 @@ export class InstagramWebClient {
     }, `Check DMs (inbox, limit=${count})`);
   }
 
+  // ── Like posts from the home timeline feed ───────────────────────────────
+  // Fetches the home feed and likes up to `count` posts.
+  // If a post is a reel/video (media_type === 2), it is marked as watched
+  // before being liked, so Instagram sees a realistic view → like sequence.
+  // Returns the number of posts liked and reels watched.
+  async likeTimelinePosts(count: number = 3): Promise<{ liked: number; watched: number }> {
+    return this.timed("LikeTimelinePosts", async () => {
+      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start&is_pull_to_refresh=0`);
+      const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
+      if (!rawItems.length) return { liked: 0, watched: 0 };
+
+      // Unwrap feed items — timeline wraps media under media_or_ad
+      const items = rawItems
+        .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
+        .filter((m: any) => m?.id || m?.pk);
+
+      const toProcess = items.slice(0, count);
+      let liked = 0;
+      let watched = 0;
+
+      for (const media of toProcess) {
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+
+        const isReel = media?.media_type === 2 || media?.product_type === "clips";
+
+        // Watch the reel before liking — simulates the natural viewing flow
+        if (isReel) {
+          try {
+            const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+            const seenBody = new URLSearchParams({
+              reels: `${mediaId}_${takenAt}_${takenAt + 4}`,
+              live_vods_skipped: "",
+              nuxes_skipped: "",
+            }).toString();
+            await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+            watched++;
+          } catch (_) { /* best-effort */ }
+        }
+
+        // Like the post
+        const result = await this.likeMedia(mediaId);
+        if (result === "blocked") break;
+        if (result) liked++;
+      }
+
+      return { liked, watched };
+    }, `Like timeline posts (up to ${count})`);
+  }
+
   // ── Unfollow a user ───────────────────────────────────────────────────────
   // Returns true on success, "blocked" on Instagram action-block, false otherwise.
   async unfollowUser(userId: string, username?: string): Promise<true | "blocked" | false> {

@@ -942,6 +942,23 @@ class AutomationEngine {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
       }
     }
+
+    // ── Like Posts from Timeline (execution order + not-used gate) ────────────
+    const likeTimelineOrderPct = randInt(s.likeTimelinePostsOrderMin ?? 0, s.likeTimelinePostsOrderMax ?? 0);
+    if (likeTimelineOrderPct > 0 && Math.random() * 100 < likeTimelineOrderPct
+        && !shouldSkip(s.likeTimelinePostsNotUsedMin ?? 0, s.likeTimelinePostsNotUsedMax ?? 0)) {
+      const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
+      try {
+        const { liked, watched } = await client.likeTimelinePosts(likeCount);
+        const detail = watched > 0
+          ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)`
+          : `Liked ${liked} post(s) from timeline`;
+        console.log(`[engine] @${profile.username}: ❤️ ${detail}`);
+        this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", detail);
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
+      }
+    }
   }
 
   // ── Follow session ────────────────────────────────────────────────────────

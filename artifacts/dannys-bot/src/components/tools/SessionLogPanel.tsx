@@ -24,6 +24,7 @@ const ACTION_META: Record<string, { label: string; icon: any; color: string }> =
   check_timeline_reels:    { label: "Timeline Reels",     icon: PlaySquare,   color: "text-rose-600 bg-rose-50 border-rose-200" },
   check_timeline_stories:  { label: "Timeline Stories",   icon: BookOpen,     color: "text-sky-600 bg-sky-50 border-sky-200" },
   check_dm:                { label: "Checked DMs",        icon: MessageSquare,color: "text-teal-600 bg-teal-50 border-teal-200" },
+  like_timeline_post:      { label: "Liked Timeline Post",icon: Heart,        color: "text-pink-600 bg-pink-50 border-pink-200" },
 };
 
 interface SessionLogPanelProps {
