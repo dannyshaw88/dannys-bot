@@ -54,7 +54,7 @@ export function AutoReplyPanel({ tool, profile: _profile }: Props) {
   const rules: AutoReplyRule[] = Array.isArray(settings.autoReplies) ? settings.autoReplies : [];
 
   const addRule = () => {
-    const word  = newWord.trim();
+    const word  = newWord.trim().toLowerCase();
     const reply = newReply.trim();
     if (!word || !reply) return;
     const updated = [...rules, { word, reply }];
