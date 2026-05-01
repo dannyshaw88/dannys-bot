@@ -65,6 +65,15 @@ export const profiles = pgTable("profiles", {
   activeTimerEnabled: boolean("active_timer_enabled").default(false),
   activeTimerStart: text("active_timer_start"),
   activeTimerEnd: text("active_timer_end"),
+  // Profile sync — periodically refreshes follower/following/posts counts
+  syncEnabled: boolean("sync_enabled").default(false),
+  syncIntervalMin: integer("sync_interval_min"),
+  syncIntervalMax: integer("sync_interval_max"),
+  syncUseHiker: boolean("sync_use_hiker").default(false),
+  followersCount: integer("followers_count"),
+  followingCount: integer("following_count"),
+  postsCount: integer("posts_count"),
+  lastSyncedAt: text("last_synced_at"),
 });
 
 export const tools = pgTable("tools", {

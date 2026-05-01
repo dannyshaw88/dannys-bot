@@ -65,6 +65,7 @@ class AutomationEngine {
   private unfollowStates  = new Map<number, ProfileState>(); // unfollow runners
   private dmStates        = new Map<number, ProfileState>(); // dm runners
   private contactStates   = new Map<number, ProfileState>(); // contact tool runners
+  private syncTimers      = new Map<number, number>();       // profileId → nextSyncAt (ms)
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
@@ -137,9 +138,89 @@ class AutomationEngine {
           console.log(`[engine] Stopped contact runner for profile ${id}`);
         }
       }
+
+      // ── Profile sync timers (independent of any tool runner) ──────────────
+      for (const profile of profiles) {
+        if (!profile.syncEnabled || !profile.syncIntervalMin) continue;
+        const nextAt = this.syncTimers.get(profile.id);
+        // Seed from lastSyncedAt on first encounter
+        if (nextAt === undefined) {
+          if (profile.lastSyncedAt) {
+            const lastMs = new Date(profile.lastSyncedAt).getTime();
+            const intervalMs = randInt(
+              (profile.syncIntervalMin) * 60_000,
+              (profile.syncIntervalMax ?? profile.syncIntervalMin) * 60_000,
+            );
+            this.syncTimers.set(profile.id, lastMs + intervalMs);
+          } else {
+            this.syncTimers.set(profile.id, 0); // sync immediately on first run
+          }
+          continue;
+        }
+        if (Date.now() < nextAt) continue;
+        // Time to sync
+        this.runProfileSync(profile).catch((e: any) =>
+          console.warn(`[engine] @${profile.username}: profile sync error: ${e?.message}`)
+        );
+        const intervalMs = randInt(
+          (profile.syncIntervalMin) * 60_000,
+          (profile.syncIntervalMax ?? profile.syncIntervalMin) * 60_000,
+        );
+        this.syncTimers.set(profile.id, Date.now() + intervalMs);
+        console.log(`[engine] @${profile.username}: next profile sync in ${Math.round(intervalMs / 60000)}min`);
+      }
+      // Clean up sync timers for removed profiles
+      const profileIds = new Set(profiles.map(p => p.id));
+      for (const id of this.syncTimers.keys()) {
+        if (!profileIds.has(id)) this.syncTimers.delete(id);
+      }
     } catch (err: any) {
       console.error("[engine] Reconcile error:", err?.message);
     }
+  }
+
+  // ── Profile Sync: fetch stats from Instagram or HikerAPI and persist ───────
+  // Public so the /api/profiles/:id/sync route can trigger it directly.
+  async syncProfile(profileId: number): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return null;
+    return this.runProfileSync(profile);
+  }
+
+  private async runProfileSync(profile: Profile): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
+    const globalSettings = await storage.getGlobalSettings();
+    const useHiker = !!(
+      profile.syncUseHiker &&
+      globalSettings.hikerApiEnabled === "true" &&
+      globalSettings.hikerApiToken
+    );
+
+    let stats: { followersCount: number; followingCount: number; postsCount: number } | null = null;
+
+    if (useHiker) {
+      const { HikerApiClient } = await import("./hikerApiClient");
+      const hikerClient = new HikerApiClient(globalSettings.hikerApiToken!);
+      stats = await hikerClient.getProfileStats(profile.username);
+    } else {
+      const proxyUrl = await this.buildProxyUrl(profile);
+      const client = new InstagramWebClient(proxyUrl, profile.id);
+      if (profile.userAgentEmbedded) client.setWebUserAgent(profile.userAgentEmbedded);
+      if (profile.apiLimits) client.setApiLimits(profile.apiLimits as any);
+      client.loadBrowserCookies();
+      stats = await client.getOwnProfileStats();
+    }
+
+    if (!stats) {
+      console.warn(`[engine] @${profile.username}: profile sync returned no data`);
+      return null;
+    }
+
+    await storage.updateProfile(profile.id, {
+      ...stats,
+      lastSyncedAt: new Date().toISOString(),
+    });
+    console.log(`[engine] @${profile.username}: synced — followers=${stats.followersCount} following=${stats.followingCount} posts=${stats.postsCount}`);
+    return stats;
   }
 
   // ── Runner launch ─────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ import {
   CheckCircle2, XCircle, Loader2, ShieldCheck,
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown,
   Tag, Calendar, FileText, Server, X, Clock, Copy,
-  UserPlus, MessageSquare
+  UserPlus, MessageSquare, RefreshCw, Users, BarChart2
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -76,6 +76,27 @@ export function ProfileDetailsPage() {
   const [copyTarget, setCopyTarget] = useState<string>("");
   const [copyOptions, setCopyOptions] = useState({ apiLimits: true, activeTimer: true });
   const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "done">("idle");
+
+  const [syncNowStatus, setSyncNowStatus] = useState<"idle" | "syncing" | "done" | "fail">("idle");
+  const handleSyncNow = async () => {
+    setSyncNowStatus("syncing");
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/sync`, { method: "POST" });
+      if (res.ok) {
+        setSyncNowStatus("done");
+        queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
+        toast({ title: "Profile synced", description: "Follower and post counts updated." });
+      } else {
+        setSyncNowStatus("fail");
+        toast({ title: "Sync failed", description: "Could not retrieve stats from Instagram.", variant: "destructive" });
+      }
+    } catch {
+      setSyncNowStatus("fail");
+      toast({ title: "Sync failed", description: "Network error.", variant: "destructive" });
+    } finally {
+      setTimeout(() => setSyncNowStatus("idle"), 3000);
+    }
+  };
 
   const otherProfiles = allProfiles?.filter(p => p.id !== profileId) ?? [];
 
@@ -146,6 +167,11 @@ export function ProfileDetailsPage() {
         activeTimerEnabled: profile.activeTimerEnabled ?? false,
         activeTimerStart: profile.activeTimerStart || "09:00",
         activeTimerEnd: profile.activeTimerEnd || "22:00",
+        // Profile sync
+        syncEnabled: profile.syncEnabled ?? false,
+        syncIntervalMin: profile.syncIntervalMin ?? 60,
+        syncIntervalMax: profile.syncIntervalMax ?? 120,
+        syncUseHiker: profile.syncUseHiker ?? false,
       });
     }
   }, [profile]);
@@ -790,6 +816,113 @@ export function ProfileDetailsPage() {
                 </div>
               </CardContent>
             </Card>
+            {/* Profile Sync */}
+            <Card className="border-none shadow-none !bg-transparent">
+              <CardHeader className="px-0 pt-0">
+                <CardTitle className="flex items-center gap-2 text-base"><RefreshCw className="w-4 h-4 text-primary" /> Profile Sync</CardTitle>
+              </CardHeader>
+              <CardContent className="px-0 space-y-4">
+
+                {/* Current stats read-out */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-3 px-2 border border-border">
+                    <Users className="w-4 h-4 text-blue-500 mb-1" />
+                    <span className="text-base font-bold">
+                      {profile?.followersCount != null ? profile.followersCount.toLocaleString() : "—"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Followers</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-3 px-2 border border-border">
+                    <UserPlus className="w-4 h-4 text-purple-500 mb-1" />
+                    <span className="text-base font-bold">
+                      {profile?.followingCount != null ? profile.followingCount.toLocaleString() : "—"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Following</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-3 px-2 border border-border">
+                    <BarChart2 className="w-4 h-4 text-green-500 mb-1" />
+                    <span className="text-base font-bold">
+                      {profile?.postsCount != null ? profile.postsCount.toLocaleString() : "—"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Posts</span>
+                  </div>
+                </div>
+                {profile?.lastSyncedAt && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Last synced: {new Date(profile.lastSyncedAt).toLocaleString()}
+                  </p>
+                )}
+
+                {/* Enable sync */}
+                <div className="flex items-center justify-between pt-2 border-t border-border">
+                  <div>
+                    <Label className="text-sm font-semibold">Enable Auto Sync</Label>
+                    <p className="text-[11px] text-muted-foreground">Periodically update follower, following and post counts.</p>
+                  </div>
+                  <Switch
+                    checked={!!formData?.syncEnabled}
+                    onCheckedChange={v => updateField({ syncEnabled: v })}
+                  />
+                </div>
+
+                {/* Interval range */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Min Interval (min)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formData?.syncIntervalMin ?? 60}
+                      onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Max Interval (min)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formData?.syncIntervalMax ?? 120}
+                      onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Use HikerAPI checkbox */}
+                <div className="flex items-center gap-2.5">
+                  <Checkbox
+                    id="syncUseHiker"
+                    checked={!!formData?.syncUseHiker}
+                    onCheckedChange={v => updateField({ syncUseHiker: !!v })}
+                  />
+                  <Label htmlFor="syncUseHiker" className="text-sm cursor-pointer">
+                    Use HikerAPI for sync
+                  </Label>
+                </div>
+                {formData?.syncUseHiker && (
+                  <p className="text-[11px] text-blue-600">
+                    Requires HikerAPI enabled and token set in Global Settings.
+                  </p>
+                )}
+
+                {/* Sync Now button */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 w-full"
+                  disabled={syncNowStatus === "syncing"}
+                  onClick={handleSyncNow}
+                >
+                  {syncNowStatus === "syncing" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {syncNowStatus === "done" && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
+                  {syncNowStatus === "fail" && <XCircle className="w-3.5 h-3.5 text-destructive" />}
+                  {syncNowStatus === "idle" && <RefreshCw className="w-3.5 h-3.5" />}
+                  {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Sync Failed" : "Sync Now"}
+                </Button>
+              </CardContent>
+            </Card>
+
           </div>
         </Tabs.Content>
 

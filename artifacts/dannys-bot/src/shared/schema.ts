@@ -56,6 +56,14 @@ export type Profile = {
   activeTimerEnabled: boolean | null;
   activeTimerStart: string | null;
   activeTimerEnd: string | null;
+  syncEnabled: boolean | null;
+  syncIntervalMin: number | null;
+  syncIntervalMax: number | null;
+  syncUseHiker: boolean | null;
+  followersCount: number | null;
+  followingCount: number | null;
+  postsCount: number | null;
+  lastSyncedAt: string | null;
 };
 
 export type InsertProfile = Omit<Profile, 'id' | 'status'>;

@@ -605,6 +605,23 @@ export class InstagramWebClient {
     }, "Visit own profile");
   }
 
+  // ── Fetch own profile stats (followers / following / posts) ───────────────
+  // Uses the same current_user endpoint but extracts the counts.
+  async getOwnProfileStats(): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
+    try {
+      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+      const u = j?.user;
+      if (!u) return null;
+      return {
+        followersCount: Number(u.follower_count ?? u.followed_by_count ?? 0),
+        followingCount: Number(u.following_count ?? 0),
+        postsCount:     Number(u.media_count ?? 0),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   // ── Refresh own profile feed ──────────────────────────────────────────────
   // Simulates a user pull-to-refreshing their profile page.
   async refreshOwnProfile(): Promise<boolean> {

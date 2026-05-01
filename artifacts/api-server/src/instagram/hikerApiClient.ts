@@ -52,6 +52,21 @@ export class HikerApiClient {
     }
   }
 
+  async getProfileStats(username: string): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
+    try {
+      const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
+      if (!j?.pk) return null;
+      return {
+        followersCount: Number(j.follower_count ?? j.edge_followed_by?.count ?? 0),
+        followingCount: Number(j.following_count ?? j.edge_follow?.count ?? 0),
+        postsCount:     Number(j.media_count ?? j.edge_owner_to_timeline_media?.count ?? 0),
+      };
+    } catch (e: any) {
+      console.error(`[hikerApi] getProfileStats @${username} error: ${e?.message}`);
+      return null;
+    }
+  }
+
   async getUserProfile(username: string): Promise<{ biography: string | null; fullName: string | null } | null> {
     try {
       const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);

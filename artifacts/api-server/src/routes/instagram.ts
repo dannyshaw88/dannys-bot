@@ -176,6 +176,21 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
+  // ── Profile Sync — fetch latest follower/following/posts counts ───────────
+  app.post("/api/profiles/:id/sync", async (req, res) => {
+    const id = Number(req.params.id);
+    const profile = await storage.getProfile(id);
+    if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+    try {
+      const stats = await automationEngine.syncProfile(id);
+      if (!stats) return res.status(502).json({ ok: false, message: "Could not retrieve profile stats" });
+      const updated = await storage.getProfile(id);
+      res.json({ ok: true, profile: updated });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, message: err?.message ?? "Sync failed" });
+    }
+  });
+
   app.post("/api/profiles/:id/verify", async (req, res) => {
     const profile = await storage.getProfile(Number(req.params.id));
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
