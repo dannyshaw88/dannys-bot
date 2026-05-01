@@ -296,9 +296,16 @@ export function ProfilesPage() {
     .map(t => t.trim().toLowerCase())
     .filter(Boolean);
   const filteredProfiles = filterTokens.length > 0
-    ? (profiles ?? []).filter(p =>
-        filterTokens.includes((p.accountStatus ?? "pending").toLowerCase())
-      )
+    ? (profiles ?? []).filter(p => {
+        const status   = (p.accountStatus ?? "pending").toLowerCase();
+        const username = (p.username ?? "").toLowerCase();
+        const label    = (p.accountLabel ?? "").toLowerCase();
+        return filterTokens.some(token =>
+          status === token ||
+          username.includes(token) ||
+          label.includes(token)
+        );
+      })
     : profiles;
 
   return (
