@@ -15,7 +15,8 @@ import {
   CheckCircle2, XCircle, Loader2, ShieldCheck,
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown,
   Tag, Calendar, FileText, Server, X, Clock, Copy,
-  UserPlus, MessageSquare, RefreshCw, Users, BarChart2
+  UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
+  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -42,9 +43,28 @@ const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementTyp
   email_confirmation: { label: "Email Confirm",     icon: Mail,        pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   phone_verification: { label: "Phone Verify",      icon: Phone,       pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   "2fa_verification": { label: "2FA Verify",        icon: KeyRound,    pill: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
-  stopped:            { label: "Stopped",           icon: PowerOff,    pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
-  logged_out:         { label: "Logged Out",        icon: LogOut,      pill: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
-  action_blocked:     { label: "Action Blocked",    icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  stopped:              { label: "Stopped",            icon: PowerOff,      pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
+  logged_out:           { label: "Logged Out",         icon: LogOut,        pill: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
+  action_blocked:       { label: "Action Blocked",     icon: Ban,           pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  action_required:      { label: "Action Required",    icon: AlertTriangle, pill: "bg-amber-50  text-amber-700  border-amber-200",  dot: "bg-amber-500"  },
+  post_deleted:         { label: "Post Deleted",       icon: AlertTriangle, pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  account_disabled:     { label: "Acct Disabled",      icon: UserMinus,     pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  api_block:            { label: "API Block",          icon: ShieldAlert,   pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  captcha_disabled:     { label: "Captcha Disabled",   icon: ScanFace,      pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
+  compromised:          { label: "Compromised",        icon: ShieldAlert,   pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  email_verification:   { label: "Email Verify",       icon: Mail,          pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
+  phone_validation:     { label: "Phone Valid.",       icon: Phone,         pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
+  invalid_credentials:  { label: "Invalid Creds",      icon: KeyRound,      pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  no_internet:          { label: "No Internet",        icon: WifiOff,       pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
+  password_reset:       { label: "Password Reset",     icon: RefreshCw,     pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
+  temporary_locked:     { label: "Temp. Locked",       icon: Lock,          pill: "bg-amber-50  text-amber-700  border-amber-200",  dot: "bg-amber-500"  },
+  scrape_warning:       { label: "Scrape Warning",     icon: AlertTriangle, pill: "bg-amber-50  text-amber-700  border-amber-200",  dot: "bg-amber-500"  },
+  suspended:            { label: "Suspended",          icon: UserMinus,     pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
+  selfie_verification:  { label: "Selfie Verify",      icon: Camera,        pill: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
+  own_phone_verification: { label: "Own Phone Verify", icon: Phone,         pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
+  email_connection:     { label: "Email Connect",      icon: Mail,          pill: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
+  upload:               { label: "Upload",             icon: AlertTriangle, pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
+  review:               { label: "Review",             icon: Eye,           pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
 };
 
 export function ProfileDetailsPage() {
