@@ -227,16 +227,6 @@ export function ProfilesPage() {
     const allSelected = !!(profiles?.length && selectedProfileIds.length === profiles.length);
     setSlot(
       <div className="space-y-2">
-        <div className="flex items-center gap-2.5 px-1">
-          <Checkbox
-            id="sidebar-select-all"
-            checked={allSelected}
-            onCheckedChange={toggleAll}
-          />
-          <Label htmlFor="sidebar-select-all" className="text-sm font-semibold cursor-pointer select-none">
-            Select All
-          </Label>
-        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -347,7 +337,7 @@ export function ProfilesPage() {
           <Input
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            placeholder="Filter by status: valid | pending | banned"
+            placeholder="Filter"
             className="h-8 pl-7 pr-7 text-xs font-mono"
           />
           {statusFilter && (
@@ -369,7 +359,13 @@ export function ProfilesPage() {
 
       {/* Column headers */}
       <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        <div className="w-6 shrink-0" />
+        <div className="w-6 shrink-0 flex items-center justify-center">
+          <Checkbox
+            checked={!!(profiles?.length && selectedProfileIds.length === profiles.length)}
+            onCheckedChange={toggleAll}
+            aria-label="Select all profiles"
+          />
+        </div>
         <div className="ml-1">Account</div>
         <div className="flex-1" />
         <div className="w-8 shrink-0" />
