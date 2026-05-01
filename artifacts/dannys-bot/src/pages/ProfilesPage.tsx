@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile } from "@/hooks/use-profiles";
+import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile } from "@/hooks/use-profiles";
+import { userAgents } from "@/shared/userAgents";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import {
   Plus, Trash2, Instagram, Activity, ChevronDown, Upload, Download,
-  ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock
+  ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
+  Smartphone, FileDown
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -53,6 +55,7 @@ export function ProfilesPage() {
   const deleteProfileMutation = useDeleteProfile();
   const updateAccountStatus   = useUpdateAccountStatus();
   const verifyMutation        = useVerifyProfile();
+  const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
   const { openWindow } = useBrowserWindows();
 
@@ -115,6 +118,82 @@ export function ProfilesPage() {
     }
   }, [selectedProfileIds, deleteProfileMutation, toast]);
 
+  const handleBulkResetDeviceIds = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    try {
+      for (const id of selectedProfileIds) {
+        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
+        await updateProfileMutation.mutateAsync({
+          id,
+          userAgentApi: ua.api,
+          userAgentEmbedded: ua.embedded,
+          credentialsDirty: true,
+          accountStatus: "pending",
+        });
+      }
+      setSelectedProfileIds([]);
+      toast({ title: "Device IDs Reset", description: `${selectedProfileIds.length} account(s) assigned new device fingerprints.` });
+    } catch {
+      toast({ title: "Error", description: "Failed to reset some device IDs.", variant: "destructive" });
+    }
+  }, [selectedProfileIds, updateProfileMutation, toast]);
+
+  const handleExportProfiles = useCallback(() => {
+    const toExport = selectedProfileIds.length > 0
+      ? profiles?.filter(p => selectedProfileIds.includes(p.id))
+      : profiles;
+    if (!toExport?.length) {
+      toast({ title: "No profiles to export", variant: "destructive" });
+      return;
+    }
+    const headers = [
+      "#Email/Username", "Password", "Proxy-url/Proxy-ip:port",
+      "Proxy Username", "Proxy Password", "Tags",
+      "Date of birth(US Format)", "EB User Agent", "API User Agent",
+      "Username", "Notes", "Phone number", "2FA Secret Key",
+      "Backup Codes", "Email Validation Username", "Email Validation Pass",
+      "Email Validation Pop3Server", "Email Validation Port",
+    ];
+    const rows = toExport.map(p => [
+      p.email ?? "",
+      p.password ?? "",
+      p.proxyHost ? `${p.proxyHost}${p.proxyPort ? `:${p.proxyPort}` : ""}` : "",
+      p.proxyUsername ?? "",
+      p.proxyPassword ?? "",
+      p.tags ?? "",
+      p.dateOfBirth ?? "",
+      p.userAgentEmbedded ?? "",
+      p.userAgentApi ?? "",
+      p.username ?? "",
+      p.notes ?? "",
+      p.phoneNumber ?? "",
+      p.twoFASecretKey ?? "",
+      p.backupCodes ?? "",
+      p.emailValidationUsername ?? "",
+      p.emailValidationPassword ?? "",
+      p.emailValidationPop3Server ?? "",
+      p.emailValidationPort ?? "",
+    ].map(v => String(v)));
+    const tsv = [headers, ...rows].map(r => r.join("\t")).join("\r\n");
+    const buf = new ArrayBuffer(2 + tsv.length * 2);
+    const view = new DataView(buf);
+    view.setUint8(0, 0xff);
+    view.setUint8(1, 0xfe);
+    for (let i = 0; i < tsv.length; i++) {
+      view.setUint16(2 + i * 2, tsv.charCodeAt(i), true);
+    }
+    const blob = new Blob([buf], { type: "text/plain;charset=utf-16le" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `profiles_export_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Exported", description: `${toExport.length} profile(s) saved as Jarvee-compatible file.` });
+  }, [profiles, selectedProfileIds, toast]);
+
   const toggleStopped = (id: number, currentStatus: string, credentialsDirty?: boolean | null) => {
     const next = currentStatus === "stopped"
       ? (credentialsDirty ? "pending" : "valid")
@@ -147,9 +226,15 @@ export function ProfilesPage() {
               Actions <ChevronDown className="ml-1 w-3.5 h-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-52 p-2 mb-2">
+          <DropdownMenuContent align="start" side="top" className="w-56 p-2 mb-2">
             <DropdownMenuItem onClick={() => setImportOpen(true)} className="cursor-pointer font-medium p-3">
               <Upload className="w-4 h-4 mr-2" /> Import Profiles
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleExportProfiles}
+              className="cursor-pointer font-medium p-3"
+            >
+              <FileDown className="w-4 h-4 mr-2" /> Export Profiles
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={async () => {
@@ -174,6 +259,14 @@ export function ProfilesPage() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
+              onClick={handleBulkResetDeviceIds}
+              disabled={selectedProfileIds.length === 0}
+              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Smartphone className="w-4 h-4 mr-2" /> Reset Device IDs
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
               onClick={handleBulkDelete}
               disabled={selectedProfileIds.length === 0}
               className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -185,7 +278,7 @@ export function ProfilesPage() {
       </div>
     );
     return () => setSlot(null);
-  }, [selectedProfileIds, profiles, toggleAll, handleBulkDelete, setImportOpen]);
+  }, [selectedProfileIds, profiles, toggleAll, handleBulkDelete, handleBulkResetDeviceIds, handleExportProfiles, setImportOpen]);
 
   return (
     <AppLayout>
