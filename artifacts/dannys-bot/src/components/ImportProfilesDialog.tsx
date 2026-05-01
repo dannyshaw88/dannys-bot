@@ -29,11 +29,13 @@ interface ParsedProfile {
   emailValidationPassword: string;
   emailValidationPop3Server: string;
   emailValidationPort: string;
+  accStatus: string;
 }
 
 // Map Jarvee column headers (lowercased, # stripped) to our field names
 const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "name":                        "accountLabel",
+  "acc status":                  "accStatus",
   "email/username":              "email",
   "password":                    "password",
   "proxy username":              "proxyUsername",
@@ -125,7 +127,7 @@ function parseJarveeFile(text: string): ParsedProfile[] {
       proxyUsername: "", proxyPassword: "", userAgentEmbedded: "", userAgentApi: "",
       tags: "", dateOfBirth: "", notes: "", phoneNumber: "", twoFASecretKey: "",
       backupCodes: "", emailValidationUsername: "", emailValidationPassword: "",
-      emailValidationPop3Server: "", emailValidationPort: "",
+      emailValidationPop3Server: "", emailValidationPort: "", accStatus: "",
     };
 
     headers.forEach((header, idx) => {

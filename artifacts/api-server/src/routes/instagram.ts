@@ -232,6 +232,18 @@ export async function registerInstagramRoutes(
     res.json(result);
   });
 
+  function resolveImportStatus(raw: string | undefined): string {
+    const s = (raw ?? "").toLowerCase().trim().replace(/\s+/g, "_");
+    const valid = ["pending","valid","banned","captcha","email_confirmation","phone_verification","2fa_verification","stopped","logged_out","action_blocked"];
+    if (valid.includes(s)) return s;
+    const aliases: Record<string, string> = {
+      "ok": "valid", "active": "valid", "verified": "valid",
+      "email_confirm": "email_confirmation", "phone_verify": "phone_verification",
+      "2fa_verify": "2fa_verification", "action_block": "action_blocked",
+    };
+    return aliases[s] ?? "pending";
+  }
+
   app.post("/api/profiles/import", async (req, res) => {
     try {
       const { profiles: toImport } = req.body;
@@ -262,7 +274,7 @@ export async function registerInstagramRoutes(
             emailValidationPassword: p.emailValidationPassword || null,
             emailValidationPop3Server: p.emailValidationPop3Server || null,
             emailValidationPort: p.emailValidationPort || null,
-            accountStatus: "valid",
+            accountStatus: resolveImportStatus(p.accStatus),
           });
           results.push({ success: true, username: created.username });
         } catch (err: any) {
