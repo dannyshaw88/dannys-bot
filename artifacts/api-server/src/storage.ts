@@ -238,17 +238,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async countFollowsToday(profileId: number, todayPrefix: string): Promise<number> {
-    const rows = await db.select({ count: sql<number>`count(*)::int` })
+    const rows = await db.select({ count: sql<number>`count(*)` })
       .from(followedUsers)
       .where(and(
         eq(followedUsers.profileId, profileId),
         like(followedUsers.followedAt, `${todayPrefix}%`),
       ));
-    return rows[0]?.count ?? 0;
+    return Number(rows[0]?.count ?? 0);
   }
 
   async countFollowsThisHour(profileId: number, hourPrefix: string): Promise<number> {
-    const rows = await db.select({ count: sql<number>`count(*)::int` })
+    const rows = await db.select({ count: sql<number>`count(*)` })
       .from(followedUsers)
       .where(and(
         eq(followedUsers.profileId, profileId),

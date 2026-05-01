@@ -1,10 +1,10 @@
-import { pgTable, text, serial, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const proxies = pgTable("proxies", {
-  id: serial("id").primaryKey(),
+export const proxies = sqliteTable("proxies", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   host: text("host").notNull(),
   port: integer("port").notNull(),
@@ -26,8 +26,8 @@ export const ACCOUNT_STATUSES = [
 
 export type AccountStatus = typeof ACCOUNT_STATUSES[number];
 
-export const profiles = pgTable("profiles", {
-  id: serial("id").primaryKey(),
+export const profiles = sqliteTable("profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull(),
   password: text("password").notNull(),
   email: text("email"),
@@ -40,61 +40,55 @@ export const profiles = pgTable("profiles", {
   accountStatus: text("account_status").notNull().default('pending'),
   userAgentApi: text("user_agent_api"),
   userAgentEmbedded: text("user_agent_embedded"),
-  apiLimits: jsonb("api_limits").default({
+  apiLimits: text("api_limits", { mode: "json" }).default({
     requestsMin: 5,
     requestsMax: 10,
     everySecondsMin: 30,
     everySecondsMax: 60
   }),
-  browserDirectConnection: boolean("browser_direct_connection").default(true),
-  credentialsDirty: boolean("credentials_dirty").default(true),
-  // Account details
+  browserDirectConnection: integer("browser_direct_connection", { mode: "boolean" }).default(true),
+  credentialsDirty: integer("credentials_dirty", { mode: "boolean" }).default(true),
   accountLabel: text("account_label"),
   tags: text("tags"),
   dateOfBirth: text("date_of_birth"),
   notes: text("notes"),
-  // Security
   phoneNumber: text("phone_number"),
   twoFASecretKey: text("two_fa_secret_key"),
   backupCodes: text("backup_codes"),
-  // Email validation
   emailValidationUsername: text("email_validation_username"),
   emailValidationPassword: text("email_validation_password"),
   emailValidationPop3Server: text("email_validation_pop3_server"),
   emailValidationPort: text("email_validation_port"),
-  // Active timer — "HH:MM" strings, null means timer disabled
-  activeTimerEnabled: boolean("active_timer_enabled").default(false),
+  activeTimerEnabled: integer("active_timer_enabled", { mode: "boolean" }).default(false),
   activeTimerStart: text("active_timer_start"),
   activeTimerEnd: text("active_timer_end"),
-  // Profile sync — periodically refreshes follower/following/posts counts
-  syncEnabled: boolean("sync_enabled").default(false),
+  syncEnabled: integer("sync_enabled", { mode: "boolean" }).default(false),
   syncIntervalMin: integer("sync_interval_min"),
   syncIntervalMax: integer("sync_interval_max"),
-  syncUseHiker: boolean("sync_use_hiker").default(false),
+  syncUseHiker: integer("sync_use_hiker", { mode: "boolean" }).default(false),
   followersCount: integer("followers_count"),
   followingCount: integer("following_count"),
   postsCount: integer("posts_count"),
   lastSyncedAt: text("last_synced_at"),
 });
 
-export const tools = pgTable("tools", {
-  id: serial("id").primaryKey(),
+export const tools = sqliteTable("tools", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
-  type: text("type").notNull(), // 'follow', 'like', 'dm', 'unfollow'
-  enabled: boolean("enabled").notNull().default(false),
-  settings: jsonb("settings").default({}),
+  type: text("type").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  settings: text("settings", { mode: "json" }).default({}),
 });
 
-export const sources = pgTable("sources", {
-  id: serial("id").primaryKey(),
+export const sources = sqliteTable("sources", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   toolId: integer("tool_id").notNull(),
-  type: text("type").notNull(), // 'hashtag', 'target_followers'
+  type: text("type").notNull(),
   value: text("value").notNull(),
-  rank: integer("rank"),        // Jarvee-style weight out of 1000
-  nrPosts: integer("nr_posts"), // Post count from Jarvee export
+  rank: integer("rank"),
+  nrPosts: integer("nr_posts"),
 });
 
-// Relations
 export const profilesRelations = relations(profiles, ({ one, many }) => ({
   proxy: one(proxies, {
     fields: [profiles.proxyId],
@@ -119,22 +113,21 @@ export const sourcesRelations = relations(sources, ({ one }) => ({
   }),
 }));
 
-export const logs = pgTable("logs", {
-  id: serial("id").primaryKey(),
+export const logs = sqliteTable("logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
-  toolType: text("type").notNull(), // 'follow', 'dm', etc
+  toolType: text("type").notNull(),
   message: text("message").notNull(),
-  timestamp: text("timestamp").notNull(), // Use ISO string or timestamp
+  timestamp: text("timestamp").notNull(),
 });
 
-// Tracks actual Instagram API HTTP calls (matches Jarvee's API Calls export format)
-export const instagramApiCalls = pgTable("instagram_api_calls", {
-  id: serial("id").primaryKey(),
+export const instagramApiCalls = sqliteTable("instagram_api_calls", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
-  operationName: text("operation_name").notNull(),  // e.g. "GetTimeline", "Follow"
-  date: text("date").notNull(),                      // ISO timestamp
+  operationName: text("operation_name").notNull(),
+  date: text("date").notNull(),
   message: text("message").default(""),
-  source: text("source").default(""),               // "Post" / "Get"
+  source: text("source").default(""),
   navChain: text("nav_chain").default(""),
   ipAddress: text("ip_address").default(""),
   durationMs: integer("duration_ms").default(0),
@@ -147,13 +140,13 @@ export const logsRelations = relations(logs, ({ one }) => ({
   }),
 }));
 
-export const followedUsers = pgTable("followed_users", {
-  id: serial("id").primaryKey(),
+export const followedUsers = sqliteTable("followed_users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
   instagramUsername: text("instagram_username").notNull(),
-  sourceValue: text("source_value").notNull().default(""),   // e.g. "#travel" or "@someaccount"
-  sourceType: text("source_type").notNull().default(""),     // "hashtag" | "target_followers" | etc
-  followedAt: text("followed_at").notNull(),                  // ISO timestamp
+  sourceValue: text("source_value").notNull().default(""),
+  sourceType: text("source_type").notNull().default(""),
+  followedAt: text("followed_at").notNull(),
 });
 
 export const followedUsersRelations = relations(followedUsers, ({ one }) => ({
@@ -167,15 +160,15 @@ export const insertFollowedUserSchema = createInsertSchema(followedUsers).omit({
 export type FollowedUser = typeof followedUsers.$inferSelect;
 export type InsertFollowedUser = z.infer<typeof insertFollowedUserSchema>;
 
-export const sessionActions = pgTable("session_actions", {
-  id: serial("id").primaryKey(),
+export const sessionActions = sqliteTable("session_actions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
   toolId: integer("tool_id").notNull(),
-  action: text("action").notNull(),        // 'like','view_stories','view_reels','view_highlights','follow','follow_skipped','follow_blocked','dedup_skip'
+  action: text("action").notNull(),
   targetUsername: text("target_username").notNull(),
   sourceValue: text("source_value").notNull().default(""),
   sourceType: text("source_type").notNull().default(""),
-  result: text("result").notNull().default("ok"), // 'ok','skipped','error'
+  result: text("result").notNull().default("ok"),
   detail: text("detail").default(""),
   timestamp: text("timestamp").notNull(),
 });
@@ -191,12 +184,12 @@ export const insertSessionActionSchema = createInsertSchema(sessionActions).omit
 export type SessionAction = typeof sessionActions.$inferSelect;
 export type InsertSessionAction = z.infer<typeof insertSessionActionSchema>;
 
-export const stats = pgTable("stats", {
-  id: serial("id").primaryKey(),
+export const stats = sqliteTable("stats", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
-  toolType: text("type").notNull(), // 'follow', 'dm', 'unfollow'
+  toolType: text("type").notNull(),
   count: integer("count").notNull().default(0),
-  date: text("date").notNull(), // 'YYYY-MM-DD' for daily, 'lifetime' for lifetime
+  date: text("date").notNull(),
 });
 
 export const statsRelations = relations(stats, ({ one }) => ({
@@ -205,15 +198,14 @@ export const statsRelations = relations(stats, ({ one }) => ({
     references: [profiles.id],
   }),
 }));
-// Global key-value settings (e.g. skipFollowedUsers, skipAlreadySkippedUsers)
-export const globalSettings = pgTable("global_settings", {
+
+export const globalSettings = sqliteTable("global_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull().default(""),
 });
 
-// Users skipped globally (shared across all profiles)
-export const skippedUsers = pgTable("skipped_users", {
-  id: serial("id").primaryKey(),
+export const skippedUsers = sqliteTable("skipped_users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   instagramUsername: text("instagram_username").notNull(),
   reason: text("reason").notNull().default(""),
   skippedAt: text("skipped_at").notNull(),
@@ -223,8 +215,8 @@ export const insertSkippedUserSchema = createInsertSchema(skippedUsers).omit({ i
 export type SkippedUser = typeof skippedUsers.$inferSelect;
 export type InsertSkippedUser = z.infer<typeof insertSkippedUserSchema>;
 
-export const repostedPosts = pgTable("reposted_posts", {
-  id: serial("id").primaryKey(),
+export const repostedPosts = sqliteTable("reposted_posts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
   toolId: integer("tool_id").notNull(),
   sourceUsername: text("source_username").notNull(),
@@ -246,10 +238,8 @@ export const insertRepostedPostSchema = createInsertSchema(repostedPosts).omit({
 export type RepostedPost = typeof repostedPosts.$inferSelect;
 export type InsertRepostedPost = z.infer<typeof insertRepostedPostSchema>;
 
-// Tracks which users have already been DM'd as new followers for a profile,
-// so they are never messaged twice.
-export const contactDmSent = pgTable("contact_dm_sent", {
-  id: serial("id").primaryKey(),
+export const contactDmSent = sqliteTable("contact_dm_sent", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
   instagramUsername: text("instagram_username").notNull(),
   instagramUserId: text("instagram_user_id").notNull().default(""),
@@ -268,16 +258,14 @@ export const insertContactDmSentSchema = createInsertSchema(contactDmSent).omit(
 export type ContactDmSent = typeof contactDmSent.$inferSelect;
 export type InsertContactDmSent = z.infer<typeof insertContactDmSentSchema>;
 
-// Queue of outgoing contact DMs (pending → sent/failed).
-// Populated by the Contact New Followers runner; consumed by the Contact Users runner.
-export const contactPendingMessages = pgTable("contact_pending_messages", {
-  id: serial("id").primaryKey(),
+export const contactPendingMessages = sqliteTable("contact_pending_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
   instagramUsername: text("instagram_username").notNull(),
   instagramUserId: text("instagram_user_id").notNull().default(""),
-  messageType: text("message_type").notNull(), // 'new_follower' | 'auto_reply'
+  messageType: text("message_type").notNull(),
   messageText: text("message_text").notNull(),
-  status: text("status").notNull().default("pending"), // 'pending' | 'sent' | 'failed'
+  status: text("status").notNull().default("pending"),
   queuedAt: text("queued_at").notNull(),
   sentAt: text("sent_at"),
   dmThreadId: text("dm_thread_id"),
@@ -310,7 +298,6 @@ export const insertToolSchema = createInsertSchema(tools).omit({ id: true });
 export const insertSourceSchema = createInsertSchema(sources).omit({ id: true });
 export const insertLogSchema = createInsertSchema(logs).omit({ id: true });
 
-// Types
 export type Proxy = typeof proxies.$inferSelect;
 export type InsertProxy = z.infer<typeof insertProxySchema>;
 
