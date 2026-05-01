@@ -322,7 +322,6 @@ export function ProfilesPage() {
               </span>
             )}
           </div>
-          <p className="text-muted-foreground mt-1">Manage your Instagram profiles and their status.</p>
         </div>
         <Button onClick={handleCreate} disabled={createProfileMutation.isPending}>
           <Plus className="w-4 h-4 mr-2" />
