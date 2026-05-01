@@ -844,7 +844,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         {/* Settings Column */}
         <div className={`${tool.type === 'follow' ? 'col-span-1' : 'lg:col-span-1'} space-y-6`}>
           <div className="desktop-card p-6">
-            <div className="border border-black dark:border-white rounded-xl p-4 space-y-4">
+            <div className="rounded-xl p-4 space-y-4">
             {tool.type === 'follow' && (
               <div className="flex items-center gap-3 mb-4">
                 <Switch
