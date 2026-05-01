@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
 interface ParsedProfile {
+  accountLabel: string;
   username: string;
   password: string;
   email: string;
@@ -30,8 +31,9 @@ interface ParsedProfile {
   emailValidationPort: string;
 }
 
-// Map Jarvee column headers to our field names
+// Map Jarvee column headers (lowercased, # stripped) to our field names
 const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
+  "name":                        "accountLabel",
   "email/username":              "email",
   "password":                    "password",
   "proxy username":              "proxyUsername",
@@ -45,26 +47,81 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "phone number":                "phoneNumber",
   "2fa secret key":              "twoFASecretKey",
   "backup codes":                "backupCodes",
+  "backup codes ":               "backupCodes",
   "email validation username":   "emailValidationUsername",
   "email validation pass":       "emailValidationPassword",
   "email validation pop3server": "emailValidationPop3Server",
   "email validation port":       "emailValidationPort",
 };
 
+/**
+ * Parse a TSV/tab-delimited file with proper RFC-4180-style quoted cell support.
+ * Jarvee wraps multi-line cells (e.g. description) in double-quotes with embedded
+ * newlines — a naive line-split breaks those into hundreds of extra "lines".
+ */
+function parseTSVRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuote = false;
+  let i = 0;
+
+  while (i < text.length) {
+    const ch = text[i];
+
+    if (inQuote) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cell += '"';
+          i += 2;
+        } else {
+          inQuote = false;
+          i++;
+        }
+      } else {
+        cell += ch;
+        i++;
+      }
+      continue;
+    }
+
+    if (ch === '"') { inQuote = true; i++; continue; }
+    if (ch === '\t') { row.push(cell); cell = ""; i++; continue; }
+
+    if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell);
+      cell = "";
+      if (row.some(c => c.trim())) rows.push(row);
+      row = [];
+      i++;
+      continue;
+    }
+
+    cell += ch;
+    i++;
+  }
+
+  // flush last row
+  row.push(cell);
+  if (row.some(c => c.trim())) rows.push(row);
+
+  return rows;
+}
+
 function parseJarveeFile(text: string): ParsedProfile[] {
-  // Remove BOM if present
   const clean = text.startsWith("\ufeff") ? text.slice(1) : text;
-  const lines = clean.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (lines.length < 2) return [];
+  const rows = parseTSVRows(clean);
+  if (rows.length < 2) return [];
 
-  const headers = lines[0].split("\t").map(h => h.trim().toLowerCase().replace(/^#/, ""));
-
+  const headers = rows[0].map(h => h.trim().toLowerCase().replace(/^#/, ""));
   const results: ParsedProfile[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split("\t");
+  for (let i = 1; i < rows.length; i++) {
+    const cells = rows[i];
     const row: any = {
-      username: "", password: "", email: "", proxyHost: "", proxyPort: "",
+      accountLabel: "", username: "", password: "", email: "",
+      proxyHost: "", proxyPort: "",
       proxyUsername: "", proxyPassword: "", userAgentEmbedded: "", userAgentApi: "",
       tags: "", dateOfBirth: "", notes: "", phoneNumber: "", twoFASecretKey: "",
       backupCodes: "", emailValidationUsername: "", emailValidationPassword: "",
@@ -74,7 +131,6 @@ function parseJarveeFile(text: string): ParsedProfile[] {
     headers.forEach((header, idx) => {
       const val = (cells[idx] || "").trim();
 
-      // Handle proxy-url/proxy-ip:port → split into host:port
       if (header === "proxy-url/proxy-ip:port" || header === "proxy url/proxy ip:port") {
         const match = val.match(/^(.+):(\d+)$/);
         if (match) { row.proxyHost = match[1]; row.proxyPort = match[2]; }
@@ -86,7 +142,6 @@ function parseJarveeFile(text: string): ParsedProfile[] {
       if (field) row[field] = val;
     });
 
-    // If username is empty but email looks like a username, use it
     if (!row.username && row.email && !row.email.includes("@")) {
       row.username = row.email;
       row.email = "";

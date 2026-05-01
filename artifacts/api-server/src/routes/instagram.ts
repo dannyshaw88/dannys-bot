@@ -244,6 +244,7 @@ export async function registerInstagramRoutes(
           const created = await storage.createProfile({
             username: p.username || "",
             password: p.password || "",
+            accountLabel: p.accountLabel || null,
             email: p.email || null,
             proxyHost: p.proxyHost || null,
             proxyPort: p.proxyPort ? Number(p.proxyPort) : null,
