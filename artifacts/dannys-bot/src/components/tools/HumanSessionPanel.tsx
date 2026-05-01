@@ -1,21 +1,33 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
-  MessageSquare, Repeat2, AtSign,
+  MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
+  ChevronDown, ChevronUp,
 } from "lucide-react";
-import { type Tool, type Profile } from "@shared/schema";
+import { format } from "date-fns";
+import { type Tool, type Profile, type RepostedPost } from "@shared/schema";
+import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 interface HumanSessionPanelProps {
   tool: Tool;
   profile: Profile;
 }
 
-export function HumanSessionPanel({ tool, profile: _profile }: HumanSessionPanelProps) {
+export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const updateToolMutation = useUpdateTool();
+  const { navigateTo } = useBrowserWindows();
+  const [showReposted, setShowReposted] = useState(false);
+
+  const { data: repostedPostsList, isLoading: repostedPostsLoading } = useQuery<RepostedPost[]>({
+    queryKey: [`/api/profiles/${tool.profileId}/reposted-posts`],
+    refetchInterval: 15000,
+  });
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
@@ -442,6 +454,88 @@ export function HumanSessionPanel({ tool, profile: _profile }: HumanSessionPanel
             <br />
             <strong>Disable at post count</strong> reads the post count from this profile's Instagram bio to stop reposting once the goal is reached.
           </p>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1.5 text-xs h-7 px-2.5"
+            onClick={() => setShowReposted(v => !v)}
+          >
+            <Repeat2 className="w-3.5 h-3.5 text-green-500" />
+            Reposted Posts
+            <span className="text-[10px] text-muted-foreground ml-0.5">({repostedPostsList?.length ?? '…'})</span>
+            {showReposted ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+          </Button>
+
+          {showReposted && (
+            <div className="border border-border rounded-lg overflow-hidden animate-in fade-in duration-200">
+              <div className="overflow-x-auto max-h-72">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Date / Time</th>
+                      <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Source Account</th>
+                      <th className="px-4 py-2.5 font-bold bg-muted/30 whitespace-nowrap">Post ID / Code</th>
+                      <th className="px-4 py-2.5 font-bold bg-muted/30 w-full">Caption (preview)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {repostedPostsLoading ? (
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <tr key={i} className="animate-pulse">
+                          <td colSpan={4} className="px-4 py-3 bg-muted/10 h-10" />
+                        </tr>
+                      ))
+                    ) : !repostedPostsList || repostedPostsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                          <Repeat2 className="w-6 h-6 mx-auto mb-2 text-muted-foreground/30" />
+                          <p className="text-xs font-medium">No posts reposted yet</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      repostedPostsList.map(rp => (
+                        <tr key={rp.id} className="hover:bg-accent/5 transition-colors">
+                          <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground text-xs font-mono">
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              {format(new Date(rp.repostedAt), "MMM d, HH:mm:ss")}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap font-medium text-foreground">
+                            <button
+                              onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/${rp.sourceUsername}/`)}
+                              className="flex items-center gap-1 text-primary hover:underline group text-xs"
+                            >
+                              @{rp.sourceUsername}
+                              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap text-xs text-muted-foreground font-mono">
+                            {rp.shortcode ? (
+                              <button
+                                onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/p/${rp.shortcode}/`)}
+                                className="flex items-center gap-1 text-primary hover:underline group"
+                              >
+                                <ImageIcon className="w-3 h-3" />
+                                {rp.shortcode}
+                                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            ) : (
+                              <span className="truncate max-w-[100px] block" title={rp.mediaId}>{rp.mediaId}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[240px]">
+                            <span className="line-clamp-2">{rp.caption || "—"}</span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

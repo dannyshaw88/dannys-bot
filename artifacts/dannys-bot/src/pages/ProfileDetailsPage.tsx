@@ -5,6 +5,7 @@ import { useTools } from "@/hooks/use-tools";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
+import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
@@ -282,6 +283,9 @@ export function ProfileDetailsPage() {
           </Tabs.Trigger>
           <Tabs.Trigger value="human-session" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
             <User className="w-4 h-4 mr-2" /> Human Session Tools
+          </Tabs.Trigger>
+          <Tabs.Trigger value="session-log" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
+            <Activity className="w-4 h-4 mr-2" /> Session Log
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -795,6 +799,13 @@ export function ProfileDetailsPage() {
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
           {getTool('follow')
             ? <HumanSessionPanel tool={getTool('follow')!} profile={profile} />
+            : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
+          }
+        </Tabs.Content>
+
+        <Tabs.Content value="session-log" className="outline-none animate-in fade-in duration-300">
+          {getTool('follow')
+            ? <SessionLogPanel tool={getTool('follow')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
           }
         </Tabs.Content>
