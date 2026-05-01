@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useProfile, useUpdateProfile, useUpdateAccountStatus, useProfiles } from "@/hooks/use-profiles";
 import { useTools } from "@/hooks/use-tools";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -13,8 +13,8 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { 
   ArrowLeft, Settings, Shield, User, Lock, Globe, Zap, Instagram, Activity, Monitor,
   CheckCircle2, XCircle, Loader2, ShieldCheck,
-  Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown,
-  Tag, Calendar, FileText, Server, X, Clock, Copy,
+  Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown, ChevronLeft, ChevronRight,
+  Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
   UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
   AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye
 } from "lucide-react";
@@ -89,6 +89,9 @@ export function ProfileDetailsPage() {
   const initialLoadRef = useRef(false);
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [profileSearch, setProfileSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("settings");
+  const [, navigate] = useLocation();
 
   const ACCOUNT_COPY_GROUPS: CopyOptionGroup[] = [
     {
@@ -288,6 +291,20 @@ export function ProfileDetailsPage() {
 
   const getTool = (type: string) => tools?.find(t => t.type === type);
 
+  // Profile switcher helpers
+  const sortedProfiles = [...(allProfiles ?? [])].sort((a, b) =>
+    (a.accountLabel || a.username).toLowerCase().localeCompare((b.accountLabel || b.username).toLowerCase())
+  );
+  const switcherProfiles = profileSearch.trim()
+    ? sortedProfiles.filter(p => {
+        const q = profileSearch.toLowerCase();
+        return (p.username ?? "").toLowerCase().includes(q) || (p.accountLabel ?? "").toLowerCase().includes(q);
+      })
+    : sortedProfiles;
+  const currentIdx  = sortedProfiles.findIndex(p => p.id === profileId);
+  const prevProfile = currentIdx > 0 ? sortedProfiles[currentIdx - 1] : null;
+  const nextProfile = currentIdx < sortedProfiles.length - 1 ? sortedProfiles[currentIdx + 1] : null;
+
   return (
     <AppLayout>
       <div className="mb-8">
@@ -296,7 +313,70 @@ export function ProfileDetailsPage() {
         </Link>
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">@{profile.username}</h1>
+            {/* Profile switcher */}
+            <div className="flex items-center gap-1 mb-1">
+              <button
+                onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}`)}
+                disabled={!prevProfile}
+                title={prevProfile ? (prevProfile.accountLabel || prevProfile.username) : undefined}
+                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <DropdownMenu onOpenChange={open => { if (!open) setProfileSearch(""); }}>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent transition-colors max-w-md">
+                    <Instagram className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-2xl font-bold tracking-tight text-foreground truncate">
+                      {profile.accountLabel || `@${profile.username}`}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-80 p-0">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b">
+                    <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <input
+                      value={profileSearch}
+                      onChange={e => setProfileSearch(e.target.value)}
+                      placeholder="Search profiles…"
+                      className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                      autoFocus
+                    />
+                    {profileSearch && (
+                      <button onClick={() => setProfileSearch("")} className="text-muted-foreground hover:text-foreground">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-72 overflow-y-auto py-1">
+                    {switcherProfiles.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-sm text-muted-foreground">No profiles found</div>
+                    ) : switcherProfiles.map(p => (
+                      <DropdownMenuItem
+                        key={p.id}
+                        onClick={() => navigate(`/profiles/${p.id}`)}
+                        className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 text-sm ${p.id === profileId ? "bg-accent font-semibold" : ""}`}
+                      >
+                        <Instagram className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{p.accountLabel || `@${p.username}`}</span>
+                        {p.id === profileId && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button
+                onClick={() => nextProfile && navigate(`/profiles/${nextProfile.id}`)}
+                disabled={!nextProfile}
+                title={nextProfile ? (nextProfile.accountLabel || nextProfile.username) : undefined}
+                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
             <div className="flex items-center gap-2 mt-2">
               {/* Account status badge — click to change */}
               {(() => {
@@ -352,7 +432,7 @@ export function ProfileDetailsPage() {
         </div>
       </div>
 
-      <Tabs.Root defaultValue="settings" className="w-full">
+      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full">
         <Tabs.List className="flex border-b border-border mb-8 overflow-x-auto">
           <Tabs.Trigger value="settings" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
             <Settings className="w-4 h-4 mr-2" /> Account Settings
