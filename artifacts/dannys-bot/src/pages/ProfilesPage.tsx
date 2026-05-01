@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import {
   Plus, Trash2, Instagram, Activity, ChevronDown, Upload, Download,
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
-  Smartphone, FileDown, Bell
+  Smartphone, FileDown, Bell, Filter, X
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -91,6 +92,7 @@ export function ProfilesPage() {
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
 
   const handleCreate = () => {
     createProfileMutation.mutate({
@@ -298,6 +300,17 @@ export function ProfilesPage() {
     return () => setSlot(null);
   }, [selectedProfileIds, profiles, toggleAll, handleBulkDelete, handleBulkResetDeviceIds, handleExportProfiles, setImportOpen]);
 
+  // Parse filter: split on | or ||, trim, lowercase
+  const filterTokens = statusFilter
+    .split(/\|\|?/)
+    .map(t => t.trim().toLowerCase())
+    .filter(Boolean);
+  const filteredProfiles = filterTokens.length > 0
+    ? (profiles ?? []).filter(p =>
+        filterTokens.includes((p.accountStatus ?? "pending").toLowerCase())
+      )
+    : profiles;
+
   return (
     <AppLayout>
       <div className="flex justify-between items-start mb-8">
@@ -327,6 +340,33 @@ export function ProfilesPage() {
         </Button>
       </div>
 
+      {/* Status filter bar */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="relative flex-1 max-w-xs">
+          <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            placeholder="Filter by status: valid | pending | banned"
+            className="h-8 pl-7 pr-7 text-xs font-mono"
+          />
+          {statusFilter && (
+            <button
+              onClick={() => setStatusFilter("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Clear filter"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        {filterTokens.length > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {filteredProfiles?.length ?? 0} of {profiles?.length ?? 0} accounts
+          </span>
+        )}
+      </div>
+
       {/* Column headers */}
       <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
         <div className="w-6 shrink-0" />
@@ -349,9 +389,18 @@ export function ProfilesPage() {
           <p className="text-muted-foreground text-sm mt-1 mb-4">Add your first Instagram account to start automating.</p>
           <Button onClick={handleCreate} variant="outline" disabled={createProfileMutation.isPending}>Add Profile</Button>
         </div>
+      ) : filteredProfiles?.length === 0 ? (
+        <div className="text-center py-16 desktop-card flex flex-col items-center">
+          <Filter className="w-10 h-10 text-muted-foreground/40 mb-3" />
+          <h3 className="text-base font-medium">No accounts match this filter</h3>
+          <p className="text-muted-foreground text-sm mt-1">
+            Try a different status or{" "}
+            <button onClick={() => setStatusFilter("")} className="underline hover:text-foreground transition-colors">clear the filter</button>.
+          </p>
+        </div>
       ) : (
         <div className="space-y-1.5 pb-24">
-          {profiles?.map((profile) => {
+          {filteredProfiles?.map((profile) => {
             const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
             const isStopped  = acctStatus === "stopped";
 
