@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile } from "@/hooks/use-profiles";
@@ -10,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Plus, Trash2, Instagram, Activity, ChevronDown, Upload, Download,
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
-  Smartphone, FileDown
+  Smartphone, FileDown, Bell
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -59,6 +60,18 @@ export function ProfilesPage() {
   const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
   const { openWindow } = useBrowserWindows();
+
+  const { data: liveApiCalls } = useQuery<any[]>({
+    queryKey: ["/api/instagram-api-calls"],
+    refetchInterval: 4000,
+    select: (data) => data?.slice(0, 1),
+  });
+  const latestCall = liveApiCalls?.[0];
+  const latestUsername = latestCall
+    ? (profiles?.find(p => p.id === latestCall.profileId)?.accountLabel
+        || profiles?.find(p => p.id === latestCall.profileId)?.username
+        || `#${latestCall.profileId}`)
+    : null;
 
   const handleVerify = (id: number) => {
     verifyMutation.mutate(id, {
@@ -287,9 +300,25 @@ export function ProfilesPage() {
 
   return (
     <AppLayout>
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Accounts</h1>
+      <div className="flex justify-between items-start mb-8">
+        <div className="min-w-0 flex-1 mr-4">
+          <div className="flex items-baseline gap-3 min-w-0">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
+            {latestCall && latestUsername && (
+              <span
+                key={latestCall.id}
+                className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 overflow-hidden"
+              >
+                <Bell className="w-3 h-3 text-primary shrink-0" />
+                <span className="truncate">
+                  <span className="font-semibold text-foreground">{latestCall.operationName}</span>
+                  {" — "}
+                  <span className="text-primary font-medium">{latestUsername}</span>
+                  {latestCall.message ? ` ${latestCall.message}` : ""}
+                </span>
+              </span>
+            )}
+          </div>
           <p className="text-muted-foreground mt-1">Manage your Instagram profiles and their status.</p>
         </div>
         <Button onClick={handleCreate} disabled={createProfileMutation.isPending}>
