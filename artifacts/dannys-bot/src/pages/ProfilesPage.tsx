@@ -359,7 +359,7 @@ export function ProfilesPage() {
 
       {/* Column headers */}
       <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        <div className="w-6 shrink-0 flex items-center justify-center">
+        <div className="w-6 shrink-0">
           <Checkbox
             checked={!!(profiles?.length && selectedProfileIds.length === profiles.length)}
             onCheckedChange={toggleAll}
