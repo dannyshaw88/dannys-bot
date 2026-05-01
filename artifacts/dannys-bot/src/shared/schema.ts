@@ -134,6 +134,21 @@ export type ContactDmSent = {
   messagePreview: string;
 };
 
+export type ContactPendingMessage = {
+  id: number;
+  profileId: number;
+  instagramUsername: string;
+  instagramUserId: string;
+  messageType: string;
+  messageText: string;
+  status: string;
+  queuedAt: string;
+  sentAt: string | null;
+  dmThreadId: string | null;
+  dmItemId: string | null;
+  unsendAt: string | null;
+};
+
 export type Stat = {
   id: number;
   profileId: number;

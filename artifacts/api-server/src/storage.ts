@@ -2,7 +2,7 @@ import { db } from "@workspace/db";
 import { userAgents } from "./shared/userAgents";
 import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
-  globalSettings, skippedUsers, repostedPosts, contactDmSent,
+  globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -12,6 +12,7 @@ import {
   type SkippedUser,
   type RepostedPost, type InsertRepostedPost,
   type ContactDmSent, type InsertContactDmSent,
+  type ContactPendingMessage, type InsertContactPendingMessage,
 } from "./shared/schema";
 import { eq, desc, and, sql, like } from "drizzle-orm";
 
@@ -79,6 +80,14 @@ export interface IStorage {
   createContactDmSent(entry: InsertContactDmSent): Promise<ContactDmSent>;
   isContactDmAlreadySent(profileId: number, instagramUsername: string): Promise<boolean>;
   deleteContactDmSent(id: number): Promise<void>;
+
+  // Contact Pending Messages (send queue)
+  getContactPendingMessages(profileId: number, status?: string): Promise<ContactPendingMessage[]>;
+  createContactPendingMessage(entry: InsertContactPendingMessage): Promise<ContactPendingMessage>;
+  updateContactPendingMessage(id: number, updates: Partial<Pick<ContactPendingMessage, 'status' | 'sentAt' | 'dmThreadId' | 'dmItemId' | 'unsendAt'>>): Promise<void>;
+  deleteContactPendingMessage(id: number): Promise<void>;
+  isContactAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
+  getContactMessagesForUnsend(profileId: number): Promise<ContactPendingMessage[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -346,6 +355,49 @@ export class DatabaseStorage implements IStorage {
 
   async deleteContactDmSent(id: number): Promise<void> {
     await db.delete(contactDmSent).where(eq(contactDmSent.id, id));
+  }
+
+  async getContactPendingMessages(profileId: number, status?: string): Promise<ContactPendingMessage[]> {
+    const conditions = status
+      ? and(eq(contactPendingMessages.profileId, profileId), eq(contactPendingMessages.status, status))
+      : eq(contactPendingMessages.profileId, profileId);
+    return await db.select().from(contactPendingMessages)
+      .where(conditions)
+      .orderBy(desc(contactPendingMessages.id));
+  }
+
+  async createContactPendingMessage(entry: InsertContactPendingMessage): Promise<ContactPendingMessage> {
+    const [created] = await db.insert(contactPendingMessages).values(entry).returning();
+    return created;
+  }
+
+  async updateContactPendingMessage(id: number, updates: Partial<Pick<ContactPendingMessage, 'status' | 'sentAt' | 'dmThreadId' | 'dmItemId' | 'unsendAt'>>): Promise<void> {
+    await db.update(contactPendingMessages).set(updates).where(eq(contactPendingMessages.id, id));
+  }
+
+  async deleteContactPendingMessage(id: number): Promise<void> {
+    await db.delete(contactPendingMessages).where(eq(contactPendingMessages.id, id));
+  }
+
+  async isContactAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean> {
+    const rows = await db.select({ id: contactPendingMessages.id })
+      .from(contactPendingMessages)
+      .where(and(
+        eq(contactPendingMessages.profileId, profileId),
+        sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`
+      ))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async getContactMessagesForUnsend(profileId: number): Promise<ContactPendingMessage[]> {
+    const now = new Date().toISOString();
+    return await db.select().from(contactPendingMessages)
+      .where(and(
+        eq(contactPendingMessages.profileId, profileId),
+        eq(contactPendingMessages.status, "sent"),
+        sql`${contactPendingMessages.unsendAt} IS NOT NULL AND ${contactPendingMessages.unsendAt} <= ${now}`
+      ));
   }
 }
 

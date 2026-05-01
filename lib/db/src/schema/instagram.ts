@@ -258,6 +258,34 @@ export const insertContactDmSentSchema = createInsertSchema(contactDmSent).omit(
 export type ContactDmSent = typeof contactDmSent.$inferSelect;
 export type InsertContactDmSent = z.infer<typeof insertContactDmSentSchema>;
 
+// Queue of outgoing contact DMs (pending → sent/failed).
+// Populated by the Contact New Followers runner; consumed by the Contact Users runner.
+export const contactPendingMessages = pgTable("contact_pending_messages", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profile_id").notNull(),
+  instagramUsername: text("instagram_username").notNull(),
+  instagramUserId: text("instagram_user_id").notNull().default(""),
+  messageType: text("message_type").notNull(), // 'new_follower' | 'auto_reply'
+  messageText: text("message_text").notNull(),
+  status: text("status").notNull().default("pending"), // 'pending' | 'sent' | 'failed'
+  queuedAt: text("queued_at").notNull(),
+  sentAt: text("sent_at"),
+  dmThreadId: text("dm_thread_id"),
+  dmItemId: text("dm_item_id"),
+  unsendAt: text("unsend_at"),
+});
+
+export const contactPendingMessagesRelations = relations(contactPendingMessages, ({ one }) => ({
+  profile: one(profiles, {
+    fields: [contactPendingMessages.profileId],
+    references: [profiles.id],
+  }),
+}));
+
+export const insertContactPendingMessageSchema = createInsertSchema(contactPendingMessages).omit({ id: true });
+export type ContactPendingMessage = typeof contactPendingMessages.$inferSelect;
+export type InsertContactPendingMessage = z.infer<typeof insertContactPendingMessageSchema>;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
 });

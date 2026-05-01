@@ -343,7 +343,7 @@ class AutomationEngine {
     });
   }
 
-  // ── Contact (new-follower DM) runner launch ───────────────────────────────
+  // ── Contact (new-follower + users send) runner ────────────────────────────
   private launchContact(profile: Profile, _tool: Tool) {
     const state: ProfileState = {
       stop: { stopped: false },
@@ -358,6 +358,10 @@ class AutomationEngine {
     this.contactStates.set(profile.id, state);
     console.log(`[engine] Launching contact runner for @${profile.username}`);
 
+    // Each timer is tracked separately so they run on their own independent cadence
+    let nextFollowerCheckAt = 0;  // run immediately on first tick
+    let nextUsersSessionAt  = 0;
+
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -369,20 +373,51 @@ class AutomationEngine {
         const contactTool = tools.find(t => t.type === "contact");
         if (!contactTool?.enabled || state.stop.stopped) break;
 
-        try {
-          await this.runContactSession(freshProfile, contactTool, state);
-        } catch (err: any) {
-          console.error(`[engine] @${freshProfile.username}: contact session error: ${err?.message}`);
+        const s = contactTool.settings as any;
+        const now = Date.now();
+
+        // ── New Followers → enqueue to pending ─────────────────────────────
+        if (now >= nextFollowerCheckAt) {
+          try {
+            await this.runContactNewFollowersSession(freshProfile, contactTool, state);
+          } catch (err: any) {
+            console.error(`[engine] @${freshProfile.username}: new-follower contact session error: ${err?.message}`);
+          }
+          const waitMs = randInt(
+            (s.contactCheckIntervalMin ?? 30) * 60_000,
+            (s.contactCheckIntervalMax ?? 60) * 60_000
+          );
+          nextFollowerCheckAt = Date.now() + waitMs;
+          console.log(`[engine] @${freshProfile.username}: next follower check in ${Math.round(waitMs / 60000)}min`);
         }
 
         if (state.stop.stopped) break;
-        const s = contactTool.settings as any;
-        const waitMs = randInt(
-          (s.contactCheckIntervalMin ?? 30) * 60_000,
-          (s.contactCheckIntervalMax ?? 60) * 60_000
-        );
-        console.log(`[engine] @${freshProfile.username}: next contact check in ${Math.round(waitMs / 60000)}min`);
-        await sleep(waitMs);
+
+        // ── Contact Users → send from pending queue ─────────────────────────
+        if (now >= nextUsersSessionAt) {
+          try {
+            await this.runContactUsersSession(freshProfile, contactTool, state);
+          } catch (err: any) {
+            console.error(`[engine] @${freshProfile.username}: contact-users send session error: ${err?.message}`);
+          }
+          const waitMs = randInt(
+            (s.contactUsersWaitMin ?? 30) * 60_000,
+            (s.contactUsersWaitMax ?? 60) * 60_000
+          );
+          nextUsersSessionAt = Date.now() + waitMs;
+          console.log(`[engine] @${freshProfile.username}: next users send in ${Math.round(waitMs / 60000)}min`);
+        }
+
+        if (state.stop.stopped) break;
+
+        // ── Unsend check ────────────────────────────────────────────────────
+        try {
+          await this.runContactUnsends(freshProfile, state);
+        } catch (err: any) {
+          console.error(`[engine] @${freshProfile.username}: unsend check error: ${err?.message}`);
+        }
+
+        await sleep(30_000); // poll every 30s to check if timers are due
       }
       this.contactStates.delete(profile.id);
       console.log(`[engine] Contact runner exited for @${profile.username}`);
@@ -394,31 +429,27 @@ class AutomationEngine {
     });
   }
 
-  // ── Contact session: DM new followers ─────────────────────────────────────
-  private async runContactSession(profile: Profile, tool: Tool, state: ProfileState): Promise<{ sent: number }> {
+  // ── Contact New Followers: scrape followers → enqueue to pending ───────────
+  private async runContactNewFollowersSession(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
     const s = tool.settings as any;
 
-    // Require a message template
     const messageTemplate: string = (s.contactMessage ?? "").trim();
     if (!messageTemplate) {
-      console.log(`[engine] @${profile.username}: no contact message configured — skipping`);
-      return { sent: 0 };
+      console.log(`[engine] @${profile.username}: no contact message configured — skipping follower check`);
+      return;
     }
 
-    // How many followers to check per session
     const usersToCheck = randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
 
     const client = await this.ensureClient(profile, state);
-    if (!client) return { sent: 0 };
+    if (!client) return;
 
-    // Resolve own Instagram user ID
     const ownUser = await client.getUserByUsername(profile.username);
     if (!ownUser?.pk) {
       console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
-      return { sent: 0 };
+      return;
     }
 
-    // Get followers — use HikerAPI if configured and selected, else account API
     const globalSettings = await storage.getGlobalSettings();
     const useHiker = s.contactApiSource === "hiker"
       && globalSettings.hikerApiEnabled === "true"
@@ -434,10 +465,9 @@ class AutomationEngine {
 
     if (!followers.length) {
       console.log(`[engine] @${profile.username}: no followers returned for contact session`);
-      return { sent: 0 };
+      return;
     }
 
-    // Optionally filter to only users followed through the app
     let candidates = followers;
     if (s.contactOnlyAppFollowed) {
       const followedUsers = await storage.getFollowedUsersByProfile(profile.id);
@@ -445,50 +475,127 @@ class AutomationEngine {
       candidates = followers.filter(u => followedSet.has(u.username.toLowerCase()));
     }
 
-    // Filter out users already DM'd
-    const toMessage: { pk: string; username: string }[] = [];
+    let queued = 0;
     for (const user of candidates) {
+      if (state.stop.stopped) break;
+      // Skip if already queued or previously sent
+      if (await storage.isContactAlreadyQueued(profile.id, user.username)) continue;
       if (await storage.isContactDmAlreadySent(profile.id, user.username)) continue;
-      toMessage.push(user);
+      const text = this.applySpintax(messageTemplate);
+      await storage.createContactPendingMessage({
+        profileId: profile.id,
+        instagramUsername: user.username,
+        instagramUserId: user.pk,
+        messageType: "new_follower",
+        messageText: text,
+        status: "pending",
+        queuedAt: new Date().toISOString(),
+      });
+      queued++;
     }
 
-    if (!toMessage.length) {
-      console.log(`[engine] @${profile.username}: no new followers to message in contact session`);
-      return { sent: 0 };
+    if (queued > 0) {
+      console.log(`[engine] @${profile.username}: queued ${queued} new-follower DMs to pending`);
     }
+  }
+
+  // ── Contact Users: send from pending queue ─────────────────────────────────
+  private async runContactUsersSession(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
+    const s = tool.settings as any;
+
+    const pending = await storage.getContactPendingMessages(profile.id, "pending");
+    if (!pending.length) {
+      console.log(`[engine] @${profile.username}: no pending contact messages to send`);
+      return;
+    }
+
+    const sendCount = randInt(s.contactUsersSendCountMin ?? 1, s.contactUsersSendCountMax ?? 5);
+    const delayMin  = (s.contactUsersDelayBetweenMin ?? 5) * 1000;
+    const delayMax  = (s.contactUsersDelayBetweenMax ?? 15) * 1000;
+    const pickRandom = !!s.contactUsersPickRandom;
+    const unsendEnabled = !!s.contactUsersUnsendEnabled;
+    const unsendMin = (s.contactUsersUnsendMin ?? 30) * 60_000;
+    const unsendMax = (s.contactUsersUnsendMax ?? 60) * 60_000;
+
+    let queue = pickRandom
+      ? [...pending].sort(() => Math.random() - 0.5)
+      : pending;
+    queue = queue.slice(0, sendCount);
+
+    const client = await this.ensureClient(profile, state);
+    if (!client) return;
 
     let sent = 0;
-
-    for (const user of toMessage) {
+    for (const msg of queue) {
       if (state.stop.stopped) break;
       try {
-        const text = this.applySpintax(messageTemplate);
-        const result = await client.sendDirectMessage(user.pk, text, user.username);
+        const result = await client.sendDirectMessage(msg.instagramUserId, msg.messageText, msg.instagramUsername);
         if (result === "blocked") {
-          this.logAction(profile.id, tool.id, "contact_dm_blocked", user.username, "", "", "skipped", "Instagram action-blocked contact DM");
+          this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "skipped", "Instagram action-blocked contact DM");
+          await storage.updateContactPendingMessage(msg.id, { status: "failed" });
           break;
         }
         if (result) {
           sent++;
-          console.log(`[engine] @${profile.username}: 📩 contact DM sent to @${user.username} [${sent}]`);
+          const sentAt = new Date().toISOString();
+          const unsendAt = unsendEnabled
+            ? new Date(Date.now() + randInt(unsendMin, unsendMax)).toISOString()
+            : undefined;
+          await storage.updateContactPendingMessage(msg.id, {
+            status: "sent",
+            sentAt,
+            dmThreadId: result.threadId || undefined,
+            dmItemId: result.itemId || undefined,
+            unsendAt: unsendAt ?? undefined,
+          });
           await storage.createContactDmSent({
             profileId: profile.id,
-            instagramUsername: user.username,
-            instagramUserId: user.pk,
-            sentAt: new Date().toISOString(),
-            messagePreview: text.slice(0, 100),
+            instagramUsername: msg.instagramUsername,
+            instagramUserId: msg.instagramUserId,
+            sentAt,
+            messagePreview: msg.messageText.slice(0, 100),
           });
-          this.logAction(profile.id, tool.id, "contact_dm", user.username, "", "", "ok",
-            `New-follower DM sent: "${text.slice(0, 50)}"`);
+          this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "ok",
+            `Contact DM sent (${msg.messageType}): "${msg.messageText.slice(0, 50)}"`);
           await storage.incrementStat(profile.id, "dm");
+          console.log(`[engine] @${profile.username}: 📩 contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
+          if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
-        console.warn(`[engine] contact DM @${user.username} error: ${e?.message}`);
-        this.logAction(profile.id, tool.id, "contact_dm", user.username, "", "", "error", e?.message ?? "");
+        console.warn(`[engine] contact DM @${msg.instagramUsername} error: ${e?.message}`);
+        await storage.updateContactPendingMessage(msg.id, { status: "failed" });
+        this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", e?.message ?? "");
       }
     }
+  }
 
-    return { sent };
+  // ── Contact Unsends: call unsendDirectMessage on due messages ──────────────
+  private async runContactUnsends(profile: Profile, state: ProfileState): Promise<void> {
+    const due = await storage.getContactMessagesForUnsend(profile.id);
+    if (!due.length) return;
+
+    const client = await this.ensureClient(profile, state);
+    if (!client) return;
+
+    for (const msg of due) {
+      if (state.stop.stopped) break;
+      if (!msg.dmThreadId || !msg.dmItemId) {
+        await storage.updateContactPendingMessage(msg.id, { unsendAt: undefined });
+        continue;
+      }
+      try {
+        const ok = await client.unsendDirectMessage(msg.dmThreadId, msg.dmItemId);
+        if (ok) {
+          await storage.updateContactPendingMessage(msg.id, { status: "unsent" as any, unsendAt: undefined });
+          console.log(`[engine] @${profile.username}: ↩ unsent DM to @${msg.instagramUsername}`);
+        } else {
+          await storage.updateContactPendingMessage(msg.id, { unsendAt: undefined });
+        }
+      } catch (e: any) {
+        console.warn(`[engine] unsend @${msg.instagramUsername} error: ${e?.message}`);
+        await storage.updateContactPendingMessage(msg.id, { unsendAt: undefined });
+      }
+    }
   }
 
   // ── Proxy URL resolver ────────────────────────────────────────────────────

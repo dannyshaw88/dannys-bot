@@ -772,7 +772,7 @@ export class InstagramWebClient {
 
   // ── Send a direct message to a user ───────────────────────────────────────
   // Returns true on success, "blocked" on action-block, false otherwise.
-  async sendDirectMessage(userId: string, text: string, username?: string): Promise<true | "blocked" | false> {
+  async sendDirectMessage(userId: string, text: string, username?: string): Promise<{ threadId: string; itemId: string } | "blocked" | false> {
     return this.timed("SendDM", async () => {
       const body = new URLSearchParams({
         recipient_users: `[[${userId}]]`,
@@ -781,14 +781,26 @@ export class InstagramWebClient {
       }).toString();
       const j = await this.mobilePost(`/api/v1/direct_v2/threads/broadcast/text/`, body);
       if (!j) return false;
-      if (j?.status === "ok") return true;
       if (j?.message === "feedback_required" || j?.feedback_required === true) {
         console.warn(`[webClient] DM BLOCKED to ${userId}`);
         return "blocked";
       }
+      if (j?.status === "ok") {
+        const threadId: string = j?.payload?.thread_id ?? j?.thread_id ?? "";
+        const itemId: string = j?.payload?.item_id ?? j?.item_id ?? "";
+        return { threadId, itemId };
+      }
       console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
+  }
+
+  async unsendDirectMessage(threadId: string, itemId: string): Promise<boolean> {
+    return this.timed("UnsendDM", async () => {
+      const body = new URLSearchParams({}).toString();
+      const j = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/delete/`, body);
+      return j?.status === "ok";
+    }, `Unsend thread=${threadId} item=${itemId}`);
   }
 
   // ── Get user ID + username by username ────────────────────────────────────

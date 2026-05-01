@@ -561,6 +561,20 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── Contact Pending Messages ──────────────────────────────────────────────
+  app.get("/api/profiles/:profileId/contact-pending-messages", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const list = await storage.getContactPendingMessages(profileId, status);
+    res.json(list);
+  });
+
+  app.delete("/api/contact-pending-messages/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    await storage.deleteContactPendingMessage(id);
+    res.json({ ok: true });
+  });
+
   // ── Global Settings ───────────────────────────────────────────────────────
   app.get("/api/settings", async (_req, res) => {
     const settings = await storage.getGlobalSettings();
