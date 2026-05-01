@@ -28,26 +28,6 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 460dpi; 1242x2688; Apple; iPhone 16 Pro; i386; A18; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "35/15; 460dpi; 1290x2796; Apple; iPhone 15 Pro Max; i386; A17; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "34/14; 450dpi; 1242x2688; Apple; iPhone 15 Pro; i386; A17; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "34/14; 460dpi; 1170x2532; Apple; iPhone 14; i386; A15; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "33/13; 460dpi; 1170x2532; Apple; iPhone 13; i386; A15; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
-  },
-  {
     api: "34/14; 440dpi; 1080x2400; OnePlus; CPH2551; op535; Snapdragon8Gen2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2551) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
@@ -144,18 +124,6 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 460dpi; 1290x2796; Apple; iPhone 16 Pro Max; i386; A18Pro; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "34/14; 460dpi; 1284x2778; Apple; iPhone 14 Plus; i386; A15; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "33/13; 460dpi; 1125x2436; Apple; iPhone 12; i386; A14; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1"
-  },
-  {
     api: "34/14; 420dpi; 1080x2400; Xiaomi; 22081212UG; zeus; Dimensity9000Plus; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 22081212UG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
@@ -206,18 +174,6 @@ export const userAgents = [
   {
     api: "33/13; 393dpi; 1080x2316; Samsung; SM-A735F; a73xq; Snapdragon778G; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A735F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "35/15; 460dpi; 1320x2868; Apple; iPhone 16 Plus; i386; A18; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "34/14; 460dpi; 1179x2556; Apple; iPhone 15; i386; A16; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "33/13; 460dpi; 1125x2436; Apple; iPhone 11; i386; A13; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1"
   },
   {
     api: "34/14; 400dpi; 1080x2400; Xiaomi; 23116PN5BC; aurora; Snapdragon8Gen3; en_CN",
@@ -324,14 +280,6 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A526B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 460dpi; 1179x2556; Apple; iPhone 16; i386; A18; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-  },
-  {
-    api: "33/13; 460dpi; 1125x2436; Apple; iPhone 13 Pro; i386; A15; en_US",
-    embedded: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1"
-  },
-  {
     api: "34/14; 400dpi; 1080x2400; Xiaomi; 2304FPN6DG; duchamp; Dimensity9200Plus; en_CN",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2304FPN6DG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
@@ -394,5 +342,5 @@ export const userAgents = [
   {
     api: "33/13; 400dpi; 1080x2400; realme; RMX3710; RM3313; Snapdragon778G; en_IN",
     embedded: "Mozilla/5.0 (Linux; Android 13; RMX3710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
-  },
+  }
 ];
