@@ -1,0 +1,318 @@
+import { db } from "@workspace/db";
+import { userAgents } from "./shared/userAgents";
+import {
+  proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
+  globalSettings, skippedUsers, repostedPosts,
+  type Proxy, type InsertProxy,
+  type Profile, type InsertProfile,
+  type Tool, type InsertTool,
+  type Source, type InsertSource,
+  type FollowedUser, type InsertFollowedUser,
+  type SessionAction, type InsertSessionAction,
+  type SkippedUser,
+  type RepostedPost, type InsertRepostedPost,
+} from "./shared/schema";
+import { eq, desc, and, sql, like } from "drizzle-orm";
+
+export interface IStorage {
+  // Proxies
+  getProxies(): Promise<Proxy[]>;
+  createProxy(proxy: InsertProxy): Promise<Proxy>;
+  deleteProxy(id: number): Promise<void>;
+
+  // Profiles
+  getProfiles(): Promise<Profile[]>;
+  getProfile(id: number): Promise<Profile | undefined>;
+  createProfile(profile: InsertProfile): Promise<Profile>;
+  updateProfile(id: number, profile: Partial<InsertProfile>): Promise<Profile>;
+  deleteProfile(id: number): Promise<void>;
+  updateProfileStatus(id: number, status: string): Promise<Profile>;
+
+  // Tools
+  getToolsByProfile(profileId: number): Promise<Tool[]>;
+  updateTool(id: number, tool: Partial<InsertTool>): Promise<Tool>;
+  initializeToolsForProfile(profileId: number): Promise<void>;
+
+  // Stats
+  getStatsByProfile(profileId: number): Promise<any[]>;
+  incrementStat(profileId: number, toolType: string): Promise<void>;
+
+  // Sources
+  getSourcesByTool(toolId: number): Promise<Source[]>;
+  createSource(source: InsertSource): Promise<Source>;
+  deleteSource(id: number): Promise<void>;
+
+  // Instagram API Calls
+  getInstagramApiCalls(limit?: number): Promise<any[]>;
+  createInstagramApiCall(call: { profileId: number; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
+
+  // Followed Users
+  getFollowedUsersByProfile(profileId: number, limit?: number): Promise<FollowedUser[]>;
+  createFollowedUser(entry: InsertFollowedUser): Promise<FollowedUser>;
+  deleteFollowedUser(id: number): Promise<void>;
+  countFollowsToday(profileId: number, todayPrefix: string): Promise<number>;
+  countFollowsThisHour(profileId: number, hourPrefix: string): Promise<number>;
+
+  // Session Actions
+  getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
+  createSessionAction(entry: InsertSessionAction): Promise<SessionAction>;
+
+  // Global Settings
+  getGlobalSettings(): Promise<Record<string, string>>;
+  setGlobalSetting(key: string, value: string): Promise<void>;
+
+  // Skipped Users (global)
+  isGloballySkipped(username: string): Promise<boolean>;
+  isGloballyFollowed(username: string): Promise<boolean>;
+  addSkippedUser(username: string, reason: string): Promise<void>;
+  getSkippedUsers(limit?: number): Promise<SkippedUser[]>;
+
+  // Reposted Posts
+  getRepostedPostsByProfile(profileId: number, limit?: number): Promise<RepostedPost[]>;
+  createRepostedPost(entry: InsertRepostedPost): Promise<RepostedPost>;
+  deleteRepostedPost(id: number): Promise<void>;
+  isAlreadyReposted(profileId: number, mediaId: string): Promise<boolean>;
+}
+
+export class DatabaseStorage implements IStorage {
+  async getProxies(): Promise<Proxy[]> {
+    return await db.select().from(proxies);
+  }
+
+  async createProxy(proxy: InsertProxy): Promise<Proxy> {
+    const [created] = await db.insert(proxies).values(proxy).returning();
+    return created;
+  }
+
+  async deleteProxy(id: number): Promise<void> {
+    await db.delete(proxies).where(eq(proxies.id, id));
+  }
+
+  async getProfiles(): Promise<Profile[]> {
+    return await db.select().from(profiles);
+  }
+
+  async getProfile(id: number): Promise<Profile | undefined> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, id));
+    return profile;
+  }
+
+  async createProfile(profile: InsertProfile): Promise<Profile> {
+    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    const [created] = await db.insert(profiles).values({
+      ...profile,
+      userAgentApi: randomUA.api,
+      userAgentEmbedded: randomUA.embedded
+    }).returning();
+    await this.initializeToolsForProfile(created.id);
+    return created;
+  }
+
+  async updateProfile(id: number, updates: any): Promise<Profile> {
+    const [updated] = await db.update(profiles).set(updates).where(eq(profiles.id, id)).returning();
+    return updated;
+  }
+
+  async deleteProfile(id: number): Promise<void> {
+    await db.delete(tools).where(eq(tools.profileId, id));
+    await db.delete(profiles).where(eq(profiles.id, id));
+  }
+
+  async updateProfileStatus(id: number, status: string): Promise<Profile> {
+    const [updated] = await db.update(profiles).set({ status }).where(eq(profiles.id, id)).returning();
+    return updated;
+  }
+
+  async getToolsByProfile(profileId: number): Promise<Tool[]> {
+    const existing = await db.select().from(tools).where(eq(tools.profileId, profileId));
+    const allTypes = ['follow', 'unfollow', 'like', 'dm'];
+    const existingTypes = new Set(existing.map(t => t.type));
+    const missing = allTypes.filter(t => !existingTypes.has(t));
+    if (missing.length > 0) {
+      for (const type of missing) {
+        await db.insert(tools).values({ profileId, type, enabled: false, settings: {} });
+      }
+      return await db.select().from(tools).where(eq(tools.profileId, profileId));
+    }
+    return existing;
+  }
+
+  async updateTool(id: number, updates: Partial<InsertTool>): Promise<Tool> {
+    const [updated] = await db.update(tools).set(updates).where(eq(tools.id, id)).returning();
+    return updated;
+  }
+
+  async initializeToolsForProfile(profileId: number): Promise<void> {
+    const toolTypes = ['follow', 'unfollow', 'like', 'dm'];
+    for (const type of toolTypes) {
+      await db.insert(tools).values({ profileId, type, enabled: false, settings: {} });
+    }
+  }
+
+  async getSourcesByTool(toolId: number): Promise<Source[]> {
+    return await db.select().from(sources).where(eq(sources.toolId, toolId));
+  }
+
+  async createSource(source: InsertSource): Promise<Source> {
+    const [created] = await db.insert(sources).values(source).returning();
+    return created;
+  }
+
+  async deleteSource(id: number): Promise<void> {
+    await db.delete(sources).where(eq(sources.id, id));
+  }
+
+  async getStatsByProfile(profileId: number): Promise<any[]> {
+    return await db.select().from(stats).where(eq(stats.profileId, profileId));
+  }
+
+  async getInstagramApiCalls(limit: number = 100000): Promise<any[]> {
+    return await db.select().from(instagramApiCalls).orderBy(desc(instagramApiCalls.id)).limit(limit);
+  }
+
+  async createInstagramApiCall(call: { profileId: number; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any> {
+    const [created] = await db.insert(instagramApiCalls).values({
+      profileId: call.profileId,
+      operationName: call.operationName,
+      date: call.date,
+      message: call.message ?? "",
+      source: call.source ?? "",
+      navChain: call.navChain ?? "",
+      ipAddress: call.ipAddress ?? "",
+      durationMs: call.durationMs ?? 0,
+    }).returning();
+    return created;
+  }
+
+  async incrementStat(profileId: number, toolType: string): Promise<void> {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Update daily
+    const [daily] = await db.select().from(stats).where(and(eq(stats.profileId, profileId), eq(stats.toolType, toolType), eq(stats.date, today)));
+    if (daily) {
+      await db.update(stats).set({ count: daily.count + 1 }).where(eq(stats.id, daily.id));
+    } else {
+      await db.insert(stats).values({ profileId, toolType, count: 1, date: today });
+    }
+
+    // Update lifetime
+    const [lifetime] = await db.select().from(stats).where(and(eq(stats.profileId, profileId), eq(stats.toolType, toolType), eq(stats.date, 'lifetime')));
+    if (lifetime) {
+      await db.update(stats).set({ count: lifetime.count + 1 }).where(eq(stats.id, lifetime.id));
+    } else {
+      await db.insert(stats).values({ profileId, toolType, count: 1, date: 'lifetime' });
+    }
+  }
+
+  async getFollowedUsersByProfile(profileId: number, limit: number = 10000): Promise<FollowedUser[]> {
+    return await db.select().from(followedUsers)
+      .where(eq(followedUsers.profileId, profileId))
+      .orderBy(desc(followedUsers.id))
+      .limit(limit);
+  }
+
+  async createFollowedUser(entry: InsertFollowedUser): Promise<FollowedUser> {
+    const [created] = await db.insert(followedUsers).values(entry).returning();
+    return created;
+  }
+
+  async deleteFollowedUser(id: number): Promise<void> {
+    await db.delete(followedUsers).where(eq(followedUsers.id, id));
+  }
+
+  async countFollowsToday(profileId: number, todayPrefix: string): Promise<number> {
+    const rows = await db.select({ count: sql<number>`count(*)::int` })
+      .from(followedUsers)
+      .where(and(
+        eq(followedUsers.profileId, profileId),
+        like(followedUsers.followedAt, `${todayPrefix}%`),
+      ));
+    return rows[0]?.count ?? 0;
+  }
+
+  async countFollowsThisHour(profileId: number, hourPrefix: string): Promise<number> {
+    const rows = await db.select({ count: sql<number>`count(*)::int` })
+      .from(followedUsers)
+      .where(and(
+        eq(followedUsers.profileId, profileId),
+        like(followedUsers.followedAt, `${hourPrefix}%`),
+      ));
+    return rows[0]?.count ?? 0;
+  }
+
+  async getSessionActionsByProfile(profileId: number, limit: number = 500): Promise<SessionAction[]> {
+    return await db.select().from(sessionActions)
+      .where(eq(sessionActions.profileId, profileId))
+      .orderBy(desc(sessionActions.id))
+      .limit(limit);
+  }
+
+  async createSessionAction(entry: InsertSessionAction): Promise<SessionAction> {
+    const [created] = await db.insert(sessionActions).values(entry).returning();
+    return created;
+  }
+
+  async getGlobalSettings(): Promise<Record<string, string>> {
+    const rows = await db.select().from(globalSettings);
+    const out: Record<string, string> = {};
+    for (const row of rows) out[row.key] = row.value;
+    return out;
+  }
+
+  async setGlobalSetting(key: string, value: string): Promise<void> {
+    await db.insert(globalSettings).values({ key, value })
+      .onConflictDoUpdate({ target: globalSettings.key, set: { value } });
+  }
+
+  async isGloballySkipped(username: string): Promise<boolean> {
+    const rows = await db.select({ id: skippedUsers.id })
+      .from(skippedUsers)
+      .where(sql`LOWER(${skippedUsers.instagramUsername}) = LOWER(${username})`)
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async isGloballyFollowed(username: string): Promise<boolean> {
+    const rows = await db.select({ id: followedUsers.id })
+      .from(followedUsers)
+      .where(sql`LOWER(${followedUsers.instagramUsername}) = LOWER(${username})`)
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async addSkippedUser(username: string, reason: string): Promise<void> {
+    await db.insert(skippedUsers)
+      .values({ instagramUsername: username, reason, skippedAt: new Date().toISOString() })
+      .onConflictDoNothing();
+  }
+
+  async getSkippedUsers(limit: number = 10000): Promise<SkippedUser[]> {
+    return await db.select().from(skippedUsers).orderBy(desc(skippedUsers.id)).limit(limit);
+  }
+
+  async getRepostedPostsByProfile(profileId: number, limit: number = 500): Promise<RepostedPost[]> {
+    return await db.select().from(repostedPosts)
+      .where(eq(repostedPosts.profileId, profileId))
+      .orderBy(desc(repostedPosts.id))
+      .limit(limit);
+  }
+
+  async createRepostedPost(entry: InsertRepostedPost): Promise<RepostedPost> {
+    const [created] = await db.insert(repostedPosts).values(entry).returning();
+    return created;
+  }
+
+  async deleteRepostedPost(id: number): Promise<void> {
+    await db.delete(repostedPosts).where(eq(repostedPosts.id, id));
+  }
+
+  async isAlreadyReposted(profileId: number, mediaId: string): Promise<boolean> {
+    const rows = await db.select({ id: repostedPosts.id })
+      .from(repostedPosts)
+      .where(and(eq(repostedPosts.profileId, profileId), eq(repostedPosts.mediaId, mediaId)))
+      .limit(1);
+    return rows.length > 0;
+  }
+}
+
+export const storage = new DatabaseStorage();
