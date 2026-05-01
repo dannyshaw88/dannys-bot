@@ -406,7 +406,7 @@ class AutomationEngine {
     }
 
     // How many followers to check per session
-    const usersToCheck = randInt(s.contactUsersPerCheckMin ?? 20, s.contactUsersPerCheckMax ?? 40);
+    const usersToCheck = randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
 
     const client = await this.ensureClient(profile, state);
     if (!client) return { sent: 0 };
@@ -457,8 +457,6 @@ class AutomationEngine {
       return { sent: 0 };
     }
 
-    const delayMin = (s.contactDelayAfterDmMin ?? 10) * 1000;
-    const delayMax = (s.contactDelayAfterDmMax ?? 30) * 1000;
     let sent = 0;
 
     for (const user of toMessage) {
@@ -483,7 +481,6 @@ class AutomationEngine {
           this.logAction(profile.id, tool.id, "contact_dm", user.username, "", "", "ok",
             `New-follower DM sent: "${text.slice(0, 50)}"`);
           await storage.incrementStat(profile.id, "dm");
-          await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
         console.warn(`[engine] contact DM @${user.username} error: ${e?.message}`);

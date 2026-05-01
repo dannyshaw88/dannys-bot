@@ -1,15 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import {
-  MessageSquare, UserCheck, Clock, Users, Zap, Trash2, RefreshCw, Shuffle,
-} from "lucide-react";
-import { format } from "date-fns";
-import { type Tool, type Profile, type ContactDmSent } from "@shared/schema";
+import { MessageSquare, UserCheck, Clock, Users, Zap, Shuffle } from "lucide-react";
+import { type Tool, type Profile } from "@shared/schema";
 
 interface ContactToolPanelProps {
   tool: Tool;
@@ -23,23 +18,9 @@ function applySpintax(text: string): string {
   });
 }
 
-export function ContactToolPanel({ tool, profile }: ContactToolPanelProps) {
+export function ContactToolPanel({ tool, profile: _profile }: ContactToolPanelProps) {
   const updateToolMutation = useUpdateTool();
-  const queryClient = useQueryClient();
   const [previewText, setPreviewText] = useState("");
-
-  const { data: dmSentList, isLoading: dmSentLoading } = useQuery<ContactDmSent[]>({
-    queryKey: [`/api/profiles/${profile.id}/contact-dm-sent`],
-    refetchInterval: 15000,
-  });
-
-  const deleteDmSentMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`/api/contact-dm-sent/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete");
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-dm-sent`] }),
-  });
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
@@ -47,10 +28,8 @@ export function ContactToolPanel({ tool, profile }: ContactToolPanelProps) {
       contactMessage: "",
       contactCheckIntervalMin: 30,
       contactCheckIntervalMax: 60,
-      contactUsersPerCheckMin: 20,
-      contactUsersPerCheckMax: 40,
-      contactDelayAfterDmMin: 10,
-      contactDelayAfterDmMax: 30,
+      contactUsersPerCheckMin: 1,
+      contactUsersPerCheckMax: 20,
       contactApiSource: "account",
     };
     return { ...def, ...(tool.settings as object || {}) };
@@ -101,7 +80,7 @@ export function ContactToolPanel({ tool, profile }: ContactToolPanelProps) {
           <h4 className="font-semibold text-sm">Send Message to New Followers</h4>
         </div>
 
-        {/* Option 1: Only app-followed users */}
+        {/* Only app-followed users */}
         <div className="flex items-start gap-3">
           <input
             type="checkbox"
@@ -121,7 +100,7 @@ export function ContactToolPanel({ tool, profile }: ContactToolPanelProps) {
           </div>
         </div>
 
-        {/* Option 2: Message with SpinTax */}
+        {/* Message with SpinTax */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Message</Label>
@@ -154,7 +133,7 @@ export function ContactToolPanel({ tool, profile }: ContactToolPanelProps) {
           )}
         </div>
 
-        {/* Option 3: Check interval + users per check */}
+        {/* Check interval + users per check */}
         <div className="space-y-2">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
@@ -173,37 +152,23 @@ export function ContactToolPanel({ tool, profile }: ContactToolPanelProps) {
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Users per Check</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">New Followers to Check</span>
               <div className="flex items-center gap-1.5">
                 <Label className="text-xs text-muted-foreground">Min</Label>
-                {numInput("contactUsersPerCheckMin", 1, 200)}
+                {numInput("contactUsersPerCheckMin", 1, 100)}
               </div>
               <div className="flex items-center gap-1.5">
                 <Label className="text-xs text-muted-foreground">Max</Label>
-                {numInput("contactUsersPerCheckMax", 1, 200)}
+                {numInput("contactUsersPerCheckMax", 1, 100)}
               </div>
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            One GetFollowers API call returns up to 20 users. Set users per check in multiples of 20 accordingly.
+            Each GetFollowers API call returns up to 20 users. Values above 20 will trigger multiple calls.
           </p>
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Delay Between DMs (s)</span>
-              <div className="flex items-center gap-1.5">
-                <Label className="text-xs text-muted-foreground">Min</Label>
-                {numInput("contactDelayAfterDmMin", 1, 3600)}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Label className="text-xs text-muted-foreground">Max</Label>
-                {numInput("contactDelayAfterDmMax", 1, 3600)}
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Option 4: API Source */}
+        {/* API Source */}
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -236,73 +201,6 @@ export function ContactToolPanel({ tool, profile }: ContactToolPanelProps) {
           <p className="text-[11px] text-muted-foreground">
             HikerAPI requires a valid token in the global Settings page. Uses the account's own session if HikerAPI is not available.
           </p>
-        </div>
-      </div>
-
-      {/* ── DM Sent Log ───────────────────────────────────────── */}
-      <div className="border border-border rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-blue-500" />
-            <span className="text-sm font-semibold">New-Follower DMs Sent</span>
-            <span className="text-xs text-muted-foreground">({dmSentList?.length ?? 0} total)</span>
-          </div>
-          <button
-            onClick={() => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-dm-sent`] })}
-            className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <div className="overflow-x-auto max-h-80">
-          {dmSentLoading ? (
-            <p className="text-sm text-muted-foreground px-4 py-6 text-center">Loading…</p>
-          ) : !dmSentList?.length ? (
-            <p className="text-sm text-muted-foreground px-4 py-6 text-center">No DMs sent yet.</p>
-          ) : (
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
-                <tr>
-                  <th className="px-4 py-2 font-bold bg-muted/30">User</th>
-                  <th className="px-4 py-2 font-bold bg-muted/30">Message Preview</th>
-                  <th className="px-4 py-2 font-bold bg-muted/30 whitespace-nowrap">Sent At</th>
-                  <th className="px-4 py-2 font-bold bg-muted/30"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {dmSentList.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-2 font-medium text-primary">
-                      <a
-                        href={`https://instagram.com/${entry.instagramUsername}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                      >
-                        @{entry.instagramUsername}
-                      </a>
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground text-xs max-w-xs truncate">
-                      {entry.messagePreview || "—"}
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
-                      {format(new Date(entry.sentAt), "MMM d, yyyy HH:mm")}
-                    </td>
-                    <td className="px-4 py-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => deleteDmSentMutation.mutate(entry.id)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
         </div>
       </div>
     </div>
