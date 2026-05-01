@@ -30,13 +30,13 @@ export function ContactToolPanel({ tool, profile }: Props) {
           <UserPlus className="w-3.5 h-3.5" />
           Contact New Followers
         </button>
-        <button className={triggerClass("contact-users")} onClick={() => setActiveTab("contact-users")}>
-          <Users className="w-3.5 h-3.5" />
-          Contact Users
-        </button>
         <button className={triggerClass("auto-reply")} onClick={() => setActiveTab("auto-reply")}>
           <MessageSquare className="w-3.5 h-3.5" />
           Auto Reply
+        </button>
+        <button className={triggerClass("contact-users")} onClick={() => setActiveTab("contact-users")}>
+          <Users className="w-3.5 h-3.5" />
+          Contact Users
         </button>
       </div>
 
