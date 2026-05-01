@@ -159,6 +159,7 @@ export function ProfileDetailsPage() {
           everySecondsMax: 60
         },
         // Account details
+        accountLabel: profile.accountLabel || "",
         tags: profile.tags || "",
         dateOfBirth: profile.dateOfBirth || "",
         notes: profile.notes || "",
@@ -363,6 +364,19 @@ export function ProfileDetailsPage() {
             optionGroups={ACCOUNT_COPY_GROUPS}
             onCopy={handleAccountCopy}
           />
+
+          {/* Account Label */}
+          <div className="space-y-2 pb-2">
+            <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <Tag className="w-3.5 h-3.5" /> Account Name &amp; Trustscore
+            </Label>
+            <Input
+              placeholder="e.g. @Account1 | Monster Trustscore"
+              value={formData.accountLabel}
+              onChange={e => updateField({ accountLabel: e.target.value })}
+            />
+            <p className="text-[11px] text-muted-foreground">A display label for quick identification — use any format you like.</p>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="border-none shadow-none !bg-transparent">

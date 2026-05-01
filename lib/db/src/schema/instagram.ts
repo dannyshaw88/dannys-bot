@@ -49,6 +49,7 @@ export const profiles = pgTable("profiles", {
   browserDirectConnection: boolean("browser_direct_connection").default(true),
   credentialsDirty: boolean("credentials_dirty").default(true),
   // Account details
+  accountLabel: text("account_label"),
   tags: text("tags"),
   dateOfBirth: text("date_of_birth"),
   notes: text("notes"),
