@@ -2,7 +2,7 @@ import { db } from "@workspace/db";
 import { userAgents } from "./shared/userAgents";
 import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
-  globalSettings, skippedUsers, repostedPosts,
+  globalSettings, skippedUsers, repostedPosts, contactDmSent,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -11,6 +11,7 @@ import {
   type SessionAction, type InsertSessionAction,
   type SkippedUser,
   type RepostedPost, type InsertRepostedPost,
+  type ContactDmSent, type InsertContactDmSent,
 } from "./shared/schema";
 import { eq, desc, and, sql, like } from "drizzle-orm";
 
@@ -72,6 +73,12 @@ export interface IStorage {
   createRepostedPost(entry: InsertRepostedPost): Promise<RepostedPost>;
   deleteRepostedPost(id: number): Promise<void>;
   isAlreadyReposted(profileId: number, mediaId: string): Promise<boolean>;
+
+  // Contact DM Sent (new-followers DM tracker)
+  getContactDmSentByProfile(profileId: number, limit?: number): Promise<ContactDmSent[]>;
+  createContactDmSent(entry: InsertContactDmSent): Promise<ContactDmSent>;
+  isContactDmAlreadySent(profileId: number, instagramUsername: string): Promise<boolean>;
+  deleteContactDmSent(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -125,7 +132,7 @@ export class DatabaseStorage implements IStorage {
 
   async getToolsByProfile(profileId: number): Promise<Tool[]> {
     const existing = await db.select().from(tools).where(eq(tools.profileId, profileId));
-    const allTypes = ['follow', 'unfollow', 'like', 'dm'];
+    const allTypes = ['follow', 'unfollow', 'like', 'dm', 'contact'];
     const existingTypes = new Set(existing.map(t => t.type));
     const missing = allTypes.filter(t => !existingTypes.has(t));
     if (missing.length > 0) {
@@ -143,7 +150,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async initializeToolsForProfile(profileId: number): Promise<void> {
-    const toolTypes = ['follow', 'unfollow', 'like', 'dm'];
+    const toolTypes = ['follow', 'unfollow', 'like', 'dm', 'contact'];
     for (const type of toolTypes) {
       await db.insert(tools).values({ profileId, type, enabled: false, settings: {} });
     }
@@ -312,6 +319,33 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(repostedPosts.profileId, profileId), eq(repostedPosts.mediaId, mediaId)))
       .limit(1);
     return rows.length > 0;
+  }
+
+  async getContactDmSentByProfile(profileId: number, limit: number = 1000): Promise<ContactDmSent[]> {
+    return await db.select().from(contactDmSent)
+      .where(eq(contactDmSent.profileId, profileId))
+      .orderBy(desc(contactDmSent.id))
+      .limit(limit);
+  }
+
+  async createContactDmSent(entry: InsertContactDmSent): Promise<ContactDmSent> {
+    const [created] = await db.insert(contactDmSent).values(entry).returning();
+    return created;
+  }
+
+  async isContactDmAlreadySent(profileId: number, instagramUsername: string): Promise<boolean> {
+    const rows = await db.select({ id: contactDmSent.id })
+      .from(contactDmSent)
+      .where(and(
+        eq(contactDmSent.profileId, profileId),
+        sql`LOWER(${contactDmSent.instagramUsername}) = LOWER(${instagramUsername})`
+      ))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async deleteContactDmSent(id: number): Promise<void> {
+    await db.delete(contactDmSent).where(eq(contactDmSent.id, id));
   }
 }
 

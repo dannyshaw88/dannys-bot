@@ -548,6 +548,19 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── Contact DM Sent (new-follower DM tracker) ─────────────────────────────
+  app.get("/api/profiles/:profileId/contact-dm-sent", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    const list = await storage.getContactDmSentByProfile(profileId);
+    res.json(list);
+  });
+
+  app.delete("/api/contact-dm-sent/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    await storage.deleteContactDmSent(id);
+    res.json({ ok: true });
+  });
+
   // ── Global Settings ───────────────────────────────────────────────────────
   app.get("/api/settings", async (_req, res) => {
     const settings = await storage.getGlobalSettings();

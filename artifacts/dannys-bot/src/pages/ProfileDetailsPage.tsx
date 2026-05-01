@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
+import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
@@ -13,7 +14,7 @@ import {
   CheckCircle2, XCircle, Loader2, ShieldCheck,
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown,
   Tag, Calendar, FileText, Server, X, Clock, Copy,
-  UserPlus
+  UserPlus, MessageSquare
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -280,6 +281,9 @@ export function ProfileDetailsPage() {
           </Tabs.Trigger>
           <Tabs.Trigger value="follow" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
             <UserPlus className="w-4 h-4 mr-2" /> Follow Tool
+          </Tabs.Trigger>
+          <Tabs.Trigger value="contact" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
+            <MessageSquare className="w-4 h-4 mr-2" /> Contact Tool
           </Tabs.Trigger>
           <Tabs.Trigger value="human-session" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
             <User className="w-4 h-4 mr-2" /> Human Session Tools
@@ -793,6 +797,13 @@ export function ProfileDetailsPage() {
           {getTool('follow')
             ? <ToolConfigPanel tool={getTool('follow')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
+          }
+        </Tabs.Content>
+
+        <Tabs.Content value="contact" className="outline-none animate-in fade-in duration-300">
+          {getTool('contact')
+            ? <ContactToolPanel tool={getTool('contact')!} profile={profile} />
+            : <p className="text-sm text-muted-foreground py-8">Contact tool not found for this profile.</p>
           }
         </Tabs.Content>
 

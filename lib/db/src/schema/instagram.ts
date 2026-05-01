@@ -236,6 +236,28 @@ export const insertRepostedPostSchema = createInsertSchema(repostedPosts).omit({
 export type RepostedPost = typeof repostedPosts.$inferSelect;
 export type InsertRepostedPost = z.infer<typeof insertRepostedPostSchema>;
 
+// Tracks which users have already been DM'd as new followers for a profile,
+// so they are never messaged twice.
+export const contactDmSent = pgTable("contact_dm_sent", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profile_id").notNull(),
+  instagramUsername: text("instagram_username").notNull(),
+  instagramUserId: text("instagram_user_id").notNull().default(""),
+  sentAt: text("sent_at").notNull(),
+  messagePreview: text("message_preview").notNull().default(""),
+});
+
+export const contactDmSentRelations = relations(contactDmSent, ({ one }) => ({
+  profile: one(profiles, {
+    fields: [contactDmSent.profileId],
+    references: [profiles.id],
+  }),
+}));
+
+export const insertContactDmSentSchema = createInsertSchema(contactDmSent).omit({ id: true });
+export type ContactDmSent = typeof contactDmSent.$inferSelect;
+export type InsertContactDmSent = z.infer<typeof insertContactDmSentSchema>;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
 });

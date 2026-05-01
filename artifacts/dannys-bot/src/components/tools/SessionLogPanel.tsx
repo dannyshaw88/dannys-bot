@@ -25,6 +25,8 @@ const ACTION_META: Record<string, { label: string; icon: any; color: string }> =
   check_timeline_stories:  { label: "Timeline Stories",   icon: BookOpen,     color: "text-sky-600 bg-sky-50 border-sky-200" },
   check_dm:                { label: "Checked DMs",        icon: MessageSquare,color: "text-teal-600 bg-teal-50 border-teal-200" },
   like_timeline_post:      { label: "Liked Timeline Post",icon: Heart,        color: "text-pink-600 bg-pink-50 border-pink-200" },
+  contact_dm:              { label: "New-Follower DM",    icon: MessageSquare,color: "text-blue-600 bg-blue-50 border-blue-200" },
+  contact_dm_blocked:      { label: "DM Blocked",         icon: Ban,          color: "text-red-600 bg-red-50 border-red-200" },
 };
 
 interface SessionLogPanelProps {

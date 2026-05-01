@@ -125,6 +125,15 @@ export type RepostedPost = {
   repostedAt: string;
 };
 
+export type ContactDmSent = {
+  id: number;
+  profileId: number;
+  instagramUsername: string;
+  instagramUserId: string;
+  sentAt: string;
+  messagePreview: string;
+};
+
 export type Stat = {
   id: number;
   profileId: number;

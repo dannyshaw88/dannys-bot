@@ -61,9 +61,10 @@ interface ProfileState {
 }
 
 class AutomationEngine {
-  private states         = new Map<number, ProfileState>(); // follow runners
-  private unfollowStates = new Map<number, ProfileState>(); // unfollow runners
-  private dmStates       = new Map<number, ProfileState>(); // dm runners
+  private states          = new Map<number, ProfileState>(); // follow runners
+  private unfollowStates  = new Map<number, ProfileState>(); // unfollow runners
+  private dmStates        = new Map<number, ProfileState>(); // dm runners
+  private contactStates   = new Map<number, ProfileState>(); // contact tool runners
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
@@ -78,6 +79,7 @@ class AutomationEngine {
       const activeFollow   = new Set<number>();
       const activeUnfollow = new Set<number>();
       const activeDM       = new Set<number>();
+      const activeContact  = new Set<number>();
 
       for (const profile of profiles) {
         const tools = await storage.getToolsByProfile(profile.id);
@@ -98,6 +100,12 @@ class AutomationEngine {
         if (dmTool) {
           activeDM.add(profile.id);
           if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool);
+        }
+
+        const contactTool = tools.find(t => t.type === "contact" && t.enabled);
+        if (contactTool) {
+          activeContact.add(profile.id);
+          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
         }
       }
 
@@ -120,6 +128,13 @@ class AutomationEngine {
           state.stop.stopped = true;
           this.dmStates.delete(id);
           console.log(`[engine] Stopped DM runner for profile ${id}`);
+        }
+      }
+      for (const [id, state] of this.contactStates) {
+        if (!activeContact.has(id)) {
+          state.stop.stopped = true;
+          this.contactStates.delete(id);
+          console.log(`[engine] Stopped contact runner for profile ${id}`);
         }
       }
     } catch (err: any) {
@@ -326,6 +341,157 @@ class AutomationEngine {
       this.dmStates.delete(profile.id);
       console.error(`[engine] Fatal DM error for @${profile.username}:`, err?.message);
     });
+  }
+
+  // ── Contact (new-follower DM) runner launch ───────────────────────────────
+  private launchContact(profile: Profile, _tool: Tool) {
+    const state: ProfileState = {
+      stop: { stopped: false },
+      client: null,
+      dailyCount: 0, dailyDate: todayStr(),
+      hourlyCount: 0, hourlyHour: hourStr(),
+      actionDailyCount: {}, actionDailyDate: todayStr(),
+      actionHourlyCount: {}, actionHourlyHour: hourStr(),
+      actionSuspensions: {},
+      nextHumanSessionAt: 0,
+    };
+    this.contactStates.set(profile.id, state);
+    console.log(`[engine] Launching contact runner for @${profile.username}`);
+
+    const loop = async () => {
+      while (!state.stop.stopped) {
+        const freshProfile = await storage.getProfile(profile.id);
+        if (!freshProfile) break;
+        if (freshProfile.accountStatus === "banned") break;
+        if (freshProfile.accountStatus === "captcha") { await sleep(5 * 60_000); continue; }
+
+        const tools = await storage.getToolsByProfile(freshProfile.id);
+        const contactTool = tools.find(t => t.type === "contact");
+        if (!contactTool?.enabled || state.stop.stopped) break;
+
+        try {
+          await this.runContactSession(freshProfile, contactTool, state);
+        } catch (err: any) {
+          console.error(`[engine] @${freshProfile.username}: contact session error: ${err?.message}`);
+        }
+
+        if (state.stop.stopped) break;
+        const s = contactTool.settings as any;
+        const waitMs = randInt(
+          (s.contactCheckIntervalMin ?? 30) * 60_000,
+          (s.contactCheckIntervalMax ?? 60) * 60_000
+        );
+        console.log(`[engine] @${freshProfile.username}: next contact check in ${Math.round(waitMs / 60000)}min`);
+        await sleep(waitMs);
+      }
+      this.contactStates.delete(profile.id);
+      console.log(`[engine] Contact runner exited for @${profile.username}`);
+    };
+
+    loop().catch(err => {
+      this.contactStates.delete(profile.id);
+      console.error(`[engine] Fatal contact error for @${profile.username}:`, err?.message);
+    });
+  }
+
+  // ── Contact session: DM new followers ─────────────────────────────────────
+  private async runContactSession(profile: Profile, tool: Tool, state: ProfileState): Promise<{ sent: number }> {
+    const s = tool.settings as any;
+
+    // Require a message template
+    const messageTemplate: string = (s.contactMessage ?? "").trim();
+    if (!messageTemplate) {
+      console.log(`[engine] @${profile.username}: no contact message configured — skipping`);
+      return { sent: 0 };
+    }
+
+    // How many followers to check per session
+    const usersToCheck = randInt(s.contactUsersPerCheckMin ?? 20, s.contactUsersPerCheckMax ?? 40);
+
+    const client = await this.ensureClient(profile, state);
+    if (!client) return { sent: 0 };
+
+    // Resolve own Instagram user ID
+    const ownUser = await client.getUserByUsername(profile.username);
+    if (!ownUser?.pk) {
+      console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
+      return { sent: 0 };
+    }
+
+    // Get followers — use HikerAPI if configured and selected, else account API
+    const globalSettings = await storage.getGlobalSettings();
+    const useHiker = s.contactApiSource === "hiker"
+      && globalSettings.hikerApiEnabled === "true"
+      && !!globalSettings.hikerApiToken;
+
+    let followers: { pk: string; username: string }[] = [];
+    if (useHiker) {
+      const hikerClient = new HikerApiClient(globalSettings.hikerApiToken!);
+      followers = await hikerClient.getFollowers(ownUser.pk, usersToCheck);
+    } else {
+      followers = await client.getFollowers(ownUser.pk, usersToCheck);
+    }
+
+    if (!followers.length) {
+      console.log(`[engine] @${profile.username}: no followers returned for contact session`);
+      return { sent: 0 };
+    }
+
+    // Optionally filter to only users followed through the app
+    let candidates = followers;
+    if (s.contactOnlyAppFollowed) {
+      const followedUsers = await storage.getFollowedUsersByProfile(profile.id);
+      const followedSet = new Set(followedUsers.map(u => u.instagramUsername.toLowerCase()));
+      candidates = followers.filter(u => followedSet.has(u.username.toLowerCase()));
+    }
+
+    // Filter out users already DM'd
+    const toMessage: { pk: string; username: string }[] = [];
+    for (const user of candidates) {
+      if (await storage.isContactDmAlreadySent(profile.id, user.username)) continue;
+      toMessage.push(user);
+    }
+
+    if (!toMessage.length) {
+      console.log(`[engine] @${profile.username}: no new followers to message in contact session`);
+      return { sent: 0 };
+    }
+
+    const delayMin = (s.contactDelayAfterDmMin ?? 10) * 1000;
+    const delayMax = (s.contactDelayAfterDmMax ?? 30) * 1000;
+    let sent = 0;
+
+    for (const user of toMessage) {
+      if (state.stop.stopped) break;
+      try {
+        const text = this.applySpintax(messageTemplate);
+        const result = await client.sendDirectMessage(user.pk, text, user.username);
+        if (result === "blocked") {
+          this.logAction(profile.id, tool.id, "contact_dm_blocked", user.username, "", "", "skipped", "Instagram action-blocked contact DM");
+          break;
+        }
+        if (result) {
+          sent++;
+          console.log(`[engine] @${profile.username}: 📩 contact DM sent to @${user.username} [${sent}]`);
+          await storage.createContactDmSent({
+            profileId: profile.id,
+            instagramUsername: user.username,
+            instagramUserId: user.pk,
+            sentAt: new Date().toISOString(),
+            messagePreview: text.slice(0, 100),
+          });
+          this.logAction(profile.id, tool.id, "contact_dm", user.username, "", "", "ok",
+            `New-follower DM sent: "${text.slice(0, 50)}"`);
+          await storage.incrementStat(profile.id, "dm");
+          await sleep(randInt(delayMin, delayMax));
+        }
+      } catch (e: any) {
+        console.warn(`[engine] contact DM @${user.username} error: ${e?.message}`);
+        this.logAction(profile.id, tool.id, "contact_dm", user.username, "", "", "error", e?.message ?? "");
+      }
+    }
+
+    return { sent };
   }
 
   // ── Proxy URL resolver ────────────────────────────────────────────────────
