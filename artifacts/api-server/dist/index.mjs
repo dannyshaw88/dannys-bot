@@ -145161,16 +145161,24 @@ var AutomationEngine = class {
   }
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus() {
-    return Array.from(this.states.entries()).map(([profileId, state]) => {
+    const allIds = /* @__PURE__ */ new Set([
+      ...this.states.keys(),
+      ...this.humanSessionStates.keys(),
+      ...this.contactStates.keys(),
+      ...this.dmStates.keys()
+    ]);
+    return Array.from(allIds).map((profileId) => {
+      const followState = this.states.get(profileId);
       const humanState = this.humanSessionStates.get(profileId);
       const contactState = this.contactStates.get(profileId);
+      const anyState = followState ?? humanState ?? contactState;
       return {
         profileId,
-        loggedIn: !!state.client?.isLoggedIn(),
-        dailyCount: this.daily(state),
-        hourlyCount: this.hourly(state),
+        loggedIn: !!anyState?.client?.isLoggedIn(),
+        dailyCount: followState ? this.daily(followState) : 0,
+        hourlyCount: followState ? this.hourly(followState) : 0,
         nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0,
-        nextFollowAt: state.nextFollowAt,
+        nextFollowAt: followState?.nextFollowAt ?? 0,
         nextContactAt: contactState?.nextContactAt ?? 0
       };
     });

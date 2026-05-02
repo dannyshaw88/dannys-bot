@@ -1775,17 +1775,26 @@ class AutomationEngine {
 
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number }[] {
-    return Array.from(this.states.entries()).map(([profileId, state]) => {
-      const humanState = this.humanSessionStates.get(profileId);
-      const contactState = this.contactStates.get(profileId);
+    // Collect every profileId that has at least one active runner
+    const allIds = new Set<number>([
+      ...this.states.keys(),
+      ...this.humanSessionStates.keys(),
+      ...this.contactStates.keys(),
+      ...this.dmStates.keys(),
+    ]);
+    return Array.from(allIds).map(profileId => {
+      const followState   = this.states.get(profileId);
+      const humanState    = this.humanSessionStates.get(profileId);
+      const contactState  = this.contactStates.get(profileId);
+      const anyState      = followState ?? humanState ?? contactState;
       return {
         profileId,
-        loggedIn: !!state.client?.isLoggedIn(),
-        dailyCount: this.daily(state),
-        hourlyCount: this.hourly(state),
+        loggedIn:           !!anyState?.client?.isLoggedIn(),
+        dailyCount:         followState ? this.daily(followState) : 0,
+        hourlyCount:        followState ? this.hourly(followState) : 0,
         nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0,
-        nextFollowAt: state.nextFollowAt,
-        nextContactAt: contactState?.nextContactAt ?? 0,
+        nextFollowAt:       followState?.nextFollowAt ?? 0,
+        nextContactAt:      contactState?.nextContactAt ?? 0,
       };
     });
   }
