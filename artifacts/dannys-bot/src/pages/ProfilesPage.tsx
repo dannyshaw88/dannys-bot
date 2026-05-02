@@ -275,21 +275,13 @@ export function ProfilesPage() {
               <FileDown className="w-4 h-4 mr-2" /> Export Profiles
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={async () => {
-                try {
-                  const res = await fetch("/api/logs/export");
-                  const blob = await res.blob();
-                  const url = URL.createObjectURL(new Blob([blob], { type: "text/csv" }));
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                } catch {
-                  toast({ title: "Export failed", description: "Could not download the file.", variant: "destructive" });
-                }
+              onClick={() => {
+                const a = document.createElement("a");
+                a.href = "/api/logs/export";
+                a.download = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
               }}
               className="cursor-pointer font-medium p-3"
             >
