@@ -1277,20 +1277,57 @@ class AutomationEngine {
     }
     const source = this.pickSource(sources);
 
+    const globalSettings = await storage.getGlobalSettings();
+    const hikerEnabled = globalSettings.hikerApiEnabled === "true";
+    const hikerToken   = globalSettings.hikerApiToken ?? "";
+    const hikerClient: HikerApiClient | null = (hikerEnabled && hikerToken) ? new HikerApiClient(hikerToken) : null;
+
+    const logHikerDM = (op: string, message: string, durationMs: number) => {
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        operationName: op,
+        date: new Date().toISOString(),
+        message,
+        source: "HikerAPI",
+        durationMs,
+      }).catch(() => {});
+    };
+
     let candidates: { pk: string; username: string; fullName: string }[] = [];
     if (source.type === "hashtag") {
-      candidates = await client.getHashtagUsers(source.value, processCount * 3);
+      if (hikerClient) {
+        const t0 = Date.now();
+        candidates = await hikerClient.getHashtagUsers(source.value, processCount * 3);
+        logHikerDM("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
+      } else {
+        candidates = await client.getHashtagUsers(source.value, processCount * 3);
+      }
     } else {
-      // Use cached targetUserId; resolve once via search if missing
+      // Use cached targetUserId; resolve once (prefer HikerAPI) and cache
       let targetUserId = source.targetUserId ?? "";
       if (!targetUserId) {
-        const found = await client.searchUserByUsername(source.value.replace(/^@/, ""));
-        if (found) {
-          targetUserId = found.pk;
+        let resolved: { pk: string; username: string } | null = null;
+        if (hikerClient) {
+          const t0 = Date.now();
+          resolved = await hikerClient.getUserByUsername(source.value.replace(/^@/, ""));
+          logHikerDM("GetUserByUsername", `Resolved @${source.value.replace(/^@/, "")} via HikerAPI (cached)`, Date.now() - t0);
+        } else {
+          resolved = await client.searchUserByUsername(source.value.replace(/^@/, ""));
+        }
+        if (resolved) {
+          targetUserId = resolved.pk;
           await storage.updateSourceTargetUserId(source.id, targetUserId);
         }
       }
-      if (targetUserId) candidates = await client.getFollowers(targetUserId, processCount * 3);
+      if (targetUserId) {
+        if (hikerClient) {
+          const t0 = Date.now();
+          candidates = await hikerClient.getFollowers(targetUserId, processCount * 3);
+          logHikerDM("FollowersScrape", `Scraped followers of @${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
+        } else {
+          candidates = await client.getFollowers(targetUserId, processCount * 3);
+        }
+      }
     }
 
     let sent = 0;
