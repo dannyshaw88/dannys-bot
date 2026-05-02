@@ -143399,7 +143399,7 @@ var InstagramWebClient = class {
   // Returns the number of posts liked and reels watched.
   async likeTimelinePosts(count = 3) {
     return this.timed("LikeTimelinePosts", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start&is_pull_to_refresh=0`);
+      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=pull_to_refresh&is_pull_to_refresh=1`);
       const rawItems = j?.feed_items ?? j?.items ?? [];
       if (!rawItems.length) return { liked: 0, watched: 0 };
       const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk);
@@ -144342,8 +144342,7 @@ var AutomationEngine = class {
         "ViewTimelineReels",
         "ViewTimelineStories",
         "GetDirectMessages",
-        "GetDirectMessagesInternal",
-        "LikeTimelinePosts"
+        "GetDirectMessagesInternal"
       ]);
       state.client.setLogger((op, durationMs, message) => {
         if (!LOGGED_OPS.has(op)) return;

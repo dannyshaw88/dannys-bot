@@ -810,7 +810,7 @@ export class InstagramWebClient {
   // Returns the number of posts liked and reels watched.
   async likeTimelinePosts(count: number = 3): Promise<{ liked: number; watched: number }> {
     return this.timed("LikeTimelinePosts", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start&is_pull_to_refresh=0`);
+      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=pull_to_refresh&is_pull_to_refresh=1`);
       const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
       if (!rawItems.length) return { liked: 0, watched: 0 };
 
