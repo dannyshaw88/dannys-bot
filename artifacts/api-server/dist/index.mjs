@@ -144855,6 +144855,29 @@ async function registerInstagramRoutes(httpServer2, app2) {
     }
     res.json({ imported, skipped });
   });
+  app2.post("/api/proxies/auto-link", async (req, res) => {
+    const proxies2 = await storage.getProxies();
+    const profiles2 = await storage.getProfiles();
+    const proxyByHostPort = new Map(proxies2.map((p) => [`${p.host}:${p.port}`, p.id]));
+    let linked = 0;
+    let unmatched = 0;
+    for (const profile of profiles2) {
+      if (profile.proxyId) continue;
+      if (!profile.proxyHost || !profile.proxyPort) {
+        unmatched++;
+        continue;
+      }
+      const key = `${profile.proxyHost}:${profile.proxyPort}`;
+      const proxyId = proxyByHostPort.get(key);
+      if (proxyId) {
+        await storage.updateProfile(profile.id, { proxyId });
+        linked++;
+      } else {
+        unmatched++;
+      }
+    }
+    res.json({ linked, unmatched });
+  });
   app2.post("/api/proxies/:id/ping", async (req, res) => {
     const proxy = (await storage.getProxies()).find((p) => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });

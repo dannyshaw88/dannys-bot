@@ -197,6 +197,7 @@ export function ProxiesPage() {
   const [importing, setImporting] = useState(false);
   const [maxPerProxy, setMaxPerProxy] = useState(5);
   const [splitting, setSplitting] = useState(false);
+  const [autoLinking, setAutoLinking] = useState(false);
 
   // Centralised ping state
   const [pingResults, setPingResults] = useState<Record<number, PingResult>>({});
@@ -219,6 +220,25 @@ export function ProxiesPage() {
       return result;
     } finally {
       setPingingIds(prev => { const next = new Set(prev); next.delete(proxyId); return next; });
+    }
+  };
+
+  const handleAutoLink = async () => {
+    setAutoLinking(true);
+    try {
+      const res = await apiRequest("POST", "/api/proxies/auto-link");
+      const { linked, unmatched } = await res.json();
+      await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      toast({
+        title: linked > 0 ? `Linked ${linked} ${linked === 1 ? "account" : "accounts"} to proxies` : "No accounts were linked",
+        description: unmatched > 0
+          ? `${unmatched} ${unmatched === 1 ? "account has" : "accounts have"} no matching proxy — add their proxies first.`
+          : linked > 0 ? "All accounts matched to their proxies." : "All accounts already had proxies assigned.",
+      });
+    } catch {
+      toast({ title: "Auto-link failed", variant: "destructive" });
+    } finally {
+      setAutoLinking(false);
     }
   };
 
@@ -352,6 +372,15 @@ export function ProxiesPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={handleAutoLink}
+            disabled={autoLinking || !proxies.length}
+          >
+            {autoLinking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            {autoLinking ? "Linking…" : "Auto-link Accounts"}
+          </Button>
+
           <Button
             variant="outline"
             onClick={handlePingAll}
