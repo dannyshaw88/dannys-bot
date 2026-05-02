@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "20"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -43,6 +43,12 @@ jobs:
 
       - name: Build Electron main process
         run: pnpm --filter @workspace/electron run build
+
+      - name: Rebuild native modules for Electron
+        working-directory: artifacts/electron
+        run: npx --yes @electron/rebuild -f --only better-sqlite3
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
       - name: Package Windows installer
         run: pnpm --filter @workspace/electron run package

@@ -1,10 +1,12 @@
 import { app, BrowserWindow, utilityProcess, UtilityProcess } from "electron";
 import http from "http";
+import fs from "fs";
 import path from "path";
 
 const PORT = 8765;
 let serverProc: UtilityProcess | null = null;
 let win: BrowserWindow | null = null;
+let serverLog = "";
 
 function getServerEntry(): string {
   if (app.isPackaged) {
@@ -57,19 +59,37 @@ function startServer(): void {
   const entry = getServerEntry();
   const dbPath = path.join(app.getPath("userData"), "database.db");
   const frontendPath = getFrontendPath();
+  const logPath = path.join(app.getPath("userData"), "server.log");
+
+  serverLog = "";
 
   serverProc = utilityProcess.fork(entry, [], {
+    stdio: "pipe",
     env: {
       PORT: String(PORT),
       DATABASE_PATH: dbPath,
       FRONTEND_DIST_PATH: frontendPath,
       NODE_ENV: "production",
-      LOG_LEVEL: "silent",
+      LOG_LEVEL: "warn",
     },
     serviceName: "Danny's Bot Server",
   });
 
+  const logStream = fs.createWriteStream(logPath, { flags: "w" });
+
+  serverProc.stdout?.on("data", (d: Buffer) => {
+    const text = d.toString();
+    serverLog += text;
+    logStream.write(text);
+  });
+  serverProc.stderr?.on("data", (d: Buffer) => {
+    const text = d.toString();
+    serverLog += text;
+    logStream.write(text);
+  });
+
   serverProc.on("exit", (code) => {
+    logStream.end();
     if (code !== 0) {
       console.error("Server process exited with code", code);
     }
@@ -97,11 +117,13 @@ async function createWindow() {
     await waitForServer();
     win.loadURL(`http://localhost:${PORT}`);
   } catch (err) {
+    const logPath = path.join(app.getPath("userData"), "server.log");
+    const logSnippet = serverLog.slice(-800).replace(/</g, "&lt;").replace(/>/g, "&gt;");
     win.loadURL(
-      `data:text/html,<html><body style="font-family:sans-serif;padding:40px;background:%231a1a2e;color:%23fff">` +
-      `<h2 style="color:%23ff6b6b">Danny's Bot failed to start</h2>` +
-      `<p>The local server did not respond on port ${PORT}.</p>` +
-      `<p>Please restart the app. If this keeps happening, try reinstalling.</p>` +
+      `data:text/html,<html><body style="font-family:monospace;padding:24px;background:%231a1a2e;color:%23fff">` +
+      `<h2 style="color:%23ff6b6b">Server failed to start</h2>` +
+      `<p style="color:%23aaa">Log file: ${logPath}</p>` +
+      `<pre style="background:%23111;padding:12px;border-radius:6px;font-size:12px;overflow:auto;max-height:400px;white-space:pre-wrap">${logSnippet || "(no output captured)"}</pre>` +
       `</body></html>`
     );
   }
