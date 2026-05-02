@@ -13,9 +13,7 @@
     "dist/server/**",
     "dist/frontend/**",
     "node_modules/better-sqlite3/**",
-    "node_modules/bindings/**",
-    "node_modules/file-uri-to-path/**",
-    "node_modules/node-gyp-build/**",
+    "node_modules/better-sqlite3/node_modules/**",
     "**/*.node"
   ],
   "npmRebuild": true,
