@@ -295,10 +295,14 @@ class AutomationEngine {
         // ── Human session tools — run on their own separate timer ─────────────
         if (Date.now() >= state.nextHumanSessionAt) {
           const hs = followTool.settings as any;
-          try {
-            await this.runHumanSessionTools(freshProfile, followTool, state);
-          } catch (err: any) {
-            console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
+          if (hs.humanToolsEnabled !== false) {
+            try {
+              await this.runHumanSessionTools(freshProfile, followTool, state);
+            } catch (err: any) {
+              console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
+            }
+          } else {
+            console.log(`[engine] @${freshProfile.username}: human session tools disabled — skipping`);
           }
           const humanWaitMs = randInt(
             (hs.humanToolsDelayMin ?? 30) * 60_000,

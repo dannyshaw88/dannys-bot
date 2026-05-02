@@ -143668,10 +143668,14 @@ var AutomationEngine = class {
         if (state.stop.stopped) break;
         if (Date.now() >= state.nextHumanSessionAt) {
           const hs = followTool.settings;
-          try {
-            await this.runHumanSessionTools(freshProfile, followTool, state);
-          } catch (err) {
-            console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
+          if (hs.humanToolsEnabled !== false) {
+            try {
+              await this.runHumanSessionTools(freshProfile, followTool, state);
+            } catch (err) {
+              console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
+            }
+          } else {
+            console.log(`[engine] @${freshProfile.username}: human session tools disabled \u2014 skipping`);
           }
           const humanWaitMs = randInt(
             (hs.humanToolsDelayMin ?? 30) * 6e4,

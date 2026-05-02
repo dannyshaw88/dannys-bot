@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile } from "@/hooks/use-profiles";
@@ -12,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import {
   Plus, Trash2, Instagram, Activity, ChevronDown, Upload, Download,
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
-  Smartphone, FileDown, Bell, Filter, X,
+  Smartphone, FileDown, Filter, X,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, UserMinus, Camera, Eye
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -82,18 +81,6 @@ export function ProfilesPage() {
   const { toast } = useToast();
   const { openWindow } = useBrowserWindows();
 
-  const { data: liveApiCalls } = useQuery<any[]>({
-    queryKey: ["/api/instagram-api-calls"],
-    refetchInterval: 4000,
-    select: (data) => data?.slice(0, 1),
-  });
-  const latestCall = liveApiCalls?.[0];
-  const latestUsername = latestCall
-    ? (profiles?.find(p => p.id === latestCall.profileId)?.accountLabel
-        || profiles?.find(p => p.id === latestCall.profileId)?.username
-        || `#${latestCall.profileId}`)
-    : null;
-
   const handleVerify = (id: number) => {
     verifyMutation.mutate(id, {
       onSuccess: (data) => {
@@ -112,14 +99,33 @@ export function ProfilesPage() {
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [sortField, setSortField] = useState<"account" | "status" | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
+  const [sortField, setSortField] = useState<"account" | "status" | null>(() => {
+    const v = sessionStorage.getItem("profiles:sortField");
+    return (v === "account" || v === "status") ? v : null;
+  });
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
+    (sessionStorage.getItem("profiles:sortDir") as "asc" | "desc") ?? "asc"
+  );
+
+  const setFilterPersisted = (v: string) => {
+    sessionStorage.setItem("profiles:filter", v);
+    setStatusFilter(v);
+  };
 
   const cycleSort = (field: "account" | "status") => {
-    if (sortField !== field) { setSortField(field); setSortDir("asc"); }
-    else if (sortDir === "asc") setSortDir("desc");
-    else { setSortField(null); setSortDir("asc"); }
+    if (sortField !== field) {
+      setSortField(field); setSortDir("asc");
+      sessionStorage.setItem("profiles:sortField", field);
+      sessionStorage.setItem("profiles:sortDir", "asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+      sessionStorage.setItem("profiles:sortDir", "desc");
+    } else {
+      setSortField(null); setSortDir("asc");
+      sessionStorage.removeItem("profiles:sortField");
+      sessionStorage.setItem("profiles:sortDir", "asc");
+    }
   };
 
   const handleCreate = () => {
@@ -349,20 +355,6 @@ export function ProfilesPage() {
         <div className="min-w-0 flex-1 mr-4">
           <div className="flex items-baseline gap-3 min-w-0">
             <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
-            {latestCall && latestUsername && (
-              <span
-                key={latestCall.id}
-                className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 overflow-hidden"
-              >
-                <Bell className="w-3 h-3 text-primary shrink-0" />
-                <span className="truncate">
-                  <span className="font-semibold text-foreground">{latestCall.operationName}</span>
-                  {" — "}
-                  <span className="text-primary font-medium">{latestUsername}</span>
-                  {latestCall.message ? ` ${latestCall.message}` : ""}
-                </span>
-              </span>
-            )}
           </div>
         </div>
         <Button onClick={handleCreate} disabled={createProfileMutation.isPending}>
@@ -377,13 +369,13 @@ export function ProfilesPage() {
           <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
+            onChange={e => setFilterPersisted(e.target.value)}
             placeholder="Filter to show specific profiles"
             className="h-8 pl-7 pr-7 text-xs font-mono"
           />
           {statusFilter && (
             <button
-              onClick={() => setStatusFilter("")}
+              onClick={() => setFilterPersisted("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Clear filter"
             >
@@ -415,7 +407,7 @@ export function ProfilesPage() {
           <h3 className="text-base font-medium">No accounts match this filter</h3>
           <p className="text-muted-foreground text-sm mt-1">
             Try a different status or{" "}
-            <button onClick={() => setStatusFilter("")} className="underline hover:text-foreground transition-colors">clear the filter</button>.
+            <button onClick={() => setFilterPersisted("")} className="underline hover:text-foreground transition-colors">clear the filter</button>.
           </p>
         </div>
       ) : (
