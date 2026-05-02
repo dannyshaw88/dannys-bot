@@ -144824,6 +144824,37 @@ async function registerInstagramRoutes(httpServer2, app2) {
     await storage.deleteProxy(Number(req.params.id));
     res.status(204).end();
   });
+  app2.post("/api/proxies/import", async (req, res) => {
+    const input = external_exports.object({
+      proxies: external_exports.array(external_exports.object({
+        host: external_exports.string().min(1),
+        port: external_exports.number().int().min(1).max(65535),
+        username: external_exports.string().nullable().optional(),
+        password: external_exports.string().nullable().optional()
+      }))
+    }).parse(req.body);
+    const existing = await storage.getProxies();
+    const existingSet = new Set(existing.map((p) => `${p.host}:${p.port}`));
+    let imported = 0;
+    let skipped = 0;
+    for (const p of input.proxies) {
+      const key = `${p.host}:${p.port}`;
+      if (existingSet.has(key)) {
+        skipped++;
+        continue;
+      }
+      await storage.createProxy({
+        name: key,
+        host: p.host,
+        port: p.port,
+        username: p.username ?? null,
+        password: p.password ?? null
+      });
+      existingSet.add(key);
+      imported++;
+    }
+    res.json({ imported, skipped });
+  });
   app2.post("/api/proxies/:id/ping", async (req, res) => {
     const proxy = (await storage.getProxies()).find((p) => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
