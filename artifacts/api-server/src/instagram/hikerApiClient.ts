@@ -98,7 +98,12 @@ export class HikerApiClient {
     try {
       const amount = Math.min(Math.max(max, 1), 200);
       const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
-      const users: any[] = Array.isArray(j) ? j : [];
+      console.error(`[hikerApi] getFollowers raw keys: ${JSON.stringify(Object.keys(j ?? {}))}, isArray: ${Array.isArray(j)}`);
+      const users: any[] = Array.isArray(j) ? j
+        : Array.isArray(j?.users) ? j.users
+        : Array.isArray(j?.items) ? j.items
+        : Array.isArray(j?.data) ? j.data
+        : [];
       return users
         .filter((u: any) => u?.pk && u?.username)
         .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }))
@@ -113,8 +118,21 @@ export class HikerApiClient {
     try {
       const tag = hashtag.replace(/^#/, "");
       const amount = Math.min(Math.max(max, 1), 200);
-      const j = await hikerGet(`/v1/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
-      const items: any[] = Array.isArray(j) ? j : [];
+      let j = await hikerGet(`/v1/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
+      let items: any[] = Array.isArray(j) ? j
+        : Array.isArray(j?.items) ? j.items
+        : Array.isArray(j?.medias) ? j.medias
+        : Array.isArray(j?.data) ? j.data
+        : [];
+      if (items.length === 0) {
+        j = await hikerGet(`/v1/hashtag/medias/top?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
+        items = Array.isArray(j) ? j
+          : Array.isArray(j?.items) ? j.items
+          : Array.isArray(j?.medias) ? j.medias
+          : Array.isArray(j?.data) ? j.data
+          : [];
+        if (items.length > 0) console.error(`[hikerApi] getHashtagUsers: recent empty, using top (${items.length} items)`);
+      }
       const seen = new Set<string>();
       const users: { pk: string; username: string; fullName: string }[] = [];
       for (const item of items) {
