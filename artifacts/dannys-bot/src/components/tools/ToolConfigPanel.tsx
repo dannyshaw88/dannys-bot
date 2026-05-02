@@ -1,5 +1,6 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { format, addMinutes } from "date-fns";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useSources, useCreateSource, useDeleteSource, useImportSources, parseJarveeHashtagFile } from "@/hooks/use-sources";
@@ -9,9 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign } from "lucide-react";
 import { useRef } from "react";
-import { type Tool, type Profile, type FollowedUser } from "@shared/schema";
+import { type Tool, type Profile, type FollowedUser, type SessionAction } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
@@ -207,6 +207,23 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     refetchInterval: 10000,
     enabled: showFollowedUsers,
   });
+
+  const { data: sessionActions } = useQuery<SessionAction[]>({
+    queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
+    refetchInterval: 15000,
+  });
+  const lastAction = sessionActions?.find(a => a.toolId === tool.id);
+  const nextRunDisplay = (() => {
+    if (!lastAction) return null;
+    const last = new Date(lastAction.timestamp);
+    const earliest = addMinutes(last, settings.delayMin ?? 1);
+    const latest = addMinutes(last, settings.delayMax ?? 2);
+    const now = new Date();
+    if (now > latest) return "now";
+    if (now > earliest) return `by ${format(latest, "HH:mm")}`;
+    return `${format(earliest, "HH:mm")} – ${format(latest, "HH:mm")}`;
+  })();
+
   const [showCopyModal, setShowCopyModal] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
@@ -280,7 +297,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   };
 
   const NumInput = ({ valueKey, min = 0, max, unit, onChange }: { valueKey: string; min?: number; max?: number; unit?: string; onChange?: (v: number) => void }) => (
-    <div className="relative w-full">
+    <div className="relative w-16">
       <Input type="number" className={`w-full h-6 text-xs px-2 ${unit ? 'pr-4' : ''}`} min={min} max={max}
         value={(settings as any)[valueKey]}
         onChange={(e) => {
@@ -592,15 +609,23 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
           <div className="desktop-card p-6">
             <div className="rounded-xl p-4 space-y-4">
             {tool.type === 'follow' && (
-              <div className="flex items-center gap-3 mb-4">
-                <Switch
-                  checked={tool.enabled}
-                  onCheckedChange={handleToggleEnable}
-                  disabled={updateToolMutation.isPending}
-                />
-                <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
-                  {tool.enabled ? 'ACTIVE' : 'STOPPED'}
-                </span>
+              <div className="space-y-3 mb-4">
+                {nextRunDisplay && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Clock className="w-3 h-3 shrink-0" />
+                    Next execution:&nbsp;<span className="font-mono font-medium text-foreground">{nextRunDisplay}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={tool.enabled}
+                    onCheckedChange={handleToggleEnable}
+                    disabled={updateToolMutation.isPending}
+                  />
+                  <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
+                    {tool.enabled ? 'ACTIVE' : 'STOPPED'}
+                  </span>
+                </div>
               </div>
             )}
             <div className="border-b border-border pb-3 mb-4">

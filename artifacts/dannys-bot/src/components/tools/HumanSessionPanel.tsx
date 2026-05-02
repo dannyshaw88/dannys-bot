@@ -11,8 +11,8 @@ import {
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
   ChevronDown, ChevronUp, Heart, Copy,
 } from "lucide-react";
-import { format } from "date-fns";
-import { type Tool, type Profile, type RepostedPost } from "@shared/schema";
+import { format, addMinutes } from "date-fns";
+import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useToast } from "@/hooks/use-toast";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
@@ -33,7 +33,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
   const HUMAN_KEY_MAP: Record<string, string[]> = {
-    humanToolsDelay:    ["humanToolsDelayMin","humanToolsDelayMax"],
+    humanToolsDelay:    ["delayMin","delayMax"],
     viewTimelineFeed:   ["viewTimelineFeedEnabled","viewTimelineFeedMin","viewTimelineFeedMax","viewTimelineFeedOrderMin","viewTimelineFeedOrderMax","viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"],
     humanSession:       ["humanSessionEnabled","humanSessionOrderMin","humanSessionOrderMax","humanSessionNotUsedMin","humanSessionNotUsedMax"],
     checkReels:         ["checkTimelineReelsEnabled","checkTimelineReelsMin","checkTimelineReelsMax","checkTimelineReelsOrderMin","checkTimelineReelsOrderMax","checkTimelineReelsNotUsedMin","checkTimelineReelsNotUsedMax"],
@@ -70,9 +70,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
-      humanToolsDelayMin: 30,
-      humanToolsDelayMax: 60,
-      humanToolsEnabled: true,
+      delayMin: 30,
+      delayMax: 60,
       viewTimelineFeedEnabled: true,
       viewTimelineFeedMin: 3,
       viewTimelineFeedMax: 8,
@@ -162,17 +161,44 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     </>
   );
 
+  const { data: sessionActions } = useQuery<SessionAction[]>({
+    queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
+    refetchInterval: 15000,
+  });
+  const lastAction = sessionActions?.find(a => a.toolId === tool.id);
+  const nextRunDisplay = (() => {
+    if (!lastAction) return null;
+    const last = new Date(lastAction.timestamp);
+    const earliest = addMinutes(last, settings.delayMin ?? 30);
+    const latest = addMinutes(last, settings.delayMax ?? 60);
+    const now = new Date();
+    if (now > latest) return "now";
+    if (now > earliest) return `by ${format(latest, "HH:mm")}`;
+    return `${format(earliest, "HH:mm")} – ${format(latest, "HH:mm")}`;
+  })();
+
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      {/* Master Enable + Title */}
-      <div className="flex items-center gap-3 px-1">
-        <Switch
-          checked={!!settings.humanToolsEnabled}
-          onCheckedChange={(v) => setSettings({ ...settings, humanToolsEnabled: v })}
-        />
+      {/* ── Master enable/disable ─────────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold">Human Session Tools</p>
-          <p className="text-[11px] text-muted-foreground">Enable the timer and tools below to simulate human behaviour.</p>
+          <h4 className="font-semibold text-sm">Human Session Tool</h4>
+          {nextRunDisplay && (
+            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Clock className="w-3 h-3 shrink-0" />
+              Next execution: <span className="font-mono font-medium text-foreground">{nextRunDisplay}</span>
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={tool.enabled}
+            onCheckedChange={(enabled) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })}
+            disabled={updateToolMutation.isPending}
+          />
+          <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
+            {tool.enabled ? 'ACTIVE' : 'STOPPED'}
+          </span>
         </div>
       </div>
 
@@ -180,23 +206,22 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       <div className="border border-border rounded-xl p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="font-semibold text-sm">Human Session Tools Timer</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">How often the tools below run, independent of the follow session timer.</p>
+            <h4 className="font-semibold text-sm">Execute Every (min)</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">How often the actions below run.</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Every (min)</span>
             <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Min</Label>
               <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
-                value={settings.humanToolsDelayMin ?? 30}
-                onChange={(e) => setSettings({ ...settings, humanToolsDelayMin: Math.max(1, Number(e.target.value)) })}
+                value={settings.delayMin ?? 30}
+                onChange={(e) => setSettings({ ...settings, delayMin: Math.max(1, Number(e.target.value)) })}
               />
             </div>
             <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Max</Label>
               <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
-                value={settings.humanToolsDelayMax ?? 60}
-                onChange={(e) => setSettings({ ...settings, humanToolsDelayMax: Math.max(1, Number(e.target.value)) })}
+                value={settings.delayMax ?? 60}
+                onChange={(e) => setSettings({ ...settings, delayMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
           </div>
@@ -280,7 +305,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40' : ''}`}>
-          Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity. Set execution order &gt; 0% to enable.
+          Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity.
         </p>
       </div>
 
@@ -310,7 +335,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40' : ''}`}>
-          Scrolls through the Reels tab feed and marks reels as watched. Set execution order &gt; 0% to enable.
+          Scrolls through the Reels tab feed and marks reels as watched.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels to Watch</span>
@@ -359,7 +384,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40' : ''}`}>
-          Watches stories from the top of Instagram's home feed tray. Set execution order &gt; 0% to enable.
+          Watches stories from the top of Instagram's home feed tray.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Stories to Watch</span>
@@ -408,7 +433,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkDmEnabled ? 'opacity-40' : ''}`}>
-          Calls <code className="bg-muted px-1 rounded text-[10px]">getDirectMessagesInternal</code> to simulate checking the inbox. Set execution order &gt; 0% to enable.
+          Calls <code className="bg-muted px-1 rounded text-[10px]">getDirectMessagesInternal</code> to simulate checking the inbox.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">DMs to Check</span>
@@ -457,7 +482,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40' : ''}`}>
-          Likes posts from the home timeline feed. If a post is a reel, it is marked as watched before liking. Set execution order &gt; 0% to enable.
+          Likes posts from the home timeline feed. If a post is a reel, it is marked as watched before liking.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Like</span>
