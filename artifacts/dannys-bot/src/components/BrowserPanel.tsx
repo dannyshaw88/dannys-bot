@@ -339,7 +339,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       )}
 
       {/* Viewport */}
-      <div className="flex-1 relative bg-slate-900 min-h-0 overflow-hidden">
+      <div className="flex-1 relative bg-slate-900 min-h-0 overflow-hidden flex items-center justify-center">
 
         {/* Connecting */}
         {status === "connecting" && (
@@ -359,7 +359,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           </div>
         )}
 
-        {/* Live canvas — fills full viewport, always rendered once connected */}
+        {/* Live canvas — letterboxed to preserve 1280×760 aspect ratio */}
         <canvas
           ref={canvasRef}
           width={BROWSER_W}
@@ -367,8 +367,11 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           className="outline-none"
           style={{
             display: connected ? "block" : "none",
-            width: "100%",
-            height: "100%",
+            maxWidth: "100%",
+            maxHeight: "100%",
+            width: "auto",
+            height: "auto",
+            aspectRatio: `${BROWSER_W} / ${BROWSER_H}`,
             cursor: "default",
             touchAction: "none",
           }}

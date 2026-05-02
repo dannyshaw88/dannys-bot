@@ -142259,7 +142259,7 @@ function startFrameLoop(profileId) {
     }
     try {
       const [screenshot, currentUrl] = await Promise.all([
-        s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
+        s.page.screenshot({ type: "jpeg", quality: 90, encoding: "base64" }),
         s.page.url()
       ]);
       const frame = JSON.stringify({ type: "frame", data: screenshot, url: currentUrl });
