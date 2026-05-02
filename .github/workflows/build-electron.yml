@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -29,6 +32,11 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: "true"
 
+      - name: Set version from run number
+        run: node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('artifacts/electron/package.json','utf8'));p.version='1.0.'+process.env.RUN_NUMBER;fs.writeFileSync('artifacts/electron/package.json',JSON.stringify(p,null,2));console.log('Version:',p.version);"
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+
       - name: Build frontend
         run: pnpm --filter @workspace/dannys-bot run build
         env:
@@ -41,15 +49,15 @@ jobs:
       - name: Build Electron main process
         run: pnpm --filter @workspace/electron run build
 
-      - name: Inject bindings shim into better-sqlite3
+      - name: Patch better-sqlite3 to load native binary directly
         run: node scripts/inject-bindings-shim.cjs
 
-      - name: Package Windows installer
+      - name: Package and publish Windows installer
         run: pnpm --filter @workspace/electron run package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Windows installer
+      - name: Upload installer as artifact
         uses: actions/upload-artifact@v4
         with:
           name: dannys-bot-windows-installer

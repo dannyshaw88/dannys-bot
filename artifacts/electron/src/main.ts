@@ -1,4 +1,5 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
+import { autoUpdater } from "electron-updater";
 import { spawn, ChildProcess } from "child_process";
 import http from "http";
 import net from "net";
@@ -66,9 +67,6 @@ function startServer(port: number, logPath: string): void {
   const dbPath = path.join(getUserDataPath(), "database.db");
   const frontendPath = getFrontendPath();
 
-  // ELECTRON_RUN_AS_NODE=1 tells Electron to behave as plain Node.js —
-  // no sandbox, no renderer, full network access. Required because
-  // utilityProcess blocks listen() on Windows.
   serverProc = spawn(process.execPath, [entry], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -88,6 +86,31 @@ function startServer(port: number, logPath: string): void {
   serverProc.stdout?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.stderr?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.on("exit", () => logStream.end());
+}
+
+function setupAutoUpdater(): void {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-downloaded", () => {
+    if (!win) return;
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "Update Ready",
+      message: "Danny's Bot has been updated. Restart now to apply?",
+      buttons: ["Restart Now", "Later"],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) autoUpdater.quitAndInstall(false, true);
+    });
+  });
+
+  autoUpdater.on("error", () => {
+    // Silently ignore — don't interrupt the user for update errors
+  });
+
+  // Check 5 seconds after startup so it doesn't slow down the launch
+  setTimeout(() => autoUpdater.checkForUpdates(), 5000);
 }
 
 async function createWindow() {
@@ -134,6 +157,8 @@ async function createWindow() {
 
   win.once("ready-to-show", () => win?.show());
   win.on("closed", () => { win = null; });
+
+  if (app.isPackaged) setupAutoUpdater();
 }
 
 app.whenReady().then(createWindow);

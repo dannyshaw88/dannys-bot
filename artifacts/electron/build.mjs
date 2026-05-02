@@ -16,7 +16,7 @@ await esbuild({
   bundle: true,
   platform: "node",
   target: "node20",
-  external: ["electron"],
+  external: ["electron", "electron-updater"],
   outfile: path.join(dist, "main.js"),
   format: "cjs",
 });

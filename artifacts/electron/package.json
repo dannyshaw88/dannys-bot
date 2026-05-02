@@ -9,10 +9,11 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "package": "electron-builder --win"
+    "package": "electron-builder --win --publish always"
   },
   "dependencies": {
-    "better-sqlite3": "^12.0.0"
+    "better-sqlite3": "^12.0.0",
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
