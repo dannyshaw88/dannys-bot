@@ -234,28 +234,108 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
   // ── Follow Tool copy option groups ──────────────────────────────
   const FOLLOW_TOOL_KEY_MAP: Record<string, string[]> = {
-    followDelays:      ["delayMin","delayMax","delayAfterFollowMin","delayAfterFollowMax","delayAfterUnfollowMin","delayAfterUnfollowMax"],
-    followLimits:      ["maxPerDayMin","maxPerDayMax","maxPerHourMin","maxPerHourMax","processMin","processMax"],
-    scraping:          ["abortScrapeAfterMin","abortScrapeAfterMax","executionOrderMin","executionOrderMax","minFollowAgeDays","skipIndianUsers"],
-    likeSettings:      ["likeChanceMin","likeChanceMax","likeProcessMin","likeProcessMax","likeMaxPerDayMin","likeMaxPerDayMax","likeMaxPerHourMin","likeMaxPerHourMax","likeBeforeMin","likeBeforeMax","likeDelayMin","likeDelayMax"],
-    viewReels:         ["viewReelsChanceMin","viewReelsChanceMax","viewReelsProcessMin","viewReelsProcessMax","viewReelsMaxPerDayMin","viewReelsMaxPerDayMax","viewReelsMaxPerHourMin","viewReelsMaxPerHourMax","viewReelsBeforeMin","viewReelsBeforeMax","viewReelsDelayMin","viewReelsDelayMax"],
-    viewStories:       ["viewStoriesChanceMin","viewStoriesChanceMax","viewStoriesProcessMin","viewStoriesProcessMax","viewStoriesMaxPerDayMin","viewStoriesMaxPerDayMax","viewStoriesMaxPerHourMin","viewStoriesMaxPerHourMax","viewStoriesBeforeMin","viewStoriesBeforeMax","viewStoriesDelayMin","viewStoriesDelayMax"],
-    viewHighlights:    ["viewHighlightsChanceMin","viewHighlightsChanceMax","viewHighlightsProcessMin","viewHighlightsProcessMax","viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax","viewHighlightsMaxPerHourMin","viewHighlightsMaxPerHourMax","viewHighlightsBeforeMin","viewHighlightsBeforeMax","viewHighlightsDelayMin","viewHighlightsDelayMax"],
-    contextualActions: ["contextualActionsEnabled","contextualActionsMin","contextualActionsMax","contextualActionsDelayMin","contextualActionsDelayMax","discoverPagePercentageMin","discoverPagePercentageMax"],
-    dmMessages:        ["dmMessages"],
+    // Timing
+    sessionWait:              ["delayMin","delayMax"],
+    delayAfterFollow:         ["delayAfterFollowMin","delayAfterFollowMax"],
+    // Limits
+    usersPerSession:          ["processMin","processMax"],
+    maxPerDay:                ["maxPerDayMin","maxPerDayMax"],
+    maxPerHour:               ["maxPerHourMin","maxPerHourMax"],
+    // Scraping
+    scrapeAbort:              ["abortScrapeAfterMin","abortScrapeAfterMax"],
+    minFollowAge:             ["minFollowAgeDays"],
+    // Contextual Actions
+    contextualEnabled:        ["contextualActionsEnabled"],
+    contextualCount:          ["contextualActionsMin","contextualActionsMax"],
+    contextualDelay:          ["contextualActionsDelayMin","contextualActionsDelayMax"],
+    discoverPage:             ["discoverPagePercentageMin","discoverPagePercentageMax"],
+    // Like
+    likeChance:               ["likeChanceMin","likeChanceMax"],
+    likeProcess:              ["likeProcessMin","likeProcessMax"],
+    likeMaxPerDay:            ["likeMaxPerDayMin","likeMaxPerDayMax"],
+    likeMaxPerHour:           ["likeMaxPerHourMin","likeMaxPerHourMax"],
+    likeDelay:                ["likeDelayMin","likeDelayMax"],
+    // View Reels
+    viewReelsChance:          ["viewReelsChanceMin","viewReelsChanceMax"],
+    viewReelsProcess:         ["viewReelsProcessMin","viewReelsProcessMax"],
+    viewReelsMaxPerDay:       ["viewReelsMaxPerDayMin","viewReelsMaxPerDayMax"],
+    viewReelsMaxPerHour:      ["viewReelsMaxPerHourMin","viewReelsMaxPerHourMax"],
+    viewReelsDelay:           ["viewReelsDelayMin","viewReelsDelayMax"],
+    // View Stories
+    viewStoriesChance:        ["viewStoriesChanceMin","viewStoriesChanceMax"],
+    viewStoriesProcess:       ["viewStoriesProcessMin","viewStoriesProcessMax"],
+    viewStoriesMaxPerDay:     ["viewStoriesMaxPerDayMin","viewStoriesMaxPerDayMax"],
+    viewStoriesMaxPerHour:    ["viewStoriesMaxPerHourMin","viewStoriesMaxPerHourMax"],
+    viewStoriesDelay:         ["viewStoriesDelayMin","viewStoriesDelayMax"],
+    // View Highlights
+    viewHighlightsChance:     ["viewHighlightsChanceMin","viewHighlightsChanceMax"],
+    viewHighlightsProcess:    ["viewHighlightsProcessMin","viewHighlightsProcessMax"],
+    viewHighlightsMaxPerDay:  ["viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax"],
+    viewHighlightsMaxPerHour: ["viewHighlightsMaxPerHourMin","viewHighlightsMaxPerHourMax"],
+    viewHighlightsDelay:      ["viewHighlightsDelayMin","viewHighlightsDelayMax"],
+    // Auto follow/unfollow
+    autoFollowEnabled:        ["autoFollowUnfollowEnabled"],
+    autoStopAt:               ["autoStopFollowAtFollowingsMin","autoStopFollowAtFollowingsMax"],
+    autoStartAfter:           ["autoStartUnfollowAfterMin","autoStartUnfollowAfterMax"],
+    // DM
+    dmMessages:               ["dmMessages"],
+    // startStop is special — handled directly in handler
   };
   const FOLLOW_TOOL_COPY_GROUPS: CopyOptionGroup[] = [
-    { label: "Follow", options: [
-      { key: "followDelays", label: "Follow Delays", description: "Action, post-follow, and post-unfollow delay ranges" },
-      { key: "followLimits", label: "Follow Limits", description: "Daily/hourly limits and session size" },
-      { key: "scraping",     label: "Scraping & Filters", description: "Abort threshold, execution order, age filter, region filter" },
+    { label: "General", options: [
+      { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+    ]},
+    { label: "Timing", options: [
+      { key: "sessionWait",      label: "Wait Until Next Session",  description: "Min/max minutes between sessions" },
+      { key: "delayAfterFollow", label: "Delay After Follow",       description: "Seconds to wait after each follow action" },
+    ]},
+    { label: "Limits", options: [
+      { key: "usersPerSession", label: "Users Per Session",   description: "How many users to process each session" },
+      { key: "maxPerDay",       label: "Max Actions Per Day",  description: "Daily cap on follow actions (0 = unlimited)" },
+      { key: "maxPerHour",      label: "Max Actions Per Hour", description: "Hourly cap on follow actions (0 = unlimited)" },
+    ]},
+    { label: "Scraping", options: [
+      { key: "scrapeAbort",  label: "Abort Scrape After", description: "Stop scraping if results fall below this range" },
+      { key: "minFollowAge", label: "Min Follow Age",      description: "Minimum days before a user can be unfollowed" },
     ]},
     { label: "Contextual Actions", options: [
-      { key: "likeSettings",      label: "Like Settings",       description: "Chance, process count, limits, delay, before-follow" },
-      { key: "viewReels",         label: "View Reels",          description: "Chance, process, limits, delay, before-follow" },
-      { key: "viewStories",       label: "View Stories",        description: "Chance, process, limits, delay, before-follow" },
-      { key: "viewHighlights",    label: "View Highlights",     description: "Chance, process, limits, delay, before-follow" },
-      { key: "contextualActions", label: "Contextual Action Mix", description: "Discover page %, combined action limits and delay" },
+      { key: "contextualEnabled", label: "Contextual Actions Enabled", description: "Toggle the contextual actions feature" },
+      { key: "contextualCount",   label: "Contextual Action Count",    description: "How many contextual follows per session" },
+      { key: "contextualDelay",   label: "Contextual Action Delay",    description: "Seconds between contextual actions" },
+      { key: "discoverPage",      label: "Discover Page %",            description: "Percentage of follows from discover page" },
+    ]},
+    { label: "Like Settings", options: [
+      { key: "likeChance",     label: "Like Chance (%)",   description: "Probability of liking a post after following" },
+      { key: "likeProcess",    label: "Like Count",         description: "How many posts to like per action" },
+      { key: "likeMaxPerDay",  label: "Like Max / Day",     description: "Daily cap on likes" },
+      { key: "likeMaxPerHour", label: "Like Max / Hour",    description: "Hourly cap on likes" },
+      { key: "likeDelay",      label: "Like Delay",         description: "Seconds between like actions" },
+    ]},
+    { label: "View Reels", options: [
+      { key: "viewReelsChance",     label: "Reels Chance (%)",  description: "Probability of watching reels" },
+      { key: "viewReelsProcess",    label: "Reels Count",        description: "How many reels to watch per action" },
+      { key: "viewReelsMaxPerDay",  label: "Reels Max / Day",    description: "Daily cap on reel views" },
+      { key: "viewReelsMaxPerHour", label: "Reels Max / Hour",   description: "Hourly cap on reel views" },
+      { key: "viewReelsDelay",      label: "Reels Delay",        description: "Seconds between reel views" },
+    ]},
+    { label: "View Stories", options: [
+      { key: "viewStoriesChance",     label: "Stories Chance (%)", description: "Probability of watching stories" },
+      { key: "viewStoriesProcess",    label: "Stories Count",       description: "How many stories to watch per action" },
+      { key: "viewStoriesMaxPerDay",  label: "Stories Max / Day",   description: "Daily cap on story views" },
+      { key: "viewStoriesMaxPerHour", label: "Stories Max / Hour",  description: "Hourly cap on story views" },
+      { key: "viewStoriesDelay",      label: "Stories Delay",       description: "Seconds between story views" },
+    ]},
+    { label: "View Highlights", options: [
+      { key: "viewHighlightsChance",     label: "Highlights Chance (%)", description: "Probability of watching highlights" },
+      { key: "viewHighlightsProcess",    label: "Highlights Count",       description: "How many highlights to watch per action" },
+      { key: "viewHighlightsMaxPerDay",  label: "Highlights Max / Day",   description: "Daily cap on highlight views" },
+      { key: "viewHighlightsMaxPerHour", label: "Highlights Max / Hour",  description: "Hourly cap on highlight views" },
+      { key: "viewHighlightsDelay",      label: "Highlights Delay",       description: "Seconds between highlight views" },
+    ]},
+    { label: "Auto Follow / Unfollow", options: [
+      { key: "autoFollowEnabled", label: "Auto Follow/Unfollow Enabled", description: "Toggle automatic switching between follow and unfollow" },
+      { key: "autoStopAt",        label: "Stop at Followings Count",     description: "Target followings count to stop the follow tool" },
+      { key: "autoStartAfter",    label: "Start Unfollow After (min)",   description: "Minutes to wait before enabling the unfollow tool" },
     ]},
     { label: "DM", options: [
       { key: "dmMessages", label: "DM Messages", description: "Message templates sent after following" },
@@ -263,8 +343,15 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   ];
 
   const handleFollowToolCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
-    const keysToSend = [...selectedKeys].flatMap(k => FOLLOW_TOOL_KEY_MAP[k] ?? []);
-    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend);
+    const copyEnabled = selectedKeys.has("startStop");
+    const keysToSend = [...selectedKeys].filter(k => k !== "startStop").flatMap(k => FOLLOW_TOOL_KEY_MAP[k] ?? []);
+    await copyToolSettingsToProfiles(
+      settings as Record<string, unknown>,
+      tool.type,
+      targetIds,
+      keysToSend,
+      copyEnabled ? tool.enabled : undefined,
+    );
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 

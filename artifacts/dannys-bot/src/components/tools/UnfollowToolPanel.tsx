@@ -17,20 +17,32 @@ interface UnfollowToolPanelProps {
 }
 
 const UNFOLLOW_KEY_MAP: Record<string, string[]> = {
-  timing:   ["delayMin", "delayMax"],
-  process:  ["processMin", "processMax"],
-  delay:    ["delayAfterUnfollowMin", "delayAfterUnfollowMax"],
-  age:      ["minFollowAgeDays"],
-  auto:     ["autoFollowUnfollowEnabled", "autoStopUnfollowAtFollowingsMin", "autoStopUnfollowAtFollowingsMax", "autoStartFollowAfterMin", "autoStartFollowAfterMax"],
+  // Settings
+  timing:            ["delayMin","delayMax"],
+  process:           ["processMin","processMax"],
+  delay:             ["delayAfterUnfollowMin","delayAfterUnfollowMax"],
+  age:               ["minFollowAgeDays"],
+  // Auto follow/unfollow
+  autoEnabled:       ["autoFollowUnfollowEnabled"],
+  autoStopAt:        ["autoStopUnfollowAtFollowingsMin","autoStopUnfollowAtFollowingsMax"],
+  autoStartAfter:    ["autoStartFollowAfterMin","autoStartFollowAfterMax"],
+  // startStop is special — handled in handler
 };
 
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
+  { label: "General", options: [
+    { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+  ]},
   { label: "Settings", options: [
-    { key: "timing",  label: "Wait between executions", description: "Min/max minutes between sessions" },
-    { key: "process", label: "Process users",            description: "Min/max users per session" },
-    { key: "delay",   label: "Delay between each",       description: "Min/max seconds between each unfollow" },
-    { key: "age",     label: "Unfollow after (days)",    description: "Minimum days since follow before unfollowing" },
-    { key: "auto",    label: "Auto follow/unfollow",     description: "Automatic switching settings" },
+    { key: "age",     label: "Unfollow After (days)",    description: "Minimum days since follow before unfollowing" },
+    { key: "timing",  label: "Wait Between Executions",  description: "Min/max minutes between sessions" },
+    { key: "process", label: "Process Users",            description: "Min/max users to unfollow per session" },
+    { key: "delay",   label: "Delay Between Each",       description: "Min/max seconds between each unfollow action" },
+  ]},
+  { label: "Auto Follow / Unfollow", options: [
+    { key: "autoEnabled",    label: "Auto Follow/Unfollow Enabled", description: "Toggle automatic switching between unfollow and follow" },
+    { key: "autoStopAt",     label: "Stop at Followings Count",     description: "Target followings count to stop the unfollow tool" },
+    { key: "autoStartAfter", label: "Start Follow After (min)",     description: "Minutes to wait before enabling the follow tool" },
   ]},
 ];
 
@@ -72,8 +84,15 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   }, [settings]);
 
   const handleCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
-    const keysToSend = [...selectedKeys].flatMap(k => UNFOLLOW_KEY_MAP[k] ?? []);
-    await copyToolSettingsToProfiles(settings as Record<string, unknown>, "unfollow", targetIds, keysToSend);
+    const copyEnabled = selectedKeys.has("startStop");
+    const keysToSend = [...selectedKeys].filter(k => k !== "startStop").flatMap(k => UNFOLLOW_KEY_MAP[k] ?? []);
+    await copyToolSettingsToProfiles(
+      settings as Record<string, unknown>,
+      "unfollow",
+      targetIds,
+      keysToSend,
+      copyEnabled ? tool.enabled : undefined,
+    );
     toast({ title: `Settings copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}` });
   };
 

@@ -20,29 +20,45 @@ interface Props {
 type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
 const CONTACT_KEY_MAP: Record<string, string[]> = {
-  contactNewFollowers: [
-    "contactOnlyAppFollowed",
-    "contactMessage",
-    "contactCheckIntervalMin","contactCheckIntervalMax",
-    "contactUsersPerCheckMin","contactUsersPerCheckMax",
-    "contactApiSource",
-  ],
-  contactUsers: [
-    "contactUsersWaitMin","contactUsersWaitMax",
-    "contactUsersSendCountMin","contactUsersSendCountMax",
-    "contactUsersDelayBetweenMin","contactUsersDelayBetweenMax",
-    "contactUsersPickRandom",
-    "contactUsersUnsendEnabled",
-    "contactUsersUnsendMin","contactUsersUnsendMax",
-  ],
-  autoReply: ["autoReplyEnabled","autoReplies"],
+  // Contact New Followers
+  contactOnlyAppFollowed:   ["contactOnlyAppFollowed"],
+  contactMessage:           ["contactMessage"],
+  contactCheckInterval:     ["contactCheckIntervalMin","contactCheckIntervalMax"],
+  contactPerCheck:          ["contactUsersPerCheckMin","contactUsersPerCheckMax"],
+  contactApiSource:         ["contactApiSource"],
+  // Contact Users
+  contactUsersWait:         ["contactUsersWaitMin","contactUsersWaitMax"],
+  contactUsersSendCount:    ["contactUsersSendCountMin","contactUsersSendCountMax"],
+  contactUsersDelay:        ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"],
+  contactUsersPickRandom:   ["contactUsersPickRandom"],
+  contactUsersUnsend:       ["contactUsersUnsendEnabled","contactUsersUnsendMin","contactUsersUnsendMax"],
+  // Auto Reply
+  autoReplyEnabled:         ["autoReplyEnabled"],
+  autoReplies:              ["autoReplies"],
+  // startStop is special — handled in handler
 };
 
 const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
-  { label: "Contact Settings", options: [
-    { key: "contactNewFollowers", label: "Contact New Followers", description: "Message template, check interval, per-check limit, API source" },
-    { key: "contactUsers",        label: "Contact Users",         description: "Wait time, send count, delay between, random pick, unsend settings" },
-    { key: "autoReply",           label: "Auto Reply",            description: "Enabled state and trigger-word / reply pairs" },
+  { label: "General", options: [
+    { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+  ]},
+  { label: "Contact New Followers", options: [
+    { key: "contactOnlyAppFollowed", label: "Only App Followed",   description: "Restrict to users followed by this app" },
+    { key: "contactMessage",         label: "Message Template",    description: "The message sent to new followers" },
+    { key: "contactCheckInterval",   label: "Check Interval",      description: "Min/max minutes between follower checks" },
+    { key: "contactPerCheck",        label: "Users Per Check",     description: "How many users to contact each check" },
+    { key: "contactApiSource",       label: "API Source",          description: "Which API endpoint to use for detection" },
+  ]},
+  { label: "Contact Users", options: [
+    { key: "contactUsersWait",       label: "Wait Between Sessions", description: "Min/max minutes between contact sessions" },
+    { key: "contactUsersSendCount",  label: "Send Count",            description: "Min/max messages to send per session" },
+    { key: "contactUsersDelay",      label: "Delay Between",         description: "Seconds between individual messages" },
+    { key: "contactUsersPickRandom", label: "Pick Random",           description: "Pick users randomly from the list" },
+    { key: "contactUsersUnsend",     label: "Unsend Settings",       description: "Auto-unsend after a time window" },
+  ]},
+  { label: "Auto Reply", options: [
+    { key: "autoReplyEnabled", label: "Auto Reply Enabled", description: "Toggle the auto reply feature on/off" },
+    { key: "autoReplies",      label: "Auto Reply Rules",   description: "Trigger words and reply message pairs" },
   ]},
 ];
 
@@ -62,12 +78,14 @@ export function ContactToolPanel({ tool, profile }: Props) {
   })();
 
   const handleContactCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
-    const keysToSend = [...selectedKeys].flatMap(k => CONTACT_KEY_MAP[k] ?? []);
+    const copyEnabled = selectedKeys.has("startStop");
+    const keysToSend = [...selectedKeys].filter(k => k !== "startStop").flatMap(k => CONTACT_KEY_MAP[k] ?? []);
     await copyToolSettingsToProfiles(
       (tool.settings as Record<string, unknown>) ?? {},
       tool.type,
       targetIds,
       keysToSend,
+      copyEnabled ? tool.enabled : undefined,
     );
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
