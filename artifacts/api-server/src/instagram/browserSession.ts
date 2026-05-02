@@ -1,4 +1,4 @@
-import puppeteer, { Browser, Page } from "puppeteer";
+import type { Browser, Page } from "puppeteer";
 import { WebSocket } from "ws";
 import { generate as totpGenerate } from "otplib";
 import fs from "fs";
@@ -116,6 +116,7 @@ export async function getOrCreateSession(
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
   log(`Launching Chrome for profile ${profileId}${proxy ? ` via proxy ${proxy.host}:${proxy.port}` : " (direct)"}`, "browser");
 
+  const { default: puppeteer } = await import("puppeteer");
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: CHROMIUM_PATH,
