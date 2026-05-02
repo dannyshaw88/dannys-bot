@@ -144884,20 +144884,12 @@ var AutomationEngine = class {
       }
     }
     if (s.checkDmEnabled !== false) {
-      const dmCount = randInt(s.checkDmMin ?? 5, s.checkDmMax ?? 15);
-      try {
-        const { count: actualDmCount } = await client.getDirectMessages(dmCount);
-        console.log(`[engine] @${profile.username}: \u{1F4AC} checked ${actualDmCount} DM thread(s)`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked ${actualDmCount} direct message${actualDmCount === 1 ? "" : "s"}`);
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
-      }
       try {
         const { count: pendingCount } = await client.getDirectMessagesInternal();
-        console.log(`[engine] @${profile.username}: \u{1F4E8} checked ${pendingCount} pending DM request(s)`);
-        this.logAction(profile.id, tool.id, "check_dm_internal", "", "", "", "ok", `Checked ${pendingCount} pending DM request${pendingCount === 1 ? "" : "s"}`);
+        console.log(`[engine] @${profile.username}: \u{1F4AC} checked DMs (${pendingCount} pending request(s))`);
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DMs \u2014 ${pendingCount} pending request${pendingCount === 1 ? "" : "s"}`);
       } catch (e) {
-        console.warn(`[engine] @${profile.username}: check DMs internal error: ${e?.message}`);
+        console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
       }
       try {
         await this.runAutoReplyCheck(profile, client);

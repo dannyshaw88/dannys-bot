@@ -1457,23 +1457,14 @@ class AutomationEngine {
       }
     }
 
-    // ── Check Direct Messages ────────────────────────────────────────────────
+    // ── Check Direct Messages (GetDirectMessagesInternal — matches Jarvee) ───
     if (s.checkDmEnabled !== false) {
-      const dmCount = randInt(s.checkDmMin ?? 5, s.checkDmMax ?? 15);
-      try {
-        const { count: actualDmCount } = await client.getDirectMessages(dmCount);
-        console.log(`[engine] @${profile.username}: 💬 checked ${actualDmCount} DM thread(s)`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked ${actualDmCount} direct message${actualDmCount === 1 ? "" : "s"}`);
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
-      }
-      // Pending / message-requests inbox (GetDirectMessagesInternal — matches Jarvee)
       try {
         const { count: pendingCount } = await client.getDirectMessagesInternal();
-        console.log(`[engine] @${profile.username}: 📨 checked ${pendingCount} pending DM request(s)`);
-        this.logAction(profile.id, tool.id, "check_dm_internal", "", "", "", "ok", `Checked ${pendingCount} pending DM request${pendingCount === 1 ? "" : "s"}`);
+        console.log(`[engine] @${profile.username}: 💬 checked DMs (${pendingCount} pending request(s))`);
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DMs — ${pendingCount} pending request${pendingCount === 1 ? "" : "s"}`);
       } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: check DMs internal error: ${e?.message}`);
+        console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
       }
       // Auto-reply scan — runs after every DM check if the contact tool has auto-reply rules
       try {
