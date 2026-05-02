@@ -145066,6 +145066,20 @@ var AutomationEngine = class {
     const list = await storage.getFollowedUsersByProfile(profileId, 1e5);
     return list.some((u) => u.instagramUsername.toLowerCase() === username.toLowerCase());
   }
+  // ── Public trigger: immediate human session ───────────────────────────────
+  // Called when a human_sessions tool is explicitly enabled from the UI.
+  // If a runner is already alive, reset its timer to 0 so it fires on the
+  // next 10-second tick instead of waiting out the 30-60 min interval.
+  // If no runner exists yet, kick off an immediate reconcile to launch one.
+  triggerHumanSession(profileId) {
+    const state = this.humanSessionStates.get(profileId);
+    if (state) {
+      state.nextHumanSessionAt = 0;
+    } else {
+      this.reconcile().catch(() => {
+      });
+    }
+  }
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus() {
     return Array.from(this.states.entries()).map(([profileId, state]) => ({
@@ -145401,6 +145415,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     try {
       const input = api.tools.update.input.parse(req.body);
       const updated = await storage.updateTool(Number(req.params.id), input);
+      if (updated.type === "human_sessions" && updated.enabled) {
+        automationEngine.triggerHumanSession(updated.profileId);
+      }
       res.json(updated);
     } catch (err) {
       if (err instanceof external_exports.ZodError) {

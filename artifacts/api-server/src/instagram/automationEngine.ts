@@ -1722,6 +1722,20 @@ class AutomationEngine {
     return list.some(u => u.instagramUsername.toLowerCase() === username.toLowerCase());
   }
 
+  // ── Public trigger: immediate human session ───────────────────────────────
+  // Called when a human_sessions tool is explicitly enabled from the UI.
+  // If a runner is already alive, reset its timer to 0 so it fires on the
+  // next 10-second tick instead of waiting out the 30-60 min interval.
+  // If no runner exists yet, kick off an immediate reconcile to launch one.
+  triggerHumanSession(profileId: number) {
+    const state = this.humanSessionStates.get(profileId);
+    if (state) {
+      state.nextHumanSessionAt = 0;
+    } else {
+      this.reconcile().catch(() => {});
+    }
+  }
+
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number }[] {
     return Array.from(this.states.entries()).map(([profileId, state]) => ({
