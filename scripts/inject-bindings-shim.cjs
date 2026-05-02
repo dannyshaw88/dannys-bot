@@ -7,15 +7,14 @@ console.log('better-sqlite3 dir:', bs3Dir);
 
 const dbJsPath = path.join(bs3Dir, 'lib', 'database.js');
 let dbJs = fs.readFileSync(dbJsPath, 'utf8');
-console.log('database.js first 300 chars:', dbJs.slice(0, 300));
 
 const directLoad = "require(require('path').join(__dirname, '..', 'build', 'Release', 'better_sqlite3.node'))";
 
 const patterns = [
+  "require('bindings')('better_sqlite3.node')",
+  'require("bindings")("better_sqlite3.node")',
   "require('bindings')('better_sqlite3')",
   'require("bindings")("better_sqlite3")',
-  "require('bindings')(\"better_sqlite3\")",
-  'require("bindings")(\'better_sqlite3\')',
 ];
 
 let patched = false;
@@ -31,7 +30,7 @@ for (const p of patterns) {
 
 if (!patched) {
   const lines = dbJs.split('\n').filter(l => l.includes('bindings') || l.includes('.node'));
-  console.log('COULD NOT PATCH. Relevant lines:');
+  console.log('COULD NOT PATCH. Lines containing bindings/.node:');
   lines.forEach(l => console.log(' >', l.trim()));
   process.exit(1);
 }
