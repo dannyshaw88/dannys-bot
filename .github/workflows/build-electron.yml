@@ -42,7 +42,7 @@ jobs:
         run: pnpm --filter @workspace/electron run build
 
       - name: Inject bindings shim into better-sqlite3
-        run: node scripts/inject-bindings-shim.js
+        run: node scripts/inject-bindings-shim.cjs
 
       - name: Package Windows installer
         run: pnpm --filter @workspace/electron run package
