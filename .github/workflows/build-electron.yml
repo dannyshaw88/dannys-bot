@@ -44,12 +44,6 @@ jobs:
       - name: Build Electron main process
         run: pnpm --filter @workspace/electron run build
 
-      - name: Rebuild native modules for Electron
-        working-directory: artifacts/electron
-        run: npx --yes @electron/rebuild -f --only better-sqlite3
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-
       - name: Package Windows installer
         run: pnpm --filter @workspace/electron run package
         env:
