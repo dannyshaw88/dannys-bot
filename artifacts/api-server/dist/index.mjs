@@ -142180,6 +142180,16 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
   });
   const STATIC_EXT = /\.(jpg|jpeg|png|gif|webp|svg|ico|css|js|woff2?|ttf|eot|mp4|mp3)(\?.*)?$/i;
   const IG_HOSTS = ["instagram.com", "i.instagram.com", "graph.instagram.com", "www.instagram.com"];
+  const NOISE_PATHS = /* @__PURE__ */ new Set([
+    "ajax/bz",
+    "ajax/bootloader-endpoint",
+    "ajax/bulk-route-definitions",
+    "ajax/logging",
+    "logging_client_events",
+    "sync/instagram",
+    "ajax/mercury/rollout",
+    "ajax/navigation"
+  ]);
   const isIgApiCall = (url2) => {
     try {
       const u = new URL(url2);
@@ -142207,14 +142217,16 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
     const info = pending.get(url2);
     if (!info) return;
     pending.delete(url2);
+    const opName = getOpName(url2);
+    if (NOISE_PATHS.has(opName)) return;
     const durationMs = Date.now() - info.startMs;
     try {
       await db.insert(instagramApiCalls).values({
         profileId,
-        operationName: getOpName(url2),
+        operationName: opName,
         date: (/* @__PURE__ */ new Date()).toISOString(),
         message: url2,
-        source: info.method,
+        source: "Browser",
         navChain: "",
         ipAddress: "",
         durationMs
@@ -144080,7 +144092,7 @@ var AutomationEngine = class {
           operationName: op,
           date: (/* @__PURE__ */ new Date()).toISOString(),
           message: message ?? "",
-          source: "automation",
+          source: "Human Sessions",
           durationMs
         }).catch(() => {
         });
@@ -144514,12 +144526,7 @@ var AutomationEngine = class {
     const s = tool.settings;
     const client = await this.ensureClient(profile, state);
     if (!client) return;
-    const shouldSkip = (notUsedMin, notUsedMax) => {
-      const pct = randInt(notUsedMin, notUsedMax);
-      return pct > 0 && Math.random() * 100 < pct;
-    };
-    const humanSessionOrderPct = randInt(s.humanSessionOrderMin ?? 0, s.humanSessionOrderMax ?? 0);
-    if (humanSessionOrderPct > 0 && Math.random() * 100 < humanSessionOrderPct && !shouldSkip(s.humanSessionNotUsedMin ?? 0, s.humanSessionNotUsedMax ?? 0)) {
+    if (s.humanSessionEnabled !== false) {
       try {
         await client.visitNotifications();
         console.log(`[engine] @${profile.username}: \u{1F514} visited notifications`);
@@ -144549,8 +144556,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
       }
     }
-    const checkTimelineReelsOrderPct = randInt(s.checkTimelineReelsOrderMin ?? 0, s.checkTimelineReelsOrderMax ?? 0);
-    if (checkTimelineReelsOrderPct > 0 && Math.random() * 100 < checkTimelineReelsOrderPct && !shouldSkip(s.checkTimelineReelsNotUsedMin ?? 0, s.checkTimelineReelsNotUsedMax ?? 0)) {
+    if (s.checkTimelineReelsEnabled !== false) {
       const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
       try {
         const watched = await client.viewTimelineReels(reelCount);
@@ -144560,8 +144566,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
       }
     }
-    const checkTimelineStoriesOrderPct = randInt(s.checkTimelineStoriesOrderMin ?? 0, s.checkTimelineStoriesOrderMax ?? 0);
-    if (checkTimelineStoriesOrderPct > 0 && Math.random() * 100 < checkTimelineStoriesOrderPct && !shouldSkip(s.checkTimelineStoriesNotUsedMin ?? 0, s.checkTimelineStoriesNotUsedMax ?? 0)) {
+    if (s.checkTimelineStoriesEnabled !== false) {
       const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
       try {
         const watched = await client.viewTimelineStories(storyCount);
@@ -144571,8 +144576,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
       }
     }
-    const checkDmOrderPct = randInt(s.checkDmOrderMin ?? 0, s.checkDmOrderMax ?? 0);
-    if (checkDmOrderPct > 0 && Math.random() * 100 < checkDmOrderPct && !shouldSkip(s.checkDmNotUsedMin ?? 0, s.checkDmNotUsedMax ?? 0)) {
+    if (s.checkDmEnabled !== false) {
       const dmCount = randInt(s.checkDmMin ?? 5, s.checkDmMax ?? 15);
       try {
         await client.getDirectMessages(dmCount);
@@ -144587,8 +144591,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
       }
     }
-    const likeTimelineOrderPct = randInt(s.likeTimelinePostsOrderMin ?? 0, s.likeTimelinePostsOrderMax ?? 0);
-    if (likeTimelineOrderPct > 0 && Math.random() * 100 < likeTimelineOrderPct && !shouldSkip(s.likeTimelinePostsNotUsedMin ?? 0, s.likeTimelinePostsNotUsedMax ?? 0)) {
+    if (s.likeTimelinePostsEnabled !== false) {
       const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
       try {
         const { liked, watched } = await client.likeTimelinePosts(likeCount);

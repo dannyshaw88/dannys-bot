@@ -770,7 +770,7 @@ class AutomationEngine {
           operationName: op,
           date: new Date().toISOString(),
           message: message ?? "",
-          source: "automation",
+          source: "Human Sessions",
           durationMs,
         }).catch(() => {});
       });
@@ -1270,15 +1270,8 @@ class AutomationEngine {
     const client = await this.ensureClient(profile, state);
     if (!client) return;
 
-    const shouldSkip = (notUsedMin: number, notUsedMax: number) => {
-      const pct = randInt(notUsedMin, notUsedMax);
-      return pct > 0 && Math.random() * 100 < pct;
-    };
-
     // ── Human Session (notifications → own profile → refresh → settings) ──────
-    const humanSessionOrderPct = randInt(s.humanSessionOrderMin ?? 0, s.humanSessionOrderMax ?? 0);
-    if (humanSessionOrderPct > 0 && Math.random() * 100 < humanSessionOrderPct
-        && !shouldSkip(s.humanSessionNotUsedMin ?? 0, s.humanSessionNotUsedMax ?? 0)) {
+    if (s.humanSessionEnabled !== false) {
       try {
         await client.visitNotifications();
         console.log(`[engine] @${profile.username}: 🔔 visited notifications`);
@@ -1309,10 +1302,8 @@ class AutomationEngine {
       }
     }
 
-    // ── Watch Timeline Reels (execution order + not-used gate) ───────────────
-    const checkTimelineReelsOrderPct = randInt(s.checkTimelineReelsOrderMin ?? 0, s.checkTimelineReelsOrderMax ?? 0);
-    if (checkTimelineReelsOrderPct > 0 && Math.random() * 100 < checkTimelineReelsOrderPct
-        && !shouldSkip(s.checkTimelineReelsNotUsedMin ?? 0, s.checkTimelineReelsNotUsedMax ?? 0)) {
+    // ── Watch Timeline Reels ─────────────────────────────────────────────────
+    if (s.checkTimelineReelsEnabled !== false) {
       const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
       try {
         const watched = await client.viewTimelineReels(reelCount);
@@ -1323,10 +1314,8 @@ class AutomationEngine {
       }
     }
 
-    // ── Watch Timeline Stories (execution order + not-used gate) ─────────────
-    const checkTimelineStoriesOrderPct = randInt(s.checkTimelineStoriesOrderMin ?? 0, s.checkTimelineStoriesOrderMax ?? 0);
-    if (checkTimelineStoriesOrderPct > 0 && Math.random() * 100 < checkTimelineStoriesOrderPct
-        && !shouldSkip(s.checkTimelineStoriesNotUsedMin ?? 0, s.checkTimelineStoriesNotUsedMax ?? 0)) {
+    // ── Watch Timeline Stories ───────────────────────────────────────────────
+    if (s.checkTimelineStoriesEnabled !== false) {
       const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
       try {
         const watched = await client.viewTimelineStories(storyCount);
@@ -1337,10 +1326,8 @@ class AutomationEngine {
       }
     }
 
-    // ── Check Direct Messages (execution order + not-used gate) ──────────────
-    const checkDmOrderPct = randInt(s.checkDmOrderMin ?? 0, s.checkDmOrderMax ?? 0);
-    if (checkDmOrderPct > 0 && Math.random() * 100 < checkDmOrderPct
-        && !shouldSkip(s.checkDmNotUsedMin ?? 0, s.checkDmNotUsedMax ?? 0)) {
+    // ── Check Direct Messages ────────────────────────────────────────────────
+    if (s.checkDmEnabled !== false) {
       const dmCount = randInt(s.checkDmMin ?? 5, s.checkDmMax ?? 15);
       try {
         await client.getDirectMessages(dmCount);
@@ -1357,10 +1344,8 @@ class AutomationEngine {
       }
     }
 
-    // ── Like Posts from Timeline (execution order + not-used gate) ────────────
-    const likeTimelineOrderPct = randInt(s.likeTimelinePostsOrderMin ?? 0, s.likeTimelinePostsOrderMax ?? 0);
-    if (likeTimelineOrderPct > 0 && Math.random() * 100 < likeTimelineOrderPct
-        && !shouldSkip(s.likeTimelinePostsNotUsedMin ?? 0, s.likeTimelinePostsNotUsedMax ?? 0)) {
+    // ── Like Posts from Timeline ─────────────────────────────────────────────
+    if (s.likeTimelinePostsEnabled !== false) {
       const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
       try {
         const { liked, watched } = await client.likeTimelinePosts(likeCount);

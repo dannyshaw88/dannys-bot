@@ -280,7 +280,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40' : ''}`}>
-          Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity. Set execution order &gt; 0% to enable.
+          Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity.
         </p>
       </div>
 
@@ -310,7 +310,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40' : ''}`}>
-          Scrolls through the Reels tab feed and marks reels as watched. Set execution order &gt; 0% to enable.
+          Scrolls through the Reels tab feed and marks reels as watched.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels to Watch</span>
@@ -359,7 +359,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40' : ''}`}>
-          Watches stories from the top of Instagram's home feed tray. Set execution order &gt; 0% to enable.
+          Watches stories from the top of Instagram's home feed tray.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Stories to Watch</span>
@@ -408,7 +408,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkDmEnabled ? 'opacity-40' : ''}`}>
-          Calls <code className="bg-muted px-1 rounded text-[10px]">getDirectMessagesInternal</code> to simulate checking the inbox. Set execution order &gt; 0% to enable.
+          Calls <code className="bg-muted px-1 rounded text-[10px]">getDirectMessagesInternal</code> to simulate checking the inbox.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">DMs to Check</span>
@@ -457,7 +457,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40' : ''}`}>
-          Likes posts from the home timeline feed. If a post is a reel, it is marked as watched before liking. Set execution order &gt; 0% to enable.
+          Likes posts from the home timeline feed. If a post is a reel, it is marked as watched before liking.
         </p>
         <div className={`flex items-center gap-4 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
           <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Like</span>

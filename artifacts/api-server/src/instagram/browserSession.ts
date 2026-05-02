@@ -166,6 +166,13 @@ export async function getOrCreateSession(
   const STATIC_EXT = /\.(jpg|jpeg|png|gif|webp|svg|ico|css|js|woff2?|ttf|eot|mp4|mp3)(\?.*)?$/i;
   const IG_HOSTS = ["instagram.com", "i.instagram.com", "graph.instagram.com", "www.instagram.com"];
 
+  // Telemetry / infrastructure endpoints — not useful to log
+  const NOISE_PATHS = new Set([
+    "ajax/bz", "ajax/bootloader-endpoint", "ajax/bulk-route-definitions",
+    "ajax/logging", "logging_client_events", "sync/instagram",
+    "ajax/mercury/rollout", "ajax/navigation",
+  ]);
+
   const isIgApiCall = (url: string) => {
     try {
       const u = new URL(url);
@@ -196,14 +203,17 @@ export async function getOrCreateSession(
     if (!info) return;
     pending.delete(url);
 
+    const opName = getOpName(url);
+    if (NOISE_PATHS.has(opName)) return; // skip telemetry noise
+
     const durationMs = Date.now() - info.startMs;
     try {
       await db.insert(instagramApiCalls).values({
         profileId,
-        operationName: getOpName(url),
+        operationName: opName,
         date: new Date().toISOString(),
         message: url,
-        source: info.method,
+        source: "Browser",
         navChain: "",
         ipAddress: "",
         durationMs,
