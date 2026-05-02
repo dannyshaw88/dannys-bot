@@ -838,7 +838,7 @@ class AutomationEngine {
           operationName: op,
           date: new Date().toISOString(),
           message: message ?? "",
-          source: "Human Sessions",
+          source: "Account",
           durationMs,
         }).catch(() => {});
       });
@@ -1481,20 +1481,44 @@ class AutomationEngine {
     let followed = 0;
     let candidates: { pk: string; username: string }[] = [];
 
+    const logHiker = (op: string, message: string, durationMs: number) => {
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        operationName: op,
+        date: new Date().toISOString(),
+        message,
+        source: "HikerAPI",
+        durationMs,
+      }).catch(() => {});
+    };
+
     try {
       if (source.type === "hashtag") {
-        candidates = hikerClient
-          ? await hikerClient.getHashtagUsers(source.value, processCount * 3)
-          : await client.getHashtagUsers(source.value, processCount * 3);
+        if (hikerClient) {
+          const t0 = Date.now();
+          candidates = await hikerClient.getHashtagUsers(source.value, processCount * 3);
+          logHiker("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
+        } else {
+          candidates = await client.getHashtagUsers(source.value, processCount * 3);
+        }
       } else if (source.type === "target_followers") {
         const targetName = source.value.replace(/^@/, "");
-        const target = hikerClient
-          ? await hikerClient.getUserByUsername(targetName)
-          : await client.getUserByUsername(targetName);
+        let target: { pk: string; username: string } | null;
+        if (hikerClient) {
+          const t0 = Date.now();
+          target = await hikerClient.getUserByUsername(targetName);
+          logHiker("GetUserByUsername", `Resolved @${targetName} via HikerAPI`, Date.now() - t0);
+        } else {
+          target = await client.getUserByUsername(targetName);
+        }
         if (!target) { console.error(`[engine] @${profile.username}: target @${targetName} not found`); return { followed: 0 }; }
-        candidates = hikerClient
-          ? await hikerClient.getFollowers(target.pk, processCount * 3)
-          : await client.getFollowers(target.pk, processCount * 3);
+        if (hikerClient) {
+          const t0 = Date.now();
+          candidates = await hikerClient.getFollowers(target.pk, processCount * 3);
+          logHiker("FollowersScrape", `Scraped followers of @${targetName} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
+        } else {
+          candidates = await client.getFollowers(target.pk, processCount * 3);
+        }
       }
     } catch (err: any) {
       console.error(`[engine] @${profile.username}: scrape error: ${err?.message}`);
