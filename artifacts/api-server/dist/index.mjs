@@ -142072,7 +142072,6 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // src/instagram/browserSession.ts
-import puppeteer from "puppeteer";
 import fs from "fs";
 import path2 from "path";
 function log(msg, _category) {
@@ -142144,6 +142143,7 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
   }
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
   log(`Launching Chrome for profile ${profileId}${proxy ? ` via proxy ${proxy.host}:${proxy.port}` : " (direct)"}`, "browser");
+  const { default: puppeteer } = await import("puppeteer");
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: CHROMIUM_PATH,
@@ -145375,8 +145375,9 @@ registerInstagramRoutes(httpServer, app_default).then(() => {
     });
     logger.info({ frontendDist }, "Serving frontend static files");
   }
-  httpServer.listen(port, () => {
-    logger.info({ port }, "Server listening");
+  const host = process.env["HOST"] ?? "0.0.0.0";
+  httpServer.listen(port, host, () => {
+    logger.info({ port, host }, "Server listening");
   });
 }).catch((err) => {
   logger.error({ err }, "Failed to start server");
