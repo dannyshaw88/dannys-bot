@@ -11,8 +11,9 @@ import {
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
   ChevronDown, ChevronUp, Heart, Copy,
 } from "lucide-react";
-import { format, addMinutes } from "date-fns";
+import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useToast } from "@/hooks/use-toast";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
@@ -166,15 +167,12 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     refetchInterval: 15000,
   });
   const lastAction = sessionActions?.find(a => a.toolId === tool.id);
+  const engineStatus = useProfileEngineStatus(tool.profileId);
   const nextRunDisplay = (() => {
     if (!lastAction) return null;
-    const last = new Date(lastAction.timestamp);
-    const earliest = addMinutes(last, settings.delayMin ?? 30);
-    const latest = addMinutes(last, settings.delayMax ?? 60);
-    const now = new Date();
-    if (now > latest) return "now";
-    if (now > earliest) return `by ${format(latest, "HH:mm")}`;
-    return `${format(earliest, "HH:mm")} – ${format(latest, "HH:mm")}`;
+    const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
+    if (!nextAt || nextAt <= Date.now()) return "now";
+    return format(new Date(nextAt), "HH:mm:ss");
   })();
 
   return (

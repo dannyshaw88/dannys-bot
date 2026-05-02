@@ -1752,13 +1752,17 @@ class AutomationEngine {
   }
 
   // ── Status API ────────────────────────────────────────────────────────────
-  getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number }[] {
-    return Array.from(this.states.entries()).map(([profileId, state]) => ({
-      profileId,
-      loggedIn: !!state.client?.isLoggedIn(),
-      dailyCount: this.daily(state),
-      hourlyCount: this.hourly(state),
-    }));
+  getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; nextHumanSessionAt: number }[] {
+    return Array.from(this.states.entries()).map(([profileId, state]) => {
+      const humanState = this.humanSessionStates.get(profileId);
+      return {
+        profileId,
+        loggedIn: !!state.client?.isLoggedIn(),
+        dailyCount: this.daily(state),
+        hourlyCount: this.hourly(state),
+        nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0,
+      };
+    });
   }
 }
 
