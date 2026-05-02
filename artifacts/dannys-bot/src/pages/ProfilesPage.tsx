@@ -363,7 +363,7 @@ export function ProfilesPage() {
           <Input
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            placeholder="Filter"
+            placeholder="Filter to show specific profiles"
             className="h-8 pl-7 pr-7 text-xs font-mono"
           />
           {statusFilter && (
