@@ -113,6 +113,14 @@ export function ProfilesPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
+  const [sortField, setSortField] = useState<"account" | "status" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const cycleSort = (field: "account" | "status") => {
+    if (sortField !== field) { setSortField(field); setSortDir("asc"); }
+    else if (sortDir === "asc") setSortDir("desc");
+    else { setSortField(null); setSortDir("asc"); }
+  };
 
   const handleCreate = () => {
     createProfileMutation.mutate({
@@ -315,7 +323,7 @@ export function ProfilesPage() {
     .split(/\|\|?/)
     .map(t => t.trim().toLowerCase())
     .filter(Boolean);
-  const filteredProfiles = filterTokens.length > 0
+  const baseFiltered = filterTokens.length > 0
     ? (profiles ?? []).filter(p => {
         const status   = (p.accountStatus ?? "pending").toLowerCase();
         const username = (p.username ?? "").toLowerCase();
@@ -326,7 +334,22 @@ export function ProfilesPage() {
           label.includes(token)
         );
       })
-    : profiles;
+    : (profiles ?? []);
+
+  const filteredProfiles = sortField
+    ? [...baseFiltered].sort((a, b) => {
+        let va = "";
+        let vb = "";
+        if (sortField === "account") {
+          va = (a.accountLabel || a.username || "").toLowerCase();
+          vb = (b.accountLabel || b.username || "").toLowerCase();
+        } else {
+          va = (STATUS_META[a.accountStatus as AccountStatus]?.label ?? a.accountStatus ?? "").toLowerCase();
+          vb = (STATUS_META[b.accountStatus as AccountStatus]?.label ?? b.accountStatus ?? "").toLowerCase();
+        }
+        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      })
+    : baseFiltered;
 
   return (
     <AppLayout>
@@ -406,7 +429,7 @@ export function ProfilesPage() {
       ) : (
         <div className="desktop-card overflow-hidden pb-24">
           {/* Column headers */}
-          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
             <div className="w-5 shrink-0">
               <Checkbox
                 checked={!!(profiles?.length && selectedProfileIds.length === profiles.length)}
@@ -414,8 +437,24 @@ export function ProfilesPage() {
                 aria-label="Select all profiles"
               />
             </div>
-            <div className="flex-1 min-w-0">Account</div>
-            <div className="w-24 shrink-0 text-center">Status</div>
+            <button
+              onClick={() => cycleSort("account")}
+              className="flex-1 min-w-0 flex items-center gap-1 text-left hover:text-foreground transition-colors"
+            >
+              Account
+              <span className="text-[9px]">
+                {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+              </span>
+            </button>
+            <button
+              onClick={() => cycleSort("status")}
+              className="w-24 shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors"
+            >
+              Status
+              <span className="text-[9px]">
+                {sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+              </span>
+            </button>
             <div className="w-14 shrink-0 text-center">Active</div>
             <div className="w-44 shrink-0 text-right">Actions</div>
           </div>
