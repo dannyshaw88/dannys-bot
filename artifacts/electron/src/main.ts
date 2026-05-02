@@ -1,4 +1,5 @@
 import { app, BrowserWindow, utilityProcess, UtilityProcess } from "electron";
+import http from "http";
 import path from "path";
 
 const PORT = 8765;
@@ -31,7 +32,28 @@ function getFrontendPath(): string {
   return path.join(__dirname, "..", "dist", "frontend", "public");
 }
 
-function startServer(): Promise<void> {
+function waitForServer(timeoutMs = 20000): Promise<void> {
+  const start = Date.now();
+  return new Promise<void>((resolve, reject) => {
+    function attempt() {
+      const req = http.get(`http://localhost:${PORT}/`, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.setTimeout(1000, () => req.destroy());
+      req.on("error", () => {
+        if (Date.now() - start > timeoutMs) {
+          reject(new Error(`Server did not respond within ${timeoutMs}ms`));
+        } else {
+          setTimeout(attempt, 500);
+        }
+      });
+    }
+    attempt();
+  });
+}
+
+function startServer(): void {
   const entry = getServerEntry();
   const dbPath = path.join(app.getPath("userData"), "database.db");
   const frontendPath = getFrontendPath();
@@ -52,11 +74,6 @@ function startServer(): Promise<void> {
       console.error("Server process exited with code", code);
     }
   });
-
-  return new Promise<void>((resolve) => {
-    serverProc!.once("spawn", () => setTimeout(resolve, 2000));
-    setTimeout(resolve, 4000);
-  });
 }
 
 async function createWindow() {
@@ -74,12 +91,28 @@ async function createWindow() {
     },
   });
 
-  await startServer();
+  startServer();
 
-  win.loadURL(`http://localhost:${PORT}`);
+  try {
+    await waitForServer();
+    win.loadURL(`http://localhost:${PORT}`);
+  } catch (err) {
+    win.loadURL(
+      `data:text/html,<html><body style="font-family:sans-serif;padding:40px;background:%231a1a2e;color:%23fff">` +
+      `<h2 style="color:%23ff6b6b">Danny's Bot failed to start</h2>` +
+      `<p>The local server did not respond on port ${PORT}.</p>` +
+      `<p>Please restart the app. If this keeps happening, try reinstalling.</p>` +
+      `</body></html>`
+    );
+  }
+
+  win.webContents.on("did-fail-load", (_e, code, desc) => {
+    console.error("Page failed to load:", code, desc);
+  });
 
   win.once("ready-to-show", () => {
     win?.show();
+    win?.webContents.openDevTools();
   });
 
   win.on("closed", () => {

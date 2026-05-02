@@ -34,6 +34,9 @@ jobs:
 
       - name: Build frontend
         run: pnpm --filter @workspace/dannys-bot run build
+        env:
+          REPL_ID: "ci"
+          BASE_PATH: "/"
 
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
