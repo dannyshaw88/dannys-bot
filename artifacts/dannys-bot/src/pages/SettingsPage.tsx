@@ -29,11 +29,19 @@ export function SettingsPage() {
   const qc = useQueryClient();
   const [testingHiker, setTestingHiker] = useState(false);
   const [hikerStatus, setHikerStatus] = useState<"idle" | "ok" | "fail">("idle");
+  const [tokenDraft, setTokenDraft] = useState<string | null>(null);
 
   const { data: settings, isLoading } = useQuery<GlobalSettings>({
     queryKey: ["/api/settings"],
     queryFn: fetchSettings,
   });
+
+  // Sync token input from DB on first load only (don't overwrite while user is typing)
+  const [tokenInitialized, setTokenInitialized] = useState(false);
+  if (settings && !tokenInitialized) {
+    setTokenDraft(settings.hikerApiToken ?? "");
+    setTokenInitialized(true);
+  }
 
   const mutation = useMutation({
     mutationFn: saveSettings,
@@ -55,7 +63,7 @@ export function SettingsPage() {
   };
 
   const testHikerConnection = async () => {
-    const token = settings?.hikerApiToken;
+    const token = tokenDraft ?? settings?.hikerApiToken;
     if (!token) {
       toast({ title: "No API token set", variant: "destructive" });
       return;
@@ -133,10 +141,12 @@ export function SettingsPage() {
                 <Input
                   type="password"
                   placeholder="Enter your HikerAPI token"
-                  defaultValue={settings?.hikerApiToken ?? ""}
+                  value={tokenDraft ?? ""}
+                  onChange={(e) => setTokenDraft(e.target.value)}
                   onBlur={(e) => {
-                    if (e.target.value !== (settings?.hikerApiToken ?? "")) {
-                      saveToken(e.target.value);
+                    const v = e.target.value;
+                    if (v !== (settings?.hikerApiToken ?? "")) {
+                      saveToken(v);
                     }
                   }}
                   className="font-mono text-sm"
