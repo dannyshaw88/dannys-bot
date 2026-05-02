@@ -492,22 +492,26 @@ export async function registerInstagramRoutes(
       const esc = (v: string) => /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
       const settings = await storage.getGlobalSettings();
-      const tzOffsetHours = parseFloat(settings.csvTimezoneOffset ?? "0");
+      const useLocal = settings.useLocalTime === "true";
+      // ?tz= is JS getTimezoneOffset() — minutes WEST of UTC (negative for UTC+)
+      const browserTzMins = useLocal ? parseInt((req.query as any).tz ?? "0", 10) : 0;
+      const offsetMins = -browserTzMins; // convert to minutes EAST (positive = UTC+)
 
       const csvRows = apiCalls.map((call: any) => {
         const profile = profileMap.get(call.profileId);
         const username = profile?.username ?? String(call.profileId);
         const utcMs = new Date(call.date).getTime();
-        const localMs = utcMs + tzOffsetHours * 60 * 60 * 1000;
+        const localMs = utcMs + offsetMins * 60 * 1000;
         const localDate = new Date(localMs);
-        const sign = tzOffsetHours >= 0 ? "+" : "-";
-        const absH = Math.abs(Math.floor(tzOffsetHours)).toString().padStart(2, "0");
-        const absM = Math.round((Math.abs(tzOffsetHours) % 1) * 60).toString().padStart(2, "0");
+        const sign = offsetMins >= 0 ? "+" : "-";
+        const absH = Math.abs(Math.floor(Math.abs(offsetMins) / 60)).toString().padStart(2, "0");
+        const absM = (Math.abs(offsetMins) % 60).toString().padStart(2, "0");
+        const tzLabel = useLocal ? ` UTC${sign}${absH}:${absM}` : " UTC";
         const date = `${localDate.toLocaleString("en-US", {
           month: "numeric", day: "numeric", year: "numeric",
           hour: "numeric", minute: "numeric", second: "numeric", hour12: true,
           timeZone: "UTC",
-        })} UTC${sign}${absH}:${absM}`;
+        })}${tzLabel}`;
         return [
           `Instagram_${call.profileId}`,
           username,
@@ -706,12 +710,12 @@ export async function registerInstagramRoutes(
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
-      csvTimezoneOffset: parseFloat(settings.csvTimezoneOffset ?? "0"),
+      useLocalTime: settings.useLocalTime === "true",
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, csvTimezoneOffset } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -730,8 +734,8 @@ export async function registerInstagramRoutes(
     if (typeof scrapedUserIgnoreDays === "number" && scrapedUserIgnoreDays > 0) {
       await storage.setGlobalSetting("scrapedUserIgnoreDays", String(Math.round(scrapedUserIgnoreDays)));
     }
-    if (typeof csvTimezoneOffset === "number" && isFinite(csvTimezoneOffset)) {
-      await storage.setGlobalSetting("csvTimezoneOffset", String(csvTimezoneOffset));
+    if (typeof useLocalTime === "boolean") {
+      await storage.setGlobalSetting("useLocalTime", String(useLocalTime));
     }
     const settings = await storage.getGlobalSettings();
     res.json({
@@ -741,7 +745,7 @@ export async function registerInstagramRoutes(
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
-      csvTimezoneOffset: parseFloat(settings.csvTimezoneOffset ?? "0"),
+      useLocalTime: settings.useLocalTime === "true",
     });
   });
 

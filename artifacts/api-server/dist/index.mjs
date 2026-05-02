@@ -15472,13 +15472,13 @@ var require_type_is = __commonJS({
       }
       return false;
     }
-    function hasbody(req) {
-      return req.headers["transfer-encoding"] !== void 0 || !isNaN(req.headers["content-length"]);
+    function hasbody(req2) {
+      return req2.headers["transfer-encoding"] !== void 0 || !isNaN(req2.headers["content-length"]);
     }
-    function typeofrequest(req, types_) {
-      if (!hasbody(req)) return null;
+    function typeofrequest(req2, types_) {
+      if (!hasbody(req2)) return null;
       var types = arguments.length > 2 ? Array.prototype.slice.call(arguments, 1) : types_;
-      var value = req.headers["content-type"];
+      var value = req2.headers["content-type"];
       return typeis(value, types);
     }
     function normalize(type) {
@@ -15542,16 +15542,16 @@ var require_utils = __commonJS({
       normalizeOptions,
       passthrough
     };
-    function getCharset(req) {
+    function getCharset(req2) {
       try {
-        return (contentType.parse(req).parameters.charset || "").toLowerCase();
+        return (contentType.parse(req2).parameters.charset || "").toLowerCase();
       } catch {
         return void 0;
       }
     }
     function typeChecker(type) {
-      return function checkType(req) {
-        return Boolean(typeis(req, type));
+      return function checkType(req2) {
+        return Boolean(typeis(req2, type));
       };
     }
     function normalizeOptions(options, defaultType) {
@@ -15593,29 +15593,29 @@ var require_read = __commonJS({
     var hasBody = require_type_is().hasBody;
     var { getCharset } = require_utils();
     module2.exports = read;
-    function read(req, res, next, parse3, debug3, options) {
-      if (onFinished.isFinished(req)) {
+    function read(req2, res, next, parse3, debug3, options) {
+      if (onFinished.isFinished(req2)) {
         debug3("body already parsed");
         next();
         return;
       }
-      if (!("body" in req)) {
-        req.body = void 0;
+      if (!("body" in req2)) {
+        req2.body = void 0;
       }
-      if (!hasBody(req)) {
+      if (!hasBody(req2)) {
         debug3("skip empty body");
         next();
         return;
       }
-      debug3("content-type %j", req.headers["content-type"]);
-      if (!options.shouldParse(req)) {
+      debug3("content-type %j", req2.headers["content-type"]);
+      if (!options.shouldParse(req2)) {
         debug3("skip parsing");
         next();
         return;
       }
       var encoding = null;
       if (options?.skipCharset !== true) {
-        encoding = getCharset(req) || options.defaultCharset;
+        encoding = getCharset(req2) || options.defaultCharset;
         if (!!options?.isValidCharset && !options.isValidCharset(encoding)) {
           debug3("invalid charset");
           next(createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
@@ -15630,7 +15630,7 @@ var require_read = __commonJS({
       var stream;
       var verify = opts.verify;
       try {
-        stream = contentstream(req, debug3, opts.inflate);
+        stream = contentstream(req2, debug3, opts.inflate);
         length = stream.length;
         stream.length = void 0;
       } catch (err) {
@@ -15656,11 +15656,11 @@ var require_read = __commonJS({
           } else {
             _error = createError(400, error40);
           }
-          if (stream !== req) {
-            req.unpipe();
+          if (stream !== req2) {
+            req2.unpipe();
             stream.destroy();
           }
-          dump(req, function onfinished() {
+          dump(req2, function onfinished() {
             next(createError(400, _error));
           });
           return;
@@ -15668,7 +15668,7 @@ var require_read = __commonJS({
         if (verify) {
           try {
             debug3("verify body");
-            verify(req, res, body, encoding);
+            verify(req2, res, body, encoding);
           } catch (err) {
             next(createError(403, err, {
               body,
@@ -15681,7 +15681,7 @@ var require_read = __commonJS({
         try {
           debug3("parse body");
           str = typeof body !== "string" && encoding !== null ? iconv.decode(body, encoding) : body;
-          req.body = parse3(str, encoding);
+          req2.body = parse3(str, encoding);
         } catch (err) {
           next(createError(400, err, {
             body: str,
@@ -15692,9 +15692,9 @@ var require_read = __commonJS({
         next();
       });
     }
-    function contentstream(req, debug3, inflate) {
-      var encoding = (req.headers["content-encoding"] || "identity").toLowerCase();
-      var length = req.headers["content-length"];
+    function contentstream(req2, debug3, inflate) {
+      var encoding = (req2.headers["content-encoding"] || "identity").toLowerCase();
+      var length = req2.headers["content-length"];
       debug3('content-encoding "%s"', encoding);
       if (inflate === false && encoding !== "identity") {
         throw createError(415, "content encoding unsupported", {
@@ -15703,11 +15703,11 @@ var require_read = __commonJS({
         });
       }
       if (encoding === "identity") {
-        req.length = length;
-        return req;
+        req2.length = length;
+        return req2;
       }
       var stream = createDecompressionStream(encoding, debug3);
-      req.pipe(stream);
+      req2.pipe(stream);
       return stream;
     }
     function createDecompressionStream(encoding, debug3) {
@@ -15728,12 +15728,12 @@ var require_read = __commonJS({
           });
       }
     }
-    function dump(req, callback) {
-      if (onFinished.isFinished(req)) {
+    function dump(req2, callback) {
+      if (onFinished.isFinished(req2)) {
         callback(null);
       } else {
-        onFinished(req, callback);
-        req.resume();
+        onFinished(req2, callback);
+        req2.resume();
       }
     }
   }
@@ -15780,8 +15780,8 @@ var require_json = __commonJS({
         // assert charset per RFC 7159 sec 8.1
         isValidCharset: (charset) => charset.slice(0, 4) === "utf-"
       };
-      return function jsonParser(req, res, next) {
-        read(req, res, next, parse3, debug3, readOptions);
+      return function jsonParser(req2, res, next) {
+        read(req2, res, next, parse3, debug3, readOptions);
       };
     }
     function createStrictSyntaxError(str, char) {
@@ -15836,8 +15836,8 @@ var require_raw = __commonJS({
         // Skip charset validation and parse the body as is
         skipCharset: true
       };
-      return function rawParser(req, res, next) {
-        read(req, res, next, passthrough, debug3, readOptions);
+      return function rawParser(req2, res, next) {
+        read(req2, res, next, passthrough, debug3, readOptions);
       };
     }
   }
@@ -15853,8 +15853,8 @@ var require_text = __commonJS({
     module2.exports = text2;
     function text2(options) {
       const normalizedOptions = normalizeOptions(options, "text/plain");
-      return function textParser(req, res, next) {
-        read(req, res, next, passthrough, debug3, normalizedOptions);
+      return function textParser(req2, res, next) {
+        read(req2, res, next, passthrough, debug3, normalizedOptions);
       };
     }
   }
@@ -18397,8 +18397,8 @@ var require_urlencoded = __commonJS({
         // assert charset
         isValidCharset: (charset) => charset === "utf-8" || charset === "iso-8859-1"
       };
-      return function urlencodedParser(req, res, next) {
-        read(req, res, next, parse3, debug3, readOptions);
+      return function urlencodedParser(req2, res, next) {
+        read(req2, res, next, parse3, debug3, readOptions);
       };
     }
     function createQueryParser(options) {
@@ -18586,31 +18586,31 @@ var require_parseurl = __commonJS({
     var Url = url2.Url;
     module2.exports = parseurl;
     module2.exports.original = originalurl;
-    function parseurl(req) {
-      var url3 = req.url;
+    function parseurl(req2) {
+      var url3 = req2.url;
       if (url3 === void 0) {
         return void 0;
       }
-      var parsed = req._parsedUrl;
+      var parsed = req2._parsedUrl;
       if (fresh(url3, parsed)) {
         return parsed;
       }
       parsed = fastparse(url3);
       parsed._raw = url3;
-      return req._parsedUrl = parsed;
+      return req2._parsedUrl = parsed;
     }
-    function originalurl(req) {
-      var url3 = req.originalUrl;
+    function originalurl(req2) {
+      var url3 = req2.originalUrl;
       if (typeof url3 !== "string") {
-        return parseurl(req);
+        return parseurl(req2);
       }
-      var parsed = req._parsedOriginalUrl;
+      var parsed = req2._parsedOriginalUrl;
       if (fresh(url3, parsed)) {
         return parsed;
       }
       parsed = fastparse(url3);
       parsed._raw = url3;
-      return req._parsedOriginalUrl = parsed;
+      return req2._parsedOriginalUrl = parsed;
     }
     function fastparse(str) {
       if (typeof str !== "string" || str.charCodeAt(0) !== 47) {
@@ -18677,7 +18677,7 @@ var require_finalhandler = __commonJS({
       return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>Error</title>\n</head>\n<body>\n<pre>' + body + "</pre>\n</body>\n</html>\n";
     }
     module2.exports = finalhandler;
-    function finalhandler(req, res, options) {
+    function finalhandler(req2, res, options) {
       var opts = options || {};
       var env2 = opts.env || process.env.NODE_ENV || "development";
       var onerror = opts.onerror;
@@ -18699,20 +18699,20 @@ var require_finalhandler = __commonJS({
           msg = getErrorMessage(err, status, env2);
         } else {
           status = 404;
-          msg = "Cannot " + req.method + " " + encodeUrl(getResourceName(req));
+          msg = "Cannot " + req2.method + " " + encodeUrl(getResourceName(req2));
         }
         debug3("default %s", status);
         if (err && onerror) {
-          setImmediate(onerror, err, req, res);
+          setImmediate(onerror, err, req2, res);
         }
         if (res.headersSent) {
           debug3("cannot %d after headers sent", status);
-          if (req.socket) {
-            req.socket.destroy();
+          if (req2.socket) {
+            req2.socket.destroy();
           }
           return;
         }
-        send(req, res, status, headers, msg);
+        send(req2, res, status, headers, msg);
       };
     }
     function getErrorHeaders(err) {
@@ -18740,9 +18740,9 @@ var require_finalhandler = __commonJS({
       }
       return void 0;
     }
-    function getResourceName(req) {
+    function getResourceName(req2) {
       try {
-        return parseUrl.original(req).pathname;
+        return parseUrl.original(req2).pathname;
       } catch (e) {
         return "resource";
       }
@@ -18754,11 +18754,11 @@ var require_finalhandler = __commonJS({
       }
       return status;
     }
-    function send(req, res, status, headers, message) {
+    function send(req2, res, status, headers, message) {
       function write() {
         var body = createHtmlDocument(message);
         res.statusCode = status;
-        if (req.httpVersionMajor < 2) {
+        if (req2.httpVersionMajor < 2) {
           res.statusMessage = statuses.message[status];
         }
         res.removeHeader("Content-Encoding");
@@ -18771,19 +18771,19 @@ var require_finalhandler = __commonJS({
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.setHeader("Content-Length", Buffer.byteLength(body, "utf8"));
-        if (req.method === "HEAD") {
+        if (req2.method === "HEAD") {
           res.end();
           return;
         }
         res.end(body, "utf8");
       }
-      if (isFinished(req)) {
+      if (isFinished(req2)) {
         write();
         return;
       }
-      req.unpipe();
-      onFinished(req, write);
-      req.resume();
+      req2.unpipe();
+      onFinished(req2, write);
+      req2.resume();
     }
   }
 });
@@ -18929,17 +18929,17 @@ var require_forwarded = __commonJS({
   "../../node_modules/.pnpm/forwarded@0.2.0/node_modules/forwarded/index.js"(exports2, module2) {
     "use strict";
     module2.exports = forwarded;
-    function forwarded(req) {
-      if (!req) {
+    function forwarded(req2) {
+      if (!req2) {
         throw new TypeError("argument req is required");
       }
-      var proxyAddrs = parse3(req.headers["x-forwarded-for"] || "");
-      var socketAddr = getSocketAddr(req);
+      var proxyAddrs = parse3(req2.headers["x-forwarded-for"] || "");
+      var socketAddr = getSocketAddr(req2);
       var addrs = [socketAddr].concat(proxyAddrs);
       return addrs;
     }
-    function getSocketAddr(req) {
-      return req.socket ? req.socket.remoteAddress : req.connection.remoteAddress;
+    function getSocketAddr(req2) {
+      return req2.socket ? req2.socket.remoteAddress : req2.connection.remoteAddress;
     }
     function parse3(header) {
       var end = header.length;
@@ -19610,8 +19610,8 @@ var require_proxy_addr = __commonJS({
       loopback: ["127.0.0.1/8", "::1/128"],
       uniquelocal: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]
     };
-    function alladdrs(req, trust) {
-      var addrs = forwarded(req);
+    function alladdrs(req2, trust) {
+      var addrs = forwarded(req2);
       if (!trust) {
         return addrs;
       }
@@ -19689,14 +19689,14 @@ var require_proxy_addr = __commonJS({
       var kind = ip.kind();
       return kind === "ipv4" ? ip.prefixLengthFromSubnetMask() : null;
     }
-    function proxyaddr(req, trust) {
-      if (!req) {
+    function proxyaddr(req2, trust) {
+      if (!req2) {
         throw new TypeError("req argument is required");
       }
       if (!trust) {
         throw new TypeError("trust argument is required");
       }
-      var addrs = alladdrs(req, trust);
+      var addrs = alladdrs(req2, trust);
       var addr = addrs[addrs.length - 1];
       return addr;
     }
@@ -20396,13 +20396,13 @@ var require_layer = __commonJS({
       }
       this.matchers = Array.isArray(path4) ? path4.map(matcher) : [matcher(path4)];
     }
-    Layer.prototype.handleError = function handleError(error40, req, res, next) {
+    Layer.prototype.handleError = function handleError(error40, req2, res, next) {
       const fn = this.handle;
       if (fn.length !== 4) {
         return next(error40);
       }
       try {
-        const ret2 = fn(error40, req, res, next);
+        const ret2 = fn(error40, req2, res, next);
         if (isPromise(ret2)) {
           if (!(ret2 instanceof Promise)) {
             deprecate("handlers that are Promise-like are deprecated, use a native Promise instead");
@@ -20415,13 +20415,13 @@ var require_layer = __commonJS({
         next(err);
       }
     };
-    Layer.prototype.handleRequest = function handleRequest(req, res, next) {
+    Layer.prototype.handleRequest = function handleRequest(req2, res, next) {
       const fn = this.handle;
       if (fn.length > 3) {
         return next();
       }
       try {
-        const ret2 = fn(req, res, next);
+        const ret2 = fn(req2, res, next);
         if (isPromise(ret2)) {
           if (!(ret2 instanceof Promise)) {
             deprecate("handlers that are Promise-like are deprecated, use a native Promise instead");
@@ -20520,18 +20520,18 @@ var require_route = __commonJS({
       }
       return methods2;
     };
-    Route.prototype.dispatch = function dispatch(req, res, done) {
+    Route.prototype.dispatch = function dispatch(req2, res, done) {
       let idx = 0;
       const stack = this.stack;
       let sync = 0;
       if (stack.length === 0) {
         return done();
       }
-      let method = typeof req.method === "string" ? req.method.toLowerCase() : req.method;
+      let method = typeof req2.method === "string" ? req2.method.toLowerCase() : req2.method;
       if (method === "head" && !this.methods.head) {
         method = "get";
       }
-      req.route = this;
+      req2.route = this;
       next();
       function next(err) {
         if (err && err === "route") {
@@ -20556,9 +20556,9 @@ var require_route = __commonJS({
           return done(err);
         }
         if (err) {
-          layer.handleError(err, req, res, next);
+          layer.handleError(err, req2, res, next);
         } else {
-          layer.handleRequest(req, res, next);
+          layer.handleRequest(req2, res, next);
         }
         sync = 0;
       }
@@ -20624,8 +20624,8 @@ var require_router = __commonJS({
         return new Router3(options);
       }
       const opts = options || {};
-      function router3(req, res, next) {
-        router3.handle(req, res, next);
+      function router3(req2, res, next) {
+        router3.handle(req2, res, next);
       }
       Object.setPrototypeOf(router3, this);
       router3.caseSensitive = opts.caseSensitive;
@@ -20657,40 +20657,40 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router3.prototype.handle = function handle(req, res, callback) {
+    Router3.prototype.handle = function handle(req2, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
-      debug3("dispatching %s %s", req.method, req.url);
+      debug3("dispatching %s %s", req2.method, req2.url);
       let idx = 0;
       let methods2;
-      const protohost = getProtohost(req.url) || "";
+      const protohost = getProtohost(req2.url) || "";
       let removed = "";
       const self2 = this;
       let slashAdded = false;
       let sync = 0;
       const paramcalled = {};
       const stack = this.stack;
-      const parentParams = req.params;
-      const parentUrl = req.baseUrl || "";
-      let done = restore(callback, req, "baseUrl", "next", "params");
-      req.next = next;
-      if (req.method === "OPTIONS") {
+      const parentParams = req2.params;
+      const parentUrl = req2.baseUrl || "";
+      let done = restore(callback, req2, "baseUrl", "next", "params");
+      req2.next = next;
+      if (req2.method === "OPTIONS") {
         methods2 = [];
         done = wrap(done, generateOptionsResponder(res, methods2));
       }
-      req.baseUrl = parentUrl;
-      req.originalUrl = req.originalUrl || req.url;
+      req2.baseUrl = parentUrl;
+      req2.originalUrl = req2.originalUrl || req2.url;
       next();
       function next(err) {
         let layerError = err === "route" ? null : err;
         if (slashAdded) {
-          req.url = req.url.slice(1);
+          req2.url = req2.url.slice(1);
           slashAdded = false;
         }
         if (removed.length !== 0) {
-          req.baseUrl = parentUrl;
-          req.url = protohost + removed + req.url.slice(protohost.length);
+          req2.baseUrl = parentUrl;
+          req2.url = protohost + removed + req2.url.slice(protohost.length);
           removed = "";
         }
         if (layerError === "router") {
@@ -20704,7 +20704,7 @@ var require_router = __commonJS({
         if (++sync > 100) {
           return setImmediate(next, err);
         }
-        const path4 = getPathname(req);
+        const path4 = getPathname(req2);
         if (path4 == null) {
           return done(layerError);
         }
@@ -20728,7 +20728,7 @@ var require_router = __commonJS({
             match = false;
             continue;
           }
-          const method = req.method;
+          const method = req2.method;
           const hasMethod = route._handlesMethod(method);
           if (!hasMethod && method === "OPTIONS" && methods2) {
             methods2.push.apply(methods2, route._methods());
@@ -20741,15 +20741,15 @@ var require_router = __commonJS({
           return done(layerError);
         }
         if (route) {
-          req.route = route;
+          req2.route = route;
         }
-        req.params = self2.mergeParams ? mergeParams(layer.params, parentParams) : layer.params;
+        req2.params = self2.mergeParams ? mergeParams(layer.params, parentParams) : layer.params;
         const layerPath = layer.path;
-        processParams(self2.params, layer, paramcalled, req, res, function(err2) {
+        processParams(self2.params, layer, paramcalled, req2, res, function(err2) {
           if (err2) {
             next(layerError || err2);
           } else if (route) {
-            layer.handleRequest(req, res, next);
+            layer.handleRequest(req2, res, next);
           } else {
             trimPrefix(layer, layerError, layerPath, path4);
           }
@@ -20767,20 +20767,20 @@ var require_router = __commonJS({
             next(layerError);
             return;
           }
-          debug3("trim prefix (%s) from url %s", layerPath, req.url);
+          debug3("trim prefix (%s) from url %s", layerPath, req2.url);
           removed = layerPath;
-          req.url = protohost + req.url.slice(protohost.length + removed.length);
-          if (!protohost && req.url[0] !== "/") {
-            req.url = "/" + req.url;
+          req2.url = protohost + req2.url.slice(protohost.length + removed.length);
+          if (!protohost && req2.url[0] !== "/") {
+            req2.url = "/" + req2.url;
             slashAdded = true;
           }
-          req.baseUrl = parentUrl + (removed[removed.length - 1] === "/" ? removed.substring(0, removed.length - 1) : removed);
+          req2.baseUrl = parentUrl + (removed[removed.length - 1] === "/" ? removed.substring(0, removed.length - 1) : removed);
         }
-        debug3("%s %s : %s", layer.name, layerPath, req.originalUrl);
+        debug3("%s %s : %s", layer.name, layerPath, req2.originalUrl);
         if (layerError) {
-          layer.handleError(layerError, req, res, next);
+          layer.handleError(layerError, req2, res, next);
         } else {
-          layer.handleRequest(req, res, next);
+          layer.handleRequest(req2, res, next);
         }
       }
     };
@@ -20824,8 +20824,8 @@ var require_router = __commonJS({
         strict: this.strict,
         end: true
       }, handle);
-      function handle(req, res, next) {
-        route2.dispatch(req, res, next);
+      function handle(req2, res, next) {
+        route2.dispatch(req2, res, next);
       }
       layer.route = route2;
       this.stack.push(layer);
@@ -20846,9 +20846,9 @@ var require_router = __commonJS({
         trySendOptionsResponse(res, methods2, fn);
       };
     }
-    function getPathname(req) {
+    function getPathname(req2) {
       try {
-        return parseUrl(req).pathname;
+        return parseUrl(req2).pathname;
       } catch (err) {
         return void 0;
       }
@@ -20893,7 +20893,7 @@ var require_router = __commonJS({
       }
       return Object.assign(obj2, params);
     }
-    function processParams(params, layer, called, req, res, done) {
+    function processParams(params, layer, called, req2, res, done) {
       const keys = layer.keys;
       if (!keys || keys.length === 0) {
         return done();
@@ -20913,14 +20913,14 @@ var require_router = __commonJS({
         }
         paramIndex = 0;
         key = keys[i2++];
-        paramVal = req.params[key];
+        paramVal = req2.params[key];
         paramCallbacks = params[key];
         paramCalled = called[key];
         if (paramVal === void 0 || !paramCallbacks) {
           return param();
         }
         if (paramCalled && (paramCalled.match === paramVal || paramCalled.error && paramCalled.error !== "route")) {
-          req.params[key] = paramCalled.value;
+          req2.params[key] = paramCalled.value;
           return param(paramCalled.error);
         }
         called[key] = paramCalled = {
@@ -20932,7 +20932,7 @@ var require_router = __commonJS({
       }
       function paramCallback(err) {
         const fn = paramCallbacks[paramIndex++];
-        paramCalled.value = req.params[key];
+        paramCalled.value = req2.params[key];
         if (err) {
           paramCalled.error = err;
           param(err);
@@ -20940,7 +20940,7 @@ var require_router = __commonJS({
         }
         if (!fn) return param();
         try {
-          const ret2 = fn(req, res, paramCallback, paramVal, key);
+          const ret2 = fn(req2, res, paramCallback, paramVal, key);
           if (isPromise(ret2)) {
             if (!(ret2 instanceof Promise)) {
               deprecate("parameters that are Promise-like are deprecated, use a native Promise instead");
@@ -21073,22 +21073,22 @@ var require_application = __commonJS({
         this.enable("view cache");
       }
     };
-    app2.handle = function handle(req, res, callback) {
-      var done = callback || finalhandler(req, res, {
+    app2.handle = function handle(req2, res, callback) {
+      var done = callback || finalhandler(req2, res, {
         env: this.get("env"),
         onerror: logerror.bind(this)
       });
       if (this.enabled("x-powered-by")) {
         res.setHeader("X-Powered-By", "Express");
       }
-      req.res = res;
-      res.req = req;
-      Object.setPrototypeOf(req, this.request);
+      req2.res = res;
+      res.req = req2;
+      Object.setPrototypeOf(req2, this.request);
       Object.setPrototypeOf(res, this.response);
       if (!res.locals) {
         res.locals = /* @__PURE__ */ Object.create(null);
       }
-      this.router.handle(req, res, done);
+      this.router.handle(req2, res, done);
     };
     app2.use = function use(fn) {
       var offset = 0;
@@ -21115,10 +21115,10 @@ var require_application = __commonJS({
         debug3(".use app under %s", path4);
         fn2.mountpath = path4;
         fn2.parent = this;
-        router3.use(path4, function mounted_app(req, res, next) {
-          var orig = req.app;
-          fn2.handle(req, res, function(err) {
-            Object.setPrototypeOf(req, orig.request);
+        router3.use(path4, function mounted_app(req2, res, next) {
+          var orig = req2.app;
+          fn2.handle(req2, res, function(err) {
+            Object.setPrototypeOf(req2, orig.request);
             Object.setPrototypeOf(res, orig.response);
             next(err);
           });
@@ -21782,12 +21782,12 @@ var require_accepts = __commonJS({
     var Negotiator = require_negotiator();
     var mime = require_mime_types();
     module2.exports = Accepts;
-    function Accepts(req) {
+    function Accepts(req2) {
       if (!(this instanceof Accepts)) {
-        return new Accepts(req);
+        return new Accepts(req2);
       }
-      this.headers = req.headers;
-      this.negotiator = new Negotiator(req);
+      this.headers = req2.headers;
+      this.negotiator = new Negotiator(req2);
     }
     Accepts.prototype.type = Accepts.prototype.types = function(types_) {
       var types = types_;
@@ -22021,9 +22021,9 @@ var require_request = __commonJS({
     var parseRange = require_range_parser();
     var parse3 = require_parseurl();
     var proxyaddr = require_proxy_addr();
-    var req = Object.create(http2.IncomingMessage.prototype);
-    module2.exports = req;
-    req.get = req.header = function header(name) {
+    var req2 = Object.create(http2.IncomingMessage.prototype);
+    module2.exports = req2;
+    req2.get = req2.header = function header(name) {
       if (!name) {
         throw new TypeError("name argument is required to req.get");
       }
@@ -22039,27 +22039,27 @@ var require_request = __commonJS({
           return this.headers[lc];
       }
     };
-    req.accepts = function() {
+    req2.accepts = function() {
       var accept = accepts(this);
       return accept.types.apply(accept, arguments);
     };
-    req.acceptsEncodings = function() {
+    req2.acceptsEncodings = function() {
       var accept = accepts(this);
       return accept.encodings.apply(accept, arguments);
     };
-    req.acceptsCharsets = function() {
+    req2.acceptsCharsets = function() {
       var accept = accepts(this);
       return accept.charsets.apply(accept, arguments);
     };
-    req.acceptsLanguages = function(...languages) {
+    req2.acceptsLanguages = function(...languages) {
       return accepts(this).languages(...languages);
     };
-    req.range = function range(size, options) {
+    req2.range = function range(size, options) {
       var range2 = this.get("Range");
       if (!range2) return;
       return parseRange(size, range2, options);
     };
-    defineGetter(req, "query", function query() {
+    defineGetter(req2, "query", function query() {
       var queryparse = this.app.get("query parser fn");
       if (!queryparse) {
         return /* @__PURE__ */ Object.create(null);
@@ -22067,7 +22067,7 @@ var require_request = __commonJS({
       var querystring = parse3(this).query;
       return queryparse(querystring);
     });
-    req.is = function is2(types) {
+    req2.is = function is2(types) {
       var arr = types;
       if (!Array.isArray(types)) {
         arr = new Array(arguments.length);
@@ -22077,7 +22077,7 @@ var require_request = __commonJS({
       }
       return typeis(this, arr);
     };
-    defineGetter(req, "protocol", function protocol() {
+    defineGetter(req2, "protocol", function protocol() {
       var proto = this.socket.encrypted ? "https" : "http";
       var trust = this.app.get("trust proxy fn");
       if (!trust(this.socket.remoteAddress, 0)) {
@@ -22087,30 +22087,30 @@ var require_request = __commonJS({
       var index = header.indexOf(",");
       return index !== -1 ? header.substring(0, index).trim() : header.trim();
     });
-    defineGetter(req, "secure", function secure() {
+    defineGetter(req2, "secure", function secure() {
       return this.protocol === "https";
     });
-    defineGetter(req, "ip", function ip() {
+    defineGetter(req2, "ip", function ip() {
       var trust = this.app.get("trust proxy fn");
       return proxyaddr(this, trust);
     });
-    defineGetter(req, "ips", function ips() {
+    defineGetter(req2, "ips", function ips() {
       var trust = this.app.get("trust proxy fn");
       var addrs = proxyaddr.all(this, trust);
       addrs.reverse().pop();
       return addrs;
     });
-    defineGetter(req, "subdomains", function subdomains() {
+    defineGetter(req2, "subdomains", function subdomains() {
       var hostname2 = this.hostname;
       if (!hostname2) return [];
       var offset = this.app.get("subdomain offset");
       var subdomains2 = !isIP2(hostname2) ? hostname2.split(".").reverse() : [hostname2];
       return subdomains2.slice(offset);
     });
-    defineGetter(req, "path", function path4() {
+    defineGetter(req2, "path", function path4() {
       return parse3(this).pathname;
     });
-    defineGetter(req, "host", function host() {
+    defineGetter(req2, "host", function host() {
       var trust = this.app.get("trust proxy fn");
       var val = this.get("X-Forwarded-Host");
       if (!val || !trust(this.socket.remoteAddress, 0)) {
@@ -22120,14 +22120,14 @@ var require_request = __commonJS({
       }
       return val || void 0;
     });
-    defineGetter(req, "hostname", function hostname2() {
+    defineGetter(req2, "hostname", function hostname2() {
       var host = this.host;
       if (!host) return;
       var offset = host[0] === "[" ? host.indexOf("]") + 1 : 0;
       var index = host.indexOf(":", offset);
       return index !== -1 ? host.substring(0, index) : host;
     });
-    defineGetter(req, "fresh", function() {
+    defineGetter(req2, "fresh", function() {
       var method = this.method;
       var res = this.res;
       var status = res.statusCode;
@@ -22140,10 +22140,10 @@ var require_request = __commonJS({
       }
       return false;
     });
-    defineGetter(req, "stale", function stale() {
+    defineGetter(req2, "stale", function stale() {
       return !this.fresh;
     });
-    defineGetter(req, "xhr", function xhr() {
+    defineGetter(req2, "xhr", function xhr() {
       var val = this.get("X-Requested-With") || "";
       return val.toLowerCase() === "xmlhttprequest";
     });
@@ -22532,15 +22532,15 @@ var require_send = __commonJS({
     var MAX_MAXAGE = 60 * 60 * 24 * 365 * 1e3;
     var UP_PATH_REGEXP = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
     module2.exports = send;
-    function send(req, path5, options) {
-      return new SendStream(req, path5, options);
+    function send(req2, path5, options) {
+      return new SendStream(req2, path5, options);
     }
-    function SendStream(req, path5, options) {
+    function SendStream(req2, path5, options) {
       Stream.call(this);
       var opts = options || {};
       this.options = opts;
       this.path = path5;
-      this.req = req;
+      this.req = req2;
       this._acceptRanges = opts.acceptRanges !== void 0 ? Boolean(opts.acceptRanges) : true;
       this._cacheControl = opts.cacheControl !== void 0 ? Boolean(opts.cacheControl) : true;
       this._etag = opts.etag !== void 0 ? Boolean(opts.etag) : true;
@@ -22583,16 +22583,16 @@ var require_send = __commonJS({
       return this.req.headers["if-match"] || this.req.headers["if-unmodified-since"] || this.req.headers["if-none-match"] || this.req.headers["if-modified-since"];
     };
     SendStream.prototype.isPreconditionFailure = function isPreconditionFailure() {
-      var req = this.req;
+      var req2 = this.req;
       var res = this.res;
-      var match = req.headers["if-match"];
+      var match = req2.headers["if-match"];
       if (match) {
         var etag2 = res.getHeader("ETag");
         return !etag2 || match !== "*" && parseTokenList(match).every(function(match2) {
           return match2 !== etag2 && match2 !== "W/" + etag2 && "W/" + match2 !== etag2;
         });
       }
-      var unmodifiedSince = parseHttpDate(req.headers["if-unmodified-since"]);
+      var unmodifiedSince = parseHttpDate(req2.headers["if-unmodified-since"]);
       if (!isNaN(unmodifiedSince)) {
         var lastModified = parseHttpDate(res.getHeader("Last-Modified"));
         return isNaN(lastModified) || lastModified > unmodifiedSince;
@@ -22732,8 +22732,8 @@ var require_send = __commonJS({
       var options = this.options;
       var opts = {};
       var res = this.res;
-      var req = this.req;
-      var ranges = req.headers.range;
+      var req2 = this.req;
+      var ranges = req2.headers.range;
       var offset = options.start || 0;
       if (res.headersSent) {
         this.headersAlreadySent();
@@ -22786,7 +22786,7 @@ var require_send = __commonJS({
       opts.start = offset;
       opts.end = Math.max(offset, offset + len - 1);
       res.setHeader("Content-Length", len);
-      if (req.method === "HEAD") {
+      if (req2.method === "HEAD") {
         res.end();
         return;
       }
@@ -23113,7 +23113,7 @@ var require_response = __commonJS({
     res.send = function send2(body) {
       var chunk = body;
       var encoding;
-      var req = this.req;
+      var req2 = this.req;
       var type;
       var app2 = this.app;
       switch (typeof chunk) {
@@ -23165,7 +23165,7 @@ var require_response = __commonJS({
           this.set("ETag", etag);
         }
       }
-      if (req.fresh) this.status(304);
+      if (req2.fresh) this.status(304);
       if (204 === this.statusCode || 304 === this.statusCode) {
         this.removeHeader("Content-Type");
         this.removeHeader("Content-Length");
@@ -23177,7 +23177,7 @@ var require_response = __commonJS({
         this.removeHeader("Transfer-Encoding");
         chunk = "";
       }
-      if (req.method === "HEAD") {
+      if (req2.method === "HEAD") {
         this.end();
       } else {
         this.end(chunk, encoding);
@@ -23230,9 +23230,9 @@ var require_response = __commonJS({
     };
     res.sendFile = function sendFile(path5, options, callback) {
       var done = callback;
-      var req = this.req;
+      var req2 = this.req;
       var res2 = this;
-      var next = req.next;
+      var next = req2.next;
       var opts = options || {};
       if (!path5) {
         throw new TypeError("path argument is required to res.sendFile");
@@ -23249,7 +23249,7 @@ var require_response = __commonJS({
       }
       var pathname = encodeURI(path5);
       opts.etag = this.app.enabled("etag");
-      var file2 = send(req, pathname, opts);
+      var file2 = send(req2, pathname, opts);
       sendfile(res2, file2, opts, function(err) {
         if (done) return done(err);
         if (err && err.code === "EISDIR") return next();
@@ -23296,18 +23296,18 @@ var require_response = __commonJS({
       return this.set("Content-Type", ct);
     };
     res.format = function(obj2) {
-      var req = this.req;
-      var next = req.next;
+      var req2 = this.req;
+      var next = req2.next;
       var keys = Object.keys(obj2).filter(function(v3) {
         return v3 !== "default";
       });
-      var key = keys.length > 0 ? req.accepts(keys) : false;
+      var key = keys.length > 0 ? req2.accepts(keys) : false;
       this.vary("Accept");
       if (key) {
         this.set("Content-Type", normalizeType(key).value);
-        obj2[key](req, this, next);
+        obj2[key](req2, this, next);
       } else if (obj2.default) {
-        obj2.default(req, this, next);
+        obj2.default(req2, this, next);
       } else {
         next(createError(406, {
           types: normalizeTypes(keys).map(function(o) {
@@ -23430,7 +23430,7 @@ var require_response = __commonJS({
       var app2 = this.req.app;
       var done = callback;
       var opts = options || {};
-      var req = this.req;
+      var req2 = this.req;
       var self2 = this;
       if (typeof options === "function") {
         done = options;
@@ -23438,7 +23438,7 @@ var require_response = __commonJS({
       }
       opts._locals = self2.locals;
       done = done || function(err, str) {
-        if (err) return req.next(err);
+        if (err) return req2.next(err);
         self2.send(str);
       };
       app2.render(view, opts, done);
@@ -23558,8 +23558,8 @@ var require_serve_static = __commonJS({
       opts.maxage = opts.maxage || opts.maxAge || 0;
       opts.root = resolve(root);
       var onDirectory = redirect ? createRedirectDirectoryListener() : createNotFoundDirectoryListener();
-      return function serveStatic2(req, res, next) {
-        if (req.method !== "GET" && req.method !== "HEAD") {
+      return function serveStatic2(req2, res, next) {
+        if (req2.method !== "GET" && req2.method !== "HEAD") {
           if (fallthrough) {
             return next();
           }
@@ -23570,12 +23570,12 @@ var require_serve_static = __commonJS({
           return;
         }
         var forwardError = !fallthrough;
-        var originalUrl = parseUrl.original(req);
-        var path4 = parseUrl(req).pathname;
+        var originalUrl = parseUrl.original(req2);
+        var path4 = parseUrl(req2).pathname;
         if (path4 === "/" && originalUrl.pathname.substr(-1) !== "/") {
           path4 = "";
         }
-        var stream = send(req, path4, opts);
+        var stream = send(req2, path4, opts);
         stream.on("directory", onDirectory);
         if (setHeaders) {
           stream.on("headers", setHeaders);
@@ -23643,16 +23643,16 @@ var require_express = __commonJS({
     var mixin = require_merge_descriptors();
     var proto = require_application();
     var Router3 = require_router();
-    var req = require_request();
+    var req2 = require_request();
     var res = require_response();
     exports2 = module2.exports = createApplication;
     function createApplication() {
-      var app2 = function(req2, res2, next) {
-        app2.handle(req2, res2, next);
+      var app2 = function(req3, res2, next) {
+        app2.handle(req3, res2, next);
       };
       mixin(app2, EventEmitter.prototype, false);
       mixin(app2, proto, false);
-      app2.request = Object.create(req, {
+      app2.request = Object.create(req2, {
         app: { configurable: true, enumerable: true, writable: true, value: app2 }
       });
       app2.response = Object.create(res, {
@@ -23662,7 +23662,7 @@ var require_express = __commonJS({
       return app2;
     }
     exports2.application = proto;
-    exports2.request = req;
+    exports2.request = req2;
     exports2.response = res;
     exports2.Route = Router3.Route;
     exports2.Router = Router3;
@@ -23784,8 +23784,8 @@ var require_lib3 = __commonJS({
           return !!allowedOrigin;
         }
       }
-      function configureOrigin(options, req) {
-        var requestOrigin = req.headers.origin, headers = [], isAllowed;
+      function configureOrigin(options, req2) {
+        var requestOrigin = req2.headers.origin, headers = [], isAllowed;
         if (!options.origin || options.origin === "*") {
           headers.push([{
             key: "Access-Control-Allow-Origin",
@@ -23832,11 +23832,11 @@ var require_lib3 = __commonJS({
         }
         return null;
       }
-      function configureAllowedHeaders(options, req) {
+      function configureAllowedHeaders(options, req2) {
         var allowedHeaders = options.allowedHeaders || options.headers;
         var headers = [];
         if (!allowedHeaders) {
-          allowedHeaders = req.headers["access-control-request-headers"];
+          allowedHeaders = req2.headers["access-control-request-headers"];
           headers.push([{
             key: "Vary",
             value: "Access-Control-Request-Headers"
@@ -23891,13 +23891,13 @@ var require_lib3 = __commonJS({
           }
         }
       }
-      function cors2(options, req, res, next) {
-        var headers = [], method = req.method && req.method.toUpperCase && req.method.toUpperCase();
+      function cors2(options, req2, res, next) {
+        var headers = [], method = req2.method && req2.method.toUpperCase && req2.method.toUpperCase();
         if (method === "OPTIONS") {
-          headers.push(configureOrigin(options, req));
+          headers.push(configureOrigin(options, req2));
           headers.push(configureCredentials(options));
           headers.push(configureMethods(options));
-          headers.push(configureAllowedHeaders(options, req));
+          headers.push(configureAllowedHeaders(options, req2));
           headers.push(configureMaxAge(options));
           headers.push(configureExposedHeaders(options));
           applyHeaders(headers, res);
@@ -23909,7 +23909,7 @@ var require_lib3 = __commonJS({
             res.end();
           }
         } else {
-          headers.push(configureOrigin(options, req));
+          headers.push(configureOrigin(options, req2));
           headers.push(configureCredentials(options));
           headers.push(configureExposedHeaders(options));
           applyHeaders(headers, res);
@@ -23921,12 +23921,12 @@ var require_lib3 = __commonJS({
         if (typeof o === "function") {
           optionsCallback = o;
         } else {
-          optionsCallback = function(req, cb) {
+          optionsCallback = function(req2, cb) {
             cb(null, o);
           };
         }
-        return function corsMiddleware(req, res, next) {
-          optionsCallback(req, function(err, options) {
+        return function corsMiddleware(req2, res, next) {
+          optionsCallback(req2, function(err, options) {
             if (err) {
               next(err);
             } else {
@@ -23940,12 +23940,12 @@ var require_lib3 = __commonJS({
                 };
               }
               if (originCallback) {
-                originCallback(req.headers.origin, function(err2, origin) {
+                originCallback(req2.headers.origin, function(err2, origin) {
                   if (err2 || !origin) {
                     next(err2);
                   } else {
                     corsOptions.origin = origin;
-                    cors2(corsOptions, req, res, next);
+                    cors2(corsOptions, req2, res, next);
                   }
                 });
               } else {
@@ -24215,32 +24215,32 @@ var require_req = __commonJS({
       writable: true,
       value: {}
     });
-    function reqSerializer(req) {
-      const connection = req.info || req.socket;
+    function reqSerializer(req2) {
+      const connection = req2.info || req2.socket;
       const _req = Object.create(pinoReqProto);
-      _req.id = typeof req.id === "function" ? req.id() : req.id || (req.info ? req.info.id : void 0);
-      _req.method = req.method;
-      if (req.originalUrl) {
-        _req.url = req.originalUrl;
+      _req.id = typeof req2.id === "function" ? req2.id() : req2.id || (req2.info ? req2.info.id : void 0);
+      _req.method = req2.method;
+      if (req2.originalUrl) {
+        _req.url = req2.originalUrl;
       } else {
-        const path4 = req.path;
-        _req.url = typeof path4 === "string" ? path4 : req.url ? req.url.path || req.url : void 0;
+        const path4 = req2.path;
+        _req.url = typeof path4 === "string" ? path4 : req2.url ? req2.url.path || req2.url : void 0;
       }
-      if (req.query) {
-        _req.query = req.query;
+      if (req2.query) {
+        _req.query = req2.query;
       }
-      if (req.params) {
-        _req.params = req.params;
+      if (req2.params) {
+        _req.params = req2.params;
       }
-      _req.headers = req.headers;
+      _req.headers = req2.headers;
       _req.remoteAddress = connection && connection.remoteAddress;
       _req.remotePort = connection && connection.remotePort;
-      _req.raw = req.raw || req;
+      _req.raw = req2.raw || req2;
       return _req;
     }
-    function mapHttpRequest(req) {
+    function mapHttpRequest(req2) {
       return {
-        req: reqSerializer(req)
+        req: reqSerializer(req2)
       };
     }
   }
@@ -24318,8 +24318,8 @@ var require_pino_std_serializers = __commonJS({
       },
       wrapRequestSerializer: function wrapRequestSerializer(customSerializer) {
         if (customSerializer === reqSerializers.reqSerializer) return customSerializer;
-        return function wrappedReqSerializer(req) {
-          return customSerializer(reqSerializers.reqSerializer(req));
+        return function wrappedReqSerializer(req2) {
+          return customSerializer(reqSerializers.reqSerializer(req2));
         };
       },
       wrapResponseSerializer: function wrapResponseSerializer(customSerializer) {
@@ -28345,8 +28345,8 @@ var require_logger = __commonJS({
         }
         return defaultValue;
       }
-      function getLogLevelFromCustomLogLevel(customLogLevel2, useLevel2, res, err, req) {
-        return customLogLevel2 ? getValidLogLevel(customLogLevel2(req, res, err), useLevel2) : useLevel2;
+      function getLogLevelFromCustomLogLevel(customLogLevel2, useLevel2, res, err, req2) {
+        return customLogLevel2 ? getValidLogLevel(customLogLevel2(req2, res, err), useLevel2) : useLevel2;
       }
       const customLogLevel = opts.customLogLevel;
       delete opts.customLogLevel;
@@ -28370,20 +28370,20 @@ var require_logger = __commonJS({
       const useLevel = getValidLogLevel(opts.useLevel);
       delete opts.useLevel;
       const genReqId = reqIdGenFactory(opts.genReqId);
-      const result = (req, res, next) => {
-        return loggingMiddleware(logger2, req, res, next);
+      const result = (req2, res, next) => {
+        return loggingMiddleware(logger2, req2, res, next);
       };
       result.logger = logger2;
       return result;
       function onResFinished(res, logger3, err) {
         let log2 = logger3;
         const responseTime = Date.now() - res[startTime];
-        const req = res[reqObject];
-        const level = getLogLevelFromCustomLogLevel(customLogLevel, useLevel, res, err, req);
+        const req2 = res[reqObject];
+        const level = getLogLevelFromCustomLogLevel(customLogLevel, useLevel, res, err, req2);
         if (level === "silent") {
           return;
         }
-        const customPropBindings = typeof customProps === "function" ? customProps(req, res) : customProps;
+        const customPropBindings = typeof customProps === "function" ? customProps(req2, res) : customProps;
         if (customPropBindings) {
           const customPropBindingStr = logger3[stringifySym](customPropBindings).replace(/[{}]/g, "");
           const customPropBindingsStr = logger3[chindingsSym];
@@ -28394,29 +28394,29 @@ var require_logger = __commonJS({
         if (err || res.err || res.statusCode >= 500) {
           const error40 = err || res.err || new Error("failed with status code " + res.statusCode);
           log2[level](
-            onRequestErrorObject(req, res, error40, {
+            onRequestErrorObject(req2, res, error40, {
               [resKey]: res,
               [errKey]: error40,
               [responseTimeKey]: responseTime
             }),
-            errorMessage(req, res, error40, responseTime)
+            errorMessage(req2, res, error40, responseTime)
           );
           return;
         }
         log2[level](
-          onRequestSuccessObject(req, res, {
+          onRequestSuccessObject(req2, res, {
             [resKey]: res,
             [responseTimeKey]: responseTime
           }),
-          successMessage(req, res, responseTime)
+          successMessage(req2, res, responseTime)
         );
       }
-      function loggingMiddleware(logger3, req, res, next) {
+      function loggingMiddleware(logger3, req2, res, next) {
         let shouldLogSuccess = true;
-        req.id = req.id || genReqId(req, res);
-        const log2 = quietReqLogger ? logger3.child({ [requestIdKey]: req.id }) : logger3;
-        let fullReqLogger = log2.child({ [reqKey]: req });
-        const customPropBindings = typeof customProps === "function" ? customProps(req, res) : customProps;
+        req2.id = req2.id || genReqId(req2, res);
+        const log2 = quietReqLogger ? logger3.child({ [requestIdKey]: req2.id }) : logger3;
+        let fullReqLogger = log2.child({ [reqKey]: req2 });
+        const customPropBindings = typeof customProps === "function" ? customProps(req2, res) : customProps;
         if (customPropBindings) {
           fullReqLogger = fullReqLogger.child(customPropBindings);
         }
@@ -28429,15 +28429,15 @@ var require_logger = __commonJS({
           res.allLogs = [];
         }
         res.allLogs.push(responseLogger);
-        if (!req.log) {
-          req.log = requestLogger;
+        if (!req2.log) {
+          req2.log = requestLogger;
         }
-        if (!req.allLogs) {
-          req.allLogs = [];
+        if (!req2.allLogs) {
+          req2.allLogs = [];
         }
-        req.allLogs.push(requestLogger);
+        req2.allLogs.push(requestLogger);
         res[startTime] = res[startTime] || Date.now();
-        res[reqObject] = req;
+        res[reqObject] = req2;
         const onResponseComplete = (err) => {
           res.removeListener("close", onResponseComplete);
           res.removeListener("finish", onResponseComplete);
@@ -28446,15 +28446,15 @@ var require_logger = __commonJS({
         };
         if (autoLogging) {
           if (autoLoggingIgnore !== null && shouldLogSuccess === true) {
-            const isIgnored = autoLoggingIgnore(req);
+            const isIgnored = autoLoggingIgnore(req2);
             shouldLogSuccess = !isIgnored;
           }
           if (shouldLogSuccess) {
             const shouldLogReceived = receivedMessage !== void 0 || onRequestReceivedObject !== void 0;
             if (shouldLogReceived) {
-              const level = getLogLevelFromCustomLogLevel(customLogLevel, useLevel, res, void 0, req);
-              const receivedObjectResult = onRequestReceivedObject !== void 0 ? onRequestReceivedObject(req, res, void 0) : {};
-              const receivedStringResult = receivedMessage !== void 0 ? receivedMessage(req, res) : void 0;
+              const level = getLogLevelFromCustomLogLevel(customLogLevel, useLevel, res, void 0, req2);
+              const receivedObjectResult = onRequestReceivedObject !== void 0 ? onRequestReceivedObject(req2, res, void 0) : {};
+              const receivedStringResult = receivedMessage !== void 0 ? receivedMessage(req2, res) : void 0;
               requestLogger[level](receivedObjectResult, receivedStringResult);
             }
             res.on("close", onResponseComplete);
@@ -28489,8 +28489,8 @@ var require_logger = __commonJS({
       if (typeof func === "function") return func;
       const maxInt = 2147483647;
       let nextReqId = 0;
-      return function genReqId(req, res) {
-        return req.id || (nextReqId = nextReqId + 1 & maxInt);
+      return function genReqId(req2, res) {
+        return req2.id || (nextReqId = nextReqId + 1 & maxInt);
       };
     }
     function getFunctionOrDefault(value, defaultValue) {
@@ -28499,17 +28499,17 @@ var require_logger = __commonJS({
       }
       return defaultValue;
     }
-    function defaultSuccessfulRequestObjectProvider(req, res, successObject) {
+    function defaultSuccessfulRequestObjectProvider(req2, res, successObject) {
       return successObject;
     }
-    function defaultFailedRequestObjectProvider(req, res, error40, errorObject) {
+    function defaultFailedRequestObjectProvider(req2, res, error40, errorObject) {
       return errorObject;
     }
     function defaultFailedRequestMessageProvider() {
       return "request errored";
     }
-    function defaultSuccessfulRequestMessageProvider(req, res) {
-      return !req.readableAborted && res.writableEnded ? "request completed" : "request aborted";
+    function defaultSuccessfulRequestMessageProvider(req2, res) {
+      return !req2.readableAborted && res.writableEnded ? "request completed" : "request aborted";
     }
     module2.exports = pinoLogger;
     module2.exports.stdSerializers = {
@@ -77569,21 +77569,21 @@ var require_forever_agent = __commonJS({
     ForeverAgent.defaultMinSockets = 5;
     ForeverAgent.prototype.createConnection = net3.createConnection;
     ForeverAgent.prototype.addRequestNoreuse = Agent3.prototype.addRequest;
-    ForeverAgent.prototype.addRequest = function(req, host, port2) {
+    ForeverAgent.prototype.addRequest = function(req2, host, port2) {
       var name = getConnectionName(host, port2);
       if (typeof host !== "string") {
         var options = host;
         port2 = options.port;
         host = options.host;
       }
-      if (this.freeSockets[name] && this.freeSockets[name].length > 0 && !req.useChunkedEncodingByDefault) {
+      if (this.freeSockets[name] && this.freeSockets[name].length > 0 && !req2.useChunkedEncodingByDefault) {
         var idleSocket = this.freeSockets[name].pop();
         idleSocket.removeListener("error", idleSocket._onIdleError);
         delete idleSocket._onIdleError;
-        req._reusedSocket = true;
-        req.onSocket(idleSocket);
+        req2._reusedSocket = true;
+        req2.onSocket(idleSocket);
       } else {
-        this.addRequestNoreuse(req, host, port2);
+        this.addRequestNoreuse(req2, host, port2);
       }
     };
     ForeverAgent.prototype.removeSocket = function(s, name, host, port2) {
@@ -85926,32 +85926,32 @@ var require_har2 = __commonJS({
       if (!validate.request(har)) {
         return options;
       }
-      var req = this.prep(har);
-      if (req.url) {
-        options.url = req.url;
+      var req2 = this.prep(har);
+      if (req2.url) {
+        options.url = req2.url;
       }
-      if (req.method) {
-        options.method = req.method;
+      if (req2.method) {
+        options.method = req2.method;
       }
-      if (Object.keys(req.queryObj).length) {
-        options.qs = req.queryObj;
+      if (Object.keys(req2.queryObj).length) {
+        options.qs = req2.queryObj;
       }
-      if (Object.keys(req.headersObj).length) {
-        options.headers = req.headersObj;
+      if (Object.keys(req2.headersObj).length) {
+        options.headers = req2.headersObj;
       }
       function test(type) {
-        return req.postData.mimeType.indexOf(type) === 0;
+        return req2.postData.mimeType.indexOf(type) === 0;
       }
       if (test("application/x-www-form-urlencoded")) {
-        options.form = req.postData.paramsObj;
+        options.form = req2.postData.paramsObj;
       } else if (test("application/json")) {
-        if (req.postData.jsonObj) {
-          options.body = req.postData.jsonObj;
+        if (req2.postData.jsonObj) {
+          options.body = req2.postData.jsonObj;
           options.json = true;
         }
       } else if (test("multipart/form-data")) {
         options.formData = {};
-        req.postData.params.forEach(function(param) {
+        req2.postData.params.forEach(function(param) {
           var attachment = {};
           if (!param.fileName && !param.contentType) {
             options.formData[param.name] = param.value;
@@ -85971,8 +85971,8 @@ var require_har2 = __commonJS({
           options.formData[param.name] = attachment;
         });
       } else {
-        if (req.postData.text) {
-          options.body = req.postData.text;
+        if (req2.postData.text) {
+          options.body = req2.postData.text;
         }
       }
       return options;
@@ -86775,7 +86775,7 @@ var require_tunnel_agent = __commonJS({
       });
     }
     util2.inherits(TunnelingAgent, events.EventEmitter);
-    TunnelingAgent.prototype.addRequest = function addRequest(req, options) {
+    TunnelingAgent.prototype.addRequest = function addRequest(req2, options) {
       var self2 = this;
       if (typeof options === "string") {
         options = {
@@ -86785,10 +86785,10 @@ var require_tunnel_agent = __commonJS({
         };
       }
       if (self2.sockets.length >= this.maxSockets) {
-        self2.requests.push({ host: options.host, port: options.port, request: req });
+        self2.requests.push({ host: options.host, port: options.port, request: req2 });
         return;
       }
-      self2.createConnection({ host: options.host, port: options.port, request: req });
+      self2.createConnection({ host: options.host, port: options.port, request: req2 });
     };
     TunnelingAgent.prototype.createConnection = function createConnection(pending) {
       var self2 = this;
@@ -104876,8 +104876,8 @@ var require_igtv_browse_feed = __commonJS({
         this.isPrefetch = false;
       }
       async items() {
-        const req = await this.request();
-        return req.browse_items;
+        const req2 = await this.request();
+        return req2.browse_items;
       }
       async request() {
         const { body } = await this.client.request.send({
@@ -105238,8 +105238,8 @@ var require_media_inline_child_comments_feed = __commonJS({
         return body;
       }
       async items() {
-        const req = await this.request();
-        return req.child_comments;
+        const req2 = await this.request();
+        return req2.child_comments;
       }
     };
     __decorate([
@@ -117216,7 +117216,7 @@ var require_websocket = __commonJS({
         opts.socketPath = parts[0];
         opts.path = parts[1];
       }
-      let req;
+      let req2;
       if (opts.followRedirects) {
         if (websocket._redirects === 0) {
           websocket._originalIpc = isIpcUrl;
@@ -117241,32 +117241,32 @@ var require_websocket = __commonJS({
         if (opts.auth && !options.headers.authorization) {
           options.headers.authorization = "Basic " + Buffer.from(opts.auth).toString("base64");
         }
-        req = websocket._req = request3(opts);
+        req2 = websocket._req = request3(opts);
         if (websocket._redirects) {
-          websocket.emit("redirect", websocket.url, req);
+          websocket.emit("redirect", websocket.url, req2);
         }
       } else {
-        req = websocket._req = request3(opts);
+        req2 = websocket._req = request3(opts);
       }
       if (opts.timeout) {
-        req.on("timeout", () => {
-          abortHandshake(websocket, req, "Opening handshake has timed out");
+        req2.on("timeout", () => {
+          abortHandshake(websocket, req2, "Opening handshake has timed out");
         });
       }
-      req.on("error", (err) => {
-        if (req === null || req[kAborted]) return;
-        req = websocket._req = null;
+      req2.on("error", (err) => {
+        if (req2 === null || req2[kAborted]) return;
+        req2 = websocket._req = null;
         emitErrorAndClose(websocket, err);
       });
-      req.on("response", (res) => {
+      req2.on("response", (res) => {
         const location = res.headers.location;
         const statusCode = res.statusCode;
         if (location && opts.followRedirects && statusCode >= 300 && statusCode < 400) {
           if (++websocket._redirects > opts.maxRedirects) {
-            abortHandshake(websocket, req, "Maximum redirects exceeded");
+            abortHandshake(websocket, req2, "Maximum redirects exceeded");
             return;
           }
-          req.abort();
+          req2.abort();
           let addr;
           try {
             addr = new URL3(location, address);
@@ -117276,18 +117276,18 @@ var require_websocket = __commonJS({
             return;
           }
           initAsClient(websocket, addr, protocols, options);
-        } else if (!websocket.emit("unexpected-response", req, res)) {
+        } else if (!websocket.emit("unexpected-response", req2, res)) {
           abortHandshake(
             websocket,
-            req,
+            req2,
             `Unexpected server response: ${res.statusCode}`
           );
         }
       });
-      req.on("upgrade", (res, socket, head) => {
+      req2.on("upgrade", (res, socket, head) => {
         websocket.emit("upgrade", res);
         if (websocket.readyState !== WebSocket2.CONNECTING) return;
-        req = websocket._req = null;
+        req2 = websocket._req = null;
         const upgrade = res.headers.upgrade;
         if (upgrade === void 0 || upgrade.toLowerCase() !== "websocket") {
           abortHandshake(websocket, socket, "Invalid Upgrade header");
@@ -117352,9 +117352,9 @@ var require_websocket = __commonJS({
         });
       });
       if (opts.finishRequest) {
-        opts.finishRequest(req, websocket);
+        opts.finishRequest(req2, websocket);
       } else {
-        req.end();
+        req2.end();
       }
     }
     function emitErrorAndClose(websocket, err) {
@@ -117733,7 +117733,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (options.port != null) {
-          this._server = http2.createServer((req, res) => {
+          this._server = http2.createServer((req2, res) => {
             const body = http2.STATUS_CODES[426];
             res.writeHead(426, {
               "Content-Length": body.length,
@@ -117755,8 +117755,8 @@ var require_websocket_server = __commonJS({
           this._removeListeners = addListeners(this._server, {
             listening: this.emit.bind(this, "listening"),
             error: this.emit.bind(this, "error"),
-            upgrade: (req, socket, head) => {
-              this.handleUpgrade(req, socket, head, emitConnection);
+            upgrade: (req2, socket, head) => {
+              this.handleUpgrade(req2, socket, head, emitConnection);
             }
           });
         }
@@ -117834,10 +117834,10 @@ var require_websocket_server = __commonJS({
        * @return {Boolean} `true` if the request is valid, else `false`
        * @public
        */
-      shouldHandle(req) {
+      shouldHandle(req2) {
         if (this.options.path) {
-          const index = req.url.indexOf("?");
-          const pathname = index !== -1 ? req.url.slice(0, index) : req.url;
+          const index = req2.url.indexOf("?");
+          const pathname = index !== -1 ? req2.url.slice(0, index) : req2.url;
           if (pathname !== this.options.path) return false;
         }
         return true;
@@ -117851,49 +117851,49 @@ var require_websocket_server = __commonJS({
        * @param {Function} cb Callback
        * @public
        */
-      handleUpgrade(req, socket, head, cb) {
+      handleUpgrade(req2, socket, head, cb) {
         socket.on("error", socketOnError);
-        const key = req.headers["sec-websocket-key"];
-        const upgrade = req.headers.upgrade;
-        const version3 = +req.headers["sec-websocket-version"];
-        if (req.method !== "GET") {
+        const key = req2.headers["sec-websocket-key"];
+        const upgrade = req2.headers.upgrade;
+        const version3 = +req2.headers["sec-websocket-version"];
+        if (req2.method !== "GET") {
           const message = "Invalid HTTP method";
-          abortHandshakeOrEmitwsClientError(this, req, socket, 405, message);
+          abortHandshakeOrEmitwsClientError(this, req2, socket, 405, message);
           return;
         }
         if (upgrade === void 0 || upgrade.toLowerCase() !== "websocket") {
           const message = "Invalid Upgrade header";
-          abortHandshakeOrEmitwsClientError(this, req, socket, 400, message);
+          abortHandshakeOrEmitwsClientError(this, req2, socket, 400, message);
           return;
         }
         if (key === void 0 || !keyRegex.test(key)) {
           const message = "Missing or invalid Sec-WebSocket-Key header";
-          abortHandshakeOrEmitwsClientError(this, req, socket, 400, message);
+          abortHandshakeOrEmitwsClientError(this, req2, socket, 400, message);
           return;
         }
         if (version3 !== 13 && version3 !== 8) {
           const message = "Missing or invalid Sec-WebSocket-Version header";
-          abortHandshakeOrEmitwsClientError(this, req, socket, 400, message, {
+          abortHandshakeOrEmitwsClientError(this, req2, socket, 400, message, {
             "Sec-WebSocket-Version": "13, 8"
           });
           return;
         }
-        if (!this.shouldHandle(req)) {
+        if (!this.shouldHandle(req2)) {
           abortHandshake(socket, 400);
           return;
         }
-        const secWebSocketProtocol = req.headers["sec-websocket-protocol"];
+        const secWebSocketProtocol = req2.headers["sec-websocket-protocol"];
         let protocols = /* @__PURE__ */ new Set();
         if (secWebSocketProtocol !== void 0) {
           try {
             protocols = subprotocol2.parse(secWebSocketProtocol);
           } catch (err) {
             const message = "Invalid Sec-WebSocket-Protocol header";
-            abortHandshakeOrEmitwsClientError(this, req, socket, 400, message);
+            abortHandshakeOrEmitwsClientError(this, req2, socket, 400, message);
             return;
           }
         }
-        const secWebSocketExtensions = req.headers["sec-websocket-extensions"];
+        const secWebSocketExtensions = req2.headers["sec-websocket-extensions"];
         const extensions = {};
         if (this.options.perMessageDeflate && secWebSocketExtensions !== void 0) {
           const perMessageDeflate = new PerMessageDeflate2({
@@ -117909,15 +117909,15 @@ var require_websocket_server = __commonJS({
             }
           } catch (err) {
             const message = "Invalid or unacceptable Sec-WebSocket-Extensions header";
-            abortHandshakeOrEmitwsClientError(this, req, socket, 400, message);
+            abortHandshakeOrEmitwsClientError(this, req2, socket, 400, message);
             return;
           }
         }
         if (this.options.verifyClient) {
           const info = {
-            origin: req.headers[`${version3 === 8 ? "sec-websocket-origin" : "origin"}`],
-            secure: !!(req.socket.authorized || req.socket.encrypted),
-            req
+            origin: req2.headers[`${version3 === 8 ? "sec-websocket-origin" : "origin"}`],
+            secure: !!(req2.socket.authorized || req2.socket.encrypted),
+            req: req2
           };
           if (this.options.verifyClient.length === 2) {
             this.options.verifyClient(info, (verified, code, message, headers) => {
@@ -117928,7 +117928,7 @@ var require_websocket_server = __commonJS({
                 extensions,
                 key,
                 protocols,
-                req,
+                req2,
                 socket,
                 head,
                 cb
@@ -117938,7 +117938,7 @@ var require_websocket_server = __commonJS({
           }
           if (!this.options.verifyClient(info)) return abortHandshake(socket, 401);
         }
-        this.completeUpgrade(extensions, key, protocols, req, socket, head, cb);
+        this.completeUpgrade(extensions, key, protocols, req2, socket, head, cb);
       }
       /**
        * Upgrade the connection to WebSocket.
@@ -117953,7 +117953,7 @@ var require_websocket_server = __commonJS({
        * @throws {Error} If called more than once with the same socket
        * @private
        */
-      completeUpgrade(extensions, key, protocols, req, socket, head, cb) {
+      completeUpgrade(extensions, key, protocols, req2, socket, head, cb) {
         if (!socket.readable || !socket.writable) return socket.destroy();
         if (socket[kWebSocket]) {
           throw new Error(
@@ -117970,7 +117970,7 @@ var require_websocket_server = __commonJS({
         ];
         const ws = new this.options.WebSocket(null, void 0, this.options);
         if (protocols.size) {
-          const protocol = this.options.handleProtocols ? this.options.handleProtocols(protocols, req) : protocols.values().next().value;
+          const protocol = this.options.handleProtocols ? this.options.handleProtocols(protocols, req2) : protocols.values().next().value;
           if (protocol) {
             headers.push(`Sec-WebSocket-Protocol: ${protocol}`);
             ws._protocol = protocol;
@@ -117984,7 +117984,7 @@ var require_websocket_server = __commonJS({
           headers.push(`Sec-WebSocket-Extensions: ${value}`);
           ws._extensions = extensions;
         }
-        this.emit("headers", headers, req);
+        this.emit("headers", headers, req2);
         socket.write(headers.concat("\r\n").join("\r\n"));
         socket.removeListener("error", socketOnError);
         ws.setSocket(socket, head, {
@@ -118001,7 +118001,7 @@ var require_websocket_server = __commonJS({
             }
           });
         }
-        cb(ws, req);
+        cb(ws, req2);
       }
     };
     module2.exports = WebSocketServer2;
@@ -118034,11 +118034,11 @@ var require_websocket_server = __commonJS({
 ` + Object.keys(headers).map((h4) => `${h4}: ${headers[h4]}`).join("\r\n") + "\r\n\r\n" + message
       );
     }
-    function abortHandshakeOrEmitwsClientError(server, req, socket, code, message, headers) {
+    function abortHandshakeOrEmitwsClientError(server, req2, socket, code, message, headers) {
       if (server.listenerCount("wsClientError")) {
         const err = new Error(message);
         Error.captureStackTrace(err, abortHandshakeOrEmitwsClientError);
-        server.emit("wsClientError", err, socket, req);
+        server.emit("wsClientError", err, socket, req2);
       } else {
         abortHandshake(socket, code, message, headers);
       }
@@ -118124,24 +118124,24 @@ var init_dist = __esm({
         }
         return super.getName(options);
       }
-      createSocket(req, options, cb) {
+      createSocket(req2, options, cb) {
         const connectOpts = {
           ...options,
           secureEndpoint: this.isSecureEndpoint(options)
         };
         const name = this.getName(connectOpts);
         const fakeSocket = this.incrementSockets(name);
-        Promise.resolve().then(() => this.connect(req, connectOpts)).then((socket) => {
+        Promise.resolve().then(() => this.connect(req2, connectOpts)).then((socket) => {
           this.decrementSockets(name, fakeSocket);
           if (typeof socket.addRequest === "function") {
             try {
-              return socket.addRequest(req, connectOpts);
+              return socket.addRequest(req2, connectOpts);
             } catch (err) {
               return cb(err);
             }
           }
           this[INTERNAL].currentSocket = socket;
-          super.createSocket(req, options, cb);
+          super.createSocket(req2, options, cb);
         }, (err) => {
           this.decrementSockets(name, fakeSocket);
           cb(err);
@@ -118324,7 +118324,7 @@ var init_dist2 = __esm({
        * Called when the node-core HTTP client library is creating a
        * new HTTP request.
        */
-      async connect(req, opts) {
+      async connect(req2, opts) {
         const { proxy } = this;
         if (!opts.host) {
           throw new TypeError('No "host" provided');
@@ -118357,10 +118357,10 @@ var init_dist2 = __esm({
         socket.write(`${payload}\r
 `);
         const { connect: connect3, buffered } = await proxyResponsePromise;
-        req.emit("proxyConnect", connect3);
-        this.emit("proxyConnect", connect3, req);
+        req2.emit("proxyConnect", connect3);
+        this.emit("proxyConnect", connect3, req2);
         if (connect3.statusCode === 200) {
-          req.once("socket", resume);
+          req2.once("socket", resume);
           if (opts.secureEndpoint) {
             debug2("Upgrading socket connection to TLS");
             return tls.connect({
@@ -118373,7 +118373,7 @@ var init_dist2 = __esm({
         socket.destroy();
         const fakeSocket = new net2.Socket({ writable: false });
         fakeSocket.readable = true;
-        req.once("socket", (s) => {
+        req2.once("socket", (s) => {
           debug2("Replaying proxy buffer for failed request");
           assert2(s.listenerCount("data") > 0);
           s.push(buffered);
@@ -118394,7 +118394,7 @@ __export(hikerApiClient_exports, {
 import * as https2 from "https";
 function hikerGet(path4, token) {
   return new Promise((resolve, reject) => {
-    const req = https2.request(
+    const req2 = https2.request(
       {
         hostname: HIKER_HOST,
         path: path4,
@@ -118418,11 +118418,11 @@ function hikerGet(path4, token) {
         });
       }
     );
-    req.on("error", reject);
-    req.setTimeout(25e3, () => {
-      req.destroy(new Error("HikerAPI request timeout"));
+    req2.on("error", reject);
+    req2.setTimeout(25e3, () => {
+      req2.destroy(new Error("HikerAPI request timeout"));
     });
-    req.end();
+    req2.end();
   });
 }
 var HIKER_HOST, HikerApiClient;
@@ -122475,11 +122475,11 @@ app.use(
   (0, import_pino_http.default)({
     logger,
     serializers: {
-      req(req) {
+      req(req2) {
         return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0]
+          id: req2.id,
+          method: req2.method,
+          url: req2.url?.split("?")[0]
         };
       },
       res(res) {
@@ -141943,11 +141943,11 @@ function extractFromBody(body, key) {
   }
 }
 function attachRequestLogger(ig, profileId, source, proxyIp) {
-  const req = ig.request;
-  if (req.__logged) return;
-  req.__logged = true;
-  const originalSend = req.send.bind(req);
-  req.send = async function(userOptions, onlyCheckHttpStatus) {
+  const req2 = ig.request;
+  if (req2.__logged) return;
+  req2.__logged = true;
+  const originalSend = req2.send.bind(req2);
+  req2.send = async function(userOptions, onlyCheckHttpStatus) {
     const t0 = Date.now();
     const rawUrl = userOptions?.url || userOptions?.uri || "";
     const opName = extractOperationName(rawUrl);
@@ -142317,9 +142317,9 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
     }
   };
   const pending = /* @__PURE__ */ new Map();
-  page.on("request", (req) => {
-    if (isIgApiCall(req.url())) {
-      pending.set(req.url(), { startMs: Date.now(), method: req.method() });
+  page.on("request", (req2) => {
+    if (isIgApiCall(req2.url())) {
+      pending.set(req2.url(), { startMs: Date.now(), method: req2.method() });
     }
   });
   page.on("response", async (res) => {
@@ -142730,7 +142730,7 @@ import * as https from "https";
 import * as fs2 from "fs";
 function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
+    const req2 = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => {
         data += chunk;
@@ -142739,12 +142739,12 @@ function httpsRequest(options, body) {
         resolve({ status: res.statusCode ?? 0, headers: res.headers, body: data });
       });
     });
-    req.on("error", reject);
-    req.setTimeout(2e4, () => {
-      req.destroy(new Error("timeout"));
+    req2.on("error", reject);
+    req2.setTimeout(2e4, () => {
+      req2.destroy(new Error("timeout"));
     });
-    if (body) req.write(body);
-    req.end();
+    if (body) req2.write(body);
+    req2.end();
   });
 }
 async function igReq(opts) {
@@ -145107,9 +145107,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const data = await storage.getProxies();
     res.json(data);
   });
-  app2.post(api.proxies.create.path, async (req, res) => {
+  app2.post(api.proxies.create.path, async (req2, res) => {
     try {
-      const input = api.proxies.create.input.parse(req.body);
+      const input = api.proxies.create.input.parse(req2.body);
       const created = await storage.createProxy({
         ...input,
         name: `${input.host}:${input.port}`
@@ -145122,11 +145122,11 @@ async function registerInstagramRoutes(httpServer2, app2) {
       throw err;
     }
   });
-  app2.delete(api.proxies.delete.path, async (req, res) => {
-    await storage.deleteProxy(Number(req.params.id));
+  app2.delete(api.proxies.delete.path, async (req2, res) => {
+    await storage.deleteProxy(Number(req2.params.id));
     res.status(204).end();
   });
-  app2.post("/api/proxies/import", async (req, res) => {
+  app2.post("/api/proxies/import", async (req2, res) => {
     const input = external_exports.object({
       proxies: external_exports.array(external_exports.object({
         host: external_exports.string().min(1),
@@ -145134,7 +145134,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
         username: external_exports.string().nullable().optional(),
         password: external_exports.string().nullable().optional()
       }))
-    }).parse(req.body);
+    }).parse(req2.body);
     const existing = await storage.getProxies();
     const existingSet = new Set(existing.map((p) => `${p.host}:${p.port}`));
     let imported = 0;
@@ -145157,7 +145157,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
     }
     res.json({ imported, skipped });
   });
-  app2.post("/api/proxies/auto-link", async (req, res) => {
+  app2.post("/api/proxies/auto-link", async (req2, res) => {
     const proxies2 = await storage.getProxies();
     const profiles2 = await storage.getProfiles();
     const proxyByHostPort = new Map(proxies2.map((p) => [`${p.host}:${p.port}`, p.id]));
@@ -145180,8 +145180,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
     }
     res.json({ linked, unmatched });
   });
-  app2.post("/api/proxies/:id/ping", async (req, res) => {
-    const proxy = (await storage.getProxies()).find((p) => p.id === Number(req.params.id));
+  app2.post("/api/proxies/:id/ping", async (req2, res) => {
+    const proxy = (await storage.getProxies()).find((p) => p.id === Number(req2.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
     const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
     const https3 = await import("https");
@@ -145191,7 +145191,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const start = Date.now();
     try {
       await new Promise((resolve, reject) => {
-        const req2 = https3.get(
+        const req22 = https3.get(
           "https://i.instagram.com/api/v1/si/fetch_headers/?challenge_type=signup&guid=",
           { agent, timeout: 1e4 },
           (r2) => {
@@ -145199,9 +145199,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
             resolve();
           }
         );
-        req2.on("error", reject);
-        req2.on("timeout", () => {
-          req2.destroy();
+        req22.on("error", reject);
+        req22.on("timeout", () => {
+          req22.destroy();
           reject(new Error("timeout"));
         });
       });
@@ -145214,17 +145214,17 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const data = await storage.getProfiles();
     res.json(data);
   });
-  app2.get(api.profiles.get.path, async (req, res) => {
-    const profile = await storage.getProfile(Number(req.params.id));
+  app2.get(api.profiles.get.path, async (req2, res) => {
+    const profile = await storage.getProfile(Number(req2.params.id));
     if (!profile) return res.status(404).json({ message: "Not found" });
     res.json(profile);
   });
-  app2.post(api.profiles.create.path, async (req, res) => {
+  app2.post(api.profiles.create.path, async (req2, res) => {
     try {
       const inputSchema = api.profiles.create.input.extend({
         proxyId: external_exports.coerce.number().optional().nullable()
       });
-      const input = inputSchema.parse(req.body);
+      const input = inputSchema.parse(req2.body);
       const created = await storage.createProfile(input);
       res.status(201).json(created);
     } catch (err) {
@@ -145234,10 +145234,10 @@ async function registerInstagramRoutes(httpServer2, app2) {
       throw err;
     }
   });
-  async function handleProfileUpdate(req, res) {
+  async function handleProfileUpdate(req2, res) {
     try {
-      const id = Number(req.params.id);
-      const body = req.body;
+      const id = Number(req2.params.id);
+      const body = req2.body;
       if ("username" in body || "password" in body) {
         const current = await storage.getProfile(id);
         const usernameChanged = current && "username" in body && body.username !== current.username;
@@ -145255,12 +145255,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
   }
   app2.patch("/api/profiles/:id", handleProfileUpdate);
   app2.put("/api/profiles/:id", handleProfileUpdate);
-  app2.delete(api.profiles.delete.path, async (req, res) => {
-    await storage.deleteProfile(Number(req.params.id));
+  app2.delete(api.profiles.delete.path, async (req2, res) => {
+    await storage.deleteProfile(Number(req2.params.id));
     res.status(204).end();
   });
-  app2.post("/api/profiles/:id/sync", async (req, res) => {
-    const id = Number(req.params.id);
+  app2.post("/api/profiles/:id/sync", async (req2, res) => {
+    const id = Number(req2.params.id);
     const profile = await storage.getProfile(id);
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
     try {
@@ -145272,13 +145272,13 @@ async function registerInstagramRoutes(httpServer2, app2) {
       res.status(500).json({ ok: false, message: err?.message ?? "Sync failed" });
     }
   });
-  app2.post("/api/profiles/:id/verify", async (req, res) => {
-    const profile = await storage.getProfile(Number(req.params.id));
+  app2.post("/api/profiles/:id/verify", async (req2, res) => {
+    const profile = await storage.getProfile(Number(req2.params.id));
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
     if (!profile.username || !profile.password) {
       return res.status(400).json({ ok: false, message: "Username and password are required before verifying." });
     }
-    const bypassProxy = req.query.bypassProxy === "true";
+    const bypassProxy = req2.query.bypassProxy === "true";
     let effectiveProfile = { ...profile };
     if (!bypassProxy && profile.proxyId) {
       const proxies2 = await storage.getProxies();
@@ -145325,9 +145325,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     };
     return aliases[s] ?? "pending";
   }
-  app2.post("/api/profiles/import", async (req, res) => {
+  app2.post("/api/profiles/import", async (req2, res) => {
     try {
-      const { profiles: toImport } = req.body;
+      const { profiles: toImport } = req2.body;
       if (!Array.isArray(toImport) || toImport.length === 0) {
         return res.status(400).json({ message: "No profiles provided" });
       }
@@ -145385,22 +145385,22 @@ async function registerInstagramRoutes(httpServer2, app2) {
       res.status(500).json({ message: "Import failed" });
     }
   });
-  app2.post(api.profiles.start.path, async (req, res) => {
-    await storage.updateProfileStatus(Number(req.params.id), "running");
+  app2.post(api.profiles.start.path, async (req2, res) => {
+    await storage.updateProfileStatus(Number(req2.params.id), "running");
     res.json({ status: "running" });
   });
-  app2.post(api.profiles.stop.path, async (req, res) => {
-    await storage.updateProfileStatus(Number(req.params.id), "idle");
+  app2.post(api.profiles.stop.path, async (req2, res) => {
+    await storage.updateProfileStatus(Number(req2.params.id), "idle");
     res.json({ status: "idle" });
   });
-  app2.get(api.tools.listByProfile.path, async (req, res) => {
-    const data = await storage.getToolsByProfile(Number(req.params.profileId));
+  app2.get(api.tools.listByProfile.path, async (req2, res) => {
+    const data = await storage.getToolsByProfile(Number(req2.params.profileId));
     res.json(data);
   });
-  app2.put(api.tools.update.path, async (req, res) => {
+  app2.put(api.tools.update.path, async (req2, res) => {
     try {
-      const input = api.tools.update.input.parse(req.body);
-      const updated = await storage.updateTool(Number(req.params.id), input);
+      const input = api.tools.update.input.parse(req2.body);
+      const updated = await storage.updateTool(Number(req2.params.id), input);
       res.json(updated);
     } catch (err) {
       if (err instanceof external_exports.ZodError) {
@@ -145409,17 +145409,17 @@ async function registerInstagramRoutes(httpServer2, app2) {
       throw err;
     }
   });
-  app2.get(api.sources.listByTool.path, async (req, res) => {
-    const data = await storage.getSourcesByTool(Number(req.params.toolId));
+  app2.get(api.sources.listByTool.path, async (req2, res) => {
+    const data = await storage.getSourcesByTool(Number(req2.params.toolId));
     res.json(data);
   });
-  app2.post(api.sources.create.path, async (req, res) => {
+  app2.post(api.sources.create.path, async (req2, res) => {
     try {
       const inputSchema = api.sources.create.input.extend({
         toolId: external_exports.coerce.number().optional()
       });
-      const input = inputSchema.parse(req.body);
-      const created = await storage.createSource({ ...input, toolId: Number(req.params.toolId) });
+      const input = inputSchema.parse(req2.body);
+      const created = await storage.createSource({ ...input, toolId: Number(req2.params.toolId) });
       res.status(201).json(created);
     } catch (err) {
       if (err instanceof external_exports.ZodError) {
@@ -145428,15 +145428,15 @@ async function registerInstagramRoutes(httpServer2, app2) {
       throw err;
     }
   });
-  app2.post("/api/tools/:toolId/sources/import", async (req, res) => {
+  app2.post("/api/tools/:toolId/sources/import", async (req2, res) => {
     try {
-      const toolId = Number(req.params.toolId);
+      const toolId = Number(req2.params.toolId);
       const rows = external_exports.array(external_exports.object({
         type: external_exports.string(),
         value: external_exports.string(),
         rank: external_exports.number().int().optional().nullable(),
         nrPosts: external_exports.number().int().optional().nullable()
-      })).parse(req.body);
+      })).parse(req2.body);
       const created = await storage.createSourcesBulk(
         rows.map((row) => ({ ...row, toolId }))
       );
@@ -145448,17 +145448,17 @@ async function registerInstagramRoutes(httpServer2, app2) {
       throw err;
     }
   });
-  app2.delete(api.sources.delete.path, async (req, res) => {
-    await storage.deleteSource(Number(req.params.id));
+  app2.delete(api.sources.delete.path, async (req2, res) => {
+    await storage.deleteSource(Number(req2.params.id));
     res.status(204).end();
   });
-  app2.get("/api/profiles/:profileId/followed-users", async (req, res) => {
-    const data = await storage.getFollowedUsersByProfile(Number(req.params.profileId));
+  app2.get("/api/profiles/:profileId/followed-users", async (req2, res) => {
+    const data = await storage.getFollowedUsersByProfile(Number(req2.params.profileId));
     res.json(data);
   });
-  app2.post("/api/profiles/:profileId/followed-users", async (req, res) => {
-    const profileId = Number(req.params.profileId);
-    const { instagramUsername, sourceValue, sourceType } = req.body;
+  app2.post("/api/profiles/:profileId/followed-users", async (req2, res) => {
+    const profileId = Number(req2.params.profileId);
+    const { instagramUsername, sourceValue, sourceType } = req2.body;
     if (!instagramUsername) return res.status(400).json({ message: "instagramUsername required" });
     const entry = await storage.createFollowedUser({
       profileId,
@@ -145469,12 +145469,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
     });
     res.json(entry);
   });
-  app2.delete("/api/followed-users/:id", async (req, res) => {
-    await storage.deleteFollowedUser(Number(req.params.id));
+  app2.delete("/api/followed-users/:id", async (req2, res) => {
+    await storage.deleteFollowedUser(Number(req2.params.id));
     res.json({ ok: true });
   });
-  app2.get("/api/profiles/:profileId/session-actions", async (req, res) => {
-    const data = await storage.getSessionActionsByProfile(Number(req.params.profileId));
+  app2.get("/api/profiles/:profileId/session-actions", async (req2, res) => {
+    const data = await storage.getSessionActionsByProfile(Number(req2.params.profileId));
     res.json(data);
   });
   app2.get("/api/instagram-api-calls", async (_req, res) => {
@@ -145499,16 +145499,19 @@ async function registerInstagramRoutes(httpServer2, app2) {
       ];
       const esc2 = (v3) => /[",\r\n]/.test(v3) ? `"${v3.replace(/"/g, '""')}"` : v3;
       const settings = await storage.getGlobalSettings();
-      const tzOffsetHours = parseFloat(settings.csvTimezoneOffset ?? "0");
+      const useLocal = settings.useLocalTime === "true";
+      const browserTzMins = useLocal ? parseInt(req.query.tz ?? "0", 10) : 0;
+      const offsetMins = -browserTzMins;
       const csvRows = apiCalls.map((call) => {
         const profile = profileMap.get(call.profileId);
         const username = profile?.username ?? String(call.profileId);
         const utcMs = new Date(call.date).getTime();
-        const localMs = utcMs + tzOffsetHours * 60 * 60 * 1e3;
+        const localMs = utcMs + offsetMins * 60 * 1e3;
         const localDate = new Date(localMs);
-        const sign = tzOffsetHours >= 0 ? "+" : "-";
-        const absH = Math.abs(Math.floor(tzOffsetHours)).toString().padStart(2, "0");
-        const absM = Math.round(Math.abs(tzOffsetHours) % 1 * 60).toString().padStart(2, "0");
+        const sign = offsetMins >= 0 ? "+" : "-";
+        const absH = Math.abs(Math.floor(Math.abs(offsetMins) / 60)).toString().padStart(2, "0");
+        const absM = (Math.abs(offsetMins) % 60).toString().padStart(2, "0");
+        const tzLabel = useLocal ? ` UTC${sign}${absH}:${absM}` : " UTC";
         const date5 = `${localDate.toLocaleString("en-US", {
           month: "numeric",
           day: "numeric",
@@ -145518,7 +145521,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
           second: "numeric",
           hour12: true,
           timeZone: "UTC"
-        })} UTC${sign}${absH}:${absM}`;
+        })}${tzLabel}`;
         return [
           `Instagram_${call.profileId}`,
           username,
@@ -145544,12 +145547,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
       res.status(500).json({ message: "Export failed" });
     }
   });
-  app2.get("/api/profiles/:id/stats", async (req, res) => {
-    const data = await storage.getStatsByProfile(Number(req.params.id));
+  app2.get("/api/profiles/:id/stats", async (req2, res) => {
+    const data = await storage.getStatsByProfile(Number(req2.params.id));
     res.json(data);
   });
-  app2.post("/api/browser/:profileId/start", async (req, res) => {
-    const profileId = Number(req.params.profileId);
+  app2.post("/api/browser/:profileId/start", async (req2, res) => {
+    const profileId = Number(req2.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
     const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
@@ -145560,8 +145563,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       res.status(500).json({ error: err?.message || "Failed to start browser" });
     }
   });
-  app2.post("/api/browser/:profileId/login", async (req, res) => {
-    const profileId = Number(req.params.profileId);
+  app2.post("/api/browser/:profileId/login", async (req2, res) => {
+    const profileId = Number(req2.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
     if (!profile.username || !profile.password) {
@@ -145575,8 +145578,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       profile.twoFASecretKey || ""
     ).then((result) => sendLoginDone(profileId, result.ok, result.message)).catch((err) => sendLoginDone(profileId, false, String(err)));
   });
-  app2.delete("/api/browser/:profileId/session", async (req, res) => {
-    const profileId = Number(req.params.profileId);
+  app2.delete("/api/browser/:profileId/session", async (req2, res) => {
+    const profileId = Number(req2.params.profileId);
     const profile = await storage.getProfile(profileId);
     const ua = profile?.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
     const proxy = profile ? await resolveProxyConfig(profile) : void 0;
@@ -145584,8 +145587,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
     res.json({ ok: true });
   });
   const wss = new import_websocket_server.default({ noServer: true });
-  httpServer2.on("upgrade", async (req, socket, head) => {
-    const match = req.url?.match(/^\/api\/browser\/(\d+)\/stream/);
+  httpServer2.on("upgrade", async (req2, socket, head) => {
+    const match = req2.url?.match(/^\/api\/browser\/(\d+)\/stream/);
     if (!match) return;
     const profileId = Number(match[1]);
     const profile = await storage.getProfile(profileId);
@@ -145593,7 +145596,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, async (ws) => {
+    wss.handleUpgrade(req2, socket, head, async (ws) => {
       const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
       try {
         const proxy = await resolveProxyConfig(profile);
@@ -145646,16 +145649,16 @@ async function registerInstagramRoutes(httpServer2, app2) {
       });
     });
   });
-  app2.get("/api/profiles/:id/reposted-posts", async (req, res) => {
-    const profileId = Number(req.params.id);
+  app2.get("/api/profiles/:id/reposted-posts", async (req2, res) => {
+    const profileId = Number(req2.params.id);
     const posts = await storage.getRepostedPostsByProfile(profileId);
     res.json(posts);
   });
-  app2.post("/api/profiles/:id/reposted-posts", async (req, res) => {
-    const profileId = Number(req.params.id);
+  app2.post("/api/profiles/:id/reposted-posts", async (req2, res) => {
+    const profileId = Number(req2.params.id);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
-    const { toolId, sourceUsername, mediaId, shortcode, caption, thumbnailUrl } = req.body;
+    const { toolId, sourceUsername, mediaId, shortcode, caption, thumbnailUrl } = req2.body;
     if (!toolId || !sourceUsername || !mediaId) {
       return res.status(400).json({ error: "toolId, sourceUsername and mediaId are required" });
     }
@@ -145673,29 +145676,29 @@ async function registerInstagramRoutes(httpServer2, app2) {
     });
     res.status(201).json(entry);
   });
-  app2.delete("/api/reposted-posts/:id", async (req, res) => {
-    const id = Number(req.params.id);
+  app2.delete("/api/reposted-posts/:id", async (req2, res) => {
+    const id = Number(req2.params.id);
     await storage.deleteRepostedPost(id);
     res.json({ ok: true });
   });
-  app2.get("/api/profiles/:profileId/contact-dm-sent", async (req, res) => {
-    const profileId = Number(req.params.profileId);
+  app2.get("/api/profiles/:profileId/contact-dm-sent", async (req2, res) => {
+    const profileId = Number(req2.params.profileId);
     const list = await storage.getContactDmSentByProfile(profileId);
     res.json(list);
   });
-  app2.delete("/api/contact-dm-sent/:id", async (req, res) => {
-    const id = Number(req.params.id);
+  app2.delete("/api/contact-dm-sent/:id", async (req2, res) => {
+    const id = Number(req2.params.id);
     await storage.deleteContactDmSent(id);
     res.json({ ok: true });
   });
-  app2.get("/api/profiles/:profileId/contact-pending-messages", async (req, res) => {
-    const profileId = Number(req.params.profileId);
-    const status = typeof req.query.status === "string" ? req.query.status : void 0;
+  app2.get("/api/profiles/:profileId/contact-pending-messages", async (req2, res) => {
+    const profileId = Number(req2.params.profileId);
+    const status = typeof req2.query.status === "string" ? req2.query.status : void 0;
     const list = await storage.getContactPendingMessages(profileId, status);
     res.json(list);
   });
-  app2.delete("/api/contact-pending-messages/:id", async (req, res) => {
-    const id = Number(req.params.id);
+  app2.delete("/api/contact-pending-messages/:id", async (req2, res) => {
+    const id = Number(req2.params.id);
     await storage.deleteContactPendingMessage(id);
     res.json({ ok: true });
   });
@@ -145708,11 +145711,11 @@ async function registerInstagramRoutes(httpServer2, app2) {
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
-      csvTimezoneOffset: parseFloat(settings.csvTimezoneOffset ?? "0")
+      useLocalTime: settings.useLocalTime === "true"
     });
   });
-  app2.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, csvTimezoneOffset } = req.body;
+  app2.put("/api/settings", async (req2, res) => {
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime } = req2.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -145731,8 +145734,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (typeof scrapedUserIgnoreDays === "number" && scrapedUserIgnoreDays > 0) {
       await storage.setGlobalSetting("scrapedUserIgnoreDays", String(Math.round(scrapedUserIgnoreDays)));
     }
-    if (typeof csvTimezoneOffset === "number" && isFinite(csvTimezoneOffset)) {
-      await storage.setGlobalSetting("csvTimezoneOffset", String(csvTimezoneOffset));
+    if (typeof useLocalTime === "boolean") {
+      await storage.setGlobalSetting("useLocalTime", String(useLocalTime));
     }
     const settings = await storage.getGlobalSettings();
     res.json({
@@ -145742,11 +145745,11 @@ async function registerInstagramRoutes(httpServer2, app2) {
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
-      csvTimezoneOffset: parseFloat(settings.csvTimezoneOffset ?? "0")
+      useLocalTime: settings.useLocalTime === "true"
     });
   });
-  app2.post("/api/settings/test-hiker", async (req, res) => {
-    const { token } = req.body;
+  app2.post("/api/settings/test-hiker", async (req2, res) => {
+    const { token } = req2.body;
     if (!token) return res.status(400).json({ ok: false, error: "No token provided" });
     try {
       const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));

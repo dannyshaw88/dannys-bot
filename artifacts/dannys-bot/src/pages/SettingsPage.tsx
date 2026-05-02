@@ -302,26 +302,24 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">CSV Export Timezone</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            The server runs on UTC. Set your UTC offset so exported timestamps match your local time.
-            For example, if you are UTC+1 enter <strong>1</strong>, UTC-5 enter <strong>-5</strong>.
+            When enabled, exported timestamps are automatically converted to your PC's local time.
+            The timezone is detected from your browser — no manual offset needed.
           </p>
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-medium shrink-0">UTC offset (hours)</Label>
-            <Input
-              type="number"
-              min={-12}
-              max={14}
-              step={0.5}
-              className="w-28"
-              defaultValue={settings?.csvTimezoneOffset ?? 0}
-              key={settings?.csvTimezoneOffset}
-              onBlur={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!isNaN(v) && v !== settings?.csvTimezoneOffset) {
-                  mutation.mutate({ csvTimezoneOffset: v });
-                }
-              }}
-              disabled={isLoading}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Label className="text-sm font-medium cursor-pointer" htmlFor="use-local-time">
+                Use PC's Local Time
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Timestamps in exported CSV files will match your local clock instead of server UTC.
+              </p>
+            </div>
+            <Switch
+              id="use-local-time"
+              checked={settings?.useLocalTime ?? false}
+              onCheckedChange={(v) => toggle("useLocalTime", v)}
+              disabled={isLoading || mutation.isPending}
+              className="data-[state=checked]:bg-cyan-500 shrink-0 mt-0.5"
             />
           </div>
         </div>

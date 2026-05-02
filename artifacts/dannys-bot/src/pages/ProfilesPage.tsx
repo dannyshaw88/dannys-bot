@@ -283,8 +283,8 @@ export function ProfilesPage() {
             <DropdownMenuItem
               onClick={() => {
                 const a = document.createElement("a");
-                a.href = "/api/logs/export";
-                a.download = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                const tzOffset = new Date().getTimezoneOffset();
+                a.href = `/api/logs/export?tz=${tzOffset}`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
