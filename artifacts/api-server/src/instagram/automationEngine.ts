@@ -73,9 +73,10 @@ interface ProfileState {
 class AutomationEngine {
   private states          = new Map<number, ProfileState>(); // follow runners
   private unfollowStates  = new Map<number, ProfileState>(); // unfollow runners
-  private dmStates        = new Map<number, ProfileState>(); // dm runners
-  private contactStates   = new Map<number, ProfileState>(); // contact tool runners
-  private syncTimers      = new Map<number, number>();       // profileId → nextSyncAt (ms)
+  private dmStates             = new Map<number, ProfileState>(); // dm runners
+  private contactStates        = new Map<number, ProfileState>(); // contact tool runners
+  private humanSessionStates   = new Map<number, ProfileState>(); // independent human session runners
+  private syncTimers           = new Map<number, number>();       // profileId → nextSyncAt (ms)
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
@@ -87,10 +88,11 @@ class AutomationEngine {
   private async reconcile() {
     try {
       const profiles = await storage.getProfiles();
-      const activeFollow   = new Set<number>();
-      const activeUnfollow = new Set<number>();
-      const activeDM       = new Set<number>();
-      const activeContact  = new Set<number>();
+      const activeFollow        = new Set<number>();
+      const activeUnfollow      = new Set<number>();
+      const activeDM            = new Set<number>();
+      const activeContact       = new Set<number>();
+      const activeHumanSession  = new Set<number>();
 
       for (const profile of profiles) {
         const tools = await storage.getToolsByProfile(profile.id);
@@ -117,6 +119,13 @@ class AutomationEngine {
         if (contactTool) {
           activeContact.add(profile.id);
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
+        }
+
+        // Human session runner is independent — only needs humanToolsEnabled=true on the follow tool
+        const humanBaseTool = tools.find(t => t.type === "follow");
+        if (humanBaseTool && (humanBaseTool.settings as any)?.humanToolsEnabled !== false) {
+          activeHumanSession.add(profile.id);
+          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanBaseTool);
         }
       }
 
@@ -146,6 +155,13 @@ class AutomationEngine {
           state.stop.stopped = true;
           this.contactStates.delete(id);
           console.log(`[engine] Stopped contact runner for profile ${id}`);
+        }
+      }
+      for (const [id, state] of this.humanSessionStates) {
+        if (!activeHumanSession.has(id)) {
+          state.stop.stopped = true;
+          this.humanSessionStates.delete(id);
+          console.log(`[engine] Stopped human session runner for profile ${id}`);
         }
       }
 
@@ -303,39 +319,6 @@ class AutomationEngine {
 
         if (state.stop.stopped) break;
 
-        // ── Human session tools — run on their own separate timer ─────────────
-        {
-          const hs = followTool.settings as any;
-          const humanNowEnabled = hs.humanToolsEnabled !== false;
-
-          // If the toggle was just flipped on, fire immediately
-          if (humanNowEnabled && !state.lastHumanToolsEnabled) {
-            console.log(`[engine] @${freshProfile.username}: humanTools toggled ON — resetting timer`);
-            state.nextHumanSessionAt = 0;
-          }
-          state.lastHumanToolsEnabled = humanNowEnabled;
-
-          if (Date.now() >= state.nextHumanSessionAt) {
-            if (humanNowEnabled) {
-              try {
-                await this.runHumanSessionTools(freshProfile, followTool, state);
-              } catch (err: any) {
-                console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
-              }
-            } else {
-              console.log(`[engine] @${freshProfile.username}: human session tools disabled — skipping`);
-            }
-            const humanWaitMs = randInt(
-              (hs.humanToolsDelayMin ?? 30) * 60_000,
-              (hs.humanToolsDelayMax ?? 60) * 60_000,
-            );
-            state.nextHumanSessionAt = Date.now() + humanWaitMs;
-            console.log(`[engine] @${freshProfile.username}: next human session tools in ${Math.round(humanWaitMs / 60000)}min`);
-          }
-        }
-
-        if (state.stop.stopped) break;
-
         const s = followTool.settings as any;
 
         const waitMs = randInt(
@@ -353,6 +336,68 @@ class AutomationEngine {
     loop().catch(err => {
       this.states.delete(profile.id);
       console.error(`[engine] Fatal error for @${profile.username}:`, err?.message);
+    });
+  }
+
+  // ── Human session runner (independent of follow tool) ─────────────────────
+  private launchHumanSession(profile: Profile, _tool: Tool) {
+    const state: ProfileState = {
+      stop: { stopped: false },
+      client: null,
+      dailyCount: 0, dailyDate: todayStr(),
+      hourlyCount: 0, hourlyHour: hourStr(),
+      actionDailyCount: {}, actionDailyDate: todayStr(),
+      actionHourlyCount: {}, actionHourlyHour: hourStr(),
+      actionSuspensions: {},
+      nextHumanSessionAt: 0,   // run immediately on first tick
+      lastHumanToolsEnabled: true,
+    };
+    this.humanSessionStates.set(profile.id, state);
+    console.log(`[engine] Launching human session runner for @${profile.username}`);
+
+    const loop = async () => {
+      while (!state.stop.stopped) {
+        const freshProfile = await storage.getProfile(profile.id);
+        if (!freshProfile) break;
+        if (freshProfile.accountStatus === "banned") break;
+        if (freshProfile.accountStatus === "captcha") {
+          await sleepInterruptible(5 * 60_000, state.stop);
+          continue;
+        }
+
+        const tools = await storage.getToolsByProfile(freshProfile.id);
+        const followTool = tools.find(t => t.type === "follow");
+        if (!followTool) break;
+
+        const s = followTool.settings as any;
+        if (s.humanToolsEnabled === false) {
+          // Toggle turned off — exit so reconcile stops the runner
+          break;
+        }
+
+        if (Date.now() >= state.nextHumanSessionAt) {
+          try {
+            await this.runHumanSessionTools(freshProfile, followTool, state);
+          } catch (err: any) {
+            console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
+          }
+          const waitMs = randInt(
+            (s.humanToolsDelayMin ?? 30) * 60_000,
+            (s.humanToolsDelayMax ?? 60) * 60_000,
+          );
+          state.nextHumanSessionAt = Date.now() + waitMs;
+          console.log(`[engine] @${freshProfile.username}: next human session in ${Math.round(waitMs / 60000)}min`);
+        }
+
+        await sleepInterruptible(10_000, state.stop);
+      }
+      this.humanSessionStates.delete(profile.id);
+      console.log(`[engine] Human session runner exited for @${profile.username}`);
+    };
+
+    loop().catch(err => {
+      this.humanSessionStates.delete(profile.id);
+      console.error(`[engine] Fatal human session error for @${profile.username}:`, err?.message);
     });
   }
 

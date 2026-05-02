@@ -143479,6 +143479,8 @@ var AutomationEngine = class {
   // dm runners
   contactStates = /* @__PURE__ */ new Map();
   // contact tool runners
+  humanSessionStates = /* @__PURE__ */ new Map();
+  // independent human session runners
   syncTimers = /* @__PURE__ */ new Map();
   // profileId → nextSyncAt (ms)
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -143494,6 +143496,7 @@ var AutomationEngine = class {
       const activeUnfollow = /* @__PURE__ */ new Set();
       const activeDM = /* @__PURE__ */ new Set();
       const activeContact = /* @__PURE__ */ new Set();
+      const activeHumanSession = /* @__PURE__ */ new Set();
       for (const profile of profiles2) {
         const tools2 = await storage.getToolsByProfile(profile.id);
         const followTool = tools2.find((t2) => t2.type === "follow" && t2.enabled);
@@ -143515,6 +143518,11 @@ var AutomationEngine = class {
         if (contactTool) {
           activeContact.add(profile.id);
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
+        }
+        const humanBaseTool = tools2.find((t2) => t2.type === "follow");
+        if (humanBaseTool && humanBaseTool.settings?.humanToolsEnabled !== false) {
+          activeHumanSession.add(profile.id);
+          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanBaseTool);
         }
       }
       for (const [id, state] of this.states) {
@@ -143543,6 +143551,13 @@ var AutomationEngine = class {
           state.stop.stopped = true;
           this.contactStates.delete(id);
           console.log(`[engine] Stopped contact runner for profile ${id}`);
+        }
+      }
+      for (const [id, state] of this.humanSessionStates) {
+        if (!activeHumanSession.has(id)) {
+          state.stop.stopped = true;
+          this.humanSessionStates.delete(id);
+          console.log(`[engine] Stopped human session runner for profile ${id}`);
         }
       }
       for (const profile of profiles2) {
@@ -143674,33 +143689,6 @@ var AutomationEngine = class {
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
         }
         if (state.stop.stopped) break;
-        {
-          const hs = followTool.settings;
-          const humanNowEnabled = hs.humanToolsEnabled !== false;
-          if (humanNowEnabled && !state.lastHumanToolsEnabled) {
-            console.log(`[engine] @${freshProfile.username}: humanTools toggled ON \u2014 resetting timer`);
-            state.nextHumanSessionAt = 0;
-          }
-          state.lastHumanToolsEnabled = humanNowEnabled;
-          if (Date.now() >= state.nextHumanSessionAt) {
-            if (humanNowEnabled) {
-              try {
-                await this.runHumanSessionTools(freshProfile, followTool, state);
-              } catch (err) {
-                console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
-              }
-            } else {
-              console.log(`[engine] @${freshProfile.username}: human session tools disabled \u2014 skipping`);
-            }
-            const humanWaitMs = randInt(
-              (hs.humanToolsDelayMin ?? 30) * 6e4,
-              (hs.humanToolsDelayMax ?? 60) * 6e4
-            );
-            state.nextHumanSessionAt = Date.now() + humanWaitMs;
-            console.log(`[engine] @${freshProfile.username}: next human session tools in ${Math.round(humanWaitMs / 6e4)}min`);
-          }
-        }
-        if (state.stop.stopped) break;
         const s = followTool.settings;
         const waitMs = randInt(
           (s.delayMin ?? 1) * 6e4,
@@ -143715,6 +143703,65 @@ var AutomationEngine = class {
     loop().catch((err) => {
       this.states.delete(profile.id);
       console.error(`[engine] Fatal error for @${profile.username}:`, err?.message);
+    });
+  }
+  // ── Human session runner (independent of follow tool) ─────────────────────
+  launchHumanSession(profile, _tool) {
+    const state = {
+      stop: { stopped: false },
+      client: null,
+      dailyCount: 0,
+      dailyDate: todayStr(),
+      hourlyCount: 0,
+      hourlyHour: hourStr(),
+      actionDailyCount: {},
+      actionDailyDate: todayStr(),
+      actionHourlyCount: {},
+      actionHourlyHour: hourStr(),
+      actionSuspensions: {},
+      nextHumanSessionAt: 0,
+      // run immediately on first tick
+      lastHumanToolsEnabled: true
+    };
+    this.humanSessionStates.set(profile.id, state);
+    console.log(`[engine] Launching human session runner for @${profile.username}`);
+    const loop = async () => {
+      while (!state.stop.stopped) {
+        const freshProfile = await storage.getProfile(profile.id);
+        if (!freshProfile) break;
+        if (freshProfile.accountStatus === "banned") break;
+        if (freshProfile.accountStatus === "captcha") {
+          await sleepInterruptible(5 * 6e4, state.stop);
+          continue;
+        }
+        const tools2 = await storage.getToolsByProfile(freshProfile.id);
+        const followTool = tools2.find((t2) => t2.type === "follow");
+        if (!followTool) break;
+        const s = followTool.settings;
+        if (s.humanToolsEnabled === false) {
+          break;
+        }
+        if (Date.now() >= state.nextHumanSessionAt) {
+          try {
+            await this.runHumanSessionTools(freshProfile, followTool, state);
+          } catch (err) {
+            console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
+          }
+          const waitMs = randInt(
+            (s.humanToolsDelayMin ?? 30) * 6e4,
+            (s.humanToolsDelayMax ?? 60) * 6e4
+          );
+          state.nextHumanSessionAt = Date.now() + waitMs;
+          console.log(`[engine] @${freshProfile.username}: next human session in ${Math.round(waitMs / 6e4)}min`);
+        }
+        await sleepInterruptible(1e4, state.stop);
+      }
+      this.humanSessionStates.delete(profile.id);
+      console.log(`[engine] Human session runner exited for @${profile.username}`);
+    };
+    loop().catch((err) => {
+      this.humanSessionStates.delete(profile.id);
+      console.error(`[engine] Fatal human session error for @${profile.username}:`, err?.message);
     });
   }
   // ── Unfollow runner launch ─────────────────────────────────────────────────
