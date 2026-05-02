@@ -7,6 +7,7 @@ import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
 import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
+import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -1034,7 +1035,7 @@ export function ProfileDetailsPage() {
 
         <Tabs.Content value="unfollow" className="outline-none animate-in fade-in duration-300">
           {getTool('unfollow')
-            ? <ToolConfigPanel tool={getTool('unfollow')!} profile={profile} />
+            ? <UnfollowToolPanel tool={getTool('unfollow')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Unfollow tool not found for this profile.</p>
           }
         </Tabs.Content>
