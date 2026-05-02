@@ -157,6 +157,16 @@ function setupAutoUpdater(): void {
     });
   });
 
+  autoUpdater.on("update-not-available", () => {
+    if (!win) return;
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "Up to Date",
+      message: "You are up to date — Danny's Bot is running the latest version.",
+      buttons: ["OK"],
+    });
+  });
+
   autoUpdater.on("error", (err) => {
     if (!win) return;
     dialog.showMessageBox(win, {
