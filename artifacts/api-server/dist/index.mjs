@@ -122479,8 +122479,8 @@ app.use(
   })
 );
 app.use((0, import_cors.default)());
-app.use(import_express3.default.json());
-app.use(import_express3.default.urlencoded({ extended: true }));
+app.use(import_express3.default.json({ limit: "10mb" }));
+app.use(import_express3.default.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api", routes_default);
 var app_default = app;
 
@@ -140228,6 +140228,10 @@ var DatabaseStorage = class {
     const [created] = await db.insert(sources).values(source).returning();
     return created;
   }
+  async createSourcesBulk(rows) {
+    if (!rows.length) return [];
+    return await db.insert(sources).values(rows).returning();
+  }
   async deleteSource(id) {
     await db.delete(sources).where(eq(sources.id, id));
   }
@@ -145220,8 +145224,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
         rank: external_exports.number().int().optional().nullable(),
         nrPosts: external_exports.number().int().optional().nullable()
       })).parse(req.body);
-      const created = await Promise.all(
-        rows.map((row) => storage.createSource({ ...row, toolId }))
+      const created = await storage.createSourcesBulk(
+        rows.map((row) => ({ ...row, toolId }))
       );
       res.status(201).json(created);
     } catch (err) {

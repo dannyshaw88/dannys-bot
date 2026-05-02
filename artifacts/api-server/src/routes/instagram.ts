@@ -427,8 +427,8 @@ export async function registerInstagramRoutes(
         rank: z.number().int().optional().nullable(),
         nrPosts: z.number().int().optional().nullable(),
       })).parse(req.body);
-      const created = await Promise.all(
-        rows.map(row => storage.createSource({ ...row, toolId }))
+      const created = await storage.createSourcesBulk(
+        rows.map(row => ({ ...row, toolId }))
       );
       res.status(201).json(created);
     } catch (err) {

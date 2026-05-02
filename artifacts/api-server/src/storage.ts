@@ -175,6 +175,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async createSourcesBulk(rows: InsertSource[]): Promise<Source[]> {
+    if (!rows.length) return [];
+    return await db.insert(sources).values(rows).returning();
+  }
+
   async deleteSource(id: number): Promise<void> {
     await db.delete(sources).where(eq(sources.id, id));
   }
