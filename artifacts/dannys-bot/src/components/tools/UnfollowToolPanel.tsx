@@ -3,7 +3,7 @@ import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserMinus, Timer, Users, Clock, CalendarDays } from "lucide-react";
+import { UserMinus, Timer, Users, Clock, CalendarDays, Repeat2 } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
 
 interface UnfollowToolPanelProps {
@@ -23,6 +23,11 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
       delayAfterUnfollowMin: 5,
       delayAfterUnfollowMax: 15,
       minFollowAgeDays: 3,
+      autoFollowUnfollowEnabled: false,
+      autoStopUnfollowAtFollowingsMin: 7000,
+      autoStopUnfollowAtFollowingsMax: 7000,
+      autoStartFollowAfterMin: 60,
+      autoStartFollowAfterMax: 135,
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -72,8 +77,11 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
     </div>
   );
 
+  const autoEnabled = !!(settings as any).autoFollowUnfollowEnabled;
+
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
+      {/* Master toggle */}
       <div className="border border-border rounded-xl p-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <UserMinus className="w-4 h-4 text-muted-foreground" />
@@ -93,6 +101,7 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
         </div>
       </div>
 
+      {/* Unfollow after X days */}
       <div className="border border-border rounded-xl p-4 flex items-center gap-4">
         <div className="flex items-center gap-2 text-muted-foreground w-44 shrink-0">
           <CalendarDays className="w-4 h-4" />
@@ -107,6 +116,60 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
       {row(<Timer className="w-4 h-4" />, "Wait between executions", "minutes", "delayMin", "delayMax", 1)}
       {row(<Users className="w-4 h-4" />, "Process users", "users", "processMin", "processMax", 1)}
       {row(<Clock className="w-4 h-4" />, "Delay between each", "seconds", "delayAfterUnfollowMin", "delayAfterUnfollowMax", 1)}
+
+      {/* Enable automatic follow/unfollow */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="autoFollowUnfollowEnabled"
+            checked={autoEnabled}
+            onChange={(e) => setSettings(s => ({ ...s, autoFollowUnfollowEnabled: e.target.checked }))}
+            className="w-3.5 h-3.5 accent-primary cursor-pointer"
+          />
+          <label htmlFor="autoFollowUnfollowEnabled" className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+            <Repeat2 className="w-3.5 h-3.5" />
+            Enable Automatic Follow / Unfollow
+          </label>
+        </div>
+
+        <div className={`space-y-3 pl-1 transition-opacity ${!autoEnabled ? "opacity-40 pointer-events-none" : ""}`}>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="space-y-1.5">
+              <h4 className="text-xs text-muted-foreground">Stop unfollow tool when having less than followings</h4>
+              <div className="flex items-center gap-1.5">
+                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                  value={(settings as any).autoStopUnfollowAtFollowingsMin ?? 7000}
+                  onChange={(e) => setSettings(s => ({ ...s, autoStopUnfollowAtFollowingsMin: Number(e.target.value) }))}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                  value={(settings as any).autoStopUnfollowAtFollowingsMax ?? 7000}
+                  onChange={(e) => setSettings(s => ({ ...s, autoStopUnfollowAtFollowingsMax: Number(e.target.value) }))}
+                />
+              </div>
+            </div>
+            <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+            <div className="space-y-1.5">
+              <h4 className="text-xs text-muted-foreground">Start follow tool after (minutes)</h4>
+              <div className="flex items-center gap-1.5">
+                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                  value={(settings as any).autoStartFollowAfterMin ?? 60}
+                  onChange={(e) => setSettings(s => ({ ...s, autoStartFollowAfterMin: Number(e.target.value) }))}
+                />
+                <span className="text-[10px] text-muted-foreground">–</span>
+                <Input type="number" min="0" className="w-20 h-7 text-xs"
+                  value={(settings as any).autoStartFollowAfterMax ?? 135}
+                  onChange={(e) => setSettings(s => ({ ...s, autoStartFollowAfterMax: Number(e.target.value) }))}
+                />
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            When your followings count drops below the target, the unfollow tool stops and the follow tool starts automatically after the specified delay. Requires profile sync to stay accurate.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

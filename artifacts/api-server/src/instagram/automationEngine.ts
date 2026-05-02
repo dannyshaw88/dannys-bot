@@ -471,6 +471,35 @@ class AutomationEngine {
         }
 
         if (state.stop.stopped) break;
+
+        // ── Auto follow/unfollow (unfollow side) ─────────────────────────
+        {
+          const sa = unfollowTool.settings as any;
+          if (sa.autoFollowUnfollowEnabled && (freshProfile.followingCount ?? 0) > 0) {
+            const stopAt = randInt(
+              sa.autoStopUnfollowAtFollowingsMin ?? 7000,
+              sa.autoStopUnfollowAtFollowingsMax ?? 7000,
+            );
+            if ((freshProfile.followingCount ?? 0) <= stopAt) {
+              console.log(`[engine] @${freshProfile.username}: followings ${freshProfile.followingCount} <= ${stopAt} — auto: disabling unfollow tool`);
+              await storage.updateTool(unfollowTool.id, { enabled: false });
+              const delayMs = randInt(
+                (sa.autoStartFollowAfterMin ?? 60) * 60_000,
+                (sa.autoStartFollowAfterMax ?? 135) * 60_000,
+              );
+              console.log(`[engine] @${freshProfile.username}: auto: enabling follow tool in ${Math.round(delayMs / 60000)}min`);
+              await sleepInterruptible(delayMs, state.stop);
+              if (!state.stop.stopped) {
+                const tools2 = await storage.getToolsByProfile(freshProfile.id);
+                const followTool2 = tools2.find(t => t.type === "follow");
+                if (followTool2) await storage.updateTool(followTool2.id, { enabled: true });
+                console.log(`[engine] @${freshProfile.username}: auto: follow tool enabled`);
+              }
+              break;
+            }
+          }
+        }
+
         const s = unfollowTool.settings as any;
         const waitMs = randInt((s.delayMin ?? 5) * 60_000, (s.delayMax ?? 15) * 60_000);
         console.log(`[engine] @${freshProfile.username}: next unfollow session in ${Math.round(waitMs / 60000)}min`);
