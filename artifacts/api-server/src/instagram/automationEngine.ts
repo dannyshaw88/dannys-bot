@@ -1398,9 +1398,9 @@ class AutomationEngine {
     if (s.checkDmEnabled !== false) {
       const dmCount = randInt(s.checkDmMin ?? 5, s.checkDmMax ?? 15);
       try {
-        await client.getDirectMessages(dmCount);
-        console.log(`[engine] @${profile.username}: 💬 checked DMs (${dmCount} threads)`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked direct messages inbox (${dmCount} threads)`);
+        const { count: actualDmCount } = await client.getDirectMessages(dmCount);
+        console.log(`[engine] @${profile.username}: 💬 checked ${actualDmCount} DM thread(s)`);
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked ${actualDmCount} direct message${actualDmCount === 1 ? "" : "s"}`);
       } catch (e: any) {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
       }

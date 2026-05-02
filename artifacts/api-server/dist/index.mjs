@@ -142757,7 +142757,8 @@ var InstagramWebClient = class {
     const t0 = Date.now();
     const result = await fn();
     const ms = Date.now() - t0;
-    this.logCallFn?.(opName, ms, message);
+    const msg = typeof message === "function" ? message(result) : message;
+    this.logCallFn?.(opName, ms, msg);
     return result;
   }
   // ── Login (web + 2FA TOTP) ─────────────────────────────────────────────────
@@ -143185,7 +143186,7 @@ var InstagramWebClient = class {
         await this.mobilePost(`/api/v1/media/seen/`, seenBody);
       }
       return toView.length;
-    }, `View timeline reels (up to ${count})`);
+    }, (n) => `Viewed ${n} timeline reel${n === 1 ? "" : "s"}`);
   }
   // ── Watch stories from the timeline tray ─────────────────────────────────
   // Fetches the stories tray at the top of the home feed and marks up to
@@ -143210,7 +143211,7 @@ var InstagramWebClient = class {
       }
       await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
       return toView.length;
-    }, `View timeline stories (up to ${count})`);
+    }, (n) => `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`);
   }
   // ── Check direct messages inbox ──────────────────────────────────────────
   // Fetches the DM inbox to simulate a user checking their messages.
@@ -143220,8 +143221,9 @@ var InstagramWebClient = class {
       const j = await this.mobileGet(
         `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`
       );
-      return !!(j?.inbox ?? j?.threads);
-    }, `Check DMs (inbox, limit=${count})`);
+      const threads = j?.inbox?.threads ?? j?.threads ?? [];
+      return { ok: !!(j?.inbox ?? j?.threads), count: threads.length };
+    }, (r2) => `Checked ${r2.count} direct message${r2.count === 1 ? "" : "s"}`);
   }
   // Like getDirectMessages but returns thread content for auto-reply scanning.
   // Returns up to `count` threads, each with recent messages from the other user.
@@ -143284,7 +143286,7 @@ var InstagramWebClient = class {
         if (result) liked++;
       }
       return { liked, watched };
-    }, `Like timeline posts (up to ${count})`);
+    }, (r2) => r2.watched > 0 ? `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"} (watched ${r2.watched} reel${r2.watched === 1 ? "" : "s"})` : `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"}`);
   }
   // ── Unfollow a user ───────────────────────────────────────────────────────
   // Returns true on success, "blocked" on Instagram action-block, false otherwise.
@@ -144652,9 +144654,9 @@ var AutomationEngine = class {
     if (s.checkDmEnabled !== false) {
       const dmCount = randInt(s.checkDmMin ?? 5, s.checkDmMax ?? 15);
       try {
-        await client.getDirectMessages(dmCount);
-        console.log(`[engine] @${profile.username}: \u{1F4AC} checked DMs (${dmCount} threads)`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked direct messages inbox (${dmCount} threads)`);
+        const { count: actualDmCount } = await client.getDirectMessages(dmCount);
+        console.log(`[engine] @${profile.username}: \u{1F4AC} checked ${actualDmCount} DM thread(s)`);
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked ${actualDmCount} direct message${actualDmCount === 1 ? "" : "s"}`);
       } catch (e) {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
       }

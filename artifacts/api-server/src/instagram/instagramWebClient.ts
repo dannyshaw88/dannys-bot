@@ -171,11 +171,12 @@ export class InstagramWebClient {
     }
   }
 
-  private async timed<T>(opName: string, fn: () => Promise<T>, message?: string): Promise<T> {
+  private async timed<T>(opName: string, fn: () => Promise<T>, message?: string | ((result: T) => string)): Promise<T> {
     const t0 = Date.now();
     const result = await fn();
     const ms = Date.now() - t0;
-    this.logCallFn?.(opName, ms, message);
+    const msg = typeof message === "function" ? message(result) : message;
+    this.logCallFn?.(opName, ms, msg);
     return result;
   }
 
@@ -674,7 +675,7 @@ export class InstagramWebClient {
       }
 
       return toView.length;
-    }, `View timeline reels (up to ${count})`);
+    }, (n) => `Viewed ${n} timeline reel${n === 1 ? "" : "s"}`);
   }
 
   // ── Watch stories from the timeline tray ─────────────────────────────────
@@ -704,7 +705,7 @@ export class InstagramWebClient {
 
       await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
       return toView.length;
-    }, `View timeline stories (up to ${count})`);
+    }, (n) => `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`);
   }
 
   // ── Check direct messages inbox ──────────────────────────────────────────
@@ -715,8 +716,9 @@ export class InstagramWebClient {
       const j = await this.mobileGet(
         `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`
       );
-      return !!(j?.inbox ?? j?.threads);
-    }, `Check DMs (inbox, limit=${count})`);
+      const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
+      return { ok: !!(j?.inbox ?? j?.threads), count: threads.length };
+    }, (r) => `Checked ${r.count} direct message${r.count === 1 ? "" : "s"}`);
   }
 
   // Like getDirectMessages but returns thread content for auto-reply scanning.
@@ -799,7 +801,9 @@ export class InstagramWebClient {
       }
 
       return { liked, watched };
-    }, `Like timeline posts (up to ${count})`);
+    }, (r) => r.watched > 0
+        ? `Liked ${r.liked} timeline post${r.liked === 1 ? "" : "s"} (watched ${r.watched} reel${r.watched === 1 ? "" : "s"})`
+        : `Liked ${r.liked} timeline post${r.liked === 1 ? "" : "s"}`);
   }
 
   // ── Unfollow a user ───────────────────────────────────────────────────────
