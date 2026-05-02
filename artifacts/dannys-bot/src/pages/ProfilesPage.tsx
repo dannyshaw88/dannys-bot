@@ -416,8 +416,8 @@ export function ProfilesPage() {
             </div>
             <div className="flex-1 min-w-0">Account</div>
             <div className="w-24 shrink-0 text-center">Status</div>
-            <div className="w-16 shrink-0 text-center">Active</div>
-            <div className="w-36 shrink-0 text-right">Actions</div>
+            <div className="w-14 shrink-0 text-center">Active</div>
+            <div className="w-44 shrink-0 text-right">Actions</div>
           </div>
 
           {filteredProfiles?.map((profile, idx) => {
@@ -465,17 +465,17 @@ export function ProfilesPage() {
                 </div>
 
                 {/* Active toggle */}
-                <div className="w-16 flex items-center justify-center shrink-0">
+                <div className="w-14 flex items-center justify-center shrink-0">
                   <Switch
                     checked={!isStopped}
                     onCheckedChange={() => toggleStopped(profile.id, acctStatus, profile.credentialsDirty)}
                     data-testid={`switch-active-${profile.id}`}
-                    className="data-[state=checked]:bg-green-500 scale-75"
+                    className="data-[state=checked]:bg-green-500"
                   />
                 </div>
 
                 {/* Text-only actions */}
-                <div className="w-36 shrink-0 flex items-center justify-end gap-3">
+                <div className="w-44 shrink-0 flex items-center justify-end gap-3">
                   <button
                     onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
                     title="Open embedded browser"
