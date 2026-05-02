@@ -5,9 +5,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: windows-latest
@@ -24,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
 
       - name: Install workspace dependencies
@@ -44,17 +41,8 @@ jobs:
       - name: Build Electron main process
         run: pnpm --filter @workspace/electron run build
 
-      - name: Install electron package deps with npm (flat node_modules for native modules)
-        working-directory: artifacts/electron
-        run: npm install --omit=dev
-
-      - name: Rebuild native modules for Electron
-        working-directory: artifacts/electron
-        run: npx electron-builder install-app-deps --version 33.4.11
-
       - name: Package Windows installer
-        working-directory: artifacts/electron
-        run: pnpm exec electron-builder --win
+        run: pnpm --filter @workspace/electron run package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
