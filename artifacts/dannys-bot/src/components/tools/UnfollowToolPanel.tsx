@@ -3,7 +3,7 @@ import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserMinus, Timer, Users, Clock } from "lucide-react";
+import { UserMinus, Timer, Users, Clock, CalendarDays } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
 
 interface UnfollowToolPanelProps {
@@ -22,6 +22,7 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
       processMax: 15,
       delayAfterUnfollowMin: 5,
       delayAfterUnfollowMax: 15,
+      minFollowAgeDays: 3,
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -89,6 +90,17 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
           <span className={`text-sm font-medium ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
             {tool.enabled ? "ACTIVE" : "STOPPED"}
           </span>
+        </div>
+      </div>
+
+      <div className="border border-border rounded-xl p-4 flex items-center gap-4">
+        <div className="flex items-center gap-2 text-muted-foreground w-44 shrink-0">
+          <CalendarDays className="w-4 h-4" />
+          <span className="text-sm font-medium text-foreground">Unfollow after</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {num("minFollowAgeDays", 1)}
+          <span className="text-xs text-muted-foreground">days since follow</span>
         </div>
       </div>
 
