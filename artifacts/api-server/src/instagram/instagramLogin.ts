@@ -179,7 +179,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
   } catch (err: any) {
     const errName: string = err?.constructor?.name ?? "";
-    const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 300);
+    const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 2000);
     console.error(`[instagramLogin] login error for @${profile.username}: ${errName} — ${err?.message} — body: ${errBody}`);
     const ds = captureDeviceState();
 

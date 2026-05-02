@@ -30,6 +30,11 @@ interface ParsedProfile {
   emailValidationPop3Server: string;
   emailValidationPort: string;
   accStatus: string;
+  // Device fingerprint fields (exported by some Jarvee versions)
+  deviceId: string;
+  deviceUuid: string;
+  phoneId: string;
+  adid: string;
 }
 
 // Map Jarvee column headers (lowercased, # stripped) to our field names
@@ -54,6 +59,16 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "email validation pass":       "emailValidationPassword",
   "email validation pop3server": "emailValidationPop3Server",
   "email validation port":       "emailValidationPort",
+  // Device fingerprint columns
+  "device id":                   "deviceId",
+  "android device id":           "deviceId",
+  "uuid":                        "deviceUuid",
+  "device uuid":                 "deviceUuid",
+  "phone id":                    "phoneId",
+  "phone uuid":                  "phoneId",
+  "adid":                        "adid",
+  "advertising id":              "adid",
+  "android id":                  "adid",
 };
 
 /**
@@ -128,6 +143,7 @@ function parseJarveeFile(text: string): ParsedProfile[] {
       tags: "", dateOfBirth: "", notes: "", phoneNumber: "", twoFASecretKey: "",
       backupCodes: "", emailValidationUsername: "", emailValidationPassword: "",
       emailValidationPop3Server: "", emailValidationPort: "", accStatus: "",
+      deviceId: "", deviceUuid: "", phoneId: "", adid: "",
     };
 
     headers.forEach((header, idx) => {

@@ -141926,7 +141926,7 @@ async function verifyInstagramCredentials(profile) {
     return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
   } catch (err) {
     const errName = err?.constructor?.name ?? "";
-    const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 300);
+    const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 2e3);
     console.error(`[instagramLogin] login error for @${profile.username}: ${errName} \u2014 ${err?.message} \u2014 body: ${errBody}`);
     const ds = captureDeviceState();
     if (err instanceof import_instagram_private_api.IgLoginTwoFactorRequiredError) {
@@ -144959,6 +144959,21 @@ async function registerInstagramRoutes(httpServer2, app2) {
       const results = [];
       for (const p of toImport) {
         try {
+          let igDeviceState = null;
+          const devId = p.deviceId || "";
+          const devUuid = p.deviceUuid || "";
+          const devPhoneId = p.phoneId || "";
+          const devAdid = p.adid || "";
+          const devString = p.userAgentApi || "";
+          if (devId || devUuid || devPhoneId || devAdid) {
+            igDeviceState = JSON.stringify({
+              deviceId: devId || void 0,
+              uuid: devUuid || void 0,
+              phoneId: devPhoneId || void 0,
+              adid: devAdid || void 0,
+              deviceString: devString || void 0
+            });
+          }
           const created = await storage.createProfile({
             username: p.username || "",
             password: p.password || "",
@@ -144980,7 +144995,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
             emailValidationPassword: p.emailValidationPassword || null,
             emailValidationPop3Server: p.emailValidationPop3Server || null,
             emailValidationPort: p.emailValidationPort || null,
-            accountStatus: resolveImportStatus(p.accStatus)
+            accountStatus: resolveImportStatus(p.accStatus),
+            igDeviceState
           });
           results.push({ success: true, username: created.username });
         } catch (err) {

@@ -312,6 +312,23 @@ export async function registerInstagramRoutes(
       const results: { success: boolean; username: string; error?: string }[] = [];
       for (const p of toImport) {
         try {
+          // Build igDeviceState from any device fingerprint fields present in the export
+          let igDeviceState: string | null = null;
+          const devId: string = p.deviceId || "";
+          const devUuid: string = p.deviceUuid || "";
+          const devPhoneId: string = p.phoneId || "";
+          const devAdid: string = p.adid || "";
+          const devString: string = p.userAgentApi || "";
+          if (devId || devUuid || devPhoneId || devAdid) {
+            igDeviceState = JSON.stringify({
+              deviceId: devId || undefined,
+              uuid: devUuid || undefined,
+              phoneId: devPhoneId || undefined,
+              adid: devAdid || undefined,
+              deviceString: devString || undefined,
+            });
+          }
+
           const created = await storage.createProfile({
             username: p.username || "",
             password: p.password || "",
@@ -334,6 +351,7 @@ export async function registerInstagramRoutes(
             emailValidationPop3Server: p.emailValidationPop3Server || null,
             emailValidationPort: p.emailValidationPort || null,
             accountStatus: resolveImportStatus(p.accStatus),
+            igDeviceState,
           });
           results.push({ success: true, username: created.username });
         } catch (err: any) {
