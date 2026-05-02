@@ -418,10 +418,7 @@ export function ProfileDetailsPage() {
                 );
               })()}
               {/* Automation running indicator */}
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span className={`w-2 h-2 rounded-full ${profile.status === 'running' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
-                {profile.status === 'running' ? 'Automation running' : 'Automation idle'}
-              </span>
+              <span className={`w-2 h-2 rounded-full ${profile.status === 'running' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
             </div>
           </div>
 
