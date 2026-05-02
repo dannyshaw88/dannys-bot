@@ -122,8 +122,13 @@ class AutomationEngine {
         }
 
         // Human session runner is independent — only needs humanToolsEnabled=true on the follow tool
+        // but the account must be in a valid (verified) state before we touch it
         const humanBaseTool = tools.find(t => t.type === "follow");
-        if (humanBaseTool && (humanBaseTool.settings as any)?.humanToolsEnabled !== false) {
+        if (
+          humanBaseTool &&
+          (humanBaseTool.settings as any)?.humanToolsEnabled !== false &&
+          profile.accountStatus === "valid"
+        ) {
           activeHumanSession.add(profile.id);
           if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanBaseTool);
         }

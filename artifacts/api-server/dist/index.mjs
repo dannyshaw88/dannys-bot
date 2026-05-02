@@ -143520,7 +143520,7 @@ var AutomationEngine = class {
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
         }
         const humanBaseTool = tools2.find((t2) => t2.type === "follow");
-        if (humanBaseTool && humanBaseTool.settings?.humanToolsEnabled !== false) {
+        if (humanBaseTool && humanBaseTool.settings?.humanToolsEnabled !== false && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
           if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanBaseTool);
         }
