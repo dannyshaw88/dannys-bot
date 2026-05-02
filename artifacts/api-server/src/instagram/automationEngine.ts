@@ -1301,6 +1301,8 @@ class AutomationEngine {
         candidates = result.users;
         if (result.nextCursor) {
           await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {});
+        } else if (source.hashtagCursor) {
+          await storage.updateSourceHashtagCursor(source.id, "").catch(() => {});
         }
         logHikerDM("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
       } else {
@@ -1553,6 +1555,8 @@ class AutomationEngine {
           candidates = result.users;
           if (result.nextCursor) {
             await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {});
+          } else if (source.hashtagCursor) {
+            await storage.updateSourceHashtagCursor(source.id, "").catch(() => {});
           }
           logHiker("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
