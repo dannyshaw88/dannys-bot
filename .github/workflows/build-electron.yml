@@ -37,6 +37,18 @@ jobs:
         env:
           RUN_NUMBER: ${{ github.run_number }}
 
+      - name: Inject updater token for private repo
+        run: |
+          node -e "
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('artifacts/electron/electron-builder.json', 'utf8'));
+          cfg.publish.token = process.env.UPDATER_TOKEN;
+          fs.writeFileSync('artifacts/electron/electron-builder.json', JSON.stringify(cfg, null, 2));
+          console.log('Updater token injected');
+          "
+        env:
+          UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+
       - name: Generate icon from SVG
         run: |
           magick artifacts/electron/assets/icon.svg -resize 256x256 artifacts/electron/assets/icon.png
