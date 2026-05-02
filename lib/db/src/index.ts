@@ -176,5 +176,12 @@ sqlite.exec(`
   );
 `);
 
+// Add new columns if they don't exist yet (safe to run on existing DBs)
+const existingCols = sqlite.prepare("pragma table_info(profiles)").all() as { name: string }[];
+const colNames = new Set(existingCols.map((c) => c.name));
+if (!colNames.has("ig_device_state")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_device_state TEXT;`);
+}
+
 export const db = drizzle(sqlite, { schema });
 export * from "./schema";

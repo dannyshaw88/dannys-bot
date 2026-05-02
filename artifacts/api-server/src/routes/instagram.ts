@@ -285,6 +285,7 @@ export async function registerInstagramRoutes(
     await storage.updateProfile(profile.id, {
       accountStatus: result.accountStatus,
       ...(result.ok ? { credentialsDirty: false } : {}),
+      ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
     });
 
     res.json(result);

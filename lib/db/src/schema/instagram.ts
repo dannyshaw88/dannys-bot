@@ -89,6 +89,7 @@ export const profiles = sqliteTable("profiles", {
   followingCount: integer("following_count"),
   postsCount: integer("posts_count"),
   lastSyncedAt: text("last_synced_at"),
+  igDeviceState: text("ig_device_state"),
 });
 
 export const tools = sqliteTable("tools", {

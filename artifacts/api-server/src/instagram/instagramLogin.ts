@@ -5,8 +5,8 @@ import { instagramApiCalls } from "../shared/schema";
 import type { Profile } from "../shared/schema";
 
 export type VerifyResult =
-  | { ok: true; message: string; accountStatus: "valid" }
-  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" };
+  | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
+  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out"; igDeviceState?: string };
 
 async function logApiCall(
   profileId: number,
@@ -115,9 +115,40 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
 
   const ig = new IgApiClient();
-  ig.state.generateDevice(profile.username);
-  if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
+
+  // Restore persisted device state if available, otherwise generate a new one.
+  // Using userAgentApi as the seed ties the device fingerprint to the imported agent.
+  const deviceSeed = profile.userAgentApi ?? profile.username;
+  if (profile.igDeviceState) {
+    try {
+      const saved = JSON.parse(profile.igDeviceState);
+      ig.state.generateDevice(deviceSeed); // sets defaults first
+      if (saved.deviceId) ig.state.deviceId = saved.deviceId;
+      if (saved.uuid) ig.state.uuid = saved.uuid;
+      if (saved.phoneId) ig.state.phoneId = saved.phoneId;
+      if (saved.adid) ig.state.adid = saved.adid;
+      if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      console.error(`[instagramLogin] Restored device state for @${profile.username} (deviceId=${ig.state.deviceId})`);
+    } catch {
+      ig.state.generateDevice(deviceSeed);
+      if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
+    }
+  } else {
+    ig.state.generateDevice(deviceSeed);
+    if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
+    console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
+  }
+
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
+
+  // Capture device state now so we can return it to the caller for persistence
+  const captureDeviceState = () => JSON.stringify({
+    deviceId: ig.state.deviceId,
+    uuid: ig.state.uuid,
+    phoneId: ig.state.phoneId,
+    adid: ig.state.adid,
+    deviceString: ig.state.deviceString,
+  });
 
   attachRequestLogger(ig, profile.id);
 
@@ -144,22 +175,23 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   try {
     await ig.account.login(profile.username, profile.password);
     ig.simulate.postLoginFlow().catch(() => {});
-    return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid" };
+    return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
 
   } catch (err: any) {
     const errName: string = err?.constructor?.name ?? "";
     const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 300);
     console.error(`[instagramLogin] login error for @${profile.username}: ${errName} — ${err?.message} — body: ${errBody}`);
+    const ds = captureDeviceState();
 
     if (err instanceof IgLoginTwoFactorRequiredError) {
       const twoFactorInfo = err.response.body.two_factor_info;
       const secret = profile.twoFASecretKey?.replace(/\s+/g, "") ?? "";
       if (!secret) {
-        return { ok: false, message: `@${profile.username} — 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification" };
+        return { ok: false, message: `@${profile.username} — 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       let code: string;
       try { code = totpGenerate({ secret }); } catch {
-        return { ok: false, message: `@${profile.username} — invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification" };
+        return { ok: false, message: `@${profile.username} — invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       try {
         await ig.account.twoFactorLogin({
@@ -170,19 +202,17 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           trustThisDevice: "1",
         });
         ig.simulate.postLoginFlow().catch(() => {});
-        return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid" };
+        return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
       } catch (e2: any) {
-        return { ok: false, message: `@${profile.username} — 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification" };
+        return { ok: false, message: `@${profile.username} — 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
     }
 
     if (err instanceof IgCheckpointError) {
-      return { ok: false, message: `@${profile.username} — security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha" };
+      return { ok: false, message: `@${profile.username} — security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", igDeviceState: ds };
     }
 
     if (err instanceof IgLoginBadPasswordError) {
-      // Instagram sometimes returns this error class for email/nonce challenges rather than a real bad password.
-      // Detect by checking the actual response body.
       const body = err?.response?.body ?? {};
       const buttons: any[] = body?.buttons ?? [];
       const hasEmailAction = buttons.some((b: any) => b?.action === "send_one_click_login_email");
@@ -190,25 +220,26 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
         return {
           ok: false,
-          message: `@${profile.username} — Instagram requires email verification before allowing login from this device. Check the account's email inbox.`,
+          message: `@${profile.username} — Instagram requires email verification before allowing login from this device. Check the account's email inbox and click the confirmation link.`,
           accountStatus: "email_confirmation",
+          igDeviceState: ds,
         };
       }
-      return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "logged_out" };
+      return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "logged_out", igDeviceState: ds };
     }
 
     if (err instanceof IgLoginInvalidUserError) {
-      return { ok: false, message: `@${profile.username} — account does not exist on Instagram.`, accountStatus: "banned" };
+      return { ok: false, message: `@${profile.username} — account does not exist on Instagram.`, accountStatus: "banned", igDeviceState: ds };
     }
 
     const msg: string = err?.message ?? "unknown error";
     if (/banned|disabled|suspended/i.test(msg)) {
-      return { ok: false, message: `@${profile.username} — account banned or disabled.`, accountStatus: "banned" };
+      return { ok: false, message: `@${profile.username} — account banned or disabled.`, accountStatus: "banned", igDeviceState: ds };
     }
     if (/checkpoint/i.test(msg)) {
-      return { ok: false, message: `@${profile.username} — checkpoint required.`, accountStatus: "captcha" };
+      return { ok: false, message: `@${profile.username} — checkpoint required.`, accountStatus: "captcha", igDeviceState: ds };
     }
 
-    return { ok: false, message: `@${profile.username} — login failed: ${msg}`, accountStatus: "logged_out" };
+    return { ok: false, message: `@${profile.username} — login failed: ${msg}`, accountStatus: "logged_out", igDeviceState: ds };
   }
 }

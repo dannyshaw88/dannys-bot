@@ -139429,7 +139429,8 @@ var profiles = sqliteTable("profiles", {
   followersCount: integer("followers_count"),
   followingCount: integer("following_count"),
   postsCount: integer("posts_count"),
-  lastSyncedAt: text("last_synced_at")
+  lastSyncedAt: text("last_synced_at"),
+  igDeviceState: text("ig_device_state")
 });
 var tools = sqliteTable("tools", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -139788,6 +139789,11 @@ sqlite.exec(`
     unsend_at TEXT
   );
 `);
+var existingCols = sqlite.prepare("pragma table_info(profiles)").all();
+var colNames = new Set(existingCols.map((c3) => c3.name));
+if (!colNames.has("ig_device_state")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_device_state TEXT;`);
+}
 var db = drizzle(sqlite, { schema: schema_exports });
 
 // src/shared/userAgents.ts
@@ -141870,9 +141876,34 @@ async function verifyInstagramCredentials(profile) {
   const proxyUrl = buildProxyUrl(profile);
   console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
   const ig = new import_instagram_private_api.IgApiClient();
-  ig.state.generateDevice(profile.username);
-  if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
+  const deviceSeed = profile.userAgentApi ?? profile.username;
+  if (profile.igDeviceState) {
+    try {
+      const saved = JSON.parse(profile.igDeviceState);
+      ig.state.generateDevice(deviceSeed);
+      if (saved.deviceId) ig.state.deviceId = saved.deviceId;
+      if (saved.uuid) ig.state.uuid = saved.uuid;
+      if (saved.phoneId) ig.state.phoneId = saved.phoneId;
+      if (saved.adid) ig.state.adid = saved.adid;
+      if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      console.error(`[instagramLogin] Restored device state for @${profile.username} (deviceId=${ig.state.deviceId})`);
+    } catch {
+      ig.state.generateDevice(deviceSeed);
+      if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
+    }
+  } else {
+    ig.state.generateDevice(deviceSeed);
+    if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
+    console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
+  }
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
+  const captureDeviceState = () => JSON.stringify({
+    deviceId: ig.state.deviceId,
+    uuid: ig.state.uuid,
+    phoneId: ig.state.phoneId,
+    adid: ig.state.adid,
+    deviceString: ig.state.deviceString
+  });
   attachRequestLogger(ig, profile.id);
   await ensureEncryptionKeys(ig);
   if (!ig.state.passwordEncryptionPubKey) {
@@ -141892,22 +141923,23 @@ async function verifyInstagramCredentials(profile) {
     await ig.account.login(profile.username, profile.password);
     ig.simulate.postLoginFlow().catch(() => {
     });
-    return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid" };
+    return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
   } catch (err) {
     const errName = err?.constructor?.name ?? "";
     const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 300);
     console.error(`[instagramLogin] login error for @${profile.username}: ${errName} \u2014 ${err?.message} \u2014 body: ${errBody}`);
+    const ds = captureDeviceState();
     if (err instanceof import_instagram_private_api.IgLoginTwoFactorRequiredError) {
       const twoFactorInfo = err.response.body.two_factor_info;
       const secret = profile.twoFASecretKey?.replace(/\s+/g, "") ?? "";
       if (!secret) {
-        return { ok: false, message: `@${profile.username} \u2014 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification" };
+        return { ok: false, message: `@${profile.username} \u2014 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       let code;
       try {
         code = h3({ secret });
       } catch {
-        return { ok: false, message: `@${profile.username} \u2014 invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification" };
+        return { ok: false, message: `@${profile.username} \u2014 invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       try {
         await ig.account.twoFactorLogin({
@@ -141919,13 +141951,13 @@ async function verifyInstagramCredentials(profile) {
         });
         ig.simulate.postLoginFlow().catch(() => {
         });
-        return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid" };
+        return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
       } catch (e2) {
-        return { ok: false, message: `@${profile.username} \u2014 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification" };
+        return { ok: false, message: `@${profile.username} \u2014 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
     }
     if (err instanceof import_instagram_private_api.IgCheckpointError) {
-      return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha" };
+      return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", igDeviceState: ds };
     }
     if (err instanceof import_instagram_private_api.IgLoginBadPasswordError) {
       const body = err?.response?.body ?? {};
@@ -141935,23 +141967,24 @@ async function verifyInstagramCredentials(profile) {
       if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
         return {
           ok: false,
-          message: `@${profile.username} \u2014 Instagram requires email verification before allowing login from this device. Check the account's email inbox.`,
-          accountStatus: "email_confirmation"
+          message: `@${profile.username} \u2014 Instagram requires email verification before allowing login from this device. Check the account's email inbox and click the confirmation link.`,
+          accountStatus: "email_confirmation",
+          igDeviceState: ds
         };
       }
-      return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "logged_out" };
+      return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "logged_out", igDeviceState: ds };
     }
     if (err instanceof import_instagram_private_api.IgLoginInvalidUserError) {
-      return { ok: false, message: `@${profile.username} \u2014 account does not exist on Instagram.`, accountStatus: "banned" };
+      return { ok: false, message: `@${profile.username} \u2014 account does not exist on Instagram.`, accountStatus: "banned", igDeviceState: ds };
     }
     const msg = err?.message ?? "unknown error";
     if (/banned|disabled|suspended/i.test(msg)) {
-      return { ok: false, message: `@${profile.username} \u2014 account banned or disabled.`, accountStatus: "banned" };
+      return { ok: false, message: `@${profile.username} \u2014 account banned or disabled.`, accountStatus: "banned", igDeviceState: ds };
     }
     if (/checkpoint/i.test(msg)) {
-      return { ok: false, message: `@${profile.username} \u2014 checkpoint required.`, accountStatus: "captcha" };
+      return { ok: false, message: `@${profile.username} \u2014 checkpoint required.`, accountStatus: "captcha", igDeviceState: ds };
     }
-    return { ok: false, message: `@${profile.username} \u2014 login failed: ${msg}`, accountStatus: "logged_out" };
+    return { ok: false, message: `@${profile.username} \u2014 login failed: ${msg}`, accountStatus: "logged_out", igDeviceState: ds };
   }
 }
 
@@ -144897,7 +144930,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const result = await verifyInstagramCredentials(effectiveProfile);
     await storage.updateProfile(profile.id, {
       accountStatus: result.accountStatus,
-      ...result.ok ? { credentialsDirty: false } : {}
+      ...result.ok ? { credentialsDirty: false } : {},
+      ...result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}
     });
     res.json(result);
   });
