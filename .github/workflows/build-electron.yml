@@ -46,7 +46,7 @@ jobs:
 
       - name: Install electron package deps with npm (flat node_modules for native modules)
         working-directory: artifacts/electron
-        run: npm install
+        run: npm install --omit=dev
 
       - name: Rebuild native modules for Electron
         working-directory: artifacts/electron
