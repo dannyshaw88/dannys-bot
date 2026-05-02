@@ -1033,9 +1033,9 @@ export function ProfileDetailsPage() {
         </Tabs.Content>
 
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
-          {getTool('follow')
-            ? <HumanSessionPanel tool={getTool('follow')!} profile={profile} />
-            : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
+          {getTool('human_sessions')
+            ? <HumanSessionPanel tool={getTool('human_sessions')!} profile={profile} />
+            : <p className="text-sm text-muted-foreground py-8">Human sessions tool not found for this profile.</p>
           }
         </Tabs.Content>
 

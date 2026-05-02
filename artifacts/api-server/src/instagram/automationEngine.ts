@@ -121,16 +121,11 @@ class AutomationEngine {
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
         }
 
-        // Human session runner is independent — only needs humanToolsEnabled=true on the follow tool
-        // but the account must be in a valid (verified) state before we touch it
-        const humanBaseTool = tools.find(t => t.type === "follow");
-        if (
-          humanBaseTool &&
-          (humanBaseTool.settings as any)?.humanToolsEnabled !== false &&
-          profile.accountStatus === "valid"
-        ) {
+        // Human session runner has its own tool record — completely independent of all other tools
+        const humanSessionTool = tools.find(t => t.type === "human_sessions" && t.enabled);
+        if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
-          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanBaseTool);
+          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool);
         }
       }
 
@@ -344,7 +339,7 @@ class AutomationEngine {
     });
   }
 
-  // ── Human session runner (independent of follow tool) ─────────────────────
+  // ── Human session runner ──────────────────────────────────────────────────
   private launchHumanSession(profile: Profile, _tool: Tool) {
     const state: ProfileState = {
       stop: { stopped: false },
@@ -370,25 +365,22 @@ class AutomationEngine {
           continue;
         }
 
-        const tools = await storage.getToolsByProfile(freshProfile.id);
-        const followTool = tools.find(t => t.type === "follow");
-        if (!followTool) break;
+        const freshTools = await storage.getToolsByProfile(freshProfile.id);
+        const hsTool = freshTools.find(t => t.type === "human_sessions");
+        // Exit if tool was disabled or deleted — reconcile will not re-launch
+        if (!hsTool?.enabled) break;
 
-        const s = followTool.settings as any;
-        if (s.humanToolsEnabled === false) {
-          // Toggle turned off — exit so reconcile stops the runner
-          break;
-        }
+        const s = hsTool.settings as any;
 
         if (Date.now() >= state.nextHumanSessionAt) {
           try {
-            await this.runHumanSessionTools(freshProfile, followTool, state);
+            await this.runHumanSessionTools(freshProfile, hsTool, state);
           } catch (err: any) {
             console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
           }
           const waitMs = randInt(
-            (s.humanToolsDelayMin ?? 30) * 60_000,
-            (s.humanToolsDelayMax ?? 60) * 60_000,
+            (s.delayMin ?? 30) * 60_000,
+            (s.delayMax ?? 60) * 60_000,
           );
           state.nextHumanSessionAt = Date.now() + waitMs;
           console.log(`[engine] @${freshProfile.username}: next human session in ${Math.round(waitMs / 60000)}min`);

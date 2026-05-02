@@ -186,5 +186,16 @@ if (!colNames.has("ig_api_cookies")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_api_cookies TEXT;`);
 }
 
+// Ensure every profile has a human_sessions tool record (safe to run on existing DBs)
+const profileIds = sqlite.prepare("SELECT id FROM profiles").all() as { id: number }[];
+const insertHumanSession = sqlite.prepare(
+  `INSERT INTO tools (profile_id, type, enabled, settings)
+   SELECT ?, 'human_sessions', 0, '{}'
+   WHERE NOT EXISTS (SELECT 1 FROM tools WHERE profile_id = ? AND type = 'human_sessions')`
+);
+for (const { id } of profileIds) {
+  insertHumanSession.run(id, id);
+}
+
 export const db = drizzle(sqlite, { schema });
 export * from "./schema";

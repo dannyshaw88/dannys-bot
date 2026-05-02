@@ -33,7 +33,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
   const HUMAN_KEY_MAP: Record<string, string[]> = {
-    humanToolsDelay:    ["humanToolsDelayMin","humanToolsDelayMax"],
+    humanToolsDelay:    ["delayMin","delayMax"],
     viewTimelineFeed:   ["viewTimelineFeedEnabled","viewTimelineFeedMin","viewTimelineFeedMax","viewTimelineFeedOrderMin","viewTimelineFeedOrderMax","viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"],
     humanSession:       ["humanSessionEnabled","humanSessionOrderMin","humanSessionOrderMax","humanSessionNotUsedMin","humanSessionNotUsedMax"],
     checkReels:         ["checkTimelineReelsEnabled","checkTimelineReelsMin","checkTimelineReelsMax","checkTimelineReelsOrderMin","checkTimelineReelsOrderMax","checkTimelineReelsNotUsedMin","checkTimelineReelsNotUsedMax"],
@@ -70,9 +70,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
-      humanToolsDelayMin: 30,
-      humanToolsDelayMax: 60,
-      humanToolsEnabled: true,
+      delayMin: 30,
+      delayMax: 60,
       viewTimelineFeedEnabled: true,
       viewTimelineFeedMin: 3,
       viewTimelineFeedMax: 8,
@@ -164,39 +163,26 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      {/* Master Enable + Title */}
-      <div className="flex items-center gap-3 px-1">
-        <Switch
-          checked={!!settings.humanToolsEnabled}
-          onCheckedChange={(v) => setSettings({ ...settings, humanToolsEnabled: v })}
-        />
-        <div>
-          <p className="text-sm font-semibold">Human Session Tools</p>
-          <p className="text-[11px] text-muted-foreground">Enable the timer and tools below to simulate human behaviour.</p>
-        </div>
-      </div>
-
       {/* ── Timer ─────────────────────────────────────────────── */}
       <div className="border border-border rounded-xl p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="font-semibold text-sm">Human Session Tools Timer</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">How often the tools below run, independent of the follow session timer.</p>
+            <h4 className="font-semibold text-sm">Execute Every (min)</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">How often the actions below run.</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Every (min)</span>
             <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Min</Label>
               <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
-                value={settings.humanToolsDelayMin ?? 30}
-                onChange={(e) => setSettings({ ...settings, humanToolsDelayMin: Math.max(1, Number(e.target.value)) })}
+                value={settings.delayMin ?? 30}
+                onChange={(e) => setSettings({ ...settings, delayMin: Math.max(1, Number(e.target.value)) })}
               />
             </div>
             <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Max</Label>
               <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
-                value={settings.humanToolsDelayMax ?? 60}
-                onChange={(e) => setSettings({ ...settings, humanToolsDelayMax: Math.max(1, Number(e.target.value)) })}
+                value={settings.delayMax ?? 60}
+                onChange={(e) => setSettings({ ...settings, delayMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
           </div>

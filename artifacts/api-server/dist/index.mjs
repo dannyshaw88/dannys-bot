@@ -139798,6 +139798,15 @@ if (!colNames.has("ig_device_state")) {
 if (!colNames.has("ig_api_cookies")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_api_cookies TEXT;`);
 }
+var profileIds = sqlite.prepare("SELECT id FROM profiles").all();
+var insertHumanSession = sqlite.prepare(
+  `INSERT INTO tools (profile_id, type, enabled, settings)
+   SELECT ?, 'human_sessions', 0, '{}'
+   WHERE NOT EXISTS (SELECT 1 FROM tools WHERE profile_id = ? AND type = 'human_sessions')`
+);
+for (const { id } of profileIds) {
+  insertHumanSession.run(id, id);
+}
 var db = drizzle(sqlite, { schema: schema_exports });
 
 // src/shared/userAgents.ts
@@ -140207,7 +140216,7 @@ var DatabaseStorage = class {
     return updated;
   }
   async initializeToolsForProfile(profileId) {
-    const toolTypes = ["follow", "unfollow", "like", "dm", "contact"];
+    const toolTypes = ["follow", "unfollow", "like", "dm", "contact", "human_sessions"];
     for (const type of toolTypes) {
       await db.insert(tools).values({ profileId, type, enabled: false, settings: {} });
     }
@@ -143519,10 +143528,10 @@ var AutomationEngine = class {
           activeContact.add(profile.id);
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
         }
-        const humanBaseTool = tools2.find((t2) => t2.type === "follow");
-        if (humanBaseTool && humanBaseTool.settings?.humanToolsEnabled !== false && profile.accountStatus === "valid") {
+        const humanSessionTool = tools2.find((t2) => t2.type === "human_sessions" && t2.enabled);
+        if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
-          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanBaseTool);
+          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool);
         }
       }
       for (const [id, state] of this.states) {
@@ -143587,9 +143596,9 @@ var AutomationEngine = class {
         this.syncTimers.set(profile.id, Date.now() + intervalMs);
         console.log(`[engine] @${profile.username}: next profile sync in ${Math.round(intervalMs / 6e4)}min`);
       }
-      const profileIds = new Set(profiles2.map((p) => p.id));
+      const profileIds2 = new Set(profiles2.map((p) => p.id));
       for (const id of this.syncTimers.keys()) {
-        if (!profileIds.has(id)) this.syncTimers.delete(id);
+        if (!profileIds2.has(id)) this.syncTimers.delete(id);
       }
     } catch (err) {
       console.error("[engine] Reconcile error:", err?.message);
@@ -143705,7 +143714,7 @@ var AutomationEngine = class {
       console.error(`[engine] Fatal error for @${profile.username}:`, err?.message);
     });
   }
-  // ── Human session runner (independent of follow tool) ─────────────────────
+  // ── Human session runner ──────────────────────────────────────────────────
   launchHumanSession(profile, _tool) {
     const state = {
       stop: { stopped: false },
@@ -143734,22 +143743,19 @@ var AutomationEngine = class {
           await sleepInterruptible(5 * 6e4, state.stop);
           continue;
         }
-        const tools2 = await storage.getToolsByProfile(freshProfile.id);
-        const followTool = tools2.find((t2) => t2.type === "follow");
-        if (!followTool) break;
-        const s = followTool.settings;
-        if (s.humanToolsEnabled === false) {
-          break;
-        }
+        const freshTools = await storage.getToolsByProfile(freshProfile.id);
+        const hsTool = freshTools.find((t2) => t2.type === "human_sessions");
+        if (!hsTool?.enabled) break;
+        const s = hsTool.settings;
         if (Date.now() >= state.nextHumanSessionAt) {
           try {
-            await this.runHumanSessionTools(freshProfile, followTool, state);
+            await this.runHumanSessionTools(freshProfile, hsTool, state);
           } catch (err) {
             console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
           }
           const waitMs = randInt(
-            (s.humanToolsDelayMin ?? 30) * 6e4,
-            (s.humanToolsDelayMax ?? 60) * 6e4
+            (s.delayMin ?? 30) * 6e4,
+            (s.delayMax ?? 60) * 6e4
           );
           state.nextHumanSessionAt = Date.now() + waitMs;
           console.log(`[engine] @${freshProfile.username}: next human session in ${Math.round(waitMs / 6e4)}min`);

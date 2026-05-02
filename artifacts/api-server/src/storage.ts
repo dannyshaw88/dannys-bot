@@ -160,7 +160,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async initializeToolsForProfile(profileId: number): Promise<void> {
-    const toolTypes = ['follow', 'unfollow', 'like', 'dm', 'contact'];
+    const toolTypes = ['follow', 'unfollow', 'like', 'dm', 'contact', 'human_sessions'];
     for (const type of toolTypes) {
       await db.insert(tools).values({ profileId, type, enabled: false, settings: {} });
     }
