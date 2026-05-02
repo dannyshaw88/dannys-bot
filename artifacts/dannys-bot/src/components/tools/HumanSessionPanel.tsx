@@ -168,11 +168,11 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   });
   const lastAction = sessionActions?.find(a => a.toolId === tool.id);
   const engineStatus = useProfileEngineStatus(tool.profileId);
-  const nextRunDisplay = (() => {
-    if (!lastAction) return null;
+  const nextRunStatus: { label: string; executing: boolean } | null = (() => {
+    if (!lastAction && !(engineStatus?.nextHumanSessionAt)) return null;
     const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
-    if (!nextAt || nextAt <= Date.now()) return "now";
-    return format(new Date(nextAt), "HH:mm:ss");
+    if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
+    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
   })();
 
   return (
@@ -181,10 +181,13 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       <div className="border border-border rounded-xl p-4 flex items-center justify-between gap-4">
         <div>
           <h4 className="font-semibold text-sm">Human Session Tool</h4>
-          {nextRunDisplay && (
-            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+          {nextRunStatus && (
+            <p className="text-[11px] mt-0.5 flex items-center gap-1" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
-              Next execution: <span className="font-mono font-medium text-foreground">{nextRunDisplay}</span>
+              {nextRunStatus.executing
+                ? <span className="font-medium">Executing</span>
+                : <><span>Scheduled:</span> <span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+              }
             </p>
           )}
         </div>

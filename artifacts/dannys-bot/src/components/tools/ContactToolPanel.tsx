@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Users, UserPlus, MessageSquare, Copy } from "lucide-react";
+import { Users, UserPlus, MessageSquare, Copy, Clock } from "lucide-react";
+import { format } from "date-fns";
 import { type Tool, type Profile } from "@shared/schema";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
 import { AutoReplyPanel } from "./AutoReplyPanel";
@@ -50,6 +52,13 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
+  const engineStatus = useProfileEngineStatus(tool.profileId);
+  const contactRunStatus: { label: string; executing: boolean } | null = (() => {
+    if (!engineStatus) return null;
+    const nextAt = engineStatus.nextContactAt ?? 0;
+    if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
+    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
+  })();
 
   const handleContactCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
     const keysToSend = [...selectedKeys].flatMap(k => CONTACT_KEY_MAP[k] ?? []);
@@ -71,6 +80,16 @@ export function ContactToolPanel({ tool, profile }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Status badge */}
+      {contactRunStatus && (
+        <div className="flex items-center gap-1.5 text-[11px]" style={{ color: contactRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+          <Clock className="w-3 h-3 shrink-0" />
+          {contactRunStatus.executing
+            ? <span className="font-medium">Executing</span>
+            : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{contactRunStatus.label}</span></>
+          }
+        </div>
+      )}
       {/* Sub-tab bar + Copy button */}
       <div className="flex items-center border-b border-border -mx-1">
         <button className={triggerClass("new-followers")} onClick={() => setActiveTab("new-followers")}>

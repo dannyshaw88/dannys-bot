@@ -1,6 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, addMinutes } from "date-fns";
+import { format } from "date-fns";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useSources, useCreateSource, useDeleteSource, useImportSources, parseJarveeHashtagFile } from "@/hooks/use-sources";
@@ -213,15 +214,12 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     refetchInterval: 15000,
   });
   const lastAction = sessionActions?.find(a => a.toolId === tool.id);
-  const nextRunDisplay = (() => {
-    if (!lastAction) return null;
-    const last = new Date(lastAction.timestamp);
-    const earliest = addMinutes(last, settings.delayMin ?? 1);
-    const latest = addMinutes(last, settings.delayMax ?? 2);
-    const now = new Date();
-    if (now > latest) return "now";
-    if (now > earliest) return `by ${format(latest, "HH:mm")}`;
-    return `${format(earliest, "HH:mm")} – ${format(latest, "HH:mm")}`;
+  const engineStatus = useProfileEngineStatus(tool.profileId);
+  const nextRunStatus: { label: string; executing: boolean } | null = (() => {
+    if (!lastAction && !engineStatus) return null;
+    const nextAt = engineStatus?.nextFollowAt ?? 0;
+    if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
+    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
   })();
 
   const [showCopyModal, setShowCopyModal] = useState(false);
@@ -610,10 +608,13 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
             <div className="rounded-xl p-4 space-y-4">
             {tool.type === 'follow' && (
               <div className="space-y-3 mb-4">
-                {nextRunDisplay && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                {nextRunStatus && (
+                  <div className="flex items-center gap-1.5 text-[11px]" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
                     <Clock className="w-3 h-3 shrink-0" />
-                    Next execution:&nbsp;<span className="font-mono font-medium text-foreground">{nextRunDisplay}</span>
+                    {nextRunStatus.executing
+                      ? <span className="font-medium">Executing</span>
+                      : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+                    }
                   </div>
                 )}
                 <div className="flex items-center gap-3">

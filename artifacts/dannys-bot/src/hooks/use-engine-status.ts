@@ -6,6 +6,8 @@ interface EngineStatusEntry {
   dailyCount: number;
   hourlyCount: number;
   nextHumanSessionAt: number;
+  nextFollowAt: number;
+  nextContactAt: number;
 }
 
 export function useEngineStatus() {

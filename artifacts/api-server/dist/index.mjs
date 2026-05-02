@@ -143814,7 +143814,9 @@ var AutomationEngine = class {
       actionHourlyHour: hourStr(),
       actionSuspensions: {},
       nextHumanSessionAt: 0,
-      lastHumanToolsEnabled: true
+      lastHumanToolsEnabled: true,
+      nextFollowAt: 0,
+      nextContactAt: 0
     };
     this.states.set(profile.id, state);
     console.log(`[engine] Launching runner for @${profile.username}`);
@@ -143864,8 +143866,10 @@ var AutomationEngine = class {
           (s.delayMin ?? 1) * 6e4,
           (s.delayMax ?? 5) * 6e4
         );
+        state.nextFollowAt = Date.now() + waitMs;
         console.log(`[engine] @${freshProfile.username}: next follow session in ${Math.round(waitMs / 6e4)}min`);
         await sleepInterruptible(waitMs, state.stop);
+        state.nextFollowAt = 0;
       }
       this.states.delete(profile.id);
       console.log(`[engine] Runner exited for @${profile.username}`);
@@ -143891,7 +143895,9 @@ var AutomationEngine = class {
       actionSuspensions: {},
       nextHumanSessionAt: 0,
       // run immediately on first tick
-      lastHumanToolsEnabled: true
+      lastHumanToolsEnabled: true,
+      nextFollowAt: 0,
+      nextContactAt: 0
     };
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
@@ -143944,7 +143950,11 @@ var AutomationEngine = class {
       actionDailyDate: todayStr(),
       actionHourlyCount: {},
       actionHourlyHour: hourStr(),
-      actionSuspensions: {}
+      actionSuspensions: {},
+      nextHumanSessionAt: 0,
+      lastHumanToolsEnabled: false,
+      nextFollowAt: 0,
+      nextContactAt: 0
     };
     this.unfollowStates.set(profile.id, state);
     console.log(`[engine] Launching unfollow runner for @${profile.username}`);
@@ -143992,7 +144002,11 @@ var AutomationEngine = class {
       actionDailyDate: todayStr(),
       actionHourlyCount: {},
       actionHourlyHour: hourStr(),
-      actionSuspensions: {}
+      actionSuspensions: {},
+      nextHumanSessionAt: 0,
+      lastHumanToolsEnabled: false,
+      nextFollowAt: 0,
+      nextContactAt: 0
     };
     this.dmStates.set(profile.id, state);
     console.log(`[engine] Launching DM runner for @${profile.username}`);
@@ -144041,7 +144055,10 @@ var AutomationEngine = class {
       actionHourlyCount: {},
       actionHourlyHour: hourStr(),
       actionSuspensions: {},
-      nextHumanSessionAt: 0
+      nextHumanSessionAt: 0,
+      lastHumanToolsEnabled: false,
+      nextFollowAt: 0,
+      nextContactAt: 0
     };
     this.contactStates.set(profile.id, state);
     console.log(`[engine] Launching contact runner for @${profile.username}`);
@@ -144072,6 +144089,7 @@ var AutomationEngine = class {
             (s.contactCheckIntervalMax ?? 60) * 6e4
           );
           nextFollowerCheckAt = Date.now() + waitMs;
+          state.nextContactAt = Math.min(nextFollowerCheckAt, nextUsersSessionAt || nextFollowerCheckAt);
           console.log(`[engine] @${freshProfile.username}: next follower check in ${Math.round(waitMs / 6e4)}min`);
         }
         if (state.stop.stopped) break;
@@ -144086,6 +144104,7 @@ var AutomationEngine = class {
             (s.contactUsersWaitMax ?? 60) * 6e4
           );
           nextUsersSessionAt = Date.now() + waitMs;
+          state.nextContactAt = Math.min(nextFollowerCheckAt || nextUsersSessionAt, nextUsersSessionAt);
           console.log(`[engine] @${freshProfile.username}: next users send in ${Math.round(waitMs / 6e4)}min`);
         }
         if (state.stop.stopped) break;
@@ -145144,12 +145163,15 @@ var AutomationEngine = class {
   getStatus() {
     return Array.from(this.states.entries()).map(([profileId, state]) => {
       const humanState = this.humanSessionStates.get(profileId);
+      const contactState = this.contactStates.get(profileId);
       return {
         profileId,
         loggedIn: !!state.client?.isLoggedIn(),
         dailyCount: this.daily(state),
         hourlyCount: this.hourly(state),
-        nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0
+        nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0,
+        nextFollowAt: state.nextFollowAt,
+        nextContactAt: contactState?.nextContactAt ?? 0
       };
     });
   }
