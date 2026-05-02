@@ -21729,11 +21729,11 @@ var require_negotiator = __commonJS({
     var preferredMediaTypes = require_mediaType();
     module2.exports = Negotiator;
     module2.exports.Negotiator = Negotiator;
-    function Negotiator(request4) {
+    function Negotiator(request3) {
       if (!(this instanceof Negotiator)) {
-        return new Negotiator(request4);
+        return new Negotiator(request3);
       }
-      this.request = request4;
+      this.request = request3;
     }
     Negotiator.prototype.charset = function charset(available) {
       var set2 = this.charsets(available);
@@ -54901,26 +54901,26 @@ var require_aws4 = __commonJS({
       "presigned-expires": true,
       "range": true
     };
-    function RequestSigner(request4, credentials) {
-      if (typeof request4 === "string") request4 = url2.parse(request4);
-      var headers = request4.headers = Object.assign({}, request4.headers || {}), hostParts = (!this.service || !this.region) && this.matchHost(request4.hostname || request4.host || headers.Host || headers.host);
-      this.request = request4;
+    function RequestSigner(request3, credentials) {
+      if (typeof request3 === "string") request3 = url2.parse(request3);
+      var headers = request3.headers = Object.assign({}, request3.headers || {}), hostParts = (!this.service || !this.region) && this.matchHost(request3.hostname || request3.host || headers.Host || headers.host);
+      this.request = request3;
       this.credentials = credentials || this.defaultCredentials();
-      this.service = request4.service || hostParts[0] || "";
-      this.region = request4.region || hostParts[1] || "us-east-1";
+      this.service = request3.service || hostParts[0] || "";
+      this.region = request3.region || hostParts[1] || "us-east-1";
       if (this.service === "email") this.service = "ses";
-      if (!request4.method && request4.body)
-        request4.method = "POST";
+      if (!request3.method && request3.body)
+        request3.method = "POST";
       if (!headers.Host && !headers.host) {
-        headers.Host = request4.hostname || request4.host || this.createHost();
-        if (request4.port)
-          headers.Host += ":" + request4.port;
+        headers.Host = request3.hostname || request3.host || this.createHost();
+        if (request3.port)
+          headers.Host += ":" + request3.port;
       }
-      if (!request4.hostname && !request4.host)
-        request4.hostname = headers.Host || headers.host;
-      this.isCodeCommitGit = this.service === "codecommit" && request4.method === "GIT";
-      this.extraHeadersToIgnore = request4.extraHeadersToIgnore || /* @__PURE__ */ Object.create(null);
-      this.extraHeadersToInclude = request4.extraHeadersToInclude || /* @__PURE__ */ Object.create(null);
+      if (!request3.hostname && !request3.host)
+        request3.hostname = headers.Host || headers.host;
+      this.isCodeCommitGit = this.service === "codecommit" && request3.method === "GIT";
+      this.extraHeadersToIgnore = request3.extraHeadersToIgnore || /* @__PURE__ */ Object.create(null);
+      this.extraHeadersToInclude = request3.extraHeadersToInclude || /* @__PURE__ */ Object.create(null);
     }
     RequestSigner.prototype.matchHost = function(host) {
       var match = (host || "").match(/([^\.]{1,63})\.(?:([^\.]{0,63})\.)?amazonaws\.com(\.cn)?$/);
@@ -54951,8 +54951,8 @@ var require_aws4 = __commonJS({
     };
     RequestSigner.prototype.prepareRequest = function() {
       this.parsePath();
-      var request4 = this.request, headers = request4.headers, query;
-      if (request4.signQuery) {
+      var request3 = this.request, headers = request3.headers, query;
+      if (request3.signQuery) {
         this.parsedPath.query = query = this.parsedPath.query || {};
         if (this.credentials.sessionToken)
           query["X-Amz-Security-Token"] = this.credentials.sessionToken;
@@ -54966,11 +54966,11 @@ var require_aws4 = __commonJS({
         query["X-Amz-Credential"] = this.credentials.accessKeyId + "/" + this.credentialString();
         query["X-Amz-SignedHeaders"] = this.signedHeaders();
       } else {
-        if (!request4.doNotModifyHeaders && !this.isCodeCommitGit) {
-          if (request4.body && !headers["Content-Type"] && !headers["content-type"])
+        if (!request3.doNotModifyHeaders && !this.isCodeCommitGit) {
+          if (request3.body && !headers["Content-Type"] && !headers["content-type"])
             headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8";
-          if (request4.body && !headers["Content-Length"] && !headers["content-length"])
-            headers["Content-Length"] = Buffer.byteLength(request4.body);
+          if (request3.body && !headers["Content-Length"] && !headers["content-length"])
+            headers["Content-Length"] = Buffer.byteLength(request3.body);
           if (this.credentials.sessionToken && !headers["X-Amz-Security-Token"] && !headers["x-amz-security-token"])
             headers["X-Amz-Security-Token"] = this.credentials.sessionToken;
           if (this.service === "s3" && !headers["X-Amz-Content-Sha256"] && !headers["x-amz-content-sha256"])
@@ -55142,8 +55142,8 @@ var require_aws4 = __commonJS({
       return path4 + "?" + encodeRfc3986(querystring.stringify(query));
     };
     aws4.RequestSigner = RequestSigner;
-    aws4.sign = function(request4, credentials) {
-      return new RequestSigner(request4, credentials).sign();
+    aws4.sign = function(request3, credentials) {
+      return new RequestSigner(request3, credentials).sign();
     };
   }
 });
@@ -67120,20 +67120,20 @@ var require_parser = __commonJS({
        *                              mode.
        * @throws {ExpiredRequestError} if the value of date or x-date exceeds skew.
        */
-      parseRequest: function parseRequest(request4, options) {
-        assert3.object(request4, "request");
-        assert3.object(request4.headers, "request.headers");
+      parseRequest: function parseRequest(request3, options) {
+        assert3.object(request3, "request");
+        assert3.object(request3.headers, "request.headers");
         if (options === void 0) {
           options = {};
         }
         if (options.headers === void 0) {
-          options.headers = [request4.headers["x-date"] ? "x-date" : "date"];
+          options.headers = [request3.headers["x-date"] ? "x-date" : "date"];
         }
         assert3.object(options, "options");
         assert3.arrayOfString(options.headers, "options.headers");
         assert3.optionalFinite(options.clockSkew, "options.clockSkew");
         var authzHeaderName = options.authorizationHeaderName || "authorization";
-        if (!request4.headers[authzHeaderName]) {
+        if (!request3.headers[authzHeaderName]) {
           throw new MissingHeaderError("no " + authzHeaderName + " header present in the request");
         }
         options.clockSkew = options.clockSkew || 300;
@@ -67147,7 +67147,7 @@ var require_parser = __commonJS({
           params: {},
           signingString: ""
         };
-        var authz = request4.headers[authzHeaderName];
+        var authz = request3.headers[authzHeaderName];
         for (i2 = 0; i2 < authz.length; i2++) {
           var c3 = authz.charAt(i2);
           switch (Number(state)) {
@@ -67203,7 +67203,7 @@ var require_parser = __commonJS({
           }
         }
         if (!parsed.params.headers || parsed.params.headers === "") {
-          if (request4.headers["x-date"]) {
+          if (request3.headers["x-date"]) {
             parsed.params.headers = ["x-date"];
           } else {
             parsed.params.headers = ["date"];
@@ -67233,14 +67233,14 @@ var require_parser = __commonJS({
           parsed.params.headers[i2] = h4;
           if (h4 === "request-line") {
             if (!options.strict) {
-              parsed.signingString += request4.method + " " + request4.url + " HTTP/" + request4.httpVersion;
+              parsed.signingString += request3.method + " " + request3.url + " HTTP/" + request3.httpVersion;
             } else {
               throw new StrictParsingError("request-line is not a valid header with strict parsing enabled.");
             }
           } else if (h4 === "(request-target)") {
-            parsed.signingString += "(request-target): " + request4.method.toLowerCase() + " " + request4.url;
+            parsed.signingString += "(request-target): " + request3.method.toLowerCase() + " " + request3.url;
           } else {
-            var value = request4.headers[h4];
+            var value = request3.headers[h4];
             if (value === void 0)
               throw new MissingHeaderError(h4 + " was not in the request");
             parsed.signingString += h4 + ": " + value;
@@ -67249,11 +67249,11 @@ var require_parser = __commonJS({
             parsed.signingString += "\n";
         }
         var date5;
-        if (request4.headers.date || request4.headers["x-date"]) {
-          if (request4.headers["x-date"]) {
-            date5 = new Date(request4.headers["x-date"]);
+        if (request3.headers.date || request3.headers["x-date"]) {
+          if (request3.headers["x-date"]) {
+            date5 = new Date(request3.headers["x-date"]);
           } else {
-            date5 = new Date(request4.headers.date);
+            date5 = new Date(request3.headers.date);
           }
           var now = /* @__PURE__ */ new Date();
           var skew = Math.abs(now.getTime() - date5.getTime());
@@ -68644,15 +68644,15 @@ var require_signer = __commonJS({
        * @throws {MissingHeaderError} if a header to be signed was specified but
        *                              was not present.
        */
-      signRequest: function signRequest(request4, options) {
-        assert3.object(request4, "request");
+      signRequest: function signRequest(request3, options) {
+        assert3.object(request3, "request");
         assert3.object(options, "options");
         assert3.optionalString(options.algorithm, "options.algorithm");
         assert3.string(options.keyId, "options.keyId");
         assert3.optionalArrayOfString(options.headers, "options.headers");
         assert3.optionalString(options.httpVersion, "options.httpVersion");
-        if (!request4.getHeader("Date"))
-          request4.setHeader("Date", jsprim.rfc1123(/* @__PURE__ */ new Date()));
+        if (!request3.getHeader("Date"))
+          request3.setHeader("Date", jsprim.rfc1123(/* @__PURE__ */ new Date()));
         if (!options.headers)
           options.headers = ["date"];
         if (!options.httpVersion)
@@ -68670,14 +68670,14 @@ var require_signer = __commonJS({
           var h4 = options.headers[i2].toLowerCase();
           if (h4 === "request-line") {
             if (!options.strict) {
-              stringToSign += request4.method + " " + request4.path + " HTTP/" + options.httpVersion;
+              stringToSign += request3.method + " " + request3.path + " HTTP/" + options.httpVersion;
             } else {
               throw new StrictParsingError("request-line is not a valid header with strict parsing enabled.");
             }
           } else if (h4 === "(request-target)") {
-            stringToSign += "(request-target): " + request4.method.toLowerCase() + " " + request4.path;
+            stringToSign += "(request-target): " + request3.method.toLowerCase() + " " + request3.path;
           } else {
-            var value = request4.getHeader(h4);
+            var value = request3.getHeader(h4);
             if (value === void 0 || value === "") {
               throw new MissingHeaderError(h4 + " was not in the request");
             }
@@ -68686,8 +68686,8 @@ var require_signer = __commonJS({
           if (i2 + 1 < options.headers.length)
             stringToSign += "\n";
         }
-        if (request4.hasOwnProperty("_stringToSign")) {
-          request4._stringToSign = stringToSign;
+        if (request3.hasOwnProperty("_stringToSign")) {
+          request3._stringToSign = stringToSign;
         }
         var signature;
         if (alg[0] === "hmac") {
@@ -68721,7 +68721,7 @@ var require_signer = __commonJS({
           assert3.notStrictEqual(signature, "", "empty signature produced");
         }
         var authzHeaderName = options.authorizationHeaderName || "Authorization";
-        request4.setHeader(authzHeaderName, sprintf(
+        request3.setHeader(authzHeaderName, sprintf(
           AUTHZ_FMT,
           options.keyId,
           options.algorithm,
@@ -78169,7 +78169,7 @@ var require_form_data = __commonJS({
     var util2 = __require("util");
     var path4 = __require("path");
     var http2 = __require("http");
-    var https4 = __require("https");
+    var https3 = __require("https");
     var parseUrl = __require("url").parse;
     var fs4 = __require("fs");
     var crypto2 = __require("crypto");
@@ -78421,7 +78421,7 @@ var require_form_data = __commonJS({
       });
     };
     FormData.prototype.submit = function(params, cb) {
-      var request4;
+      var request3;
       var options;
       var defaults = { method: "post" };
       if (typeof params === "string") {
@@ -78440,23 +78440,23 @@ var require_form_data = __commonJS({
       }
       options.headers = this.getHeaders(params.headers);
       if (options.protocol === "https:") {
-        request4 = https4.request(options);
+        request3 = https3.request(options);
       } else {
-        request4 = http2.request(options);
+        request3 = http2.request(options);
       }
       this.getLength(function(err, length) {
         if (err) {
           this._error(err);
           return;
         }
-        request4.setHeader("Content-Length", length);
-        this.pipe(request4);
+        request3.setHeader("Content-Length", length);
+        this.pipe(request3);
         if (cb) {
-          request4.on("error", cb);
-          request4.on("response", cb.bind(this, null));
+          request3.on("error", cb);
+          request3.on("response", cb.bind(this, null));
         }
       }.bind(this));
-      return request4;
+      return request3;
     };
     FormData.prototype._error = function(err) {
       if (!this.error) {
@@ -78580,8 +78580,8 @@ var require_querystring = __commonJS({
     "use strict";
     var qs = require_lib2();
     var querystring = __require("querystring");
-    function Querystring(request4) {
-      this.request = request4;
+    function Querystring(request3) {
+      this.request = request3;
       this.lib = null;
       this.useQuerystring = null;
       this.parseOptions = null;
@@ -85828,8 +85828,8 @@ var require_har2 = __commonJS({
     var qs = __require("querystring");
     var validate = require_promise2();
     var extend2 = require_extend();
-    function Har(request4) {
-      this.request = request4;
+    function Har(request3) {
+      this.request = request3;
     }
     Har.prototype.reducer = function(obj2, pair) {
       if (obj2[pair.name] === void 0) {
@@ -86064,8 +86064,8 @@ var require_auth = __commonJS({
     var helpers = require_helpers();
     var md5 = helpers.md5;
     var toBase64 = helpers.toBase64;
-    function Auth(request4) {
-      this.request = request4;
+    function Auth(request3) {
+      this.request = request3;
       this.hasAuth = false;
       this.sentAuth = false;
       this.bearerToken = null;
@@ -86153,7 +86153,7 @@ var require_auth = __commonJS({
     };
     Auth.prototype.onRequest = function(user, pass, sendImmediately, bearer) {
       var self2 = this;
-      var request4 = self2.request;
+      var request3 = self2.request;
       var authHeader;
       if (bearer === void 0 && user === void 0) {
         self2.request.emit("error", new Error("no auth mechanism defined"));
@@ -86163,26 +86163,26 @@ var require_auth = __commonJS({
         authHeader = self2.basic(user, pass, sendImmediately);
       }
       if (authHeader) {
-        request4.setHeader("authorization", authHeader);
+        request3.setHeader("authorization", authHeader);
       }
     };
     Auth.prototype.onResponse = function(response) {
       var self2 = this;
-      var request4 = self2.request;
+      var request3 = self2.request;
       if (!self2.hasAuth || self2.sentAuth) {
         return null;
       }
       var c3 = caseless(response.headers);
       var authHeader = c3.get("www-authenticate");
       var authVerb = authHeader && authHeader.split(" ")[0].toLowerCase();
-      request4.debug("reauth", authVerb);
+      request3.debug("reauth", authVerb);
       switch (authVerb) {
         case "basic":
           return self2.basic(self2.user, self2.pass, true);
         case "bearer":
           return self2.bearer(self2.bearerToken, true);
         case "digest":
-          return self2.digest(request4.method, request4.path, authHeader);
+          return self2.digest(request3.method, request3.path, authHeader);
       }
     };
     exports2.Auth = Auth;
@@ -86306,8 +86306,8 @@ var require_oauth = __commonJS({
     var oauth = require_oauth_sign();
     var crypto2 = __require("crypto");
     var Buffer2 = require_safe_buffer().Buffer;
-    function OAuth(request4) {
-      this.request = request4;
+    function OAuth(request3) {
+      this.request = request3;
       this.params = null;
     }
     OAuth.prototype.buildParams = function(_oauth, uri, method, query, form, qsLib) {
@@ -86496,8 +86496,8 @@ var require_multipart = __commonJS({
     var CombinedStream = require_combined_stream();
     var isstream = require_isstream();
     var Buffer2 = require_safe_buffer().Buffer;
-    function Multipart(request4) {
-      this.request = request4;
+    function Multipart(request3) {
+      this.request = request3;
       this.boundary = uuid3();
       this.chunked = false;
       this.body = null;
@@ -86592,8 +86592,8 @@ var require_redirect = __commonJS({
     "use strict";
     var url2 = __require("url");
     var isUrl = /^https?:/;
-    function Redirect(request4) {
-      this.request = request4;
+    function Redirect(request3) {
+      this.request = request3;
       this.followRedirect = true;
       this.followRedirects = true;
       this.followAllRedirects = false;
@@ -86632,15 +86632,15 @@ var require_redirect = __commonJS({
     };
     Redirect.prototype.redirectTo = function(response) {
       var self2 = this;
-      var request4 = self2.request;
+      var request3 = self2.request;
       var redirectTo = null;
       if (response.statusCode >= 300 && response.statusCode < 400 && response.caseless.has("location")) {
         var location = response.caseless.get("location");
-        request4.debug("redirect", location);
+        request3.debug("redirect", location);
         if (self2.followAllRedirects) {
           redirectTo = location;
         } else if (self2.followRedirects) {
-          switch (request4.method) {
+          switch (request3.method) {
             case "PATCH":
             case "PUT":
             case "POST":
@@ -86652,62 +86652,62 @@ var require_redirect = __commonJS({
           }
         }
       } else if (response.statusCode === 401) {
-        var authHeader = request4._auth.onResponse(response);
+        var authHeader = request3._auth.onResponse(response);
         if (authHeader) {
-          request4.setHeader("authorization", authHeader);
-          redirectTo = request4.uri;
+          request3.setHeader("authorization", authHeader);
+          redirectTo = request3.uri;
         }
       }
       return redirectTo;
     };
     Redirect.prototype.onResponse = function(response) {
       var self2 = this;
-      var request4 = self2.request;
+      var request3 = self2.request;
       var redirectTo = self2.redirectTo(response);
-      if (!redirectTo || !self2.allowRedirect.call(request4, response)) {
+      if (!redirectTo || !self2.allowRedirect.call(request3, response)) {
         return false;
       }
-      request4.debug("redirect to", redirectTo);
+      request3.debug("redirect to", redirectTo);
       if (response.resume) {
         response.resume();
       }
       if (self2.redirectsFollowed >= self2.maxRedirects) {
-        request4.emit("error", new Error("Exceeded maxRedirects. Probably stuck in a redirect loop " + request4.uri.href));
+        request3.emit("error", new Error("Exceeded maxRedirects. Probably stuck in a redirect loop " + request3.uri.href));
         return false;
       }
       self2.redirectsFollowed += 1;
       if (!isUrl.test(redirectTo)) {
-        redirectTo = url2.resolve(request4.uri.href, redirectTo);
+        redirectTo = url2.resolve(request3.uri.href, redirectTo);
       }
-      var uriPrev = request4.uri;
-      request4.uri = url2.parse(redirectTo);
-      if (request4.uri.protocol !== uriPrev.protocol) {
-        delete request4.agent;
+      var uriPrev = request3.uri;
+      request3.uri = url2.parse(redirectTo);
+      if (request3.uri.protocol !== uriPrev.protocol) {
+        delete request3.agent;
       }
       self2.redirects.push({ statusCode: response.statusCode, redirectUri: redirectTo });
-      if (self2.followAllRedirects && request4.method !== "HEAD" && response.statusCode !== 401 && response.statusCode !== 307) {
-        request4.method = self2.followOriginalHttpMethod ? request4.method : "GET";
+      if (self2.followAllRedirects && request3.method !== "HEAD" && response.statusCode !== 401 && response.statusCode !== 307) {
+        request3.method = self2.followOriginalHttpMethod ? request3.method : "GET";
       }
-      delete request4.src;
-      delete request4.req;
-      delete request4._started;
+      delete request3.src;
+      delete request3.req;
+      delete request3._started;
       if (response.statusCode !== 401 && response.statusCode !== 307) {
-        delete request4.body;
-        delete request4._form;
-        if (request4.headers) {
-          request4.removeHeader("host");
-          request4.removeHeader("content-type");
-          request4.removeHeader("content-length");
-          if (request4.uri.hostname !== request4.originalHost.split(":")[0]) {
-            request4.removeHeader("authorization");
+        delete request3.body;
+        delete request3._form;
+        if (request3.headers) {
+          request3.removeHeader("host");
+          request3.removeHeader("content-type");
+          request3.removeHeader("content-length");
+          if (request3.uri.hostname !== request3.originalHost.split(":")[0]) {
+            request3.removeHeader("authorization");
           }
         }
       }
       if (!self2.removeRefererHeader) {
-        request4.setHeader("referer", uriPrev.href);
+        request3.setHeader("referer", uriPrev.href);
       }
-      request4.emit("redirect");
-      request4.init();
+      request3.emit("redirect");
+      request3.init();
       return true;
     };
     exports2.Redirect = Redirect;
@@ -86721,7 +86721,7 @@ var require_tunnel_agent = __commonJS({
     var net3 = __require("net");
     var tls2 = __require("tls");
     var http2 = __require("http");
-    var https4 = __require("https");
+    var https3 = __require("https");
     var events = __require("events");
     var assert3 = __require("assert");
     var util2 = __require("util");
@@ -86744,12 +86744,12 @@ var require_tunnel_agent = __commonJS({
     }
     function httpOverHttps(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = https4.request;
+      agent.request = https3.request;
       return agent;
     }
     function httpsOverHttps(options) {
       var agent = new TunnelingAgent(options);
-      agent.request = https4.request;
+      agent.request = https3.request;
       agent.createSocket = createSecureSocket;
       agent.defaultPort = 443;
       return agent;
@@ -86981,8 +86981,8 @@ var require_tunnel = __commonJS({
         return set2;
       }, {});
     }
-    function constructTunnelOptions(request4, proxyHeaders) {
-      var proxy = request4.proxy;
+    function constructTunnelOptions(request3, proxyHeaders) {
+      var proxy = request3.proxy;
       var tunnelOptions = {
         proxy: {
           host: proxy.hostname,
@@ -86990,16 +86990,16 @@ var require_tunnel = __commonJS({
           proxyAuth: proxy.auth,
           headers: proxyHeaders
         },
-        headers: request4.headers,
-        ca: request4.ca,
-        cert: request4.cert,
-        key: request4.key,
-        passphrase: request4.passphrase,
-        pfx: request4.pfx,
-        ciphers: request4.ciphers,
-        rejectUnauthorized: request4.rejectUnauthorized,
-        secureOptions: request4.secureOptions,
-        secureProtocol: request4.secureProtocol
+        headers: request3.headers,
+        ca: request3.ca,
+        cert: request3.cert,
+        key: request3.key,
+        passphrase: request3.passphrase,
+        pfx: request3.pfx,
+        ciphers: request3.ciphers,
+        rejectUnauthorized: request3.rejectUnauthorized,
+        secureOptions: request3.secureOptions,
+        secureProtocol: request3.secureProtocol
       };
       return tunnelOptions;
     }
@@ -87008,39 +87008,39 @@ var require_tunnel = __commonJS({
       var proxyProtocol = proxy.protocol === "https:" ? "Https" : "Http";
       return [uriProtocol, proxyProtocol].join("Over");
     }
-    function getTunnelFn(request4) {
-      var uri = request4.uri;
-      var proxy = request4.proxy;
+    function getTunnelFn(request3) {
+      var uri = request3.uri;
+      var proxy = request3.proxy;
       var tunnelFnName = constructTunnelFnName(uri, proxy);
       return tunnel[tunnelFnName];
     }
-    function Tunnel(request4) {
-      this.request = request4;
+    function Tunnel(request3) {
+      this.request = request3;
       this.proxyHeaderWhiteList = defaultProxyHeaderWhiteList;
       this.proxyHeaderExclusiveList = [];
-      if (typeof request4.tunnel !== "undefined") {
-        this.tunnelOverride = request4.tunnel;
+      if (typeof request3.tunnel !== "undefined") {
+        this.tunnelOverride = request3.tunnel;
       }
     }
     Tunnel.prototype.isEnabled = function() {
       var self2 = this;
-      var request4 = self2.request;
+      var request3 = self2.request;
       if (typeof self2.tunnelOverride !== "undefined") {
         return self2.tunnelOverride;
       }
-      if (request4.uri.protocol === "https:") {
+      if (request3.uri.protocol === "https:") {
         return true;
       }
       return false;
     };
     Tunnel.prototype.setup = function(options) {
       var self2 = this;
-      var request4 = self2.request;
+      var request3 = self2.request;
       options = options || {};
-      if (typeof request4.proxy === "string") {
-        request4.proxy = url2.parse(request4.proxy);
+      if (typeof request3.proxy === "string") {
+        request3.proxy = url2.parse(request3.proxy);
       }
-      if (!request4.proxy || !request4.tunnel) {
+      if (!request3.proxy || !request3.tunnel) {
         return false;
       }
       if (options.proxyHeaderWhiteList) {
@@ -87051,12 +87051,12 @@ var require_tunnel = __commonJS({
       }
       var proxyHeaderExclusiveList = self2.proxyHeaderExclusiveList.concat(defaultProxyHeaderExclusiveList);
       var proxyHeaderWhiteList = self2.proxyHeaderWhiteList.concat(proxyHeaderExclusiveList);
-      var proxyHeaders = constructProxyHeaderWhiteList(request4.headers, proxyHeaderWhiteList);
-      proxyHeaders.host = constructProxyHost(request4.uri);
-      proxyHeaderExclusiveList.forEach(request4.removeHeader, request4);
-      var tunnelFn = getTunnelFn(request4);
-      var tunnelOptions = constructTunnelOptions(request4, proxyHeaders);
-      request4.agent = tunnelFn(tunnelOptions);
+      var proxyHeaders = constructProxyHeaderWhiteList(request3.headers, proxyHeaderWhiteList);
+      proxyHeaders.host = constructProxyHost(request3.uri);
+      proxyHeaderExclusiveList.forEach(request3.removeHeader, request3);
+      var tunnelFn = getTunnelFn(request3);
+      var tunnelOptions = constructTunnelOptions(request3, proxyHeaders);
+      request3.agent = tunnelFn(tunnelOptions);
       return true;
     };
     Tunnel.defaultProxyHeaderWhiteList = defaultProxyHeaderWhiteList;
@@ -87107,7 +87107,7 @@ var require_request3 = __commonJS({
   "../../node_modules/.pnpm/request@2.88.2/node_modules/request/request.js"(exports2, module2) {
     "use strict";
     var http2 = __require("http");
-    var https4 = __require("https");
+    var https3 = __require("https");
     var url2 = __require("url");
     var util2 = __require("util");
     var stream = __require("stream");
@@ -87461,7 +87461,7 @@ var require_request3 = __commonJS({
         self2.oauth(self2._oauth.params);
       }
       var protocol = self2.proxy && !self2.tunnel ? self2.proxy.protocol : self2.uri.protocol;
-      var defaultModules = { "http:": http2, "https:": https4 };
+      var defaultModules = { "http:": http2, "https:": https3 };
       var httpModules = self2.httpModules || {};
       self2.httpModule = httpModules[protocol] || defaultModules[protocol];
       if (!self2.httpModule) {
@@ -87837,7 +87837,7 @@ var require_request3 = __commonJS({
       self2.response = response;
       response.request = self2;
       response.toJSON = responseToJSON;
-      if (self2.httpModule === https4 && self2.strictSSL && (!response.hasOwnProperty("socket") || !response.socket.authorized)) {
+      if (self2.httpModule === https3 && self2.strictSSL && (!response.hasOwnProperty("socket") || !response.socket.authorized)) {
         debug3("strict ssl error", self2.uri.href);
         var sslErr = response.hasOwnProperty("socket") ? response.socket.authorizationError : self2.uri.href + " does not support SSL";
         self2.emit("error", new Error("SSL Error: " + sslErr));
@@ -88371,7 +88371,7 @@ var require_request4 = __commonJS({
       params.callback = callback || params.callback;
       return params;
     }
-    function request4(uri, options, callback) {
+    function request3(uri, options, callback) {
       if (typeof uri === "undefined") {
         throw new Error("undefined is not a valid uri or options object.");
       }
@@ -88379,28 +88379,28 @@ var require_request4 = __commonJS({
       if (params.method === "HEAD" && paramsHaveRequestBody(params)) {
         throw new Error("HTTP HEAD requests MUST NOT include a request body.");
       }
-      return new request4.Request(params);
+      return new request3.Request(params);
     }
     function verbFunc(verb) {
       var method = verb.toUpperCase();
       return function(uri, options, callback) {
         var params = initParams(uri, options, callback);
         params.method = method;
-        return request4(params, params.callback);
+        return request3(params, params.callback);
       };
     }
-    request4.get = verbFunc("get");
-    request4.head = verbFunc("head");
-    request4.options = verbFunc("options");
-    request4.post = verbFunc("post");
-    request4.put = verbFunc("put");
-    request4.patch = verbFunc("patch");
-    request4.del = verbFunc("delete");
-    request4["delete"] = verbFunc("delete");
-    request4.jar = function(store) {
+    request3.get = verbFunc("get");
+    request3.head = verbFunc("head");
+    request3.options = verbFunc("options");
+    request3.post = verbFunc("post");
+    request3.put = verbFunc("put");
+    request3.patch = verbFunc("patch");
+    request3.del = verbFunc("delete");
+    request3["delete"] = verbFunc("delete");
+    request3.jar = function(store) {
       return cookies.jar(store);
     };
-    request4.cookie = function(str) {
+    request3.cookie = function(str) {
       return cookies.parse(str);
     };
     function wrapRequestMethod(method, options, requester, verb) {
@@ -88418,7 +88418,7 @@ var require_request4 = __commonJS({
         return method(target, target.callback);
       };
     }
-    request4.defaults = function(options, requester) {
+    request3.defaults = function(options, requester) {
       var self2 = this;
       options = options || {};
       if (typeof options === "function") {
@@ -88435,7 +88435,7 @@ var require_request4 = __commonJS({
       defaults.defaults = self2.defaults;
       return defaults;
     };
-    request4.forever = function(agentOptions, optionsArg) {
+    request3.forever = function(agentOptions, optionsArg) {
       var options = {};
       if (optionsArg) {
         extend2(options, optionsArg);
@@ -88444,18 +88444,18 @@ var require_request4 = __commonJS({
         options.agentOptions = agentOptions;
       }
       options.forever = true;
-      return request4.defaults(options);
+      return request3.defaults(options);
     };
-    module2.exports = request4;
-    request4.Request = require_request3();
-    request4.initParams = initParams;
-    Object.defineProperty(request4, "debug", {
+    module2.exports = request3;
+    request3.Request = require_request3();
+    request3.initParams = initParams;
+    Object.defineProperty(request3, "debug", {
       enumerable: true,
       get: function() {
-        return request4.Request.debug;
+        return request3.Request.debug;
       },
       set: function(debug3) {
-        request4.Request.debug = debug3;
+        request3.Request.debug = debug3;
       }
     });
   }
@@ -95328,7 +95328,7 @@ var require_rp = __commonJS({
     var configure = require_request22();
     var stealthyRequire = require_lib8();
     try {
-      request4 = stealthyRequire(
+      request3 = stealthyRequire(
         __require.cache,
         function() {
           return require_request4();
@@ -95343,11 +95343,11 @@ var require_rp = __commonJS({
       console.error(EOL + "###" + EOL + '### The "request" library is not installed automatically anymore.' + EOL + '### But is a dependency of "request-promise".' + EOL + "### Please install it with:" + EOL + "### npm install request --save" + EOL + "###" + EOL);
       throw err;
     }
-    var request4;
+    var request3;
     var EOL;
     Bluebird.config({ cancellation: true });
     configure({
-      request: request4,
+      request: request3,
       PromiseImpl: Bluebird,
       expose: [
         "then",
@@ -95364,10 +95364,10 @@ var require_rp = __commonJS({
         });
       }
     });
-    request4.bindCLS = function RP$bindCLS() {
+    request3.bindCLS = function RP$bindCLS() {
       throw new Error("CLS support was dropped. To get it back read: https://github.com/request/request-promise/wiki/Getting-Back-Support-for-Continuation-Local-Storage");
     };
-    module2.exports = request4;
+    module2.exports = request3;
   }
 });
 
@@ -97141,7 +97141,7 @@ var require_request5 = __commonJS({
     var crypto_1 = __require("crypto");
     var rxjs_1 = require_rxjs();
     var attempt_1 = require_src2();
-    var request4 = require_rp();
+    var request3 = require_rp();
     var errors_1 = require_errors4();
     var JSONbigInt = require_json_bigint();
     var JSONbigString = JSONbigInt({ storeAsString: true });
@@ -97260,7 +97260,7 @@ ${body}
       }
       async faultTolerantRequest(options) {
         try {
-          return await (0, attempt_1.retry)(async () => request4(options), this.attemptOptions);
+          return await (0, attempt_1.retry)(async () => request3(options), this.attemptOptions);
         } catch (err) {
           throw new errors_1.IgNetworkError(err);
         }
@@ -102465,11 +102465,11 @@ var require_media_entity = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.MediaEntity = void 0;
-    var request4 = require_rp();
+    var request3 = require_rp();
     var entity_1 = require_entity();
     var MediaEntity = class extends entity_1.Entity {
       static async oembed(url2) {
-        return request4({
+        return request3({
           url: "https://api.instagram.com/instagram_oembed/",
           json: true,
           qs: {
@@ -113116,7 +113116,7 @@ var require_simulate_service = __commonJS({
         if (toShuffle) {
           requests = (0, lodash_1.shuffle)(requests);
         }
-        await Bluebird.map(requests, (request4) => request4(), { concurrency });
+        await Bluebird.map(requests, (request3) => request3(), { concurrency });
       }
       async preLoginFlow(concurrency, toShuffle) {
         return _SimulateService.executeRequestsFlow({
@@ -114427,346 +114427,6 @@ var require_dist2 = __commonJS({
     __exportStar(require_feeds(), exports2);
     __exportStar(require_types2(), exports2);
     __exportStar(require_responses(), exports2);
-  }
-});
-
-// ../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/helpers.js
-var init_helpers = __esm({
-  "../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/helpers.js"() {
-  }
-});
-
-// ../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/index.js
-import * as net from "net";
-import * as http from "http";
-import { Agent as HttpsAgent } from "https";
-var INTERNAL, Agent2;
-var init_dist = __esm({
-  "../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/index.js"() {
-    init_helpers();
-    INTERNAL = /* @__PURE__ */ Symbol("AgentBaseInternalState");
-    Agent2 = class extends http.Agent {
-      constructor(opts) {
-        super(opts);
-        this[INTERNAL] = {};
-      }
-      /**
-       * Determine whether this is an `http` or `https` request.
-       */
-      isSecureEndpoint(options) {
-        if (options) {
-          if (typeof options.secureEndpoint === "boolean") {
-            return options.secureEndpoint;
-          }
-          if (typeof options.protocol === "string") {
-            return options.protocol === "https:";
-          }
-        }
-        const { stack } = new Error();
-        if (typeof stack !== "string")
-          return false;
-        return stack.split("\n").some((l2) => l2.indexOf("(https.js:") !== -1 || l2.indexOf("node:https:") !== -1);
-      }
-      // In order to support async signatures in `connect()` and Node's native
-      // connection pooling in `http.Agent`, the array of sockets for each origin
-      // has to be updated synchronously. This is so the length of the array is
-      // accurate when `addRequest()` is next called. We achieve this by creating a
-      // fake socket and adding it to `sockets[origin]` and incrementing
-      // `totalSocketCount`.
-      incrementSockets(name) {
-        if (this.maxSockets === Infinity && this.maxTotalSockets === Infinity) {
-          return null;
-        }
-        if (!this.sockets[name]) {
-          this.sockets[name] = [];
-        }
-        const fakeSocket = new net.Socket({ writable: false });
-        this.sockets[name].push(fakeSocket);
-        this.totalSocketCount++;
-        return fakeSocket;
-      }
-      decrementSockets(name, socket) {
-        if (!this.sockets[name] || socket === null) {
-          return;
-        }
-        const sockets = this.sockets[name];
-        const index = sockets.indexOf(socket);
-        if (index !== -1) {
-          sockets.splice(index, 1);
-          this.totalSocketCount--;
-          if (sockets.length === 0) {
-            delete this.sockets[name];
-          }
-        }
-      }
-      // In order to properly update the socket pool, we need to call `getName()` on
-      // the core `https.Agent` if it is a secureEndpoint.
-      getName(options) {
-        const secureEndpoint = this.isSecureEndpoint(options);
-        if (secureEndpoint) {
-          return HttpsAgent.prototype.getName.call(this, options);
-        }
-        return super.getName(options);
-      }
-      createSocket(req, options, cb) {
-        const connectOpts = {
-          ...options,
-          secureEndpoint: this.isSecureEndpoint(options)
-        };
-        const name = this.getName(connectOpts);
-        const fakeSocket = this.incrementSockets(name);
-        Promise.resolve().then(() => this.connect(req, connectOpts)).then((socket) => {
-          this.decrementSockets(name, fakeSocket);
-          if (typeof socket.addRequest === "function") {
-            try {
-              return socket.addRequest(req, connectOpts);
-            } catch (err) {
-              return cb(err);
-            }
-          }
-          this[INTERNAL].currentSocket = socket;
-          super.createSocket(req, options, cb);
-        }, (err) => {
-          this.decrementSockets(name, fakeSocket);
-          cb(err);
-        });
-      }
-      createConnection() {
-        const socket = this[INTERNAL].currentSocket;
-        this[INTERNAL].currentSocket = void 0;
-        if (!socket) {
-          throw new Error("No socket was returned in the `connect()` function");
-        }
-        return socket;
-      }
-      get defaultPort() {
-        return this[INTERNAL].defaultPort ?? (this.protocol === "https:" ? 443 : 80);
-      }
-      set defaultPort(v3) {
-        if (this[INTERNAL]) {
-          this[INTERNAL].defaultPort = v3;
-        }
-      }
-      get protocol() {
-        return this[INTERNAL].protocol ?? (this.isSecureEndpoint() ? "https:" : "http:");
-      }
-      set protocol(v3) {
-        if (this[INTERNAL]) {
-          this[INTERNAL].protocol = v3;
-        }
-      }
-    };
-  }
-});
-
-// ../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/parse-proxy-response.js
-function parseProxyResponse(socket) {
-  return new Promise((resolve, reject) => {
-    let buffersLength = 0;
-    const buffers = [];
-    function read() {
-      const b3 = socket.read();
-      if (b3)
-        ondata(b3);
-      else
-        socket.once("readable", read);
-    }
-    function cleanup() {
-      socket.removeListener("end", onend);
-      socket.removeListener("error", onerror);
-      socket.removeListener("readable", read);
-    }
-    function onend() {
-      cleanup();
-      debug("onend");
-      reject(new Error("Proxy connection ended before receiving CONNECT response"));
-    }
-    function onerror(err) {
-      cleanup();
-      debug("onerror %o", err);
-      reject(err);
-    }
-    function ondata(b3) {
-      buffers.push(b3);
-      buffersLength += b3.length;
-      const buffered = Buffer.concat(buffers, buffersLength);
-      const endOfHeaders = buffered.indexOf("\r\n\r\n");
-      if (endOfHeaders === -1) {
-        debug("have not received end of HTTP headers yet...");
-        read();
-        return;
-      }
-      const headerParts = buffered.slice(0, endOfHeaders).toString("ascii").split("\r\n");
-      const firstLine = headerParts.shift();
-      if (!firstLine) {
-        socket.destroy();
-        return reject(new Error("No header received from proxy CONNECT response"));
-      }
-      const firstLineParts = firstLine.split(" ");
-      const statusCode = +firstLineParts[1];
-      const statusText = firstLineParts.slice(2).join(" ");
-      const headers = {};
-      for (const header of headerParts) {
-        if (!header)
-          continue;
-        const firstColon = header.indexOf(":");
-        if (firstColon === -1) {
-          socket.destroy();
-          return reject(new Error(`Invalid header from proxy CONNECT response: "${header}"`));
-        }
-        const key = header.slice(0, firstColon).toLowerCase();
-        const value = header.slice(firstColon + 1).trimStart();
-        const current = headers[key];
-        if (typeof current === "string") {
-          headers[key] = [current, value];
-        } else if (Array.isArray(current)) {
-          current.push(value);
-        } else {
-          headers[key] = value;
-        }
-      }
-      debug("got proxy server response: %o %o", firstLine, headers);
-      cleanup();
-      resolve({
-        connect: {
-          statusCode,
-          statusText,
-          headers
-        },
-        buffered
-      });
-    }
-    socket.on("error", onerror);
-    socket.on("end", onend);
-    read();
-  });
-}
-var import_debug, debug;
-var init_parse_proxy_response = __esm({
-  "../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/parse-proxy-response.js"() {
-    import_debug = __toESM(require_src(), 1);
-    debug = (0, import_debug.default)("https-proxy-agent:parse-proxy-response");
-  }
-});
-
-// ../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/index.js
-var dist_exports = {};
-__export(dist_exports, {
-  HttpsProxyAgent: () => HttpsProxyAgent
-});
-import * as net2 from "net";
-import * as tls from "tls";
-import assert2 from "assert";
-import { URL as URL2 } from "url";
-function resume(socket) {
-  socket.resume();
-}
-function omit2(obj2, ...keys) {
-  const ret2 = {};
-  let key;
-  for (key in obj2) {
-    if (!keys.includes(key)) {
-      ret2[key] = obj2[key];
-    }
-  }
-  return ret2;
-}
-var import_debug2, debug2, setServernameFromNonIpHost, HttpsProxyAgent;
-var init_dist2 = __esm({
-  "../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/index.js"() {
-    import_debug2 = __toESM(require_src(), 1);
-    init_dist();
-    init_parse_proxy_response();
-    debug2 = (0, import_debug2.default)("https-proxy-agent");
-    setServernameFromNonIpHost = (options) => {
-      if (options.servername === void 0 && options.host && !net2.isIP(options.host)) {
-        return {
-          ...options,
-          servername: options.host
-        };
-      }
-      return options;
-    };
-    HttpsProxyAgent = class extends Agent2 {
-      constructor(proxy, opts) {
-        super(opts);
-        this.options = { path: void 0 };
-        this.proxy = typeof proxy === "string" ? new URL2(proxy) : proxy;
-        this.proxyHeaders = opts?.headers ?? {};
-        debug2("Creating new HttpsProxyAgent instance: %o", this.proxy.href);
-        const host = (this.proxy.hostname || this.proxy.host).replace(/^\[|\]$/g, "");
-        const port2 = this.proxy.port ? parseInt(this.proxy.port, 10) : this.proxy.protocol === "https:" ? 443 : 80;
-        this.connectOpts = {
-          // Attempt to negotiate http/1.1 for proxy servers that support http/2
-          ALPNProtocols: ["http/1.1"],
-          ...opts ? omit2(opts, "headers") : null,
-          host,
-          port: port2
-        };
-      }
-      /**
-       * Called when the node-core HTTP client library is creating a
-       * new HTTP request.
-       */
-      async connect(req, opts) {
-        const { proxy } = this;
-        if (!opts.host) {
-          throw new TypeError('No "host" provided');
-        }
-        let socket;
-        if (proxy.protocol === "https:") {
-          debug2("Creating `tls.Socket`: %o", this.connectOpts);
-          socket = tls.connect(setServernameFromNonIpHost(this.connectOpts));
-        } else {
-          debug2("Creating `net.Socket`: %o", this.connectOpts);
-          socket = net2.connect(this.connectOpts);
-        }
-        const headers = typeof this.proxyHeaders === "function" ? this.proxyHeaders() : { ...this.proxyHeaders };
-        const host = net2.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
-        let payload = `CONNECT ${host}:${opts.port} HTTP/1.1\r
-`;
-        if (proxy.username || proxy.password) {
-          const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
-          headers["Proxy-Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
-        }
-        headers.Host = `${host}:${opts.port}`;
-        if (!headers["Proxy-Connection"]) {
-          headers["Proxy-Connection"] = this.keepAlive ? "Keep-Alive" : "close";
-        }
-        for (const name of Object.keys(headers)) {
-          payload += `${name}: ${headers[name]}\r
-`;
-        }
-        const proxyResponsePromise = parseProxyResponse(socket);
-        socket.write(`${payload}\r
-`);
-        const { connect: connect3, buffered } = await proxyResponsePromise;
-        req.emit("proxyConnect", connect3);
-        this.emit("proxyConnect", connect3, req);
-        if (connect3.statusCode === 200) {
-          req.once("socket", resume);
-          if (opts.secureEndpoint) {
-            debug2("Upgrading socket connection to TLS");
-            return tls.connect({
-              ...omit2(setServernameFromNonIpHost(opts), "host", "path", "port"),
-              socket
-            });
-          }
-          return socket;
-        }
-        socket.destroy();
-        const fakeSocket = new net2.Socket({ writable: false });
-        fakeSocket.readable = true;
-        req.once("socket", (s) => {
-          debug2("Replaying proxy buffer for failed request");
-          assert2(s.listenerCount("data") > 0);
-          s.push(buffered);
-          s.push(null);
-        });
-        return fakeSocket;
-      }
-    };
-    HttpsProxyAgent.protocols = ["http", "https"];
   }
 });
 
@@ -116969,7 +116629,7 @@ var require_websocket = __commonJS({
   "../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/lib/websocket.js"(exports2, module2) {
     "use strict";
     var EventEmitter = __require("events");
-    var https4 = __require("https");
+    var https3 = __require("https");
     var http2 = __require("http");
     var net3 = __require("net");
     var tls2 = __require("tls");
@@ -117504,7 +117164,7 @@ var require_websocket = __commonJS({
       }
       const defaultPort = isSecure ? 443 : 80;
       const key = randomBytes2(16).toString("base64");
-      const request4 = isSecure ? https4.request : http2.request;
+      const request3 = isSecure ? https3.request : http2.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
       opts.createConnection = opts.createConnection || (isSecure ? tlsConnect : netConnect);
@@ -117581,12 +117241,12 @@ var require_websocket = __commonJS({
         if (opts.auth && !options.headers.authorization) {
           options.headers.authorization = "Basic " + Buffer.from(opts.auth).toString("base64");
         }
-        req = websocket._req = request4(opts);
+        req = websocket._req = request3(opts);
         if (websocket._redirects) {
           websocket.emit("redirect", websocket.url, req);
         }
       } else {
-        req = websocket._req = request4(opts);
+        req = websocket._req = request3(opts);
       }
       if (opts.timeout) {
         req.on("timeout", () => {
@@ -118386,15 +118046,355 @@ var require_websocket_server = __commonJS({
   }
 });
 
+// ../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/helpers.js
+var init_helpers = __esm({
+  "../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/helpers.js"() {
+  }
+});
+
+// ../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/index.js
+import * as net from "net";
+import * as http from "http";
+import { Agent as HttpsAgent } from "https";
+var INTERNAL, Agent2;
+var init_dist = __esm({
+  "../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/index.js"() {
+    init_helpers();
+    INTERNAL = /* @__PURE__ */ Symbol("AgentBaseInternalState");
+    Agent2 = class extends http.Agent {
+      constructor(opts) {
+        super(opts);
+        this[INTERNAL] = {};
+      }
+      /**
+       * Determine whether this is an `http` or `https` request.
+       */
+      isSecureEndpoint(options) {
+        if (options) {
+          if (typeof options.secureEndpoint === "boolean") {
+            return options.secureEndpoint;
+          }
+          if (typeof options.protocol === "string") {
+            return options.protocol === "https:";
+          }
+        }
+        const { stack } = new Error();
+        if (typeof stack !== "string")
+          return false;
+        return stack.split("\n").some((l2) => l2.indexOf("(https.js:") !== -1 || l2.indexOf("node:https:") !== -1);
+      }
+      // In order to support async signatures in `connect()` and Node's native
+      // connection pooling in `http.Agent`, the array of sockets for each origin
+      // has to be updated synchronously. This is so the length of the array is
+      // accurate when `addRequest()` is next called. We achieve this by creating a
+      // fake socket and adding it to `sockets[origin]` and incrementing
+      // `totalSocketCount`.
+      incrementSockets(name) {
+        if (this.maxSockets === Infinity && this.maxTotalSockets === Infinity) {
+          return null;
+        }
+        if (!this.sockets[name]) {
+          this.sockets[name] = [];
+        }
+        const fakeSocket = new net.Socket({ writable: false });
+        this.sockets[name].push(fakeSocket);
+        this.totalSocketCount++;
+        return fakeSocket;
+      }
+      decrementSockets(name, socket) {
+        if (!this.sockets[name] || socket === null) {
+          return;
+        }
+        const sockets = this.sockets[name];
+        const index = sockets.indexOf(socket);
+        if (index !== -1) {
+          sockets.splice(index, 1);
+          this.totalSocketCount--;
+          if (sockets.length === 0) {
+            delete this.sockets[name];
+          }
+        }
+      }
+      // In order to properly update the socket pool, we need to call `getName()` on
+      // the core `https.Agent` if it is a secureEndpoint.
+      getName(options) {
+        const secureEndpoint = this.isSecureEndpoint(options);
+        if (secureEndpoint) {
+          return HttpsAgent.prototype.getName.call(this, options);
+        }
+        return super.getName(options);
+      }
+      createSocket(req, options, cb) {
+        const connectOpts = {
+          ...options,
+          secureEndpoint: this.isSecureEndpoint(options)
+        };
+        const name = this.getName(connectOpts);
+        const fakeSocket = this.incrementSockets(name);
+        Promise.resolve().then(() => this.connect(req, connectOpts)).then((socket) => {
+          this.decrementSockets(name, fakeSocket);
+          if (typeof socket.addRequest === "function") {
+            try {
+              return socket.addRequest(req, connectOpts);
+            } catch (err) {
+              return cb(err);
+            }
+          }
+          this[INTERNAL].currentSocket = socket;
+          super.createSocket(req, options, cb);
+        }, (err) => {
+          this.decrementSockets(name, fakeSocket);
+          cb(err);
+        });
+      }
+      createConnection() {
+        const socket = this[INTERNAL].currentSocket;
+        this[INTERNAL].currentSocket = void 0;
+        if (!socket) {
+          throw new Error("No socket was returned in the `connect()` function");
+        }
+        return socket;
+      }
+      get defaultPort() {
+        return this[INTERNAL].defaultPort ?? (this.protocol === "https:" ? 443 : 80);
+      }
+      set defaultPort(v3) {
+        if (this[INTERNAL]) {
+          this[INTERNAL].defaultPort = v3;
+        }
+      }
+      get protocol() {
+        return this[INTERNAL].protocol ?? (this.isSecureEndpoint() ? "https:" : "http:");
+      }
+      set protocol(v3) {
+        if (this[INTERNAL]) {
+          this[INTERNAL].protocol = v3;
+        }
+      }
+    };
+  }
+});
+
+// ../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/parse-proxy-response.js
+function parseProxyResponse(socket) {
+  return new Promise((resolve, reject) => {
+    let buffersLength = 0;
+    const buffers = [];
+    function read() {
+      const b3 = socket.read();
+      if (b3)
+        ondata(b3);
+      else
+        socket.once("readable", read);
+    }
+    function cleanup() {
+      socket.removeListener("end", onend);
+      socket.removeListener("error", onerror);
+      socket.removeListener("readable", read);
+    }
+    function onend() {
+      cleanup();
+      debug("onend");
+      reject(new Error("Proxy connection ended before receiving CONNECT response"));
+    }
+    function onerror(err) {
+      cleanup();
+      debug("onerror %o", err);
+      reject(err);
+    }
+    function ondata(b3) {
+      buffers.push(b3);
+      buffersLength += b3.length;
+      const buffered = Buffer.concat(buffers, buffersLength);
+      const endOfHeaders = buffered.indexOf("\r\n\r\n");
+      if (endOfHeaders === -1) {
+        debug("have not received end of HTTP headers yet...");
+        read();
+        return;
+      }
+      const headerParts = buffered.slice(0, endOfHeaders).toString("ascii").split("\r\n");
+      const firstLine = headerParts.shift();
+      if (!firstLine) {
+        socket.destroy();
+        return reject(new Error("No header received from proxy CONNECT response"));
+      }
+      const firstLineParts = firstLine.split(" ");
+      const statusCode = +firstLineParts[1];
+      const statusText = firstLineParts.slice(2).join(" ");
+      const headers = {};
+      for (const header of headerParts) {
+        if (!header)
+          continue;
+        const firstColon = header.indexOf(":");
+        if (firstColon === -1) {
+          socket.destroy();
+          return reject(new Error(`Invalid header from proxy CONNECT response: "${header}"`));
+        }
+        const key = header.slice(0, firstColon).toLowerCase();
+        const value = header.slice(firstColon + 1).trimStart();
+        const current = headers[key];
+        if (typeof current === "string") {
+          headers[key] = [current, value];
+        } else if (Array.isArray(current)) {
+          current.push(value);
+        } else {
+          headers[key] = value;
+        }
+      }
+      debug("got proxy server response: %o %o", firstLine, headers);
+      cleanup();
+      resolve({
+        connect: {
+          statusCode,
+          statusText,
+          headers
+        },
+        buffered
+      });
+    }
+    socket.on("error", onerror);
+    socket.on("end", onend);
+    read();
+  });
+}
+var import_debug, debug;
+var init_parse_proxy_response = __esm({
+  "../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/parse-proxy-response.js"() {
+    import_debug = __toESM(require_src(), 1);
+    debug = (0, import_debug.default)("https-proxy-agent:parse-proxy-response");
+  }
+});
+
+// ../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/index.js
+var dist_exports = {};
+__export(dist_exports, {
+  HttpsProxyAgent: () => HttpsProxyAgent
+});
+import * as net2 from "net";
+import * as tls from "tls";
+import assert2 from "assert";
+import { URL as URL2 } from "url";
+function resume(socket) {
+  socket.resume();
+}
+function omit2(obj2, ...keys) {
+  const ret2 = {};
+  let key;
+  for (key in obj2) {
+    if (!keys.includes(key)) {
+      ret2[key] = obj2[key];
+    }
+  }
+  return ret2;
+}
+var import_debug2, debug2, setServernameFromNonIpHost, HttpsProxyAgent;
+var init_dist2 = __esm({
+  "../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/index.js"() {
+    import_debug2 = __toESM(require_src(), 1);
+    init_dist();
+    init_parse_proxy_response();
+    debug2 = (0, import_debug2.default)("https-proxy-agent");
+    setServernameFromNonIpHost = (options) => {
+      if (options.servername === void 0 && options.host && !net2.isIP(options.host)) {
+        return {
+          ...options,
+          servername: options.host
+        };
+      }
+      return options;
+    };
+    HttpsProxyAgent = class extends Agent2 {
+      constructor(proxy, opts) {
+        super(opts);
+        this.options = { path: void 0 };
+        this.proxy = typeof proxy === "string" ? new URL2(proxy) : proxy;
+        this.proxyHeaders = opts?.headers ?? {};
+        debug2("Creating new HttpsProxyAgent instance: %o", this.proxy.href);
+        const host = (this.proxy.hostname || this.proxy.host).replace(/^\[|\]$/g, "");
+        const port2 = this.proxy.port ? parseInt(this.proxy.port, 10) : this.proxy.protocol === "https:" ? 443 : 80;
+        this.connectOpts = {
+          // Attempt to negotiate http/1.1 for proxy servers that support http/2
+          ALPNProtocols: ["http/1.1"],
+          ...opts ? omit2(opts, "headers") : null,
+          host,
+          port: port2
+        };
+      }
+      /**
+       * Called when the node-core HTTP client library is creating a
+       * new HTTP request.
+       */
+      async connect(req, opts) {
+        const { proxy } = this;
+        if (!opts.host) {
+          throw new TypeError('No "host" provided');
+        }
+        let socket;
+        if (proxy.protocol === "https:") {
+          debug2("Creating `tls.Socket`: %o", this.connectOpts);
+          socket = tls.connect(setServernameFromNonIpHost(this.connectOpts));
+        } else {
+          debug2("Creating `net.Socket`: %o", this.connectOpts);
+          socket = net2.connect(this.connectOpts);
+        }
+        const headers = typeof this.proxyHeaders === "function" ? this.proxyHeaders() : { ...this.proxyHeaders };
+        const host = net2.isIPv6(opts.host) ? `[${opts.host}]` : opts.host;
+        let payload = `CONNECT ${host}:${opts.port} HTTP/1.1\r
+`;
+        if (proxy.username || proxy.password) {
+          const auth = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+          headers["Proxy-Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
+        }
+        headers.Host = `${host}:${opts.port}`;
+        if (!headers["Proxy-Connection"]) {
+          headers["Proxy-Connection"] = this.keepAlive ? "Keep-Alive" : "close";
+        }
+        for (const name of Object.keys(headers)) {
+          payload += `${name}: ${headers[name]}\r
+`;
+        }
+        const proxyResponsePromise = parseProxyResponse(socket);
+        socket.write(`${payload}\r
+`);
+        const { connect: connect3, buffered } = await proxyResponsePromise;
+        req.emit("proxyConnect", connect3);
+        this.emit("proxyConnect", connect3, req);
+        if (connect3.statusCode === 200) {
+          req.once("socket", resume);
+          if (opts.secureEndpoint) {
+            debug2("Upgrading socket connection to TLS");
+            return tls.connect({
+              ...omit2(setServernameFromNonIpHost(opts), "host", "path", "port"),
+              socket
+            });
+          }
+          return socket;
+        }
+        socket.destroy();
+        const fakeSocket = new net2.Socket({ writable: false });
+        fakeSocket.readable = true;
+        req.once("socket", (s) => {
+          debug2("Replaying proxy buffer for failed request");
+          assert2(s.listenerCount("data") > 0);
+          s.push(buffered);
+          s.push(null);
+        });
+        return fakeSocket;
+      }
+    };
+    HttpsProxyAgent.protocols = ["http", "https"];
+  }
+});
+
 // src/instagram/hikerApiClient.ts
 var hikerApiClient_exports = {};
 __export(hikerApiClient_exports, {
   HikerApiClient: () => HikerApiClient
 });
-import * as https3 from "https";
+import * as https2 from "https";
 function hikerGet(path4, token) {
   return new Promise((resolve, reject) => {
-    const req = https3.request(
+    const req = https2.request(
       {
         hostname: HIKER_HOST,
         path: path4,
@@ -140518,7 +140518,6 @@ var api = {
 
 // src/instagram/instagramLogin.ts
 var import_instagram_private_api = __toESM(require_dist2(), 1);
-import * as https from "https";
 
 // ../../node_modules/.pnpm/@otplib+core@13.4.0/node_modules/@otplib/core/dist/index.js
 var i = class extends Error {
@@ -141833,252 +141832,115 @@ function attachRequestLogger(ig, profileId) {
     }
   });
 }
-function httpsRequest(options, body) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => {
-        data += chunk;
-      });
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: data }));
-    });
-    req.on("error", reject);
-    req.setTimeout(2e4, () => {
-      req.destroy(new Error("timeout"));
-    });
-    if (body) req.write(body);
-    req.end();
-  });
-}
-async function igWebRequest(opts) {
-  const { path: path4, method, headers, body, cookieJar = [], proxyUrl } = opts;
-  const reqHeaders = {
-    ...headers,
-    ...cookieJar.length ? { "Cookie": cookieJar.join("; ") } : {},
-    ...body ? { "Content-Length": String(Buffer.byteLength(body)) } : {}
-  };
-  let agent;
-  if (proxyUrl) {
-    const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
-    agent = new HttpsProxyAgent2(proxyUrl);
-  }
-  const res = await httpsRequest(
-    { host: "www.instagram.com", port: 443, path: path4, method, headers: reqHeaders, ...agent ? { agent } : {} },
-    body
-  );
-  const setCookieRaw = res.headers["set-cookie"];
-  const setCookies = Array.isArray(setCookieRaw) ? setCookieRaw : setCookieRaw ? [setCookieRaw] : [];
-  const newCookies = setCookies.map((c3) => c3.split(";")[0]);
-  let json2 = null;
+async function ensureEncryptionKeys(ig) {
   try {
-    json2 = JSON.parse(res.body);
-  } catch {
-  }
-  return { status: res.status, cookies: newCookies, json: json2, rawBody: res.body };
-}
-function mergeCookies(base, overrides) {
-  const map2 = /* @__PURE__ */ new Map();
-  for (const c3 of [...base, ...overrides]) {
-    const [k2] = c3.split("=");
-    map2.set(k2, c3);
-  }
-  return Array.from(map2.values());
-}
-var IG_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-var IG_APP_ID = "936619743392459";
-async function webGetLoginPage(proxyUrl) {
-  const res = await igWebRequest({
-    path: "/accounts/login/",
-    method: "GET",
-    headers: {
-      "Host": "www.instagram.com",
-      "User-Agent": IG_UA,
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9"
-    },
-    proxyUrl
-  });
-  let csrfToken = "";
-  for (const c3 of res.cookies) {
-    if (c3.startsWith("csrftoken=")) {
-      csrfToken = c3.split("=")[1];
-      break;
+    await ig.request.send({
+      method: "GET",
+      url: "/api/v1/si/fetch_headers/",
+      qs: { challenge_type: "signup", guid: ig.state.uuid }
+    });
+    if (ig.state.passwordEncryptionPubKey) {
+      console.error(`[instagramLogin] Got encryption keys via si/fetch_headers (keyId=${ig.state.passwordEncryptionKeyId})`);
+      return;
     }
+  } catch (e) {
+    console.error(`[instagramLogin] si/fetch_headers failed: ${e?.message}`);
   }
-  if (!csrfToken) {
-    const m3 = res.rawBody.match(/"csrf_token":"([^"]+)"/);
-    if (m3) csrfToken = m3[1];
-  }
-  console.error(`[webLogin] page status=${res.status} csrf=${csrfToken ? "ok" : "MISSING"}`);
-  return csrfToken ? { cookieJar: res.cookies, csrfToken } : null;
-}
-async function webPostLogin(username, password, session, proxyUrl) {
-  const timestamp = Math.floor(Date.now() / 1e3);
-  const formBody = new URLSearchParams({
-    username,
-    enc_password: `#PWD_INSTAGRAM:0:${timestamp}:${password}`,
-    queryParams: "{}",
-    optIntoOneTap: "false"
-  }).toString();
-  const res = await igWebRequest({
-    path: "/accounts/login/ajax/",
-    method: "POST",
-    headers: {
-      "Host": "www.instagram.com",
-      "User-Agent": IG_UA,
-      "Accept": "*/*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/x-www-form-urlencoded",
-      "X-CSRFToken": session.csrfToken,
-      "X-IG-App-ID": IG_APP_ID,
-      "X-Requested-With": "XMLHttpRequest",
-      "Referer": "https://www.instagram.com/accounts/login/",
-      "Origin": "https://www.instagram.com"
-    },
-    body: formBody,
-    cookieJar: session.cookieJar,
-    proxyUrl
-  });
-  console.error(`[webLogin] ajax status=${res.status} body=${res.rawBody.slice(0, 200)}`);
-  const j = res.json;
-  if (j?.authenticated === true) return { outcome: "ok" };
-  if (j?.two_factor_required) {
-    const identifier = j?.two_factor_info?.two_factor_identifier ?? "";
-    const merged = mergeCookies(session.cookieJar, res.cookies);
-    let csrf = session.csrfToken;
-    for (const c3 of res.cookies) {
-      if (c3.startsWith("csrftoken=")) {
-        csrf = c3.split("=")[1];
-        break;
-      }
+  try {
+    await ig.qe.syncLoginExperiments();
+    if (ig.state.passwordEncryptionPubKey) {
+      console.error(`[instagramLogin] Got encryption keys via qe/sync (keyId=${ig.state.passwordEncryptionKeyId})`);
+      return;
     }
-    return { outcome: "2fa", identifier, session: { cookieJar: merged, csrfToken: csrf } };
+  } catch (e) {
+    console.error(`[instagramLogin] qe/sync failed: ${e?.message}`);
   }
-  if (j?.checkpoint_url || j?.lock) return { outcome: "checkpoint" };
-  if (j?.user === false || j?.authenticated === false) return { outcome: "bad_password" };
-  return { outcome: "error", detail: res.rawBody.slice(0, 200) };
-}
-async function webPostTwoFactor(username, totpCode, identifier, session, proxyUrl) {
-  const formBody = new URLSearchParams({
-    username,
-    verificationCode: totpCode,
-    identifier,
-    queryParams: "{}",
-    verificationMethod: "3"
-  }).toString();
-  const res = await igWebRequest({
-    path: "/accounts/login/ajax/two_factor/",
-    method: "POST",
-    headers: {
-      "Host": "www.instagram.com",
-      "User-Agent": IG_UA,
-      "Accept": "*/*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": "application/x-www-form-urlencoded",
-      "X-CSRFToken": session.csrfToken,
-      "X-IG-App-ID": IG_APP_ID,
-      "X-Requested-With": "XMLHttpRequest",
-      "Referer": "https://www.instagram.com/accounts/login/",
-      "Origin": "https://www.instagram.com"
-    },
-    body: formBody,
-    cookieJar: session.cookieJar,
-    proxyUrl
-  });
-  return res.json?.authenticated === true;
+  try {
+    await ig.account.readMsisdnHeader();
+    if (ig.state.passwordEncryptionPubKey) {
+      console.error(`[instagramLogin] Got encryption keys via readMsisdnHeader (keyId=${ig.state.passwordEncryptionKeyId})`);
+      return;
+    }
+  } catch (e) {
+    console.error(`[instagramLogin] readMsisdnHeader failed: ${e?.message}`);
+  }
+  console.error(`[instagramLogin] WARNING: could not fetch encryption keys \u2014 login will fail`);
 }
 async function verifyInstagramCredentials(profile) {
   const proxyUrl = buildProxyUrl(profile);
   console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
-  const loginStart = Date.now();
   const ig = new import_instagram_private_api.IgApiClient();
   ig.state.generateDevice(profile.username);
   if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
   attachRequestLogger(ig, profile.id);
+  await ensureEncryptionKeys(ig);
+  if (!ig.state.passwordEncryptionPubKey) {
+    return {
+      ok: false,
+      message: `@${profile.username} \u2014 could not reach Instagram servers. Check your proxy or network connection.`,
+      accountStatus: "logged_out"
+    };
+  }
   try {
     await ig.simulate.preLoginFlow();
-    console.error(`[instagramLogin] preLoginFlow completed for @${profile.username}`);
+    console.error(`[instagramLogin] preLoginFlow OK for @${profile.username}`);
   } catch (e) {
-    console.error(`[instagramLogin] preLoginFlow error (continuing): ${e?.message}`);
+    console.error(`[instagramLogin] preLoginFlow partial failure (continuing): ${e?.message}`);
   }
   try {
     await ig.account.login(profile.username, profile.password);
     ig.simulate.postLoginFlow().catch(() => {
     });
     return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid" };
-  } catch (mobileErr) {
-    console.error(`[instagramLogin] Mobile login failed for @${profile.username}: ${mobileErr?.constructor?.name} \u2014 ${mobileErr?.message}`);
-    if (mobileErr instanceof import_instagram_private_api.IgLoginTwoFactorRequiredError) {
-      return await handle2FA(profile, mobileErr, ig, proxyUrl, loginStart);
+  } catch (err) {
+    const errName = err?.constructor?.name ?? "";
+    const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 300);
+    console.error(`[instagramLogin] login error for @${profile.username}: ${errName} \u2014 ${err?.message} \u2014 body: ${errBody}`);
+    if (err instanceof import_instagram_private_api.IgLoginTwoFactorRequiredError) {
+      const twoFactorInfo = err.response.body.two_factor_info;
+      const secret = profile.twoFASecretKey?.replace(/\s+/g, "") ?? "";
+      if (!secret) {
+        return { ok: false, message: `@${profile.username} \u2014 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification" };
+      }
+      let code;
+      try {
+        code = h3({ secret });
+      } catch {
+        return { ok: false, message: `@${profile.username} \u2014 invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification" };
+      }
+      try {
+        await ig.account.twoFactorLogin({
+          username: profile.username,
+          verificationCode: code,
+          twoFactorIdentifier: twoFactorInfo.two_factor_identifier,
+          verificationMethod: "0",
+          trustThisDevice: "1"
+        });
+        ig.simulate.postLoginFlow().catch(() => {
+        });
+        return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid" };
+      } catch (e2) {
+        return { ok: false, message: `@${profile.username} \u2014 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification" };
+      }
     }
-    if (mobileErr instanceof import_instagram_private_api.IgCheckpointError) {
-      return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser to verify.`, accountStatus: "captcha" };
+    if (err instanceof import_instagram_private_api.IgCheckpointError) {
+      return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha" };
     }
-    if (mobileErr instanceof import_instagram_private_api.IgLoginInvalidUserError) {
-      return { ok: false, message: `@${profile.username} \u2014 account does not exist.`, accountStatus: "banned" };
+    if (err instanceof import_instagram_private_api.IgLoginBadPasswordError) {
+      return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "logged_out" };
     }
-    console.error(`[instagramLogin] Falling back to web login for @${profile.username}`);
-  }
-  const session = await webGetLoginPage(proxyUrl);
-  if (!session) {
-    await logApiCall(profile.id, "accounts/login/web", `Could not reach Instagram \u2014 check proxy`, "GET", Date.now() - loginStart);
-    return { ok: false, message: `@${profile.username} \u2014 could not reach Instagram. Check your proxy or network.`, accountStatus: "logged_out" };
-  }
-  const webResult = await webPostLogin(profile.username, profile.password, session, proxyUrl);
-  if (webResult.outcome === "ok") {
-    await logApiCall(profile.id, "accounts/login/web", `Login OK: @${profile.username}`, "POST", Date.now() - loginStart);
-    return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid" };
-  }
-  if (webResult.outcome === "2fa") {
-    const secret = profile.twoFASecretKey?.replace(/\s+/g, "") ?? "";
-    if (!secret) return { ok: false, message: `@${profile.username} \u2014 2FA required but no secret key is set.`, accountStatus: "2fa_verification" };
-    let code;
-    try {
-      code = h3({ secret });
-    } catch {
-      return { ok: false, message: `@${profile.username} \u2014 invalid 2FA secret key.`, accountStatus: "2fa_verification" };
+    if (err instanceof import_instagram_private_api.IgLoginInvalidUserError) {
+      return { ok: false, message: `@${profile.username} \u2014 account does not exist on Instagram.`, accountStatus: "banned" };
     }
-    const ok = await webPostTwoFactor(profile.username, code, webResult.identifier, webResult.session, proxyUrl);
-    if (ok) {
-      await logApiCall(profile.id, "accounts/login/web/2fa", `2FA OK: @${profile.username}`, "POST", Date.now() - loginStart);
-      return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid" };
+    const msg = err?.message ?? "unknown error";
+    if (/banned|disabled|suspended/i.test(msg)) {
+      return { ok: false, message: `@${profile.username} \u2014 account banned or disabled.`, accountStatus: "banned" };
     }
-    return { ok: false, message: `@${profile.username} \u2014 2FA code rejected.`, accountStatus: "2fa_verification" };
-  }
-  if (webResult.outcome === "checkpoint") {
-    return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser to verify.`, accountStatus: "captcha" };
-  }
-  if (webResult.outcome === "bad_password") {
-    await logApiCall(profile.id, "accounts/login/web", `Bad password: @${profile.username}`, "POST", Date.now() - loginStart);
-    return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "logged_out" };
-  }
-  await logApiCall(profile.id, "accounts/login/web", `Login error: ${webResult.detail}`, "POST", Date.now() - loginStart);
-  return { ok: false, message: `@${profile.username} \u2014 login failed. Check credentials and proxy.`, accountStatus: "logged_out" };
-}
-async function handle2FA(profile, err, ig, proxyUrl, loginStart) {
-  const twoFactorInfo = err.response.body.two_factor_info;
-  const secret = profile.twoFASecretKey?.replace(/\s+/g, "") ?? "";
-  if (!secret) return { ok: false, message: `@${profile.username} \u2014 2FA required but no secret key is set. Add your TOTP secret in Account Details.`, accountStatus: "2fa_verification" };
-  let code;
-  try {
-    code = h3({ secret });
-  } catch {
-    return { ok: false, message: `@${profile.username} \u2014 invalid 2FA secret key.`, accountStatus: "2fa_verification" };
-  }
-  try {
-    await ig.account.twoFactorLogin({
-      username: profile.username,
-      verificationCode: code,
-      twoFactorIdentifier: twoFactorInfo.two_factor_identifier,
-      verificationMethod: "0",
-      trustThisDevice: "1"
-    });
-    ig.simulate.postLoginFlow().catch(() => {
-    });
-    return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid" };
-  } catch (e2) {
-    return { ok: false, message: `@${profile.username} \u2014 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification" };
+    if (/checkpoint/i.test(msg)) {
+      return { ok: false, message: `@${profile.username} \u2014 checkpoint required.`, accountStatus: "captcha" };
+    }
+    return { ok: false, message: `@${profile.username} \u2014 login failed: ${msg}`, accountStatus: "logged_out" };
   }
 }
 
@@ -142618,11 +142480,11 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
 }
 
 // src/instagram/instagramWebClient.ts
-import * as https2 from "https";
+import * as https from "https";
 import * as fs2 from "fs";
-function httpsRequest2(options, body) {
+function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
-    const req = https2.request(options, (res) => {
+    const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => {
         data += chunk;
@@ -142651,7 +142513,7 @@ async function igReq(opts) {
     const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
     agent = new HttpsProxyAgent2(proxyUrl);
   }
-  const res = await httpsRequest2(
+  const res = await httpsRequest(
     { host, port: 443, path: path4, method, headers: reqHeaders, ...agent ? { agent } : {} },
     body
   );
@@ -142664,7 +142526,7 @@ async function igReq(opts) {
   }
   return { status: res.status, cookies: newCookies, json: json2, rawBody: res.body };
 }
-function mergeCookies2(base, overrides) {
+function mergeCookies(base, overrides) {
   const map2 = /* @__PURE__ */ new Map();
   for (const c3 of [...base, ...overrides]) map2.set(c3.split("=")[0], c3);
   return Array.from(map2.values());
@@ -142735,7 +142597,7 @@ var InstagramWebClient = class {
       const igCookies = puppeteerCookies.filter((c3) => (c3.domain ?? "").includes("instagram.com"));
       if (!igCookies.length) return false;
       const asSetCookie = igCookies.map((c3) => `${c3.name}=${c3.value}`);
-      this.cookieJar = mergeCookies2(this.cookieJar, asSetCookie);
+      this.cookieJar = mergeCookies(this.cookieJar, asSetCookie);
       const csrf = igCookies.find((c3) => c3.name === "csrftoken");
       if (csrf) this.csrfToken = csrf.value;
       const hasSession = igCookies.some((c3) => c3.name === "sessionid");
@@ -142807,7 +142669,7 @@ var InstagramWebClient = class {
       proxyUrl: this.proxyUrl
     });
     const j = loginRes.json;
-    this.cookieJar = mergeCookies2(this.cookieJar, loginRes.cookies);
+    this.cookieJar = mergeCookies(this.cookieJar, loginRes.cookies);
     const newCsrf = extractCsrf(loginRes.cookies);
     if (newCsrf) this.csrfToken = newCsrf;
     if (j?.authenticated === true) {
@@ -142854,7 +142716,7 @@ var InstagramWebClient = class {
         cookieJar: this.cookieJar,
         proxyUrl: this.proxyUrl
       });
-      this.cookieJar = mergeCookies2(this.cookieJar, tfRes.cookies);
+      this.cookieJar = mergeCookies(this.cookieJar, tfRes.cookies);
       const tfCsrf = extractCsrf(tfRes.cookies);
       if (tfCsrf) this.csrfToken = tfCsrf;
       if (tfRes.json?.authenticated === true) {
@@ -142938,7 +142800,7 @@ var InstagramWebClient = class {
       proxyUrl: this.proxyUrl
     });
     if (res.status < 300) {
-      this.cookieJar = mergeCookies2(this.cookieJar, res.cookies);
+      this.cookieJar = mergeCookies(this.cookieJar, res.cookies);
       const newCsrf = extractCsrf(res.cookies);
       if (newCsrf) this.csrfToken = newCsrf;
     }
@@ -143371,7 +143233,7 @@ var InstagramWebClient = class {
       proxyUrl: this.proxyUrl
     });
     const safeCookies = res.cookies.filter((c3) => !c3.startsWith("csrftoken="));
-    this.cookieJar = mergeCookies2(this.cookieJar, safeCookies);
+    this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
     if (!res.json) console.log(`[webClient] mobilePost ${path4} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
     return res.json;
   }
@@ -144903,14 +144765,14 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const proxy = (await storage.getProxies()).find((p) => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
     const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
-    const https4 = await import("https");
+    const https3 = await import("https");
     const auth = proxy.username && proxy.password ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@` : "";
     const proxyUrl = `http://${auth}${proxy.host}:${proxy.port}`;
     const agent = new HttpsProxyAgent2(proxyUrl);
     const start = Date.now();
     try {
       await new Promise((resolve, reject) => {
-        const req2 = https4.get(
+        const req2 = https3.get(
           "https://i.instagram.com/api/v1/si/fetch_headers/?challenge_type=signup&guid=",
           { agent, timeout: 1e4 },
           (r2) => {
