@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "main": "dist/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dannyshaw88/dannys-bot.git"
+  },
   "scripts": {
     "build": "node build.mjs",
     "package": "electron-builder --win"
