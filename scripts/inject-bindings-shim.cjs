@@ -5,21 +5,33 @@ const fs = require('fs');
 const bs3Dir = path.dirname(require.resolve('better-sqlite3/package.json'));
 console.log('better-sqlite3 dir:', bs3Dir);
 
-const shimDir = path.join(bs3Dir, 'node_modules', 'bindings');
-fs.mkdirSync(shimDir, { recursive: true });
+const dbJsPath = path.join(bs3Dir, 'lib', 'database.js');
+let dbJs = fs.readFileSync(dbJsPath, 'utf8');
+console.log('database.js first 300 chars:', dbJs.slice(0, 300));
 
-const shim = [
-  "'use strict';",
-  "const path = require('path');",
-  "module.exports = function(name) {",
-  "  const f = path.join(__dirname, '..', '..', 'build', 'Release', name + '.node');",
-  "  return require(f);",
-  "};",
-].join('\n');
+const directLoad = "require(require('path').join(__dirname, '..', 'build', 'Release', 'better_sqlite3.node'))";
 
-fs.writeFileSync(path.join(shimDir, 'index.js'), shim);
-fs.writeFileSync(
-  path.join(shimDir, 'package.json'),
-  JSON.stringify({ name: 'bindings', version: '1.5.0', main: 'index.js' })
-);
-console.log('Bindings shim written to:', shimDir);
+const patterns = [
+  "require('bindings')('better_sqlite3')",
+  'require("bindings")("better_sqlite3")',
+  "require('bindings')(\"better_sqlite3\")",
+  'require("bindings")(\'better_sqlite3\')',
+];
+
+let patched = false;
+for (const p of patterns) {
+  if (dbJs.includes(p)) {
+    dbJs = dbJs.replace(p, directLoad);
+    fs.writeFileSync(dbJsPath, dbJs);
+    console.log('SUCCESS: Patched pattern:', p);
+    patched = true;
+    break;
+  }
+}
+
+if (!patched) {
+  const lines = dbJs.split('\n').filter(l => l.includes('bindings') || l.includes('.node'));
+  console.log('COULD NOT PATCH. Relevant lines:');
+  lines.forEach(l => console.log(' >', l.trim()));
+  process.exit(1);
+}
