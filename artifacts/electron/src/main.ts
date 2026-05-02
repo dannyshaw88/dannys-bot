@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, dialog } from "electron";
+import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, ChildProcess } from "child_process";
 import http from "http";
@@ -183,6 +183,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
@@ -227,6 +228,28 @@ async function createWindow() {
   createTray();
 
   if (app.isPackaged) setupAutoUpdater();
+
+  ipcMain.handle("check-for-updates", async () => {
+    if (!app.isPackaged) {
+      dialog.showMessageBox(win!, {
+        type: "info",
+        title: "Dev Mode",
+        message: "Update checks only run in the packaged app.",
+        buttons: ["OK"],
+      });
+      return;
+    }
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch (err) {
+      dialog.showMessageBox(win!, {
+        type: "error",
+        title: "Update Check Failed",
+        message: String((err as Error)?.message || err),
+        buttons: ["OK"],
+      });
+    }
+  });
 }
 
 app.whenReady().then(createWindow);

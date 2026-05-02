@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState } from "react";
 
@@ -229,6 +229,33 @@ export function SettingsPage() {
             Danny's Bot is designed with a clean white desktop interface to maximise productivity during automation management.
             Dark mode is intentionally disabled to maintain this professional aesthetic.
           </p>
+        </div>
+
+        {/* App Updates */}
+        <div className="desktop-card p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-green-100 text-green-600">
+              <RefreshCw className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">App Updates</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Danny's Bot checks for updates automatically on startup. Click below to check right now.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const api = (window as unknown as { electronAPI?: { checkForUpdates: () => Promise<void> } }).electronAPI;
+              if (api?.checkForUpdates) {
+                api.checkForUpdates();
+              } else {
+                alert("Update checks are only available in the installed desktop app.");
+              }
+            }}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Check for Updates
+          </Button>
         </div>
 
         {/* Data Management */}

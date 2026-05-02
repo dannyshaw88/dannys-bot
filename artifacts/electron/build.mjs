@@ -10,7 +10,7 @@ const dist = path.join(__dirname, "dist");
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
-// 1. Compile Electron main process → dist/main.js (CJS)
+// 1a. Compile Electron main process → dist/main.js (CJS)
 await esbuild({
   entryPoints: [path.join(__dirname, "src/main.ts")],
   bundle: true,
@@ -18,6 +18,17 @@ await esbuild({
   target: "node20",
   external: ["electron", "electron-updater"],
   outfile: path.join(dist, "main.js"),
+  format: "cjs",
+});
+
+// 1b. Compile preload → dist/preload.js (CJS)
+await esbuild({
+  entryPoints: [path.join(__dirname, "src/preload.ts")],
+  bundle: true,
+  platform: "node",
+  target: "node20",
+  external: ["electron"],
+  outfile: path.join(dist, "preload.js"),
   format: "cjs",
 });
 
