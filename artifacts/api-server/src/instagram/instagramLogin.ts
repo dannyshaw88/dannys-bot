@@ -263,7 +263,13 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   // Step 3: Login
   try {
     await ig.account.login(profile.username, profile.password);
-    ig.simulate.postLoginFlow().catch(() => {});
+    try {
+      await ig.simulate.postLoginFlow();
+    } catch (plErr: any) {
+      if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
+        return { ok: false, message: `@${profile.username} — logged in but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", igDeviceState: captureDeviceState() };
+      }
+    }
     return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
 
   } catch (err: any) {
@@ -290,7 +296,13 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           verificationMethod: "0",
           trustThisDevice: "1",
         });
-        ig.simulate.postLoginFlow().catch(() => {});
+        try {
+          await ig.simulate.postLoginFlow();
+        } catch (plErr: any) {
+          if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
+            return { ok: false, message: `@${profile.username} — passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", igDeviceState: captureDeviceState() };
+          }
+        }
         return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
       } catch (e2: any) {
         return { ok: false, message: `@${profile.username} — 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification", igDeviceState: ds };
