@@ -491,13 +491,23 @@ export async function registerInstagramRoutes(
 
       const esc = (v: string) => /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
+      const settings = await storage.getGlobalSettings();
+      const tzOffsetHours = parseFloat(settings.csvTimezoneOffset ?? "0");
+
       const csvRows = apiCalls.map((call: any) => {
         const profile = profileMap.get(call.profileId);
         const username = profile?.username ?? String(call.profileId);
-        const date = new Date(call.date).toLocaleString("en-US", {
+        const utcMs = new Date(call.date).getTime();
+        const localMs = utcMs + tzOffsetHours * 60 * 60 * 1000;
+        const localDate = new Date(localMs);
+        const sign = tzOffsetHours >= 0 ? "+" : "-";
+        const absH = Math.abs(Math.floor(tzOffsetHours)).toString().padStart(2, "0");
+        const absM = Math.round((Math.abs(tzOffsetHours) % 1) * 60).toString().padStart(2, "0");
+        const date = `${localDate.toLocaleString("en-US", {
           month: "numeric", day: "numeric", year: "numeric",
           hour: "numeric", minute: "numeric", second: "numeric", hour12: true,
-        });
+          timeZone: "UTC",
+        })} UTC${sign}${absH}:${absM}`;
         return [
           `Instagram_${call.profileId}`,
           username,
@@ -696,11 +706,12 @@ export async function registerInstagramRoutes(
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
+      csvTimezoneOffset: parseFloat(settings.csvTimezoneOffset ?? "0"),
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, csvTimezoneOffset } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -719,6 +730,9 @@ export async function registerInstagramRoutes(
     if (typeof scrapedUserIgnoreDays === "number" && scrapedUserIgnoreDays > 0) {
       await storage.setGlobalSetting("scrapedUserIgnoreDays", String(Math.round(scrapedUserIgnoreDays)));
     }
+    if (typeof csvTimezoneOffset === "number" && isFinite(csvTimezoneOffset)) {
+      await storage.setGlobalSetting("csvTimezoneOffset", String(csvTimezoneOffset));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -727,6 +741,7 @@ export async function registerInstagramRoutes(
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
+      csvTimezoneOffset: parseFloat(settings.csvTimezoneOffset ?? "0"),
     });
   });
 

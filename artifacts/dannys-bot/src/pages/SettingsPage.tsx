@@ -293,6 +293,39 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* CSV Export Timezone */}
+        <div className="desktop-card p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-cyan-100 text-cyan-600">
+              <RefreshCw className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">CSV Export Timezone</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            The server runs on UTC. Set your UTC offset so exported timestamps match your local time.
+            For example, if you are UTC+1 enter <strong>1</strong>, UTC-5 enter <strong>-5</strong>.
+          </p>
+          <div className="flex items-center gap-3">
+            <Label className="text-sm font-medium shrink-0">UTC offset (hours)</Label>
+            <Input
+              type="number"
+              min={-12}
+              max={14}
+              step={0.5}
+              className="w-28"
+              defaultValue={settings?.csvTimezoneOffset ?? 0}
+              key={settings?.csvTimezoneOffset}
+              onBlur={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v !== settings?.csvTimezoneOffset) {
+                  mutation.mutate({ csvTimezoneOffset: v });
+                }
+              }}
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
         {/* Theme */}
         <div className="desktop-card p-6">
           <h3 className="text-base font-semibold mb-2">Application Theme</h3>

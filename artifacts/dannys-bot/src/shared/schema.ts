@@ -248,4 +248,5 @@ export type GlobalSettings = {
   hikerApiToken: string;
   skipScrapedUsers: boolean;
   scrapedUserIgnoreDays: number;
+  csvTimezoneOffset: number;
 };
