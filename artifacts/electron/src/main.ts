@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, Tray, Menu, nativeImage, dialog } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, ChildProcess } from "child_process";
 import http from "http";
@@ -9,6 +9,8 @@ import path from "path";
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
 let win: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
 
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -39,6 +41,13 @@ function getFrontendPath(): string {
     return path.join(process.resourcesPath, "app.asar.unpacked", "dist", "frontend", "public");
   }
   return path.join(__dirname, "..", "dist", "frontend", "public");
+}
+
+function getIconPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "app.asar.unpacked", "dist", "assets", "icon.png");
+  }
+  return path.join(__dirname, "..", "assets", "icon.png");
 }
 
 function waitForServer(port: number, timeoutMs = 30000): Promise<void> {
@@ -88,6 +97,49 @@ function startServer(port: number, logPath: string): void {
   serverProc.on("exit", () => logStream.end());
 }
 
+function createTray(): void {
+  const iconPath = getIconPath();
+  let icon: Electron.NativeImage;
+
+  try {
+    icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  } catch {
+    icon = nativeImage.createEmpty();
+  }
+
+  tray = new Tray(icon);
+  tray.setToolTip("Danny's Bot");
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: "Open Danny's Bot",
+      click: () => {
+        win?.show();
+        win?.focus();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Close Danny's Bot",
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(menu);
+
+  tray.on("click", () => {
+    if (win?.isVisible()) {
+      win.hide();
+    } else {
+      win?.show();
+      win?.focus();
+    }
+  });
+}
+
 function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -109,7 +161,6 @@ function setupAutoUpdater(): void {
     // Silently ignore — don't interrupt the user for update errors
   });
 
-  // Check 5 seconds after startup so it doesn't slow down the launch
   setTimeout(() => autoUpdater.checkForUpdates(), 5000);
 }
 
@@ -120,12 +171,21 @@ async function createWindow() {
     minWidth: 960,
     minHeight: 600,
     title: "Danny's Bot",
+    icon: getIconPath(),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
     },
+  });
+
+  // Minimise to tray on close instead of quitting
+  win.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      win?.hide();
+    }
   });
 
   const logPath = path.join(getUserDataPath(), "server.log");
@@ -158,17 +218,26 @@ async function createWindow() {
   win.once("ready-to-show", () => win?.show());
   win.on("closed", () => { win = null; });
 
+  createTray();
+
   if (app.isPackaged) setupAutoUpdater();
 }
 
 app.whenReady().then(createWindow);
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", () => {
-  serverProc?.kill();
-  serverProc = null;
-  app.quit();
+  // Do NOT quit on window close — the app lives in the tray
+  // Only quit when isQuitting is true (from tray menu)
 });
 
 app.on("activate", () => {
-  if (win === null) createWindow();
+  if (win === null) {
+    createWindow();
+  } else {
+    win.show();
+  }
 });

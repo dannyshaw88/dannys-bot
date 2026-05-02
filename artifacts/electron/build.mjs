@@ -35,7 +35,13 @@ if (!existsSync(frontendSrc)) {
 }
 await cp(frontendSrc, path.join(dist, "frontend", "public"), { recursive: true });
 
-// 4. Generate a crash-logging wrapper that is the real entry point
+// 4. Copy app assets (icons etc.)
+const assetsSrc = path.join(__dirname, "assets");
+if (existsSync(assetsSrc)) {
+  await cp(assetsSrc, path.join(dist, "assets"), { recursive: true });
+}
+
+// 5. Generate a crash-logging wrapper that is the real entry point
 const wrapper = `
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
