@@ -144320,7 +144320,17 @@ var AutomationEngine = class {
         "GetUserProfile",
         "GetOwnUser",
         "SearchUser",
-        "LikeMedia"
+        "LikeMedia",
+        // Human session actions — visible in dashboard so user can confirm sessions are running
+        "VisitNotifications",
+        "VisitOwnProfile",
+        "RefreshOwnProfile",
+        "VisitSettingsAndActivity",
+        "ViewTimelineFeed",
+        "ViewTimelineReels",
+        "ViewTimelineStories",
+        "GetDirectMessages",
+        "LikeTimelinePosts"
       ]);
       state.client.setLogger((op, durationMs, message) => {
         if (!LOGGED_OPS.has(op)) return;
