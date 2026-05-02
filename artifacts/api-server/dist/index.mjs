@@ -141798,49 +141798,72 @@ function h3(t2) {
 }
 
 // src/instagram/instagramLogin.ts
-async function logApiCall(profileId, operationName, message, source, durationMs) {
+async function logApiCall(profileId, operationName, status, source, navChain, ipAddress, durationMs) {
   try {
     await db.insert(instagramApiCalls).values({
       profileId,
       operationName,
       date: (/* @__PURE__ */ new Date()).toISOString(),
-      message,
+      message: status,
       source,
-      navChain: "",
-      ipAddress: "",
+      navChain,
+      ipAddress,
       durationMs
     });
   } catch {
   }
 }
 function buildProxyUrl(profile) {
-  if (!profile.proxyHost || !profile.proxyPort) return void 0;
+  if (!profile.proxyHost || !profile.proxyPort) return null;
   const auth = profile.proxyUsername && profile.proxyPassword ? `${encodeURIComponent(profile.proxyUsername)}:${encodeURIComponent(profile.proxyPassword)}@` : "";
   return `http://${auth}${profile.proxyHost}:${profile.proxyPort}`;
 }
-function extractOperationName(url2) {
+function extractOperationName(rawUrl) {
+  const path4 = rawUrl.split("?")[0];
+  return path4.replace(/^(https?:\/\/[^/]+)?\/api\/v\d+\//, "").replace(/\/$/, "") || path4;
+}
+function extractFromBody(body, key) {
+  if (!body) return "";
   try {
-    const u = new URL(url2);
-    return u.pathname.replace(/^\/api\/v\d+\//, "").replace(/\/$/, "") || u.pathname;
+    const str = Buffer.isBuffer(body) ? body.toString() : String(body);
+    const params = new URLSearchParams(str);
+    return params.get(key) ?? "";
   } catch {
-    return url2.split("?")[0].replace(/^\/api\/v\d+\//, "").replace(/\/$/, "");
+    return "";
   }
 }
-function attachRequestLogger(ig, profileId) {
-  ig.request.end$.subscribe({
-    next: async (response) => {
-      try {
-        const url2 = response?.request?.requestUrl ?? response?.url ?? response?.request?.options?.url ?? "";
-        const opName = extractOperationName(url2);
-        const phases = response?.timings?.phases ?? {};
-        const durationMs = phases.total ?? phases.firstByte ?? 0;
-        const status = response?.statusCode ?? 0;
-        const method = (response?.request?.options?.method ?? "POST").toUpperCase();
-        await logApiCall(profileId, opName, `HTTP ${status} @${ig.state.username ?? profileId}`, method, Math.round(durationMs));
-      } catch {
-      }
+function attachRequestLogger(ig, profileId, source, proxyIp) {
+  const req = ig.request;
+  if (req.__logged) return;
+  req.__logged = true;
+  const originalSend = req.send.bind(req);
+  req.send = async function(userOptions, onlyCheckHttpStatus) {
+    const t0 = Date.now();
+    const rawUrl = userOptions?.url || userOptions?.uri || "";
+    const opName = extractOperationName(rawUrl);
+    let response;
+    let statusStr = "";
+    try {
+      response = await originalSend(userOptions, onlyCheckHttpStatus);
+      statusStr = String(response?.statusCode ?? 200);
+    } catch (err) {
+      const durationMs2 = Date.now() - t0;
+      const code = err?.statusCode ?? err?.response?.statusCode ?? 0;
+      const errShort = err?.message?.slice(0, 80) ?? "error";
+      statusStr = code ? `${code} ${errShort}` : errShort;
+      const bodyStr = userOptions?.form ? new URLSearchParams(userOptions.form).toString() : typeof userOptions?.body === "string" ? userOptions.body : "";
+      const navChain2 = extractFromBody(bodyStr, "nav_chain");
+      logApiCall(profileId, opName, statusStr, source, navChain2, proxyIp, durationMs2).catch(() => {
+      });
+      throw err;
     }
-  });
+    const durationMs = Date.now() - t0;
+    const sentBody = response?.request?.body;
+    const navChain = extractFromBody(sentBody, "nav_chain");
+    logApiCall(profileId, opName, statusStr, source, navChain, proxyIp, durationMs).catch(() => {
+    });
+    return response;
+  };
 }
 async function ensureEncryptionKeys(ig) {
   try {
@@ -141931,10 +141954,11 @@ function buildIgClient(profile, proxyUrl) {
 async function verifyInstagramCredentials(profile) {
   const proxyUrl = buildProxyUrl(profile);
   console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
+  const proxyIp = profile.proxyHost ?? "";
   if (profile.igApiCookies) {
     console.error(`[instagramLogin] @${profile.username} \u2014 trying cookie session restore`);
     const { ig: ig2, captureDeviceState: captureDeviceState2 } = buildIgClient(profile, proxyUrl);
-    attachRequestLogger(ig2, profile.id);
+    attachRequestLogger(ig2, profile.id, "Verify", proxyIp);
     try {
       await restoreSessionCookies(ig2, profile.igApiCookies);
       const user = await ig2.account.currentUser();
@@ -141950,7 +141974,7 @@ async function verifyInstagramCredentials(profile) {
     }
   }
   const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
-  attachRequestLogger(ig, profile.id);
+  attachRequestLogger(ig, profile.id, "Verify", proxyIp);
   await ensureEncryptionKeys(ig);
   if (!ig.state.passwordEncryptionPubKey) {
     return {

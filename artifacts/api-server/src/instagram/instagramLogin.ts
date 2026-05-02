@@ -11,8 +11,10 @@ export type VerifyResult =
 async function logApiCall(
   profileId: number,
   operationName: string,
-  message: string,
+  status: string,
   source: string,
+  navChain: string,
+  ipAddress: string,
   durationMs: number,
 ) {
   try {
@@ -20,49 +22,82 @@ async function logApiCall(
       profileId,
       operationName,
       date: new Date().toISOString(),
-      message,
+      message: status,
       source,
-      navChain: "",
-      ipAddress: "",
+      navChain,
+      ipAddress,
       durationMs,
     });
   } catch { /* never crash on logging failure */ }
 }
 
-function buildProxyUrl(profile: Profile): string | undefined {
-  if (!profile.proxyHost || !profile.proxyPort) return undefined;
+function buildProxyUrl(profile: Profile): string | null {
+  if (!profile.proxyHost || !profile.proxyPort) return null;
   const auth = profile.proxyUsername && profile.proxyPassword
     ? `${encodeURIComponent(profile.proxyUsername)}:${encodeURIComponent(profile.proxyPassword)}@`
     : "";
   return `http://${auth}${profile.proxyHost}:${profile.proxyPort}`;
 }
 
-function extractOperationName(url: string): string {
-  try {
-    const u = new URL(url);
-    return u.pathname.replace(/^\/api\/v\d+\//, "").replace(/\/$/, "") || u.pathname;
-  } catch {
-    return url.split("?")[0].replace(/^\/api\/v\d+\//, "").replace(/\/$/, "");
-  }
+/** Strip /api/v1/ prefix and trailing slash to get a clean endpoint label */
+function extractOperationName(rawUrl: string): string {
+  const path = rawUrl.split("?")[0];
+  return path.replace(/^(https?:\/\/[^/]+)?\/api\/v\d+\//, "").replace(/\/$/, "") || path;
 }
 
-function attachRequestLogger(ig: IgApiClient, profileId: number) {
-  ig.request.end$.subscribe({
-    next: async (response: any) => {
-      try {
-        const url: string =
-          response?.request?.requestUrl ??
-          response?.url ??
-          response?.request?.options?.url ?? "";
-        const opName = extractOperationName(url);
-        const phases = response?.timings?.phases ?? {};
-        const durationMs: number = phases.total ?? phases.firstByte ?? 0;
-        const status: number = response?.statusCode ?? 0;
-        const method: string = (response?.request?.options?.method ?? "POST").toUpperCase();
-        await logApiCall(profileId, opName, `HTTP ${status} @${ig.state.username ?? profileId}`, method, Math.round(durationMs));
-      } catch { /* ignore */ }
-    },
-  });
+/** Pull a named key out of a URL-encoded form body string */
+function extractFromBody(body: string | Buffer | undefined, key: string): string {
+  if (!body) return "";
+  try {
+    const str = Buffer.isBuffer(body) ? body.toString() : String(body);
+    const params = new URLSearchParams(str);
+    return params.get(key) ?? "";
+  } catch { return ""; }
+}
+
+/**
+ * Monkey-patch ig.request.send so every Instagram API call is logged with real
+ * data: endpoint, HTTP status, duration, nav_chain from the request body, and
+ * the proxy IP. This works correctly where end$.subscribe does NOT — the library
+ * calls end$.next() with zero arguments so subscribers always receive undefined.
+ */
+export function attachRequestLogger(ig: IgApiClient, profileId: number, source: string, proxyIp: string) {
+  const req = ig.request as any;
+  if (req.__logged) return; // prevent double-patching
+  req.__logged = true;
+
+  const originalSend = req.send.bind(req);
+  req.send = async function(userOptions: any, onlyCheckHttpStatus?: boolean) {
+    const t0 = Date.now();
+    const rawUrl: string = userOptions?.url || userOptions?.uri || "";
+    const opName = extractOperationName(rawUrl);
+
+    let response: any;
+    let statusStr = "";
+    try {
+      response = await originalSend(userOptions, onlyCheckHttpStatus);
+      statusStr = String(response?.statusCode ?? 200);
+    } catch (err: any) {
+      const durationMs = Date.now() - t0;
+      const code: number = err?.statusCode ?? err?.response?.statusCode ?? 0;
+      const errShort = err?.message?.slice(0, 80) ?? "error";
+      statusStr = code ? `${code} ${errShort}` : errShort;
+      // Extract nav_chain from the original request body even on error
+      const bodyStr: string = userOptions?.form
+        ? new URLSearchParams(userOptions.form).toString()
+        : (typeof userOptions?.body === "string" ? userOptions.body : "");
+      const navChain = extractFromBody(bodyStr, "nav_chain");
+      logApiCall(profileId, opName, statusStr, source, navChain, proxyIp, durationMs).catch(() => {});
+      throw err;
+    }
+
+    const durationMs = Date.now() - t0;
+    // nav_chain lives in the outgoing request body (URL-encoded form)
+    const sentBody: string | Buffer | undefined = response?.request?.body;
+    const navChain = extractFromBody(sentBody, "nav_chain");
+    logApiCall(profileId, opName, statusStr, source, navChain, proxyIp, durationMs).catch(() => {});
+    return response;
+  };
 }
 
 // ── Fetch Instagram's RSA encryption keys before login ────────────────────────
@@ -180,10 +215,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
 
   // ── Fast path: restore existing session from imported ApiCookies ──────────
+  const proxyIp = profile.proxyHost ?? "";
+
   if (profile.igApiCookies) {
     console.error(`[instagramLogin] @${profile.username} — trying cookie session restore`);
     const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
-    attachRequestLogger(ig, profile.id);
+    attachRequestLogger(ig, profile.id, "Verify", proxyIp);
     try {
       await restoreSessionCookies(ig, profile.igApiCookies);
       const user = await ig.account.currentUser();
@@ -202,7 +239,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
   // ── Normal path: fresh password login ────────────────────────────────────
   const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
-  attachRequestLogger(ig, profile.id);
+  attachRequestLogger(ig, profile.id, "Verify", proxyIp);
 
   // Step 1: Fetch encryption keys (must happen before login)
   await ensureEncryptionKeys(ig);
