@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, CheckCircle2, Loader2 } from "lucide-react";
+import { Copy, CheckCircle2, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -30,12 +30,17 @@ interface Props {
 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
   const [targets, setTargets]     = useState<Set<number>>(new Set());
+  const [search, setSearch]       = useState("");
   const [selected, setSelected]   = useState<Set<string>>(() => {
     const all = new Set<string>();
     optionGroups.forEach(g => g.options.forEach(o => all.add(o.key)));
     return all;
   });
   const [status, setStatus] = useState<"idle" | "copying" | "done">("idle");
+
+  const filteredProfiles = profiles.filter(p =>
+    p.username.toLowerCase().includes(search.toLowerCase())
+  );
 
   const toggleTarget = (id: number) => setTargets(prev => {
     const next = new Set(prev);
@@ -49,7 +54,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     return next;
   });
 
-  const allTargetsSelected = targets.size === profiles.length;
+  const allFilteredSelected = filteredProfiles.length > 0 && filteredProfiles.every(p => targets.has(p.id));
 
   const totalOptions = optionGroups.reduce((n, g) => n + g.options.length, 0);
 
@@ -81,17 +86,47 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
           <div className="w-56 shrink-0 border-r border-border flex flex-col">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
-              {profiles.length > 1 && (
+              {filteredProfiles.length > 1 && (
                 <button
                   className="text-[11px] text-primary hover:underline font-medium"
-                  onClick={() => setTargets(allTargetsSelected ? new Set() : new Set(profiles.map(p => p.id)))}
+                  onClick={() => {
+                    if (allFilteredSelected) {
+                      setTargets(prev => {
+                        const next = new Set(prev);
+                        filteredProfiles.forEach(p => next.delete(p.id));
+                        return next;
+                      });
+                    } else {
+                      setTargets(prev => {
+                        const next = new Set(prev);
+                        filteredProfiles.forEach(p => next.add(p.id));
+                        return next;
+                      });
+                    }
+                  }}
                 >
-                  {allTargetsSelected ? "None" : "All"}
+                  {allFilteredSelected ? "None" : "All"}
                 </button>
               )}
             </div>
+            {/* Search */}
+            <div className="px-3 py-2 border-b border-border">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Filter profiles…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+            </div>
             <div className="overflow-y-auto flex-1 divide-y divide-border/40">
-              {profiles.map(p => (
+              {filteredProfiles.length === 0 && (
+                <p className="px-4 py-3 text-xs text-muted-foreground text-center">No profiles match.</p>
+              )}
+              {filteredProfiles.map(p => (
                 <label
                   key={p.id}
                   className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
