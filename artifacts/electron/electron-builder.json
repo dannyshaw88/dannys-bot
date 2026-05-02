@@ -7,7 +7,8 @@
   },
   "files": [
     "dist/**",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "node_modules/**"
   ],
   "asarUnpack": [
     "dist/server/**",
@@ -15,8 +16,10 @@
     "node_modules/better-sqlite3/**",
     "node_modules/bindings/**",
     "node_modules/file-uri-to-path/**",
+    "node_modules/node-gyp-build/**",
     "**/*.node"
   ],
+  "npmRebuild": false,
   "win": {
     "target": [
       {

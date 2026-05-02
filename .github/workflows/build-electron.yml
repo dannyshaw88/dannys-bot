@@ -27,7 +27,7 @@ jobs:
           node-version: "20"
           cache: "pnpm"
 
-      - name: Install dependencies
+      - name: Install workspace dependencies
         run: pnpm install --no-frozen-lockfile
         env:
           PUPPETEER_SKIP_DOWNLOAD: "true"
@@ -43,6 +43,14 @@ jobs:
 
       - name: Build Electron main process
         run: pnpm --filter @workspace/electron run build
+
+      - name: Install electron package deps with npm (flat node_modules for native modules)
+        working-directory: artifacts/electron
+        run: npm install
+
+      - name: Rebuild native modules for Electron
+        working-directory: artifacts/electron
+        run: npx electron-builder install-app-deps
 
       - name: Package Windows installer
         run: pnpm --filter @workspace/electron run package
