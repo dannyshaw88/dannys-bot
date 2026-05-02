@@ -105,17 +105,7 @@ export function ContactToolPanel({ tool, profile }: Props) {
           <Users className="w-3.5 h-3.5" />
           Contact Users
         </button>
-        <div className="ml-auto pr-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            disabled={otherProfiles.length === 0}
-            onClick={() => setCopyOpen(true)}
-          >
-            <Copy className="w-3.5 h-3.5" /> Copy Settings
-          </Button>
-        </div>
+        <div className="ml-auto pr-1" />
       </div>
 
       {/* Panel content */}
@@ -128,6 +118,20 @@ export function ContactToolPanel({ tool, profile }: Props) {
       {activeTab === "auto-reply" && (
         <AutoReplyPanel tool={tool} profile={profile} />
       )}
+
+      <div className="mt-6">
+        <Button
+          variant="outline"
+          className="w-full gap-2"
+          disabled={otherProfiles.length === 0}
+          onClick={() => setCopyOpen(true)}
+        >
+          <Copy className="w-4 h-4" /> Copy Contact Tool Settings to Other Profiles
+        </Button>
+        {otherProfiles.length === 0 && (
+          <p className="text-xs text-center text-muted-foreground mt-2">Add more profiles to enable copying settings.</p>
+        )}
+      </div>
 
       <CopySettingsDialog
         key={copyOpen ? "open" : "closed"}
