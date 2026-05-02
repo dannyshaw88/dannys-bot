@@ -21,17 +21,17 @@ export function LiveActivityTicker() {
   if (!latestCall || !latestUsername) return null;
 
   return (
-    <div className="border-b border-border/50 bg-muted/30 px-6 py-1.5 flex items-center gap-2 min-w-0 overflow-hidden">
+    <div className="border-b border-border/50 bg-muted/30 px-6 py-1.5 flex items-center gap-2 w-full overflow-hidden">
       <Bell className="w-3 h-3 text-primary shrink-0" />
       <span
         key={latestCall.id}
-        className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-1 text-xs text-muted-foreground min-w-0 overflow-hidden"
+        className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-1 text-xs text-muted-foreground overflow-hidden min-w-0 flex-1"
       >
-        <span className="font-semibold text-foreground">{latestCall.operationName}</span>
-        <span className="text-muted-foreground/60 mx-0.5">—</span>
-        <span className="text-primary font-medium truncate">{latestUsername}</span>
+        <span className="font-semibold text-foreground shrink-0">{latestCall.operationName}</span>
+        <span className="text-muted-foreground/60 mx-0.5 shrink-0">—</span>
+        <span className="text-primary font-medium shrink-0">{latestUsername}</span>
         {latestCall.message && (
-          <span className="text-muted-foreground truncate hidden sm:inline"> {latestCall.message}</span>
+          <span className="text-muted-foreground truncate"> {latestCall.message}</span>
         )}
       </span>
     </div>
