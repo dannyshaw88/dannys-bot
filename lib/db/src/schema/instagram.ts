@@ -228,6 +228,18 @@ export const globalSettings = sqliteTable("global_settings", {
   value: text("value").notNull().default(""),
 });
 
+export const hashtagCursors = sqliteTable("hashtag_cursors", {
+  hashtag: text("hashtag").primaryKey(),
+  cursor: text("cursor").notNull().default(""),
+});
+
+export const scrapedUsersGlobal = sqliteTable("scraped_users_global", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  instagramUserId: text("instagram_user_id").notNull().unique(),
+  instagramUsername: text("instagram_username").notNull(),
+  scrapedAt: text("scraped_at").notNull(),
+});
+
 export const skippedUsers = sqliteTable("skipped_users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   instagramUsername: text("instagram_username").notNull(),

@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState } from "react";
 
@@ -228,6 +228,67 @@ export function SettingsPage() {
                 disabled={isLoading || mutation.isPending}
                 className="data-[state=checked]:bg-green-500 shrink-0 mt-0.5"
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Scraped User Deduplication */}
+        <div className="desktop-card p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
+              <Database className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Scraped User Deduplication</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Track every user scraped from a hashtag globally across all accounts. When enabled, a user
+            scraped by Account A won't be scraped again by Account B — saving HikerAPI credits.
+            The hashtag cursor position is also shared globally so accounts continue where others left off.
+          </p>
+
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Label className="text-sm font-medium cursor-pointer" htmlFor="skip-scraped">
+                  Skip Already Scraped Users
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Users already scraped by any account are excluded from future scrape batches for the
+                  configured number of days.
+                </p>
+              </div>
+              <Switch
+                id="skip-scraped"
+                checked={settings?.skipScrapedUsers ?? false}
+                onCheckedChange={(v) => toggle("skipScrapedUsers", v)}
+                disabled={isLoading || mutation.isPending}
+                className="data-[state=checked]:bg-purple-500 shrink-0 mt-0.5"
+              />
+            </div>
+
+            <div className="border-t border-border/50 pt-4 space-y-2">
+              <Label className="text-sm font-medium" htmlFor="ignore-days">
+                Ignore scraped users for (days)
+              </Label>
+              <Input
+                id="ignore-days"
+                type="number"
+                min={1}
+                max={3650}
+                className="w-32"
+                defaultValue={settings?.scrapedUserIgnoreDays ?? 365}
+                key={settings?.scrapedUserIgnoreDays}
+                onBlur={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!isNaN(v) && v > 0 && v !== settings?.scrapedUserIgnoreDays) {
+                    mutation.mutate({ scrapedUserIgnoreDays: v });
+                  }
+                }}
+                disabled={isLoading || !(settings?.skipScrapedUsers)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Default 365 days — effectively means never scrape the same user twice.
+              </p>
             </div>
           </div>
         </div>

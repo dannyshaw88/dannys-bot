@@ -1297,12 +1297,20 @@ class AutomationEngine {
     if (source.type === "hashtag") {
       if (hikerClient) {
         const t0 = Date.now();
-        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+        const globalCursor = await storage.getHashtagCursor(source.value);
+        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, globalCursor);
         candidates = result.users;
         if (result.nextCursor) {
-          await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {});
-        } else if (source.hashtagCursor) {
-          await storage.updateSourceHashtagCursor(source.id, "").catch(() => {});
+          await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
+        } else if (globalCursor) {
+          await storage.setHashtagCursor(source.value, "").catch(() => {});
+        }
+        if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
+          const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+          const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);
+          const fresh = candidates.filter(c => !alreadyScraped.has(c.pk));
+          await storage.addScrapedUsers(fresh).catch(() => {});
+          candidates = fresh;
         }
         logHikerDM("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
       } else {
@@ -1551,12 +1559,20 @@ class AutomationEngine {
       if (source.type === "hashtag") {
         if (hikerClient) {
           const t0 = Date.now();
-          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+          const globalCursor = await storage.getHashtagCursor(source.value);
+          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, globalCursor);
           candidates = result.users;
           if (result.nextCursor) {
-            await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {});
-          } else if (source.hashtagCursor) {
-            await storage.updateSourceHashtagCursor(source.id, "").catch(() => {});
+            await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
+          } else if (globalCursor) {
+            await storage.setHashtagCursor(source.value, "").catch(() => {});
+          }
+          if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
+            const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+            const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);
+            const fresh = candidates.filter(c => !alreadyScraped.has(c.pk));
+            await storage.addScrapedUsers(fresh).catch(() => {});
+            candidates = fresh;
           }
           logHiker("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {

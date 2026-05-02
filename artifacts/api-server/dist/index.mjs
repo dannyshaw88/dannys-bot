@@ -127943,6 +127943,7 @@ __export(schema_exports, {
   followedUsers: () => followedUsers,
   followedUsersRelations: () => followedUsersRelations,
   globalSettings: () => globalSettings,
+  hashtagCursors: () => hashtagCursors,
   insertContactDmSentSchema: () => insertContactDmSentSchema,
   insertContactPendingMessageSchema: () => insertContactPendingMessageSchema,
   insertFollowedUserSchema: () => insertFollowedUserSchema,
@@ -127962,6 +127963,7 @@ __export(schema_exports, {
   proxies: () => proxies,
   repostedPosts: () => repostedPosts,
   repostedPostsRelations: () => repostedPostsRelations,
+  scrapedUsersGlobal: () => scrapedUsersGlobal,
   sessionActions: () => sessionActions,
   sessionActionsRelations: () => sessionActionsRelations,
   skippedUsers: () => skippedUsers,
@@ -139559,6 +139561,16 @@ var globalSettings = sqliteTable("global_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull().default("")
 });
+var hashtagCursors = sqliteTable("hashtag_cursors", {
+  hashtag: text("hashtag").primaryKey(),
+  cursor: text("cursor").notNull().default("")
+});
+var scrapedUsersGlobal = sqliteTable("scraped_users_global", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  instagramUserId: text("instagram_user_id").notNull().unique(),
+  instagramUsername: text("instagram_username").notNull(),
+  scrapedAt: text("scraped_at").notNull()
+});
 var skippedUsers = sqliteTable("skipped_users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   instagramUsername: text("instagram_username").notNull(),
@@ -139760,6 +139772,18 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS global_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
+  );
+
+  CREATE TABLE IF NOT EXISTS hashtag_cursors (
+    hashtag TEXT PRIMARY KEY,
+    cursor TEXT NOT NULL DEFAULT ''
+  );
+
+  CREATE TABLE IF NOT EXISTS scraped_users_global (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instagram_user_id TEXT NOT NULL UNIQUE,
+    instagram_username TEXT NOT NULL,
+    scraped_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS skipped_users (
@@ -140268,6 +140292,31 @@ var DatabaseStorage = class {
   }
   async updateSourceHashtagCursor(id, cursor) {
     await db.update(sources).set({ hashtagCursor: cursor }).where(eq(sources.id, id));
+  }
+  async getHashtagCursor(hashtag) {
+    const [row] = await db.select().from(hashtagCursors).where(eq(hashtagCursors.hashtag, hashtag));
+    return row?.cursor ?? "";
+  }
+  async setHashtagCursor(hashtag, cursor) {
+    await db.insert(hashtagCursors).values({ hashtag, cursor }).onConflictDoUpdate({ target: hashtagCursors.hashtag, set: { cursor } });
+  }
+  async getScrapedUserIds(userIds, ignoreDays) {
+    if (userIds.length === 0) return /* @__PURE__ */ new Set();
+    const cutoff = new Date(Date.now() - ignoreDays * 24 * 60 * 60 * 1e3).toISOString();
+    const rows = await db.select({ id: scrapedUsersGlobal.instagramUserId }).from(scrapedUsersGlobal).where(
+      and(
+        sql`${scrapedUsersGlobal.instagramUserId} IN (${sql.join(userIds.map((id) => sql`${id}`), sql`, `)})`,
+        sql`${scrapedUsersGlobal.scrapedAt} >= ${cutoff}`
+      )
+    );
+    return new Set(rows.map((r2) => r2.id));
+  }
+  async addScrapedUsers(users) {
+    if (users.length === 0) return;
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    for (const u of users) {
+      await db.insert(scrapedUsersGlobal).values({ instagramUserId: u.pk, instagramUsername: u.username, scrapedAt: now }).onConflictDoNothing();
+    }
   }
   async getStatsByProfile(profileId) {
     return await db.select().from(stats).where(eq(stats.profileId, profileId));
@@ -144613,14 +144662,23 @@ var AutomationEngine = class {
     if (source.type === "hashtag") {
       if (hikerClient) {
         const t0 = Date.now();
-        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+        const globalCursor = await storage.getHashtagCursor(source.value);
+        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, globalCursor);
         candidates = result.users;
         if (result.nextCursor) {
-          await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {
+          await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {
           });
-        } else if (source.hashtagCursor) {
-          await storage.updateSourceHashtagCursor(source.id, "").catch(() => {
+        } else if (globalCursor) {
+          await storage.setHashtagCursor(source.value, "").catch(() => {
           });
+        }
+        if (globalSettings2.skipScrapedUsers === "true" && candidates.length > 0) {
+          const ignoreDays = parseInt(globalSettings2.scrapedUserIgnoreDays ?? "365", 10);
+          const alreadyScraped = await storage.getScrapedUserIds(candidates.map((c3) => c3.pk), ignoreDays);
+          const fresh = candidates.filter((c3) => !alreadyScraped.has(c3.pk));
+          await storage.addScrapedUsers(fresh).catch(() => {
+          });
+          candidates = fresh;
         }
         logHikerDM("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
       } else {
@@ -144845,14 +144903,23 @@ var AutomationEngine = class {
       if (source.type === "hashtag") {
         if (hikerClient) {
           const t0 = Date.now();
-          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+          const globalCursor = await storage.getHashtagCursor(source.value);
+          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, globalCursor);
           candidates = result.users;
           if (result.nextCursor) {
-            await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {
+            await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {
             });
-          } else if (source.hashtagCursor) {
-            await storage.updateSourceHashtagCursor(source.id, "").catch(() => {
+          } else if (globalCursor) {
+            await storage.setHashtagCursor(source.value, "").catch(() => {
             });
+          }
+          if (globalSettings2.skipScrapedUsers === "true" && candidates.length > 0) {
+            const ignoreDays = parseInt(globalSettings2.scrapedUserIgnoreDays ?? "365", 10);
+            const alreadyScraped = await storage.getScrapedUserIds(candidates.map((c3) => c3.pk), ignoreDays);
+            const fresh = candidates.filter((c3) => !alreadyScraped.has(c3.pk));
+            await storage.addScrapedUsers(fresh).catch(() => {
+            });
+            candidates = fresh;
           }
           logHiker("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
@@ -145624,11 +145691,13 @@ async function registerInstagramRoutes(httpServer2, app2) {
       skipFollowedUsers: settings.skipFollowedUsers === "true",
       skipAlreadySkippedUsers: settings.skipAlreadySkippedUsers === "true",
       hikerApiEnabled: settings.hikerApiEnabled === "true",
-      hikerApiToken: settings.hikerApiToken ?? ""
+      hikerApiToken: settings.hikerApiToken ?? "",
+      skipScrapedUsers: settings.skipScrapedUsers === "true",
+      scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10)
     });
   });
   app2.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -145641,12 +145710,20 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (typeof hikerApiToken === "string") {
       await storage.setGlobalSetting("hikerApiToken", hikerApiToken);
     }
+    if (typeof skipScrapedUsers === "boolean") {
+      await storage.setGlobalSetting("skipScrapedUsers", String(skipScrapedUsers));
+    }
+    if (typeof scrapedUserIgnoreDays === "number" && scrapedUserIgnoreDays > 0) {
+      await storage.setGlobalSetting("scrapedUserIgnoreDays", String(Math.round(scrapedUserIgnoreDays)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
       skipAlreadySkippedUsers: settings.skipAlreadySkippedUsers === "true",
       hikerApiEnabled: settings.hikerApiEnabled === "true",
-      hikerApiToken: settings.hikerApiToken ?? ""
+      hikerApiToken: settings.hikerApiToken ?? "",
+      skipScrapedUsers: settings.skipScrapedUsers === "true",
+      scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10)
     });
   });
   app2.post("/api/settings/test-hiker", async (req, res) => {

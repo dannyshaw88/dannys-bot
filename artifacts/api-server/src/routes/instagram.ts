@@ -691,11 +691,13 @@ export async function registerInstagramRoutes(
       skipAlreadySkippedUsers: settings.skipAlreadySkippedUsers === "true",
       hikerApiEnabled: settings.hikerApiEnabled === "true",
       hikerApiToken: settings.hikerApiToken ?? "",
+      skipScrapedUsers: settings.skipScrapedUsers === "true",
+      scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -708,12 +710,20 @@ export async function registerInstagramRoutes(
     if (typeof hikerApiToken === "string") {
       await storage.setGlobalSetting("hikerApiToken", hikerApiToken);
     }
+    if (typeof skipScrapedUsers === "boolean") {
+      await storage.setGlobalSetting("skipScrapedUsers", String(skipScrapedUsers));
+    }
+    if (typeof scrapedUserIgnoreDays === "number" && scrapedUserIgnoreDays > 0) {
+      await storage.setGlobalSetting("scrapedUserIgnoreDays", String(Math.round(scrapedUserIgnoreDays)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
       skipAlreadySkippedUsers: settings.skipAlreadySkippedUsers === "true",
       hikerApiEnabled: settings.hikerApiEnabled === "true",
       hikerApiToken: settings.hikerApiToken ?? "",
+      skipScrapedUsers: settings.skipScrapedUsers === "true",
+      scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
     });
   });
 

@@ -3,6 +3,7 @@ import { userAgents } from "./shared/userAgents";
 import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
+  hashtagCursors, scrapedUsersGlobal,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -91,6 +92,14 @@ export interface IStorage {
   isContactAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
   isAutoReplyAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
   getContactMessagesForUnsend(profileId: number): Promise<ContactPendingMessage[]>;
+
+  // Global Hashtag Cursors (shared across all profiles)
+  getHashtagCursor(hashtag: string): Promise<string>;
+  setHashtagCursor(hashtag: string, cursor: string): Promise<void>;
+
+  // Scraped Users (global deduplication across all profiles)
+  getScrapedUserIds(userIds: string[], ignoreDays: number): Promise<Set<string>>;
+  addScrapedUsers(users: { pk: string; username: string }[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -192,6 +201,40 @@ export class DatabaseStorage implements IStorage {
 
   async updateSourceHashtagCursor(id: number, cursor: string): Promise<void> {
     await db.update(sources).set({ hashtagCursor: cursor }).where(eq(sources.id, id));
+  }
+
+  async getHashtagCursor(hashtag: string): Promise<string> {
+    const [row] = await db.select().from(hashtagCursors).where(eq(hashtagCursors.hashtag, hashtag));
+    return row?.cursor ?? "";
+  }
+
+  async setHashtagCursor(hashtag: string, cursor: string): Promise<void> {
+    await db.insert(hashtagCursors).values({ hashtag, cursor })
+      .onConflictDoUpdate({ target: hashtagCursors.hashtag, set: { cursor } });
+  }
+
+  async getScrapedUserIds(userIds: string[], ignoreDays: number): Promise<Set<string>> {
+    if (userIds.length === 0) return new Set();
+    const cutoff = new Date(Date.now() - ignoreDays * 24 * 60 * 60 * 1000).toISOString();
+    const rows = await db.select({ id: scrapedUsersGlobal.instagramUserId })
+      .from(scrapedUsersGlobal)
+      .where(
+        and(
+          sql`${scrapedUsersGlobal.instagramUserId} IN (${sql.join(userIds.map(id => sql`${id}`), sql`, `)})`,
+          sql`${scrapedUsersGlobal.scrapedAt} >= ${cutoff}`,
+        )
+      );
+    return new Set(rows.map(r => r.id));
+  }
+
+  async addScrapedUsers(users: { pk: string; username: string }[]): Promise<void> {
+    if (users.length === 0) return;
+    const now = new Date().toISOString();
+    for (const u of users) {
+      await db.insert(scrapedUsersGlobal)
+        .values({ instagramUserId: u.pk, instagramUsername: u.username, scrapedAt: now })
+        .onConflictDoNothing();
+    }
   }
 
   async getStatsByProfile(profileId: number): Promise<any[]> {

@@ -246,4 +246,6 @@ export type GlobalSettings = {
   skipAlreadySkippedUsers: boolean;
   hikerApiEnabled: boolean;
   hikerApiToken: string;
+  skipScrapedUsers: boolean;
+  scrapedUserIgnoreDays: number;
 };

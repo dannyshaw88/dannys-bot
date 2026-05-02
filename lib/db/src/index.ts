@@ -132,6 +132,18 @@ sqlite.exec(`
     value TEXT NOT NULL DEFAULT ''
   );
 
+  CREATE TABLE IF NOT EXISTS hashtag_cursors (
+    hashtag TEXT PRIMARY KEY,
+    cursor TEXT NOT NULL DEFAULT ''
+  );
+
+  CREATE TABLE IF NOT EXISTS scraped_users_global (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instagram_user_id TEXT NOT NULL UNIQUE,
+    instagram_username TEXT NOT NULL,
+    scraped_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS skipped_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     instagram_username TEXT NOT NULL,
