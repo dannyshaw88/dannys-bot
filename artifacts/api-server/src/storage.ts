@@ -44,6 +44,7 @@ export interface IStorage {
   createSource(source: InsertSource): Promise<Source>;
   deleteSource(id: number): Promise<void>;
   updateSourceTargetUserId(id: number, targetUserId: string): Promise<void>;
+  updateSourceHashtagCursor(id: number, cursor: string): Promise<void>;
 
   // Instagram API Calls
   getInstagramApiCalls(limit?: number): Promise<any[]>;
@@ -187,6 +188,10 @@ export class DatabaseStorage implements IStorage {
 
   async updateSourceTargetUserId(id: number, targetUserId: string): Promise<void> {
     await db.update(sources).set({ targetUserId }).where(eq(sources.id, id));
+  }
+
+  async updateSourceHashtagCursor(id: number, cursor: string): Promise<void> {
+    await db.update(sources).set({ hashtagCursor: cursor }).where(eq(sources.id, id));
   }
 
   async getStatsByProfile(profileId: number): Promise<any[]> {

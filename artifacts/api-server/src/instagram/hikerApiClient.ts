@@ -114,39 +114,43 @@ export class HikerApiClient {
     }
   }
 
-  async getHashtagUsers(hashtag: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
+  async getHashtagUsers(
+    hashtag: string,
+    max = 50,
+    cursor = "",
+  ): Promise<{ users: { pk: string; username: string; fullName: string }[]; nextCursor: string | null }> {
     try {
       const tag = hashtag.replace(/^#/, "");
       const amount = Math.min(Math.max(max, 1), 200);
-      let j = await hikerGet(`/v1/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
-      let items: any[] = Array.isArray(j) ? j
-        : Array.isArray(j?.items) ? j.items
-        : Array.isArray(j?.medias) ? j.medias
-        : Array.isArray(j?.data) ? j.data
-        : [];
-      if (items.length === 0) {
-        j = await hikerGet(`/v1/hashtag/medias/top?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
-        items = Array.isArray(j) ? j
-          : Array.isArray(j?.items) ? j.items
-          : Array.isArray(j?.medias) ? j.medias
-          : Array.isArray(j?.data) ? j.data
-          : [];
-        if (items.length > 0) console.error(`[hikerApi] getHashtagUsers: recent empty, using top (${items.length} items)`);
-      }
+      const qs = new URLSearchParams({ name: tag, amount: String(amount) });
+      if (cursor) qs.set("next_max_id", cursor);
+      const j = await hikerGet(`/v2/hashtag/medias/recent?${qs}`, this.token);
+      const response = j?.response ?? j;
+      const sections: any[] = Array.isArray(response?.sections) ? response.sections : [];
       const seen = new Set<string>();
       const users: { pk: string; username: string; fullName: string }[] = [];
-      for (const item of items) {
-        const u = item?.user ?? item?.owner ?? item;
-        if (!u?.pk || !u?.username) continue;
-        if (seen.has(String(u.pk))) continue;
-        seen.add(String(u.pk));
-        users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+      for (const section of sections) {
+        const lc = section?.layout_content ?? {};
+        const medias: any[] = lc.medias ?? lc.fill_items ?? [];
+        for (const item of medias) {
+          const media = item?.media ?? item;
+          const u = media?.user ?? media?.owner;
+          if (!u?.pk || !u?.username) continue;
+          if (seen.has(String(u.pk))) continue;
+          seen.add(String(u.pk));
+          users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+          if (users.length >= max) break;
+        }
         if (users.length >= max) break;
       }
-      return users;
+      const nextCursor = (response?.more_available && response?.next_max_id)
+        ? String(response.next_max_id)
+        : null;
+      console.error(`[hikerApi] getHashtagUsers #${tag}: ${users.length} users, nextCursor=${nextCursor ?? "none"}`);
+      return { users, nextCursor };
     } catch (e: any) {
       console.error(`[hikerApi] getHashtagUsers #${hashtag} error: ${e?.message}`);
-      return [];
+      return { users: [], nextCursor: null };
     }
   }
 }

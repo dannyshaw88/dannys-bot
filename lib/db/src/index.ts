@@ -192,6 +192,9 @@ const sourcesColNames = new Set(sourcesCols.map((c) => c.name));
 if (!sourcesColNames.has("target_user_id")) {
   sqlite.exec(`ALTER TABLE sources ADD COLUMN target_user_id TEXT NOT NULL DEFAULT '';`);
 }
+if (!sourcesColNames.has("hashtag_cursor")) {
+  sqlite.exec(`ALTER TABLE sources ADD COLUMN hashtag_cursor TEXT NOT NULL DEFAULT '';`);
+}
 const followedUsersCols = sqlite.prepare("pragma table_info(followed_users)").all() as { name: string }[];
 const followedUsersColNames = new Set(followedUsersCols.map((c) => c.name));
 if (!followedUsersColNames.has("instagram_user_id")) {

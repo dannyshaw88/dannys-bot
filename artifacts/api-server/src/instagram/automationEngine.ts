@@ -1297,7 +1297,11 @@ class AutomationEngine {
     if (source.type === "hashtag") {
       if (hikerClient) {
         const t0 = Date.now();
-        candidates = await hikerClient.getHashtagUsers(source.value, processCount * 3);
+        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+        candidates = result.users;
+        if (result.nextCursor) {
+          await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {});
+        }
         logHikerDM("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
       } else {
         candidates = await client.getHashtagUsers(source.value, processCount * 3);
@@ -1545,7 +1549,11 @@ class AutomationEngine {
       if (source.type === "hashtag") {
         if (hikerClient) {
           const t0 = Date.now();
-          candidates = await hikerClient.getHashtagUsers(source.value, processCount * 3);
+          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+          candidates = result.users;
+          if (result.nextCursor) {
+            await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {});
+          }
           logHiker("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
           candidates = await client.getHashtagUsers(source.value, processCount * 3);

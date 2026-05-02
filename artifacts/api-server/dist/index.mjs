@@ -118503,31 +118503,37 @@ var init_hikerApiClient = __esm({
           return [];
         }
       }
-      async getHashtagUsers(hashtag, max = 50) {
+      async getHashtagUsers(hashtag, max = 50, cursor = "") {
         try {
           const tag = hashtag.replace(/^#/, "");
           const amount = Math.min(Math.max(max, 1), 200);
-          let j = await hikerGet(`/v1/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
-          let items = Array.isArray(j) ? j : Array.isArray(j?.items) ? j.items : Array.isArray(j?.medias) ? j.medias : Array.isArray(j?.data) ? j.data : [];
-          if (items.length === 0) {
-            j = await hikerGet(`/v1/hashtag/medias/top?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
-            items = Array.isArray(j) ? j : Array.isArray(j?.items) ? j.items : Array.isArray(j?.medias) ? j.medias : Array.isArray(j?.data) ? j.data : [];
-            if (items.length > 0) console.error(`[hikerApi] getHashtagUsers: recent empty, using top (${items.length} items)`);
-          }
+          const qs = new URLSearchParams({ name: tag, amount: String(amount) });
+          if (cursor) qs.set("next_max_id", cursor);
+          const j = await hikerGet(`/v2/hashtag/medias/recent?${qs}`, this.token);
+          const response = j?.response ?? j;
+          const sections = Array.isArray(response?.sections) ? response.sections : [];
           const seen = /* @__PURE__ */ new Set();
           const users = [];
-          for (const item of items) {
-            const u = item?.user ?? item?.owner ?? item;
-            if (!u?.pk || !u?.username) continue;
-            if (seen.has(String(u.pk))) continue;
-            seen.add(String(u.pk));
-            users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+          for (const section of sections) {
+            const lc = section?.layout_content ?? {};
+            const medias = lc.medias ?? lc.fill_items ?? [];
+            for (const item of medias) {
+              const media = item?.media ?? item;
+              const u = media?.user ?? media?.owner;
+              if (!u?.pk || !u?.username) continue;
+              if (seen.has(String(u.pk))) continue;
+              seen.add(String(u.pk));
+              users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+              if (users.length >= max) break;
+            }
             if (users.length >= max) break;
           }
-          return users;
+          const nextCursor = response?.more_available && response?.next_max_id ? String(response.next_max_id) : null;
+          console.error(`[hikerApi] getHashtagUsers #${tag}: ${users.length} users, nextCursor=${nextCursor ?? "none"}`);
+          return { users, nextCursor };
         } catch (e) {
           console.error(`[hikerApi] getHashtagUsers #${hashtag} error: ${e?.message}`);
-          return [];
+          return { users: [], nextCursor: null };
         }
       }
     };
@@ -139453,7 +139459,8 @@ var sources = sqliteTable("sources", {
   value: text("value").notNull(),
   rank: integer("rank"),
   nrPosts: integer("nr_posts"),
-  targetUserId: text("target_user_id").notNull().default("")
+  targetUserId: text("target_user_id").notNull().default(""),
+  hashtagCursor: text("hashtag_cursor").notNull().default("")
 });
 var profilesRelations = relations(profiles, ({ one, many }) => ({
   proxy: one(proxies, {
@@ -139810,6 +139817,9 @@ var sourcesCols = sqlite.prepare("pragma table_info(sources)").all();
 var sourcesColNames = new Set(sourcesCols.map((c3) => c3.name));
 if (!sourcesColNames.has("target_user_id")) {
   sqlite.exec(`ALTER TABLE sources ADD COLUMN target_user_id TEXT NOT NULL DEFAULT '';`);
+}
+if (!sourcesColNames.has("hashtag_cursor")) {
+  sqlite.exec(`ALTER TABLE sources ADD COLUMN hashtag_cursor TEXT NOT NULL DEFAULT '';`);
 }
 var followedUsersCols = sqlite.prepare("pragma table_info(followed_users)").all();
 var followedUsersColNames = new Set(followedUsersCols.map((c3) => c3.name));
@@ -140255,6 +140265,9 @@ var DatabaseStorage = class {
   }
   async updateSourceTargetUserId(id, targetUserId) {
     await db.update(sources).set({ targetUserId }).where(eq(sources.id, id));
+  }
+  async updateSourceHashtagCursor(id, cursor) {
+    await db.update(sources).set({ hashtagCursor: cursor }).where(eq(sources.id, id));
   }
   async getStatsByProfile(profileId) {
     return await db.select().from(stats).where(eq(stats.profileId, profileId));
@@ -144600,7 +144613,12 @@ var AutomationEngine = class {
     if (source.type === "hashtag") {
       if (hikerClient) {
         const t0 = Date.now();
-        candidates = await hikerClient.getHashtagUsers(source.value, processCount * 3);
+        const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+        candidates = result.users;
+        if (result.nextCursor) {
+          await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {
+          });
+        }
         logHikerDM("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
       } else {
         candidates = await client.getHashtagUsers(source.value, processCount * 3);
@@ -144824,7 +144842,12 @@ var AutomationEngine = class {
       if (source.type === "hashtag") {
         if (hikerClient) {
           const t0 = Date.now();
-          candidates = await hikerClient.getHashtagUsers(source.value, processCount * 3);
+          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, source.hashtagCursor ?? "");
+          candidates = result.users;
+          if (result.nextCursor) {
+            await storage.updateSourceHashtagCursor(source.id, result.nextCursor).catch(() => {
+            });
+          }
           logHiker("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
           candidates = await client.getHashtagUsers(source.value, processCount * 3);

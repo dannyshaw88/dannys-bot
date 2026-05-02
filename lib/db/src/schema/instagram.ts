@@ -109,6 +109,7 @@ export const sources = sqliteTable("sources", {
   rank: integer("rank"),
   nrPosts: integer("nr_posts"),
   targetUserId: text("target_user_id").notNull().default(""),
+  hashtagCursor: text("hashtag_cursor").notNull().default(""),
 });
 
 export const profilesRelations = relations(profiles, ({ one, many }) => ({
