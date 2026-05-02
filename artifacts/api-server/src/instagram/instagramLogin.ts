@@ -181,6 +181,19 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     }
 
     if (err instanceof IgLoginBadPasswordError) {
+      // Instagram sometimes returns this error class for email/nonce challenges rather than a real bad password.
+      // Detect by checking the actual response body.
+      const body = err?.response?.body ?? {};
+      const buttons: any[] = body?.buttons ?? [];
+      const hasEmailAction = buttons.some((b: any) => b?.action === "send_one_click_login_email");
+      const errorTitle: string = body?.error_title ?? "";
+      if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
+        return {
+          ok: false,
+          message: `@${profile.username} — Instagram requires email verification before allowing login from this device. Check the account's email inbox.`,
+          accountStatus: "email_confirmation",
+        };
+      }
       return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "logged_out" };
     }
 

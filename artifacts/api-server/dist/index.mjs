@@ -141928,6 +141928,17 @@ async function verifyInstagramCredentials(profile) {
       return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha" };
     }
     if (err instanceof import_instagram_private_api.IgLoginBadPasswordError) {
+      const body = err?.response?.body ?? {};
+      const buttons = body?.buttons ?? [];
+      const hasEmailAction = buttons.some((b3) => b3?.action === "send_one_click_login_email");
+      const errorTitle = body?.error_title ?? "";
+      if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
+        return {
+          ok: false,
+          message: `@${profile.username} \u2014 Instagram requires email verification before allowing login from this device. Check the account's email inbox.`,
+          accountStatus: "email_confirmation"
+        };
+      }
       return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "logged_out" };
     }
     if (err instanceof import_instagram_private_api.IgLoginInvalidUserError) {
