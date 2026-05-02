@@ -1,18 +1,45 @@
 import { useState, useEffect, useRef } from "react";
 import { useUpdateTool } from "@/hooks/use-tools";
+import { useProfiles } from "@/hooks/use-profiles";
+import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserMinus, Timer, Users, Clock, CalendarDays, Repeat2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { UserMinus, Timer, Users, Clock, CalendarDays, Repeat2, Copy } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
+import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
+import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 
 interface UnfollowToolPanelProps {
   tool: Tool;
   profile: Profile;
 }
 
-export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
+const UNFOLLOW_KEY_MAP: Record<string, string[]> = {
+  timing:   ["delayMin", "delayMax"],
+  process:  ["processMin", "processMax"],
+  delay:    ["delayAfterUnfollowMin", "delayAfterUnfollowMax"],
+  age:      ["minFollowAgeDays"],
+  auto:     ["autoFollowUnfollowEnabled", "autoStopUnfollowAtFollowingsMin", "autoStopUnfollowAtFollowingsMax", "autoStartFollowAfterMin", "autoStartFollowAfterMax"],
+};
+
+const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
+  { label: "Settings", options: [
+    { key: "timing",  label: "Wait between executions", description: "Min/max minutes between sessions" },
+    { key: "process", label: "Process users",            description: "Min/max users per session" },
+    { key: "delay",   label: "Delay between each",       description: "Min/max seconds between each unfollow" },
+    { key: "age",     label: "Unfollow after (days)",    description: "Minimum days since follow before unfollowing" },
+    { key: "auto",    label: "Auto follow/unfollow",     description: "Automatic switching settings" },
+  ]},
+];
+
+export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   const updateToolMutation = useUpdateTool();
+  const { data: allProfiles = [] } = useProfiles();
+  const { toast } = useToast();
+  const [copyOpen, setCopyOpen] = useState(false);
+  const otherProfiles = allProfiles.filter(p => p.id !== profile.id);
 
   const [settings, setSettings] = useState(() => {
     const def = {
@@ -43,6 +70,12 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
     }, 600);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [settings]);
+
+  const handleCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
+    const keysToSend = [...selectedKeys].flatMap(k => UNFOLLOW_KEY_MAP[k] ?? []);
+    await copyToolSettingsToProfiles(settings as Record<string, unknown>, "unfollow", targetIds, keysToSend);
+    toast({ title: `Settings copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}` });
+  };
 
   const num = (key: string, min = 0) => (
     <Input
@@ -132,7 +165,6 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
             Enable Automatic Follow / Unfollow
           </label>
         </div>
-
         <div className={`space-y-3 pl-1 transition-opacity ${!autoEnabled ? "opacity-40 pointer-events-none" : ""}`}>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div className="space-y-1.5">
@@ -170,6 +202,31 @@ export function UnfollowToolPanel({ tool }: UnfollowToolPanelProps) {
           </p>
         </div>
       </div>
+
+      {/* Copy Settings */}
+      <div className="pt-2">
+        <Button
+          variant="outline"
+          className="w-full gap-2"
+          disabled={otherProfiles.length === 0}
+          onClick={() => setCopyOpen(true)}
+        >
+          <Copy className="w-4 h-4" /> Copy Unfollow Tool Settings to Other Profiles
+        </Button>
+        {otherProfiles.length === 0 && (
+          <p className="text-xs text-center text-muted-foreground mt-2">Add more profiles to enable copying settings.</p>
+        )}
+      </div>
+
+      <CopySettingsDialog
+        key={copyOpen ? "open" : "closed"}
+        open={copyOpen}
+        onOpenChange={setCopyOpen}
+        title="Copy Unfollow Tool Settings"
+        profiles={otherProfiles}
+        optionGroups={UNFOLLOW_COPY_GROUPS}
+        onCopy={handleCopy}
+      />
     </div>
   );
 }

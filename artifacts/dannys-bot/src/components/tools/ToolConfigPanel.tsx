@@ -1159,22 +1159,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
       </div>
 
-      {tool.type === 'follow' && (
-        <div className="mt-6">
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={() => setShowCopyModal(true)}
-            disabled={otherProfiles.length === 0}
-          >
-            <Copy className="w-4 h-4" /> Copy Follow Tool Settings to Other Profiles
-          </Button>
-          {otherProfiles.length === 0 && (
-            <p className="text-xs text-center text-muted-foreground mt-2">Add more profiles to enable copying settings.</p>
-          )}
-        </div>
-      )}
-
       <CopySettingsDialog
         key={showCopyModal ? "open" : "closed"}
         open={showCopyModal}
