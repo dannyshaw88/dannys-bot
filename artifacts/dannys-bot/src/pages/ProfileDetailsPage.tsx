@@ -90,8 +90,11 @@ export function ProfileDetailsPage() {
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("settings");
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const initialTab = (() => {
+    try { return new URLSearchParams(window.location.search).get("tab") ?? "settings"; } catch { return "settings"; }
+  })();
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const ACCOUNT_COPY_GROUPS: CopyOptionGroup[] = [
     {
@@ -725,6 +728,7 @@ export function ProfileDetailsPage() {
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Allow Min Calls</Label>
                     <Input 
                       type="number"
+                      className="h-8 text-sm w-28"
                       value={formData.apiLimits.requestsMin}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })}
                     />
@@ -733,6 +737,7 @@ export function ProfileDetailsPage() {
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Allow Max Calls</Label>
                     <Input 
                       type="number"
+                      className="h-8 text-sm w-28"
                       value={formData.apiLimits.requestsMax}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })}
                     />
@@ -744,6 +749,7 @@ export function ProfileDetailsPage() {
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Min (s)</Label>
                     <Input 
                       type="number"
+                      className="h-8 text-sm w-28"
                       value={formData.apiLimits.everySecondsMin}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })}
                     />
@@ -752,6 +758,7 @@ export function ProfileDetailsPage() {
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Max (s)</Label>
                     <Input 
                       type="number"
+                      className="h-8 text-sm w-28"
                       value={formData.apiLimits.everySecondsMax}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })}
                     />

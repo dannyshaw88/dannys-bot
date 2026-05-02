@@ -11,8 +11,8 @@ import {
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
   ChevronDown, ChevronUp, Heart, Copy,
 } from "lucide-react";
-import { format } from "date-fns";
-import { type Tool, type Profile, type RepostedPost } from "@shared/schema";
+import { format, addMinutes } from "date-fns";
+import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useToast } from "@/hooks/use-toast";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
@@ -161,8 +161,47 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     </>
   );
 
+  const { data: sessionActions } = useQuery<SessionAction[]>({
+    queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
+    refetchInterval: 15000,
+  });
+  const lastAction = sessionActions?.find(a => a.toolId === tool.id);
+  const nextRunDisplay = (() => {
+    if (!lastAction) return null;
+    const last = new Date(lastAction.timestamp);
+    const earliest = addMinutes(last, settings.delayMin ?? 30);
+    const latest = addMinutes(last, settings.delayMax ?? 60);
+    const now = new Date();
+    if (now > latest) return "now";
+    if (now > earliest) return `by ${format(latest, "HH:mm")}`;
+    return `${format(earliest, "HH:mm")} – ${format(latest, "HH:mm")}`;
+  })();
+
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
+      {/* ── Master enable/disable ─────────────────────────────── */}
+      <div className="border border-border rounded-xl p-4 flex items-center justify-between gap-4">
+        <div>
+          <h4 className="font-semibold text-sm">Human Session Tool</h4>
+          {nextRunDisplay && (
+            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Clock className="w-3 h-3 shrink-0" />
+              Next execution: <span className="font-mono font-medium text-foreground">{nextRunDisplay}</span>
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={tool.enabled}
+            onCheckedChange={(enabled) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })}
+            disabled={updateToolMutation.isPending}
+          />
+          <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
+            {tool.enabled ? 'ACTIVE' : 'STOPPED'}
+          </span>
+        </div>
+      </div>
+
       {/* ── Timer ─────────────────────────────────────────────── */}
       <div className="border border-border rounded-xl p-4">
         <div className="flex items-center justify-between">

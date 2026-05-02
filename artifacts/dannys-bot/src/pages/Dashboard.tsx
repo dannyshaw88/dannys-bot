@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Clock, User, Zap } from "lucide-react";
@@ -67,11 +68,16 @@ export function Dashboard() {
                           {format(new Date(call.date), "MMM d, HH:mm:ss")}
                         </span>
                       </td>
-                      <td className="px-6 py-3.5 font-medium text-foreground whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                      <td className="px-6 py-3.5 font-medium whitespace-nowrap">
+                        <Link
+                          href={`/profiles/${call.profileId}?tab=follow`}
+                          className="flex items-center gap-2 text-foreground hover:text-primary transition-colors group"
+                        >
                           <User className="w-3.5 h-3.5 text-primary" />
-                          {getUsername(call.profileId)}
-                        </div>
+                          <span className="group-hover:underline underline-offset-2">
+                            {getUsername(call.profileId)}
+                          </span>
+                        </Link>
                       </td>
                       <td className="px-6 py-3.5 whitespace-nowrap">
                         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
