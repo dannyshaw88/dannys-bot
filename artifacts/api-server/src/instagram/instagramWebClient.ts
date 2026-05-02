@@ -633,13 +633,11 @@ export class InstagramWebClient {
   }
 
   // ── Click Settings and Activity ───────────────────────────────────────────
-  // Simulates visiting the Settings page and the Activity (pro dashboard) page.
+  // Simulates visiting the Settings page — fetches account security info,
+  // matching Jarvee's single GetAccountSecurityInfo call for this action.
   async visitSettingsAndActivity(): Promise<boolean> {
     return this.timed("VisitSettingsAndActivity", async () => {
-      // Settings: fetch account security info (settings deep-link)
-      await this.mobileGet(`/api/v1/accounts/account_security_info/`);
-      // Activity: mark inbox as seen (what happens when you open the activity tab)
-      const j = await this.mobileGet(`/api/v1/news/inbox/?mark_as_seen=true`);
+      const j = await this.mobileGet(`/api/v1/accounts/account_security_info/`);
       return !!(j?.status !== "fail");
     }, "Visit settings and activity");
   }
@@ -763,11 +761,11 @@ export class InstagramWebClient {
   async getDirectMessagesInternal(): Promise<{ count: number }> {
     return this.timed("GetDirectMessagesInternal", async () => {
       const j = await this.mobileGet(
-        `/api/v1/direct_v2/pending_inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
+        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
       );
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
       return { count: threads.length };
-    }, (r) => `Checked ${r.count} pending DM request${r.count === 1 ? "" : "s"}`);
+    }, (r) => `Checked DM inbox — ${r.count} thread${r.count === 1 ? "" : "s"}`);
   }
 
   // Like getDirectMessages but returns thread content for auto-reply scanning.

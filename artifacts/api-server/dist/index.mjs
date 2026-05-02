@@ -143252,11 +143252,11 @@ var InstagramWebClient = class {
     }, "Refresh own profile");
   }
   // ── Click Settings and Activity ───────────────────────────────────────────
-  // Simulates visiting the Settings page and the Activity (pro dashboard) page.
+  // Simulates visiting the Settings page — fetches account security info,
+  // matching Jarvee's single GetAccountSecurityInfo call for this action.
   async visitSettingsAndActivity() {
     return this.timed("VisitSettingsAndActivity", async () => {
-      await this.mobileGet(`/api/v1/accounts/account_security_info/`);
-      const j = await this.mobileGet(`/api/v1/news/inbox/?mark_as_seen=true`);
+      const j = await this.mobileGet(`/api/v1/accounts/account_security_info/`);
       return !!(j?.status !== "fail");
     }, "Visit settings and activity");
   }
@@ -143361,11 +143361,11 @@ var InstagramWebClient = class {
   async getDirectMessagesInternal() {
     return this.timed("GetDirectMessagesInternal", async () => {
       const j = await this.mobileGet(
-        `/api/v1/direct_v2/pending_inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
+        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
       );
       const threads = j?.inbox?.threads ?? j?.threads ?? [];
       return { count: threads.length };
-    }, (r2) => `Checked ${r2.count} pending DM request${r2.count === 1 ? "" : "s"}`);
+    }, (r2) => `Checked DM inbox \u2014 ${r2.count} thread${r2.count === 1 ? "" : "s"}`);
   }
   // Like getDirectMessages but returns thread content for auto-reply scanning.
   // Returns up to `count` threads, each with recent messages from the other user.
@@ -144886,7 +144886,7 @@ var AutomationEngine = class {
       try {
         const { count: pendingCount } = await client.getDirectMessagesInternal();
         console.log(`[engine] @${profile.username}: \u{1F4AC} checked DMs (${pendingCount} pending request(s))`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DMs \u2014 ${pendingCount} pending request${pendingCount === 1 ? "" : "s"}`);
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DM inbox \u2014 ${pendingCount} thread${pendingCount === 1 ? "" : "s"}`);
       } catch (e) {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
       }

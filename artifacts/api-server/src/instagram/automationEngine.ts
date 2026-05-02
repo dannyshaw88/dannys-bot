@@ -1462,7 +1462,7 @@ class AutomationEngine {
       try {
         const { count: pendingCount } = await client.getDirectMessagesInternal();
         console.log(`[engine] @${profile.username}: 💬 checked DMs (${pendingCount} pending request(s))`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DMs — ${pendingCount} pending request${pendingCount === 1 ? "" : "s"}`);
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DM inbox — ${pendingCount} thread${pendingCount === 1 ? "" : "s"}`);
       } catch (e: any) {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
       }
