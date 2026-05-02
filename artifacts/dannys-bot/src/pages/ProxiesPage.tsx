@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProxies, useCreateProxy, useDeleteProxy } from "@/hooks/use-proxies";
 import { useProfiles, useUpdateProfile } from "@/hooks/use-profiles";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Shield, Globe, User, X, UserPlus, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Plus, Trash2, Shield, Globe, User, X, UserPlus, Wifi, WifiOff, Loader2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Proxy, Profile } from "@shared/schema";
@@ -172,16 +173,71 @@ function ProxyCard({ proxy, profiles }: { proxy: Proxy; profiles: Profile[] }) {
   );
 }
 
+function parseJarveeFile(buffer: ArrayBuffer): Array<{ host: string; port: number; username: string | null; password: string | null }> {
+  const text = new TextDecoder("utf-16le").decode(buffer).replace(/^\ufeff/, "");
+  return text
+    .split(/\r?\n/)
+    .filter(l => l.trim() && !l.startsWith("proxy-"))
+    .map(line => {
+      const parts = line.split("\t");
+      const hostPort = parts[0].trim();
+      const lastColon = hostPort.lastIndexOf(":");
+      if (lastColon === -1) return null;
+      const host = hostPort.slice(0, lastColon).trim();
+      const port = Number(hostPort.slice(lastColon + 1).trim());
+      if (!host || isNaN(port) || port < 1 || port > 65535) return null;
+      return {
+        host,
+        port,
+        username: parts[1]?.trim() || null,
+        password: parts[2]?.trim() || null,
+      };
+    })
+    .filter(Boolean) as Array<{ host: string; port: number; username: string | null; password: string | null }>;
+}
+
 export function ProxiesPage() {
   const { data: proxies, isLoading: proxiesLoading } = useProxies();
   const { data: profiles = [] } = useProfiles();
   const createProxyMutation = useCreateProxy();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [hostPort, setHostPort] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const parsed = parseJarveeFile(buffer);
+
+      if (parsed.length === 0) {
+        toast({ title: "No valid proxies found in file", variant: "destructive" });
+        return;
+      }
+
+      const res = await apiRequest("POST", "/api/proxies/import", { proxies: parsed });
+      const { imported, skipped } = await res.json();
+      await queryClient.invalidateQueries({ queryKey: ["/api/proxies"] });
+
+      toast({
+        title: `Imported ${imported} ${imported === 1 ? "proxy" : "proxies"}`,
+        description: skipped > 0 ? `${skipped} already existed and were skipped.` : undefined,
+      });
+    } catch {
+      toast({ title: "Import failed", description: "Could not parse or upload the file.", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,7 +281,27 @@ export function ProxiesPage() {
           <p className="text-muted-foreground mt-1">Manage proxies and assign them to accounts.</p>
         </div>
 
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <div className="flex items-center gap-2">
+          <label>
+            <input
+              type="file"
+              accept=".txt"
+              className="hidden"
+              onChange={handleImport}
+              disabled={importing}
+            />
+            <Button variant="outline" disabled={importing} asChild>
+              <span className="cursor-pointer">
+                {importing
+                  ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  : <Upload className="w-4 h-4 mr-2" />
+                }
+                {importing ? "Importing…" : "Import from Jarvee"}
+              </span>
+            </Button>
+          </label>
+
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="w-4 h-4 mr-2" /> Add Proxy</Button>
           </DialogTrigger>
@@ -261,6 +337,7 @@ export function ProxiesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {proxiesLoading ? (

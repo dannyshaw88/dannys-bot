@@ -90,6 +90,39 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
+  app.post("/api/proxies/import", async (req, res) => {
+    const input = z.object({
+      proxies: z.array(z.object({
+        host: z.string().min(1),
+        port: z.number().int().min(1).max(65535),
+        username: z.string().nullable().optional(),
+        password: z.string().nullable().optional(),
+      })),
+    }).parse(req.body);
+
+    const existing = await storage.getProxies();
+    const existingSet = new Set(existing.map(p => `${p.host}:${p.port}`));
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const p of input.proxies) {
+      const key = `${p.host}:${p.port}`;
+      if (existingSet.has(key)) { skipped++; continue; }
+      await storage.createProxy({
+        name: key,
+        host: p.host,
+        port: p.port,
+        username: p.username ?? null,
+        password: p.password ?? null,
+      });
+      existingSet.add(key);
+      imported++;
+    }
+
+    res.json({ imported, skipped });
+  });
+
   app.post("/api/proxies/:id/ping", async (req, res) => {
     const proxy = (await storage.getProxies()).find(p => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
