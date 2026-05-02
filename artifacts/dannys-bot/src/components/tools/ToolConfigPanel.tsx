@@ -194,6 +194,11 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
       repostNotUsedMax: 0,
       repostDisableAtPostCount: 0,
       repostDisableWhenExhausted: true,
+      autoFollowUnfollowEnabled: false,
+      autoStopFollowAtFollowingsMin: 7400,
+      autoStopFollowAtFollowingsMax: 7400,
+      autoStartUnfollowAfterMin: 60,
+      autoStartUnfollowAfterMax: 135,
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -816,6 +821,59 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                     </div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
                       After every follow, also follow users from your discover page. The percentage controls how often this contextual follow is triggered.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {tool.type === 'follow' && (
+                <div className="pt-4 border-t border-border space-y-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="autoFollowUnfollowEnabled"
+                      checked={!!(settings as any).autoFollowUnfollowEnabled}
+                      onChange={(e) => setSettings({ ...settings, autoFollowUnfollowEnabled: e.target.checked } as any)}
+                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                    />
+                    <label htmlFor="autoFollowUnfollowEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+                      Enable Automatic Follow / Unfollow
+                    </label>
+                  </div>
+                  <div className={`space-y-3 pl-1 transition-opacity ${!(settings as any).autoFollowUnfollowEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                      <div className="space-y-1.5">
+                        <h4 className="text-xs text-muted-foreground">Stop follow tool when reaching followings</h4>
+                        <div className="flex items-center gap-1.5">
+                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                            value={(settings as any).autoStopFollowAtFollowingsMin ?? 7400}
+                            onChange={(e) => setSettings({ ...settings, autoStopFollowAtFollowingsMin: Number(e.target.value) } as any)}
+                          />
+                          <span className="text-[10px] text-muted-foreground">–</span>
+                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                            value={(settings as any).autoStopFollowAtFollowingsMax ?? 7400}
+                            onChange={(e) => setSettings({ ...settings, autoStopFollowAtFollowingsMax: Number(e.target.value) } as any)}
+                          />
+                        </div>
+                      </div>
+                      <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+                      <div className="space-y-1.5">
+                        <h4 className="text-xs text-muted-foreground">Start unfollow tool after (minutes)</h4>
+                        <div className="flex items-center gap-1.5">
+                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                            value={(settings as any).autoStartUnfollowAfterMin ?? 60}
+                            onChange={(e) => setSettings({ ...settings, autoStartUnfollowAfterMin: Number(e.target.value) } as any)}
+                          />
+                          <span className="text-[10px] text-muted-foreground">–</span>
+                          <Input type="number" min="0" className="w-20 h-7 text-xs"
+                            value={(settings as any).autoStartUnfollowAfterMax ?? 135}
+                            onChange={(e) => setSettings({ ...settings, autoStartUnfollowAfterMax: Number(e.target.value) } as any)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      When your followings count reaches the target, the follow tool stops automatically and the unfollow tool starts after the specified delay. Requires profile sync to be enabled so the followings count stays up to date.
                     </p>
                   </div>
                 </div>
