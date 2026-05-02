@@ -593,8 +593,8 @@ class AutomationEngine {
     const client = await this.ensureClient(profile, state);
     if (!client) return;
 
-    const ownUser = await client.getUserByUsername(profile.username);
-    if (!ownUser?.pk) {
+    const ownUserId = await client.getOwnUserId();
+    if (!ownUserId) {
       console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
       return;
     }
@@ -604,12 +604,12 @@ class AutomationEngine {
       && globalSettings.hikerApiEnabled === "true"
       && !!globalSettings.hikerApiToken;
 
-    let followers: { pk: string; username: string }[] = [];
+    let followers: { pk: string; username: string; fullName: string }[] = [];
     if (useHiker) {
       const hikerClient = new HikerApiClient(globalSettings.hikerApiToken!);
-      followers = await hikerClient.getFollowers(ownUser.pk, usersToCheck);
+      followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
     } else {
-      followers = await client.getFollowers(ownUser.pk, usersToCheck);
+      followers = await client.getFollowers(ownUserId, usersToCheck);
     }
 
     if (!followers.length) {
@@ -1215,13 +1215,17 @@ class AutomationEngine {
       if (maxPerDay > 0 && this.daily(state) >= maxPerDay) break;
 
       try {
-        // Resolve userId from username
-        const userInfo = await client.getUserByUsername(fu.instagramUsername);
-        if (!userInfo) {
-          console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} — user not found, skipping`);
-          continue;
+        // Use stored pk; fall back to search-bar lookup (no profile info endpoint)
+        let userId = fu.instagramUserId ?? "";
+        if (!userId) {
+          const found = await client.searchUserByUsername(fu.instagramUsername);
+          if (!found) {
+            console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} — could not resolve user ID, skipping`);
+            continue;
+          }
+          userId = found.pk;
         }
-        const result = await client.unfollowUser(userInfo.pk, fu.instagramUsername);
+        const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram action-blocked unfollow");
           break;
@@ -1273,12 +1277,20 @@ class AutomationEngine {
     }
     const source = this.pickSource(sources);
 
-    let candidates: { pk: string; username: string }[] = [];
+    let candidates: { pk: string; username: string; fullName: string }[] = [];
     if (source.type === "hashtag") {
       candidates = await client.getHashtagUsers(source.value, processCount * 3);
     } else {
-      const target = await client.getUserByUsername(source.value.replace(/^@/, ""));
-      if (target) candidates = await client.getFollowers(target.pk, processCount * 3);
+      // Use cached targetUserId; resolve once via search if missing
+      let targetUserId = source.targetUserId ?? "";
+      if (!targetUserId) {
+        const found = await client.searchUserByUsername(source.value.replace(/^@/, ""));
+        if (found) {
+          targetUserId = found.pk;
+          await storage.updateSourceTargetUserId(source.id, targetUserId);
+        }
+      }
+      if (targetUserId) candidates = await client.getFollowers(targetUserId, processCount * 3);
     }
 
     let sent = 0;
@@ -1479,7 +1491,7 @@ class AutomationEngine {
     console.log(`[engine] @${profile.username}: session [${processCount} follows] from ${source.type}:${source.value}`);
 
     let followed = 0;
-    let candidates: { pk: string; username: string }[] = [];
+    let candidates: { pk: string; username: string; fullName: string }[] = [];
 
     const logHiker = (op: string, message: string, durationMs: number) => {
       storage.createInstagramApiCall({
@@ -1503,21 +1515,27 @@ class AutomationEngine {
         }
       } else if (source.type === "target_followers") {
         const targetName = source.value.replace(/^@/, "");
-        let target: { pk: string; username: string } | null;
-        if (hikerClient) {
-          const t0 = Date.now();
-          target = await hikerClient.getUserByUsername(targetName);
-          logHiker("GetUserByUsername", `Resolved @${targetName} via HikerAPI`, Date.now() - t0);
-        } else {
-          target = await client.getUserByUsername(targetName);
+        // Use cached pk; resolve once and cache so we never call this again
+        let targetPk = source.targetUserId ?? "";
+        if (!targetPk) {
+          let resolved: { pk: string; username: string } | null = null;
+          if (hikerClient) {
+            const t0 = Date.now();
+            resolved = await hikerClient.getUserByUsername(targetName);
+            logHiker("GetUserByUsername", `Resolved @${targetName} via HikerAPI (cached for future runs)`, Date.now() - t0);
+          } else {
+            resolved = await client.searchUserByUsername(targetName);
+          }
+          if (!resolved) { console.error(`[engine] @${profile.username}: target @${targetName} not found`); return { followed: 0 }; }
+          targetPk = resolved.pk;
+          await storage.updateSourceTargetUserId(source.id, targetPk);
         }
-        if (!target) { console.error(`[engine] @${profile.username}: target @${targetName} not found`); return { followed: 0 }; }
         if (hikerClient) {
           const t0 = Date.now();
-          candidates = await hikerClient.getFollowers(target.pk, processCount * 3);
+          candidates = await hikerClient.getFollowers(targetPk, processCount * 3);
           logHiker("FollowersScrape", `Scraped followers of @${targetName} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
-          candidates = await client.getFollowers(target.pk, processCount * 3);
+          candidates = await client.getFollowers(targetPk, processCount * 3);
         }
       }
     } catch (err: any) {
@@ -1554,22 +1572,14 @@ class AutomationEngine {
         continue;
       }
 
-      // Tool filter: skip Indian users (check name + bio for Indic script characters)
+      // Tool filter: skip Indian users — use fullName already in scrape payload, no extra API call
       if (toolSkipIndian) {
-        try {
-          const userProfile = hikerClient
-            ? await hikerClient.getUserProfile(user.username)
-            : await client.getUserProfile(user.username);
-          const textToCheck = [userProfile?.fullName ?? "", userProfile?.biography ?? ""].join(" ");
-          if (this.hasIndianScript(textToCheck)) {
-            const matchedField = this.hasIndianScript(userProfile?.fullName ?? "") ? "name" : "bio";
-            console.log(`[engine] @${profile.username}: skip @${user.username} — Indian script detected in ${matchedField}`);
-            this.logAction(profile.id, tool.id, "filter_skip", user.username, source.value, source.type, "skipped", `Indian script detected in ${matchedField}`);
-            await storage.addSkippedUser(user.username, `Indian script in ${matchedField}`);
-            continue;
-          }
-        } catch (e: any) {
-          console.warn(`[engine] @${profile.username}: profile check for @${user.username} failed: ${e?.message}`);
+        const fullName = user.fullName ?? "";
+        if (this.hasIndianScript(fullName)) {
+          console.log(`[engine] @${profile.username}: skip @${user.username} — Indian script in name`);
+          this.logAction(profile.id, tool.id, "filter_skip", user.username, source.value, source.type, "skipped", "Indian script in name");
+          await storage.addSkippedUser(user.username, "Indian script in name");
+          continue;
         }
       }
 
@@ -1622,10 +1632,11 @@ class AutomationEngine {
         continue;
       }
 
-      // Record successful follow
+      // Record successful follow (store pk so unfollow never needs to look it up)
       await storage.createFollowedUser({
         profileId: profile.id,
         instagramUsername: user.username,
+        instagramUserId: user.pk,
         sourceValue: source.value,
         sourceType: source.type,
         followedAt: new Date().toISOString(),

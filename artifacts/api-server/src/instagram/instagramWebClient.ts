@@ -913,10 +913,10 @@ export class InstagramWebClient {
 
   // ── Scrape recent posts from a hashtag → returns users ────────────────────
   // The sections endpoint requires POST, not GET
-  async getHashtagUsers(hashtag: string, maxUsers = 50): Promise<{ pk: string; username: string }[]> {
+  async getHashtagUsers(hashtag: string, maxUsers = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
     return this.timed("HashtagScrape", async () => {
       const tag = hashtag.replace(/^#/, "");
-      const users: { pk: string; username: string }[] = [];
+      const users: { pk: string; username: string; fullName: string }[] = [];
       const seen = new Set<string>();
       let maxId = "";
       let page = 0;
@@ -942,7 +942,7 @@ export class InstagramWebClient {
             if (!u?.pk || !u?.username) continue;
             if (seen.has(String(u.pk))) continue;
             seen.add(String(u.pk));
-            users.push({ pk: String(u.pk), username: u.username });
+            users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
           }
         }
 
@@ -957,9 +957,9 @@ export class InstagramWebClient {
   }
 
   // ── Scrape followers of a target account ──────────────────────────────────
-  async getFollowers(userId: string, maxFollowers = 50): Promise<{ pk: string; username: string }[]> {
+  async getFollowers(userId: string, maxFollowers = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
     return this.timed("FollowersScrape", async () => {
-      const users: { pk: string; username: string }[] = [];
+      const users: { pk: string; username: string; fullName: string }[] = [];
       let maxId = "";
 
       const maxPages = Math.min(Math.ceil(maxFollowers / 50) + 2, 25);
@@ -968,7 +968,7 @@ export class InstagramWebClient {
         const j = await this.mobileGet(`/api/v1/friendships/${userId}/followers/?${qs}`);
         if (!j?.users?.length) break;
         for (const u of j.users) {
-          if (u.pk && u.username) users.push({ pk: String(u.pk), username: u.username });
+          if (u.pk && u.username) users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
         }
         maxId = j.next_max_id ?? "";
         if (!maxId) break;
@@ -977,5 +977,24 @@ export class InstagramWebClient {
       console.log(`[webClient] followers of ${userId}: found ${users.length}`);
       return users.slice(0, maxFollowers);
     }, `Followers of ${userId}`);
+  }
+
+  // ── Resolve own account pk (reuses current_user endpoint, no extra call) ──
+  async getOwnUserId(): Promise<string | null> {
+    return this.timed("GetOwnUser", async () => {
+      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+      return j?.user?.pk ? String(j.user.pk) : null;
+    }, "Get own user ID");
+  }
+
+  // ── Search for a user by username (safer than web_profile_info lookup) ────
+  // Uses the search bar endpoint — looks like a human typing in the search box.
+  async searchUserByUsername(username: string): Promise<{ pk: string; username: string } | null> {
+    return this.timed("SearchUser", async () => {
+      const j = await this.mobileGet(`/api/v1/users/search/?timezone_offset=0&count=5&q=${encodeURIComponent(username)}`);
+      const users: any[] = j?.users ?? [];
+      const match = users.find((u: any) => String(u.username).toLowerCase() === username.toLowerCase());
+      return match ? { pk: String(match.pk), username: String(match.username) } : null;
+    }, `Search @${username}`);
   }
 }

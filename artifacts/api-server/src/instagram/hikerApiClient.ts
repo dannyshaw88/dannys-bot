@@ -94,14 +94,14 @@ export class HikerApiClient {
     }
   }
 
-  async getFollowers(userId: string, max = 50): Promise<{ pk: string; username: string }[]> {
+  async getFollowers(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
     try {
       const amount = Math.min(Math.max(max, 1), 200);
       const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
       const users: any[] = Array.isArray(j) ? j : [];
       return users
         .filter((u: any) => u?.pk && u?.username)
-        .map((u: any) => ({ pk: String(u.pk), username: String(u.username) }))
+        .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }))
         .slice(0, max);
     } catch (e: any) {
       console.error(`[hikerApi] getFollowers ${userId} error: ${e?.message}`);
@@ -109,20 +109,20 @@ export class HikerApiClient {
     }
   }
 
-  async getHashtagUsers(hashtag: string, max = 50): Promise<{ pk: string; username: string }[]> {
+  async getHashtagUsers(hashtag: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
     try {
       const tag = hashtag.replace(/^#/, "");
       const amount = Math.min(Math.max(max, 1), 200);
       const j = await hikerGet(`/v1/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=${amount}`, this.token);
       const items: any[] = Array.isArray(j) ? j : [];
       const seen = new Set<string>();
-      const users: { pk: string; username: string }[] = [];
+      const users: { pk: string; username: string; fullName: string }[] = [];
       for (const item of items) {
         const u = item?.user ?? item?.owner ?? item;
         if (!u?.pk || !u?.username) continue;
         if (seen.has(String(u.pk))) continue;
         seen.add(String(u.pk));
-        users.push({ pk: String(u.pk), username: String(u.username) });
+        users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
         if (users.length >= max) break;
       }
       return users;

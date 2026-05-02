@@ -118496,7 +118496,7 @@ var init_hikerApiClient = __esm({
           const amount = Math.min(Math.max(max, 1), 200);
           const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
           const users = Array.isArray(j) ? j : [];
-          return users.filter((u) => u?.pk && u?.username).map((u) => ({ pk: String(u.pk), username: String(u.username) })).slice(0, max);
+          return users.filter((u) => u?.pk && u?.username).map((u) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") })).slice(0, max);
         } catch (e) {
           console.error(`[hikerApi] getFollowers ${userId} error: ${e?.message}`);
           return [];
@@ -118515,7 +118515,7 @@ var init_hikerApiClient = __esm({
             if (!u?.pk || !u?.username) continue;
             if (seen.has(String(u.pk))) continue;
             seen.add(String(u.pk));
-            users.push({ pk: String(u.pk), username: String(u.username) });
+            users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
             if (users.length >= max) break;
           }
           return users;
@@ -139446,7 +139446,8 @@ var sources = sqliteTable("sources", {
   type: text("type").notNull(),
   value: text("value").notNull(),
   rank: integer("rank"),
-  nrPosts: integer("nr_posts")
+  nrPosts: integer("nr_posts"),
+  targetUserId: text("target_user_id").notNull().default("")
 });
 var profilesRelations = relations(profiles, ({ one, many }) => ({
   proxy: one(proxies, {
@@ -139497,6 +139498,7 @@ var followedUsers = sqliteTable("followed_users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
   instagramUsername: text("instagram_username").notNull(),
+  instagramUserId: text("instagram_user_id").notNull().default(""),
   sourceValue: text("source_value").notNull().default(""),
   sourceType: text("source_type").notNull().default(""),
   followedAt: text("followed_at").notNull()
@@ -139797,6 +139799,16 @@ if (!colNames.has("ig_device_state")) {
 }
 if (!colNames.has("ig_api_cookies")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_api_cookies TEXT;`);
+}
+var sourcesCols = sqlite.prepare("pragma table_info(sources)").all();
+var sourcesColNames = new Set(sourcesCols.map((c3) => c3.name));
+if (!sourcesColNames.has("target_user_id")) {
+  sqlite.exec(`ALTER TABLE sources ADD COLUMN target_user_id TEXT NOT NULL DEFAULT '';`);
+}
+var followedUsersCols = sqlite.prepare("pragma table_info(followed_users)").all();
+var followedUsersColNames = new Set(followedUsersCols.map((c3) => c3.name));
+if (!followedUsersColNames.has("instagram_user_id")) {
+  sqlite.exec(`ALTER TABLE followed_users ADD COLUMN instagram_user_id TEXT NOT NULL DEFAULT '';`);
 }
 var profileIds = sqlite.prepare("SELECT id FROM profiles").all();
 var insertHumanSession = sqlite.prepare(
@@ -140234,6 +140246,9 @@ var DatabaseStorage = class {
   }
   async deleteSource(id) {
     await db.delete(sources).where(eq(sources.id, id));
+  }
+  async updateSourceTargetUserId(id, targetUserId) {
+    await db.update(sources).set({ targetUserId }).where(eq(sources.id, id));
   }
   async getStatsByProfile(profileId) {
     return await db.select().from(stats).where(eq(stats.profileId, profileId));
@@ -143415,7 +143430,7 @@ var InstagramWebClient = class {
             if (!u?.pk || !u?.username) continue;
             if (seen.has(String(u.pk))) continue;
             seen.add(String(u.pk));
-            users.push({ pk: String(u.pk), username: u.username });
+            users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
           }
         }
         maxId = j.next_max_id ?? "";
@@ -143437,7 +143452,7 @@ var InstagramWebClient = class {
         const j = await this.mobileGet(`/api/v1/friendships/${userId}/followers/?${qs}`);
         if (!j?.users?.length) break;
         for (const u of j.users) {
-          if (u.pk && u.username) users.push({ pk: String(u.pk), username: u.username });
+          if (u.pk && u.username) users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
         }
         maxId = j.next_max_id ?? "";
         if (!maxId) break;
@@ -143445,6 +143460,23 @@ var InstagramWebClient = class {
       console.log(`[webClient] followers of ${userId}: found ${users.length}`);
       return users.slice(0, maxFollowers);
     }, `Followers of ${userId}`);
+  }
+  // ── Resolve own account pk (reuses current_user endpoint, no extra call) ──
+  async getOwnUserId() {
+    return this.timed("GetOwnUser", async () => {
+      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+      return j?.user?.pk ? String(j.user.pk) : null;
+    }, "Get own user ID");
+  }
+  // ── Search for a user by username (safer than web_profile_info lookup) ────
+  // Uses the search bar endpoint — looks like a human typing in the search box.
+  async searchUserByUsername(username) {
+    return this.timed("SearchUser", async () => {
+      const j = await this.mobileGet(`/api/v1/users/search/?timezone_offset=0&count=5&q=${encodeURIComponent(username)}`);
+      const users = j?.users ?? [];
+      const match = users.find((u) => String(u.username).toLowerCase() === username.toLowerCase());
+      return match ? { pk: String(match.pk), username: String(match.username) } : null;
+    }, `Search @${username}`);
   }
 };
 
@@ -143960,8 +143992,8 @@ var AutomationEngine = class {
     const usersToCheck = randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
     const client = await this.ensureClient(profile, state);
     if (!client) return;
-    const ownUser = await client.getUserByUsername(profile.username);
-    if (!ownUser?.pk) {
+    const ownUserId = await client.getOwnUserId();
+    if (!ownUserId) {
       console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
       return;
     }
@@ -143970,9 +144002,9 @@ var AutomationEngine = class {
     let followers = [];
     if (useHiker) {
       const hikerClient = new HikerApiClient(globalSettings2.hikerApiToken);
-      followers = await hikerClient.getFollowers(ownUser.pk, usersToCheck);
+      followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
     } else {
-      followers = await client.getFollowers(ownUser.pk, usersToCheck);
+      followers = await client.getFollowers(ownUserId, usersToCheck);
     }
     if (!followers.length) {
       console.log(`[engine] @${profile.username}: no followers returned for contact session`);
@@ -144486,12 +144518,16 @@ var AutomationEngine = class {
       if (unfollowed >= processCount || state.stop.stopped) break;
       if (maxPerDay > 0 && this.daily(state) >= maxPerDay) break;
       try {
-        const userInfo = await client.getUserByUsername(fu.instagramUsername);
-        if (!userInfo) {
-          console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} \u2014 user not found, skipping`);
-          continue;
+        let userId = fu.instagramUserId ?? "";
+        if (!userId) {
+          const found = await client.searchUserByUsername(fu.instagramUsername);
+          if (!found) {
+            console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} \u2014 could not resolve user ID, skipping`);
+            continue;
+          }
+          userId = found.pk;
         }
-        const result = await client.unfollowUser(userInfo.pk, fu.instagramUsername);
+        const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram action-blocked unfollow");
           break;
@@ -144543,8 +144579,15 @@ var AutomationEngine = class {
     if (source.type === "hashtag") {
       candidates = await client.getHashtagUsers(source.value, processCount * 3);
     } else {
-      const target = await client.getUserByUsername(source.value.replace(/^@/, ""));
-      if (target) candidates = await client.getFollowers(target.pk, processCount * 3);
+      let targetUserId = source.targetUserId ?? "";
+      if (!targetUserId) {
+        const found = await client.searchUserByUsername(source.value.replace(/^@/, ""));
+        if (found) {
+          targetUserId = found.pk;
+          await storage.updateSourceTargetUserId(source.id, targetUserId);
+        }
+      }
+      if (targetUserId) candidates = await client.getFollowers(targetUserId, processCount * 3);
     }
     let sent = 0;
     for (const user of candidates) {
@@ -144746,24 +144789,29 @@ var AutomationEngine = class {
         }
       } else if (source.type === "target_followers") {
         const targetName = source.value.replace(/^@/, "");
-        let target;
+        let targetPk = source.targetUserId ?? "";
+        if (!targetPk) {
+          let resolved = null;
+          if (hikerClient) {
+            const t0 = Date.now();
+            resolved = await hikerClient.getUserByUsername(targetName);
+            logHiker("GetUserByUsername", `Resolved @${targetName} via HikerAPI (cached for future runs)`, Date.now() - t0);
+          } else {
+            resolved = await client.searchUserByUsername(targetName);
+          }
+          if (!resolved) {
+            console.error(`[engine] @${profile.username}: target @${targetName} not found`);
+            return { followed: 0 };
+          }
+          targetPk = resolved.pk;
+          await storage.updateSourceTargetUserId(source.id, targetPk);
+        }
         if (hikerClient) {
           const t0 = Date.now();
-          target = await hikerClient.getUserByUsername(targetName);
-          logHiker("GetUserByUsername", `Resolved @${targetName} via HikerAPI`, Date.now() - t0);
-        } else {
-          target = await client.getUserByUsername(targetName);
-        }
-        if (!target) {
-          console.error(`[engine] @${profile.username}: target @${targetName} not found`);
-          return { followed: 0 };
-        }
-        if (hikerClient) {
-          const t0 = Date.now();
-          candidates = await hikerClient.getFollowers(target.pk, processCount * 3);
+          candidates = await hikerClient.getFollowers(targetPk, processCount * 3);
           logHiker("FollowersScrape", `Scraped followers of @${targetName} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
-          candidates = await client.getFollowers(target.pk, processCount * 3);
+          candidates = await client.getFollowers(targetPk, processCount * 3);
         }
       }
     } catch (err) {
@@ -144799,18 +144847,12 @@ var AutomationEngine = class {
         continue;
       }
       if (toolSkipIndian) {
-        try {
-          const userProfile = hikerClient ? await hikerClient.getUserProfile(user.username) : await client.getUserProfile(user.username);
-          const textToCheck = [userProfile?.fullName ?? "", userProfile?.biography ?? ""].join(" ");
-          if (this.hasIndianScript(textToCheck)) {
-            const matchedField = this.hasIndianScript(userProfile?.fullName ?? "") ? "name" : "bio";
-            console.log(`[engine] @${profile.username}: skip @${user.username} \u2014 Indian script detected in ${matchedField}`);
-            this.logAction(profile.id, tool.id, "filter_skip", user.username, source.value, source.type, "skipped", `Indian script detected in ${matchedField}`);
-            await storage.addSkippedUser(user.username, `Indian script in ${matchedField}`);
-            continue;
-          }
-        } catch (e) {
-          console.warn(`[engine] @${profile.username}: profile check for @${user.username} failed: ${e?.message}`);
+        const fullName = user.fullName ?? "";
+        if (this.hasIndianScript(fullName)) {
+          console.log(`[engine] @${profile.username}: skip @${user.username} \u2014 Indian script in name`);
+          this.logAction(profile.id, tool.id, "filter_skip", user.username, source.value, source.type, "skipped", "Indian script in name");
+          await storage.addSkippedUser(user.username, "Indian script in name");
+          continue;
         }
       }
       if (this.isActionSuspended(state, "follow")) {
@@ -144854,6 +144896,7 @@ var AutomationEngine = class {
       await storage.createFollowedUser({
         profileId: profile.id,
         instagramUsername: user.username,
+        instagramUserId: user.pk,
         sourceValue: source.value,
         sourceType: source.type,
         followedAt: (/* @__PURE__ */ new Date()).toISOString()

@@ -186,6 +186,18 @@ if (!colNames.has("ig_api_cookies")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_api_cookies TEXT;`);
 }
 
+// Add new columns to sources and followed_users if they don't exist
+const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];
+const sourcesColNames = new Set(sourcesCols.map((c) => c.name));
+if (!sourcesColNames.has("target_user_id")) {
+  sqlite.exec(`ALTER TABLE sources ADD COLUMN target_user_id TEXT NOT NULL DEFAULT '';`);
+}
+const followedUsersCols = sqlite.prepare("pragma table_info(followed_users)").all() as { name: string }[];
+const followedUsersColNames = new Set(followedUsersCols.map((c) => c.name));
+if (!followedUsersColNames.has("instagram_user_id")) {
+  sqlite.exec(`ALTER TABLE followed_users ADD COLUMN instagram_user_id TEXT NOT NULL DEFAULT '';`);
+}
+
 // Ensure every profile has a human_sessions tool record (safe to run on existing DBs)
 const profileIds = sqlite.prepare("SELECT id FROM profiles").all() as { id: number }[];
 const insertHumanSession = sqlite.prepare(

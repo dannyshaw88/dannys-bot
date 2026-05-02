@@ -108,6 +108,7 @@ export const sources = sqliteTable("sources", {
   value: text("value").notNull(),
   rank: integer("rank"),
   nrPosts: integer("nr_posts"),
+  targetUserId: text("target_user_id").notNull().default(""),
 });
 
 export const profilesRelations = relations(profiles, ({ one, many }) => ({
@@ -165,6 +166,7 @@ export const followedUsers = sqliteTable("followed_users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
   instagramUsername: text("instagram_username").notNull(),
+  instagramUserId: text("instagram_user_id").notNull().default(""),
   sourceValue: text("source_value").notNull().default(""),
   sourceType: text("source_type").notNull().default(""),
   followedAt: text("followed_at").notNull(),
