@@ -478,7 +478,7 @@ export async function registerInstagramRoutes(
     res.json(data);
   });
 
-  app.get("/api/logs/export", async (_req, res) => {
+  app.get("/api/logs/export", async (req, res) => {
     try {
       const allProfiles = await storage.getProfiles();
       const profileMap = new Map(allProfiles.map(p => [p.id, p]));
