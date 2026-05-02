@@ -143509,22 +143509,22 @@ var AutomationEngine = class {
       for (const profile of profiles2) {
         const tools2 = await storage.getToolsByProfile(profile.id);
         const followTool = tools2.find((t2) => t2.type === "follow" && t2.enabled);
-        if (followTool) {
+        if (followTool && profile.accountStatus === "valid") {
           activeFollow.add(profile.id);
           if (!this.states.has(profile.id)) this.launch(profile, followTool);
         }
         const unfollowTool = tools2.find((t2) => t2.type === "unfollow" && t2.enabled);
-        if (unfollowTool) {
+        if (unfollowTool && profile.accountStatus === "valid") {
           activeUnfollow.add(profile.id);
           if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool);
         }
         const dmTool = tools2.find((t2) => t2.type === "dm" && t2.enabled);
-        if (dmTool) {
+        if (dmTool && profile.accountStatus === "valid") {
           activeDM.add(profile.id);
           if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool);
         }
         const contactTool = tools2.find((t2) => t2.type === "contact" && t2.enabled);
-        if (contactTool) {
+        if (contactTool && profile.accountStatus === "valid") {
           activeContact.add(profile.id);
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
         }

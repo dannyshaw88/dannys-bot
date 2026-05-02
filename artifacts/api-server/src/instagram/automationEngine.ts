@@ -98,25 +98,25 @@ class AutomationEngine {
         const tools = await storage.getToolsByProfile(profile.id);
 
         const followTool = tools.find(t => t.type === "follow" && t.enabled);
-        if (followTool) {
+        if (followTool && profile.accountStatus === "valid") {
           activeFollow.add(profile.id);
           if (!this.states.has(profile.id)) this.launch(profile, followTool);
         }
 
         const unfollowTool = tools.find(t => t.type === "unfollow" && t.enabled);
-        if (unfollowTool) {
+        if (unfollowTool && profile.accountStatus === "valid") {
           activeUnfollow.add(profile.id);
           if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool);
         }
 
         const dmTool = tools.find(t => t.type === "dm" && t.enabled);
-        if (dmTool) {
+        if (dmTool && profile.accountStatus === "valid") {
           activeDM.add(profile.id);
           if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool);
         }
 
         const contactTool = tools.find(t => t.type === "contact" && t.enabled);
-        if (contactTool) {
+        if (contactTool && profile.accountStatus === "valid") {
           activeContact.add(profile.id);
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
         }
