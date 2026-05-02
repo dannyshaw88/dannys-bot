@@ -157,8 +157,14 @@ function setupAutoUpdater(): void {
     });
   });
 
-  autoUpdater.on("error", () => {
-    // Silently ignore — don't interrupt the user for update errors
+  autoUpdater.on("error", (err) => {
+    if (!win) return;
+    dialog.showMessageBox(win, {
+      type: "error",
+      title: "Update Check Failed",
+      message: String(err?.message || err),
+      buttons: ["OK"],
+    });
   });
 
   setTimeout(() => autoUpdater.checkForUpdates(), 5000);
