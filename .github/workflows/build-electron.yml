@@ -53,7 +53,8 @@ jobs:
         run: npx electron-builder install-app-deps --version 33.4.11
 
       - name: Package Windows installer
-        run: pnpm --filter @workspace/electron run package
+        working-directory: artifacts/electron
+        run: pnpm exec electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
