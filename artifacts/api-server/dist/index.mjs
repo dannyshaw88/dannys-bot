@@ -143441,6 +143441,13 @@ function randInt(min, max) {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+async function sleepInterruptible(ms, stop) {
+  const chunk = 1e4;
+  const end = Date.now() + ms;
+  while (!stop.stopped && Date.now() < end) {
+    await sleep(Math.min(chunk, end - Date.now()));
+  }
+}
 function todayStr() {
   return (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
 }
@@ -143621,7 +143628,8 @@ var AutomationEngine = class {
       actionHourlyCount: {},
       actionHourlyHour: hourStr(),
       actionSuspensions: {},
-      nextHumanSessionAt: 0
+      nextHumanSessionAt: 0,
+      lastHumanToolsEnabled: true
     };
     this.states.set(profile.id, state);
     console.log(`[engine] Launching runner for @${profile.username}`);
@@ -143666,23 +143674,31 @@ var AutomationEngine = class {
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
         }
         if (state.stop.stopped) break;
-        if (Date.now() >= state.nextHumanSessionAt) {
+        {
           const hs = followTool.settings;
-          if (hs.humanToolsEnabled !== false) {
-            try {
-              await this.runHumanSessionTools(freshProfile, followTool, state);
-            } catch (err) {
-              console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
-            }
-          } else {
-            console.log(`[engine] @${freshProfile.username}: human session tools disabled \u2014 skipping`);
+          const humanNowEnabled = hs.humanToolsEnabled !== false;
+          if (humanNowEnabled && !state.lastHumanToolsEnabled) {
+            console.log(`[engine] @${freshProfile.username}: humanTools toggled ON \u2014 resetting timer`);
+            state.nextHumanSessionAt = 0;
           }
-          const humanWaitMs = randInt(
-            (hs.humanToolsDelayMin ?? 30) * 6e4,
-            (hs.humanToolsDelayMax ?? 60) * 6e4
-          );
-          state.nextHumanSessionAt = Date.now() + humanWaitMs;
-          console.log(`[engine] @${freshProfile.username}: next human session tools in ${Math.round(humanWaitMs / 6e4)}min`);
+          state.lastHumanToolsEnabled = humanNowEnabled;
+          if (Date.now() >= state.nextHumanSessionAt) {
+            if (humanNowEnabled) {
+              try {
+                await this.runHumanSessionTools(freshProfile, followTool, state);
+              } catch (err) {
+                console.error(`[engine] @${freshProfile.username}: human session tools error: ${err?.message}`);
+              }
+            } else {
+              console.log(`[engine] @${freshProfile.username}: human session tools disabled \u2014 skipping`);
+            }
+            const humanWaitMs = randInt(
+              (hs.humanToolsDelayMin ?? 30) * 6e4,
+              (hs.humanToolsDelayMax ?? 60) * 6e4
+            );
+            state.nextHumanSessionAt = Date.now() + humanWaitMs;
+            console.log(`[engine] @${freshProfile.username}: next human session tools in ${Math.round(humanWaitMs / 6e4)}min`);
+          }
         }
         if (state.stop.stopped) break;
         const s = followTool.settings;
@@ -143691,7 +143707,7 @@ var AutomationEngine = class {
           (s.delayMax ?? 5) * 6e4
         );
         console.log(`[engine] @${freshProfile.username}: next follow session in ${Math.round(waitMs / 6e4)}min`);
-        await sleep(waitMs);
+        await sleepInterruptible(waitMs, state.stop);
       }
       this.states.delete(profile.id);
       console.log(`[engine] Runner exited for @${profile.username}`);
@@ -143739,7 +143755,7 @@ var AutomationEngine = class {
         const s = unfollowTool.settings;
         const waitMs = randInt((s.delayMin ?? 5) * 6e4, (s.delayMax ?? 15) * 6e4);
         console.log(`[engine] @${freshProfile.username}: next unfollow session in ${Math.round(waitMs / 6e4)}min`);
-        await sleep(waitMs);
+        await sleepInterruptible(waitMs, state.stop);
       }
       this.unfollowStates.delete(profile.id);
       console.log(`[engine] Unfollow runner exited for @${profile.username}`);
@@ -143787,7 +143803,7 @@ var AutomationEngine = class {
         const s = dmTool.settings;
         const waitMs = randInt((s.delayMin ?? 10) * 6e4, (s.delayMax ?? 30) * 6e4);
         console.log(`[engine] @${freshProfile.username}: next DM session in ${Math.round(waitMs / 6e4)}min`);
-        await sleep(waitMs);
+        await sleepInterruptible(waitMs, state.stop);
       }
       this.dmStates.delete(profile.id);
       console.log(`[engine] DM runner exited for @${profile.username}`);
@@ -143864,7 +143880,7 @@ var AutomationEngine = class {
         } catch (err) {
           console.error(`[engine] @${freshProfile.username}: unsend check error: ${err?.message}`);
         }
-        await sleep(3e4);
+        await sleepInterruptible(3e4, state.stop);
       }
       this.contactStates.delete(profile.id);
       console.log(`[engine] Contact runner exited for @${profile.username}`);
