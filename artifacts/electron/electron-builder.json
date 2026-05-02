@@ -13,7 +13,6 @@
     "dist/server/**",
     "dist/frontend/**",
     "node_modules/better-sqlite3/**",
-    "node_modules/better-sqlite3/node_modules/**",
     "**/*.node"
   ],
   "npmRebuild": true,

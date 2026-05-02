@@ -41,36 +41,34 @@ jobs:
       - name: Build Electron main process
         run: pnpm --filter @workspace/electron run build
 
-      - name: Vendor bindings into better-sqlite3 (fixes asar module resolution)
+      - name: Inject bindings shim into better-sqlite3
         run: |
           node -e "
           const path = require('path');
           const fs = require('fs');
 
-          function findInPnpm(pkgName) {
-            const pnpmDir = path.join(process.cwd(), 'node_modules', '.pnpm');
-            const entries = fs.readdirSync(pnpmDir);
-            const match = entries.find(e => e.startsWith(pkgName + '@'));
-            if (match) return path.join(pnpmDir, match, 'node_modules', pkgName);
-            throw new Error('Not found in pnpm store: ' + pkgName);
-          }
+          const pnpmDir = path.join(process.cwd(), 'node_modules', '.pnpm');
+          const bs3Entry = fs.readdirSync(pnpmDir).find(e => e.startsWith('better-sqlite3@'));
+          if (!bs3Entry) throw new Error('better-sqlite3 not found in pnpm store');
+          const bs3Dir = path.join(pnpmDir, bs3Entry, 'node_modules', 'better-sqlite3');
+          console.log('better-sqlite3 dir:', bs3Dir);
 
-          const bs3Dir = findInPnpm('better-sqlite3');
-          console.log('better-sqlite3:', bs3Dir);
+          const shimDir = path.join(bs3Dir, 'node_modules', 'bindings');
+          fs.mkdirSync(shimDir, { recursive: true });
 
-          const destBase = path.join(bs3Dir, 'node_modules');
-          fs.mkdirSync(destBase, { recursive: true });
+          // Shim: load the .node file directly — no path-searching needed
+          const shim = [
+            \"'use strict';\",
+            \"const path = require('path');\",
+            \"module.exports = function(name) {\",
+            \"  const f = path.join(__dirname, '..', '..', 'build', 'Release', name + '.node');\",
+            \"  return require(f);\",
+            \"};\"
+          ].join('\n');
 
-          for (const pkg of ['bindings', 'file-uri-to-path', 'node-gyp-build']) {
-            try {
-              const src = findInPnpm(pkg);
-              const dest = path.join(destBase, pkg);
-              fs.cpSync(src, dest, { recursive: true, force: true });
-              console.log('Vendored', pkg, '->', dest);
-            } catch(e) {
-              console.log('Skip', pkg, ':', e.message);
-            }
-          }
+          fs.writeFileSync(path.join(shimDir, 'index.js'), shim);
+          fs.writeFileSync(path.join(shimDir, 'package.json'), JSON.stringify({ name: 'bindings', version: '1.5.0', main: 'index.js' }));
+          console.log('Bindings shim written to', shimDir);
           "
 
       - name: Package Windows installer
