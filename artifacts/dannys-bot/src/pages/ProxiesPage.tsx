@@ -68,6 +68,8 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
   const { toast } = useToast();
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
+  const validCount = assigned.filter(p => p.accountStatus === "valid").length;
+  const totalCount = assigned.length;
 
   const handleAssign = (profileId: number) => {
     updateProfileMutation.mutate({ id: profileId, proxyId: proxy.id });
@@ -99,6 +101,17 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
             placeholder="no password"
             className="font-mono text-sm h-8 bg-accent/30 w-32 shrink-0"
           />
+          {totalCount > 0 && (
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${
+              validCount === totalCount
+                ? "bg-emerald-50 text-emerald-700"
+                : validCount === 0
+                ? "bg-slate-100 text-slate-500"
+                : "bg-yellow-50 text-yellow-700"
+            }`}>
+              {validCount}/{totalCount}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
