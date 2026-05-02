@@ -143260,6 +143260,35 @@ var InstagramWebClient = class {
       return !!(j?.status !== "fail");
     }, "Visit settings and activity");
   }
+  // ── Scroll the home timeline feed ────────────────────────────────────────
+  // Fetches the main home feed and marks up to `count` posts as seen,
+  // simulating a user scrolling through their Instagram home feed.
+  async viewTimelineFeed(count = 5) {
+    return this.timed("ViewTimelineFeed", async () => {
+      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start&is_pull_to_refresh=0`);
+      const rawItems = j?.feed_items ?? j?.items ?? [];
+      if (!rawItems.length) return 0;
+      const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk).slice(0, count);
+      const seenEntries = [];
+      for (const media of items) {
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
+      }
+      if (seenEntries.length) {
+        try {
+          await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
+            reels: seenEntries.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: ""
+          }).toString());
+        } catch (_2) {
+        }
+      }
+      return items.length;
+    }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+  }
   // ── Watch reels from the home feed Reels tab ─────────────────────────────
   // Fetches the reels explore/home feed and marks up to `count` reels as seen,
   // simulating a user scrolling through the Reels tab.
@@ -144799,6 +144828,16 @@ var AutomationEngine = class {
         this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
       } catch (e) {
         console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+      }
+    }
+    if (s.viewTimelineFeedEnabled !== false) {
+      const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
+      try {
+        const viewed = await client.viewTimelineFeed(feedCount);
+        console.log(`[engine] @${profile.username}: \u{1F4F0} viewed ${viewed} timeline post(s)`);
+        this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
+      } catch (e) {
+        console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
       }
     }
     if (s.checkTimelineReelsEnabled !== false) {

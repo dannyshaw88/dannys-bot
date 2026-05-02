@@ -1417,6 +1417,18 @@ class AutomationEngine {
       }
     }
 
+    // ── View Timeline Feed ───────────────────────────────────────────────────
+    if (s.viewTimelineFeedEnabled !== false) {
+      const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
+      try {
+        const viewed = await client.viewTimelineFeed(feedCount);
+        console.log(`[engine] @${profile.username}: 📰 viewed ${viewed} timeline post(s)`);
+        this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
+      }
+    }
+
     // ── Watch Timeline Reels ─────────────────────────────────────────────────
     if (s.checkTimelineReelsEnabled !== false) {
       const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);

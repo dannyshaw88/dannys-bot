@@ -644,6 +644,42 @@ export class InstagramWebClient {
     }, "Visit settings and activity");
   }
 
+  // ── Scroll the home timeline feed ────────────────────────────────────────
+  // Fetches the main home feed and marks up to `count` posts as seen,
+  // simulating a user scrolling through their Instagram home feed.
+  async viewTimelineFeed(count: number = 5): Promise<number> {
+    return this.timed("ViewTimelineFeed", async () => {
+      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start&is_pull_to_refresh=0`);
+      const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
+      if (!rawItems.length) return 0;
+
+      const items = rawItems
+        .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
+        .filter((m: any) => m?.id || m?.pk)
+        .slice(0, count);
+
+      const seenEntries: string[] = [];
+      for (const media of items) {
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
+      }
+
+      if (seenEntries.length) {
+        try {
+          await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
+            reels: seenEntries.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: "",
+          }).toString());
+        } catch (_) { /* best-effort */ }
+      }
+
+      return items.length;
+    }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+  }
+
   // ── Watch reels from the home feed Reels tab ─────────────────────────────
   // Fetches the reels explore/home feed and marks up to `count` reels as seen,
   // simulating a user scrolling through the Reels tab.
