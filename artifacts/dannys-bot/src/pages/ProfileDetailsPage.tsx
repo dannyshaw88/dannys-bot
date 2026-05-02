@@ -166,6 +166,9 @@ export function ProfileDetailsPage() {
   useEffect(() => {
     if (profile && !initialLoadRef.current) {
       initialLoadRef.current = true;
+      if (profile.accountStatus === "valid" && !profile.credentialsDirty) {
+        setVerifyStatus("ok");
+      }
       setFormData({
         username: profile.username,
         password: profile.password,
