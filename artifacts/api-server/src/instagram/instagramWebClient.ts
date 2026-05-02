@@ -757,6 +757,19 @@ export class InstagramWebClient {
     }, (r) => `Checked ${r.count} direct message${r.count === 1 ? "" : "s"}`);
   }
 
+  // ── Fetch pending / message-request inbox (GetDirectMessagesInternal) ────
+  // Simulates a user opening the message requests folder — non-followers'
+  // DMs land here. Jarvee calls this as a second DM pass after the main inbox.
+  async getDirectMessagesInternal(): Promise<{ count: number }> {
+    return this.timed("GetDirectMessagesInternal", async () => {
+      const j = await this.mobileGet(
+        `/api/v1/direct_v2/pending_inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
+      );
+      const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
+      return { count: threads.length };
+    }, (r) => `Checked ${r.count} pending DM request${r.count === 1 ? "" : "s"}`);
+  }
+
   // Like getDirectMessages but returns thread content for auto-reply scanning.
   // Returns up to `count` threads, each with recent messages from the other user.
   async getDMThreadsWithContent(count: number = 10): Promise<{

@@ -841,7 +841,7 @@ class AutomationEngine {
         // Human session actions — visible in dashboard so user can confirm sessions are running
         "VisitNotifications", "VisitOwnProfile", "RefreshOwnProfile", "VisitSettingsAndActivity",
         "ViewTimelineFeed", "ViewTimelineReels", "ViewTimelineStories",
-        "GetDirectMessages", "LikeTimelinePosts",
+        "GetDirectMessages", "GetDirectMessagesInternal", "LikeTimelinePosts",
       ]);
       state.client.setLogger((op, durationMs, message) => {
         if (!LOGGED_OPS.has(op)) return;
@@ -1466,6 +1466,14 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked ${actualDmCount} direct message${actualDmCount === 1 ? "" : "s"}`);
       } catch (e: any) {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
+      }
+      // Pending / message-requests inbox (GetDirectMessagesInternal — matches Jarvee)
+      try {
+        const { count: pendingCount } = await client.getDirectMessagesInternal();
+        console.log(`[engine] @${profile.username}: 📨 checked ${pendingCount} pending DM request(s)`);
+        this.logAction(profile.id, tool.id, "check_dm_internal", "", "", "", "ok", `Checked ${pendingCount} pending DM request${pendingCount === 1 ? "" : "s"}`);
+      } catch (e: any) {
+        console.warn(`[engine] @${profile.username}: check DMs internal error: ${e?.message}`);
       }
       // Auto-reply scan — runs after every DM check if the contact tool has auto-reply rules
       try {

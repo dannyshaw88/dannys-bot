@@ -143355,6 +143355,18 @@ var InstagramWebClient = class {
       return { ok: !!(j?.inbox ?? j?.threads), count: threads.length };
     }, (r2) => `Checked ${r2.count} direct message${r2.count === 1 ? "" : "s"}`);
   }
+  // ── Fetch pending / message-request inbox (GetDirectMessagesInternal) ────
+  // Simulates a user opening the message requests folder — non-followers'
+  // DMs land here. Jarvee calls this as a second DM pass after the main inbox.
+  async getDirectMessagesInternal() {
+    return this.timed("GetDirectMessagesInternal", async () => {
+      const j = await this.mobileGet(
+        `/api/v1/direct_v2/pending_inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
+      );
+      const threads = j?.inbox?.threads ?? j?.threads ?? [];
+      return { count: threads.length };
+    }, (r2) => `Checked ${r2.count} pending DM request${r2.count === 1 ? "" : "s"}`);
+  }
   // Like getDirectMessages but returns thread content for auto-reply scanning.
   // Returns up to `count` threads, each with recent messages from the other user.
   async getDMThreadsWithContent(count = 10) {
@@ -144330,6 +144342,7 @@ var AutomationEngine = class {
         "ViewTimelineReels",
         "ViewTimelineStories",
         "GetDirectMessages",
+        "GetDirectMessagesInternal",
         "LikeTimelinePosts"
       ]);
       state.client.setLogger((op, durationMs, message) => {
@@ -144878,6 +144891,13 @@ var AutomationEngine = class {
         this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked ${actualDmCount} direct message${actualDmCount === 1 ? "" : "s"}`);
       } catch (e) {
         console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
+      }
+      try {
+        const { count: pendingCount } = await client.getDirectMessagesInternal();
+        console.log(`[engine] @${profile.username}: \u{1F4E8} checked ${pendingCount} pending DM request(s)`);
+        this.logAction(profile.id, tool.id, "check_dm_internal", "", "", "", "ok", `Checked ${pendingCount} pending DM request${pendingCount === 1 ? "" : "s"}`);
+      } catch (e) {
+        console.warn(`[engine] @${profile.username}: check DMs internal error: ${e?.message}`);
       }
       try {
         await this.runAutoReplyCheck(profile, client);
