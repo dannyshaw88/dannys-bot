@@ -15,7 +15,8 @@ if (Number.isNaN(port) || port <= 0) {
 const httpServer = createServer(app);
 
 registerInstagramRoutes(httpServer, app).then(() => {
-  const frontendDist = path.join(process.cwd(), "artifacts", "dannys-bot", "dist", "public");
+  const frontendDist = process.env.FRONTEND_DIST_PATH ||
+    path.join(process.cwd(), "artifacts", "dannys-bot", "dist", "public");
   if (fs.existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
     app.use((_req, res) => {

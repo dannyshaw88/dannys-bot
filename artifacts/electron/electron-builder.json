@@ -1,0 +1,34 @@
+{
+  "appId": "com.dannysbot.app",
+  "productName": "Danny's Bot",
+  "copyright": "Copyright © 2025",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**",
+    "!dist/**/*.map"
+  ],
+  "asarUnpack": [
+    "dist/server/**",
+    "dist/frontend/**",
+    "node_modules/better-sqlite3/**",
+    "**/*.node"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "${productName} Setup ${version}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Danny's Bot"
+  }
+}
