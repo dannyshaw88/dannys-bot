@@ -143265,7 +143265,7 @@ var InstagramWebClient = class {
   // simulating a user scrolling through their Instagram home feed.
   async viewTimelineFeed(count = 5) {
     return this.timed("ViewTimelineFeed", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start&is_pull_to_refresh=0`);
+      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=pull_to_refresh&is_pull_to_refresh=1`);
       const rawItems = j?.feed_items ?? j?.items ?? [];
       if (!rawItems.length) return 0;
       const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk).slice(0, count);

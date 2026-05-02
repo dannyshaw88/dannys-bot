@@ -649,7 +649,7 @@ export class InstagramWebClient {
   // simulating a user scrolling through their Instagram home feed.
   async viewTimelineFeed(count: number = 5): Promise<number> {
     return this.timed("ViewTimelineFeed", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start&is_pull_to_refresh=0`);
+      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=pull_to_refresh&is_pull_to_refresh=1`);
       const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
       if (!rawItems.length) return 0;
 
