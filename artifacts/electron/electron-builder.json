@@ -2,6 +2,7 @@
   "appId": "com.dannysbot.app",
   "productName": "Danny's Bot",
   "copyright": "Copyright © 2025",
+  "artifactName": "dannys-bot-setup-${version}.${ext}",
   "directories": {
     "output": "release"
   },
