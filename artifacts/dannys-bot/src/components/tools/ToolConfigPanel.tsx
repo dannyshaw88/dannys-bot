@@ -216,6 +216,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   const lastAction = sessionActions?.find(a => a.toolId === tool.id);
   const engineStatus = useProfileEngineStatus(tool.profileId);
   const nextRunStatus: { label: string; executing: boolean } | null = (() => {
+    if (!tool.enabled) return null;
     if (!lastAction && !engineStatus) return null;
     const nextAt = engineStatus?.nextFollowAt ?? 0;
     if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };

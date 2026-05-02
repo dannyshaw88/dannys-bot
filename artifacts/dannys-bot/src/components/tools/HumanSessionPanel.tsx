@@ -169,6 +169,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const lastAction = sessionActions?.find(a => a.toolId === tool.id);
   const engineStatus = useProfileEngineStatus(tool.profileId);
   const nextRunStatus: { label: string; executing: boolean } | null = (() => {
+    if (!tool.enabled) return null;
     if (!lastAction && !(engineStatus?.nextHumanSessionAt)) return null;
     const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
     if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };

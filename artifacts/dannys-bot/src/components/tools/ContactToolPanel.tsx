@@ -54,6 +54,7 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
   const engineStatus = useProfileEngineStatus(tool.profileId);
   const contactRunStatus: { label: string; executing: boolean } | null = (() => {
+    if (!tool.enabled) return null;
     if (!engineStatus) return null;
     const nextAt = engineStatus.nextContactAt ?? 0;
     if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
