@@ -37,8 +37,6 @@ function exportProxies(proxies: Proxy[]) {
   const header = "proxy-ip:port\tproxy-username\tproxy-password";
   const rows = proxies.map(p => `${p.host}:${p.port}\t${p.username ?? ""}\t${p.password ?? ""}`);
   const text = [header, ...rows].join("\r\n");
-
-  // Encode as UTF-16 LE with BOM
   const buf = new ArrayBuffer(2 + text.length * 2);
   const view = new DataView(buf);
   view.setUint8(0, 0xff);
@@ -46,7 +44,6 @@ function exportProxies(proxies: Proxy[]) {
   for (let i = 0; i < text.length; i++) {
     view.setUint16(2 + i * 2, text.charCodeAt(i), true);
   }
-
   const blob = new Blob([buf], { type: "text/plain;charset=utf-16le" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -56,28 +53,21 @@ function exportProxies(proxies: Proxy[]) {
   URL.revokeObjectURL(url);
 }
 
-function ProxyCard({ proxy, allProfiles, unassignedProfiles }: { proxy: Proxy; allProfiles: Profile[]; unassignedProfiles: Profile[] }) {
+interface ProxyCardProps {
+  proxy: Proxy;
+  allProfiles: Profile[];
+  unassignedProfiles: Profile[];
+  pingResult: PingResult;
+  pinging: boolean;
+  onPing: (proxyId: number) => void;
+}
+
+function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing }: ProxyCardProps) {
   const deleteProxyMutation = useDeleteProxy();
   const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
-  const [pinging, setPinging] = useState(false);
-  const [pingResult, setPingResult] = useState<PingResult>(null);
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
-
-  const handlePing = async () => {
-    setPinging(true);
-    setPingResult(null);
-    try {
-      const result = await apiRequest("POST", `/api/proxies/${proxy.id}/ping`);
-      const data = await result.json();
-      setPingResult(data);
-    } catch {
-      setPingResult({ alive: false, latencyMs: 0, error: "Request failed" });
-    } finally {
-      setPinging(false);
-    }
-  };
 
   const handleAssign = (profileId: number) => {
     updateProfileMutation.mutate({ id: profileId, proxyId: proxy.id });
@@ -129,7 +119,7 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles }: { proxy: Proxy; a
           <Button
             variant="ghost" size="icon"
             className={`h-8 w-8 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-            onClick={handlePing}
+            onClick={() => onPing(proxy.id)}
             disabled={pinging}
             title="Ping through this proxy"
           >
@@ -208,7 +198,45 @@ export function ProxiesPage() {
   const [maxPerProxy, setMaxPerProxy] = useState(5);
   const [splitting, setSplitting] = useState(false);
 
+  // Centralised ping state
+  const [pingResults, setPingResults] = useState<Record<number, PingResult>>({});
+  const [pingingIds, setPingingIds] = useState<Set<number>>(new Set());
+  const [pingingAll, setPingingAll] = useState(false);
+
   const unassignedProfiles = profiles.filter(p => !p.proxyId);
+
+  const pingOne = async (proxyId: number): Promise<PingResult> => {
+    setPingingIds(prev => new Set(prev).add(proxyId));
+    setPingResults(prev => ({ ...prev, [proxyId]: null }));
+    try {
+      const res = await apiRequest("POST", `/api/proxies/${proxyId}/ping`);
+      const data: PingResult = await res.json();
+      setPingResults(prev => ({ ...prev, [proxyId]: data }));
+      return data;
+    } catch {
+      const result: PingResult = { alive: false, latencyMs: 0, error: "Request failed" };
+      setPingResults(prev => ({ ...prev, [proxyId]: result }));
+      return result;
+    } finally {
+      setPingingIds(prev => { const next = new Set(prev); next.delete(proxyId); return next; });
+    }
+  };
+
+  const handlePingAll = async () => {
+    if (!proxies.length) return;
+    setPingingAll(true);
+    try {
+      const results = await Promise.all(proxies.map(p => pingOne(p.id)));
+      const alive = results.filter(r => r?.alive).length;
+      const dead = results.length - alive;
+      toast({
+        title: `Ping complete — ${alive} alive, ${dead} dead`,
+        description: dead > 0 ? "Dead proxies are highlighted in red." : "All proxies are responding.",
+      });
+    } finally {
+      setPingingAll(false);
+    }
+  };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -237,10 +265,7 @@ export function ProxiesPage() {
   };
 
   const handleExport = () => {
-    if (!proxies.length) {
-      toast({ title: "No proxies to export", variant: "destructive" });
-      return;
-    }
+    if (!proxies.length) { toast({ title: "No proxies to export", variant: "destructive" }); return; }
     exportProxies(proxies);
     toast({ title: `Exported ${proxies.length} proxies` });
   };
@@ -249,47 +274,26 @@ export function ProxiesPage() {
     e.preventDefault();
     const trimmed = hostPort.trim();
     const lastColon = trimmed.lastIndexOf(":");
-    if (lastColon === -1) {
-      toast({ title: "Invalid format", description: "Enter the proxy as IP:PORT", variant: "destructive" });
-      return;
-    }
+    if (lastColon === -1) { toast({ title: "Invalid format", description: "Enter the proxy as IP:PORT", variant: "destructive" }); return; }
     const host = trimmed.slice(0, lastColon);
     const port = Number(trimmed.slice(lastColon + 1));
-    if (!host || isNaN(port) || port < 1 || port > 65535) {
-      toast({ title: "Invalid format", description: "Enter a valid IP:PORT", variant: "destructive" });
-      return;
-    }
+    if (!host || isNaN(port) || port < 1 || port > 65535) { toast({ title: "Invalid format", description: "Enter a valid IP:PORT", variant: "destructive" }); return; }
     createProxyMutation.mutate({ host, port, username: username || null, password: password || null }, {
-      onSuccess: () => {
-        setIsAddOpen(false);
-        setHostPort(""); setUsername(""); setPassword("");
-        toast({ title: "Proxy Added" });
-      },
+      onSuccess: () => { setIsAddOpen(false); setHostPort(""); setUsername(""); setPassword(""); toast({ title: "Proxy Added" }); },
     });
   };
 
   const handleSplitEvenly = async () => {
-    if (!proxies.length) {
-      toast({ title: "No proxies to assign to", variant: "destructive" });
-      return;
-    }
-    if (!unassignedProfiles.length) {
-      toast({ title: "All accounts are already assigned to a proxy" });
-      return;
-    }
-
+    if (!proxies.length) { toast({ title: "No proxies to assign to", variant: "destructive" }); return; }
+    if (!unassignedProfiles.length) { toast({ title: "All accounts are already assigned to a proxy" }); return; }
     setSplitting(true);
     try {
-      // Count how many slots each proxy has remaining
       const slots = proxies.map(proxy => {
         const count = profiles.filter(p => p.proxyId === proxy.id).length;
         return { proxy, remaining: Math.max(0, maxPerProxy - count) };
       });
-
       const toAssign = [...unassignedProfiles];
       const assignments: Array<{ profileId: number; proxyId: number }> = [];
-
-      // Round-robin across proxies that still have slots
       let i = 0;
       while (toAssign.length > 0) {
         const slotIdx = i % slots.length;
@@ -299,48 +303,67 @@ export function ProxiesPage() {
           slots[slotIdx].remaining--;
         }
         i++;
-        // If all proxies are full, stop
         if (slots.every(s => s.remaining === 0)) break;
       }
-
-      if (!assignments.length) {
-        toast({ title: "All proxies are already at the maximum account limit" });
-        setSplitting(false);
-        return;
-      }
-
+      if (!assignments.length) { toast({ title: "All proxies are already at the maximum account limit" }); setSplitting(false); return; }
       await Promise.all(
-        assignments.map(a =>
-          new Promise<void>((resolve, reject) =>
-            updateProfileMutation.mutate({ id: a.profileId, proxyId: a.proxyId }, { onSuccess: () => resolve(), onError: reject })
-          )
-        )
+        assignments.map(a => new Promise<void>((resolve, reject) =>
+          updateProfileMutation.mutate({ id: a.profileId, proxyId: a.proxyId }, { onSuccess: () => resolve(), onError: reject })
+        ))
       );
-
       await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
       const skipped = unassignedProfiles.length - assignments.length;
       toast({
         title: `Assigned ${assignments.length} ${assignments.length === 1 ? "account" : "accounts"} across ${proxies.length} proxies`,
-        description: skipped > 0 ? `${skipped} accounts couldn't be assigned — all proxies are at the ${maxPerProxy} account limit.` : undefined,
+        description: skipped > 0 ? `${skipped} accounts couldn't be assigned — all proxies at the ${maxPerProxy} account limit.` : undefined,
       });
-    } catch {
-      toast({ title: "Split failed", variant: "destructive" });
-    } finally {
-      setSplitting(false);
-    }
+    } catch { toast({ title: "Split failed", variant: "destructive" }); }
+    finally { setSplitting(false); }
   };
+
+  const aliveCount = Object.values(pingResults).filter(r => r?.alive).length;
+  const deadCount = Object.values(pingResults).filter(r => r !== null && !r?.alive).length;
+  const testedCount = aliveCount + deadCount;
 
   return (
     <AppLayout>
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Proxy Manager</h1>
-          <p className="text-muted-foreground mt-1">
-            {proxies.length} {proxies.length === 1 ? "proxy" : "proxies"} · {unassignedProfiles.length} unassigned {unassignedProfiles.length === 1 ? "account" : "accounts"}
-          </p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <p className="text-muted-foreground text-sm">
+              {proxies.length} {proxies.length === 1 ? "proxy" : "proxies"} · {unassignedProfiles.length} unassigned {unassignedProfiles.length === 1 ? "account" : "accounts"}
+            </p>
+            {testedCount > 0 && (
+              <div className="flex items-center gap-2 text-xs font-medium">
+                {aliveCount > 0 && (
+                  <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">
+                    <Wifi className="w-3 h-3" />{aliveCount} alive
+                  </span>
+                )}
+                {deadCount > 0 && (
+                  <span className="flex items-center gap-1 bg-red-50 text-red-500 px-2 py-0.5 rounded-full">
+                    <WifiOff className="w-3 h-3" />{deadCount} dead
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={handlePingAll}
+            disabled={pingingAll || !proxies.length}
+          >
+            {pingingAll
+              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              : <Wifi className="w-4 h-4 mr-2" />
+            }
+            {pingingAll ? `Pinging… (${testedCount}/${proxies.length})` : "Ping All"}
+          </Button>
+
           <label>
             <input type="file" accept=".txt" className="hidden" onChange={handleImport} disabled={importing} />
             <Button variant="outline" disabled={importing} asChild>
@@ -405,6 +428,9 @@ export function ProxiesPage() {
               proxy={proxy}
               allProfiles={profiles}
               unassignedProfiles={unassignedProfiles}
+              pingResult={pingResults[proxy.id] ?? null}
+              pinging={pingingIds.has(proxy.id)}
+              onPing={pingOne}
             />
           ))}
         </div>
@@ -433,11 +459,7 @@ export function ProxiesPage() {
                   className="w-20 h-8 text-sm"
                 />
               </div>
-              <Button
-                onClick={handleSplitEvenly}
-                disabled={splitting || !unassignedProfiles.length}
-                className="shrink-0"
-              >
+              <Button onClick={handleSplitEvenly} disabled={splitting || !unassignedProfiles.length} className="shrink-0">
                 {splitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 {splitting ? "Splitting…" : "Split Now"}
               </Button>
