@@ -383,26 +383,9 @@ export function ProfilesPage() {
         )}
       </div>
 
-      {/* Column headers */}
-      <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        <div className="w-6 shrink-0">
-          <Checkbox
-            checked={!!(profiles?.length && selectedProfileIds.length === profiles.length)}
-            onCheckedChange={toggleAll}
-            aria-label="Select all profiles"
-          />
-        </div>
-        <div className="ml-1">Account</div>
-        <div className="flex-1" />
-        <div className="w-8 shrink-0" />
-        <div className="w-32 shrink-0 text-center">IG Status</div>
-        <div className="w-24 shrink-0 text-center">Active</div>
-        <div className="w-40 shrink-0" />
-      </div>
-
       {isLoading ? (
-        <div className="space-y-2">
-          {[1,2,3].map(i => <div key={i} className="desktop-card h-12 animate-pulse bg-muted/50" />)}
+        <div className="desktop-card divide-y divide-border/40">
+          {[1,2,3,4,5].map(i => <div key={i} className="h-8 animate-pulse bg-muted/30" />)}
         </div>
       ) : profiles?.length === 0 ? (
         <div className="text-center py-20 desktop-card flex flex-col items-center">
@@ -421,24 +404,42 @@ export function ProfilesPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-1.5 pb-24">
-          {filteredProfiles?.map((profile) => {
+        <div className="desktop-card overflow-hidden pb-24">
+          {/* Column headers */}
+          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <div className="w-5 shrink-0">
+              <Checkbox
+                checked={!!(profiles?.length && selectedProfileIds.length === profiles.length)}
+                onCheckedChange={toggleAll}
+                aria-label="Select all profiles"
+              />
+            </div>
+            <div className="flex-1 min-w-0">Account</div>
+            <div className="w-24 shrink-0 text-center">Status</div>
+            <div className="w-16 shrink-0 text-center">Active</div>
+            <div className="w-36 shrink-0 text-right">Actions</div>
+          </div>
+
+          {filteredProfiles?.map((profile, idx) => {
             const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
             const isStopped  = acctStatus === "stopped";
+            const isEven     = idx % 2 === 1;
 
             return (
               <div
                 key={profile.id}
-                className={`desktop-card flex items-center gap-2 px-3 overflow-hidden transition-all h-12 ${
-                  isStopped
-                    ? "opacity-60 bg-slate-50"
-                    : selectedProfileIds.includes(profile.id)
-                    ? "border-primary bg-primary/5"
-                    : "hover:border-primary/30"
+                className={`flex items-center gap-3 px-3 py-1 border-b border-border/30 last:border-b-0 transition-colors ${
+                  selectedProfileIds.includes(profile.id)
+                    ? "bg-primary/8 border-primary/20"
+                    : isStopped
+                    ? "opacity-50 bg-slate-50/80"
+                    : isEven
+                    ? "bg-slate-50/70 hover:bg-slate-100/60"
+                    : "bg-white hover:bg-slate-50/60"
                 }`}
               >
                 {/* Checkbox */}
-                <div className="w-6 shrink-0">
+                <div className="w-5 shrink-0">
                   <Checkbox
                     checked={selectedProfileIds.includes(profile.id)}
                     onCheckedChange={() => toggleSelection(profile.id)}
@@ -447,78 +448,67 @@ export function ProfilesPage() {
                 </div>
 
                 {/* Username */}
-                <div className="min-w-0 ml-1">
+                <div className="flex-1 min-w-0">
                   <Link href={`/profiles/${profile.id}`}>
                     <span
-                      className="font-bold text-sm text-foreground truncate hover:text-primary cursor-pointer block"
+                      className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer block"
                       data-testid={`text-username-${profile.id}`}
                     >
-                      {profile.accountLabel || `@${profile.username}`}
+                      {profile.accountLabel || profile.username}
                     </span>
                   </Link>
                 </div>
 
-                <div className="flex-1" />
-
-                {/* Open Browser button */}
-                <div className="w-8 shrink-0 flex justify-center">
-                  <button
-                    onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
-                    title="Open embedded browser"
-                    data-testid={`btn-open-browser-${profile.id}`}
-                    className="flex items-center justify-center w-7 h-7 rounded-md text-slate-500 hover:text-primary hover:bg-primary/10 transition-colors"
-                  >
-                    <Globe className="w-4 h-4" />
-                  </button>
-                </div>
-
                 {/* IG Account Status badge */}
-                <div className="w-32 flex justify-center shrink-0">
+                <div className="w-24 flex justify-center shrink-0">
                   <AccountStatusBadge status={acctStatus} />
                 </div>
 
-                {/* Stopped toggle */}
-                <div className="w-24 flex items-center justify-center shrink-0">
+                {/* Active toggle */}
+                <div className="w-16 flex items-center justify-center shrink-0">
                   <Switch
                     checked={!isStopped}
                     onCheckedChange={() => toggleStopped(profile.id, acctStatus, profile.credentialsDirty)}
                     data-testid={`switch-active-${profile.id}`}
-                    className="data-[state=checked]:bg-green-500"
+                    className="data-[state=checked]:bg-green-500 scale-75"
                   />
                 </div>
 
-                {/* Actions */}
-                <div className="w-40 shrink-0 flex items-center justify-end gap-1.5">
+                {/* Text-only actions */}
+                <div className="w-36 shrink-0 flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
+                    title="Open embedded browser"
+                    data-testid={`btn-open-browser-${profile.id}`}
+                    className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Browser
+                  </button>
                   {(acctStatus !== "valid" || profile.credentialsDirty) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="bg-white hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 h-7 text-xs px-2"
+                    <button
                       onClick={() => handleVerify(profile.id)}
                       disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
                       data-testid={`button-verify-${profile.id}`}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors flex items-center gap-0.5"
                     >
                       {verifyMutation.isPending && verifyMutation.variables === profile.id
-                        ? <Loader2 className="w-3 h-3 animate-spin" />
-                        : <LogIn className="w-3 h-3 mr-1" />
-                      }
-                      {verifyMutation.isPending && verifyMutation.variables === profile.id ? "" : "Verify"}
-                    </Button>
+                        ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        : null}
+                      Verify
+                    </button>
                   )}
                   <Link href={`/profiles/${profile.id}`}>
-                    <Button variant="outline" size="sm" className="bg-white hover:bg-gray-50 h-7 text-xs px-2">
-                      <Activity className="w-3 h-3 mr-1" /> Config
-                    </Button>
+                    <span className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                      Config
+                    </span>
                   </Link>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  <button
                     onClick={() => setDeleteConfirm({ ids: [profile.id] })}
                     data-testid={`button-delete-${profile.id}`}
+                    className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
                   >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
+                    Delete
+                  </button>
                 </div>
               </div>
             );
