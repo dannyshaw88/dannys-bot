@@ -443,6 +443,9 @@ export function ProfileDetailsPage() {
           <Tabs.Trigger value="follow" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
             <UserPlus className="w-4 h-4 mr-2" /> Follow Tool
           </Tabs.Trigger>
+          <Tabs.Trigger value="unfollow" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
+            <UserMinus className="w-4 h-4 mr-2" /> Unfollow Tool
+          </Tabs.Trigger>
           <Tabs.Trigger value="contact" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
             <MessageSquare className="w-4 h-4 mr-2" /> Contact Tool
           </Tabs.Trigger>
@@ -1026,6 +1029,13 @@ export function ProfileDetailsPage() {
           {getTool('follow')
             ? <ToolConfigPanel tool={getTool('follow')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
+          }
+        </Tabs.Content>
+
+        <Tabs.Content value="unfollow" className="outline-none animate-in fade-in duration-300">
+          {getTool('unfollow')
+            ? <ToolConfigPanel tool={getTool('unfollow')!} profile={profile} />
+            : <p className="text-sm text-muted-foreground py-8">Unfollow tool not found for this profile.</p>
           }
         </Tabs.Content>
 
