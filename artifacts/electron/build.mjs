@@ -1,5 +1,5 @@
 import { build as esbuild } from "esbuild";
-import { cp, rm, mkdir } from "fs/promises";
+import { cp, rm, mkdir, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -34,5 +34,44 @@ if (!existsSync(frontendSrc)) {
   throw new Error(`Frontend dist not found at ${frontendSrc}. Run 'pnpm --filter @workspace/dannys-bot run build' first.`);
 }
 await cp(frontendSrc, path.join(dist, "frontend", "public"), { recursive: true });
+
+// 4. Generate a crash-logging wrapper that is the real entry point
+const wrapper = `
+import { writeFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
+
+const LOG_FILE = process.env.LOG_FILE;
+
+function writeLog(msg) {
+  process.stderr.write(msg + '\\n');
+  if (LOG_FILE) {
+    try {
+      mkdirSync(dirname(LOG_FILE), { recursive: true });
+      writeFileSync(LOG_FILE, msg + '\\n', { flag: 'a' });
+    } catch {}
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  writeLog('UNCAUGHT: ' + (err && err.stack ? err.stack : String(err)));
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  writeLog('UNHANDLED: ' + (reason && reason.stack ? reason.stack : String(reason)));
+  process.exit(1);
+});
+
+writeLog('server-start: loading index.mjs');
+
+try {
+  await import('./index.mjs');
+} catch (err) {
+  writeLog('IMPORT ERROR: ' + (err && err.stack ? err.stack : String(err)));
+  process.exit(1);
+}
+`.trimStart();
+
+await writeFile(path.join(dist, "server", "start.mjs"), wrapper, "utf8");
 
 console.log("Electron build complete → dist/");
