@@ -145524,9 +145524,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
       });
       const content = [headers.map(esc2).join(","), ...csvRows].join("\r\n");
       const file2 = Buffer.concat([Buffer.from([239, 187, 191]), Buffer.from(content, "utf8")]);
-      const filename = `api_calls_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`;
+      const filename = `api_calls_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       res.send(file2);
     } catch (err) {
       res.status(500).json({ message: "Export failed" });

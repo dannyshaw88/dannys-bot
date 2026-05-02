@@ -514,9 +514,12 @@ export async function registerInstagramRoutes(
       const content = [headers.map(esc).join(","), ...csvRows].join("\r\n");
       const file = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")]);
 
-      const filename = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
+      const filename = `api_calls_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       res.send(file);
     } catch (err) {
       res.status(500).json({ message: "Export failed" });
