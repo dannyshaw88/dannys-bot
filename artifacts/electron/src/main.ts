@@ -1,11 +1,12 @@
-import { app, BrowserWindow, utilityProcess, UtilityProcess } from "electron";
+import { app, BrowserWindow } from "electron";
+import { spawn, ChildProcess } from "child_process";
 import http from "http";
 import net from "net";
 import fs from "fs";
 import path from "path";
 
 let serverPort = 0;
-let serverProc: UtilityProcess | null = null;
+let serverProc: ChildProcess | null = null;
 let win: BrowserWindow | null = null;
 
 function findFreePort(): Promise<number> {
@@ -39,7 +40,7 @@ function getFrontendPath(): string {
   return path.join(__dirname, "..", "dist", "frontend", "public");
 }
 
-function waitForServer(port: number, timeoutMs = 25000): Promise<void> {
+function waitForServer(port: number, timeoutMs = 30000): Promise<void> {
   const start = Date.now();
   return new Promise<void>((resolve, reject) => {
     function attempt() {
@@ -47,12 +48,12 @@ function waitForServer(port: number, timeoutMs = 25000): Promise<void> {
         res.resume();
         resolve();
       });
-      req.setTimeout(1000, () => req.destroy());
+      req.setTimeout(1500, () => req.destroy());
       req.on("error", () => {
         if (Date.now() - start > timeoutMs) {
-          reject(new Error("timeout"));
+          reject(new Error("timeout waiting for server"));
         } else {
-          setTimeout(attempt, 500);
+          setTimeout(attempt, 600);
         }
       });
     }
@@ -65,9 +66,14 @@ function startServer(port: number, logPath: string): void {
   const dbPath = path.join(getUserDataPath(), "database.db");
   const frontendPath = getFrontendPath();
 
-  serverProc = utilityProcess.fork(entry, [], {
-    stdio: "pipe",
+  // ELECTRON_RUN_AS_NODE=1 tells Electron to behave as plain Node.js —
+  // no sandbox, no renderer, full network access. Required because
+  // utilityProcess blocks listen() on Windows.
+  serverProc = spawn(process.execPath, [entry], {
+    stdio: ["ignore", "pipe", "pipe"],
     env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
       PORT: String(port),
       HOST: "127.0.0.1",
       DATABASE_PATH: dbPath,
@@ -76,17 +82,12 @@ function startServer(port: number, logPath: string): void {
       LOG_LEVEL: "warn",
       LOG_FILE: logPath,
     },
-    serviceName: "Danny's Bot Server",
   });
 
   const logStream = fs.createWriteStream(logPath, { flags: "w" });
-
   serverProc.stdout?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.stderr?.on("data", (d: Buffer) => logStream.write(d));
-
-  serverProc.on("exit", (_code: number) => {
-    logStream.end();
-  });
+  serverProc.on("exit", () => logStream.end());
 }
 
 async function createWindow() {
@@ -131,10 +132,7 @@ async function createWindow() {
     );
   }
 
-  win.once("ready-to-show", () => {
-    win?.show();
-  });
-
+  win.once("ready-to-show", () => win?.show());
   win.on("closed", () => { win = null; });
 }
 
