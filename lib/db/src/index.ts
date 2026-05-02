@@ -213,6 +213,19 @@ if (!followedUsersColNames.has("instagram_user_id")) {
   sqlite.exec(`ALTER TABLE followed_users ADD COLUMN instagram_user_id TEXT NOT NULL DEFAULT '';`);
 }
 
+// Cleanup: keep only named API operations — remove human-session noise and raw
+// URL-path entries that were logged by older code. Cap to newest 5000 rows.
+sqlite.exec(`
+  DELETE FROM instagram_api_calls WHERE operation_name NOT IN (
+    'Login','Follow','UnfollowUser','SendDM','UnsendDM',
+    'HashtagScrape','FollowersScrape','GetUserByUsername',
+    'GetUserProfile','GetOwnUser','SearchUser','LikeMedia','Auto Like'
+  );
+  DELETE FROM instagram_api_calls WHERE id NOT IN (
+    SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000
+  );
+`);
+
 // Ensure every profile has a human_sessions tool record (safe to run on existing DBs)
 const profileIds = sqlite.prepare("SELECT id FROM profiles").all() as { id: number }[];
 const insertHumanSession = sqlite.prepare(

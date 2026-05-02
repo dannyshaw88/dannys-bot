@@ -245,6 +245,8 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(instagramApiCalls).orderBy(desc(instagramApiCalls.id)).limit(limit);
   }
 
+  private _apiCallInsertCount = 0;
+
   async createInstagramApiCall(call: { profileId: number; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any> {
     const [created] = await db.insert(instagramApiCalls).values({
       profileId: call.profileId,
@@ -256,6 +258,10 @@ export class DatabaseStorage implements IStorage {
       ipAddress: call.ipAddress ?? "",
       durationMs: call.durationMs ?? 0,
     }).returning();
+    // Prune to keep only the newest 5000 rows — checked every 100 inserts
+    if (++this._apiCallInsertCount % 100 === 0) {
+      db.run(sql`DELETE FROM instagram_api_calls WHERE id NOT IN (SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000)`);
+    }
     return created;
   }
 

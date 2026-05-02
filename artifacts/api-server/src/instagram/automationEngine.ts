@@ -832,7 +832,15 @@ class AutomationEngine {
     // Create client once per profile lifecycle
     if (!state.client) {
       state.client = new InstagramWebClient(proxyUrl, profile.id);
+      // Only log real API operations — skip human-session browsing noise that
+      // floods the table (timeline reels/stories, DM inbox checks, navigation).
+      const LOGGED_OPS = new Set([
+        "Login", "Follow", "UnfollowUser", "SendDM", "UnsendDM",
+        "HashtagScrape", "FollowersScrape", "GetUserByUsername",
+        "GetUserProfile", "GetOwnUser", "SearchUser", "LikeMedia",
+      ]);
       state.client.setLogger((op, durationMs, message) => {
+        if (!LOGGED_OPS.has(op)) return;
         storage.createInstagramApiCall({
           profileId: profile.id,
           operationName: op,

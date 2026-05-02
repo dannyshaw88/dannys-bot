@@ -139850,6 +139850,16 @@ var followedUsersColNames = new Set(followedUsersCols.map((c3) => c3.name));
 if (!followedUsersColNames.has("instagram_user_id")) {
   sqlite.exec(`ALTER TABLE followed_users ADD COLUMN instagram_user_id TEXT NOT NULL DEFAULT '';`);
 }
+sqlite.exec(`
+  DELETE FROM instagram_api_calls WHERE operation_name NOT IN (
+    'Login','Follow','UnfollowUser','SendDM','UnsendDM',
+    'HashtagScrape','FollowersScrape','GetUserByUsername',
+    'GetUserProfile','GetOwnUser','SearchUser','LikeMedia','Auto Like'
+  );
+  DELETE FROM instagram_api_calls WHERE id NOT IN (
+    SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000
+  );
+`);
 var profileIds = sqlite.prepare("SELECT id FROM profiles").all();
 var insertHumanSession = sqlite.prepare(
   `INSERT INTO tools (profile_id, type, enabled, settings)
@@ -140324,6 +140334,7 @@ var DatabaseStorage = class {
   async getInstagramApiCalls(limit = 1e5) {
     return await db.select().from(instagramApiCalls).orderBy(desc(instagramApiCalls.id)).limit(limit);
   }
+  _apiCallInsertCount = 0;
   async createInstagramApiCall(call) {
     const [created] = await db.insert(instagramApiCalls).values({
       profileId: call.profileId,
@@ -140335,6 +140346,9 @@ var DatabaseStorage = class {
       ipAddress: call.ipAddress ?? "",
       durationMs: call.durationMs ?? 0
     }).returning();
+    if (++this._apiCallInsertCount % 100 === 0) {
+      db.run(sql`DELETE FROM instagram_api_calls WHERE id NOT IN (SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000)`);
+    }
     return created;
   }
   async incrementStat(profileId, toolType) {
@@ -144265,7 +144279,22 @@ var AutomationEngine = class {
     const proxyUrl = await this.buildProxyUrl(profile);
     if (!state.client) {
       state.client = new InstagramWebClient(proxyUrl, profile.id);
+      const LOGGED_OPS = /* @__PURE__ */ new Set([
+        "Login",
+        "Follow",
+        "UnfollowUser",
+        "SendDM",
+        "UnsendDM",
+        "HashtagScrape",
+        "FollowersScrape",
+        "GetUserByUsername",
+        "GetUserProfile",
+        "GetOwnUser",
+        "SearchUser",
+        "LikeMedia"
+      ]);
       state.client.setLogger((op, durationMs, message) => {
+        if (!LOGGED_OPS.has(op)) return;
         storage.createInstagramApiCall({
           profileId: profile.id,
           operationName: op,
