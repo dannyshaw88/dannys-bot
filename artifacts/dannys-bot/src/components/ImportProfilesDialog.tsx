@@ -35,6 +35,8 @@ interface ParsedProfile {
   deviceUuid: string;
   phoneId: string;
   adid: string;
+  // Session cookies from Jarvee's ApiCookies column
+  apiCookies: string;
 }
 
 // Map Jarvee column headers (lowercased, # stripped) to our field names
@@ -69,6 +71,10 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "adid":                        "adid",
   "advertising id":              "adid",
   "android id":                  "adid",
+  // Session cookies
+  "apicookies":                  "apiCookies",
+  "api cookies":                 "apiCookies",
+  "cookies":                     "apiCookies",
 };
 
 /**
@@ -143,7 +149,7 @@ function parseJarveeFile(text: string): ParsedProfile[] {
       tags: "", dateOfBirth: "", notes: "", phoneNumber: "", twoFASecretKey: "",
       backupCodes: "", emailValidationUsername: "", emailValidationPassword: "",
       emailValidationPop3Server: "", emailValidationPort: "", accStatus: "",
-      deviceId: "", deviceUuid: "", phoneId: "", adid: "",
+      deviceId: "", deviceUuid: "", phoneId: "", adid: "", apiCookies: "",
     };
 
     headers.forEach((header, idx) => {

@@ -110,19 +110,42 @@ async function ensureEncryptionKeys(ig: IgApiClient): Promise<void> {
   console.error(`[instagramLogin] WARNING: could not fetch encryption keys — login will fail`);
 }
 
-export async function verifyInstagramCredentials(profile: Profile): Promise<VerifyResult> {
-  const proxyUrl = buildProxyUrl(profile);
-  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
+/**
+ * Load Jarvee-style cookie string (sessionid=X;ds_user_id=Y;mid=Z) into an IgApiClient's
+ * cookie jar so we can reuse an existing session without a fresh password login.
+ */
+async function restoreSessionCookies(ig: IgApiClient, cookieString: string): Promise<void> {
+  const pairs = cookieString.split(';').map(s => s.trim()).filter(Boolean);
+  const now = new Date().toISOString();
 
+  const cookies = pairs.flatMap(pair => {
+    const eqIdx = pair.indexOf('=');
+    if (eqIdx === -1) return [];
+    const key = pair.slice(0, eqIdx).trim();
+    const value = pair.slice(eqIdx + 1).trim();
+    // Set on both the host-only domain and the wildcard domain Instagram checks
+    return [
+      { key, value, domain: 'i.instagram.com', path: '/', secure: true, httpOnly: true, hostOnly: true, creation: now, lastAccessed: now },
+      { key, value, domain: '.instagram.com',  path: '/', secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
+    ];
+  });
+
+  await ig.state.deserializeCookieJar(JSON.stringify({
+    version: 'tough-cookie@4.1.3',
+    storeType: 'MemoryCookieStore',
+    rejectPublicSuffixes: true,
+    cookies,
+  }));
+}
+
+function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiClient; captureDeviceState: () => string } {
   const ig = new IgApiClient();
-
-  // Restore persisted device state if available, otherwise generate a new one.
-  // Using userAgentApi as the seed ties the device fingerprint to the imported agent.
   const deviceSeed = profile.userAgentApi ?? profile.username;
+
   if (profile.igDeviceState) {
     try {
       const saved = JSON.parse(profile.igDeviceState);
-      ig.state.generateDevice(deviceSeed); // sets defaults first
+      ig.state.generateDevice(deviceSeed);
       if (saved.deviceId) ig.state.deviceId = saved.deviceId;
       if (saved.uuid) ig.state.uuid = saved.uuid;
       if (saved.phoneId) ig.state.phoneId = saved.phoneId;
@@ -141,7 +164,6 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
 
-  // Capture device state now so we can return it to the caller for persistence
   const captureDeviceState = () => JSON.stringify({
     deviceId: ig.state.deviceId,
     uuid: ig.state.uuid,
@@ -150,6 +172,36 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     deviceString: ig.state.deviceString,
   });
 
+  return { ig, captureDeviceState };
+}
+
+export async function verifyInstagramCredentials(profile: Profile): Promise<VerifyResult> {
+  const proxyUrl = buildProxyUrl(profile);
+  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
+
+  // ── Fast path: restore existing session from imported ApiCookies ──────────
+  if (profile.igApiCookies) {
+    console.error(`[instagramLogin] @${profile.username} — trying cookie session restore`);
+    const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
+    attachRequestLogger(ig, profile.id);
+    try {
+      await restoreSessionCookies(ig, profile.igApiCookies);
+      const user = await ig.account.currentUser();
+      console.error(`[instagramLogin] @${profile.username} — cookie session valid (pk=${user.pk})`);
+      return {
+        ok: true,
+        message: `@${profile.username} — session active (userId ${user.pk}).`,
+        accountStatus: "valid",
+        igDeviceState: captureDeviceState(),
+      };
+    } catch (cookieErr: any) {
+      console.error(`[instagramLogin] @${profile.username} — cookie session failed: ${cookieErr?.message} — falling back to password login`);
+      // Fall through to password login below
+    }
+  }
+
+  // ── Normal path: fresh password login ────────────────────────────────────
+  const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
   attachRequestLogger(ig, profile.id);
 
   // Step 1: Fetch encryption keys (must happen before login)

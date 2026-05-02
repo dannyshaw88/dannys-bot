@@ -329,6 +329,8 @@ export async function registerInstagramRoutes(
             });
           }
 
+          const igApiCookies: string | null = (p.apiCookies as string | undefined)?.trim() || null;
+
           const created = await storage.createProfile({
             username: p.username || "",
             password: p.password || "",
@@ -352,6 +354,7 @@ export async function registerInstagramRoutes(
             emailValidationPort: p.emailValidationPort || null,
             accountStatus: resolveImportStatus(p.accStatus),
             igDeviceState,
+            igApiCookies,
           });
           results.push({ success: true, username: created.username });
         } catch (err: any) {

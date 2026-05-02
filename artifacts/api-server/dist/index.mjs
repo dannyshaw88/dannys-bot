@@ -139430,7 +139430,8 @@ var profiles = sqliteTable("profiles", {
   followingCount: integer("following_count"),
   postsCount: integer("posts_count"),
   lastSyncedAt: text("last_synced_at"),
-  igDeviceState: text("ig_device_state")
+  igDeviceState: text("ig_device_state"),
+  igApiCookies: text("ig_api_cookies")
 });
 var tools = sqliteTable("tools", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -139793,6 +139794,9 @@ var existingCols = sqlite.prepare("pragma table_info(profiles)").all();
 var colNames = new Set(existingCols.map((c3) => c3.name));
 if (!colNames.has("ig_device_state")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_device_state TEXT;`);
+}
+if (!colNames.has("ig_api_cookies")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_api_cookies TEXT;`);
 }
 var db = drizzle(sqlite, { schema: schema_exports });
 
@@ -141872,9 +141876,27 @@ async function ensureEncryptionKeys(ig) {
   }
   console.error(`[instagramLogin] WARNING: could not fetch encryption keys \u2014 login will fail`);
 }
-async function verifyInstagramCredentials(profile) {
-  const proxyUrl = buildProxyUrl(profile);
-  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
+async function restoreSessionCookies(ig, cookieString) {
+  const pairs = cookieString.split(";").map((s) => s.trim()).filter(Boolean);
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const cookies = pairs.flatMap((pair) => {
+    const eqIdx = pair.indexOf("=");
+    if (eqIdx === -1) return [];
+    const key = pair.slice(0, eqIdx).trim();
+    const value = pair.slice(eqIdx + 1).trim();
+    return [
+      { key, value, domain: "i.instagram.com", path: "/", secure: true, httpOnly: true, hostOnly: true, creation: now, lastAccessed: now },
+      { key, value, domain: ".instagram.com", path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now }
+    ];
+  });
+  await ig.state.deserializeCookieJar(JSON.stringify({
+    version: "tough-cookie@4.1.3",
+    storeType: "MemoryCookieStore",
+    rejectPublicSuffixes: true,
+    cookies
+  }));
+}
+function buildIgClient(profile, proxyUrl) {
   const ig = new import_instagram_private_api.IgApiClient();
   const deviceSeed = profile.userAgentApi ?? profile.username;
   if (profile.igDeviceState) {
@@ -141904,6 +141926,30 @@ async function verifyInstagramCredentials(profile) {
     adid: ig.state.adid,
     deviceString: ig.state.deviceString
   });
+  return { ig, captureDeviceState };
+}
+async function verifyInstagramCredentials(profile) {
+  const proxyUrl = buildProxyUrl(profile);
+  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
+  if (profile.igApiCookies) {
+    console.error(`[instagramLogin] @${profile.username} \u2014 trying cookie session restore`);
+    const { ig: ig2, captureDeviceState: captureDeviceState2 } = buildIgClient(profile, proxyUrl);
+    attachRequestLogger(ig2, profile.id);
+    try {
+      await restoreSessionCookies(ig2, profile.igApiCookies);
+      const user = await ig2.account.currentUser();
+      console.error(`[instagramLogin] @${profile.username} \u2014 cookie session valid (pk=${user.pk})`);
+      return {
+        ok: true,
+        message: `@${profile.username} \u2014 session active (userId ${user.pk}).`,
+        accountStatus: "valid",
+        igDeviceState: captureDeviceState2()
+      };
+    } catch (cookieErr) {
+      console.error(`[instagramLogin] @${profile.username} \u2014 cookie session failed: ${cookieErr?.message} \u2014 falling back to password login`);
+    }
+  }
+  const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
   attachRequestLogger(ig, profile.id);
   await ensureEncryptionKeys(ig);
   if (!ig.state.passwordEncryptionPubKey) {
@@ -144974,6 +145020,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
               deviceString: devString || void 0
             });
           }
+          const igApiCookies = p.apiCookies?.trim() || null;
           const created = await storage.createProfile({
             username: p.username || "",
             password: p.password || "",
@@ -144996,7 +145043,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
             emailValidationPop3Server: p.emailValidationPop3Server || null,
             emailValidationPort: p.emailValidationPort || null,
             accountStatus: resolveImportStatus(p.accStatus),
-            igDeviceState
+            igDeviceState,
+            igApiCookies
           });
           results.push({ success: true, username: created.username });
         } catch (err) {

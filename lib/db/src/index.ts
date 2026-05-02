@@ -182,6 +182,9 @@ const colNames = new Set(existingCols.map((c) => c.name));
 if (!colNames.has("ig_device_state")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_device_state TEXT;`);
 }
+if (!colNames.has("ig_api_cookies")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN ig_api_cookies TEXT;`);
+}
 
 export const db = drizzle(sqlite, { schema });
 export * from "./schema";
