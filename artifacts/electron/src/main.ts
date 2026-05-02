@@ -1,11 +1,23 @@
 import { app, BrowserWindow, utilityProcess, UtilityProcess } from "electron";
 import http from "http";
+import net from "net";
 import fs from "fs";
 import path from "path";
 
-const PORT = 8765;
+let serverPort = 0;
 let serverProc: UtilityProcess | null = null;
 let win: BrowserWindow | null = null;
+
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address() as net.AddressInfo;
+      srv.close(() => resolve(addr.port));
+    });
+    srv.on("error", reject);
+  });
+}
 
 function getUserDataPath(): string {
   const p = app.getPath("userData");
@@ -27,11 +39,11 @@ function getFrontendPath(): string {
   return path.join(__dirname, "..", "dist", "frontend", "public");
 }
 
-function waitForServer(timeoutMs = 25000): Promise<void> {
+function waitForServer(port: number, timeoutMs = 25000): Promise<void> {
   const start = Date.now();
   return new Promise<void>((resolve, reject) => {
     function attempt() {
-      const req = http.get(`http://localhost:${PORT}/`, (res) => {
+      const req = http.get(`http://127.0.0.1:${port}/`, (res) => {
         res.resume();
         resolve();
       });
@@ -48,7 +60,7 @@ function waitForServer(timeoutMs = 25000): Promise<void> {
   });
 }
 
-function startServer(logPath: string): void {
+function startServer(port: number, logPath: string): void {
   const entry = getServerEntry();
   const dbPath = path.join(getUserDataPath(), "database.db");
   const frontendPath = getFrontendPath();
@@ -56,7 +68,8 @@ function startServer(logPath: string): void {
   serverProc = utilityProcess.fork(entry, [], {
     stdio: "pipe",
     env: {
-      PORT: String(PORT),
+      PORT: String(port),
+      HOST: "127.0.0.1",
       DATABASE_PATH: dbPath,
       FRONTEND_DIST_PATH: frontendPath,
       NODE_ENV: "production",
@@ -71,7 +84,7 @@ function startServer(logPath: string): void {
   serverProc.stdout?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.stderr?.on("data", (d: Buffer) => logStream.write(d));
 
-  serverProc.on("exit", (code) => {
+  serverProc.on("exit", (_code: number) => {
     logStream.end();
   });
 }
@@ -92,13 +105,19 @@ async function createWindow() {
   });
 
   const logPath = path.join(getUserDataPath(), "server.log");
-  startServer(logPath);
 
   try {
-    await waitForServer();
-    win.loadURL(`http://localhost:${PORT}`);
+    serverPort = await findFreePort();
   } catch {
-    // Read what was written to the log file
+    serverPort = 19876;
+  }
+
+  startServer(serverPort, logPath);
+
+  try {
+    await waitForServer(serverPort);
+    win.loadURL(`http://127.0.0.1:${serverPort}`);
+  } catch {
     let logContent = "(no output captured)";
     try { logContent = fs.readFileSync(logPath, "utf8").slice(-1200); } catch {}
 
@@ -114,7 +133,6 @@ async function createWindow() {
 
   win.once("ready-to-show", () => {
     win?.show();
-    win?.webContents.openDevTools();
   });
 
   win.on("closed", () => { win = null; });

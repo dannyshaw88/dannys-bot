@@ -25,8 +25,9 @@ registerInstagramRoutes(httpServer, app).then(() => {
     logger.info({ frontendDist }, "Serving frontend static files");
   }
 
-  httpServer.listen(port, () => {
-    logger.info({ port }, "Server listening");
+  const host = process.env["HOST"] ?? "0.0.0.0";
+  httpServer.listen(port, host, () => {
+    logger.info({ port, host }, "Server listening");
   });
 }).catch((err) => {
   logger.error({ err }, "Failed to start server");
