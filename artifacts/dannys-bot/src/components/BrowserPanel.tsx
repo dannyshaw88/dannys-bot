@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -28,6 +28,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const addressFocusedRef = useRef(false);
 
   const [status, setStatus] = useState<WSStatus>("idle");
+  const statusRef = useRef<WSStatus>("idle");
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setStatusSafe = useCallback((s: WSStatus) => {
+    statusRef.current = s;
+    setStatus(s);
+  }, []);
+
   const [isLoading, setIsLoading] = useState(false);
   const [addressBar, setAddressBar] = useState("https://www.instagram.com/");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -60,8 +68,12 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   // ── WebSocket lifecycle ───────────────────────────────────────────────────
   const connect = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     wsRef.current?.close();
-    setStatus("connecting");
+    setStatusSafe("connecting");
     setErrorMsg(null);
     setIsLoading(true);
 
@@ -69,7 +81,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     const ws = new WebSocket(`${proto}//${window.location.host}/api/browser/${profileId}/stream`);
     wsRef.current = ws;
 
-    ws.onopen = () => setStatus("connected");
+    ws.onopen = () => setStatusSafe("connected");
 
     ws.onmessage = (evt) => {
       try {
@@ -77,7 +89,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         switch (msg.type) {
           case "frame":
             drawFrame(msg.data);
-            // Don't overwrite while the user is typing in the address bar
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) setAddressBar(msg.url);
             break;
           case "loading":
@@ -88,7 +99,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             break;
           case "error":
             setErrorMsg(msg.message ?? "Unknown error");
-            setStatus("error");
+            setStatusSafe("error");
             setIsLoading(false);
             break;
           case "loginStatus":
@@ -107,18 +118,28 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     };
 
     ws.onerror = () => {
-      setStatus("error");
+      setStatusSafe("error");
       setIsLoading(false);
       setErrorMsg("WebSocket connection failed.");
     };
 
     ws.onclose = () => {
-      if (status !== "error") setStatus("idle");
       setIsLoading(false);
+      // Use ref so the closure reads the *current* status, not a stale snapshot
+      if (statusRef.current !== "error") {
+        setStatusSafe("idle");
+        // Auto-reconnect after 3 s if the close was unexpected (not an error)
+        reconnectTimerRef.current = setTimeout(() => {
+          if (statusRef.current === "idle") connect();
+        }, 3000);
+      }
     };
-  }, [profileId]);
+  }, [profileId, setStatusSafe]);
 
-  useEffect(() => () => { wsRef.current?.close(); }, []);
+  useEffect(() => () => {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    wsRef.current?.close();
+  }, []);
 
   // Auto-connect on mount
   useEffect(() => { connect(); }, [connect]);
@@ -344,6 +365,16 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
       {/* Viewport */}
       <div className="flex-1 relative bg-slate-900 min-h-0 overflow-hidden flex items-center justify-center">
+
+        {/* Idle — disconnected, waiting for user or auto-reconnect */}
+        {status === "idle" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
+            <MonitorPlay className="w-10 h-10 text-slate-400" />
+            <p className="text-sm font-medium text-foreground">Browser disconnected</p>
+            <p className="text-xs text-muted-foreground">Reconnecting in a moment…</p>
+            <Button onClick={connect} variant="outline" size="sm">Connect now</Button>
+          </div>
+        )}
 
         {/* Connecting */}
         {status === "connecting" && (
