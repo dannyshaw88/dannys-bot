@@ -26,6 +26,7 @@ export interface IStorage {
   // Profiles
   getProfiles(): Promise<Profile[]>;
   getProfile(id: number): Promise<Profile | undefined>;
+  getProfileByUsername(username: string): Promise<Profile | undefined>;
   createProfile(profile: InsertProfile): Promise<Profile>;
   updateProfile(id: number, profile: Partial<InsertProfile>): Promise<Profile>;
   deleteProfile(id: number): Promise<void>;
@@ -129,11 +130,17 @@ export class DatabaseStorage implements IStorage {
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
     const [created] = await db.insert(profiles).values({
       ...profile,
-      userAgentApi: randomUA.api,
-      userAgentEmbedded: randomUA.embedded
+      // Only fall back to random UA if the caller did not supply one
+      userAgentApi: profile.userAgentApi || randomUA.api,
+      userAgentEmbedded: profile.userAgentEmbedded || randomUA.embedded,
     }).returning();
     await this.initializeToolsForProfile(created.id);
     return created;
+  }
+
+  async getProfileByUsername(username: string): Promise<Profile | undefined> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.username, username));
+    return profile;
   }
 
   async updateProfile(id: number, updates: any): Promise<Profile> {

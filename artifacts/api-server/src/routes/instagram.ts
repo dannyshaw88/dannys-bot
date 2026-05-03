@@ -309,7 +309,7 @@ export async function registerInstagramRoutes(
       if (!Array.isArray(toImport) || toImport.length === 0) {
         return res.status(400).json({ message: "No profiles provided" });
       }
-      const results: { success: boolean; username: string; error?: string }[] = [];
+      const results: { success: boolean; username: string; action?: string; error?: string }[] = [];
       for (const p of toImport) {
         try {
           // Build igDeviceState from any device fingerprint fields present in the export
@@ -331,7 +331,7 @@ export async function registerInstagramRoutes(
 
           const igApiCookies: string | null = (p.apiCookies as string | undefined)?.trim() || null;
 
-          const created = await storage.createProfile({
+          const profileData = {
             username: p.username || "",
             password: p.password || "",
             accountLabel: p.accountLabel || null,
@@ -355,8 +355,24 @@ export async function registerInstagramRoutes(
             accountStatus: resolveImportStatus(p.accStatus),
             igDeviceState,
             igApiCookies,
-          });
-          results.push({ success: true, username: created.username });
+          };
+
+          // Upsert: if this username already exists, update it instead of creating a duplicate
+          const existing = await storage.getProfileByUsername(profileData.username);
+          if (existing) {
+            // Update all fields from the import; preserve igDeviceState already in DB
+            // if the new export doesn't include device IDs (don't wipe good device state)
+            const updates: Record<string, any> = { ...profileData };
+            if (!igDeviceState && existing.igDeviceState) {
+              delete updates.igDeviceState; // keep the stored one
+            }
+            // Always update igApiCookies when present in export
+            await storage.updateProfile(existing.id, updates);
+            results.push({ success: true, username: profileData.username, action: "updated" });
+          } else {
+            const created = await storage.createProfile(profileData);
+            results.push({ success: true, username: created.username, action: "created" });
+          }
         } catch (err: any) {
           results.push({ success: false, username: p.username || "?", error: err?.message || String(err) });
         }

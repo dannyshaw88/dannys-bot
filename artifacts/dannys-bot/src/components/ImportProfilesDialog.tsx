@@ -195,6 +195,7 @@ function parseJarveeFile(text: string): ParsedProfile[] {
 interface ImportResult {
   success: boolean;
   username: string;
+  action?: "created" | "updated";
   error?: string;
 }
 
@@ -275,9 +276,15 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
       queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
       const ok = data.results.filter((r: ImportResult) => r.success).length;
       const fail = data.results.filter((r: ImportResult) => !r.success).length;
+      const created = data.results.filter((r: ImportResult) => r.success && r.action === "created").length;
+      const updated = data.results.filter((r: ImportResult) => r.success && r.action === "updated").length;
+      const parts = [];
+      if (created) parts.push(`${created} created`);
+      if (updated) parts.push(`${updated} updated`);
+      if (fail) parts.push(`${fail} failed`);
       toast({
         title: "Import complete",
-        description: `${ok} imported${fail ? `, ${fail} failed` : ""}`,
+        description: parts.join(", ") || `${ok} processed`,
         variant: fail > 0 ? "destructive" : "default",
       });
     } catch {
@@ -421,10 +428,15 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
           {/* Results */}
           {results && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                {successCount > 0 && (
+              <div className="flex items-center gap-3 flex-wrap">
+                {results.filter(r => r.success && r.action === "created").length > 0 && (
                   <div className="flex items-center gap-1.5 text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                    <CheckCircle2 className="w-4 h-4" /> {successCount} imported
+                    <CheckCircle2 className="w-4 h-4" /> {results.filter(r => r.success && r.action === "created").length} created
+                  </div>
+                )}
+                {results.filter(r => r.success && r.action === "updated").length > 0 && (
+                  <div className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    <CheckCircle2 className="w-4 h-4" /> {results.filter(r => r.success && r.action === "updated").length} updated
                   </div>
                 )}
                 {failCount > 0 && (

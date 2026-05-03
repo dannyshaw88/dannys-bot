@@ -136821,11 +136821,16 @@ var DatabaseStorage = class {
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
     const [created] = await db.insert(profiles).values({
       ...profile,
-      userAgentApi: randomUA.api,
-      userAgentEmbedded: randomUA.embedded
+      // Only fall back to random UA if the caller did not supply one
+      userAgentApi: profile.userAgentApi || randomUA.api,
+      userAgentEmbedded: profile.userAgentEmbedded || randomUA.embedded
     }).returning();
     await this.initializeToolsForProfile(created.id);
     return created;
+  }
+  async getProfileByUsername(username) {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.username, username));
+    return profile;
   }
   async updateProfile(id, updates) {
     const [updated] = await db.update(profiles).set(updates).where(eq(profiles.id, id)).returning();
@@ -143255,7 +143260,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
             });
           }
           const igApiCookies = p.apiCookies?.trim() || null;
-          const created = await storage.createProfile({
+          const profileData = {
             username: p.username || "",
             password: p.password || "",
             accountLabel: p.accountLabel || null,
@@ -143279,8 +143284,19 @@ async function registerInstagramRoutes(httpServer2, app2) {
             accountStatus: resolveImportStatus(p.accStatus),
             igDeviceState,
             igApiCookies
-          });
-          results.push({ success: true, username: created.username });
+          };
+          const existing = await storage.getProfileByUsername(profileData.username);
+          if (existing) {
+            const updates = { ...profileData };
+            if (!igDeviceState && existing.igDeviceState) {
+              delete updates.igDeviceState;
+            }
+            await storage.updateProfile(existing.id, updates);
+            results.push({ success: true, username: profileData.username, action: "updated" });
+          } else {
+            const created = await storage.createProfile(profileData);
+            results.push({ success: true, username: created.username, action: "created" });
+          }
         } catch (err) {
           results.push({ success: false, username: p.username || "?", error: err?.message || String(err) });
         }
