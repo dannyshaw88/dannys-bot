@@ -652,37 +652,34 @@ export class InstagramWebClient {
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
   async viewTimelineFeed(count: number = 5): Promise<number> {
-    return this.timed("ViewTimelineFeed", async () => {
-      // As of 2024 the timeline endpoint requires POST (GET returns 405).
-      const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
-      const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
-      if (!rawItems.length) return 0;
+    // As of 2024 the timeline endpoint requires POST (GET returns 405).
+    const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+    const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
+    if (!rawItems.length) return 0;
 
-      const items = rawItems
-        .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
-        .filter((m: any) => m?.id || m?.pk)
-        .slice(0, count);
+    const items = rawItems
+      .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
+      .filter((m: any) => m?.id || m?.pk)
+      .slice(0, count);
 
-      const seenEntries: string[] = [];
-      for (const media of items) {
-        const mediaId = String(media?.id ?? media?.pk ?? "");
-        if (!mediaId) continue;
-        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
-        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
-      }
+    let viewed = 0;
+    for (const media of items) {
+      const mediaId = String(media?.id ?? media?.pk ?? "");
+      if (!mediaId) continue;
+      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+      // One seen call per post — matches Jarvee's per-post call pattern and is
+      // more authentic than batching (real app reports seen as user scrolls past).
+      await this.timed("ViewTimelineFeed", async () => {
+        await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
+          live_vods_skipped: "",
+          nuxes_skipped: "",
+        }).toString());
+        return ++viewed;
+      }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+    }
 
-      if (seenEntries.length) {
-        try {
-          await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
-            reels: seenEntries.join(","),
-            live_vods_skipped: "",
-            nuxes_skipped: "",
-          }).toString());
-        } catch (_) { /* best-effort */ }
-      }
-
-      return items.length;
-    }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+    return viewed;
   }
 
   // ── Watch reels from the home feed Reels tab ─────────────────────────────

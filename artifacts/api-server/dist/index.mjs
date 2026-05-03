@@ -143370,30 +143370,25 @@ var InstagramWebClient = class {
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
   async viewTimelineFeed(count = 5) {
-    return this.timed("ViewTimelineFeed", async () => {
-      const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
-      const rawItems = j?.feed_items ?? j?.items ?? [];
-      if (!rawItems.length) return 0;
-      const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk).slice(0, count);
-      const seenEntries = [];
-      for (const media of items) {
-        const mediaId = String(media?.id ?? media?.pk ?? "");
-        if (!mediaId) continue;
-        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
-        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
-      }
-      if (seenEntries.length) {
-        try {
-          await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
-            reels: seenEntries.join(","),
-            live_vods_skipped: "",
-            nuxes_skipped: ""
-          }).toString());
-        } catch (_2) {
-        }
-      }
-      return items.length;
-    }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+    const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+    const rawItems = j?.feed_items ?? j?.items ?? [];
+    if (!rawItems.length) return 0;
+    const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk).slice(0, count);
+    let viewed = 0;
+    for (const media of items) {
+      const mediaId = String(media?.id ?? media?.pk ?? "");
+      if (!mediaId) continue;
+      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+      await this.timed("ViewTimelineFeed", async () => {
+        await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
+          live_vods_skipped: "",
+          nuxes_skipped: ""
+        }).toString());
+        return ++viewed;
+      }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+    }
+    return viewed;
   }
   // ── Watch reels from the home feed Reels tab ─────────────────────────────
   // Fetches the reels explore/home feed and marks up to `count` reels as seen,
