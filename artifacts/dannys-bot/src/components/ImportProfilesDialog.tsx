@@ -49,8 +49,15 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "proxy password":              "proxyPassword",
   "tags":                        "tags",
   "date of birth(us format)":    "dateOfBirth",
+  // EB / API user agent — Jarvee uses these exact column names
   "eb user agent":               "userAgentEmbedded",
+  "embedded browser user agent": "userAgentEmbedded",
+  "browser user agent":          "userAgentEmbedded",
   "api user agent":              "userAgentApi",
+  "mobile user agent":           "userAgentApi",
+  "app user agent":              "userAgentApi",
+  "device user agent":           "userAgentApi",
+  "instagram user agent":        "userAgentApi",
   "username":                    "username",
   "notes":                       "notes",
   "phone number":                "phoneNumber",
@@ -61,20 +68,28 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "email validation pass":       "emailValidationPassword",
   "email validation pop3server": "emailValidationPop3Server",
   "email validation port":       "emailValidationPort",
-  // Device fingerprint columns
+  // Device fingerprint — these MUST match Jarvee's exported column names exactly.
+  // Without these, Instagram treats every login as a new unknown device and
+  // requires email verification. Export them from Jarvee's Settings → Export.
   "device id":                   "deviceId",
   "android device id":           "deviceId",
+  "android id":                  "deviceId",
+  "deviceid":                    "deviceId",
   "uuid":                        "deviceUuid",
   "device uuid":                 "deviceUuid",
+  "guid":                        "deviceUuid",
   "phone id":                    "phoneId",
   "phone uuid":                  "phoneId",
+  "phoneid":                     "phoneId",
   "adid":                        "adid",
   "advertising id":              "adid",
-  "android id":                  "adid",
-  // Session cookies
+  "google ad id":                "adid",
+  "googleadid":                  "adid",
+  // Session cookies — if present, device ID mismatch doesn't matter at all
   "apicookies":                  "apiCookies",
   "api cookies":                 "apiCookies",
   "cookies":                     "apiCookies",
+  "session cookies":             "apiCookies",
 };
 
 /**
@@ -343,23 +358,40 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
                       <tr>
                         <th className="text-left px-3 py-2 font-bold text-muted-foreground">#</th>
                         <th className="text-left px-3 py-2 font-bold text-muted-foreground">Username</th>
-                        <th className="text-left px-3 py-2 font-bold text-muted-foreground">Email</th>
                         <th className="text-left px-3 py-2 font-bold text-muted-foreground">Proxy</th>
+                        <th className="text-left px-3 py-2 font-bold text-muted-foreground">API UA</th>
+                        <th className="text-left px-3 py-2 font-bold text-muted-foreground">Device IDs</th>
+                        <th className="text-left px-3 py-2 font-bold text-muted-foreground">Cookies</th>
                         <th className="text-left px-3 py-2 font-bold text-muted-foreground">2FA</th>
-                        <th className="text-left px-3 py-2 font-bold text-muted-foreground">Tags</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {parsed.map((p, i) => (
-                        <tr key={i} className="border-t border-border hover:bg-muted/20">
-                          <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
-                          <td className="px-3 py-2 font-mono font-semibold">{p.username || <span className="text-destructive">—</span>}</td>
-                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[120px]">{p.email || "—"}</td>
-                          <td className="px-3 py-2 font-mono text-muted-foreground">{p.proxyHost ? `${p.proxyHost}:${p.proxyPort}` : "—"}</td>
-                          <td className="px-3 py-2">{p.twoFASecretKey ? <Badge variant="outline" className="text-[10px]">Yes</Badge> : "—"}</td>
-                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[100px]">{p.tags || "—"}</td>
-                        </tr>
-                      ))}
+                      {parsed.map((p, i) => {
+                        const hasDeviceIds = !!(p.deviceId || p.deviceUuid || p.phoneId || p.adid);
+                        return (
+                          <tr key={i} className="border-t border-border hover:bg-muted/20">
+                            <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                            <td className="px-3 py-2 font-mono font-semibold">{p.username || <span className="text-destructive">—</span>}</td>
+                            <td className="px-3 py-2 font-mono text-muted-foreground">{p.proxyHost ? `${p.proxyHost}:${p.proxyPort}` : "—"}</td>
+                            <td className="px-3 py-2">
+                              {p.userAgentApi
+                                ? <span className="text-green-700 font-mono truncate block max-w-[140px]" title={p.userAgentApi}>✓ {p.userAgentApi.slice(0, 22)}…</span>
+                                : <span className="text-destructive">✗ missing</span>}
+                            </td>
+                            <td className="px-3 py-2">
+                              {hasDeviceIds
+                                ? <Badge variant="outline" className="text-[10px] text-green-700 border-green-300">✓ found</Badge>
+                                : <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">✗ none</Badge>}
+                            </td>
+                            <td className="px-3 py-2">
+                              {p.apiCookies
+                                ? <Badge variant="outline" className="text-[10px] text-green-700 border-green-300">✓ yes</Badge>
+                                : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-2">{p.twoFASecretKey ? <Badge variant="outline" className="text-[10px]">Yes</Badge> : "—"}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -369,6 +401,18 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
                 <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   Some rows have no username and may be skipped during import.
+                </div>
+              )}
+
+              {parsed.some(p => !p.apiCookies && !p.deviceId && !p.deviceUuid) && (
+                <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Device IDs missing</strong> — Instagram identifies devices by UUID/DeviceID, not just the User Agent.
+                    Without these, Instagram will treat each login as a new device and may require email verification.
+                    To avoid this: in Jarvee, include the <em>UUID</em>, <em>Device ID</em>, <em>Phone ID</em>, and <em>ADID</em> columns in your export,
+                    or include the <em>API Cookies</em> column (session cookies bypass the device check entirely).
+                  </span>
                 </div>
               )}
             </div>
