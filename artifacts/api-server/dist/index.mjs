@@ -143713,17 +143713,18 @@ var InstagramWebClient = class {
     return res.json;
   }
   // ── Binary POST for rupload (photo upload) ───────────────────────────────
+  // Must target www.instagram.com — web session cookies are not valid on i.instagram.com for write ops.
   async mobilePostBinary(path4, body, extraHeaders = {}) {
-    const ua = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
     const headers = {
-      Host: "i.instagram.com",
-      "User-Agent": ua,
+      Host: "www.instagram.com",
+      "User-Agent": WEB_UA,
       Accept: "*/*",
       "Accept-Language": "en-US,en;q=0.9",
       "X-IG-App-ID": APP_ID,
       "X-CSRFToken": this.csrfToken,
-      "X-IG-Capabilities": "3brTvwE=",
-      "X-IG-Connection-Type": "WIFI",
+      "X-Requested-With": "XMLHttpRequest",
+      Referer: "https://www.instagram.com/",
+      Origin: "https://www.instagram.com",
       "Content-Length": String(body.length),
       Cookie: this.cookieJar.join("; "),
       ...extraHeaders
@@ -143734,7 +143735,7 @@ var InstagramWebClient = class {
       agent = new HttpsProxyAgent2(this.proxyUrl);
     }
     const res = await httpsRequest(
-      { host: "i.instagram.com", port: 443, path: path4, method: "POST", headers, ...agent ? { agent } : {} },
+      { host: "www.instagram.com", port: 443, path: path4, method: "POST", headers, ...agent ? { agent } : {} },
       body
     );
     let json2 = null;
