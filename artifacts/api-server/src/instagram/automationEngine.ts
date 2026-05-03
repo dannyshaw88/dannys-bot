@@ -160,6 +160,7 @@ class AutomationEngine {
   private contactStates        = new Map<number, ProfileState>(); // contact tool runners
   private humanSessionStates   = new Map<number, ProfileState>(); // independent human session runners
   private syncTimers           = new Map<number, number>();       // profileId → nextSyncAt (ms)
+  private ownUserIdCache       = new Map<number, string>();       // profileId → Instagram pk (HikerAPI, resolved once)
   private contactForceRun      = new Set<number>();               // profileIds to run contact send immediately
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -797,23 +798,31 @@ class AutomationEngine {
     // Otherwise fall back to account client.
     let ownUserId: string | null = null;
     if (hikerClient) {
-      const t0 = Date.now();
-      const hikerUser = await hikerClient.getUserByUsername(profile.username);
-      ownUserId = hikerUser?.pk ?? null;
-      storage.createInstagramApiCall({
-        profileId: profile.id,
-        operationName: "v1/user/by/username",
-        date: new Date().toISOString(),
-        message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username}` : `Could not resolve @${profile.username}`,
-        source: "HikerAPI",
-        navChain: "",
-        ipAddress: "",
-        durationMs: Date.now() - t0,
-      });
-      if (!ownUserId) {
-        throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
+      // Use cached pk if available — avoids a redundant v1/user/by/username call every run.
+      // Only resolve once; Jarvee does the same (1 call per check cycle, not 2).
+      const cached = this.ownUserIdCache.get(profile.id);
+      if (cached) {
+        ownUserId = cached;
+      } else {
+        const t0 = Date.now();
+        const hikerUser = await hikerClient.getUserByUsername(profile.username);
+        ownUserId = hikerUser?.pk ?? null;
+        storage.createInstagramApiCall({
+          profileId: profile.id,
+          operationName: "v1/user/by/username",
+          date: new Date().toISOString(),
+          message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username} (cached for future runs)` : `Could not resolve @${profile.username}`,
+          source: "HikerAPI",
+          navChain: "",
+          ipAddress: "",
+          durationMs: Date.now() - t0,
+        });
+        if (!ownUserId) {
+          throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
+        }
+        this.ownUserIdCache.set(profile.id, ownUserId);
+        console.log(`[engine] @${profile.username}: resolved own userId ${ownUserId} via HikerAPI (cached)`);
       }
-      console.log(`[engine] @${profile.username}: resolved own userId ${ownUserId} via HikerAPI`);
     } else {
       const client = await this.ensureClient(profile, state);
       if (!client) return;

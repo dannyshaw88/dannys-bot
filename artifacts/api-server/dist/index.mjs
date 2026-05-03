@@ -141013,6 +141013,8 @@ var AutomationEngine = class {
   // independent human session runners
   syncTimers = /* @__PURE__ */ new Map();
   // profileId → nextSyncAt (ms)
+  ownUserIdCache = /* @__PURE__ */ new Map();
+  // profileId → Instagram pk (HikerAPI, resolved once)
   contactForceRun = /* @__PURE__ */ new Set();
   // profileIds to run contact send immediately
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -141584,23 +141586,29 @@ var AutomationEngine = class {
     const hikerClient = useHiker ? new HikerApiClient(globalSettings2.hikerApiToken) : null;
     let ownUserId = null;
     if (hikerClient) {
-      const t0 = Date.now();
-      const hikerUser = await hikerClient.getUserByUsername(profile.username);
-      ownUserId = hikerUser?.pk ?? null;
-      storage.createInstagramApiCall({
-        profileId: profile.id,
-        operationName: "v1/user/by/username",
-        date: (/* @__PURE__ */ new Date()).toISOString(),
-        message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username}` : `Could not resolve @${profile.username}`,
-        source: "HikerAPI",
-        navChain: "",
-        ipAddress: "",
-        durationMs: Date.now() - t0
-      });
-      if (!ownUserId) {
-        throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
+      const cached2 = this.ownUserIdCache.get(profile.id);
+      if (cached2) {
+        ownUserId = cached2;
+      } else {
+        const t0 = Date.now();
+        const hikerUser = await hikerClient.getUserByUsername(profile.username);
+        ownUserId = hikerUser?.pk ?? null;
+        storage.createInstagramApiCall({
+          profileId: profile.id,
+          operationName: "v1/user/by/username",
+          date: (/* @__PURE__ */ new Date()).toISOString(),
+          message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username} (cached for future runs)` : `Could not resolve @${profile.username}`,
+          source: "HikerAPI",
+          navChain: "",
+          ipAddress: "",
+          durationMs: Date.now() - t0
+        });
+        if (!ownUserId) {
+          throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
+        }
+        this.ownUserIdCache.set(profile.id, ownUserId);
+        console.log(`[engine] @${profile.username}: resolved own userId ${ownUserId} via HikerAPI (cached)`);
       }
-      console.log(`[engine] @${profile.username}: resolved own userId ${ownUserId} via HikerAPI`);
     } else {
       const client2 = await this.ensureClient(profile, state);
       if (!client2) return;
