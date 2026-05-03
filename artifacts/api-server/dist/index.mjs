@@ -138601,7 +138601,11 @@ async function restoreSessionCookies(ig, cookieString) {
     const eqIdx = pair.indexOf("=");
     if (eqIdx === -1) return [];
     const key = pair.slice(0, eqIdx).trim();
-    const value = pair.slice(eqIdx + 1).trim();
+    let value = pair.slice(eqIdx + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+    }
     return [
       { key, value, domain: "i.instagram.com", path: "/", secure: true, httpOnly: true, hostOnly: true, creation: now, lastAccessed: now },
       { key, value, domain: ".instagram.com", path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now }
@@ -138665,7 +138669,22 @@ async function verifyInstagramCredentials(profile) {
         igDeviceState: captureDeviceState2()
       };
     } catch (cookieErr) {
-      console.error(`[instagramLogin] @${profile.username} \u2014 cookie session failed: ${cookieErr?.message} \u2014 falling back to password login`);
+      const errMsg = cookieErr?.message ?? "";
+      console.error(`[instagramLogin] @${profile.username} \u2014 cookie session failed: ${errMsg}`);
+      if (cookieErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(errMsg)) {
+        return {
+          ok: false,
+          message: `@${profile.username} \u2014 session requires a security checkpoint. Open the embedded browser to resolve it.`,
+          accountStatus: "captcha",
+          igDeviceState: captureDeviceState2()
+        };
+      }
+      return {
+        ok: false,
+        message: `@${profile.username} \u2014 session cookie has expired or been revoked. Open the embedded browser, log in manually, then click Verify again to refresh the session.`,
+        accountStatus: "logged_out",
+        igDeviceState: captureDeviceState2()
+      };
     }
   }
   const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);

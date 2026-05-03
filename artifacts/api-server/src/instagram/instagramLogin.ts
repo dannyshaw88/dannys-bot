@@ -157,7 +157,11 @@ async function restoreSessionCookies(ig: IgApiClient, cookieString: string): Pro
     const eqIdx = pair.indexOf('=');
     if (eqIdx === -1) return [];
     const key = pair.slice(0, eqIdx).trim();
-    const value = pair.slice(eqIdx + 1).trim();
+    // Jarvee URL-encodes cookie values (e.g. ":" → "%3A"). Decode so Instagram
+    // receives the raw value it originally issued (e.g. "sessionid=123:abc:...")
+    // instead of the percent-encoded form it does not recognise.
+    let value = pair.slice(eqIdx + 1).trim();
+    try { value = decodeURIComponent(value); } catch { /* keep as-is if malformed */ }
     // Set on both the host-only domain and the wildcard domain Instagram checks
     return [
       { key, value, domain: 'i.instagram.com', path: '/', secure: true, httpOnly: true, hostOnly: true, creation: now, lastAccessed: now },
@@ -232,12 +236,35 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         igDeviceState: captureDeviceState(),
       };
     } catch (cookieErr: any) {
-      console.error(`[instagramLogin] @${profile.username} — cookie session failed: ${cookieErr?.message} — falling back to password login`);
-      // Fall through to password login below
+      const errMsg: string = cookieErr?.message ?? "";
+      console.error(`[instagramLogin] @${profile.username} — cookie session failed: ${errMsg}`);
+
+      // If Instagram responded with a checkpoint, surface it so the user can resolve via browser
+      if (cookieErr instanceof IgCheckpointError || /checkpoint/i.test(errMsg)) {
+        return {
+          ok: false,
+          message: `@${profile.username} — session requires a security checkpoint. Open the embedded browser to resolve it.`,
+          accountStatus: "captcha",
+          igDeviceState: captureDeviceState(),
+        };
+      }
+
+      // CRITICAL: do NOT fall back to password login when we have cookies.
+      // Password login with unrecognized device UUIDs (not the ones Jarvee registered)
+      // triggers Instagram's "verify from new device" email challenge — exactly the
+      // error the user is hitting. Instead, report the session as expired so the user
+      // knows to re-authenticate via the embedded browser, which will capture a fresh
+      // session cookie without triggering device verification.
+      return {
+        ok: false,
+        message: `@${profile.username} — session cookie has expired or been revoked. Open the embedded browser, log in manually, then click Verify again to refresh the session.`,
+        accountStatus: "logged_out",
+        igDeviceState: captureDeviceState(),
+      };
     }
   }
 
-  // ── Normal path: fresh password login ────────────────────────────────────
+  // ── Normal path: fresh password login (only when no cookies are stored) ──
   const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
   attachRequestLogger(ig, profile.id, "Verify", proxyIp);
 
