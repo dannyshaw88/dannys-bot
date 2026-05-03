@@ -12,7 +12,7 @@ type Tab = "api-log" | "whats-new";
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
     version: "1.2.0",
-    date: "May 2026",
+    date: "3 May 2026",
     items: [
       { category: "Human Sessions", text: "Added local folder as a repost source — pick a folder on your PC's hard drive, images are automatically deleted after upload." },
       { category: "Human Sessions", text: "Added Save Media percentage — controls what share of liked timeline posts get saved to your Instagram collection." },
@@ -30,7 +30,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.1.0",
-    date: "April 2026",
+    date: "14 April 2026",
     items: [
       { category: "Repost", text: "Added image alteration pipeline with small / medium / high presets and manual per-filter overrides (contrast, brightness, noise, sharpen, pixelate)." },
       { category: "Repost", text: "Added HikerAPI feed scraping option so repost doesn't consume account session requests." },
@@ -44,7 +44,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.0.0",
-    date: "March 2026",
+    date: "2 March 2026",
     items: [
       { category: "Core", text: "Initial release of Danny's Bot automation dashboard." },
       { category: "Core", text: "Multi-account management with status tracking, proxy assignment, and 2FA support." },
