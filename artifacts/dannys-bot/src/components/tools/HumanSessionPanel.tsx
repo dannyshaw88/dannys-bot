@@ -35,6 +35,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [spinSyntaxMsg, setSpinSyntaxMsg] = useState<string | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
+  const [repostingNow, setRepostingNow] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
@@ -818,6 +819,50 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             <br />
             <strong>Disable at post count</strong> reads the post count from this profile's Instagram bio to stop reposting once the goal is reached.
           </p>
+
+          {/* Warning: skip chance is 100 — repost will never run automatically */}
+          {(Number((settings as any).repostNotUsedMin ?? 0) >= 100 || Number((settings as any).repostNotUsedMax ?? 0) >= 100) && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+              <span className="text-amber-500 text-sm shrink-0">⚠️</span>
+              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                <strong>Skip chance is 100% — repost will never run automatically.</strong><br />
+                Set <em>Skip chance %</em> min and max to <strong>0</strong> so repost always runs each session.
+              </p>
+            </div>
+          )}
+
+          {/* Manual trigger */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1.5 text-xs h-7 px-2.5 border-green-300 text-green-700 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
+              disabled={repostingNow || !settings.repostEnabled || !String((settings as any).repostSourceUsername ?? "").trim()}
+              onClick={async () => {
+                setRepostingNow(true);
+                try {
+                  const res = await fetch(`/api/profiles/${tool.profileId}/run-repost-now`, { method: "POST" });
+                  const data = await res.json() as { ok: boolean; message: string };
+                  toast({
+                    title: data.ok ? "Repost queued" : "Repost failed",
+                    description: data.message,
+                    variant: data.ok ? "default" : "destructive",
+                  });
+                } catch (e: any) {
+                  toast({ title: "Error", description: e?.message ?? "Unknown error", variant: "destructive" });
+                } finally {
+                  setRepostingNow(false);
+                }
+              }}
+            >
+              {repostingNow ? (
+                <><span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />Reposting…</>
+              ) : (
+                <><Repeat2 className="w-3.5 h-3.5 shrink-0" />Run Repost Now</>
+              )}
+            </Button>
+            <span className="text-[10px] text-muted-foreground">Bypass skip chance &amp; timer — posts 1 now</span>
+          </div>
 
           <Button
             variant="outline"

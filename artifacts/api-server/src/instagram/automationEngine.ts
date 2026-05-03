@@ -2052,6 +2052,108 @@ class AutomationEngine {
     return list.some(u => u.instagramUsername.toLowerCase() === username.toLowerCase());
   }
 
+  // ── Public trigger: run repost immediately (bypass skip-chance & timer) ──
+  async runRepostNow(profileId: number): Promise<{ ok: boolean; message: string }> {
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return { ok: false, message: "Profile not found" };
+
+    const tools = await storage.getToolsByProfile(profileId);
+    const hsTool = tools.find(t => t.type === "human_sessions");
+    if (!hsTool) return { ok: false, message: "Human sessions tool not found for this profile" };
+
+    const s = hsTool.settings as any;
+    const sourceUsername = String(s.repostSourceUsername ?? "").trim();
+    if (!s.repostEnabled) return { ok: false, message: "Repost is not enabled in settings" };
+    if (!sourceUsername) return { ok: false, message: "No source account configured" };
+
+    // Reuse existing state (keeps client alive) or create a temp one
+    let state = this.humanSessionStates.get(profileId);
+    const tempState = !state;
+    if (!state) {
+      state = {
+        stop: { stopped: false },
+        client: null,
+        dailyCount: 0, dailyDate: "",
+        hourlyCount: 0, hourlyHour: "",
+        actionDailyCount: {}, actionDailyDate: "",
+        actionHourlyCount: {}, actionHourlyHour: "",
+        actionSuspensions: {},
+        nextHumanSessionAt: 0,
+        lastHumanToolsEnabled: false,
+        nextFollowAt: 0, nextContactAt: 0,
+      };
+    }
+
+    const client = await this.ensureClient(profile, state);
+    if (!client) return { ok: false, message: "Could not establish Instagram session (check cookies)" };
+
+    try {
+      let repostHikerClient: HikerApiClient | null = null;
+      if (s.repostUseHikerApi) {
+        const gs = await storage.getGlobalSettings();
+        if (gs.hikerApiEnabled === "true" && gs.hikerApiToken) {
+          repostHikerClient = new HikerApiClient(gs.hikerApiToken);
+        }
+      }
+
+      const feedItems = repostHikerClient
+        ? await repostHikerClient.getUserFeedItems(sourceUsername)
+        : await client.getUserFeedItems(sourceUsername);
+
+      console.log(`[engine] @${profile.username}: 🔁 [MANUAL] feed fetched (${feedItems.length} items) from @${sourceUsername}`);
+
+      let candidate: { mediaId: string; shortcode: string; imageUrl: string; caption: string } | null = null;
+      for (const item of feedItems) {
+        const already = await storage.isAlreadyReposted(profileId, item.mediaId);
+        if (!already) { candidate = item; break; }
+      }
+
+      if (!candidate) return { ok: false, message: `No new posts to repost from @${sourceUsername} (all already reposted)` };
+
+      const level         = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
+      const imageBuffer   = await client.downloadImage(candidate.imageUrl);
+      const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
+
+      const captionTemplate = String(s.repostCaptionText ?? "").trim();
+      const finalCaption = captionTemplate
+        ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
+        : candidate.caption.slice(0, 2200);
+
+      const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+      if (!postedMediaId) return { ok: false, message: "Upload failed — Instagram rejected the photo" };
+
+      if (s.repostDisableComments) {
+        try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
+      }
+
+      const postedShortcode = mediaIdToShortcode(postedMediaId);
+      await storage.createRepostedPost({
+        profileId,
+        toolId: hsTool.id,
+        sourceUsername,
+        mediaId:      candidate.mediaId,
+        shortcode:    candidate.shortcode,
+        caption:      candidate.caption.slice(0, 2200),
+        thumbnailUrl: candidate.imageUrl,
+        repostedAt:   new Date().toISOString(),
+        postedShortcode,
+      });
+
+      console.log(`[engine] @${profile.username}: 🔁 [MANUAL] reposted ${candidate.mediaId} from @${sourceUsername} → ${postedShortcode}`);
+      this.logAction(profileId, hsTool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `[Manual] Reposted from @${sourceUsername} (alteration: ${level})`);
+
+      return { ok: true, message: `Reposted → instagram.com/p/${postedShortcode}` };
+    } catch (e: any) {
+      console.warn(`[engine] @${profile.username}: manual repost error: ${e?.message}`);
+      return { ok: false, message: e?.message ?? "Unknown error" };
+    } finally {
+      // Clean up temp state client if we created one
+      if (tempState && state.client) {
+        // don't destroy — just let GC handle it
+      }
+    }
+  }
+
   // ── Public trigger: immediate human session ───────────────────────────────
   // Called when a human_sessions tool is explicitly enabled from the UI.
   // If a runner is already alive, reset its timer to 0 so it fires on the

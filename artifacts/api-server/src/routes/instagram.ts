@@ -642,6 +642,13 @@ export async function registerInstagramRoutes(
     });
   });
 
+  // ── Run repost now (manual, bypasses skip-chance and session timer) ──────
+  app.post("/api/profiles/:id/run-repost-now", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const result = await automationEngine.runRepostNow(profileId);
+    res.json(result);
+  });
+
   // ── Reposted Posts ────────────────────────────────────────────────────────
   app.get("/api/profiles/:id/reposted-posts", async (req, res) => {
     const profileId = Number(req.params.id);
