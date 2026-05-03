@@ -240,13 +240,17 @@ export function ProxiesPage() {
     setAutoLinking(true);
     try {
       const res = await apiRequest("POST", "/api/proxies/auto-link");
-      const { linked, unmatched } = await res.json();
+      const { linked, created, skipped } = await res.json();
       await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/proxies"] });
+      const parts: string[] = [];
+      if (linked > 0) parts.push(`${linked} ${linked === 1 ? "account" : "accounts"} linked`);
+      if (created > 0) parts.push(`${created} new ${created === 1 ? "proxy" : "proxies"} created`);
       toast({
-        title: linked > 0 ? `Linked ${linked} ${linked === 1 ? "account" : "accounts"} to proxies` : "No accounts were linked",
-        description: unmatched > 0
-          ? `${unmatched} ${unmatched === 1 ? "account has" : "accounts have"} no matching proxy — add their proxies first.`
-          : linked > 0 ? "All accounts matched to their proxies." : "All accounts already had proxies assigned.",
+        title: parts.length > 0 ? parts.join(", ") : "Nothing to link",
+        description: parts.length > 0
+          ? "All accounts with proxy data are now linked to Proxy Manager entries."
+          : `${skipped} ${skipped === 1 ? "account" : "accounts"} already had proxies or had no proxy data.`,
       });
     } catch {
       toast({ title: "Auto-link failed", variant: "destructive" });
@@ -388,7 +392,7 @@ export function ProxiesPage() {
           <Button
             variant="outline"
             onClick={handleAutoLink}
-            disabled={autoLinking || !proxies.length}
+            disabled={autoLinking}
           >
             {autoLinking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
             {autoLinking ? "Linking…" : "Auto-link Accounts"}

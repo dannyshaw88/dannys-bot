@@ -143113,27 +143113,39 @@ async function registerInstagramRoutes(httpServer2, app2) {
     res.json({ imported, skipped });
   });
   app2.post("/api/proxies/auto-link", async (req, res) => {
-    const proxies2 = await storage.getProxies();
+    const existingProxies = await storage.getProxies();
     const profiles2 = await storage.getProfiles();
-    const proxyByHostPort = new Map(proxies2.map((p) => [`${p.host}:${p.port}`, p.id]));
+    const proxyByHostPort = new Map(existingProxies.map((p) => [`${p.host}:${p.port}`, p.id]));
     let linked = 0;
-    let unmatched = 0;
+    let created = 0;
+    let skipped = 0;
     for (const profile of profiles2) {
-      if (profile.proxyId) continue;
+      if (profile.proxyId) {
+        skipped++;
+        continue;
+      }
       if (!profile.proxyHost || !profile.proxyPort) {
-        unmatched++;
+        skipped++;
         continue;
       }
       const key = `${profile.proxyHost}:${profile.proxyPort}`;
-      const proxyId = proxyByHostPort.get(key);
-      if (proxyId) {
-        await storage.updateProfile(profile.id, { proxyId });
-        linked++;
-      } else {
-        unmatched++;
+      let proxyId = proxyByHostPort.get(key);
+      if (!proxyId) {
+        const newProxy = await storage.createProxy({
+          name: key,
+          host: profile.proxyHost,
+          port: profile.proxyPort,
+          username: profile.proxyUsername ?? null,
+          password: profile.proxyPassword ?? null
+        });
+        proxyByHostPort.set(key, newProxy.id);
+        proxyId = newProxy.id;
+        created++;
       }
+      await storage.updateProfile(profile.id, { proxyId });
+      linked++;
     }
-    res.json({ linked, unmatched });
+    res.json({ linked, created, skipped });
   });
   app2.post("/api/proxies/:id/ping", async (req, res) => {
     const proxy = (await storage.getProxies()).find((p) => p.id === Number(req.params.id));
@@ -143287,6 +143299,10 @@ async function registerInstagramRoutes(httpServer2, app2) {
         return res.status(400).json({ message: "No profiles provided" });
       }
       const results = [];
+      const existingProxies = await storage.getProxies();
+      const proxyMap = new Map(
+        existingProxies.map((px) => [`${px.host}:${px.port}`, px.id])
+      );
       for (const p of toImport) {
         try {
           let igDeviceState = null;
@@ -143317,13 +143333,33 @@ async function registerInstagramRoutes(httpServer2, app2) {
             });
           }
           const igApiCookies = p.apiCookies?.trim() || null;
+          let resolvedProxyId = null;
+          const impHost = (p.proxyHost || "").trim();
+          const impPort = p.proxyPort ? Number(p.proxyPort) : 0;
+          if (impHost && impPort) {
+            const mapKey = `${impHost}:${impPort}`;
+            if (proxyMap.has(mapKey)) {
+              resolvedProxyId = proxyMap.get(mapKey);
+            } else {
+              const newProxy = await storage.createProxy({
+                name: mapKey,
+                host: impHost,
+                port: impPort,
+                username: p.proxyUsername || null,
+                password: p.proxyPassword || null
+              });
+              proxyMap.set(mapKey, newProxy.id);
+              resolvedProxyId = newProxy.id;
+            }
+          }
           const profileData = {
             username: p.username || "",
             password: p.password || "",
             accountLabel: p.accountLabel || null,
             email: p.email || null,
-            proxyHost: p.proxyHost || null,
-            proxyPort: p.proxyPort ? Number(p.proxyPort) : null,
+            proxyId: resolvedProxyId,
+            proxyHost: impHost || null,
+            proxyPort: impPort || null,
             proxyUsername: p.proxyUsername || null,
             proxyPassword: p.proxyPassword || null,
             userAgentApi: p.userAgentApi || null,
@@ -143347,6 +143383,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
             const updates = { ...profileData };
             if (!hasExplicitDeviceIds && existing.igDeviceState) {
               delete updates.igDeviceState;
+            }
+            if (!resolvedProxyId && existing.proxyId) {
+              delete updates.proxyId;
             }
             await storage.updateProfile(existing.id, updates);
             results.push({ success: true, username: profileData.username, action: "updated" });

@@ -129,28 +129,44 @@ export async function registerInstagramRoutes(
   });
 
   app.post("/api/proxies/auto-link", async (req, res) => {
-    const proxies = await storage.getProxies();
+    const existingProxies = await storage.getProxies();
     const profiles = await storage.getProfiles();
 
-    const proxyByHostPort = new Map(proxies.map(p => [`${p.host}:${p.port}`, p.id]));
+    // Build lookup map — keyed by "host:port" → proxyId.
+    // We update this as we create new entries so accounts sharing the same
+    // proxy all get linked to the same Proxy Manager row.
+    const proxyByHostPort = new Map(existingProxies.map(p => [`${p.host}:${p.port}`, p.id]));
 
     let linked = 0;
-    let unmatched = 0;
+    let created = 0;
+    let skipped = 0;
 
     for (const profile of profiles) {
-      if (profile.proxyId) continue;
-      if (!profile.proxyHost || !profile.proxyPort) { unmatched++; continue; }
+      if (profile.proxyId) { skipped++; continue; }
+      if (!profile.proxyHost || !profile.proxyPort) { skipped++; continue; }
+
       const key = `${profile.proxyHost}:${profile.proxyPort}`;
-      const proxyId = proxyByHostPort.get(key);
-      if (proxyId) {
-        await storage.updateProfile(profile.id, { proxyId });
-        linked++;
-      } else {
-        unmatched++;
+      let proxyId = proxyByHostPort.get(key);
+
+      if (!proxyId) {
+        // Proxy not yet in the Proxy Manager — create it from the inline profile data
+        const newProxy = await storage.createProxy({
+          name: key,
+          host: profile.proxyHost,
+          port: profile.proxyPort,
+          username: profile.proxyUsername ?? null,
+          password: profile.proxyPassword ?? null,
+        });
+        proxyByHostPort.set(key, newProxy.id);
+        proxyId = newProxy.id;
+        created++;
       }
+
+      await storage.updateProfile(profile.id, { proxyId });
+      linked++;
     }
 
-    res.json({ linked, unmatched });
+    res.json({ linked, created, skipped });
   });
 
   app.post("/api/proxies/:id/ping", async (req, res) => {
@@ -315,6 +331,16 @@ export async function registerInstagramRoutes(
         return res.status(400).json({ message: "No profiles provided" });
       }
       const results: { success: boolean; username: string; action?: string; error?: string }[] = [];
+
+      // ── Build a proxy lookup map (host:port → proxyId) so we can auto-link
+      // accounts to their proxy without making a DB round-trip per account.
+      // New proxies created during this import are immediately added to the map
+      // so subsequent accounts sharing the same proxy reuse the same entry.
+      const existingProxies = await storage.getProxies();
+      const proxyMap = new Map<string, number>(
+        existingProxies.map(px => [`${px.host}:${px.port}`, px.id])
+      );
+
       for (const p of toImport) {
         try {
           // Build igDeviceState from device fingerprint fields in the export.
@@ -356,15 +382,42 @@ export async function registerInstagramRoutes(
 
           const igApiCookies: string | null = (p.apiCookies as string | undefined)?.trim() || null;
 
+          // ── Auto-resolve proxyId from embedded proxy credentials ─────────────
+          // If the imported row includes a proxy (host + port), ensure it exists
+          // in the Proxy Manager and link the account to it via proxyId.
+          // This means the EB, mobile API, and everything else all use the correct
+          // proxy automatically — no manual linking required after import.
+          let resolvedProxyId: number | null = null;
+          const impHost: string = (p.proxyHost || "").trim();
+          const impPort: number = p.proxyPort ? Number(p.proxyPort) : 0;
+          if (impHost && impPort) {
+            const mapKey = `${impHost}:${impPort}`;
+            if (proxyMap.has(mapKey)) {
+              resolvedProxyId = proxyMap.get(mapKey)!;
+            } else {
+              // Create a new Proxy Manager entry for this proxy
+              const newProxy = await storage.createProxy({
+                name: mapKey,
+                host: impHost,
+                port: impPort,
+                username: (p.proxyUsername || null) as string | null,
+                password: (p.proxyPassword || null) as string | null,
+              });
+              proxyMap.set(mapKey, newProxy.id);
+              resolvedProxyId = newProxy.id;
+            }
+          }
+
           const profileData = {
             username: p.username || "",
             password: p.password || "",
             accountLabel: p.accountLabel || null,
             email: p.email || null,
-            proxyHost: p.proxyHost || null,
-            proxyPort: p.proxyPort ? Number(p.proxyPort) : null,
-            proxyUsername: p.proxyUsername || null,
-            proxyPassword: p.proxyPassword || null,
+            proxyId: resolvedProxyId,
+            proxyHost: impHost || null,
+            proxyPort: impPort || null,
+            proxyUsername: (p.proxyUsername || null) as string | null,
+            proxyPassword: (p.proxyPassword || null) as string | null,
             userAgentApi: p.userAgentApi || null,
             userAgentEmbedded: p.userAgentEmbedded || null,
             tags: p.tags || null,
@@ -392,6 +445,10 @@ export async function registerInstagramRoutes(
             //   (avoid triggering new-device challenges on accounts Instagram already trusts)
             if (!hasExplicitDeviceIds && existing.igDeviceState) {
               delete updates.igDeviceState; // keep the trusted stored state
+            }
+            // Preserve existing proxyId if the import doesn't specify a proxy
+            if (!resolvedProxyId && existing.proxyId) {
+              delete updates.proxyId;
             }
             await storage.updateProfile(existing.id, updates);
             results.push({ success: true, username: profileData.username, action: "updated" });
