@@ -1196,7 +1196,9 @@ class AutomationEngine {
           profile.password,
           profile.twoFASecretKey ?? undefined,
         );
-        console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
+        if (!mobileOk) {
+          console.error(`[engine] @${profile.username}: mobile login FAILED — stored password may be wrong. Update it in Account Settings.`);
+        }
       }
       return client;
     }

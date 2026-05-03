@@ -139896,6 +139896,31 @@ var InstagramWebClient = class {
   // Establishes a separate mobile session used only for DM sending.
   // The web session (www.instagram.com) cannot send DMs — Instagram's DM write
   // endpoints on i.instagram.com require a session created via mobile login.
+  // Fast path: when we already have a valid EB browser session, the same
+  // sessionid + csrftoken cookies work on i.instagram.com without needing a
+  // fresh password login.  Seeds mobileCookieJar from the existing web jar and
+  // marks the mobile session ready immediately.
+  mobileBootstrapFromWebCookies() {
+    const sessionCookie = this.cookieJar.find((c3) => c3.startsWith("sessionid="));
+    const csrfCookie = this.cookieJar.find((c3) => c3.startsWith("csrftoken="));
+    if (!sessionCookie) return false;
+    const igDid = randomUUID();
+    const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+    const seeds = [
+      `ig_did=${igDid}`,
+      `mid=${mid}`,
+      sessionCookie
+    ];
+    if (csrfCookie) seeds.push(csrfCookie);
+    for (const c3 of this.cookieJar) {
+      if (c3.startsWith("ds_user_id=") || c3.startsWith("rur=")) seeds.push(c3);
+    }
+    this.mobileCookieJar = mergeCookies([], seeds);
+    if (csrfCookie) this.mobileCsrf = csrfCookie.split("=").slice(1).join("=");
+    this.mobileSessionReady = true;
+    console.log(`[webClient] mobileBootstrapFromWebCookies: seeded mobile jar with ${this.mobileCookieJar.length} cookies (sessionid=true, csrf=${!!csrfCookie})`);
+    return true;
+  }
   async mobileLogin(username, password, twoFaSecret) {
     return this.timed("MobileLogin", () => this._mobileLogin(username, password, twoFaSecret), `@${username} mobile login`);
   }
@@ -141928,12 +141953,17 @@ var AutomationEngine = class {
       }
       if (!client.isMobileLoggedIn()) {
         console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
-        const mobileOk = await client.mobileLogin(
-          profile.username,
-          profile.password,
-          profile.twoFASecretKey ?? void 0
-        );
-        console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
+        const bootstrapOk = client.mobileBootstrapFromWebCookies();
+        if (bootstrapOk) {
+          console.log(`[engine] @${profile.username}: mobile session bootstrapped from browser cookies`);
+        } else {
+          const mobileOk = await client.mobileLogin(
+            profile.username,
+            profile.password,
+            profile.twoFASecretKey ?? void 0
+          );
+          console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
+        }
       }
       return client;
     }
