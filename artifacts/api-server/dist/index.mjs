@@ -118481,7 +118481,7 @@ var init_hikerApiClient = __esm({
       }
       async getUserRecentMediaId(userId) {
         try {
-          const j = await hikerGet(`/v1/user/medias/recent?user_id=${encodeURIComponent(userId)}&amount=1`, this.token);
+          const j = await hikerGet(`/v1/user/medias?user_id=${encodeURIComponent(userId)}&amount=1`, this.token);
           const items = Array.isArray(j) ? j : [];
           if (!items.length) return null;
           const item = items[0];
@@ -118527,7 +118527,7 @@ var init_hikerApiClient = __esm({
             return [];
           }
           const j = await hikerGet(
-            `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
+            `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=12`,
             this.token
           );
           if (j && !Array.isArray(j) && typeof j.detail === "string") {

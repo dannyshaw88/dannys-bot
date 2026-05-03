@@ -83,7 +83,7 @@ export class HikerApiClient {
 
   async getUserRecentMediaId(userId: string): Promise<string | null> {
     try {
-      const j = await hikerGet(`/v1/user/medias/recent?user_id=${encodeURIComponent(userId)}&amount=1`, this.token);
+      const j = await hikerGet(`/v1/user/medias?user_id=${encodeURIComponent(userId)}&amount=1`, this.token);
       const items: any[] = Array.isArray(j) ? j : [];
       if (!items.length) return null;
       const item = items[0];
@@ -145,7 +145,7 @@ export class HikerApiClient {
         return [];
       }
       const j = await hikerGet(
-        `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
+        `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=12`,
         this.token,
       );
       // HikerAPI may return an error object like { detail: "..." } — detect and throw early
