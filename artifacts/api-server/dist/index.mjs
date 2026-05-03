@@ -143345,18 +143345,24 @@ var InstagramWebClient = class {
   }
   // ── Refresh own profile feed ──────────────────────────────────────────────
   // Simulates a user pull-to-refreshing their profile page.
+  // /api/v1/feed/self/ is a dead endpoint as of 2024 — replaced by
+  // /api/v1/feed/user/{userId}/ which requires the numeric user ID extracted
+  // from the ds_user_id cookie (always present after login).
   async refreshOwnProfile() {
     return this.timed("RefreshOwnProfile", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/self/?count=12`);
-      return !!(j?.items || j?.status);
+      const userIdCookie = this.cookieJar.find((c3) => c3.startsWith("ds_user_id="));
+      const userId = userIdCookie ? userIdCookie.split("=")[1] : null;
+      if (!userId) return false;
+      const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=12`);
+      return !!(j?.items || j?.profile_grid_items);
     }, "Refresh own profile");
   }
   // ── Click Settings and Activity ───────────────────────────────────────────
-  // Simulates visiting the Settings page — fetches account security info,
-  // matching Jarvee's single GetAccountSecurityInfo call for this action.
+  // Simulates visiting the Settings page — fetches account security info.
+  // This endpoint requires POST as of 2024 (GET returns 405).
   async visitSettingsAndActivity() {
     return this.timed("VisitSettingsAndActivity", async () => {
-      const j = await this.mobileGet(`/api/v1/accounts/account_security_info/`);
+      const j = await this.mobilePost(`/api/v1/accounts/account_security_info/`);
       return !!(j?.status !== "fail");
     }, "Visit settings and activity");
   }
@@ -143365,7 +143371,7 @@ var InstagramWebClient = class {
   // simulating a user scrolling through their Instagram home feed.
   async viewTimelineFeed(count = 5) {
     return this.timed("ViewTimelineFeed", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start_fetch&is_pull_to_refresh=0`);
+      const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
       const rawItems = j?.feed_items ?? j?.items ?? [];
       if (!rawItems.length) return 0;
       const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk).slice(0, count);
@@ -143499,7 +143505,7 @@ var InstagramWebClient = class {
   // Returns the number of posts liked and reels watched.
   async likeTimelinePosts(count = 3) {
     return this.timed("LikeTimelinePosts", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/timeline/?reason=cold_start_fetch&is_pull_to_refresh=0`);
+      const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
       const rawItems = j?.feed_items ?? j?.items ?? [];
       if (!rawItems.length) return { liked: 0, watched: 0 };
       const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk);
