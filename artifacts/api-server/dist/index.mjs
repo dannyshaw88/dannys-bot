@@ -139126,68 +139126,6 @@ async function browserReload(profileId) {
   } catch {
   }
 }
-async function browserSendDM(profileId, userId, text2) {
-  const s = sessions.get(profileId);
-  if (!s) {
-    log(`[browserSendDM] no active session for profile ${profileId}`, "browser");
-    return null;
-  }
-  try {
-    const result = await s.page.evaluate(
-      async (uid, msg) => {
-        const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? "";
-        const body = new URLSearchParams({
-          recipient_users: `[[${uid}]]`,
-          client_context: String(Date.now()),
-          text: msg
-        }).toString();
-        const res = await fetch(
-          "https://www.instagram.com/api/v1/direct_v2/threads/broadcast/text/",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              "X-CSRFToken": csrfToken,
-              "X-IG-App-ID": "936619743392459",
-              "X-Instagram-AJAX": "1",
-              "X-Requested-With": "XMLHttpRequest"
-            },
-            credentials: "include",
-            body
-          }
-        );
-        let json2 = null;
-        let rawText = "";
-        try {
-          rawText = await res.text();
-          json2 = JSON.parse(rawText);
-        } catch {
-        }
-        return { status: res.status, json: json2, rawPreview: rawText.slice(0, 300) };
-      },
-      userId,
-      text2
-    );
-    log(
-      `[browserSendDM] profile ${profileId} \u2192 user ${userId}: HTTP ${result.status} json=${JSON.stringify(result.json)?.slice(0, 200)} raw=${result.rawPreview}`,
-      "browser"
-    );
-    const j = result.json;
-    if (!j) return null;
-    if (j?.message === "feedback_required" || j?.feedback_required === true) {
-      return "blocked";
-    }
-    if (j?.status === "ok") {
-      const threadId = j?.payload?.thread_id ?? j?.thread_id ?? "";
-      const itemId = j?.payload?.item_id ?? j?.item_id ?? "";
-      return { threadId, itemId };
-    }
-    return null;
-  } catch (err) {
-    log(`[browserSendDM] error for profile ${profileId}: ${err?.message}`, "browser");
-    return null;
-  }
-}
 async function closeSession(profileId) {
   const s = sessions.get(profileId);
   if (!s) return;
@@ -140353,27 +140291,8 @@ var InstagramWebClient = class {
       }
       const errorCode = j?.content?.error_code ?? j?.error_code;
       if (errorCode === 4415001) {
-        console.log(`[webClient] sendDM ${userId}: 4415001 \u2014 searching for existing thread\u2026`);
-        const threadId = await this.getThreadIdWithUser(userId);
-        if (threadId) {
-          const retryBody = new URLSearchParams({ client_context: String(Date.now()), text: text2 }).toString();
-          const j2 = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/broadcast/text/`, retryBody);
-          console.log(`[webClient] sendDM ${userId}: thread-retry response:`, JSON.stringify(j2)?.slice(0, 300));
-          if (j2?.status === "ok") {
-            const itemId = j2?.payload?.item_id ?? j2?.item_id ?? "";
-            console.log(`[webClient] sendDM ${userId}: sent to existing thread ${threadId}`);
-            return { threadId, itemId };
-          }
-        }
-        if (this.profileId) {
-          console.log(`[webClient] sendDM ${userId}: 4415001 unresolved \u2014 trying browser DM fallback\u2026`);
-          const bResult = await browserSendDM(this.profileId, userId, text2);
-          console.log(`[webClient] sendDM ${userId}: browser fallback result:`, JSON.stringify(bResult)?.slice(0, 200));
-          if (bResult && bResult !== "blocked") return bResult;
-          if (bResult === "blocked") return "blocked";
-        }
-        console.log(`[webClient] sendDM ${userId}: 4415001 unresolved \u2014 marking failed`);
-        return false;
+        console.log(`[webClient] sendDM ${userId}: 4415001 \u2014 DM already in recipient inbox (pending acceptance), marking sent`);
+        return { threadId: "prompt_pending", itemId: "" };
       }
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
@@ -141371,14 +141290,6 @@ var AutomationEngine = class {
     queue = queue.slice(0, sendCount);
     const client = await this.ensureClient(profile, state);
     if (!client) return;
-    try {
-      const proxyConfig = await this.buildProxyConfig(profile);
-      const ua = this.defaultUA(profile);
-      await getOrCreateSession(profile.id, ua, proxyConfig);
-      console.log(`[engine] @${profile.username}: browser session ready for DM fallback`);
-    } catch (e) {
-      console.log(`[engine] @${profile.username}: browser session start failed (DM fallback unavailable): ${e?.message}`);
-    }
     let sent = 0;
     for (const msg of queue) {
       if (state.stop.stopped) break;

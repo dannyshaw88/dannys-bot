@@ -3,7 +3,6 @@ import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
-import { getOrCreateSession } from "./browserSession.js";
 import type { Profile, Tool, Source } from "../shared/schema";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -865,17 +864,6 @@ class AutomationEngine {
 
     const client = await this.ensureClient(profile, state);
     if (!client) return;
-
-    // Ensure the EB browser is running so browserSendDM fallback is available
-    // when the mobile API returns 4415001 for all DM endpoints.
-    try {
-      const proxyConfig = await this.buildProxyConfig(profile);
-      const ua = this.defaultUA(profile);
-      await getOrCreateSession(profile.id, ua, proxyConfig);
-      console.log(`[engine] @${profile.username}: browser session ready for DM fallback`);
-    } catch (e: any) {
-      console.log(`[engine] @${profile.username}: browser session start failed (DM fallback unavailable): ${e?.message}`);
-    }
 
     let sent = 0;
     for (const msg of queue) {
