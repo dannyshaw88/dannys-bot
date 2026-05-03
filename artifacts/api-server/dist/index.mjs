@@ -145144,100 +145144,162 @@ var AutomationEngine = class {
     const s = tool.settings;
     const client = await this.ensureClient(profile, state);
     if (!client) return;
-    if (s.humanSessionEnabled !== false && !this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax")) {
-      try {
-        await client.visitNotifications();
-        console.log(`[engine] @${profile.username}: \u{1F514} visited notifications`);
-        this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
-      }
-      try {
-        await client.visitOwnProfile();
-        console.log(`[engine] @${profile.username}: \u{1F464} visited own profile`);
-        this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
-      }
-      try {
-        await client.refreshOwnProfile();
-        console.log(`[engine] @${profile.username}: \u{1F504} refreshed own profile`);
-        this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
-      }
-      try {
-        await client.visitSettingsAndActivity();
-        console.log(`[engine] @${profile.username}: \u2699\uFE0F visited settings & activity`);
-        this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
-      }
-    }
-    if (s.viewTimelineFeedEnabled !== false && !this.shouldSkipDueToChance(s, "viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax")) {
-      const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
-      try {
-        const viewed = await client.viewTimelineFeed(feedCount);
-        console.log(`[engine] @${profile.username}: \u{1F4F0} viewed ${viewed} timeline post(s)`);
-        this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
-      }
-    }
-    if (s.checkTimelineReelsEnabled !== false && !this.shouldSkipDueToChance(s, "checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax")) {
-      const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
-      try {
-        const watched = await client.viewTimelineReels(reelCount);
-        console.log(`[engine] @${profile.username}: \u{1F3AC} watched ${watched} timeline reels`);
-        this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reels`);
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
-      }
-    }
-    if (s.checkTimelineStoriesEnabled !== false && !this.shouldSkipDueToChance(s, "checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")) {
-      const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
-      try {
-        const watched = await client.viewTimelineStories(storyCount);
-        console.log(`[engine] @${profile.username}: \u{1F4D6} watched ${watched} timeline stories`);
-        this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
-      }
-    }
-    if (s.checkDmEnabled !== false && !this.shouldSkipDueToChance(s, "checkDmNotUsedMin", "checkDmNotUsedMax")) {
-      try {
-        const { count: pendingCount } = await client.getDirectMessagesInternal();
-        console.log(`[engine] @${profile.username}: \u{1F4AC} checked DMs (${pendingCount} pending request(s))`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DM inbox \u2014 ${pendingCount} thread${pendingCount === 1 ? "" : "s"}`);
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
-      }
-      try {
-        await this.runAutoReplyCheck(profile, client);
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
-      }
-    }
-    if (s.likeTimelinePostsEnabled !== false && !this.shouldSkipDueToChance(s, "likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax")) {
-      const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
-      try {
-        const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
-        const summary = watched > 0 ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)` : `Liked ${liked} post(s) from timeline`;
-        console.log(`[engine] @${profile.username}: \u2764\uFE0F ${summary}`);
-        if (likedPosts.length > 0) {
-          for (const post of likedPosts) {
-            this.logAction(profile.id, tool.id, "like_timeline_post", post.ownerUsername, post.shortcode, "post", "ok", "Liked timeline post");
-          }
-        } else {
-          this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+    const queue = [];
+    const enqueue = (label, enabled, notUsedMinKey, notUsedMaxKey, orderMinKey, orderMaxKey, fn) => {
+      if (!enabled) return;
+      if (this.shouldSkipDueToChance(s, notUsedMinKey, notUsedMaxKey)) return;
+      const order = randInt(Number(s[orderMinKey] ?? 0), Number(s[orderMaxKey] ?? 0));
+      queue.push({ order, label, run: fn });
+    };
+    enqueue(
+      "humanSession",
+      s.humanSessionEnabled !== false,
+      "humanSessionNotUsedMin",
+      "humanSessionNotUsedMax",
+      "humanSessionOrderMin",
+      "humanSessionOrderMax",
+      async () => {
+        try {
+          await client.visitNotifications();
+          console.log(`[engine] @${profile.username}: \u{1F514} visited notifications`);
+          this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
         }
-      } catch (e) {
-        console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
+        try {
+          await client.visitOwnProfile();
+          console.log(`[engine] @${profile.username}: \u{1F464} visited own profile`);
+          this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
+        }
+        try {
+          await client.refreshOwnProfile();
+          console.log(`[engine] @${profile.username}: \u{1F504} refreshed own profile`);
+          this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
+        }
+        try {
+          await client.visitSettingsAndActivity();
+          console.log(`[engine] @${profile.username}: \u2699\uFE0F visited settings & activity`);
+          this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+        }
       }
-    }
-    if (s.repostEnabled && s.repostSourceUsername && !this.shouldSkipDueToChance(s, "repostNotUsedMin", "repostNotUsedMax")) {
-      const sourceUsername = String(s.repostSourceUsername ?? "").trim();
-      if (sourceUsername) {
+    );
+    enqueue(
+      "viewTimelineFeed",
+      s.viewTimelineFeedEnabled !== false,
+      "viewTimelineFeedNotUsedMin",
+      "viewTimelineFeedNotUsedMax",
+      "viewTimelineFeedOrderMin",
+      "viewTimelineFeedOrderMax",
+      async () => {
+        const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
+        try {
+          const viewed = await client.viewTimelineFeed(feedCount);
+          console.log(`[engine] @${profile.username}: \u{1F4F0} viewed ${viewed} timeline post(s)`);
+          this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
+        }
+      }
+    );
+    enqueue(
+      "checkTimelineReels",
+      s.checkTimelineReelsEnabled !== false,
+      "checkTimelineReelsNotUsedMin",
+      "checkTimelineReelsNotUsedMax",
+      "checkTimelineReelsOrderMin",
+      "checkTimelineReelsOrderMax",
+      async () => {
+        const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
+        try {
+          const watched = await client.viewTimelineReels(reelCount);
+          console.log(`[engine] @${profile.username}: \u{1F3AC} watched ${watched} timeline reels`);
+          this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reels`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
+        }
+      }
+    );
+    enqueue(
+      "checkTimelineStories",
+      s.checkTimelineStoriesEnabled !== false,
+      "checkTimelineStoriesNotUsedMin",
+      "checkTimelineStoriesNotUsedMax",
+      "checkTimelineStoriesOrderMin",
+      "checkTimelineStoriesOrderMax",
+      async () => {
+        const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
+        try {
+          const watched = await client.viewTimelineStories(storyCount);
+          console.log(`[engine] @${profile.username}: \u{1F4D6} watched ${watched} timeline stories`);
+          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
+        }
+      }
+    );
+    enqueue(
+      "checkDm",
+      s.checkDmEnabled !== false,
+      "checkDmNotUsedMin",
+      "checkDmNotUsedMax",
+      "checkDmOrderMin",
+      "checkDmOrderMax",
+      async () => {
+        try {
+          const { count: pendingCount } = await client.getDirectMessagesInternal();
+          console.log(`[engine] @${profile.username}: \u{1F4AC} checked DMs (${pendingCount} pending request(s))`);
+          this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DM inbox \u2014 ${pendingCount} thread${pendingCount === 1 ? "" : "s"}`);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
+        }
+        try {
+          await this.runAutoReplyCheck(profile, client);
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
+        }
+      }
+    );
+    enqueue(
+      "likeTimelinePosts",
+      s.likeTimelinePostsEnabled !== false,
+      "likeTimelinePostsNotUsedMin",
+      "likeTimelinePostsNotUsedMax",
+      "likeTimelinePostsOrderMin",
+      "likeTimelinePostsOrderMax",
+      async () => {
+        const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
+        try {
+          const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
+          const summary = watched > 0 ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)` : `Liked ${liked} post(s) from timeline`;
+          console.log(`[engine] @${profile.username}: \u2764\uFE0F ${summary}`);
+          if (likedPosts.length > 0) {
+            for (const post of likedPosts) {
+              this.logAction(profile.id, tool.id, "like_timeline_post", post.ownerUsername, post.shortcode, "post", "ok", "Liked timeline post");
+            }
+          } else {
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+          }
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
+        }
+      }
+    );
+    const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
+    enqueue(
+      "repost",
+      !!(s.repostEnabled && repostSourceUsername),
+      "repostNotUsedMin",
+      "repostNotUsedMax",
+      "repostOrderMin",
+      "repostOrderMax",
+      async () => {
+        const sourceUsername = repostSourceUsername;
         try {
           const disableAt = Number(s.repostDisableAtPostCount ?? 0);
           if (disableAt > 0) {
@@ -145303,6 +145365,12 @@ var AutomationEngine = class {
           this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", e?.message ?? "unknown error");
         }
       }
+    );
+    queue.sort((a2, b3) => a2.order - b3.order);
+    const orderSummary = queue.map((e) => `${e.label}(${e.order})`).join(" \u2192 ");
+    console.log(`[engine] @${profile.username}: session order: ${orderSummary || "(nothing to run)"}`);
+    for (const entry of queue) {
+      await entry.run();
     }
   }
   // ── Follow session ────────────────────────────────────────────────────────

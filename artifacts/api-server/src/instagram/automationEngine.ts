@@ -1518,120 +1518,173 @@ class AutomationEngine {
     const client = await this.ensureClient(profile, state);
     if (!client) return;
 
-    // ── Human Session (notifications → own profile → refresh → settings) ──────
-    if (s.humanSessionEnabled !== false && !this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax")) {
-      try {
-        await client.visitNotifications();
-        console.log(`[engine] @${profile.username}: 🔔 visited notifications`);
-        this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
-      }
-      try {
-        await client.visitOwnProfile();
-        console.log(`[engine] @${profile.username}: 👤 visited own profile`);
-        this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
-      }
-      try {
-        await client.refreshOwnProfile();
-        console.log(`[engine] @${profile.username}: 🔄 refreshed own profile`);
-        this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
-      }
-      try {
-        await client.visitSettingsAndActivity();
-        console.log(`[engine] @${profile.username}: ⚙️ visited settings & activity`);
-        this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
-      }
-    }
+    // Build the ordered action queue.
+    // Each entry: { order: number (random from OrderMin/Max), run: async fn }
+    // Actions are sorted ascending by order before executing, so lower numbers
+    // run first. Ties preserve insertion order (stable sort).
+    // Actions that are disabled or skipped by the NotUsed chance are excluded.
+    type QueueEntry = { order: number; label: string; run: () => Promise<void> };
+    const queue: QueueEntry[] = [];
+
+    // helper — add action to queue if enabled and not skipped by chance
+    const enqueue = (
+      label: string,
+      enabled: boolean,
+      notUsedMinKey: string, notUsedMaxKey: string,
+      orderMinKey: string,   orderMaxKey: string,
+      fn: () => Promise<void>,
+    ) => {
+      if (!enabled) return;
+      if (this.shouldSkipDueToChance(s, notUsedMinKey, notUsedMaxKey)) return;
+      const order = randInt(Number(s[orderMinKey] ?? 0), Number(s[orderMaxKey] ?? 0));
+      queue.push({ order, label, run: fn });
+    };
+
+    // ── Human Session ────────────────────────────────────────────────────────
+    enqueue("humanSession",
+      s.humanSessionEnabled !== false,
+      "humanSessionNotUsedMin", "humanSessionNotUsedMax",
+      "humanSessionOrderMin",   "humanSessionOrderMax",
+      async () => {
+        try {
+          await client.visitNotifications();
+          console.log(`[engine] @${profile.username}: 🔔 visited notifications`);
+          this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
+        }
+        try {
+          await client.visitOwnProfile();
+          console.log(`[engine] @${profile.username}: 👤 visited own profile`);
+          this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
+        }
+        try {
+          await client.refreshOwnProfile();
+          console.log(`[engine] @${profile.username}: 🔄 refreshed own profile`);
+          this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
+        }
+        try {
+          await client.visitSettingsAndActivity();
+          console.log(`[engine] @${profile.username}: ⚙️ visited settings & activity`);
+          this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+        }
+      },
+    );
 
     // ── View Timeline Feed ───────────────────────────────────────────────────
-    if (s.viewTimelineFeedEnabled !== false && !this.shouldSkipDueToChance(s, "viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax")) {
-      const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
-      try {
-        const viewed = await client.viewTimelineFeed(feedCount);
-        console.log(`[engine] @${profile.username}: 📰 viewed ${viewed} timeline post(s)`);
-        this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
-      }
-    }
+    enqueue("viewTimelineFeed",
+      s.viewTimelineFeedEnabled !== false,
+      "viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax",
+      "viewTimelineFeedOrderMin",   "viewTimelineFeedOrderMax",
+      async () => {
+        const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
+        try {
+          const viewed = await client.viewTimelineFeed(feedCount);
+          console.log(`[engine] @${profile.username}: 📰 viewed ${viewed} timeline post(s)`);
+          this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
+        }
+      },
+    );
 
     // ── Watch Timeline Reels ─────────────────────────────────────────────────
-    if (s.checkTimelineReelsEnabled !== false && !this.shouldSkipDueToChance(s, "checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax")) {
-      const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
-      try {
-        const watched = await client.viewTimelineReels(reelCount);
-        console.log(`[engine] @${profile.username}: 🎬 watched ${watched} timeline reels`);
-        this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reels`);
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
-      }
-    }
+    enqueue("checkTimelineReels",
+      s.checkTimelineReelsEnabled !== false,
+      "checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax",
+      "checkTimelineReelsOrderMin",   "checkTimelineReelsOrderMax",
+      async () => {
+        const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
+        try {
+          const watched = await client.viewTimelineReels(reelCount);
+          console.log(`[engine] @${profile.username}: 🎬 watched ${watched} timeline reels`);
+          this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reels`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
+        }
+      },
+    );
 
     // ── Watch Timeline Stories ───────────────────────────────────────────────
-    if (s.checkTimelineStoriesEnabled !== false && !this.shouldSkipDueToChance(s, "checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")) {
-      const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
-      try {
-        const watched = await client.viewTimelineStories(storyCount);
-        console.log(`[engine] @${profile.username}: 📖 watched ${watched} timeline stories`);
-        this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
-      }
-    }
+    enqueue("checkTimelineStories",
+      s.checkTimelineStoriesEnabled !== false,
+      "checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax",
+      "checkTimelineStoriesOrderMin",   "checkTimelineStoriesOrderMax",
+      async () => {
+        const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
+        try {
+          const watched = await client.viewTimelineStories(storyCount);
+          console.log(`[engine] @${profile.username}: 📖 watched ${watched} timeline stories`);
+          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
+        }
+      },
+    );
 
-    // ── Check Direct Messages (GetDirectMessagesInternal — matches Jarvee) ───
-    if (s.checkDmEnabled !== false && !this.shouldSkipDueToChance(s, "checkDmNotUsedMin", "checkDmNotUsedMax")) {
-      try {
-        const { count: pendingCount } = await client.getDirectMessagesInternal();
-        console.log(`[engine] @${profile.username}: 💬 checked DMs (${pendingCount} pending request(s))`);
-        this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DM inbox — ${pendingCount} thread${pendingCount === 1 ? "" : "s"}`);
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
-      }
-      // Auto-reply scan — runs after every DM check if the contact tool has auto-reply rules
-      try {
-        await this.runAutoReplyCheck(profile, client);
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
-      }
-    }
+    // ── Check Direct Messages ────────────────────────────────────────────────
+    enqueue("checkDm",
+      s.checkDmEnabled !== false,
+      "checkDmNotUsedMin", "checkDmNotUsedMax",
+      "checkDmOrderMin",   "checkDmOrderMax",
+      async () => {
+        try {
+          const { count: pendingCount } = await client.getDirectMessagesInternal();
+          console.log(`[engine] @${profile.username}: 💬 checked DMs (${pendingCount} pending request(s))`);
+          this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DM inbox — ${pendingCount} thread${pendingCount === 1 ? "" : "s"}`);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
+        }
+        // Auto-reply scan always runs after DM check
+        try {
+          await this.runAutoReplyCheck(profile, client);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
+        }
+      },
+    );
 
     // ── Like Posts from Timeline ─────────────────────────────────────────────
-    if (s.likeTimelinePostsEnabled !== false && !this.shouldSkipDueToChance(s, "likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax")) {
-      const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
-      try {
-        const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
-        const summary = watched > 0
-          ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)`
-          : `Liked ${liked} post(s) from timeline`;
-        console.log(`[engine] @${profile.username}: ❤️ ${summary}`);
-        if (likedPosts.length > 0) {
-          // Log each liked post individually so the session log shows a per-post
-          // clickable link. sourceValue = shortcode, sourceType = "post".
-          for (const post of likedPosts) {
-            this.logAction(profile.id, tool.id, "like_timeline_post", post.ownerUsername, post.shortcode, "post", "ok", "Liked timeline post");
+    enqueue("likeTimelinePosts",
+      s.likeTimelinePostsEnabled !== false,
+      "likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax",
+      "likeTimelinePostsOrderMin",   "likeTimelinePostsOrderMax",
+      async () => {
+        const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
+        try {
+          const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
+          const summary = watched > 0
+            ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)`
+            : `Liked ${liked} post(s) from timeline`;
+          console.log(`[engine] @${profile.username}: ❤️ ${summary}`);
+          if (likedPosts.length > 0) {
+            for (const post of likedPosts) {
+              this.logAction(profile.id, tool.id, "like_timeline_post", post.ownerUsername, post.shortcode, "post", "ok", "Liked timeline post");
+            }
+          } else {
+            this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
           }
-        } else {
-          this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
         }
-      } catch (e: any) {
-        console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
-      }
-    }
+      },
+    );
 
     // ── Repost ───────────────────────────────────────────────────────────────
-    if (s.repostEnabled && s.repostSourceUsername && !this.shouldSkipDueToChance(s, "repostNotUsedMin", "repostNotUsedMax")) {
-      const sourceUsername = String(s.repostSourceUsername ?? "").trim();
-      if (sourceUsername) {
+    const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
+    enqueue("repost",
+      !!(s.repostEnabled && repostSourceUsername),
+      "repostNotUsedMin", "repostNotUsedMax",
+      "repostOrderMin",   "repostOrderMax",
+      async () => {
+        const sourceUsername = repostSourceUsername;
         try {
-          // Check disable-at-post-count first (reads own bio stats)
           const disableAt = Number(s.repostDisableAtPostCount ?? 0);
           if (disableAt > 0) {
             const stats = await client.getOwnProfileStats();
@@ -1643,10 +1696,8 @@ class AutomationEngine {
             }
           }
 
-          // Fetch source account's recent feed (photos only)
           const feedItems = await client.getUserFeedItems(sourceUsername);
 
-          // Find first post that hasn't been reposted yet
           let candidate: { mediaId: string; shortcode: string; imageUrl: string; caption: string } | null = null;
           for (const item of feedItems) {
             const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
@@ -1663,7 +1714,6 @@ class AutomationEngine {
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);
             }
           } else {
-            // Download, alter, upload
             const imageBuffer   = await client.downloadImage(candidate.imageUrl);
             const level         = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
@@ -1693,14 +1743,24 @@ class AutomationEngine {
             } else {
               console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${candidate.mediaId}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, "", "fail", "Upload failed");
-
             }
           }
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: repost error: ${e?.message}`);
           this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", e?.message ?? "unknown error");
         }
-      }
+      },
+    );
+
+    // Sort ascending by order value (stable — ties keep insertion order)
+    queue.sort((a, b) => a.order - b.order);
+
+    const orderSummary = queue.map(e => `${e.label}(${e.order})`).join(" → ");
+    console.log(`[engine] @${profile.username}: session order: ${orderSummary || "(nothing to run)"}`);
+
+    // Execute in sorted order
+    for (const entry of queue) {
+      await entry.run();
     }
   }
 
