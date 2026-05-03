@@ -2,6 +2,11 @@ import * as https from "https";
 
 const HIKER_HOST = "api.hikerapi.com";
 
+/** Thrown when HikerAPI has no cached data for a user (not a hard error — caller may fall back). */
+export class HikerCacheMissError extends Error {
+  constructor(msg: string) { super(msg); this.name = "HikerCacheMissError"; }
+}
+
 function hikerGet(path: string, token: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -99,8 +104,13 @@ export class HikerApiClient {
       const amount = Math.min(Math.max(max, 1), 200);
       const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
       if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
-        const msg = `HikerAPI getFollowers error: ${j.detail ?? j.exc_type ?? JSON.stringify(j)}`;
+        const detail: string = j.detail ?? j.exc_type ?? JSON.stringify(j);
+        const msg = `HikerAPI getFollowers error: ${detail}`;
         console.error(`[hikerApi] ${msg}`);
+        // "Entries not found" means HikerAPI has no cached data — caller can fall back gracefully.
+        if (/entries not found/i.test(detail) || /not found/i.test(detail)) {
+          throw new HikerCacheMissError(msg);
+        }
         throw new Error(msg);
       }
       const users: any[] = Array.isArray(j) ? j

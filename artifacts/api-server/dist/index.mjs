@@ -118389,7 +118389,8 @@ var init_dist2 = __esm({
 // src/instagram/hikerApiClient.ts
 var hikerApiClient_exports = {};
 __export(hikerApiClient_exports, {
-  HikerApiClient: () => HikerApiClient
+  HikerApiClient: () => HikerApiClient,
+  HikerCacheMissError: () => HikerCacheMissError
 });
 import * as https2 from "https";
 function hikerGet(path4, token) {
@@ -118425,11 +118426,17 @@ function hikerGet(path4, token) {
     req.end();
   });
 }
-var HIKER_HOST, HikerApiClient;
+var HIKER_HOST, HikerCacheMissError, HikerApiClient;
 var init_hikerApiClient = __esm({
   "src/instagram/hikerApiClient.ts"() {
     "use strict";
     HIKER_HOST = "api.hikerapi.com";
+    HikerCacheMissError = class extends Error {
+      constructor(msg) {
+        super(msg);
+        this.name = "HikerCacheMissError";
+      }
+    };
     HikerApiClient = class {
       constructor(token) {
         this.token = token;
@@ -118496,8 +118503,12 @@ var init_hikerApiClient = __esm({
           const amount = Math.min(Math.max(max, 1), 200);
           const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
           if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
-            const msg = `HikerAPI getFollowers error: ${j.detail ?? j.exc_type ?? JSON.stringify(j)}`;
+            const detail = j.detail ?? j.exc_type ?? JSON.stringify(j);
+            const msg = `HikerAPI getFollowers error: ${detail}`;
             console.error(`[hikerApi] ${msg}`);
+            if (/entries not found/i.test(detail) || /not found/i.test(detail)) {
+              throw new HikerCacheMissError(msg);
+            }
             throw new Error(msg);
           }
           const users = Array.isArray(j) ? j : Array.isArray(j?.users) ? j.users : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : Array.isArray(j?.response?.users) ? j.response.users : [];
@@ -144718,7 +144729,16 @@ var AutomationEngine = class {
     if (!client) return;
     let followers = [];
     if (hikerClient) {
-      followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
+      try {
+        followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
+      } catch (e) {
+        if (e instanceof HikerCacheMissError) {
+          console.warn(`[engine] @${profile.username}: HikerAPI cache miss for own followers, falling back to account API`);
+          followers = await client.getFollowers(ownUserId, usersToCheck);
+        } else {
+          throw e;
+        }
+      }
     } else {
       followers = await client.getFollowers(ownUserId, usersToCheck);
     }

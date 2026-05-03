@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import { InstagramWebClient } from "./instagramWebClient";
-import { HikerApiClient } from "./hikerApiClient";
+import { HikerApiClient, HikerCacheMissError } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
@@ -769,7 +769,17 @@ class AutomationEngine {
 
     let followers: { pk: string; username: string; fullName: string }[] = [];
     if (hikerClient) {
-      followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
+      try {
+        followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
+      } catch (e: any) {
+        if (e instanceof HikerCacheMissError) {
+          // HikerAPI has no cached data for this account's followers — fall back to account API.
+          console.warn(`[engine] @${profile.username}: HikerAPI cache miss for own followers, falling back to account API`);
+          followers = await client.getFollowers(ownUserId, usersToCheck);
+        } else {
+          throw e;
+        }
+      }
     } else {
       followers = await client.getFollowers(ownUserId, usersToCheck);
     }
