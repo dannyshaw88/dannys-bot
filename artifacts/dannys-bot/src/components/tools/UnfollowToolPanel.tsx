@@ -16,33 +16,24 @@ interface UnfollowToolPanelProps {
   profile: Profile;
 }
 
-const UNFOLLOW_KEY_MAP: Record<string, string[]> = {
-  // Settings
-  timing:            ["delayMin","delayMax"],
-  process:           ["processMin","processMax"],
-  delay:             ["delayAfterUnfollowMin","delayAfterUnfollowMax"],
-  age:               ["minFollowAgeDays"],
-  // Auto follow/unfollow
-  autoEnabled:       ["autoFollowUnfollowEnabled"],
-  autoStopAt:        ["autoStopUnfollowAtFollowingsMin","autoStopUnfollowAtFollowingsMax"],
-  autoStartAfter:    ["autoStartFollowAfterMin","autoStartFollowAfterMax"],
-  // startStop is special — handled in handler
-};
-
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
     { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
   ]},
   { label: "Settings", options: [
-    { key: "age",     label: "Unfollow After (days)",    description: "Minimum days since follow before unfollowing" },
-    { key: "timing",  label: "Wait Between Executions",  description: "Min/max minutes between sessions" },
-    { key: "process", label: "Process Users",            description: "Min/max users to unfollow per session" },
-    { key: "delay",   label: "Delay Between Each",       description: "Min/max seconds between each unfollow action" },
+    { key: "uf_settings", label: "Unfollow Settings", description: "Timing, limits and age filters for unfollow actions", subOptions: [
+      { key: "uf_age",    label: "Min follow age (days)",                    settingKeys: ["minFollowAgeDays"] },
+      { key: "uf_wait",   label: "Wait between sessions (min / max mins)",   settingKeys: ["delayMin","delayMax"] },
+      { key: "uf_count",  label: "Users per session (min / max)",            settingKeys: ["processMin","processMax"] },
+      { key: "uf_delay",  label: "Delay after each unfollow (min / max secs)", settingKeys: ["delayAfterUnfollowMin","delayAfterUnfollowMax"] },
+    ]},
   ]},
   { label: "Auto Follow / Unfollow", options: [
-    { key: "autoEnabled",    label: "Auto Follow/Unfollow Enabled", description: "Toggle automatic switching between unfollow and follow" },
-    { key: "autoStopAt",     label: "Stop at Followings Count",     description: "Target followings count to stop the unfollow tool" },
-    { key: "autoStartAfter", label: "Start Follow After (min)",     description: "Minutes to wait before enabling the follow tool" },
+    { key: "uf_autoFU", label: "Auto Follow / Unfollow", description: "Automatic switching between unfollow and follow tools", subOptions: [
+      { key: "uf_autoEnabled",    label: "Enabled",                                        settingKeys: ["autoFollowUnfollowEnabled"] },
+      { key: "uf_autoStopAt",     label: "Stop unfollow at followings count (min / max)", settingKeys: ["autoStopUnfollowAtFollowingsMin","autoStopUnfollowAtFollowingsMax"] },
+      { key: "uf_autoStartAfter", label: "Start follow after (min / max mins)",           settingKeys: ["autoStartFollowAfterMin","autoStartFollowAfterMax"] },
+    ]},
   ]},
 ];
 
@@ -83,9 +74,9 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [settings]);
 
-  const handleCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
-    const copyEnabled = selectedKeys.has("startStop");
-    const keysToSend = [...selectedKeys].filter(k => k !== "startStop").flatMap(k => UNFOLLOW_KEY_MAP[k] ?? []);
+  const handleCopy = async (targetIds: number[], expandedKeys: string[]) => {
+    const copyEnabled = expandedKeys.includes("startStop");
+    const keysToSend  = expandedKeys.filter(k => k !== "startStop");
     await copyToolSettingsToProfiles(
       settings as Record<string, unknown>,
       "unfollow",

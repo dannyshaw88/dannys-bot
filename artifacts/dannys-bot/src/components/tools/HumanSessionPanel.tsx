@@ -38,34 +38,63 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
-  const HUMAN_KEY_MAP: Record<string, string[]> = {
-    humanToolsDelay:    ["delayMin","delayMax"],
-    viewTimelineFeed:   ["viewTimelineFeedEnabled","viewTimelineFeedMin","viewTimelineFeedMax","viewTimelineFeedOrderMin","viewTimelineFeedOrderMax","viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"],
-    humanSession:       ["humanSessionEnabled","humanSessionOrderMin","humanSessionOrderMax","humanSessionNotUsedMin","humanSessionNotUsedMax"],
-    checkReels:         ["checkTimelineReelsEnabled","checkTimelineReelsMin","checkTimelineReelsMax","checkTimelineReelsOrderMin","checkTimelineReelsOrderMax","checkTimelineReelsNotUsedMin","checkTimelineReelsNotUsedMax"],
-    checkStories:       ["checkTimelineStoriesEnabled","checkTimelineStoriesMin","checkTimelineStoriesMax","checkTimelineStoriesOrderMin","checkTimelineStoriesOrderMax","checkTimelineStoriesNotUsedMin","checkTimelineStoriesNotUsedMax"],
-    checkDm:            ["checkDmEnabled","checkDmMin","checkDmMax","checkDmOrderMin","checkDmOrderMax","checkDmNotUsedMin","checkDmNotUsedMax"],
-    likeTimelinePosts:  ["likeTimelinePostsEnabled","likeTimelinePostsMin","likeTimelinePostsMax","likeTimelinePostsOrderMin","likeTimelinePostsOrderMax","likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"],
-    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostImageSettings","repostCaptionText","repostDisableComments","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
-  };
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "Timing", options: [
-      { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs" },
+      { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs", subOptions: [
+        { key: "hs_delayRange", label: "Session delay range (min / max)", settingKeys: ["delayMin","delayMax"] },
+      ]},
     ]},
     { label: "Actions", options: [
-      { key: "viewTimelineFeed",  label: "View Timeline Feed",  description: "Enabled state, duration range, order and cool-down" },
-      { key: "humanSession",      label: "Human Session (Visit Profile)", description: "Enabled, order and cool-down" },
-      { key: "checkReels",        label: "Check Timeline Reels", description: "Enabled, duration, order and cool-down" },
-      { key: "checkStories",      label: "Check Timeline Stories", description: "Enabled, duration, order and cool-down" },
-      { key: "checkDm",           label: "Check DMs",            description: "Enabled, duration, order and cool-down" },
-      { key: "likeTimelinePosts", label: "Like Timeline Posts",  description: "Enabled, count range, order and cool-down" },
-      { key: "repost",            label: "Repost",               description: "Enabled, source account, order, cool-down, stop conditions" },
+      { key: "viewTimelineFeed", label: "View Timeline Feed", description: "Scrolling through the main feed", subOptions: [
+        { key: "vtf_enabled", label: "Enabled",                          settingKeys: ["viewTimelineFeedEnabled"] },
+        { key: "vtf_count",   label: "Posts per session (min / max)",    settingKeys: ["viewTimelineFeedMin","viewTimelineFeedMax"] },
+        { key: "vtf_order",   label: "Execution order (min / max)",      settingKeys: ["viewTimelineFeedOrderMin","viewTimelineFeedOrderMax"] },
+        { key: "vtf_chance",  label: "Run chance / cool-down (min / max)", settingKeys: ["viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"] },
+      ]},
+      { key: "humanSession", label: "Human Session (Visit Profile)", description: "Core session order and cool-down", subOptions: [
+        { key: "hs_enabled", label: "Enabled",                            settingKeys: ["humanSessionEnabled"] },
+        { key: "hs_order",   label: "Execution order (min / max)",        settingKeys: ["humanSessionOrderMin","humanSessionOrderMax"] },
+        { key: "hs_chance",  label: "Run chance / cool-down (min / max)", settingKeys: ["humanSessionNotUsedMin","humanSessionNotUsedMax"] },
+      ]},
+      { key: "checkReels", label: "Check Timeline Reels", description: "View reels while active", subOptions: [
+        { key: "cr_enabled", label: "Enabled",                            settingKeys: ["checkTimelineReelsEnabled"] },
+        { key: "cr_count",   label: "Reels per session (min / max)",      settingKeys: ["checkTimelineReelsMin","checkTimelineReelsMax"] },
+        { key: "cr_order",   label: "Execution order (min / max)",        settingKeys: ["checkTimelineReelsOrderMin","checkTimelineReelsOrderMax"] },
+        { key: "cr_chance",  label: "Run chance / cool-down (min / max)", settingKeys: ["checkTimelineReelsNotUsedMin","checkTimelineReelsNotUsedMax"] },
+      ]},
+      { key: "checkStories", label: "Check Timeline Stories", description: "Watch stories while active", subOptions: [
+        { key: "cs_enabled", label: "Enabled",                            settingKeys: ["checkTimelineStoriesEnabled"] },
+        { key: "cs_count",   label: "Stories per session (min / max)",    settingKeys: ["checkTimelineStoriesMin","checkTimelineStoriesMax"] },
+        { key: "cs_order",   label: "Execution order (min / max)",        settingKeys: ["checkTimelineStoriesOrderMin","checkTimelineStoriesOrderMax"] },
+        { key: "cs_chance",  label: "Run chance / cool-down (min / max)", settingKeys: ["checkTimelineStoriesNotUsedMin","checkTimelineStoriesNotUsedMax"] },
+      ]},
+      { key: "checkDm", label: "Check DMs", description: "Read direct messages", subOptions: [
+        { key: "dm_enabled", label: "Enabled",                            settingKeys: ["checkDmEnabled"] },
+        { key: "dm_count",   label: "DMs per session (min / max)",        settingKeys: ["checkDmMin","checkDmMax"] },
+        { key: "dm_order",   label: "Execution order (min / max)",        settingKeys: ["checkDmOrderMin","checkDmOrderMax"] },
+        { key: "dm_chance",  label: "Run chance / cool-down (min / max)", settingKeys: ["checkDmNotUsedMin","checkDmNotUsedMax"] },
+      ]},
+      { key: "likeTimelinePosts", label: "Like Timeline Posts", description: "Like posts from your feed", subOptions: [
+        { key: "ltp_enabled", label: "Enabled",                            settingKeys: ["likeTimelinePostsEnabled"] },
+        { key: "ltp_count",   label: "Likes per session (min / max)",      settingKeys: ["likeTimelinePostsMin","likeTimelinePostsMax"] },
+        { key: "ltp_order",   label: "Execution order (min / max)",        settingKeys: ["likeTimelinePostsOrderMin","likeTimelinePostsOrderMax"] },
+        { key: "ltp_chance",  label: "Run chance / cool-down (min / max)", settingKeys: ["likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"] },
+      ]},
+      { key: "repost", label: "Repost", description: "Repost settings for source account, alteration, caption and stop conditions", subOptions: [
+        { key: "rp_enabled",    label: "Enabled",                           settingKeys: ["repostEnabled"] },
+        { key: "rp_source",     label: "Source account",                    settingKeys: ["repostSourceUsername"] },
+        { key: "rp_alteration", label: "Alteration & image settings",       settingKeys: ["repostAlterationLevel","repostImageSettings"] },
+        { key: "rp_caption",    label: "Caption text",                      settingKeys: ["repostCaptionText"] },
+        { key: "rp_comments",   label: "Disable comments",                  settingKeys: ["repostDisableComments"] },
+        { key: "rp_order",      label: "Execution order (min / max)",       settingKeys: ["repostOrderMin","repostOrderMax"] },
+        { key: "rp_chance",     label: "Run chance / cool-down (min / max)", settingKeys: ["repostNotUsedMin","repostNotUsedMax"] },
+        { key: "rp_stop",       label: "Stop conditions",                   settingKeys: ["repostDisableAtPostCount","repostDisableWhenExhausted"] },
+      ]},
     ]},
   ];
 
-  const handleHumanCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
-    const keysToSend = [...selectedKeys].flatMap(k => HUMAN_KEY_MAP[k] ?? []);
-    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend);
+  const handleHumanCopy = async (targetIds: number[], expandedKeys: string[]) => {
+    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, expandedKeys);
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 

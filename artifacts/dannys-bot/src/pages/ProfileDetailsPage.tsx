@@ -141,16 +141,16 @@ export function ProfileDetailsPage() {
 
   const otherProfiles = allProfiles?.filter(p => p.id !== profileId) ?? [];
 
-  const handleAccountCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
+  const handleAccountCopy = async (targetIds: number[], expandedKeys: string[]) => {
     if (!formData) return;
     const patch: Record<string, any> = {};
-    if (selectedKeys.has("apiLimits")) patch.apiLimits = formData.apiLimits;
-    if (selectedKeys.has("activeTimer")) {
+    if (expandedKeys.includes("apiLimits")) patch.apiLimits = formData.apiLimits;
+    if (expandedKeys.includes("activeTimer")) {
       patch.activeTimerEnabled = formData.activeTimerEnabled;
       patch.activeTimerStart = formData.activeTimerStart;
       patch.activeTimerEnd = formData.activeTimerEnd;
     }
-    if (selectedKeys.has("profileSync")) {
+    if (expandedKeys.includes("profileSync")) {
       patch.syncEnabled = formData.syncEnabled;
       patch.syncIntervalMin = formData.syncIntervalMin;
       patch.syncIntervalMax = formData.syncIntervalMax;

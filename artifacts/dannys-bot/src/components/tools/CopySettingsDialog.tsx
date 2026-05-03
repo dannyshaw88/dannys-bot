@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, CheckCircle2, Loader2, Search } from "lucide-react";
+import { Copy, CheckCircle2, Loader2, Search, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -8,10 +8,17 @@ import {
 import { Label } from "@/components/ui/label";
 import type { Profile } from "@shared/schema";
 
+export interface CopySubOption {
+  key: string;
+  label: string;
+  settingKeys: string[];
+}
+
 export interface CopyOption {
   key: string;
   label: string;
   description?: string;
+  subOptions?: CopySubOption[];
 }
 
 export interface CopyOptionGroup {
@@ -25,18 +32,45 @@ interface Props {
   title: string;
   profiles: Profile[];
   optionGroups: CopyOptionGroup[];
-  onCopy: (targetIds: number[], selectedKeys: Set<string>) => Promise<void>;
+  onCopy: (targetIds: number[], expandedKeys: string[]) => Promise<void>;
+}
+
+function buildInitialSelected(groups: CopyOptionGroup[]): Set<string> {
+  const all = new Set<string>();
+  groups.forEach(g =>
+    g.options.forEach(o => {
+      if (o.subOptions?.length) {
+        o.subOptions.forEach(s => all.add(s.key));
+      } else {
+        all.add(o.key);
+      }
+    })
+  );
+  return all;
+}
+
+function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): string[] {
+  const result: string[] = [];
+  for (const g of groups) {
+    for (const o of g.options) {
+      if (!o.subOptions?.length) {
+        if (selected.has(o.key)) result.push(o.key);
+      } else {
+        for (const sub of o.subOptions) {
+          if (selected.has(sub.key)) result.push(...sub.settingKeys);
+        }
+      }
+    }
+  }
+  return result;
 }
 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
-  const [targets, setTargets]     = useState<Set<number>>(new Set());
-  const [search, setSearch]       = useState("");
-  const [selected, setSelected]   = useState<Set<string>>(() => {
-    const all = new Set<string>();
-    optionGroups.forEach(g => g.options.forEach(o => all.add(o.key)));
-    return all;
-  });
-  const [status, setStatus] = useState<"idle" | "copying" | "done">("idle");
+  const [targets, setTargets]   = useState<Set<number>>(new Set());
+  const [search, setSearch]     = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
 
   const filteredProfiles = profiles.filter(p =>
     p.username.toLowerCase().includes(search.toLowerCase())
@@ -48,21 +82,54 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     return next;
   });
 
-  const toggleOption = (key: string) => setSelected(prev => {
+  const toggleExpanded = (key: string) => setExpanded(prev => {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
 
-  const allFilteredSelected = filteredProfiles.length > 0 && filteredProfiles.every(p => targets.has(p.id));
+  const toggleOptionGroup = (opt: CopyOption) => {
+    if (!opt.subOptions?.length) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(opt.key)) next.delete(opt.key); else next.add(opt.key);
+        return next;
+      });
+      return;
+    }
+    const subKeys = opt.subOptions.map(s => s.key);
+    const allSel  = subKeys.every(k => selected.has(k));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allSel) subKeys.forEach(k => next.delete(k));
+      else        subKeys.forEach(k => next.add(k));
+      return next;
+    });
+  };
 
-  const totalOptions = optionGroups.reduce((n, g) => n + g.options.length, 0);
+  const toggleSubOption = (key: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  const totalItems = optionGroups.reduce((n, g) =>
+    n + g.options.reduce((m, o) => m + (o.subOptions?.length ? o.subOptions.length : 1), 0), 0
+  );
+  const allSelected = selected.size === totalItems;
+
+  const handleSelectAll = () => {
+    if (allSelected) setSelected(new Set());
+    else             setSelected(buildInitialSelected(optionGroups));
+  };
+
+  const allFilteredSelected = filteredProfiles.length > 0 && filteredProfiles.every(p => targets.has(p.id));
 
   const handleCopy = async () => {
     if (!targets.size || !selected.size) return;
     setStatus("copying");
     try {
-      await onCopy([...targets], selected);
+      await onCopy([...targets], expandToSettingKeys(optionGroups, selected));
       setStatus("done");
       setTimeout(() => { setStatus("idle"); onOpenChange(false); }, 1200);
     } catch {
@@ -82,7 +149,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         </DialogHeader>
 
         <div className="flex min-h-0" style={{ maxHeight: "calc(90vh - 140px)" }}>
-          {/* LEFT — Profile list */}
+          {/* LEFT — profile list */}
           <div className="w-56 shrink-0 border-r border-border flex flex-col">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
@@ -91,17 +158,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   className="text-[11px] text-primary hover:underline font-medium"
                   onClick={() => {
                     if (allFilteredSelected) {
-                      setTargets(prev => {
-                        const next = new Set(prev);
-                        filteredProfiles.forEach(p => next.delete(p.id));
-                        return next;
-                      });
+                      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.delete(p.id)); return n; });
                     } else {
-                      setTargets(prev => {
-                        const next = new Set(prev);
-                        filteredProfiles.forEach(p => next.add(p.id));
-                        return next;
-                      });
+                      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.add(p.id)); return n; });
                     }
                   }}
                 >
@@ -109,7 +168,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 </button>
               )}
             </div>
-            {/* Search */}
             <div className="px-3 py-2 border-b border-border">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
@@ -131,10 +189,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   key={p.id}
                   className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
                 >
-                  <Checkbox
-                    checked={targets.has(p.id)}
-                    onCheckedChange={() => toggleTarget(p.id)}
-                  />
+                  <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} />
                   <span className="text-sm font-mono truncate">@{p.username}</span>
                 </label>
               ))}
@@ -146,23 +201,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
             )}
           </div>
 
-          {/* RIGHT — Settings to copy */}
+          {/* RIGHT — settings */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             <div className="flex items-center justify-between mb-1">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Settings to Copy</Label>
-              <button
-                className="text-[11px] text-primary hover:underline font-medium"
-                onClick={() => {
-                  if (selected.size === totalOptions) {
-                    setSelected(new Set());
-                  } else {
-                    const all = new Set<string>();
-                    optionGroups.forEach(g => g.options.forEach(o => all.add(o.key)));
-                    setSelected(all);
-                  }
-                }}
-              >
-                {selected.size === totalOptions ? "Deselect all" : "Select all"}
+              <button className="text-[11px] text-primary hover:underline font-medium" onClick={handleSelectAll}>
+                {allSelected ? "Deselect all" : "Select all"}
               </button>
             </div>
 
@@ -172,21 +216,72 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{group.label}</span>
                 </div>
                 <div className="divide-y divide-border/40">
-                  {group.options.map(opt => (
-                    <label key={opt.key} className="flex items-start gap-3 px-4 py-2.5 cursor-pointer select-none hover:bg-muted/20 transition-colors">
-                      <Checkbox
-                        checked={selected.has(opt.key)}
-                        onCheckedChange={() => toggleOption(opt.key)}
-                        className="mt-0.5 shrink-0"
-                      />
-                      <div>
-                        <p className="text-sm font-medium leading-none">{opt.label}</p>
-                        {opt.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
+                  {group.options.map(opt => {
+                    const hasSubs   = !!opt.subOptions?.length;
+                    const isExpanded = expanded.has(opt.key);
+
+                    let checked       = false;
+                    let indeterminate = false;
+                    if (hasSubs) {
+                      const subKeys = opt.subOptions!.map(s => s.key);
+                      const selCount = subKeys.filter(k => selected.has(k)).length;
+                      checked       = selCount === subKeys.length;
+                      indeterminate = selCount > 0 && selCount < subKeys.length;
+                    } else {
+                      checked = selected.has(opt.key);
+                    }
+
+                    return (
+                      <div key={opt.key}>
+                        {/* Option header */}
+                        <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/20 transition-colors">
+                          <Checkbox
+                            checked={indeterminate ? "indeterminate" : checked}
+                            onCheckedChange={() => toggleOptionGroup(opt)}
+                            className="shrink-0"
+                          />
+                          <div
+                            className="flex-1 min-w-0"
+                            onClick={hasSubs ? () => toggleExpanded(opt.key) : undefined}
+                            style={hasSubs ? { cursor: "pointer" } : undefined}
+                          >
+                            <p className="text-sm font-medium leading-none">{opt.label}</p>
+                            {opt.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
+                            )}
+                          </div>
+                          {hasSubs && (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(opt.key)}
+                              className="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-muted transition-colors"
+                            >
+                              <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Sub-options (expanded) */}
+                        {hasSubs && isExpanded && (
+                          <div className="border-t border-border/60 bg-muted/10 divide-y divide-border/30">
+                            {opt.subOptions!.map(sub => (
+                              <label
+                                key={sub.key}
+                                className="flex items-center gap-3 pl-10 pr-4 py-2 cursor-pointer select-none hover:bg-muted/20 transition-colors"
+                              >
+                                <Checkbox
+                                  checked={selected.has(sub.key)}
+                                  onCheckedChange={() => toggleSubOption(sub.key)}
+                                  className="shrink-0"
+                                />
+                                <span className="text-xs text-foreground">{sub.label}</span>
+                              </label>
+                            ))}
+                          </div>
                         )}
                       </div>
-                    </label>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}

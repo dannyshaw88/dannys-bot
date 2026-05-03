@@ -19,46 +19,33 @@ interface Props {
 
 type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
-const CONTACT_KEY_MAP: Record<string, string[]> = {
-  // Contact New Followers
-  contactOnlyAppFollowed:   ["contactOnlyAppFollowed"],
-  contactMessage:           ["contactMessage"],
-  contactCheckInterval:     ["contactCheckIntervalMin","contactCheckIntervalMax"],
-  contactPerCheck:          ["contactUsersPerCheckMin","contactUsersPerCheckMax"],
-  contactApiSource:         ["contactApiSource"],
-  // Contact Users
-  contactUsersWait:         ["contactUsersWaitMin","contactUsersWaitMax"],
-  contactUsersSendCount:    ["contactUsersSendCountMin","contactUsersSendCountMax"],
-  contactUsersDelay:        ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"],
-  contactUsersPickRandom:   ["contactUsersPickRandom"],
-  contactUsersUnsend:       ["contactUsersUnsendEnabled","contactUsersUnsendMin","contactUsersUnsendMax"],
-  // Auto Reply
-  autoReplyEnabled:         ["autoReplyEnabled"],
-  autoReplies:              ["autoReplies"],
-  // startStop is special — handled in handler
-};
-
 const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
     { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
   ]},
   { label: "Contact New Followers", options: [
-    { key: "contactOnlyAppFollowed", label: "Only App Followed",   description: "Restrict to users followed by this app" },
-    { key: "contactMessage",         label: "Message Template",    description: "The message sent to new followers" },
-    { key: "contactCheckInterval",   label: "Check Interval",      description: "Min/max minutes between follower checks" },
-    { key: "contactPerCheck",        label: "Users Per Check",     description: "How many users to contact each check" },
-    { key: "contactApiSource",       label: "API Source",          description: "Which API endpoint to use for detection" },
+    { key: "ct_newFollowers", label: "Contact New Followers", description: "Auto-messaging settings for new followers", subOptions: [
+      { key: "ct_onlyApp",       label: "Only app-followed users",                 settingKeys: ["contactOnlyAppFollowed"] },
+      { key: "ct_message",       label: "Message template",                        settingKeys: ["contactMessage"] },
+      { key: "ct_interval",      label: "Check interval (min / max mins)",         settingKeys: ["contactCheckIntervalMin","contactCheckIntervalMax"] },
+      { key: "ct_perCheck",      label: "Users per check (min / max)",             settingKeys: ["contactUsersPerCheckMin","contactUsersPerCheckMax"] },
+      { key: "ct_apiSource",     label: "API source",                              settingKeys: ["contactApiSource"] },
+    ]},
   ]},
   { label: "Contact Users", options: [
-    { key: "contactUsersWait",       label: "Wait Between Sessions", description: "Min/max minutes between contact sessions" },
-    { key: "contactUsersSendCount",  label: "Send Count",            description: "Min/max messages to send per session" },
-    { key: "contactUsersDelay",      label: "Delay Between",         description: "Seconds between individual messages" },
-    { key: "contactUsersPickRandom", label: "Pick Random",           description: "Pick users randomly from the list" },
-    { key: "contactUsersUnsend",     label: "Unsend Settings",       description: "Auto-unsend after a time window" },
+    { key: "ct_users", label: "Contact Users", description: "Settings for the manual user contact list", subOptions: [
+      { key: "ct_usersWait",       label: "Wait between sessions (min / max mins)",     settingKeys: ["contactUsersWaitMin","contactUsersWaitMax"] },
+      { key: "ct_usersSendCount",  label: "Send count per session (min / max)",         settingKeys: ["contactUsersSendCountMin","contactUsersSendCountMax"] },
+      { key: "ct_usersDelay",      label: "Delay between messages (min / max secs)",    settingKeys: ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"] },
+      { key: "ct_usersPickRandom", label: "Pick users randomly",                        settingKeys: ["contactUsersPickRandom"] },
+      { key: "ct_usersUnsend",     label: "Unsend settings",                            settingKeys: ["contactUsersUnsendEnabled","contactUsersUnsendMin","contactUsersUnsendMax"] },
+    ]},
   ]},
   { label: "Auto Reply", options: [
-    { key: "autoReplyEnabled", label: "Auto Reply Enabled", description: "Toggle the auto reply feature on/off" },
-    { key: "autoReplies",      label: "Auto Reply Rules",   description: "Trigger words and reply message pairs" },
+    { key: "ct_autoReply", label: "Auto Reply", description: "Auto-respond to incoming messages", subOptions: [
+      { key: "ct_arEnabled", label: "Enabled",     settingKeys: ["autoReplyEnabled"] },
+      { key: "ct_arRules",   label: "Reply rules", settingKeys: ["autoReplies"] },
+    ]},
   ]},
 ];
 
@@ -77,9 +64,9 @@ export function ContactToolPanel({ tool, profile }: Props) {
     return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
   })();
 
-  const handleContactCopy = async (targetIds: number[], selectedKeys: Set<string>) => {
-    const copyEnabled = selectedKeys.has("startStop");
-    const keysToSend = [...selectedKeys].filter(k => k !== "startStop").flatMap(k => CONTACT_KEY_MAP[k] ?? []);
+  const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
+    const copyEnabled = expandedKeys.includes("startStop");
+    const keysToSend  = expandedKeys.filter(k => k !== "startStop");
     await copyToolSettingsToProfiles(
       (tool.settings as Record<string, unknown>) ?? {},
       tool.type,
