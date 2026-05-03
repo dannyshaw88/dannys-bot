@@ -261,6 +261,7 @@ export const repostedPosts = sqliteTable("reposted_posts", {
   caption: text("caption").notNull().default(""),
   thumbnailUrl: text("thumbnail_url").notNull().default(""),
   repostedAt: text("reposted_at").notNull(),
+  postedShortcode: text("posted_shortcode").notNull().default(""),
 });
 
 export const repostedPostsRelations = relations(repostedPosts, ({ one }) => ({

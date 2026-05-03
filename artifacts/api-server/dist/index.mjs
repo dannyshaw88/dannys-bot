@@ -118503,6 +118503,52 @@ var init_hikerApiClient = __esm({
           return [];
         }
       }
+      // Converts a numeric media ID (e.g. "3123456789012345678_123") to the
+      // base64url shortcode Instagram uses in post URLs.
+      mediaIdToShortcode(id) {
+        const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        const numericPart = id.split("_")[0];
+        let n = BigInt(numericPart);
+        let result = "";
+        while (n > 0n) {
+          result = ALPHA[Number(n % 64n)] + result;
+          n = n / 64n;
+        }
+        return result || "0";
+      }
+      // Fetches the recent photo/album feed of a username.
+      // Returns the same shape as InstagramWebClient.getUserFeedItems so the
+      // engine can swap between the two without any glue code.
+      async getUserFeedItems(username) {
+        try {
+          const user = await this.getUserByUsername(username);
+          if (!user) return [];
+          const j = await hikerGet(
+            `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
+            this.token
+          );
+          const items = Array.isArray(j) ? j : [];
+          const results = [];
+          for (const item of items) {
+            const mediaType = item?.media_type ?? 1;
+            if (mediaType !== 1 && mediaType !== 8) continue;
+            const mediaId = String(item.id ?? item.pk ?? "");
+            if (!mediaId) continue;
+            const shortcode = item.code || this.mediaIdToShortcode(mediaId);
+            const caption = item.caption?.text ?? item.caption ?? "";
+            const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
+            const firstMedia = mediaType === 8 ? item.carousel_media?.[0] ?? item : item;
+            const candidates = firstMedia.image_versions2?.candidates ?? [];
+            const imageUrl = candidates[0]?.url ?? firstMedia.thumbnail_url ?? "";
+            if (!imageUrl) continue;
+            results.push({ mediaId, shortcode, imageUrl, caption: String(caption), takenAt });
+          }
+          return results;
+        } catch (e) {
+          console.error(`[hikerApi] getUserFeedItems @${username} error: ${e?.message}`);
+          return [];
+        }
+      }
       async getHashtagUsers(hashtag, max = 50, cursor = "") {
         try {
           const tag = hashtag.replace(/^#/, "");
@@ -139687,7 +139733,8 @@ var repostedPosts = sqliteTable("reposted_posts", {
   shortcode: text("shortcode").notNull().default(""),
   caption: text("caption").notNull().default(""),
   thumbnailUrl: text("thumbnail_url").notNull().default(""),
-  repostedAt: text("reposted_at").notNull()
+  repostedAt: text("reposted_at").notNull(),
+  postedShortcode: text("posted_shortcode").notNull().default("")
 });
 var repostedPostsRelations = relations(repostedPosts, ({ one }) => ({
   profile: one(profiles, {
@@ -143830,6 +143877,17 @@ var InstagramWebClient = class {
 // src/instagram/automationEngine.ts
 init_hikerApiClient();
 init_imageAlteration();
+function mediaIdToShortcode(id) {
+  const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const numericPart = id.split("_")[0];
+  let n = BigInt(numericPart);
+  let result = "";
+  while (n > 0n) {
+    result = ALPHA[Number(n % 64n)] + result;
+    n = n / 64n;
+  }
+  return result || "0";
+}
 function resolveCaption(template, candidate, sourceUsername, profileUsername) {
   const caption = candidate.caption ?? "";
   const hashtags = (caption.match(/#\w+/g) ?? []).join(" ");
@@ -145291,6 +145349,13 @@ var AutomationEngine = class {
       }
     );
     const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
+    let repostHikerClient = null;
+    if (s.repostUseHikerApi) {
+      const gs = await storage.getGlobalSettings();
+      if (gs.hikerApiEnabled === "true" && gs.hikerApiToken) {
+        repostHikerClient = new HikerApiClient(gs.hikerApiToken);
+      }
+    }
     enqueue(
       "repost",
       !!(s.repostEnabled && repostSourceUsername),
@@ -145311,7 +145376,8 @@ var AutomationEngine = class {
               return;
             }
           }
-          const feedItems = await client.getUserFeedItems(sourceUsername);
+          const feedItems = repostHikerClient ? await repostHikerClient.getUserFeedItems(sourceUsername) : await client.getUserFeedItems(sourceUsername);
+          console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items)`);
           let candidate = null;
           for (const item of feedItems) {
             const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
@@ -145343,6 +145409,7 @@ var AutomationEngine = class {
                 } catch {
                 }
               }
+              const postedShortcode = mediaIdToShortcode(postedMediaId);
               await storage.createRepostedPost({
                 profileId: profile.id,
                 toolId: tool.id,
@@ -145351,9 +145418,10 @@ var AutomationEngine = class {
                 shortcode: candidate.shortcode,
                 caption: candidate.caption.slice(0, 2200),
                 thumbnailUrl: candidate.imageUrl,
-                repostedAt: (/* @__PURE__ */ new Date()).toISOString()
+                repostedAt: (/* @__PURE__ */ new Date()).toISOString(),
+                postedShortcode
               });
-              console.log(`[engine] @${profile.username}: \u{1F501} reposted ${candidate.mediaId} from @${sourceUsername} (alteration=${level})`);
+              console.log(`[engine] @${profile.username}: \u{1F501} reposted ${candidate.mediaId} from @${sourceUsername} \u2192 own post ${postedShortcode} (alteration=${level})`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level})`);
             } else {
               console.warn(`[engine] @${profile.username}: \u{1F501} upload failed for ${candidate.mediaId}`);

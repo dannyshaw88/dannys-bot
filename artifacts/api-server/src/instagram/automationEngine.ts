@@ -11,6 +11,21 @@ import type { Profile, Tool, Source } from "../shared/schema";
  *  - Replaces tokens like [ORIGINALPOSTCAPTION], @USERNAME, etc.
  *  - Processes multi-level spin syntax {option A|option B|option C}
  */
+// Converts a numeric Instagram media ID to its base64url shortcode.
+// Same algorithm used in InstagramWebClient — duplicated here to avoid
+// coupling the engine to the client class.
+function mediaIdToShortcode(id: string): string {
+  const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const numericPart = id.split("_")[0];
+  let n = BigInt(numericPart);
+  let result = "";
+  while (n > 0n) {
+    result = ALPHA[Number(n % 64n)] + result;
+    n = n / 64n;
+  }
+  return result || "0";
+}
+
 function resolveCaption(
   template: string,
   candidate: { caption: string; shortcode: string },
@@ -1678,6 +1693,16 @@ class AutomationEngine {
 
     // ── Repost ───────────────────────────────────────────────────────────────
     const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
+
+    // Resolve HikerAPI client for repost scraping (if the per-tool toggle is on)
+    let repostHikerClient: HikerApiClient | null = null;
+    if (s.repostUseHikerApi) {
+      const gs = await storage.getGlobalSettings();
+      if (gs.hikerApiEnabled === "true" && gs.hikerApiToken) {
+        repostHikerClient = new HikerApiClient(gs.hikerApiToken);
+      }
+    }
+
     enqueue("repost",
       !!(s.repostEnabled && repostSourceUsername),
       "repostNotUsedMin", "repostNotUsedMax",
@@ -1696,7 +1721,13 @@ class AutomationEngine {
             }
           }
 
-          const feedItems = await client.getUserFeedItems(sourceUsername);
+          // Use HikerAPI for the scrape call if the per-tool toggle is on and
+          // a valid HikerAPI client is available; otherwise fall back to the
+          // mobile Instagram session (same account cookies).
+          const feedItems = repostHikerClient
+            ? await repostHikerClient.getUserFeedItems(sourceUsername)
+            : await client.getUserFeedItems(sourceUsername);
+          console.log(`[engine] @${profile.username}: 🔁 repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items)`);
 
           let candidate: { mediaId: string; shortcode: string; imageUrl: string; caption: string } | null = null;
           for (const item of feedItems) {
@@ -1728,6 +1759,9 @@ class AutomationEngine {
               if (s.repostDisableComments) {
                 try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
               }
+              // Convert the uploaded media ID to a shortcode so the UI can
+              // show a direct link to the user's own reposted post.
+              const postedShortcode = mediaIdToShortcode(postedMediaId);
               await storage.createRepostedPost({
                 profileId:      profile.id,
                 toolId:         tool.id,
@@ -1737,8 +1771,9 @@ class AutomationEngine {
                 caption:        candidate.caption.slice(0, 2200),
                 thumbnailUrl:   candidate.imageUrl,
                 repostedAt:     new Date().toISOString(),
+                postedShortcode,
               });
-              console.log(`[engine] @${profile.username}: 🔁 reposted ${candidate.mediaId} from @${sourceUsername} (alteration=${level})`);
+              console.log(`[engine] @${profile.username}: 🔁 reposted ${candidate.mediaId} from @${sourceUsername} → own post ${postedShortcode} (alteration=${level})`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level})`);
             } else {
               console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${candidate.mediaId}`);

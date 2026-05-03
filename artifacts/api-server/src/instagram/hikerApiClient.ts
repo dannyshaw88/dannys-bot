@@ -114,6 +114,61 @@ export class HikerApiClient {
     }
   }
 
+  // Converts a numeric media ID (e.g. "3123456789012345678_123") to the
+  // base64url shortcode Instagram uses in post URLs.
+  private mediaIdToShortcode(id: string): string {
+    const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const numericPart = id.split("_")[0];
+    let n = BigInt(numericPart);
+    let result = "";
+    while (n > 0n) {
+      result = ALPHA[Number(n % 64n)] + result;
+      n = n / 64n;
+    }
+    return result || "0";
+  }
+
+  // Fetches the recent photo/album feed of a username.
+  // Returns the same shape as InstagramWebClient.getUserFeedItems so the
+  // engine can swap between the two without any glue code.
+  async getUserFeedItems(username: string): Promise<Array<{
+    mediaId: string;
+    shortcode: string;
+    imageUrl: string;
+    caption: string;
+    takenAt: number;
+  }>> {
+    try {
+      const user = await this.getUserByUsername(username);
+      if (!user) return [];
+      const j = await hikerGet(
+        `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
+        this.token,
+      );
+      const items: any[] = Array.isArray(j) ? j : [];
+      const results: { mediaId: string; shortcode: string; imageUrl: string; caption: string; takenAt: number }[] = [];
+      for (const item of items) {
+        const mediaType: number = item?.media_type ?? 1;
+        if (mediaType !== 1 && mediaType !== 8) continue;
+        const mediaId = String(item.id ?? item.pk ?? "");
+        if (!mediaId) continue;
+        // HikerAPI sometimes returns `code` (the shortcode) directly
+        const shortcode = item.code || this.mediaIdToShortcode(mediaId);
+        const caption = item.caption?.text ?? item.caption ?? "";
+        const takenAt = item.taken_at ?? Math.floor(Date.now() / 1000);
+        const firstMedia = mediaType === 8 ? (item.carousel_media?.[0] ?? item) : item;
+        const candidates: any[] = firstMedia.image_versions2?.candidates ?? [];
+        const imageUrl = candidates[0]?.url ?? firstMedia.thumbnail_url ?? "";
+        if (!imageUrl) continue;
+        results.push({ mediaId, shortcode, imageUrl, caption: String(caption), takenAt });
+      }
+      return results;
+    } catch (e: any) {
+      console.error(`[hikerApi] getUserFeedItems @${username} error: ${e?.message}`);
+      return [];
+    }
+  }
+
   async getHashtagUsers(
     hashtag: string,
     max = 50,
