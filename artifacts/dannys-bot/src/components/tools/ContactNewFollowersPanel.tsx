@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { MessageSquare, UserCheck, Clock, Users, Zap, Shuffle, Loader2, Download } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +62,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
+      contactNewFollowersEnabled: true,
       contactOnlyAppFollowed: true,
       contactMessage: "",
       contactCheckIntervalMin: 30,
@@ -98,10 +100,22 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
 
+      {/* Enable toggle */}
+      <div className="flex items-center gap-3 px-1">
+        <Switch
+          checked={!!settings.contactNewFollowersEnabled}
+          onCheckedChange={(v) => setSettings({ ...settings, contactNewFollowersEnabled: v })}
+        />
+        <div>
+          <p className="text-sm font-semibold">Contact New Followers</p>
+          <p className="text-[11px] text-muted-foreground">Automatically queue DMs for new followers of this account.</p>
+        </div>
+      </div>
+
       <div className="border border-border rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-blue-500" />
-          <h4 className="font-semibold text-sm">Contact New Followers</h4>
+          <h4 className="font-semibold text-sm">Settings</h4>
         </div>
 
         {/* Only app-followed users */}

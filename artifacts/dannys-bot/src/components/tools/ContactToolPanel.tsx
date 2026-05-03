@@ -1,13 +1,10 @@
 import { useState } from "react";
-import { Users, UserPlus, MessageSquare, Copy, Clock, TrendingUp } from "lucide-react";
-import { format } from "date-fns";
+import { Users, UserPlus, MessageSquare, Copy } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
-import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
 import { AutoReplyPanel } from "./AutoReplyPanel";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -58,14 +55,6 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const { toast } = useToast();
   const updateToolMutation = useUpdateTool();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
-  const engineStatus = useProfileEngineStatus(tool.profileId);
-  const contactRunStatus: { label: string; executing: boolean } | null = (() => {
-    if (!tool.enabled) return null;
-    if (!engineStatus) return null;
-    const nextAt = engineStatus.nextContactAt ?? 0;
-    if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
-    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
-  })();
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const copyEnabled = expandedKeys.includes("startStop");
@@ -89,48 +78,7 @@ export function ContactToolPanel({ tool, profile }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Master Enable — always visible regardless of active sub-tab */}
-      <div className="flex items-center gap-3 px-1">
-        <Switch
-          checked={!!tool.enabled}
-          onCheckedChange={(v) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled: v })}
-          disabled={updateToolMutation.isPending}
-        />
-        <div>
-          <p className={`text-sm font-semibold ${tool.enabled ? "text-primary" : "text-foreground"}`}>
-            {tool.enabled ? "ACTIVE" : "STOPPED"}
-          </p>
-          <p className="text-[11px] text-muted-foreground">Contact Tool — queue &amp; send DMs to followers and users.</p>
-        </div>
-      </div>
-
-      {/* Status badge + items/hr estimate */}
-      {(contactRunStatus || tool.enabled) && (
-        <div className="flex items-center gap-3 flex-wrap">
-          {contactRunStatus && (
-            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: contactRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-              <Clock className="w-3 h-3 shrink-0" />
-              {contactRunStatus.executing
-                ? <span className="font-medium">Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{contactRunStatus.label}</span></>
-              }
-            </div>
-          )}
-          {tool.enabled && (() => {
-            const s = (tool.settings as any) ?? {};
-            const nfDelay   = ((s.newFollowerDelayMin ?? 60) + (s.newFollowerDelayMax ?? 240)) / 2;
-            const nfCount   = ((s.newFollowerProcessMin ?? 1) + (s.newFollowerProcessMax ?? 3)) / 2;
-            const perHour   = nfDelay > 0 ? Math.round((nfCount / (nfDelay / 60))) : 0;
-            return perHour > 0 ? (
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <TrendingUp className="w-3 h-3 shrink-0" />
-                <span>~{perHour} contacts/hr</span>
-              </div>
-            ) : null;
-          })()}
-        </div>
-      )}
-      {/* Sub-tab bar + Copy button */}
+      {/* Sub-tab bar */}
       <div className="flex items-center border-b border-border -mx-1">
         <button className={triggerClass("new-followers")} onClick={() => setActiveTab("new-followers")}>
           <UserPlus className="w-3.5 h-3.5" />

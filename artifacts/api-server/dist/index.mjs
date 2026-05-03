@@ -144669,10 +144669,12 @@ var AutomationEngine = class {
         const s = contactTool.settings;
         const now = Date.now();
         if (now >= nextFollowerCheckAt) {
-          try {
-            await this.runContactNewFollowersSession(freshProfile, contactTool, state);
-          } catch (err) {
-            console.error(`[engine] @${freshProfile.username}: new-follower contact session error: ${err?.message}`);
+          if (s.contactNewFollowersEnabled !== false) {
+            try {
+              await this.runContactNewFollowersSession(freshProfile, contactTool, state);
+            } catch (err) {
+              console.error(`[engine] @${freshProfile.username}: new-follower contact session error: ${err?.message}`);
+            }
           }
           const waitMs = randInt(
             (s.contactCheckIntervalMin ?? 30) * 6e4,
