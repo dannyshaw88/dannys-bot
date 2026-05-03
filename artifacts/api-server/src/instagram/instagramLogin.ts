@@ -365,6 +365,11 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         }
 
         // ── Phase 2b: GetTimeLine cold_start_fetch (feed/timeline) ────────
+        // NOTE: checkpoint_required here is NOT treated as a hard gate.
+        // If get_account_family returned 200, the session is valid.  Instagram
+        // sometimes returns a soft checkpoint on timeline for sessions that
+        // haven't been fully "warmed up" yet (seen in Jarvee too) — it resolves
+        // on its own with continued API activity and does NOT require the EB.
         try {
           const timelineFeed = ig.feed.timeline();
           timelineFeed.reason = "cold_start_fetch";
@@ -372,16 +377,9 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           console.error(`[instagramLogin] @${profile.username} — feed/timeline cold_start_fetch OK`);
         } catch (tlErr: any) {
           const msg: string = tlErr?.message ?? "";
-          console.error(`[instagramLogin] @${profile.username} — feed/timeline failed: ${msg}`);
-          if (tlErr instanceof IgCheckpointError || /checkpoint/i.test(msg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
-              accountStatus: "captcha",
-              checkpointUrl: extractCheckpointUrl(tlErr),
-              igDeviceState: captureDeviceState(),
-            };
-          }
+          console.error(`[instagramLogin] @${profile.username} — feed/timeline failed (non-fatal): ${msg}`);
+          // Intentionally not returning captcha here — get_account_family is the
+          // authoritative checkpoint check.  Timeline soft-checkpoints are ignored.
         }
 
         // ── Phase 2c: GetReelsTray (feed/reels_tray) ─────────────────────

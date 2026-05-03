@@ -138754,16 +138754,7 @@ async function verifyInstagramCredentials(profile) {
           console.error(`[instagramLogin] @${profile.username} \u2014 feed/timeline cold_start_fetch OK`);
         } catch (tlErr) {
           const msg = tlErr?.message ?? "";
-          console.error(`[instagramLogin] @${profile.username} \u2014 feed/timeline failed: ${msg}`);
-          if (tlErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(msg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
-              accountStatus: "captcha",
-              checkpointUrl: extractCheckpointUrl(tlErr),
-              igDeviceState: captureDeviceState2()
-            };
-          }
+          console.error(`[instagramLogin] @${profile.username} \u2014 feed/timeline failed (non-fatal): ${msg}`);
         }
         try {
           const reelsFeed = ig2.feed.reelsTray();
