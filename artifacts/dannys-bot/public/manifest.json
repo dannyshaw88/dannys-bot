@@ -1,0 +1,19 @@
+{
+  "name": "Danny's Bot",
+  "short_name": "DannysBot",
+  "description": "Instagram automation dashboard",
+  "start_url": "/",
+  "id": "dannysbot",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#38BDF8",
+  "theme_color": "#38BDF8",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
