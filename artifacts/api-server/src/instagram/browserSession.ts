@@ -345,6 +345,25 @@ export function attachSSE(profileId: number, res: ServerResponse) {
   }
   session.res = res;
 
+  // ── Guarantee Instagram is loaded ──────────────────────────────────────────
+  // On every (re-)connect, check the current URL.  If the page is on
+  // about:blank (silent goto() failure), chrome-error:// (429 / network), or
+  // any non-Instagram URL, navigate to Instagram right now rather than waiting
+  // for the frame-loop retry which fires after a 10-second delay.
+  session.page.url().then(async (currentUrl) => {
+    if (currentUrl.includes("instagram.com")) return; // already on IG — nothing to do
+    const hasCookies = await session.page.cookies()
+      .then(c => c.some(ck => ck.name === "sessionid"))
+      .catch(() => false);
+    const target = hasCookies
+      ? "https://www.instagram.com/"
+      : "https://www.instagram.com/accounts/login/";
+    log(`[attachSSE:${profileId}] page is "${currentUrl}" — navigating to ${target}`, "browser");
+    session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {
+      // If this also fails, the frame-loop error-retry will handle the next attempt
+    });
+  }).catch(() => {});
+
   startFrameLoop(profileId);
 }
 
@@ -392,24 +411,27 @@ function startFrameLoop(profileId: number) {
         sseWrite(s.res, { type: "urlChange", url: currentUrl });
       }
 
-      // ── 429 / chrome-error auto-retry ────────────────────────────────────
-      // Chromium's parallel asset requests can trip Instagram's rate limiter
-      // (HTTP 429) on the first navigation.  We wait ~10 seconds and retry
-      // once — the second request, after a delay, nearly always succeeds.
-      if (currentUrl.startsWith("chrome-error://")) {
+      // ── Non-Instagram page auto-retry ────────────────────────────────────
+      // Handles three failure modes:
+      //   • chrome-error://  — HTTP 429 / net error from Instagram
+      //   • about:blank      — goto() timed out and was silently swallowed
+      //   • any non-IG URL   — ended up somewhere unexpected
+      // Wait ~3 seconds then navigate back to Instagram (up to 3 attempts).
+      if (!currentUrl.includes("instagram.com")) {
         errorRetryTick++;
-        if (errorRetryTick >= 50 && errorRetryCount < 3) { // 50*200ms = 10s
+        if (errorRetryTick >= 15 && errorRetryCount < 3) { // 15*200ms = 3s
           errorRetryTick = 0;
           errorRetryCount++;
           const hasCookies = await s.page.cookies().then(c => c.some(ck => ck.name === "sessionid")).catch(() => false);
           const retryTarget = hasCookies
             ? "https://www.instagram.com/"
             : "https://www.instagram.com/accounts/login/";
-          log(`[retry:${profileId}] chrome-error — retry #${errorRetryCount} → ${retryTarget}`, "browser");
+          log(`[retry:${profileId}] "${currentUrl}" — retry #${errorRetryCount} → ${retryTarget}`, "browser");
           s.page.goto(retryTarget, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
         }
       } else {
         errorRetryTick = 0;
+        errorRetryCount = 0; // reset so future failures also get 3 attempts
       }
       // ─────────────────────────────────────────────────────────────────────
 

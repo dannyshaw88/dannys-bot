@@ -139159,6 +139159,15 @@ function attachSSE(profileId, res) {
     }
   }
   session.res = res;
+  session.page.url().then(async (currentUrl) => {
+    if (currentUrl.includes("instagram.com")) return;
+    const hasCookies = await session.page.cookies().then((c3) => c3.some((ck) => ck.name === "sessionid")).catch(() => false);
+    const target = hasCookies ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
+    log(`[attachSSE:${profileId}] page is "${currentUrl}" \u2014 navigating to ${target}`, "browser");
+    session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25e3 }).catch(() => {
+    });
+  }).catch(() => {
+  });
   startFrameLoop(profileId);
 }
 function startFrameLoop(profileId) {
@@ -139197,19 +139206,20 @@ function startFrameLoop(profileId) {
         s.lastUrl = currentUrl;
         sseWrite(s.res, { type: "urlChange", url: currentUrl });
       }
-      if (currentUrl.startsWith("chrome-error://")) {
+      if (!currentUrl.includes("instagram.com")) {
         errorRetryTick++;
-        if (errorRetryTick >= 50 && errorRetryCount < 3) {
+        if (errorRetryTick >= 15 && errorRetryCount < 3) {
           errorRetryTick = 0;
           errorRetryCount++;
           const hasCookies = await s.page.cookies().then((c3) => c3.some((ck) => ck.name === "sessionid")).catch(() => false);
           const retryTarget = hasCookies ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
-          log(`[retry:${profileId}] chrome-error \u2014 retry #${errorRetryCount} \u2192 ${retryTarget}`, "browser");
+          log(`[retry:${profileId}] "${currentUrl}" \u2014 retry #${errorRetryCount} \u2192 ${retryTarget}`, "browser");
           s.page.goto(retryTarget, { waitUntil: "domcontentloaded", timeout: 25e3 }).catch(() => {
           });
         }
       } else {
         errorRetryTick = 0;
+        errorRetryCount = 0;
       }
       popupCheckTick++;
       if (popupCheckTick >= 50) {
