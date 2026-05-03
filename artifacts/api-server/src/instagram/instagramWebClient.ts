@@ -2,36 +2,34 @@
 // ║                  ARCHITECTURE — READ THIS BEFORE TOUCHING ANYTHING          ║
 // ╠══════════════════════════════════════════════════════════════════════════════╣
 // ║                                                                              ║
-// ║  THIS IS A MOBILE API BOT.  ALL INSTAGRAM ACTIONS ARE PERFORMED VIA THE     ║
-// ║  INSTAGRAM MOBILE PRIVATE API (i.instagram.com).                            ║
+// ║  THIS IS A MOBILE API BOT.                                                  ║
+// ║                                                                              ║
+// ║  ALL INSTAGRAM ACTIONS GO THROUGH THE MOBILE PRIVATE API (i.instagram.com). ║
+// ║  This emulates a real Android Instagram app.  Every action — follow,        ║
+// ║  unfollow, like, comment, DM, story view, profile read — uses the mobile    ║
+// ║  API.  There are NO exceptions.                                              ║
 // ║                                                                              ║
 // ║  THE EMBEDDED BROWSER (EB) IS ONLY USED FOR:                                ║
-// ║    • Manual account browsing by the user                                     ║
-// ║    • Resolving login challenges / CAPTCHAs that block API access             ║
-// ║    • NOTHING ELSE                                                            ║
+// ║    • Manual browsing by the user (they are in control)                      ║
+// ║    • Completing login challenges / CAPTCHAs so the API session recovers     ║
+// ║    • NOTHING ELSE — the EB never performs automated actions                 ║
 // ║                                                                              ║
-// ║  THE EB IS NEVER USED TO PERFORM AUTOMATED ACTIONS (follow, DM, like, etc). ║
-// ║  Do NOT add Puppeteer/browser automation for any Instagram action.           ║
-// ║  Do NOT fall back to the EB when an API call fails.                         ║
+// ║  NEVER:                                                                     ║
+// ║    • Use Puppeteer / browser automation for any action                      ║
+// ║    • Fall back to the EB browser when an API call fails                     ║
+// ║    • Use www.instagram.com endpoints for automated actions                  ║
 // ║                                                                              ║
-// ║  SESSION MODEL — TWO SEPARATE SESSIONS, TWO SEPARATE PURPOSES:              ║
-// ║                                                                              ║
-// ║  1. WEB SESSION  (www.instagram.com, cookieJar / csrfToken)                 ║
-// ║     • Established via web login  OR  by syncing the EB browser cookies      ║
-// ║     • Works for: follow, unfollow, like, comment, story views, profile read ║
-// ║     • DOES NOT WORK for DM sending — the DM broadcast endpoint returns 302  ║
-// ║                                                                              ║
-// ║  2. MOBILE SESSION  (i.instagram.com, mobileCookieJar / mobileCsrf)         ║
-// ║     • Established via _mobileLogin() using Instagram's mobile login API     ║
-// ║     • Required for: ALL direct-message (DM) send operations                 ║
-// ║     • Uses mobile App ID 567067343352427 and Android User-Agent             ║
-// ║     • Seeded with locally-generated ig_did / mid / csrftoken=missing        ║
-// ║                                                                              ║
-// ║  CONFIRMED DEAD ENDS (do not retry these — hours were wasted on them):      ║
-// ║    • www.instagram.com DM broadcast  → always returns 302 for web sessions  ║
-// ║    • i.instagram.com broadcast with web cookies → error_code 4415001        ║
+// ║  CONFIRMED DEAD ENDS — do not retry, hours were wasted on these:            ║
+// ║    • www.instagram.com DM broadcast  → returns 302 (blocked for API use)   ║
+// ║    • i.instagram.com DM broadcast with web-origin cookies → 4415001        ║
 // ║    • i.instagram.com create_group_thread with web cookies → login_required  ║
-// ║    • fetch_headers bootstrap endpoint → returns no cookies, useless         ║
+// ║    • fetch_headers as a bootstrap step → returns zero cookies, useless      ║
+// ║                                                                              ║
+// ║  MOBILE SESSION (mobileCookieJar / mobileCsrf):                             ║
+// ║    • Created by _mobileLogin() — logs in via i.instagram.com mobile API    ║
+// ║    • Seeded with locally-generated ig_did / mid / csrftoken=missing         ║
+// ║    • App ID: 567067343352427  |  UA: Android Instagram 317.x               ║
+// ║    • Must be established (via mobileLogin()) before any action is taken     ║
 // ║                                                                              ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import * as https from "https";

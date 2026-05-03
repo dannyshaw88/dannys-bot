@@ -2,24 +2,22 @@
 // ║                  ARCHITECTURE — READ THIS BEFORE TOUCHING ANYTHING          ║
 // ╠══════════════════════════════════════════════════════════════════════════════╣
 // ║                                                                              ║
-// ║  THIS IS A MOBILE API BOT.  ALL INSTAGRAM ACTIONS ARE PERFORMED VIA THE     ║
-// ║  INSTAGRAM MOBILE PRIVATE API (i.instagram.com).                            ║
+// ║  THIS IS A MOBILE API BOT.                                                  ║
+// ║                                                                              ║
+// ║  ALL INSTAGRAM ACTIONS GO THROUGH THE MOBILE PRIVATE API (i.instagram.com). ║
+// ║  This emulates a real Android Instagram app.  Every action — follow,        ║
+// ║  unfollow, like, comment, DM, story view, profile read — uses the mobile    ║
+// ║  API.  There are NO exceptions.                                              ║
 // ║                                                                              ║
 // ║  THE EMBEDDED BROWSER (EB) IS ONLY USED FOR:                                ║
-// ║    • Manual account browsing by the user                                     ║
-// ║    • Resolving login challenges / CAPTCHAs that block API access             ║
-// ║    • NOTHING ELSE                                                            ║
+// ║    • Manual browsing by the user (they are in control)                      ║
+// ║    • Completing login challenges / CAPTCHAs so the API session recovers     ║
+// ║    • NOTHING ELSE — the EB never performs automated actions                 ║
 // ║                                                                              ║
-// ║  THE EB IS NEVER USED TO PERFORM AUTOMATED ACTIONS.                         ║
-// ║  Do NOT add Puppeteer/browser automation for any Instagram action.           ║
-// ║  Do NOT fall back to the EB when an API call fails.                         ║
-// ║                                                                              ║
-// ║  SESSION MODEL:                                                              ║
-// ║    • Web session  (cookieJar)       → follow, unfollow, like, comment       ║
-// ║    • Mobile session (mobileCookieJar) → DM sending ONLY                     ║
-// ║                                                                              ║
-// ║  ensureClient() MUST call mobileLogin() after every successful web login    ║
-// ║  so that sendDirectMessage() always has a valid mobile session available.   ║
+// ║  NEVER:                                                                     ║
+// ║    • Use Puppeteer / browser automation for any action                      ║
+// ║    • Fall back to the EB browser when an API call fails                     ║
+// ║    • Use www.instagram.com endpoints for automated actions                  ║
 // ║                                                                              ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import { storage } from "../storage";
