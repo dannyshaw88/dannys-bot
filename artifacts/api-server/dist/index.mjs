@@ -143502,11 +143502,12 @@ var InstagramWebClient = class {
     return this.timed("LikeTimelinePosts", async () => {
       const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
       const rawItems = j?.feed_items ?? j?.items ?? [];
-      if (!rawItems.length) return { liked: 0, watched: 0 };
+      if (!rawItems.length) return { liked: 0, watched: 0, likedPosts: [] };
       const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk);
       const toProcess = items.slice(0, count);
       let liked = 0;
       let watched = 0;
+      const likedPosts = [];
       for (const media of toProcess) {
         const mediaId = String(media?.id ?? media?.pk ?? "");
         if (!mediaId) continue;
@@ -143526,9 +143527,14 @@ var InstagramWebClient = class {
         }
         const result = await this.likeMedia(mediaId);
         if (result === "blocked") break;
-        if (result) liked++;
+        if (result) {
+          liked++;
+          const shortcode = String(media?.code ?? "");
+          const ownerUsername = String(media?.user?.username ?? "");
+          if (shortcode) likedPosts.push({ shortcode, ownerUsername });
+        }
       }
-      return { liked, watched };
+      return { liked, watched, likedPosts };
     }, (r2) => r2.watched > 0 ? `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"} (watched ${r2.watched} reel${r2.watched === 1 ? "" : "s"})` : `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"}`);
   }
   // ── Unfollow a user ───────────────────────────────────────────────────────
@@ -145205,10 +145211,16 @@ var AutomationEngine = class {
     if (s.likeTimelinePostsEnabled !== false) {
       const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
       try {
-        const { liked, watched } = await client.likeTimelinePosts(likeCount);
-        const detail = watched > 0 ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)` : `Liked ${liked} post(s) from timeline`;
-        console.log(`[engine] @${profile.username}: \u2764\uFE0F ${detail}`);
-        this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", detail);
+        const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
+        const summary = watched > 0 ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)` : `Liked ${liked} post(s) from timeline`;
+        console.log(`[engine] @${profile.username}: \u2764\uFE0F ${summary}`);
+        if (likedPosts.length > 0) {
+          for (const post of likedPosts) {
+            this.logAction(profile.id, tool.id, "like_timeline_post", post.ownerUsername, post.shortcode, "post", "ok", "Liked timeline post");
+          }
+        } else {
+          this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+        }
       } catch (e) {
         console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
       }

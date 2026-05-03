@@ -810,12 +810,12 @@ export class InstagramWebClient {
   // If a post is a reel/video (media_type === 2), it is marked as watched
   // before being liked, so Instagram sees a realistic view → like sequence.
   // Returns the number of posts liked and reels watched.
-  async likeTimelinePosts(count: number = 3): Promise<{ liked: number; watched: number }> {
+  async likeTimelinePosts(count: number = 3): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string }> }> {
     return this.timed("LikeTimelinePosts", async () => {
       // As of 2024 the timeline endpoint requires POST (GET returns 405).
       const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
       const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
-      if (!rawItems.length) return { liked: 0, watched: 0 };
+      if (!rawItems.length) return { liked: 0, watched: 0, likedPosts: [] };
 
       // Unwrap feed items — timeline wraps media under media_or_ad
       const items = rawItems
@@ -825,6 +825,7 @@ export class InstagramWebClient {
       const toProcess = items.slice(0, count);
       let liked = 0;
       let watched = 0;
+      const likedPosts: Array<{ shortcode: string; ownerUsername: string }> = [];
 
       for (const media of toProcess) {
         const mediaId = String(media?.id ?? media?.pk ?? "");
@@ -849,10 +850,15 @@ export class InstagramWebClient {
         // Like the post
         const result = await this.likeMedia(mediaId);
         if (result === "blocked") break;
-        if (result) liked++;
+        if (result) {
+          liked++;
+          const shortcode    = String(media?.code ?? "");
+          const ownerUsername = String(media?.user?.username ?? "");
+          if (shortcode) likedPosts.push({ shortcode, ownerUsername });
+        }
       }
 
-      return { liked, watched };
+      return { liked, watched, likedPosts };
     }, (r) => r.watched > 0
         ? `Liked ${r.liked} timeline post${r.liked === 1 ? "" : "s"} (watched ${r.watched} reel${r.watched === 1 ? "" : "s"})`
         : `Liked ${r.liked} timeline post${r.liked === 1 ? "" : "s"}`);

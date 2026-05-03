@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  Activity, Clock, ExternalLink, Hash, Users,
+  Activity, Clock, ExternalLink, Hash, Users, Image,
   Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward,
   AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings,
 } from "lucide-react";
@@ -113,7 +113,17 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                         </button>
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap">
-                        {sa.sourceValue ? (
+                        {sa.sourceType === "post" && sa.sourceValue ? (
+                          <button
+                            onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/p/${sa.sourceValue}/`)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-pink-50 border border-pink-200 text-pink-700 text-[11px] font-medium hover:bg-pink-100 transition-colors group"
+                            title={`Open post in browser`}
+                          >
+                            <Image className="w-3 h-3" />
+                            View Post
+                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        ) : sa.sourceValue ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-medium">
                             {sa.sourceType === 'hashtag' ? <Hash className="w-3 h-3" /> : <Users className="w-3 h-3" />}
                             {sa.sourceValue}

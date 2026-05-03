@@ -1596,12 +1596,20 @@ class AutomationEngine {
     if (s.likeTimelinePostsEnabled !== false) {
       const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
       try {
-        const { liked, watched } = await client.likeTimelinePosts(likeCount);
-        const detail = watched > 0
+        const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
+        const summary = watched > 0
           ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)`
           : `Liked ${liked} post(s) from timeline`;
-        console.log(`[engine] @${profile.username}: ❤️ ${detail}`);
-        this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", detail);
+        console.log(`[engine] @${profile.username}: ❤️ ${summary}`);
+        if (likedPosts.length > 0) {
+          // Log each liked post individually so the session log shows a per-post
+          // clickable link. sourceValue = shortcode, sourceType = "post".
+          for (const post of likedPosts) {
+            this.logAction(profile.id, tool.id, "like_timeline_post", post.ownerUsername, post.shortcode, "post", "ok", "Liked timeline post");
+          }
+        } else {
+          this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+        }
       } catch (e: any) {
         console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
       }
