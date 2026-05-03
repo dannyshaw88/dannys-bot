@@ -140196,6 +140196,16 @@ var InstagramWebClient = class {
   }
   // ── Send a direct message to a user ───────────────────────────────────────
   // Returns true on success, "blocked" on action-block, false otherwise.
+  async getThreadIdWithUser(userId) {
+    try {
+      const j = await this.mobileGet(
+        `/api/v1/direct_v2/threads/get_by_participants/?participant_user_ids=["${userId}"]`
+      );
+      return j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
+    } catch {
+      return null;
+    }
+  }
   async sendDirectMessage(userId, text2, username) {
     return this.timed("SendDM", async () => {
       const body = new URLSearchParams({
@@ -140213,6 +140223,21 @@ var InstagramWebClient = class {
         const threadId = j?.payload?.thread_id ?? j?.thread_id ?? "";
         const itemId = j?.payload?.item_id ?? j?.item_id ?? "";
         return { threadId, itemId };
+      }
+      const errorCode = j?.content?.error_code ?? j?.error_code;
+      if (errorCode === 4415001) {
+        console.log(`[webClient] sendDM ${userId}: existing thread detected (4415001), looking up thread\u2026`);
+        const threadId = await this.getThreadIdWithUser(userId);
+        if (threadId) {
+          const body2 = new URLSearchParams({ client_context: String(Date.now()), text: text2 }).toString();
+          const j2 = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/broadcast/text/`, body2);
+          if (j2?.status === "ok") {
+            const itemId = j2?.payload?.item_id ?? j2?.item_id ?? "";
+            console.log(`[webClient] sendDM ${userId}: sent to existing thread ${threadId}`);
+            return { threadId, itemId };
+          }
+          console.log(`[webClient] sendDM ${userId}: existing-thread retry also failed:`, JSON.stringify(j2));
+        }
       }
       console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
       return false;
@@ -140566,6 +140591,8 @@ var AutomationEngine = class {
   // independent human session runners
   syncTimers = /* @__PURE__ */ new Map();
   // profileId → nextSyncAt (ms)
+  contactForceRun = /* @__PURE__ */ new Set();
+  // profileIds to run contact send immediately
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
     console.log("[engine] Automation engine started");
@@ -141107,7 +141134,12 @@ var AutomationEngine = class {
         } catch (err) {
           console.error(`[engine] @${freshProfile.username}: unsend check error: ${err?.message}`);
         }
-        await sleepInterruptible(3e4, state.stop);
+        await sleepInterruptible(5e3, state.stop);
+        if (this.contactForceRun.has(profile.id)) {
+          this.contactForceRun.delete(profile.id);
+          nextUsersSessionAt = 0;
+          console.log(`[engine] @${freshProfile.username}: contact send forced immediately`);
+        }
       }
       this.contactStates.delete(profile.id);
       console.log(`[engine] Contact runner exited for @${profile.username}`);
@@ -141245,6 +141277,10 @@ var AutomationEngine = class {
           await storage.incrementStat(profile.id, "dm");
           console.log(`[engine] @${profile.username}: \u{1F4E9} contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
           if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
+        } else {
+          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block)`);
+          await storage.updateContactPendingMessage(msg.id, { status: "failed" });
+          this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed");
         }
       } catch (e) {
         console.warn(`[engine] contact DM @${msg.instagramUsername} error: ${e?.message}`);
@@ -142612,6 +142648,18 @@ var AutomationEngine = class {
       });
     }
   }
+  // Force an immediate contact-users send session, bypassing the wait timer.
+  // If the runner is already active, it wakes on the next 5s poll.
+  // If not active, triggers a reconcile to start it.
+  triggerContactSend(profileId) {
+    if (this.contactStates.has(profileId)) {
+      this.contactForceRun.add(profileId);
+    } else {
+      this.contactForceRun.add(profileId);
+      this.reconcile().catch(() => {
+      });
+    }
+  }
   // Force an immediate new-follower extraction for the given profile,
   // regardless of whether the contact runner is active or scheduled.
   // Returns how many new messages were queued to the pending list.
@@ -143322,6 +143370,11 @@ async function registerInstagramRoutes(httpServer2, app2) {
   app2.delete("/api/contact-pending-messages/:id", async (req, res) => {
     const id = Number(req.params.id);
     await storage.deleteContactPendingMessage(id);
+    res.json({ ok: true });
+  });
+  app2.post("/api/profiles/:profileId/tools/contact/send-now", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    automationEngine.triggerContactSend(profileId);
     res.json({ ok: true });
   });
   app2.post("/api/profiles/:profileId/tools/contact/extract-now", async (req, res) => {

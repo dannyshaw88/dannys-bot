@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  Clock, Send, Timer, Shuffle, Undo2, Trash2, RefreshCw, Users, CheckCircle2,
+  Clock, Send, Timer, Shuffle, Undo2, Trash2, RefreshCw, Users, CheckCircle2, Zap,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type ContactPendingMessage } from "@shared/schema";
@@ -43,6 +43,16 @@ export function ContactUsersPanel({ tool, profile }: Props) {
       if (!res.ok) throw new Error("Failed to delete");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }),
+  });
+
+  const sendNowMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/profiles/${profile.id}/tools/contact/send-now`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to trigger send");
+    },
+    onSuccess: () => {
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }), 3000);
+    },
   });
 
   const pending = allMessages?.filter(m => m.status === "pending") ?? [];
@@ -208,12 +218,25 @@ export function ContactUsersPanel({ tool, profile }: Props) {
             <span className="text-sm font-semibold">Pending Messages</span>
             <span className="text-xs text-muted-foreground">({pending.length})</span>
           </div>
-          <button
-            onClick={() => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] })}
-            className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2.5"
+              disabled={sendNowMutation.isPending || !pending.length}
+              onClick={() => sendNowMutation.mutate()}
+              title="Trigger an immediate send session now"
+            >
+              <Zap className="w-3 h-3" />
+              {sendNowMutation.isPending ? "Sending…" : "Send Now"}
+            </Button>
+            <button
+              onClick={() => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] })}
+              className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto max-h-72">
           {isLoading ? (

@@ -716,6 +716,13 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // Force an immediate contact-users send session (bypasses wait timer)
+  app.post("/api/profiles/:profileId/tools/contact/send-now", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    automationEngine.triggerContactSend(profileId);
+    res.json({ ok: true });
+  });
+
   // Force an immediate follower extraction into the pending messages queue
   app.post("/api/profiles/:profileId/tools/contact/extract-now", async (req, res) => {
     const profileId = Number(req.params.profileId);

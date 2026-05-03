@@ -138,6 +138,7 @@ class AutomationEngine {
   private contactStates        = new Map<number, ProfileState>(); // contact tool runners
   private humanSessionStates   = new Map<number, ProfileState>(); // independent human session runners
   private syncTimers           = new Map<number, number>();       // profileId → nextSyncAt (ms)
+  private contactForceRun      = new Set<number>();               // profileIds to run contact send immediately
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
@@ -734,7 +735,13 @@ class AutomationEngine {
           console.error(`[engine] @${freshProfile.username}: unsend check error: ${err?.message}`);
         }
 
-        await sleepInterruptible(30_000, state.stop); // poll every 30s to check if timers are due
+        await sleepInterruptible(5_000, state.stop); // poll every 5s to check if timers are due or force-run set
+        // Check if a "Send Now" was requested externally
+        if (this.contactForceRun.has(profile.id)) {
+          this.contactForceRun.delete(profile.id);
+          nextUsersSessionAt = 0;
+          console.log(`[engine] @${freshProfile.username}: contact send forced immediately`);
+        }
       }
       this.contactStates.delete(profile.id);
       console.log(`[engine] Contact runner exited for @${profile.username}`);
@@ -893,6 +900,11 @@ class AutomationEngine {
           await storage.incrementStat(profile.id, "dm");
           console.log(`[engine] @${profile.username}: 📩 contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
           if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
+        } else {
+          // Non-block send failure — mark as failed so the user can see it in the UI
+          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block)`);
+          await storage.updateContactPendingMessage(msg.id, { status: "failed" });
+          this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed");
         }
       } catch (e: any) {
         console.warn(`[engine] contact DM @${msg.instagramUsername} error: ${e?.message}`);
@@ -2460,6 +2472,18 @@ class AutomationEngine {
   // Called when a follow tool is explicitly enabled from the UI.
   triggerFollow(profileId: number) {
     if (!this.states.has(profileId)) {
+      this.reconcile().catch(() => {});
+    }
+  }
+
+  // Force an immediate contact-users send session, bypassing the wait timer.
+  // If the runner is already active, it wakes on the next 5s poll.
+  // If not active, triggers a reconcile to start it.
+  triggerContactSend(profileId: number) {
+    if (this.contactStates.has(profileId)) {
+      this.contactForceRun.add(profileId);
+    } else {
+      this.contactForceRun.add(profileId);
       this.reconcile().catch(() => {});
     }
   }

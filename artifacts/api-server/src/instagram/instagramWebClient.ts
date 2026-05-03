@@ -922,6 +922,17 @@ export class InstagramWebClient {
 
   // ── Send a direct message to a user ───────────────────────────────────────
   // Returns true on success, "blocked" on action-block, false otherwise.
+  private async getThreadIdWithUser(userId: string): Promise<string | null> {
+    try {
+      const j = await this.mobileGet(
+        `/api/v1/direct_v2/threads/get_by_participants/?participant_user_ids=["${userId}"]`
+      );
+      return j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async sendDirectMessage(userId: string, text: string, username?: string): Promise<{ threadId: string; itemId: string } | "blocked" | false> {
     return this.timed("SendDM", async () => {
       const body = new URLSearchParams({
@@ -939,6 +950,23 @@ export class InstagramWebClient {
         const threadId: string = j?.payload?.thread_id ?? j?.thread_id ?? "";
         const itemId: string = j?.payload?.item_id ?? j?.item_id ?? "";
         return { threadId, itemId };
+      }
+      // Handle "Prompt has contribution" (4415001) — an existing DM thread already exists.
+      // Fetch it and send to the existing thread instead.
+      const errorCode = j?.content?.error_code ?? j?.error_code;
+      if (errorCode === 4415001) {
+        console.log(`[webClient] sendDM ${userId}: existing thread detected (4415001), looking up thread…`);
+        const threadId = await this.getThreadIdWithUser(userId);
+        if (threadId) {
+          const body2 = new URLSearchParams({ client_context: String(Date.now()), text }).toString();
+          const j2 = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/broadcast/text/`, body2);
+          if (j2?.status === "ok") {
+            const itemId = j2?.payload?.item_id ?? j2?.item_id ?? "";
+            console.log(`[webClient] sendDM ${userId}: sent to existing thread ${threadId}`);
+            return { threadId, itemId };
+          }
+          console.log(`[webClient] sendDM ${userId}: existing-thread retry also failed:`, JSON.stringify(j2));
+        }
       }
       console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
       return false;
