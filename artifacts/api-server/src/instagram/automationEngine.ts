@@ -697,8 +697,8 @@ class AutomationEngine {
         const now = Date.now();
 
         // Detect toggle-on transitions and reset timers so next run is immediate
-        const newFollowersEnabled = s.contactNewFollowersEnabled !== false;
-        const usersEnabled = s.contactUsersEnabled !== false;
+        const newFollowersEnabled = s.contactNewFollowersEnabled === true;
+        const usersEnabled = s.contactUsersEnabled === true;
         if (lastContactNewFollowersEnabled === false && newFollowersEnabled) {
           nextFollowerCheckAt = 0;
           console.log(`[engine] @${freshProfile.username}: contactNewFollowers toggled ON — running immediately`);
@@ -1794,7 +1794,7 @@ class AutomationEngine {
 
     // ── Human Session ────────────────────────────────────────────────────────
     enqueue("humanSession",
-      s.humanSessionEnabled !== false,
+      s.humanSessionEnabled === true,
       "humanSessionNotUsedMin", "humanSessionNotUsedMax",
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
@@ -1831,7 +1831,7 @@ class AutomationEngine {
 
     // ── View Timeline Feed ───────────────────────────────────────────────────
     enqueue("viewTimelineFeed",
-      s.viewTimelineFeedEnabled !== false,
+      s.viewTimelineFeedEnabled === true,
       "viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax",
       "viewTimelineFeedOrderMin",   "viewTimelineFeedOrderMax",
       async () => {
@@ -1848,7 +1848,7 @@ class AutomationEngine {
 
     // ── Watch Timeline Reels ─────────────────────────────────────────────────
     enqueue("checkTimelineReels",
-      s.checkTimelineReelsEnabled !== false,
+      s.checkTimelineReelsEnabled === true,
       "checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax",
       "checkTimelineReelsOrderMin",   "checkTimelineReelsOrderMax",
       async () => {
@@ -1865,7 +1865,7 @@ class AutomationEngine {
 
     // ── Watch Timeline Stories ───────────────────────────────────────────────
     enqueue("checkTimelineStories",
-      s.checkTimelineStoriesEnabled !== false,
+      s.checkTimelineStoriesEnabled === true,
       "checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax",
       "checkTimelineStoriesOrderMin",   "checkTimelineStoriesOrderMax",
       async () => {
@@ -1882,7 +1882,7 @@ class AutomationEngine {
 
     // ── Check Direct Messages ────────────────────────────────────────────────
     enqueue("checkDm",
-      s.checkDmEnabled !== false,
+      s.checkDmEnabled === true,
       "checkDmNotUsedMin", "checkDmNotUsedMax",
       "checkDmOrderMin",   "checkDmOrderMax",
       async () => {
@@ -1904,7 +1904,7 @@ class AutomationEngine {
 
     // ── Like Posts from Timeline ─────────────────────────────────────────────
     enqueue("likeTimelinePosts",
-      s.likeTimelinePostsEnabled !== false,
+      s.likeTimelinePostsEnabled === true,
       "likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax",
       "likeTimelinePostsOrderMin",   "likeTimelinePostsOrderMax",
       async () => {

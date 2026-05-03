@@ -141484,8 +141484,8 @@ var AutomationEngine = class {
         if (!contactTool?.enabled || state.stop.stopped) break;
         const s = contactTool.settings;
         const now = Date.now();
-        const newFollowersEnabled = s.contactNewFollowersEnabled !== false;
-        const usersEnabled = s.contactUsersEnabled !== false;
+        const newFollowersEnabled = s.contactNewFollowersEnabled === true;
+        const usersEnabled = s.contactUsersEnabled === true;
         if (lastContactNewFollowersEnabled === false && newFollowersEnabled) {
           nextFollowerCheckAt = 0;
           console.log(`[engine] @${freshProfile.username}: contactNewFollowers toggled ON \u2014 running immediately`);
@@ -142416,7 +142416,7 @@ var AutomationEngine = class {
     };
     enqueue(
       "humanSession",
-      s.humanSessionEnabled !== false,
+      s.humanSessionEnabled === true,
       "humanSessionNotUsedMin",
       "humanSessionNotUsedMax",
       "humanSessionOrderMin",
@@ -142454,7 +142454,7 @@ var AutomationEngine = class {
     );
     enqueue(
       "viewTimelineFeed",
-      s.viewTimelineFeedEnabled !== false,
+      s.viewTimelineFeedEnabled === true,
       "viewTimelineFeedNotUsedMin",
       "viewTimelineFeedNotUsedMax",
       "viewTimelineFeedOrderMin",
@@ -142472,7 +142472,7 @@ var AutomationEngine = class {
     );
     enqueue(
       "checkTimelineReels",
-      s.checkTimelineReelsEnabled !== false,
+      s.checkTimelineReelsEnabled === true,
       "checkTimelineReelsNotUsedMin",
       "checkTimelineReelsNotUsedMax",
       "checkTimelineReelsOrderMin",
@@ -142490,7 +142490,7 @@ var AutomationEngine = class {
     );
     enqueue(
       "checkTimelineStories",
-      s.checkTimelineStoriesEnabled !== false,
+      s.checkTimelineStoriesEnabled === true,
       "checkTimelineStoriesNotUsedMin",
       "checkTimelineStoriesNotUsedMax",
       "checkTimelineStoriesOrderMin",
@@ -142508,7 +142508,7 @@ var AutomationEngine = class {
     );
     enqueue(
       "checkDm",
-      s.checkDmEnabled !== false,
+      s.checkDmEnabled === true,
       "checkDmNotUsedMin",
       "checkDmNotUsedMax",
       "checkDmOrderMin",
@@ -142530,7 +142530,7 @@ var AutomationEngine = class {
     );
     enqueue(
       "likeTimelinePosts",
-      s.likeTimelinePostsEnabled !== false,
+      s.likeTimelinePostsEnabled === true,
       "likeTimelinePostsNotUsedMin",
       "likeTimelinePostsNotUsedMax",
       "likeTimelinePostsOrderMin",
