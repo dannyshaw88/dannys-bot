@@ -222,46 +222,85 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   const proxyIp = profile.proxyHost ?? "";
 
   if (profile.igApiCookies) {
-    // ── Session cookie fast path ───────────────────────────────────────────
-    // We intentionally do NOT call currentUser()?edit=true here.
-    // That endpoint triggers Instagram's checkpoint flow when called as the
-    // very first request on a restored session (Instagram treats ?edit=true
-    // as a profile-write attempt and demands verification — a false positive).
-    // Jarvee itself never calls current_user on login; it does a cold-start
-    // timeline fetch after establishing the session.
+    // ── Cookie session handshake ───────────────────────────────────────────
+    // Mirrors the Jarvee cold-start sequence for a restored session:
+    //   1. launcher/sync  (SendMobileConfig)  — establishes app config, no auth needed
+    //   2. users/{id}/info                    — lightweight read that validates the live
+    //                                           sessionid WITHOUT triggering the false
+    //                                           checkpoint that currentUser()?edit=true causes
     //
-    // Instead we trust the cookie structurally: Instagram encodes the numeric
-    // user ID as the first colon-delimited segment of the sessionid value
-    // (e.g. "77661428511:nXeHbuP299s22P:5:AYii…"). If we can parse it, the
-    // cookie was issued by Instagram and is well-formed. Real problems (expired
-    // session, banned account) surface when automation actually hits the API —
-    // not from a synthetic checkpoint caused by the wrong handshake.
+    // We intentionally avoid currentUser()?edit=true — Instagram treats that as a
+    // profile-write attempt on a freshly restored session and raises checkpoint_required.
     const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
+    attachRequestLogger(ig, profile.id, "Verify", proxyIp);
 
-    // Parse userId from sessionid
+    // Parse userId from the sessionid token (format: "userId:hash:seq:token")
+    // and inject ds_user_id into the cookie jar so the library can read cookieUserId.
     const sessionPair = profile.igApiCookies.split(';')
       .map(s => s.trim())
       .find(s => s.toLowerCase().startsWith('sessionid='));
-    if (sessionPair) {
+    if (!sessionPair) {
+      // No sessionid found — fall through to password login
+      console.error(`[instagramLogin] @${profile.username} — igApiCookies has no sessionid, falling through to password login`);
+    } else {
       const rawVal = sessionPair.slice('sessionid='.length);
-      let decoded = rawVal;
-      try { decoded = decodeURIComponent(rawVal); } catch { /* keep as-is */ }
-      const userId = decoded.split(':')[0];
-      if (userId && /^\d+$/.test(userId)) {
-        console.error(`[instagramLogin] @${profile.username} — cookie session accepted (userId=${userId})`);
-        // Load cookies into the client state so it is ready for use
-        await restoreSessionCookies(ig, profile.igApiCookies);
-        return {
-          ok: true,
-          message: `@${profile.username} — session cookie loaded (userId ${userId}). The account is ready for automation.`,
-          accountStatus: "valid",
-          igDeviceState: captureDeviceState(),
-        };
+      let decodedSession = rawVal;
+      try { decodedSession = decodeURIComponent(rawVal); } catch { /* keep as-is */ }
+      const userId = decodedSession.split(':')[0];
+
+      if (!userId || !/^\d+$/.test(userId)) {
+        console.error(`[instagramLogin] @${profile.username} — could not parse userId from sessionid, falling through`);
+      } else {
+        // Restore all cookies (sessionid decoded + ds_user_id synthetic)
+        const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
+        await restoreSessionCookies(ig, cookiesWithUserId);
+        console.error(`[instagramLogin] @${profile.username} — cookies restored (userId=${userId})`);
+
+        try {
+          // Step 1: launcher/sync (SendMobileConfig) — does not require csrftoken
+          await ig.launcher.preLoginSync();
+          console.error(`[instagramLogin] @${profile.username} — launcher/sync OK`);
+        } catch (syncErr: any) {
+          // launcher/sync failure is non-fatal — log and continue to session check
+          console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (continuing): ${syncErr?.message}`);
+        }
+
+        try {
+          // Step 2: users/{id}/info — validates the live session via sessionid cookie.
+          // This is a read-only GET, does not trigger checkpoints like currentUser()?edit=true.
+          const userInfo = await ig.user.info(userId);
+          console.error(`[instagramLogin] @${profile.username} — session valid (username=${userInfo.username})`);
+          return {
+            ok: true,
+            message: `@${profile.username} — session active (userId ${userId}). Cold-start handshake complete.`,
+            accountStatus: "valid",
+            igDeviceState: captureDeviceState(),
+          };
+        } catch (sessionErr: any) {
+          const errMsg: string = sessionErr?.message ?? "";
+          console.error(`[instagramLogin] @${profile.username} — session check failed: ${errMsg}`);
+
+          if (sessionErr instanceof IgCheckpointError || /checkpoint/i.test(errMsg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
+              accountStatus: "captcha",
+              igDeviceState: captureDeviceState(),
+            };
+          }
+
+          // Any other failure (401, expired, banned) → do NOT fall back to password login.
+          // Password login with unrecognized device UUIDs triggers Instagram's new-device
+          // email verification — the error this was built to avoid.
+          return {
+            ok: false,
+            message: `@${profile.username} — session cookie has expired or been revoked (${errMsg}). Open the embedded browser, log in manually, then click Verify again to refresh the session.`,
+            accountStatus: "logged_out",
+            igDeviceState: captureDeviceState(),
+          };
+        }
       }
     }
-
-    // sessionid is malformed / missing — treat as no-cookie and fall through
-    console.error(`[instagramLogin] @${profile.username} — could not parse sessionid from igApiCookies, falling through to password login`);
   }
 
   // ── Normal path: fresh password login (only when no cookies are stored) ──

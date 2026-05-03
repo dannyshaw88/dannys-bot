@@ -138656,27 +138656,59 @@ async function verifyInstagramCredentials(profile) {
   const proxyIp = profile.proxyHost ?? "";
   if (profile.igApiCookies) {
     const { ig: ig2, captureDeviceState: captureDeviceState2 } = buildIgClient(profile, proxyUrl);
+    attachRequestLogger(ig2, profile.id, "Verify", proxyIp);
     const sessionPair = profile.igApiCookies.split(";").map((s) => s.trim()).find((s) => s.toLowerCase().startsWith("sessionid="));
-    if (sessionPair) {
+    if (!sessionPair) {
+      console.error(`[instagramLogin] @${profile.username} \u2014 igApiCookies has no sessionid, falling through to password login`);
+    } else {
       const rawVal = sessionPair.slice("sessionid=".length);
-      let decoded = rawVal;
+      let decodedSession = rawVal;
       try {
-        decoded = decodeURIComponent(rawVal);
+        decodedSession = decodeURIComponent(rawVal);
       } catch {
       }
-      const userId = decoded.split(":")[0];
-      if (userId && /^\d+$/.test(userId)) {
-        console.error(`[instagramLogin] @${profile.username} \u2014 cookie session accepted (userId=${userId})`);
-        await restoreSessionCookies(ig2, profile.igApiCookies);
-        return {
-          ok: true,
-          message: `@${profile.username} \u2014 session cookie loaded (userId ${userId}). The account is ready for automation.`,
-          accountStatus: "valid",
-          igDeviceState: captureDeviceState2()
-        };
+      const userId = decodedSession.split(":")[0];
+      if (!userId || !/^\d+$/.test(userId)) {
+        console.error(`[instagramLogin] @${profile.username} \u2014 could not parse userId from sessionid, falling through`);
+      } else {
+        const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
+        await restoreSessionCookies(ig2, cookiesWithUserId);
+        console.error(`[instagramLogin] @${profile.username} \u2014 cookies restored (userId=${userId})`);
+        try {
+          await ig2.launcher.preLoginSync();
+          console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync OK`);
+        } catch (syncErr) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync failed (continuing): ${syncErr?.message}`);
+        }
+        try {
+          const userInfo = await ig2.user.info(userId);
+          console.error(`[instagramLogin] @${profile.username} \u2014 session valid (username=${userInfo.username})`);
+          return {
+            ok: true,
+            message: `@${profile.username} \u2014 session active (userId ${userId}). Cold-start handshake complete.`,
+            accountStatus: "valid",
+            igDeviceState: captureDeviceState2()
+          };
+        } catch (sessionErr) {
+          const errMsg = sessionErr?.message ?? "";
+          console.error(`[instagramLogin] @${profile.username} \u2014 session check failed: ${errMsg}`);
+          if (sessionErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(errMsg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
+              accountStatus: "captcha",
+              igDeviceState: captureDeviceState2()
+            };
+          }
+          return {
+            ok: false,
+            message: `@${profile.username} \u2014 session cookie has expired or been revoked (${errMsg}). Open the embedded browser, log in manually, then click Verify again to refresh the session.`,
+            accountStatus: "logged_out",
+            igDeviceState: captureDeviceState2()
+          };
+        }
       }
     }
-    console.error(`[instagramLogin] @${profile.username} \u2014 could not parse sessionid from igApiCookies, falling through to password login`);
   }
   const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
   attachRequestLogger(ig, profile.id, "Verify", proxyIp);
@@ -143003,7 +143035,7 @@ var automationEngine = new AutomationEngine();
 
 // src/routes/instagram.ts
 async function resolveProxyConfig(profile) {
-  if (profile.browserDirectConnection !== false) return void 0;
+  if (profile.browserDirectConnection === true) return void 0;
   if (profile.proxyId) {
     const proxies2 = await storage.getProxies();
     const linked = proxies2.find((p) => p.id === profile.proxyId);
