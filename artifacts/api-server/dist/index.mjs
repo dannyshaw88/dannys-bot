@@ -145281,9 +145281,10 @@ var AutomationEngine = class {
       const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
       hikerClientForLookup = new HikerApiClient2(globalSettings2.hikerApiToken);
     }
+    let attempted = 0;
     let unfollowed = 0;
     for (const fu of candidates) {
-      if (unfollowed >= processCount || state.stop.stopped) break;
+      if (attempted >= processCount || state.stop.stopped) break;
       if (maxPerDay > 0 && this.daily(state) >= maxPerDay) break;
       try {
         let userId = fu.instagramUserId ?? "";
@@ -145297,6 +145298,7 @@ var AutomationEngine = class {
             continue;
           }
         }
+        attempted++;
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram action-blocked unfollow");
@@ -145305,8 +145307,8 @@ var AutomationEngine = class {
         if (result) {
           this.bump(state);
           unfollowed++;
-          console.log(`[engine] @${profile.username}: \u2713 unfollowed @${fu.instagramUsername} [${unfollowed}/${processCount}]`);
-          this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "ok", `Unfollowed [${unfollowed}/${processCount}]`);
+          console.log(`[engine] @${profile.username}: \u2713 unfollowed @${fu.instagramUsername} [${attempted}/${processCount}]`);
+          this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "ok", `Unfollowed [${attempted}/${processCount}]`);
           await storage.incrementStat(profile.id, "unfollow");
           if (targetListEnabled) {
             const lower = fu.instagramUsername.toLowerCase();
@@ -145316,6 +145318,8 @@ var AutomationEngine = class {
             s.unfollowTargetListPks = JSON.stringify(pksMap);
             await storage.updateTool(tool.id, { settings: { ...s } });
           }
+        }
+        if (attempted < processCount && !state.stop.stopped) {
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e) {

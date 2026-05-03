@@ -1460,9 +1460,10 @@ class AutomationEngine {
       hikerClientForLookup = new HikerApiClient(globalSettings.hikerApiToken);
     }
 
-    let unfollowed = 0;
+    let attempted = 0; // counts every actual unfollow API call (respects processCount limit)
+    let unfollowed = 0; // counts only confirmed successes (for stats)
     for (const fu of candidates) {
-      if (unfollowed >= processCount || state.stop.stopped) break;
+      if (attempted >= processCount || state.stop.stopped) break;
       if (maxPerDay > 0 && this.daily(state) >= maxPerDay) break;
 
       try {
@@ -1475,9 +1476,12 @@ class AutomationEngine {
           }
           if (!userId) {
             console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} — no pk available, skipping`);
-            continue;
+            continue; // genuine skip — don't count toward limit
           }
         }
+        // Count the attempt now — whether it succeeds or fails silently, it still
+        // counts toward the session limit so we never process more users than configured.
+        attempted++;
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram action-blocked unfollow");
@@ -1486,8 +1490,8 @@ class AutomationEngine {
         if (result) {
           this.bump(state);
           unfollowed++;
-          console.log(`[engine] @${profile.username}: ✓ unfollowed @${fu.instagramUsername} [${unfollowed}/${processCount}]`);
-          this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "ok", `Unfollowed [${unfollowed}/${processCount}]`);
+          console.log(`[engine] @${profile.username}: ✓ unfollowed @${fu.instagramUsername} [${attempted}/${processCount}]`);
+          this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "ok", `Unfollowed [${attempted}/${processCount}]`);
           await storage.incrementStat(profile.id, "unfollow");
 
           // Remove from target list so it won't be attempted again next session
@@ -1504,6 +1508,10 @@ class AutomationEngine {
             await storage.updateTool(tool.id, { settings: { ...s } });
           }
 
+        }
+        // Always sleep between attempts — whether the call succeeded or failed silently —
+        // to avoid hammering Instagram with rapid-fire requests.
+        if (attempted < processCount && !state.stop.stopped) {
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
