@@ -1120,15 +1120,33 @@ class AutomationEngine {
     if (browserOk) {
       console.log(`[engine] @${profile.username}: using EB browser session (cookies synced)`);
       const current = await storage.getProfile(profile.id);
-      // Reset logged_out status when a valid EB session is available again
       if (current?.accountStatus === "logged_out") {
         await storage.updateProfile(profile.id, { accountStatus: "valid" });
+      }
+      if (!client.isMobileLoggedIn()) {
+        console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
+        const mobileOk = await client.mobileLogin(
+          profile.username,
+          profile.password,
+          profile.twoFASecretKey ?? undefined,
+        );
+        console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
       }
       return client;
     }
 
     // No EB browser session — fall back to web login
-    if (client.isLoggedIn()) return client;
+    if (client.isLoggedIn()) {
+      if (!client.isMobileLoggedIn()) {
+        const mobileOk = await client.mobileLogin(
+          profile.username,
+          profile.password,
+          profile.twoFASecretKey ?? undefined,
+        );
+        console.log(`[engine] @${profile.username}: mobile login (re-auth) ${mobileOk ? "OK" : "FAILED"}`);
+      }
+      return client;
+    }
 
     const ok = await client.login(
       profile.username,
@@ -1142,6 +1160,20 @@ class AutomationEngine {
         await storage.updateProfile(profile.id, { accountStatus: "valid" });
       }
       console.log(`[engine] @${profile.username}: web login OK`);
+
+      // Establish a separate mobile session for DM sending if not already ready.
+      // The web session cannot send DMs — i.instagram.com DM endpoints require
+      // a session created via the mobile login API.
+      if (!client.isMobileLoggedIn()) {
+        console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
+        const mobileOk = await client.mobileLogin(
+          profile.username,
+          profile.password,
+          profile.twoFASecretKey ?? undefined,
+        );
+        console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
+      }
+
       return client;
     }
 

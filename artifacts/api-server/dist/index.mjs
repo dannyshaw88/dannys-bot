@@ -139490,6 +139490,8 @@ function extractCsrf(cookies) {
 }
 var WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var APP_ID = "936619743392459";
+var MOBILE_UA = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+var MOBILE_AID = "567067343352427";
 var InstagramWebClient = class {
   cookieJar = [];
   csrfToken = "";
@@ -139499,6 +139501,12 @@ var InstagramWebClient = class {
   // User-agent to use for web (www.instagram.com) POST requests.
   // Should match the EB browser's UA so that cookies and UA are consistent.
   webUserAgent = WEB_UA;
+  // Separate mobile session (i.instagram.com) used exclusively for DM sending.
+  // The web session cannot send DMs — i.instagram.com DM write endpoints require
+  // a mobile login (i.instagram.com /api/v1/accounts/login/) session.
+  mobileCookieJar = [];
+  mobileCsrf = "";
+  mobileSessionReady = false;
   // API throttle — enforces the per-profile "x calls every y seconds" limit.
   // Computed as a per-call delay = everySeconds / requestsCount, so all calls
   // are evenly spaced rather than firing in an instant burst.
@@ -139683,6 +139691,128 @@ var InstagramWebClient = class {
   }
   isLoggedIn() {
     return this.cookieJar.some((c3) => c3.startsWith("sessionid="));
+  }
+  isMobileLoggedIn() {
+    return this.mobileSessionReady && this.mobileCookieJar.some((c3) => c3.startsWith("sessionid="));
+  }
+  // ── Mobile API login (i.instagram.com) ─────────────────────────────────────
+  // Establishes a separate mobile session used only for DM sending.
+  // The web session (www.instagram.com) cannot send DMs — Instagram's DM write
+  // endpoints on i.instagram.com require a session created via mobile login.
+  async mobileLogin(username, password, twoFaSecret) {
+    return this.timed("MobileLogin", () => this._mobileLogin(username, password, twoFaSecret), `@${username} mobile login`);
+  }
+  async _mobileLogin(username, password, twoFaSecret) {
+    const igDid = randomUUID();
+    const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+    const initCsrf = "missing";
+    this.mobileCookieJar = [
+      `ig_did=${igDid}`,
+      `mid=${mid}`,
+      `csrftoken=${initCsrf}`
+    ];
+    this.mobileCsrf = initCsrf;
+    console.log(`[webClient] mobile bootstrap cookies: ig_did=${igDid.slice(0, 8)}... mid=${mid.slice(0, 8)}...`);
+    const ts = Math.floor(Date.now() / 1e3);
+    const deviceId = `android-${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    const phoneId = randomUUID();
+    const guid3 = randomUUID();
+    const loginBody = new URLSearchParams({
+      username,
+      enc_password: `#PWD_INSTAGRAM:0:${ts}:${password}`,
+      device_id: deviceId,
+      phone_id: phoneId,
+      guid: guid3,
+      login_attempt_count: "0",
+      country_codes: JSON.stringify([{ country_code: "44", source: ["default"] }]),
+      _csrftoken: this.mobileCsrf
+    }).toString();
+    const loginRes = await igReq({
+      host: "i.instagram.com",
+      path: "/api/v1/accounts/login/",
+      method: "POST",
+      headers: {
+        Host: "i.instagram.com",
+        "User-Agent": MOBILE_UA,
+        "X-IG-App-ID": MOBILE_AID,
+        "X-IG-Capabilities": "3brTvwE=",
+        "X-IG-Connection-Type": "WIFI",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-CSRFToken": this.mobileCsrf,
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.9"
+      },
+      body: loginBody,
+      cookieJar: this.mobileCookieJar,
+      proxyUrl: this.proxyUrl
+    });
+    this.mobileCookieJar = mergeCookies(this.mobileCookieJar, loginRes.cookies);
+    const newCsrf = extractCsrf(loginRes.cookies);
+    if (newCsrf) this.mobileCsrf = newCsrf;
+    const j = loginRes.json;
+    console.log(`[webClient] mobile login response HTTP ${loginRes.status}:`, JSON.stringify(j)?.slice(0, 300));
+    if (j?.two_factor_required) {
+      const identifier = j?.two_factor_info?.two_factor_identifier ?? "";
+      const secret = twoFaSecret?.replace(/\s+/g, "");
+      if (!secret) {
+        console.error(`[webClient] @${username}: mobile 2FA required but no secret`);
+        return false;
+      }
+      let code;
+      try {
+        code = h3({ secret });
+      } catch {
+        console.error(`[webClient] @${username}: invalid mobile 2FA secret`);
+        return false;
+      }
+      const tfBody = new URLSearchParams({
+        username,
+        verificationCode: code,
+        identifier,
+        queryParams: "{}",
+        verificationMethod: "3",
+        guid: guid3,
+        device_id: deviceId,
+        _csrftoken: this.mobileCsrf
+      }).toString();
+      const tfRes = await igReq({
+        host: "i.instagram.com",
+        path: "/api/v1/accounts/two_factor_login/",
+        method: "POST",
+        headers: {
+          Host: "i.instagram.com",
+          "User-Agent": MOBILE_UA,
+          "X-IG-App-ID": MOBILE_AID,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-CSRFToken": this.mobileCsrf,
+          Accept: "*/*",
+          "Accept-Language": "en-US,en;q=0.9"
+        },
+        body: tfBody,
+        cookieJar: this.mobileCookieJar,
+        proxyUrl: this.proxyUrl
+      });
+      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, tfRes.cookies);
+      const tfCsrf = extractCsrf(tfRes.cookies);
+      if (tfCsrf) this.mobileCsrf = tfCsrf;
+      console.log(`[webClient] mobile 2FA response HTTP ${tfRes.status}:`, JSON.stringify(tfRes.json)?.slice(0, 200));
+      if (tfRes.json?.logged_in_user || tfRes.json?.status === "ok") {
+        this.mobileSessionReady = true;
+        console.log(`[webClient] @${username}: mobile 2FA OK \u2014 mobile session ready`);
+        return true;
+      }
+      console.error(`[webClient] @${username}: mobile 2FA rejected`);
+      return false;
+    }
+    if (j?.logged_in_user || j?.status === "ok") {
+      this.mobileSessionReady = true;
+      console.log(`[webClient] @${username}: mobile login OK \u2014 mobile session ready`);
+      return true;
+    }
+    console.error(`[webClient] @${username}: mobile login failed \u2014 status=${loginRes.status}`);
+    return false;
   }
   // ── Common authenticated request helper ────────────────────────────────────
   // web session GET (www.instagram.com)
@@ -140273,6 +140403,10 @@ var InstagramWebClient = class {
   }
   async sendDirectMessage(userId, text2, username) {
     return this.timed("SendDM", async () => {
+      if (!this.isMobileLoggedIn()) {
+        console.warn(`[webClient] sendDM ${userId}: no mobile session \u2014 call mobileLogin() first`);
+        return false;
+      }
       const clientCtx = randomUUID();
       const dmBody = new URLSearchParams({
         recipient_users: `[[${userId}]]`,
@@ -140282,20 +140416,17 @@ var InstagramWebClient = class {
         is_shh_mode: "0",
         text: text2
       }).toString();
-      console.log(`[webClient] sendDM ${userId}: POST www.instagram.com/api/v1/direct_v2/threads/broadcast/text/`);
-      const r2 = await this.webPost(`/api/v1/direct_v2/threads/broadcast/text/`, dmBody);
-      console.log(`[webClient] sendDM ${userId} response status=${r2.status}:`, JSON.stringify(r2.json)?.slice(0, 400) ?? r2.rawBody?.slice(0, 400));
-      if (r2.status === 302 || r2.json === null) {
-        console.warn(`[webClient] sendDM ${userId}: 302/no-json \u2014 CSRF or session issue, HTTP ${r2.status}`);
-        return false;
-      }
-      const j = r2.json;
+      console.log(`[webClient] sendDM ${userId}: mobile broadcast (session cookies: ${this.mobileCookieJar.map((c3) => c3.split("=")[0]).join(",")})`);
+      const j = await this._mobileDmPost(`/api/v1/direct_v2/threads/broadcast/text/`, dmBody);
+      console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j)?.slice(0, 400));
+      if (!j) return false;
       if (j?.message === "feedback_required" || j?.feedback_required === true) {
-        console.warn(`[webClient] DM BLOCKED to ${userId}: feedback_required`);
+        console.warn(`[webClient] DM BLOCKED to ${userId}`);
         return "blocked";
       }
       if (j?.message === "login_required" || j?.require_login) {
-        console.warn(`[webClient] sendDM ${userId}: login_required`);
+        console.warn(`[webClient] sendDM ${userId}: mobile session expired`);
+        this.mobileSessionReady = false;
         return false;
       }
       if (j?.status === "ok") {
@@ -140305,9 +140436,38 @@ var InstagramWebClient = class {
         return { threadId, itemId };
       }
       const errorCode = j?.content?.error_code ?? j?.error_code;
-      console.warn(`[webClient] sendDM ${userId}: failed \u2014 HTTP ${r2.status} error_code=${errorCode} status=${j?.status} message=${j?.message}`);
+      console.warn(`[webClient] sendDM ${userId}: failed \u2014 error_code=${errorCode} status=${j?.status} message=${j?.message}`);
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
+  }
+  // POST to i.instagram.com using the mobile session (mobileCookieJar).
+  // Used exclusively for DM operations which require a mobile-origin session.
+  async _mobileDmPost(path4, body = "") {
+    await this.apiThrottle();
+    const res = await igReq({
+      host: "i.instagram.com",
+      path: path4,
+      method: "POST",
+      headers: {
+        Host: "i.instagram.com",
+        "User-Agent": MOBILE_UA,
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-IG-App-ID": MOBILE_AID,
+        "X-CSRFToken": this.mobileCsrf,
+        "X-IG-Capabilities": "3brTvwE=",
+        "X-IG-Connection-Type": "WIFI"
+      },
+      body,
+      cookieJar: this.mobileCookieJar,
+      proxyUrl: this.proxyUrl
+    });
+    this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+    const newCsrf = extractCsrf(res.cookies);
+    if (newCsrf) this.mobileCsrf = newCsrf;
+    if (!res.json) console.log(`[webClient] _mobileDmPost ${path4} HTTP ${res.status}:`, res.rawBody.slice(0, 300));
+    return res.json;
   }
   async unsendDirectMessage(threadId, itemId) {
     return this.timed("UnsendDM", async () => {
@@ -140390,8 +140550,6 @@ Content-Disposition: form-data; name="${part.name}"`;
     chunks.push(Buffer.from(`--${boundary}--\r
 `));
     const body = Buffer.concat(chunks);
-    const MOBILE_UA = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
-    const MOBILE_AID = "567067343352427";
     const headers = {
       "User-Agent": MOBILE_UA,
       Accept: "*/*",
@@ -141538,9 +141696,28 @@ var AutomationEngine = class {
       if (current?.accountStatus === "logged_out") {
         await storage.updateProfile(profile.id, { accountStatus: "valid" });
       }
+      if (!client.isMobileLoggedIn()) {
+        console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
+        const mobileOk = await client.mobileLogin(
+          profile.username,
+          profile.password,
+          profile.twoFASecretKey ?? void 0
+        );
+        console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
+      }
       return client;
     }
-    if (client.isLoggedIn()) return client;
+    if (client.isLoggedIn()) {
+      if (!client.isMobileLoggedIn()) {
+        const mobileOk = await client.mobileLogin(
+          profile.username,
+          profile.password,
+          profile.twoFASecretKey ?? void 0
+        );
+        console.log(`[engine] @${profile.username}: mobile login (re-auth) ${mobileOk ? "OK" : "FAILED"}`);
+      }
+      return client;
+    }
     const ok = await client.login(
       profile.username,
       profile.password,
@@ -141552,6 +141729,15 @@ var AutomationEngine = class {
         await storage.updateProfile(profile.id, { accountStatus: "valid" });
       }
       console.log(`[engine] @${profile.username}: web login OK`);
+      if (!client.isMobileLoggedIn()) {
+        console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
+        const mobileOk = await client.mobileLogin(
+          profile.username,
+          profile.password,
+          profile.twoFASecretKey ?? void 0
+        );
+        console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
+      }
       return client;
     }
     console.warn(`[engine] @${profile.username}: web login failed (transient?) \u2014 skipping session, status unchanged`);
