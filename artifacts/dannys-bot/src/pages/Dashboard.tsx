@@ -94,9 +94,9 @@ export function Dashboard() {
 
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
 
-  const filteredApiCalls = selectedProfileId != null
-    ? (apiCalls ?? []).filter((c: any) => c.profileId === selectedProfileId)
-    : (apiCalls ?? []);
+  const filteredApiCalls = (apiCalls ?? [])
+    .filter((c: any) => c.source !== "Browser")
+    .filter((c: any) => selectedProfileId == null || c.profileId === selectedProfileId);
 
   const filteredProfileOptions = (profiles ?? []).filter(p =>
     !profileSearch.trim() ||
@@ -233,27 +233,34 @@ export function Dashboard() {
 
         <CardContent className="p-0">
           {activeTab === "api-log" ? (
-            <div className="overflow-x-auto max-h-[70vh]">
-              <table className="w-full text-sm text-left">
+            <div className="overflow-y-auto max-h-[70vh]">
+              <table className="w-full text-sm text-left table-fixed">
+                <colgroup>
+                  <col className="w-36" />
+                  <col className="w-28" />
+                  <col className="w-40" />
+                  <col className="w-20" />
+                  <col />
+                </colgroup>
                 <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-4 font-bold bg-muted/30 whitespace-nowrap">Timestamp</th>
-                    <th className="px-6 py-4 font-bold bg-muted/30 whitespace-nowrap">Account</th>
-                    <th className="px-6 py-4 font-bold bg-muted/30 whitespace-nowrap">Operation</th>
-                    <th className="px-6 py-4 font-bold bg-muted/30 whitespace-nowrap">Duration</th>
-                    <th className="px-6 py-4 font-bold bg-muted/30 w-full">Message</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Timestamp</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Account</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Operation</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Duration</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Message</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
                   {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
-                        <td colSpan={5} className="px-6 py-4 bg-muted/10 h-12" />
+                        <td colSpan={5} className="px-3 py-4 bg-muted/10 h-12" />
                       </tr>
                     ))
                   ) : filteredApiCalls.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
+                      <td colSpan={5} className="px-3 py-12 text-center text-muted-foreground">
                         <Activity className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
                         <p className="text-sm font-medium">
                           {selectedProfileId != null ? `No API calls for @${selectedProfile?.username ?? selectedProfileId}` : "No API calls recorded yet"}
@@ -266,32 +273,32 @@ export function Dashboard() {
                   ) : (
                     filteredApiCalls.map((call: any) => (
                       <tr key={call.id} className="hover:bg-accent/5 transition-colors">
-                        <td className="px-6 py-3.5 whitespace-nowrap text-muted-foreground text-xs font-mono">
-                          <span className="flex items-center gap-1.5">
+                        <td className="px-3 py-3.5 text-muted-foreground text-xs font-mono truncate">
+                          <span className="flex items-center gap-1 min-w-0">
                             <Clock className="w-3 h-3 shrink-0" />
-                            {format(new Date(call.date), "MMM d, HH:mm:ss")}
+                            <span className="truncate">{format(new Date(call.date), "MMM d, HH:mm:ss")}</span>
                           </span>
                         </td>
-                        <td className="px-6 py-3.5 font-medium whitespace-nowrap">
+                        <td className="px-3 py-3.5 font-medium truncate">
                           <Link
                             href={`/profiles/${call.profileId}?tab=follow`}
-                            className="flex items-center gap-2 text-foreground hover:text-primary transition-colors group"
+                            className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"
                           >
-                            <User className="w-3.5 h-3.5 text-primary" />
-                            <span className="group-hover:underline underline-offset-2">
+                            <User className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <span className="group-hover:underline underline-offset-2 truncate">
                               {getUsername(call.profileId)}
                             </span>
                           </Link>
                         </td>
-                        <td className="px-6 py-3.5 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
+                        <td className="px-3 py-3.5 truncate">
+                          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full">
                             {call.operationName}
                           </span>
                         </td>
-                        <td className="px-6 py-3.5 whitespace-nowrap text-xs text-muted-foreground font-mono">
+                        <td className="px-3 py-3.5 text-xs text-muted-foreground font-mono truncate">
                           {call.durationMs != null ? `${call.durationMs}ms` : "—"}
                         </td>
-                        <td className="px-6 py-3.5 text-foreground leading-relaxed">
+                        <td className="px-3 py-3.5 text-foreground truncate" title={call.message || undefined}>
                           {call.message || "—"}
                         </td>
                       </tr>

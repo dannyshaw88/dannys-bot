@@ -647,10 +647,8 @@ export function ProfilesPage() {
                       Verify
                     </button>
                   )}
-                  <Link href={`/profiles/${profile.id}`}>
-                    <span className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                      Config
-                    </span>
+                  <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                    Config
                   </Link>
                   <button
                     onClick={() => setDeleteConfirm({ ids: [profile.id] })}
