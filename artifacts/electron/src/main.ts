@@ -71,10 +71,35 @@ function waitForServer(port: number, timeoutMs = 30000): Promise<void> {
   });
 }
 
+function findChromiumPath(): string {
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || "";
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+    const candidates = [
+      path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+      path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+      path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+      path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+      path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+      path.join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe"),
+      path.join(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+    ];
+    for (const p of candidates) {
+      try { if (fs.existsSync(p)) return p; } catch {}
+    }
+    return "";
+  }
+  // Linux / macOS (dev environment — Nix-managed Chromium)
+  return process.env.CHROMIUM_PATH
+    || "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+}
+
 function startServer(port: number, logPath: string): void {
   const entry = getServerEntry();
   const dbPath = path.join(getUserDataPath(), "database.db");
   const frontendPath = getFrontendPath();
+  const chromiumPath = findChromiumPath();
 
   serverProc = spawn(process.execPath, [entry], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -88,6 +113,7 @@ function startServer(port: number, logPath: string): void {
       NODE_ENV: "production",
       LOG_LEVEL: "warn",
       LOG_FILE: logPath,
+      ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
     },
   });
 

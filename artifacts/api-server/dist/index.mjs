@@ -142431,7 +142431,7 @@ var LAUNCH_ARGS = [
   "--hide-scrollbars",
   "--window-size=1280,760"
 ];
-var CHROMIUM_PATH = "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+var CHROMIUM_PATH = process.env.CHROMIUM_PATH || "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 async function getOrCreateSession(profileId, userAgent, proxy) {
   const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
   const existing = sessions.get(profileId);
@@ -142442,8 +142442,18 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
   }
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
   log(`Launching Chrome for profile ${profileId}${proxy ? ` via proxy ${proxy.host}:${proxy.port}` : " (direct)"}`, "browser");
-  const { default: puppeteer } = await import("puppeteer");
-  const browser = await puppeteer.launch({
+  let puppeteerLib;
+  try {
+    puppeteerLib = (await import("puppeteer-core")).default;
+  } catch {
+    puppeteerLib = (await import("puppeteer")).default;
+  }
+  if (!CHROMIUM_PATH) {
+    throw new Error(
+      "No Chromium executable found. Please install Google Chrome or Microsoft Edge and restart the app."
+    );
+  }
+  const browser = await puppeteerLib.launch({
     headless: true,
     executablePath: CHROMIUM_PATH,
     args: [...LAUNCH_ARGS, ...proxyArg],

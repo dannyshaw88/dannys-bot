@@ -95,8 +95,10 @@ const LAUNCH_ARGS = [
   "--window-size=1280,760",
 ];
 
-// Use system Chromium installed via Nix
-const CHROMIUM_PATH = "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+// Chromium executable — resolved from env (set by Electron main on Windows) or Nix store (Linux dev)
+const CHROMIUM_PATH =
+  process.env.CHROMIUM_PATH ||
+  "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 
 export async function getOrCreateSession(
   profileId: number,
@@ -116,8 +118,22 @@ export async function getOrCreateSession(
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
   log(`Launching Chrome for profile ${profileId}${proxy ? ` via proxy ${proxy.host}:${proxy.port}` : " (direct)"}`, "browser");
 
-  const { default: puppeteer } = await import("puppeteer");
-  const browser = await puppeteer.launch({
+  // Try puppeteer-core first (ships with Electron app, no bundled Chromium).
+  // Fall back to the full puppeteer package (used in Linux dev where it manages its own Chromium).
+  let puppeteerLib: any;
+  try {
+    puppeteerLib = (await import("puppeteer-core")).default;
+  } catch {
+    puppeteerLib = (await import("puppeteer")).default;
+  }
+
+  if (!CHROMIUM_PATH) {
+    throw new Error(
+      "No Chromium executable found. Please install Google Chrome or Microsoft Edge and restart the app.",
+    );
+  }
+
+  const browser = await puppeteerLib.launch({
     headless: true,
     executablePath: CHROMIUM_PATH,
     args: [...LAUNCH_ARGS, ...proxyArg],
