@@ -1609,7 +1609,7 @@ class AutomationEngine {
             // Download, alter, upload
             const imageBuffer   = await client.downloadImage(candidate.imageUrl);
             const level         = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
-            const alteredBuffer = alterJpegBuffer(imageBuffer, level);
+            const alteredBuffer = await alterJpegBuffer(imageBuffer, level);
 
             const uploaded = await client.uploadPhoto(alteredBuffer, candidate.caption);
             if (uploaded) {
