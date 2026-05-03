@@ -4,10 +4,10 @@ import { storage } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
-import { WebSocketServer } from "ws";
 import {
   getOrCreateSession,
-  attachWebSocket,
+  attachSSE,
+  detachSSE,
   browserNavigate,
   browserClick,
   browserMouseMove,
@@ -595,53 +595,55 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
-  // WebSocket for real-time browser streaming
-  const wss = new WebSocketServer({ noServer: true });
-
-  httpServer.on("upgrade", async (req, socket, head) => {
-    const match = req.url?.match(/^\/api\/browser\/(\d+)\/stream/);
-    if (!match) return;
-
-    const profileId = Number(match[1]);
+  // SSE stream for real-time browser frames (proxy-friendly, no upgrade required)
+  app.get("/api/browser/:profileId/stream", async (req, res) => {
+    const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
-    if (!profile) {
-      socket.destroy();
+    if (!profile) { res.status(404).end(); return; }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // disable nginx/proxy response buffering
+    res.flushHeaders();
+
+    const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+    try {
+      const proxy = await resolveProxyConfig(profile);
+      await getOrCreateSession(profileId, ua, proxy);
+      attachSSE(profileId, res);
+    } catch (err: any) {
+      res.write(`data: ${JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" })}\n\n`);
+      res.end();
       return;
     }
 
-    wss.handleUpgrade(req, socket, head, async (ws) => {
-      const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-
-      try {
-        const proxy = await resolveProxyConfig(profile);
-        await getOrCreateSession(profileId, ua, proxy);
-        attachWebSocket(profileId, ws);
-      } catch (err: any) {
-        ws.send(JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" }));
-        ws.close();
-        return;
-      }
-
-      ws.on("message", async (raw) => {
-        try {
-          const msg = JSON.parse(raw.toString());
-          switch (msg.type) {
-            case "navigate":   await browserNavigate(profileId, msg.url); break;
-            case "click":      await browserClick(profileId, msg.x, msg.y); break;
-            case "mousemove":  await browserMouseMove(profileId, msg.x, msg.y); break;
-            case "scroll":     await browserScroll(profileId, msg.x, msg.y, msg.deltaX, msg.deltaY); break;
-            case "keydown":    await browserKeyDown(profileId, msg.key); break;
-            case "keyup":      await browserKeyUp(profileId, msg.key); break;
-            case "type":       await browserType(profileId, msg.text); break;
-            case "back":       await browserBack(profileId); break;
-            case "forward":    await browserForward(profileId); break;
-            case "reload":     await browserReload(profileId); break;
-          }
-        } catch {}
-      });
-
-      ws.on("close", () => {});
+    req.on("close", () => {
+      detachSSE(profileId, res);
     });
+  });
+
+  // HTTP POST for browser input events (replaces WS send)
+  app.post("/api/browser/:profileId/input", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    try {
+      const msg = req.body as any;
+      switch (msg.type) {
+        case "navigate":   await browserNavigate(profileId, msg.url); break;
+        case "click":      await browserClick(profileId, msg.x, msg.y); break;
+        case "mousemove":  await browserMouseMove(profileId, msg.x, msg.y); break;
+        case "scroll":     await browserScroll(profileId, msg.x, msg.y, msg.deltaX, msg.deltaY); break;
+        case "keydown":    await browserKeyDown(profileId, msg.key); break;
+        case "keyup":      await browserKeyUp(profileId, msg.key); break;
+        case "type":       await browserType(profileId, msg.text); break;
+        case "back":       await browserBack(profileId); break;
+        case "forward":    await browserForward(profileId); break;
+        case "reload":     await browserReload(profileId); break;
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
   });
 
   // ── Run repost now (manual, bypasses skip-chance and session timer) ──────

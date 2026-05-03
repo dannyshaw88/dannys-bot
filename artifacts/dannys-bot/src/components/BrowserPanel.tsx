@@ -14,7 +14,7 @@ interface BrowserPanelProps {
   username: string;
 }
 
-type WSStatus = "idle" | "connecting" | "connected" | "error";
+type SSEStatus = "idle" | "connecting" | "connected" | "error";
 type LoginState = "idle" | "running" | "ok" | "fail";
 
 const BROWSER_W = 1280;
@@ -24,14 +24,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const { toast } = useToast();
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const esRef = useRef<EventSource | null>(null);
   const addressFocusedRef = useRef(false);
 
-  const [status, setStatus] = useState<WSStatus>("idle");
-  const statusRef = useRef<WSStatus>("idle");
+  const [status, setStatus] = useState<SSEStatus>("idle");
+  const statusRef = useRef<SSEStatus>("idle");
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const setStatusSafe = useCallback((s: WSStatus) => {
+  const setStatusSafe = useCallback((s: SSEStatus) => {
     statusRef.current = s;
     setStatus(s);
   }, []);
@@ -44,12 +44,15 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [loginMsg, setLoginMsg] = useState<string>("");
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
 
-  // ── WebSocket message sender ──────────────────────────────────────────────
+  // ── Input sender: POST to /api/browser/:id/input ─────────────────────────
   const send = useCallback((msg: object) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(msg));
-    }
-  }, []);
+    if (statusRef.current !== "connected") return;
+    fetch(`/api/browser/${profileId}/input`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(msg),
+    }).catch(() => {});
+  }, [profileId]);
 
   // ── Non-passive wheel listener ────────────────────────────────────────────
   useEffect(() => {
@@ -66,24 +69,29 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     return () => canvas.removeEventListener("wheel", onWheel);
   }, [send]);
 
-  // ── WebSocket lifecycle ───────────────────────────────────────────────────
+  // ── SSE connection lifecycle ──────────────────────────────────────────────
   const connect = useCallback(() => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    wsRef.current?.close();
+    // Close existing EventSource
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
     setStatusSafe("connecting");
     setErrorMsg(null);
     setIsLoading(true);
 
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${window.location.host}/api/browser/${profileId}/stream`);
-    wsRef.current = ws;
+    const es = new EventSource(`/api/browser/${profileId}/stream`);
+    esRef.current = es;
 
-    ws.onopen = () => setStatusSafe("connected");
+    es.onopen = () => {
+      setStatusSafe("connected");
+    };
 
-    ws.onmessage = (evt) => {
+    es.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data as string);
         switch (msg.type) {
@@ -101,6 +109,8 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             setErrorMsg(msg.message ?? "Unknown error");
             setStatusSafe("error");
             setIsLoading(false);
+            es.close();
+            esRef.current = null;
             break;
           case "loginStatus":
             setLoginMsg(msg.message ?? "");
@@ -117,18 +127,13 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       } catch {}
     };
 
-    ws.onerror = () => {
-      setStatusSafe("error");
+    es.onerror = () => {
+      // EventSource auto-reconnects by default — suppress that and manage reconnect ourselves
+      es.close();
+      esRef.current = null;
       setIsLoading(false);
-      setErrorMsg("WebSocket connection failed.");
-    };
-
-    ws.onclose = () => {
-      setIsLoading(false);
-      // Use ref so the closure reads the *current* status, not a stale snapshot
       if (statusRef.current !== "error") {
         setStatusSafe("idle");
-        // Auto-reconnect after 3 s if the close was unexpected (not an error)
         reconnectTimerRef.current = setTimeout(() => {
           if (statusRef.current === "idle") connect();
         }, 3000);
@@ -138,7 +143,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    wsRef.current?.close();
+    if (esRef.current) { esRef.current.close(); esRef.current = null; }
   }, []);
 
   // Auto-connect on mount
@@ -150,25 +155,24 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     if (!entry?.pendingUrl) return;
     const url = entry.pendingUrl;
     clearPendingUrl(profileId);
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (statusRef.current === "connected") {
       setAddressBar(url);
       setIsLoading(true);
-      wsRef.current.send(JSON.stringify({ type: "navigate", url }));
+      send({ type: "navigate", url });
     } else {
-      // WS not open yet (EB just opened) — hold the URL until connected
       setPendingNavUrl(url);
     }
-  }, [windows, profileId, clearPendingUrl]);
+  }, [windows, profileId, clearPendingUrl, send]);
 
-  // Fire pending navigation once WS becomes connected
+  // Fire pending navigation once SSE becomes connected
   useEffect(() => {
     if (status !== "connected" || !pendingNavUrl) return;
     const url = pendingNavUrl;
     setPendingNavUrl(null);
     setAddressBar(url);
     setIsLoading(true);
-    wsRef.current?.send(JSON.stringify({ type: "navigate", url }));
-  }, [status, pendingNavUrl]);
+    send({ type: "navigate", url });
+  }, [status, pendingNavUrl, send]);
 
   // ── Canvas rendering ──────────────────────────────────────────────────────
   const drawFrame = (base64: string) => {
@@ -241,7 +245,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   // ── Auto-login ────────────────────────────────────────────────────────────
   const doLogin = () => {
-    // If already running, click acts as Cancel — reset state
     if (loginState === "running") {
       setLoginState("idle");
       setLoginMsg("");
@@ -249,7 +252,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     }
     setLoginState("running");
     setLoginMsg("Starting login…");
-    // Fire-and-forget — final result arrives via WebSocket loginDone message
     fetch(`/api/browser/${profileId}/login`, { method: "POST" }).catch(() => {
       setLoginState("fail");
       setLoginMsg("Could not reach server");
@@ -318,7 +320,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           variant="outline"
           size="sm"
           className={`h-8 px-3 text-xs gap-1.5 shrink-0 font-semibold transition-colors ${
-            loginState === "ok"   ? "border-green-300 text-green-700 bg-green-50" :
+            loginState === "ok"      ? "border-green-300 text-green-700 bg-green-50" :
             loginState === "fail"    ? "border-red-300 text-red-700 bg-red-50" :
             loginState === "running" ? "border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100" :
             "border-primary/40 text-primary hover:bg-primary/5"

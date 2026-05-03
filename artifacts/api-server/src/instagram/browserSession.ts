@@ -1,5 +1,5 @@
 import type { Browser, Page } from "puppeteer";
-import { WebSocket } from "ws";
+import type { ServerResponse } from "http";
 import { generate as totpGenerate } from "otplib";
 import fs from "fs";
 import path from "path";
@@ -69,10 +69,15 @@ export interface ProxyConfig {
 interface Session {
   browser: Browser;
   page: Page;
-  ws: WebSocket | null;
+  res: ServerResponse | null; // SSE response — null when no client is connected
   frameLoop: ReturnType<typeof setInterval> | null;
   lastUrl: string;
   proxyKey: string; // "direct" or "host:port" — used to detect proxy changes
+}
+
+function sseWrite(res: ServerResponse | null, data: object) {
+  if (!res || res.writableEnded) return;
+  try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
 }
 
 const sessions = new Map<number, Session>();
@@ -291,7 +296,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, ws: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey };
+  const session: Session = { browser, page, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -308,15 +313,22 @@ export async function getOrCreateSession(
   return session;
 }
 
-export function attachWebSocket(profileId: number, ws: WebSocket) {
+export function detachSSE(profileId: number, res: ServerResponse) {
+  const session = sessions.get(profileId);
+  if (!session || session.res !== res) return;
+  session.res = null;
+  if (session.frameLoop) { clearInterval(session.frameLoop); session.frameLoop = null; }
+}
+
+export function attachSSE(profileId: number, res: ServerResponse) {
   const session = sessions.get(profileId);
   if (!session) return;
 
-  // Replace any existing WebSocket
-  if (session.ws && session.ws.readyState === WebSocket.OPEN) {
-    session.ws.close();
+  // End any existing SSE connection for this profile
+  if (session.res && !session.res.writableEnded) {
+    try { session.res.end(); } catch {}
   }
-  session.ws = ws;
+  session.res = res;
 
   startFrameLoop(profileId);
 }
@@ -329,21 +341,21 @@ function startFrameLoop(profileId: number) {
 
   let cookieSaveTick = 0;
   let popupCheckTick = 0;
-  let pingTick = 0;
+  let keepAliveTick = 0;
   let busy = false;
 
   session.frameLoop = setInterval(async () => {
     const s = sessions.get(profileId);
-    if (!s || !s.ws || s.ws.readyState !== WebSocket.OPEN) {
+    if (!s || !s.res || s.res.writableEnded) {
       if (s?.frameLoop) clearInterval(s.frameLoop);
       return;
     }
 
-    // Keep-alive ping every ~10 seconds so the proxy doesn't drop the WS
-    pingTick++;
-    if (pingTick >= 50) { // 50 * 200ms = 10s
-      pingTick = 0;
-      try { s.ws.ping(); } catch {}
+    // Keep-alive SSE comment every ~15 seconds to prevent proxy timeouts
+    keepAliveTick++;
+    if (keepAliveTick >= 75) { // 75 * 200ms = 15s
+      keepAliveTick = 0;
+      try { s.res.write(": keepalive\n\n"); } catch {}
     }
 
     // Skip frame if a screenshot is already in flight (prevents queuing)
@@ -356,16 +368,11 @@ function startFrameLoop(profileId: number) {
         s.page.url(),
       ]);
 
-      if (s.ws.readyState === WebSocket.OPEN) {
-        const frame = JSON.stringify({ type: "frame", data: screenshot, url: currentUrl });
-        s.ws.send(frame);
-      }
+      sseWrite(s.res, { type: "frame", data: screenshot, url: currentUrl });
 
       if (currentUrl !== s.lastUrl) {
         s.lastUrl = currentUrl;
-        if (s.ws.readyState === WebSocket.OPEN) {
-          s.ws.send(JSON.stringify({ type: "urlChange", url: currentUrl }));
-        }
+        sseWrite(s.res, { type: "urlChange", url: currentUrl });
       }
 
       // Check for post-login popups every ~10 seconds
@@ -393,11 +400,11 @@ export async function browserNavigate(profileId: number, url: string) {
   const s = sessions.get(profileId);
   if (!s) return;
   try {
-    s.ws?.send(JSON.stringify({ type: "loading", loading: true }));
+    sseWrite(s.res, { type: "loading", loading: true });
     await s.page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-    s.ws?.send(JSON.stringify({ type: "loading", loading: false }));
+    sseWrite(s.res, { type: "loading", loading: false });
   } catch {
-    s.ws?.send(JSON.stringify({ type: "loading", loading: false }));
+    sseWrite(s.res, { type: "loading", loading: false });
   }
 }
 
@@ -466,7 +473,7 @@ export async function closeSession(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
   if (s.frameLoop) clearInterval(s.frameLoop);
-  if (s.ws) try { s.ws.close(); } catch {}
+  if (s.res && !s.res.writableEnded) try { s.res.end(); } catch {}
   await s.browser.close();
   sessions.delete(profileId);
   log(`Chrome closed for profile ${profileId}`, "browser");
@@ -605,17 +612,13 @@ async function dismissInstagramPopups(page: Page): Promise<void> {
 
 function sendStatus(profileId: number, message: string) {
   const s = sessions.get(profileId);
-  if (s?.ws?.readyState === WebSocket.OPEN) {
-    s.ws.send(JSON.stringify({ type: "loginStatus", message }));
-  }
+  sseWrite(s?.res ?? null, { type: "loginStatus", message });
   log(`[autoLogin:${profileId}] ${message}`, "browser");
 }
 
 export function sendLoginDone(profileId: number, ok: boolean, message: string) {
   const s = sessions.get(profileId);
-  if (s?.ws?.readyState === WebSocket.OPEN) {
-    s.ws.send(JSON.stringify({ type: "loginDone", ok, message }));
-  }
+  sseWrite(s?.res ?? null, { type: "loginDone", ok, message });
   log(`[loginDone:${profileId}] ${ok ? "✅" : "❌"} ${message}`, "browser");
 }
 
