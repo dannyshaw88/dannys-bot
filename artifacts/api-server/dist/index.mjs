@@ -508,6 +508,121 @@ var require_browser = __commonJS({
   }
 });
 
+// ../../node_modules/.pnpm/has-flag@4.0.0/node_modules/has-flag/index.js
+var require_has_flag = __commonJS({
+  "../../node_modules/.pnpm/has-flag@4.0.0/node_modules/has-flag/index.js"(exports2, module2) {
+    "use strict";
+    module2.exports = (flag, argv = process.argv) => {
+      const prefix = flag.startsWith("-") ? "" : flag.length === 1 ? "-" : "--";
+      const position = argv.indexOf(prefix + flag);
+      const terminatorPosition = argv.indexOf("--");
+      return position !== -1 && (terminatorPosition === -1 || position < terminatorPosition);
+    };
+  }
+});
+
+// ../../node_modules/.pnpm/supports-color@7.2.0/node_modules/supports-color/index.js
+var require_supports_color = __commonJS({
+  "../../node_modules/.pnpm/supports-color@7.2.0/node_modules/supports-color/index.js"(exports2, module2) {
+    "use strict";
+    var os = __require("os");
+    var tty = __require("tty");
+    var hasFlag = require_has_flag();
+    var { env: env2 } = process;
+    var forceColor;
+    if (hasFlag("no-color") || hasFlag("no-colors") || hasFlag("color=false") || hasFlag("color=never")) {
+      forceColor = 0;
+    } else if (hasFlag("color") || hasFlag("colors") || hasFlag("color=true") || hasFlag("color=always")) {
+      forceColor = 1;
+    }
+    if ("FORCE_COLOR" in env2) {
+      if (env2.FORCE_COLOR === "true") {
+        forceColor = 1;
+      } else if (env2.FORCE_COLOR === "false") {
+        forceColor = 0;
+      } else {
+        forceColor = env2.FORCE_COLOR.length === 0 ? 1 : Math.min(parseInt(env2.FORCE_COLOR, 10), 3);
+      }
+    }
+    function translateLevel(level) {
+      if (level === 0) {
+        return false;
+      }
+      return {
+        level,
+        hasBasic: true,
+        has256: level >= 2,
+        has16m: level >= 3
+      };
+    }
+    function supportsColor(haveStream, streamIsTTY) {
+      if (forceColor === 0) {
+        return 0;
+      }
+      if (hasFlag("color=16m") || hasFlag("color=full") || hasFlag("color=truecolor")) {
+        return 3;
+      }
+      if (hasFlag("color=256")) {
+        return 2;
+      }
+      if (haveStream && !streamIsTTY && forceColor === void 0) {
+        return 0;
+      }
+      const min = forceColor || 0;
+      if (env2.TERM === "dumb") {
+        return min;
+      }
+      if (process.platform === "win32") {
+        const osRelease = os.release().split(".");
+        if (Number(osRelease[0]) >= 10 && Number(osRelease[2]) >= 10586) {
+          return Number(osRelease[2]) >= 14931 ? 3 : 2;
+        }
+        return 1;
+      }
+      if ("CI" in env2) {
+        if (["TRAVIS", "CIRCLECI", "APPVEYOR", "GITLAB_CI", "GITHUB_ACTIONS", "BUILDKITE"].some((sign) => sign in env2) || env2.CI_NAME === "codeship") {
+          return 1;
+        }
+        return min;
+      }
+      if ("TEAMCITY_VERSION" in env2) {
+        return /^(9\.(0*[1-9]\d*)\.|\d{2,}\.)/.test(env2.TEAMCITY_VERSION) ? 1 : 0;
+      }
+      if (env2.COLORTERM === "truecolor") {
+        return 3;
+      }
+      if ("TERM_PROGRAM" in env2) {
+        const version3 = parseInt((env2.TERM_PROGRAM_VERSION || "").split(".")[0], 10);
+        switch (env2.TERM_PROGRAM) {
+          case "iTerm.app":
+            return version3 >= 3 ? 3 : 2;
+          case "Apple_Terminal":
+            return 2;
+        }
+      }
+      if (/-256(color)?$/i.test(env2.TERM)) {
+        return 2;
+      }
+      if (/^screen|^xterm|^vt100|^vt220|^rxvt|color|ansi|cygwin|linux/i.test(env2.TERM)) {
+        return 1;
+      }
+      if ("COLORTERM" in env2) {
+        return 1;
+      }
+      return min;
+    }
+    function getSupportLevel(stream) {
+      const level = supportsColor(stream, stream && stream.isTTY);
+      return translateLevel(level);
+    }
+    module2.exports = {
+      supportsColor: getSupportLevel,
+      stdout: translateLevel(supportsColor(true, tty.isatty(1))),
+      stderr: translateLevel(supportsColor(true, tty.isatty(2)))
+    };
+  }
+});
+
 // ../../node_modules/.pnpm/debug@4.4.3/node_modules/debug/src/node.js
 var require_node = __commonJS({
   "../../node_modules/.pnpm/debug@4.4.3/node_modules/debug/src/node.js"(exports2, module2) {
@@ -526,7 +641,7 @@ var require_node = __commonJS({
     );
     exports2.colors = [6, 2, 3, 4, 5, 1];
     try {
-      const supportsColor = __require("supports-color");
+      const supportsColor = require_supports_color();
       if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
         exports2.colors = [
           20,
@@ -118425,6 +118540,152 @@ var init_hikerApiClient = __esm({
   }
 });
 
+// src/instagram/imageAlteration.ts
+var imageAlteration_exports = {};
+__export(imageAlteration_exports, {
+  alterJpegBuffer: () => alterJpegBuffer
+});
+import { randomBytes as randomBytes2 } from "crypto";
+import sharp from "sharp";
+function randInRange(min, max) {
+  return min + Math.random() * (max - min);
+}
+function injectComSegment(buf, commentLen) {
+  if (buf.length < 4 || buf[0] !== 255 || buf[1] !== 216) return buf;
+  const comment = randomBytes2(commentLen);
+  const segLen = 2 + commentLen;
+  const com = Buffer.allocUnsafe(4 + commentLen);
+  com[0] = 255;
+  com[1] = 254;
+  com[2] = segLen >> 8 & 255;
+  com[3] = segLen & 255;
+  comment.copy(com, 4);
+  return Buffer.concat([buf.subarray(0, 2), com, buf.subarray(2)]);
+}
+function buildRandomMetadata() {
+  const iphones = [
+    "iPhone 13",
+    "iPhone 13 Pro",
+    "iPhone 14",
+    "iPhone 14 Pro",
+    "iPhone 15",
+    "iPhone 15 Pro",
+    "iPhone 15 Pro Max"
+  ];
+  const ios = ["16.6.1", "17.0", "17.1.2", "17.2", "17.3", "17.4"];
+  const model = iphones[Math.floor(Math.random() * iphones.length)];
+  const iosVer = ios[Math.floor(Math.random() * ios.length)];
+  const lat = 25 + Math.random() * 24;
+  const lon = 66 + Math.random() * 59;
+  function toDMS(deg) {
+    const d3 = Math.floor(deg);
+    const mf = (deg - d3) * 60;
+    const m3 = Math.floor(mf);
+    const s = Math.floor((mf - m3) * 60 * 100);
+    return `${d3} 1 ${m3} 1 ${s} 100`;
+  }
+  return {
+    exif: {
+      IFD0: { Make: "Apple", Model: model, Software: `${model} ${iosVer}` },
+      GPS: {
+        GPSLatitudeRef: "N",
+        GPSLatitude: toDMS(lat),
+        GPSLongitudeRef: "W",
+        GPSLongitude: toDMS(lon)
+      }
+    }
+  };
+}
+function buildConfig(level, custom2) {
+  if (!custom2) return CONFIGS[level];
+  return {
+    contrast: custom2.contrast.enabled ? { min: custom2.contrast.min, max: custom2.contrast.max } : { min: 0, max: 0 },
+    brightness: custom2.brightness.enabled ? { min: custom2.brightness.min, max: custom2.brightness.max } : { min: 0, max: 0 },
+    noise: custom2.noise.enabled ? { min: custom2.noise.min, max: custom2.noise.max } : { min: 0, max: 0 },
+    sharpen: custom2.sharpen.enabled ? { min: custom2.sharpen.min, max: custom2.sharpen.max } : { min: 1, max: 1 },
+    // sigma 0 = no sharpen
+    pixelate: custom2.pixelate.enabled ? { min: custom2.pixelate.min, max: custom2.pixelate.max } : { min: 0.3, max: 0.3 },
+    // near-zero blur
+    randomMetadata: custom2.randomMetadata
+  };
+}
+async function alterJpegBuffer(input, level, customSettings) {
+  const cfg = buildConfig(level, customSettings);
+  try {
+    const { data: rawPixels, info } = await sharp(input).raw().toBuffer({ resolveWithObject: true });
+    const noiseMax = cfg.noise.max - cfg.noise.min;
+    if (noiseMax > 0) {
+      const noiseMag = randInRange(cfg.noise.min, cfg.noise.max);
+      const channels = info.channels;
+      for (let i2 = 0; i2 < rawPixels.length; i2++) {
+        if (channels === 4 && i2 % 4 === 3) continue;
+        const u = Math.max(1e-10, Math.random());
+        const v3 = Math.max(1e-10, Math.random());
+        const gauss = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v3);
+        rawPixels[i2] = Math.max(0, Math.min(255, rawPixels[i2] + gauss * noiseMag)) | 0;
+      }
+    }
+    const contrastVal = randInRange(cfg.contrast.min, cfg.contrast.max);
+    const linearA = 1 + contrastVal / 1e3;
+    const linearB = -(contrastVal / 1e3) * 128;
+    const brightnessVal = randInRange(cfg.brightness.min, cfg.brightness.max);
+    const brightnessMultiplier = 1 + brightnessVal / 5e3;
+    const sharpenSigma = Math.max(0, randInRange(cfg.sharpen.min, cfg.sharpen.max) - 1);
+    const blurSigma = Math.max(0.3, randInRange(cfg.pixelate.min, cfg.pixelate.max));
+    let pipeline = sharp(rawPixels, {
+      raw: { width: info.width, height: info.height, channels: info.channels }
+    }).linear(linearA, linearB).modulate({ brightness: brightnessMultiplier });
+    if (sharpenSigma > 0.05) {
+      pipeline = pipeline.sharpen({ sigma: Math.min(sharpenSigma, 10) });
+    }
+    pipeline = pipeline.blur(blurSigma);
+    if (cfg.randomMetadata) {
+      try {
+        pipeline = pipeline.withMetadata(buildRandomMetadata());
+      } catch {
+      }
+    }
+    const processed = await pipeline.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
+    const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
+    return injectComSegment(processed, comLen);
+  } catch (err) {
+    console.warn("[imageAlteration] sharp pipeline failed, using COM-only fallback:", err.message);
+    return injectComSegment(input, 32);
+  }
+}
+var CONFIGS;
+var init_imageAlteration = __esm({
+  "src/instagram/imageAlteration.ts"() {
+    "use strict";
+    CONFIGS = {
+      small: {
+        contrast: { min: 5, max: 50 },
+        brightness: { min: 5, max: 50 },
+        noise: { min: 5, max: 8 },
+        sharpen: { min: 1, max: 1.3 },
+        pixelate: { min: 0.3, max: 0.7 },
+        randomMetadata: true
+      },
+      medium: {
+        contrast: { min: 5, max: 150 },
+        brightness: { min: 5, max: 150 },
+        noise: { min: 5, max: 12 },
+        sharpen: { min: 1, max: 1.7 },
+        pixelate: { min: 0.3, max: 1.2 },
+        randomMetadata: true
+      },
+      high: {
+        contrast: { min: 5, max: 250 },
+        brightness: { min: 5, max: 250 },
+        noise: { min: 5, max: 15 },
+        sharpen: { min: 1, max: 2 },
+        pixelate: { min: 0.9, max: 2.1 },
+        randomMetadata: true
+      }
+    };
+  }
+});
+
 // src/index.ts
 var import_express4 = __toESM(require_express2(), 1);
 import { createServer } from "http";
@@ -143597,128 +143858,7 @@ var InstagramWebClient = class {
 
 // src/instagram/automationEngine.ts
 init_hikerApiClient();
-
-// src/instagram/imageAlteration.ts
-import { randomBytes as randomBytes2 } from "crypto";
-import sharp from "sharp";
-var CONFIGS = {
-  small: {
-    contrast: { min: 5, max: 50 },
-    brightness: { min: 5, max: 50 },
-    noise: { min: 5, max: 8 },
-    sharpen: { min: 1, max: 1.3 },
-    pixelate: { min: 0.3, max: 0.7 }
-  },
-  medium: {
-    contrast: { min: 5, max: 150 },
-    brightness: { min: 5, max: 150 },
-    noise: { min: 5, max: 12 },
-    sharpen: { min: 1, max: 1.7 },
-    pixelate: { min: 0.3, max: 1.2 }
-  },
-  high: {
-    contrast: { min: 5, max: 250 },
-    brightness: { min: 5, max: 250 },
-    noise: { min: 5, max: 15 },
-    sharpen: { min: 1, max: 2 },
-    pixelate: { min: 0.9, max: 2.1 }
-  }
-};
-function randInRange(min, max) {
-  return min + Math.random() * (max - min);
-}
-function injectComSegment(buf, commentLen) {
-  if (buf.length < 4 || buf[0] !== 255 || buf[1] !== 216) return buf;
-  const comment = randomBytes2(commentLen);
-  const segLen = 2 + commentLen;
-  const com = Buffer.allocUnsafe(4 + commentLen);
-  com[0] = 255;
-  com[1] = 254;
-  com[2] = segLen >> 8 & 255;
-  com[3] = segLen & 255;
-  comment.copy(com, 4);
-  return Buffer.concat([buf.subarray(0, 2), com, buf.subarray(2)]);
-}
-function buildRandomMetadata() {
-  const iphones = [
-    "iPhone 13",
-    "iPhone 13 Pro",
-    "iPhone 14",
-    "iPhone 14 Pro",
-    "iPhone 15",
-    "iPhone 15 Pro",
-    "iPhone 15 Pro Max"
-  ];
-  const ios = ["16.6.1", "17.0", "17.1.2", "17.2", "17.3", "17.4"];
-  const model = iphones[Math.floor(Math.random() * iphones.length)];
-  const iosVer = ios[Math.floor(Math.random() * ios.length)];
-  const lat = 25 + Math.random() * 24;
-  const lon = 66 + Math.random() * 59;
-  function toDMS(deg) {
-    const d3 = Math.floor(deg);
-    const mFrac = (deg - d3) * 60;
-    const m3 = Math.floor(mFrac);
-    const sFrac = (mFrac - m3) * 60;
-    const s = Math.floor(sFrac * 100);
-    return [d3, 1, m3, 1, s, 100];
-  }
-  return {
-    exif: {
-      IFD0: {
-        Make: "Apple",
-        Model: model,
-        Software: `${model} ${iosVer}`
-      },
-      GPS: {
-        GPSLatitudeRef: "N",
-        GPSLatitude: toDMS(lat).join(" "),
-        GPSLongitudeRef: "W",
-        GPSLongitude: toDMS(lon).join(" ")
-      }
-    }
-  };
-}
-async function alterJpegBuffer(input, level) {
-  const cfg = CONFIGS[level];
-  try {
-    const { data: rawPixels, info } = await sharp(input).raw().toBuffer({ resolveWithObject: true });
-    const noiseMag = randInRange(cfg.noise.min, cfg.noise.max);
-    const channels = info.channels;
-    for (let i2 = 0; i2 < rawPixels.length; i2++) {
-      if (channels === 4 && i2 % 4 === 3) continue;
-      const u = Math.max(1e-10, Math.random());
-      const v3 = Math.max(1e-10, Math.random());
-      const gauss = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v3);
-      rawPixels[i2] = Math.max(0, Math.min(255, rawPixels[i2] + gauss * noiseMag)) | 0;
-    }
-    const contrastVal = randInRange(cfg.contrast.min, cfg.contrast.max);
-    const linearA = 1 + contrastVal / 1e3;
-    const linearB = -(contrastVal / 1e3) * 128;
-    const brightnessVal = randInRange(cfg.brightness.min, cfg.brightness.max);
-    const brightnessMultiplier = 1 + brightnessVal / 5e3;
-    const sharpenSigma = randInRange(cfg.sharpen.min - 1, cfg.sharpen.max - 1);
-    const blurSigma = Math.max(0.3, randInRange(cfg.pixelate.min, cfg.pixelate.max));
-    let pipeline = sharp(rawPixels, {
-      raw: { width: info.width, height: info.height, channels }
-    }).linear(linearA, linearB).modulate({ brightness: brightnessMultiplier });
-    if (sharpenSigma > 0.05) {
-      pipeline = pipeline.sharpen({ sigma: Math.min(sharpenSigma, 10) });
-    }
-    pipeline = pipeline.blur(blurSigma);
-    try {
-      pipeline = pipeline.withMetadata(buildRandomMetadata());
-    } catch {
-    }
-    const processed = await pipeline.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
-    const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
-    return injectComSegment(processed, comLen);
-  } catch (err) {
-    console.warn("[imageAlteration] sharp pipeline failed, using COM-only fallback:", err.message);
-    return injectComSegment(input, 32);
-  }
-}
-
-// src/instagram/automationEngine.ts
+init_imageAlteration();
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -145127,7 +145267,7 @@ var AutomationEngine = class {
           } else {
             const imageBuffer = await client.downloadImage(candidate.imageUrl);
             const level = s.repostAlterationLevel ?? "small";
-            const alteredBuffer = await alterJpegBuffer(imageBuffer, level);
+            const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
             const uploaded = await client.uploadPhoto(alteredBuffer, candidate.caption);
             if (uploaded) {
               await storage.createRepostedPost({
@@ -146096,6 +146236,19 @@ async function registerInstagramRoutes(httpServer2, app2) {
       return res.json({ ok });
     } catch (e) {
       return res.status(500).json({ ok: false, error: e?.message });
+    }
+  });
+  app2.post("/api/image-alteration-preview", async (req, res) => {
+    try {
+      const { imageBase64, settings, level } = req.body;
+      if (!imageBase64) return res.status(400).json({ error: "No image provided" });
+      const { alterJpegBuffer: alterJpegBuffer2 } = await Promise.resolve().then(() => (init_imageAlteration(), imageAlteration_exports));
+      const raw = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+      const buf = Buffer.from(raw, "base64");
+      const result = await alterJpegBuffer2(buf, level ?? "medium", settings);
+      return res.json({ previewBase64: `data:image/jpeg;base64,${result.toString("base64")}` });
+    } catch (e) {
+      return res.status(500).json({ error: e?.message });
     }
   });
   app2.get("/api/engine/status", (_req, res) => {

@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { FolderOpen, Loader2, Image as ImageIcon, Settings } from "lucide-react";
+import { FolderOpen, Loader2, Image as ImageIcon, Settings, AlertCircle } from "lucide-react";
 
 export interface FilterSetting {
   enabled: boolean;
@@ -42,6 +42,7 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [previewImage, setPreviewImage]   = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing]   = useState(false);
+  const [previewError, setPreviewError]   = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Keep local in sync when dialog re-opens with new settings
@@ -70,6 +71,7 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
   const handlePreview = async () => {
     if (!originalImage) return;
     setIsPreviewing(true);
+    setPreviewError(null);
     try {
       const res = await fetch("/api/image-alteration-preview", {
         method: "POST",
@@ -77,8 +79,14 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
         body: JSON.stringify({ imageBase64: originalImage, settings: local, level: alterationLevel ?? "small" }),
       });
       const data = await res.json();
-      setPreviewImage(data.previewBase64 ?? null);
-    } catch { /* silent */ }
+      if (!res.ok || data.error) {
+        setPreviewError(data.error ?? `Server error ${res.status}`);
+      } else {
+        setPreviewImage(data.previewBase64 ?? null);
+      }
+    } catch (e: any) {
+      setPreviewError(e?.message ?? "Network error");
+    }
     setIsPreviewing(false);
   };
 
@@ -174,12 +182,17 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
               <div className="flex-1 flex items-center justify-center p-3 bg-[repeating-conic-gradient(#80808018_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] min-h-[200px]">
                 {isPreviewing
                   ? <Loader2 className="w-8 h-8 animate-spin text-muted-foreground/50" />
-                  : previewImage
-                    ? <img src={previewImage} alt="preview" className="max-h-52 max-w-full object-contain shadow" />
-                    : <div className="flex flex-col items-center gap-2 text-muted-foreground/40 select-none">
-                        <ImageIcon className="w-10 h-10" />
-                        <span className="text-xs">Click "Preview Changes"</span>
+                  : previewError
+                    ? <div className="flex flex-col items-center gap-2 text-destructive/70 select-none px-4 text-center">
+                        <AlertCircle className="w-8 h-8 shrink-0" />
+                        <span className="text-xs break-all">{previewError}</span>
                       </div>
+                    : previewImage
+                      ? <img src={previewImage} alt="preview" className="max-h-52 max-w-full object-contain shadow" />
+                      : <div className="flex flex-col items-center gap-2 text-muted-foreground/40 select-none">
+                          <ImageIcon className="w-10 h-10" />
+                          <span className="text-xs">Click "Preview Changes"</span>
+                        </div>
                 }
               </div>
             </div>
