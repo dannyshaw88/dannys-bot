@@ -102,7 +102,7 @@ export class HikerApiClient {
   async getFollowers(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
     try {
       const amount = Math.min(Math.max(max, 1), 200);
-      const j = await hikerGet(`/sc/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
+      const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
       if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
         const detail: string = j.detail ?? j.exc_type ?? JSON.stringify(j);
         const msg = `HikerAPI getFollowers error: ${detail}`;
