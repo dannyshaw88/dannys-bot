@@ -1047,47 +1047,6 @@ export class InstagramWebClient {
     });
   }
 
-  // ── Get recent photo posts from a user's feed (with image URLs) ───────────
-  async getUserFeedItems(username: string): Promise<Array<{
-    mediaId: string;
-    shortcode: string;
-    imageUrl: string;
-    caption: string;
-    takenAt: number;
-  }>> {
-    return this.timed("GetUserFeed", async () => {
-      // Step 1 — resolve username → pk ANONYMOUSLY (no account session cookies).
-      // This prevents Instagram from associating any profile lookup with this account.
-      const userInfo = await this.mobileGetAnonymous(`/api/v1/users/${encodeURIComponent(username)}/usernameinfo/`);
-      const pk: string | undefined = userInfo?.user?.pk_id ?? userInfo?.user?.pk ?? userInfo?.user?.id;
-      if (!pk) {
-        console.warn(`[webClient] getUserFeedItems: anonymous usernameinfo returned no pk for @${username}`);
-        return [];
-      }
-
-      // Step 2 — fetch the feed ANONYMOUSLY (no account session cookies).
-      const j = await this.mobileGetAnonymous(`/api/v1/feed/user/${pk}/?count=12`);
-      const items: any[] = j?.items ?? [];
-
-      return items.flatMap((item: any) => {
-        // Only handle photo (1) and album (8) — skip videos/reels
-        const mediaType: number = item?.media_type ?? 1;
-        if (mediaType !== 1 && mediaType !== 8) return [];
-
-        const mediaId  = String(item.id ?? item.pk ?? "");
-        const caption  = item.caption?.text ?? "";
-        const takenAt  = item.taken_at ?? Math.floor(Date.now() / 1000);
-
-        // For albums use the first carousel image
-        const firstMedia = mediaType === 8 ? (item.carousel_media?.[0] ?? item) : item;
-        const candidates: any[] = firstMedia.image_versions2?.candidates ?? [];
-        const imageUrl = candidates[0]?.url ?? "";
-
-        if (!mediaId || !imageUrl) return [];
-        return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
-      });
-    }, `Get feed of @${username}`);
-  }
 
   // ── Upload a photo and create the Instagram post ──────────────────────────
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */

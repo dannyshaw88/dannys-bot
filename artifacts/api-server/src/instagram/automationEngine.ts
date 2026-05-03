@@ -1694,14 +1694,13 @@ class AutomationEngine {
     // ── Repost ───────────────────────────────────────────────────────────────
     const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
 
-    // Resolve HikerAPI client for repost scraping (if the per-tool toggle is on)
-    let repostHikerClient: HikerApiClient | null = null;
-    if (s.repostUseHikerApi) {
-      const gs = await storage.getGlobalSettings();
-      if (gs.hikerApiEnabled === "true" && gs.hikerApiToken) {
-        repostHikerClient = new HikerApiClient(gs.hikerApiToken);
-      }
-    }
+    // Repost source scraping MUST always use HikerAPI — the account must never
+    // make any lookup or feed call for another user's content.
+    const gs_repost = await storage.getGlobalSettings();
+    const repostHikerClient: HikerApiClient | null =
+      (gs_repost.hikerApiEnabled === "true" && gs_repost.hikerApiToken)
+        ? new HikerApiClient(gs_repost.hikerApiToken)
+        : null;
 
     enqueue("repost",
       !!(s.repostEnabled && repostSourceUsername),
@@ -1710,6 +1709,12 @@ class AutomationEngine {
       async () => {
         const sourceUsername = repostSourceUsername;
         try {
+          if (!repostHikerClient) {
+            console.warn(`[engine] @${profile.username}: 🔁 repost skipped — HikerAPI not configured (required for source scraping)`);
+            this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "error", "HikerAPI not configured — repost source scraping requires HikerAPI");
+            return;
+          }
+
           const disableAt = Number(s.repostDisableAtPostCount ?? 0);
           if (disableAt > 0) {
             const stats = await client.getOwnProfileStats();
@@ -1727,13 +1732,9 @@ class AutomationEngine {
             Math.max(1, Number(s.repostMax ?? 1)),
           );
 
-          // Use HikerAPI for the scrape call if the per-tool toggle is on and
-          // a valid HikerAPI client is available; otherwise fall back to the
-          // mobile Instagram session (same account cookies).
-          const feedItems = repostHikerClient
-            ? await repostHikerClient.getUserFeedItems(sourceUsername)
-            : await client.getUserFeedItems(sourceUsername);
-          console.log(`[engine] @${profile.username}: 🔁 repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items, target=${targetCount})`);
+          // Source feed always fetched via HikerAPI — never the account's own session.
+          const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
+          console.log(`[engine] @${profile.username}: 🔁 repost feed fetched via HikerAPI (${feedItems.length} items, target=${targetCount})`);
 
           const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
@@ -2088,19 +2089,20 @@ class AutomationEngine {
     if (!client) return { ok: false, message: "Could not establish Instagram session (check cookies)" };
 
     try {
-      let repostHikerClient: HikerApiClient | null = null;
-      if (s.repostUseHikerApi) {
-        const gs = await storage.getGlobalSettings();
-        if (gs.hikerApiEnabled === "true" && gs.hikerApiToken) {
-          repostHikerClient = new HikerApiClient(gs.hikerApiToken);
-        }
+      // Source feed MUST always use HikerAPI — the account must never make
+      // any lookup or feed call for another user's content.
+      const gs_now = await storage.getGlobalSettings();
+      const repostHikerClient: HikerApiClient | null =
+        (gs_now.hikerApiEnabled === "true" && gs_now.hikerApiToken)
+          ? new HikerApiClient(gs_now.hikerApiToken)
+          : null;
+
+      if (!repostHikerClient) {
+        return { ok: false, message: "HikerAPI not configured — repost source scraping requires HikerAPI. Enable it in Global Settings." };
       }
 
-      const feedItems = repostHikerClient
-        ? await repostHikerClient.getUserFeedItems(sourceUsername)
-        : await client.getUserFeedItems(sourceUsername);
-
-      console.log(`[engine] @${profile.username}: 🔁 [MANUAL] feed fetched (${feedItems.length} items) from @${sourceUsername}`);
+      const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
+      console.log(`[engine] @${profile.username}: 🔁 [MANUAL] feed fetched via HikerAPI (${feedItems.length} items) from @${sourceUsername}`);
 
       let candidate: { mediaId: string; shortcode: string; imageUrl: string; caption: string } | null = null;
       for (const item of feedItems) {

@@ -143757,31 +143757,6 @@ var InstagramWebClient = class {
       }).on("error", reject);
     });
   }
-  // ── Get recent photo posts from a user's feed (with image URLs) ───────────
-  async getUserFeedItems(username) {
-    return this.timed("GetUserFeed", async () => {
-      const userInfo = await this.mobileGetAnonymous(`/api/v1/users/${encodeURIComponent(username)}/usernameinfo/`);
-      const pk = userInfo?.user?.pk_id ?? userInfo?.user?.pk ?? userInfo?.user?.id;
-      if (!pk) {
-        console.warn(`[webClient] getUserFeedItems: anonymous usernameinfo returned no pk for @${username}`);
-        return [];
-      }
-      const j = await this.mobileGetAnonymous(`/api/v1/feed/user/${pk}/?count=12`);
-      const items = j?.items ?? [];
-      return items.flatMap((item) => {
-        const mediaType = item?.media_type ?? 1;
-        if (mediaType !== 1 && mediaType !== 8) return [];
-        const mediaId = String(item.id ?? item.pk ?? "");
-        const caption = item.caption?.text ?? "";
-        const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
-        const firstMedia = mediaType === 8 ? item.carousel_media?.[0] ?? item : item;
-        const candidates = firstMedia.image_versions2?.candidates ?? [];
-        const imageUrl = candidates[0]?.url ?? "";
-        if (!mediaId || !imageUrl) return [];
-        return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
-      });
-    }, `Get feed of @${username}`);
-  }
   // ── Upload a photo and create the Instagram post ──────────────────────────
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer, caption) {
@@ -145375,13 +145350,8 @@ var AutomationEngine = class {
       }
     );
     const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
-    let repostHikerClient = null;
-    if (s.repostUseHikerApi) {
-      const gs = await storage.getGlobalSettings();
-      if (gs.hikerApiEnabled === "true" && gs.hikerApiToken) {
-        repostHikerClient = new HikerApiClient(gs.hikerApiToken);
-      }
-    }
+    const gs_repost = await storage.getGlobalSettings();
+    const repostHikerClient = gs_repost.hikerApiEnabled === "true" && gs_repost.hikerApiToken ? new HikerApiClient(gs_repost.hikerApiToken) : null;
     enqueue(
       "repost",
       !!(s.repostEnabled && repostSourceUsername),
@@ -145392,6 +145362,11 @@ var AutomationEngine = class {
       async () => {
         const sourceUsername = repostSourceUsername;
         try {
+          if (!repostHikerClient) {
+            console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 HikerAPI not configured (required for source scraping)`);
+            this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "error", "HikerAPI not configured \u2014 repost source scraping requires HikerAPI");
+            return;
+          }
           const disableAt = Number(s.repostDisableAtPostCount ?? 0);
           if (disableAt > 0) {
             const stats2 = await client.getOwnProfileStats();
@@ -145406,8 +145381,8 @@ var AutomationEngine = class {
             Math.max(1, Number(s.repostMin ?? 1)),
             Math.max(1, Number(s.repostMax ?? 1))
           );
-          const feedItems = repostHikerClient ? await repostHikerClient.getUserFeedItems(sourceUsername) : await client.getUserFeedItems(sourceUsername);
-          console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items, target=${targetCount})`);
+          const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
+          console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via HikerAPI (${feedItems.length} items, target=${targetCount})`);
           const level = s.repostAlterationLevel ?? "small";
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
           let repostedCount = 0;
@@ -145722,15 +145697,13 @@ var AutomationEngine = class {
     const client = await this.ensureClient(profile, state);
     if (!client) return { ok: false, message: "Could not establish Instagram session (check cookies)" };
     try {
-      let repostHikerClient = null;
-      if (s.repostUseHikerApi) {
-        const gs = await storage.getGlobalSettings();
-        if (gs.hikerApiEnabled === "true" && gs.hikerApiToken) {
-          repostHikerClient = new HikerApiClient(gs.hikerApiToken);
-        }
+      const gs_now = await storage.getGlobalSettings();
+      const repostHikerClient = gs_now.hikerApiEnabled === "true" && gs_now.hikerApiToken ? new HikerApiClient(gs_now.hikerApiToken) : null;
+      if (!repostHikerClient) {
+        return { ok: false, message: "HikerAPI not configured \u2014 repost source scraping requires HikerAPI. Enable it in Global Settings." };
       }
-      const feedItems = repostHikerClient ? await repostHikerClient.getUserFeedItems(sourceUsername) : await client.getUserFeedItems(sourceUsername);
-      console.log(`[engine] @${profile.username}: \u{1F501} [MANUAL] feed fetched (${feedItems.length} items) from @${sourceUsername}`);
+      const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
+      console.log(`[engine] @${profile.username}: \u{1F501} [MANUAL] feed fetched via HikerAPI (${feedItems.length} items) from @${sourceUsername}`);
       let candidate = null;
       for (const item of feedItems) {
         const already = await storage.isAlreadyReposted(profileId, item.mediaId);
