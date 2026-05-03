@@ -379,12 +379,8 @@ export function ProfilesPage() {
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
-                const a = document.createElement("a");
                 const tzOffset = new Date().getTimezoneOffset();
-                a.href = `/api/logs/export?tz=${tzOffset}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                window.open(`/api/logs/export?tz=${tzOffset}`, "_blank");
               }}
               className="cursor-pointer font-medium p-3"
             >
