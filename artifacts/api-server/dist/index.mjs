@@ -88871,9 +88871,9 @@ var require_ig_login_bad_password_error = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.IgLoginBadPasswordError = void 0;
     var ig_response_error_1 = require_ig_response_error();
-    var IgLoginBadPasswordError2 = class extends ig_response_error_1.IgResponseError {
+    var IgLoginBadPasswordError3 = class extends ig_response_error_1.IgResponseError {
     };
-    exports2.IgLoginBadPasswordError = IgLoginBadPasswordError2;
+    exports2.IgLoginBadPasswordError = IgLoginBadPasswordError3;
   }
 });
 
@@ -88910,9 +88910,9 @@ var require_ig_login_two_factor_required_error = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.IgLoginTwoFactorRequiredError = void 0;
     var ig_response_error_1 = require_ig_response_error();
-    var IgLoginTwoFactorRequiredError2 = class extends ig_response_error_1.IgResponseError {
+    var IgLoginTwoFactorRequiredError3 = class extends ig_response_error_1.IgResponseError {
     };
-    exports2.IgLoginTwoFactorRequiredError = IgLoginTwoFactorRequiredError2;
+    exports2.IgLoginTwoFactorRequiredError = IgLoginTwoFactorRequiredError3;
   }
 });
 
@@ -114349,7 +114349,7 @@ var require_client = __commonJS({
     var address_book_repository_1 = require_address_book_repository();
     var status_repository_1 = require_status_repository();
     var igtv_repository_1 = require_igtv_repository();
-    var IgApiClient3 = class {
+    var IgApiClient4 = class {
       constructor() {
         this.state = new state_1.State();
         this.request = new request_1.Request(this);
@@ -114397,7 +114397,7 @@ var require_client = __commonJS({
         this.request.end$.complete();
       }
     };
-    exports2.IgApiClient = IgApiClient3;
+    exports2.IgApiClient = IgApiClient4;
   }
 });
 
@@ -138913,7 +138913,7 @@ async function verifyInstagramCredentials(profile) {
 }
 
 // src/routes/instagram.ts
-var import_instagram_private_api2 = __toESM(require_dist2(), 1);
+var import_instagram_private_api3 = __toESM(require_dist2(), 1);
 
 // src/instagram/browserSession.ts
 import fs from "fs";
@@ -139630,6 +139630,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
 import * as https from "https";
 import * as fs2 from "fs";
 import { randomUUID } from "crypto";
+var import_instagram_private_api2 = __toESM(require_dist2(), 1);
 function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
@@ -139687,7 +139688,9 @@ function extractCsrf(cookies) {
 }
 var WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var APP_ID = "936619743392459";
-var MOBILE_UA = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+var MOBILE_VERSION = "361.0.0.32.109";
+var MOBILE_VERSION_CODE = "617571539";
+var MOBILE_UA = `Instagram ${MOBILE_VERSION} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
 var MOBILE_AID = "567067343352427";
 var InstagramWebClient = class {
   cookieJar = [];
@@ -139704,6 +139707,15 @@ var InstagramWebClient = class {
   mobileCookieJar = [];
   mobileCsrf = "";
   mobileSessionReady = false;
+  // Device state from the profile — used by IgApiClient to maintain consistent
+  // device fingerprint across mobile login attempts (same uuid/deviceId/phoneId).
+  igDeviceState;
+  userAgentApi;
+  // Stored API cookies from the last successful Verify Credentials flow.
+  // These are genuine i.instagram.com mobile session cookies and are tried
+  // first in mobileLogin() to avoid triggering Instagram's new-device email
+  // verification challenge.
+  igApiCookies;
   // API throttle — enforces the per-profile "x calls every y seconds" limit.
   // Computed as a per-call delay = everySeconds / requestsCount, so all calls
   // are evenly spaced rather than firing in an instant burst.
@@ -139728,6 +139740,46 @@ var InstagramWebClient = class {
     if (delayMs > 10) {
       await new Promise((r2) => setTimeout(r2, delayMs));
     }
+  }
+  setDeviceInfo(igDeviceState, userAgentApi, igApiCookies) {
+    this.igDeviceState = igDeviceState ?? void 0;
+    this.userAgentApi = userAgentApi ?? void 0;
+    this.igApiCookies = igApiCookies ?? void 0;
+  }
+  // Parse igApiCookies (Jarvee-style "key=value;key=value" with URL-encoded values)
+  // into mobileCookieJar and mark the mobile session ready.  Returns true if a
+  // sessionid cookie was found and the session was seeded successfully.
+  _restoreMobileFromApiCookies() {
+    if (!this.igApiCookies) return false;
+    const pairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
+    const cookies = [];
+    for (const pair of pairs) {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try {
+        value = decodeURIComponent(value);
+      } catch {
+      }
+      cookies.push(`${key}=${value}`);
+    }
+    if (!cookies.some((c3) => c3.startsWith("sessionid="))) return false;
+    if (!cookies.some((c3) => c3.startsWith("ig_did="))) cookies.push(`ig_did=${randomUUID()}`);
+    if (!cookies.some((c3) => c3.startsWith("mid="))) {
+      const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      cookies.push(`mid=${mid}`);
+    }
+    if (!cookies.some((c3) => c3.startsWith("csrftoken="))) {
+      const webCsrf = this.cookieJar.find((c3) => c3.startsWith("csrftoken="));
+      if (webCsrf) cookies.push(webCsrf);
+    }
+    this.mobileCookieJar = cookies;
+    const csrfEntry = cookies.find((c3) => c3.startsWith("csrftoken="));
+    if (csrfEntry) this.mobileCsrf = csrfEntry.split("=").slice(1).join("=");
+    this.mobileSessionReady = true;
+    console.log(`[webClient] mobile session restored from igApiCookies (${cookies.length} cookies, sessionid=true, csrf=${!!csrfEntry})`);
+    return true;
   }
   setLogger(fn) {
     this.logCallFn = fn;
@@ -139925,116 +139977,119 @@ var InstagramWebClient = class {
     return this.timed("MobileLogin", () => this._mobileLogin(username, password, twoFaSecret), `@${username} mobile login`);
   }
   async _mobileLogin(username, password, twoFaSecret) {
-    const igDid = randomUUID();
-    const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
-    const initCsrf = "missing";
-    this.mobileCookieJar = [
-      `ig_did=${igDid}`,
-      `mid=${mid}`,
-      `csrftoken=${initCsrf}`
-    ];
-    this.mobileCsrf = initCsrf;
-    console.log(`[webClient] mobile bootstrap cookies: ig_did=${igDid.slice(0, 8)}... mid=${mid.slice(0, 8)}...`);
-    const ts = Math.floor(Date.now() / 1e3);
-    const deviceId = `android-${randomUUID().replace(/-/g, "").slice(0, 16)}`;
-    const phoneId = randomUUID();
-    const guid3 = randomUUID();
-    const loginBody = new URLSearchParams({
-      username,
-      enc_password: `#PWD_INSTAGRAM:0:${ts}:${password}`,
-      device_id: deviceId,
-      phone_id: phoneId,
-      guid: guid3,
-      login_attempt_count: "0",
-      country_codes: JSON.stringify([{ country_code: "44", source: ["default"] }]),
-      _csrftoken: this.mobileCsrf
-    }).toString();
-    const loginRes = await igReq({
-      host: "i.instagram.com",
-      path: "/api/v1/accounts/login/",
-      method: "POST",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": MOBILE_UA,
-        "X-IG-App-ID": MOBILE_AID,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-CSRFToken": this.mobileCsrf,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9"
-      },
-      body: loginBody,
-      cookieJar: this.mobileCookieJar,
-      proxyUrl: this.proxyUrl
-    });
-    this.mobileCookieJar = mergeCookies(this.mobileCookieJar, loginRes.cookies);
-    const newCsrf = extractCsrf(loginRes.cookies);
-    if (newCsrf) this.mobileCsrf = newCsrf;
-    const j = loginRes.json;
-    console.log(`[webClient] mobile login response HTTP ${loginRes.status}:`, JSON.stringify(j)?.slice(0, 300));
-    if (j?.two_factor_required) {
-      const identifier = j?.two_factor_info?.two_factor_identifier ?? "";
-      const secret = twoFaSecret?.replace(/\s+/g, "");
-      if (!secret) {
-        console.error(`[webClient] @${username}: mobile 2FA required but no secret`);
-        return false;
-      }
-      let code;
-      try {
-        code = h3({ secret });
-      } catch {
-        console.error(`[webClient] @${username}: invalid mobile 2FA secret`);
-        return false;
-      }
-      const tfBody = new URLSearchParams({
-        username,
-        verificationCode: code,
-        identifier,
-        queryParams: "{}",
-        verificationMethod: "3",
-        guid: guid3,
-        device_id: deviceId,
-        _csrftoken: this.mobileCsrf
-      }).toString();
-      const tfRes = await igReq({
-        host: "i.instagram.com",
-        path: "/api/v1/accounts/two_factor_login/",
-        method: "POST",
-        headers: {
-          Host: "i.instagram.com",
-          "User-Agent": MOBILE_UA,
-          "X-IG-App-ID": MOBILE_AID,
-          "X-IG-Capabilities": "3brTvwE=",
-          "X-IG-Connection-Type": "WIFI",
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "X-CSRFToken": this.mobileCsrf,
-          Accept: "*/*",
-          "Accept-Language": "en-US,en;q=0.9"
-        },
-        body: tfBody,
-        cookieJar: this.mobileCookieJar,
-        proxyUrl: this.proxyUrl
-      });
-      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, tfRes.cookies);
-      const tfCsrf = extractCsrf(tfRes.cookies);
-      if (tfCsrf) this.mobileCsrf = tfCsrf;
-      console.log(`[webClient] mobile 2FA response HTTP ${tfRes.status}:`, JSON.stringify(tfRes.json)?.slice(0, 200));
-      if (tfRes.json?.logged_in_user || tfRes.json?.status === "ok") {
-        this.mobileSessionReady = true;
-        console.log(`[webClient] @${username}: mobile 2FA OK \u2014 mobile session ready`);
-        return true;
-      }
-      console.error(`[webClient] @${username}: mobile 2FA rejected`);
-      return false;
-    }
-    if (j?.logged_in_user || j?.status === "ok") {
-      this.mobileSessionReady = true;
-      console.log(`[webClient] @${username}: mobile login OK \u2014 mobile session ready`);
+    if (this._restoreMobileFromApiCookies()) {
       return true;
     }
-    console.error(`[webClient] @${username}: mobile login failed \u2014 status=${loginRes.status}`);
-    return false;
+    const ig = new import_instagram_private_api2.IgApiClient();
+    const deviceSeed = this.userAgentApi ?? username;
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState);
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId) ig.state.deviceId = saved.deviceId;
+        if (saved.uuid) ig.state.uuid = saved.uuid;
+        if (saved.phoneId) ig.state.phoneId = saved.phoneId;
+        if (saved.adid) ig.state.adid = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch {
+        ig.state.generateDevice(deviceSeed);
+        if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
+      }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+      if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
+    }
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    try {
+      await ig.request.send({
+        method: "GET",
+        url: "/api/v1/si/fetch_headers/",
+        qs: { challenge_type: "signup", guid: ig.state.uuid }
+      });
+    } catch {
+    }
+    if (!ig.state.passwordEncryptionPubKey) {
+      try {
+        await ig.qe.syncLoginExperiments();
+      } catch {
+      }
+    }
+    if (!ig.state.passwordEncryptionPubKey) {
+      console.error(`[webClient] @${username}: could not fetch encryption keys for mobile login`);
+      return false;
+    }
+    console.log(`[webClient] @${username}: mobile login via IgApiClient (keyId=${ig.state.passwordEncryptionKeyId})`);
+    try {
+      await ig.account.login(username, password);
+    } catch (err) {
+      if (err instanceof import_instagram_private_api2.IgLoginTwoFactorRequiredError) {
+        const secret = twoFaSecret?.replace(/\s+/g, "");
+        if (!secret) {
+          console.error(`[webClient] @${username}: mobile 2FA required but no secret`);
+          return false;
+        }
+        let code;
+        try {
+          code = h3({ secret });
+        } catch {
+          console.error(`[webClient] @${username}: invalid 2FA secret`);
+          return false;
+        }
+        const twoFactorInfo = err.response.body.two_factor_info;
+        try {
+          await ig.account.twoFactorLogin({
+            username,
+            verificationCode: code,
+            twoFactorIdentifier: twoFactorInfo.two_factor_identifier,
+            verificationMethod: "0",
+            trustThisDevice: "1"
+          });
+        } catch (e2) {
+          console.error(`[webClient] @${username}: mobile 2FA rejected: ${e2?.message}`);
+          return false;
+        }
+      } else if (err instanceof import_instagram_private_api2.IgLoginBadPasswordError) {
+        const body = err?.response?.body ?? {};
+        const buttons = body?.buttons ?? [];
+        const needsEmail = buttons.some((b3) => b3?.action === "send_one_click_login_email");
+        if (needsEmail) {
+          console.error(`[webClient] @${username}: mobile login \u2014 Instagram requires email verification. Check account email and click the confirmation link, then retry.`);
+        } else {
+          console.error(`[webClient] @${username}: mobile login \u2014 bad password: ${err?.message}`);
+        }
+        return false;
+      } else {
+        console.error(`[webClient] @${username}: mobile login error (${err?.constructor?.name}): ${err?.message}`);
+        return false;
+      }
+    }
+    try {
+      const serialized = await ig.state.serializeCookieJar();
+      const jar = JSON.parse(serialized);
+      const WANTED = /* @__PURE__ */ new Set(["sessionid", "csrftoken", "ds_user_id", "rur", "mid", "ig_did"]);
+      const extracted = (jar.cookies ?? []).filter((c3) => WANTED.has(c3.key)).map((c3) => `${c3.key}=${c3.value}`);
+      if (!extracted.some((c3) => c3.startsWith("ig_did="))) {
+        const igDid = randomUUID();
+        extracted.push(`ig_did=${igDid}`);
+      }
+      if (!extracted.some((c3) => c3.startsWith("mid="))) {
+        const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+        extracted.push(`mid=${mid}`);
+      }
+      if (!extracted.some((c3) => c3.startsWith("sessionid="))) {
+        console.error(`[webClient] @${username}: IgApiClient login OK but no sessionid in cookie jar`);
+        return false;
+      }
+      this.mobileCookieJar = extracted;
+      const csrfEntry = extracted.find((c3) => c3.startsWith("csrftoken="));
+      if (csrfEntry) this.mobileCsrf = csrfEntry.split("=").slice(1).join("=");
+      this.mobileSessionReady = true;
+      console.log(`[webClient] @${username}: mobile login OK \u2014 ${extracted.length} cookies (${extracted.map((c3) => c3.split("=")[0]).join(",")})`);
+      return true;
+    } catch (e) {
+      console.error(`[webClient] @${username}: failed to extract mobile cookies: ${e?.message}`);
+      return false;
+    }
   }
   // ── Common authenticated request helper ────────────────────────────────────
   // web session GET (www.instagram.com)
@@ -140623,11 +140678,97 @@ var InstagramWebClient = class {
     console.log(`[webClient] getThreadIdWithUser ${userId}: not found`);
     return null;
   }
+  // Send a DM through IgApiClient's native request stack.  This avoids all
+  // the header-assembly issues in our hand-rolled _mobileDmPost by letting the
+  // library (which was built specifically for this) handle device headers,
+  // CSRF, cookie jar management, and HTTPS-proxy routing transparently.
+  async _sendDmViaIgClient(userId, text2) {
+    if (!this.igApiCookies) return false;
+    const ig = new import_instagram_private_api2.IgApiClient();
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState);
+        ig.state.generateDevice(saved.deviceString ?? "instagram");
+        if (saved.deviceId) ig.state.deviceId = saved.deviceId;
+        if (saved.uuid) ig.state.uuid = saved.uuid;
+        if (saved.phoneId) ig.state.phoneId = saved.phoneId;
+        if (saved.adid) ig.state.adid = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch {
+        ig.state.generateDevice("instagram");
+      }
+    } else {
+      ig.state.generateDevice("instagram");
+    }
+    const pairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const cookieEntries = pairs.flatMap((pair) => {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) return [];
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try {
+        value = decodeURIComponent(value);
+      } catch {
+      }
+      return [
+        { key, value, domain: "i.instagram.com", path: "/", secure: true, httpOnly: true, hostOnly: true, creation: now, lastAccessed: now },
+        { key, value, domain: ".instagram.com", path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now }
+      ];
+    });
+    await ig.state.deserializeCookieJar(JSON.stringify({
+      version: "tough-cookie@4.1.3",
+      storeType: "MemoryCookieStore",
+      rejectPublicSuffixes: true,
+      cookies: cookieEntries
+    }));
+    ig.state.constants.APP_VERSION = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    try {
+      console.log(`[webClient] sendDM ${userId}: via IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0, 8)}\u2026 v${MOBILE_VERSION})`);
+      try {
+        const meRes = await ig.account.currentUser();
+        const meId = meRes?.pk ?? meRes?.user?.pk;
+        console.log(`[webClient] sendDM ${userId}: session validated \u2014 logged in as pk=${meId}`);
+      } catch (sessErr) {
+        const sessBody = sessErr?.response?.body ?? sessErr?.text;
+        console.warn(`[webClient] sendDM ${userId}: session validation FAILED \u2014`, sessErr?.message ?? String(sessErr));
+        if (sessBody) console.warn(`[webClient] sendDM ${userId}: session-check body \u2014`, JSON.stringify(sessBody)?.slice(0, 400));
+        if (/login_required|401|403|checkpoint|Bad Request/i.test(String(sessErr?.message ?? ""))) {
+          return "session_expired";
+        }
+      }
+      const thread = ig.entity.directThread([userId]);
+      const resp = await thread.broadcastText(text2);
+      const threadId = resp?.payload?.thread_id ?? resp?.thread_id ?? "";
+      const itemId = resp?.payload?.item_id ?? resp?.item_id ?? "";
+      console.log(`[webClient] sendDM ${userId}: IgApiClient SUCCESS threadId=${threadId} itemId=${itemId}`);
+      return { threadId, itemId };
+    } catch (err) {
+      const msg = err?.message ?? String(err);
+      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
+      console.warn(`[webClient] sendDM ${userId}: IgApiClient error \u2014`, msg);
+      if (body) console.warn(`[webClient] sendDM ${userId}: IgApiClient raw body \u2014`, JSON.stringify(body)?.slice(0, 600));
+      if (/feedback_required|ActionBlocked/i.test(msg)) return "blocked";
+      if (/login_required|Not authorized/i.test(msg)) return "session_expired";
+      return false;
+    }
+  }
   async sendDirectMessage(userId, text2, username) {
     return this.timed("SendDM", async () => {
       if (!this.isMobileLoggedIn()) {
         console.warn(`[webClient] sendDM ${userId}: no mobile session \u2014 call mobileLogin() first`);
         return false;
+      }
+      if (this.igApiCookies) {
+        const igResult = await this._sendDmViaIgClient(userId, text2);
+        if (igResult === "session_expired") {
+          this.mobileSessionReady = false;
+          return false;
+        }
+        if (igResult !== false) return igResult;
+        console.warn(`[webClient] sendDM ${userId}: IgApiClient attempt failed, falling back to _mobileDmPost`);
       }
       const clientCtx = randomUUID();
       const dmBody = new URLSearchParams({
@@ -140666,6 +140807,18 @@ var InstagramWebClient = class {
   // Used exclusively for DM operations which require a mobile-origin session.
   async _mobileDmPost(path4, body = "") {
     await this.apiThrottle();
+    let deviceUuid = "";
+    let deviceAndroidId = "";
+    if (this.igDeviceState) {
+      try {
+        const ds = JSON.parse(this.igDeviceState);
+        deviceUuid = ds.uuid ?? "";
+        deviceAndroidId = ds.deviceId ?? "";
+      } catch {
+      }
+    }
+    const midEntry = this.mobileCookieJar.find((c3) => c3.startsWith("mid="));
+    const midValue = midEntry ? midEntry.slice(4) : "";
     const res = await igReq({
       host: "i.instagram.com",
       path: path4,
@@ -140679,7 +140832,11 @@ var InstagramWebClient = class {
         "X-IG-App-ID": MOBILE_AID,
         "X-CSRFToken": this.mobileCsrf,
         "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI"
+        "X-IG-Connection-Type": "WIFI",
+        "X-IG-App-Locale": "en_US",
+        ...deviceUuid ? { "X-IG-Device-ID": deviceUuid } : {},
+        ...deviceAndroidId ? { "X-IG-Android-ID": deviceAndroidId } : {},
+        ...midValue ? { "X-MID": midValue } : {}
       },
       body,
       cookieJar: this.mobileCookieJar,
@@ -141758,13 +141915,12 @@ var AutomationEngine = class {
           console.log(`[engine] @${profile.username}: \u{1F4E9} contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
           if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
         } else {
-          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block)`);
-          await storage.updateContactPendingMessage(msg.id, { status: "failed" });
-          this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed");
+          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block, will retry)`);
+          this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed (will retry)");
+          break;
         }
       } catch (e) {
         console.warn(`[engine] contact DM @${msg.instagramUsername} error: ${e?.message}`);
-        await storage.updateContactPendingMessage(msg.id, { status: "failed" });
         this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", e?.message ?? "");
       }
     }
@@ -141943,6 +142099,7 @@ var AutomationEngine = class {
     if (profile.userAgentEmbedded) {
       state.client.setWebUserAgent(profile.userAgentEmbedded);
     }
+    state.client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
     const client = state.client;
     const browserOk = client.loadBrowserCookies();
     if (browserOk) {
@@ -141953,16 +142110,13 @@ var AutomationEngine = class {
       }
       if (!client.isMobileLoggedIn()) {
         console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
-        const bootstrapOk = client.mobileBootstrapFromWebCookies();
-        if (bootstrapOk) {
-          console.log(`[engine] @${profile.username}: mobile session bootstrapped from browser cookies`);
-        } else {
-          const mobileOk = await client.mobileLogin(
-            profile.username,
-            profile.password,
-            profile.twoFASecretKey ?? void 0
-          );
-          console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
+        const mobileOk = await client.mobileLogin(
+          profile.username,
+          profile.password,
+          profile.twoFASecretKey ?? void 0
+        );
+        if (!mobileOk) {
+          console.error(`[engine] @${profile.username}: mobile login FAILED \u2014 stored password may be wrong. Update it in Account Settings.`);
         }
       }
       return client;
@@ -143535,7 +143689,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
               deviceString: devString || void 0
             });
           } else if (devString) {
-            const ig = new import_instagram_private_api2.IgApiClient();
+            const ig = new import_instagram_private_api3.IgApiClient();
             ig.state.generateDevice(devString);
             ig.state.deviceString = devString;
             igDeviceState = JSON.stringify({

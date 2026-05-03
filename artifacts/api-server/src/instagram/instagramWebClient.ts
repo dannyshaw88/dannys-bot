@@ -24,18 +24,30 @@
 // ║    • i.instagram.com DM broadcast with web-origin cookies → 4415001        ║
 // ║    • i.instagram.com create_group_thread with web cookies → login_required  ║
 // ║    • fetch_headers as a bootstrap step → returns zero cookies, useless      ║
+// ║    • instagram-private-api default v222 → checkpoint_required unsupported   ║
+// ║      (fix: override ig.state.constants.APP_VERSION to MOBILE_VERSION)       ║
 // ║                                                                              ║
 // ║  MOBILE SESSION (mobileCookieJar / mobileCsrf):                             ║
 // ║    • Created by _mobileLogin() — logs in via i.instagram.com mobile API    ║
 // ║    • Seeded with locally-generated ig_did / mid / csrftoken=missing         ║
-// ║    • App ID: 567067343352427  |  UA: Android Instagram 317.x               ║
+// ║    • App ID: 567067343352427  |  UA version: see MOBILE_VERSION constant    ║
 // ║    • Must be established (via mobileLogin()) before any action is taken     ║
+// ║                                                                              ║
+// ║  DM SEND PATH (preferred when igApiCookies are available):                  ║
+// ║    1. _restoreMobileFromApiCookies() seeds mobileCookieJar from stored      ║
+// ║       igApiCookies + borrows csrftoken from the EB web jar                  ║
+// ║    2. _sendDmViaIgClient() creates IgApiClient, restores cookies,           ║
+// ║       patches APP_VERSION to MOBILE_VERSION, validates session via          ║
+// ║       currentUser(), then calls directThread.broadcastText()                ║
+// ║    3. Falls back to hand-rolled _mobileDmPost for accounts without          ║
+// ║       igApiCookies (uses mobileCookieJar directly)                          ║
 // ║                                                                              ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import * as https from "https";
 import * as fs from "fs";
 import { randomUUID } from "crypto";
 import { generateSync as totpGenerate } from "otplib";
+import { IgApiClient, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
 
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
 function httpsRequest(
@@ -113,7 +125,12 @@ const APP_ID  = "936619743392459";
 
 type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 
-const MOBILE_UA  = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+// Keep this version current — Instagram rejects sessions from versions older
+// than ~18 months with a checkpoint_required → unsupported_version response.
+// Version 361 ≈ early 2025; update periodically as Instagram raises the floor.
+const MOBILE_VERSION      = "361.0.0.32.109";
+const MOBILE_VERSION_CODE = "617571539";
+const MOBILE_UA  = `Instagram ${MOBILE_VERSION} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
 const MOBILE_AID = "567067343352427";
 
 // ── Public client class ───────────────────────────────────────────────────────
@@ -133,6 +150,16 @@ export class InstagramWebClient {
   private mobileCookieJar: string[] = [];
   private mobileCsrf = "";
   private mobileSessionReady = false;
+
+  // Device state from the profile — used by IgApiClient to maintain consistent
+  // device fingerprint across mobile login attempts (same uuid/deviceId/phoneId).
+  private igDeviceState?: string;
+  private userAgentApi?: string;
+  // Stored API cookies from the last successful Verify Credentials flow.
+  // These are genuine i.instagram.com mobile session cookies and are tried
+  // first in mobileLogin() to avoid triggering Instagram's new-device email
+  // verification challenge.
+  private igApiCookies?: string;
 
   // API throttle — enforces the per-profile "x calls every y seconds" limit.
   // Computed as a per-call delay = everySeconds / requestsCount, so all calls
@@ -162,6 +189,50 @@ export class InstagramWebClient {
     if (delayMs > 10) {
       await new Promise<void>(r => setTimeout(r, delayMs));
     }
+  }
+
+  setDeviceInfo(igDeviceState?: string | null, userAgentApi?: string | null, igApiCookies?: string | null) {
+    this.igDeviceState = igDeviceState ?? undefined;
+    this.userAgentApi  = userAgentApi  ?? undefined;
+    this.igApiCookies  = igApiCookies  ?? undefined;
+  }
+
+  // Parse igApiCookies (Jarvee-style "key=value;key=value" with URL-encoded values)
+  // into mobileCookieJar and mark the mobile session ready.  Returns true if a
+  // sessionid cookie was found and the session was seeded successfully.
+  private _restoreMobileFromApiCookies(): boolean {
+    if (!this.igApiCookies) return false;
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const cookies: string[] = [];
+    for (const pair of pairs) {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try { value = decodeURIComponent(value); } catch { /* keep as-is */ }
+      cookies.push(`${key}=${value}`);
+    }
+    if (!cookies.some(c => c.startsWith("sessionid="))) return false;
+    // Ensure device-identity cookies are present
+    if (!cookies.some(c => c.startsWith("ig_did="))) cookies.push(`ig_did=${randomUUID()}`);
+    if (!cookies.some(c => c.startsWith("mid="))) {
+      const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      cookies.push(`mid=${mid}`);
+    }
+    // If igApiCookies don't include a csrftoken, pull it from the web cookie jar
+    // (EB browser session). Instagram uses the same csrftoken across *.instagram.com
+    // domains, so the web token is valid for i.instagram.com DM requests too.
+    if (!cookies.some(c => c.startsWith("csrftoken="))) {
+      const webCsrf = this.cookieJar.find(c => c.startsWith("csrftoken="));
+      if (webCsrf) cookies.push(webCsrf);
+    }
+
+    this.mobileCookieJar = cookies;
+    const csrfEntry = cookies.find(c => c.startsWith("csrftoken="));
+    if (csrfEntry) this.mobileCsrf = csrfEntry.split("=").slice(1).join("=");
+    this.mobileSessionReady = true;
+    console.log(`[webClient] mobile session restored from igApiCookies (${cookies.length} cookies, sessionid=true, csrf=${!!csrfEntry})`);
+    return true;
   }
 
   setLogger(fn: ApiCallLogger) {
@@ -390,129 +461,130 @@ export class InstagramWebClient {
   }
 
   private async _mobileLogin(username: string, password: string, twoFaSecret?: string): Promise<boolean> {
-    // Step 1 — build device identity cookies locally.
-    // The fetch_headers endpoint is unreliable (returns no cookies in many network
-    // environments). Real Instagram mobile clients generate ig_did/mid locally
-    // and include csrftoken=missing as the bootstrap value.
-    const igDid     = randomUUID();
-    const mid       = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
-    const initCsrf  = "missing";
-    // Seed the mobile cookie jar with bare name=value cookies (no metadata)
-    this.mobileCookieJar = [
-      `ig_did=${igDid}`,
-      `mid=${mid}`,
-      `csrftoken=${initCsrf}`,
-    ];
-    this.mobileCsrf = initCsrf;
-    console.log(`[webClient] mobile bootstrap cookies: ig_did=${igDid.slice(0,8)}... mid=${mid.slice(0,8)}...`);
-
-    // Step 2 — POST login credentials
-    const ts = Math.floor(Date.now() / 1000);
-    const deviceId = `android-${randomUUID().replace(/-/g, "").slice(0, 16)}`;
-    const phoneId  = randomUUID();
-    const guid     = randomUUID();
-
-    const loginBody = new URLSearchParams({
-      username,
-      enc_password: `#PWD_INSTAGRAM:0:${ts}:${password}`,
-      device_id: deviceId,
-      phone_id: phoneId,
-      guid,
-      login_attempt_count: "0",
-      country_codes: JSON.stringify([{ country_code: "44", source: ["default"] }]),
-      _csrftoken: this.mobileCsrf,
-    }).toString();
-
-    const loginRes = await igReq({
-      host: "i.instagram.com",
-      path: "/api/v1/accounts/login/",
-      method: "POST",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": MOBILE_UA,
-        "X-IG-App-ID": MOBILE_AID,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-CSRFToken": this.mobileCsrf,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      body: loginBody,
-      cookieJar: this.mobileCookieJar,
-      proxyUrl: this.proxyUrl,
-    });
-
-    this.mobileCookieJar = mergeCookies(this.mobileCookieJar, loginRes.cookies);
-    const newCsrf = extractCsrf(loginRes.cookies);
-    if (newCsrf) this.mobileCsrf = newCsrf;
-
-    const j = loginRes.json;
-    console.log(`[webClient] mobile login response HTTP ${loginRes.status}:`, JSON.stringify(j)?.slice(0, 300));
-
-    // Step 3 — handle 2FA if required
-    if (j?.two_factor_required) {
-      const identifier: string = j?.two_factor_info?.two_factor_identifier ?? "";
-      const secret = twoFaSecret?.replace(/\s+/g, "");
-      if (!secret) { console.error(`[webClient] @${username}: mobile 2FA required but no secret`); return false; }
-
-      let code: string;
-      try { code = totpGenerate({ secret }); } catch { console.error(`[webClient] @${username}: invalid mobile 2FA secret`); return false; }
-
-      const tfBody = new URLSearchParams({
-        username,
-        verificationCode: code,
-        identifier,
-        queryParams: "{}",
-        verificationMethod: "3",
-        guid,
-        device_id: deviceId,
-        _csrftoken: this.mobileCsrf,
-      }).toString();
-
-      const tfRes = await igReq({
-        host: "i.instagram.com",
-        path: "/api/v1/accounts/two_factor_login/",
-        method: "POST",
-        headers: {
-          Host: "i.instagram.com",
-          "User-Agent": MOBILE_UA,
-          "X-IG-App-ID": MOBILE_AID,
-          "X-IG-Capabilities": "3brTvwE=",
-          "X-IG-Connection-Type": "WIFI",
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "X-CSRFToken": this.mobileCsrf,
-          Accept: "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-        body: tfBody,
-        cookieJar: this.mobileCookieJar,
-        proxyUrl: this.proxyUrl,
-      });
-
-      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, tfRes.cookies);
-      const tfCsrf = extractCsrf(tfRes.cookies);
-      if (tfCsrf) this.mobileCsrf = tfCsrf;
-
-      console.log(`[webClient] mobile 2FA response HTTP ${tfRes.status}:`, JSON.stringify(tfRes.json)?.slice(0, 200));
-
-      if (tfRes.json?.logged_in_user || tfRes.json?.status === "ok") {
-        this.mobileSessionReady = true;
-        console.log(`[webClient] @${username}: mobile 2FA OK — mobile session ready`);
-        return true;
-      }
-      console.error(`[webClient] @${username}: mobile 2FA rejected`);
-      return false;
-    }
-
-    if (j?.logged_in_user || j?.status === "ok") {
-      this.mobileSessionReady = true;
-      console.log(`[webClient] @${username}: mobile login OK — mobile session ready`);
+    // Fast path: if we have stored igApiCookies from a prior Verify Credentials,
+    // use them directly — they are genuine mobile-API cookies and avoid triggering
+    // Instagram's new-device email challenge on every restart.
+    if (this._restoreMobileFromApiCookies()) {
       return true;
     }
 
-    console.error(`[webClient] @${username}: mobile login failed — status=${loginRes.status}`);
-    return false;
+    // Slow path: fresh login via IgApiClient (RSA-encrypted passwords).
+    // instagram-private-api handles #PWD_INSTAGRAM:4: — Instagram deprecated
+    // the plaintext :0: format and returns "Forgotten password" for it.
+    const ig = new IgApiClient();
+    const deviceSeed = this.userAgentApi ?? username;
+
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState);
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch {
+        ig.state.generateDevice(deviceSeed);
+        if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
+      }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+      if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
+    }
+
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+
+    // Fetch RSA encryption keys — required before login or Instagram rejects
+    try {
+      await ig.request.send({
+        method: "GET",
+        url: "/api/v1/si/fetch_headers/",
+        qs: { challenge_type: "signup", guid: ig.state.uuid },
+      });
+    } catch { /* non-fatal — try next strategy */ }
+
+    if (!ig.state.passwordEncryptionPubKey) {
+      try { await ig.qe.syncLoginExperiments(); } catch { /* non-fatal */ }
+    }
+
+    if (!ig.state.passwordEncryptionPubKey) {
+      console.error(`[webClient] @${username}: could not fetch encryption keys for mobile login`);
+      return false;
+    }
+
+    console.log(`[webClient] @${username}: mobile login via IgApiClient (keyId=${ig.state.passwordEncryptionKeyId})`);
+
+    try {
+      await ig.account.login(username, password);
+    } catch (err: any) {
+      if (err instanceof IgLoginTwoFactorRequiredError) {
+        const secret = twoFaSecret?.replace(/\s+/g, "");
+        if (!secret) { console.error(`[webClient] @${username}: mobile 2FA required but no secret`); return false; }
+        let code: string;
+        try { code = totpGenerate({ secret }); } catch { console.error(`[webClient] @${username}: invalid 2FA secret`); return false; }
+        const twoFactorInfo = err.response.body.two_factor_info;
+        try {
+          await ig.account.twoFactorLogin({
+            username,
+            verificationCode: code,
+            twoFactorIdentifier: twoFactorInfo.two_factor_identifier,
+            verificationMethod: "0",
+            trustThisDevice: "1",
+          });
+        } catch (e2: any) {
+          console.error(`[webClient] @${username}: mobile 2FA rejected: ${e2?.message}`);
+          return false;
+        }
+      } else if (err instanceof IgLoginBadPasswordError) {
+        const body = err?.response?.body ?? {};
+        const buttons: any[] = body?.buttons ?? [];
+        const needsEmail = buttons.some((b: any) => b?.action === "send_one_click_login_email");
+        if (needsEmail) {
+          console.error(`[webClient] @${username}: mobile login — Instagram requires email verification. Check account email and click the confirmation link, then retry.`);
+        } else {
+          console.error(`[webClient] @${username}: mobile login — bad password: ${err?.message}`);
+        }
+        return false;
+      } else {
+        console.error(`[webClient] @${username}: mobile login error (${err?.constructor?.name}): ${err?.message}`);
+        return false;
+      }
+    }
+
+    // Extract cookies from IgApiClient's tough-cookie jar into our flat string array
+    try {
+      const serialized = await ig.state.serializeCookieJar();
+      const jar = JSON.parse(serialized);
+      const WANTED = new Set(["sessionid", "csrftoken", "ds_user_id", "rur", "mid", "ig_did"]);
+      const extracted: string[] = (jar.cookies ?? [])
+        .filter((c: any) => WANTED.has(c.key))
+        .map((c: any) => `${c.key}=${c.value}`);
+
+      // Ensure ig_did and mid are present (may not be in jar — add from device state)
+      if (!extracted.some(c => c.startsWith("ig_did="))) {
+        const igDid = randomUUID();
+        extracted.push(`ig_did=${igDid}`);
+      }
+      if (!extracted.some(c => c.startsWith("mid="))) {
+        const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+        extracted.push(`mid=${mid}`);
+      }
+
+      if (!extracted.some(c => c.startsWith("sessionid="))) {
+        console.error(`[webClient] @${username}: IgApiClient login OK but no sessionid in cookie jar`);
+        return false;
+      }
+
+      this.mobileCookieJar = extracted;
+      const csrfEntry = extracted.find(c => c.startsWith("csrftoken="));
+      if (csrfEntry) this.mobileCsrf = csrfEntry.split("=").slice(1).join("=");
+      this.mobileSessionReady = true;
+      console.log(`[webClient] @${username}: mobile login OK — ${extracted.length} cookies (${extracted.map(c => c.split("=")[0]).join(",")})`);
+      return true;
+    } catch (e: any) {
+      console.error(`[webClient] @${username}: failed to extract mobile cookies: ${e?.message}`);
+      return false;
+    }
   }
 
   // ── Common authenticated request helper ────────────────────────────────────
@@ -1212,6 +1284,99 @@ export class InstagramWebClient {
     return null;
   }
 
+  // Send a DM through IgApiClient's native request stack.  This avoids all
+  // the header-assembly issues in our hand-rolled _mobileDmPost by letting the
+  // library (which was built specifically for this) handle device headers,
+  // CSRF, cookie jar management, and HTTPS-proxy routing transparently.
+  private async _sendDmViaIgClient(userId: string, text: string): Promise<{ threadId: string; itemId: string } | "blocked" | "session_expired" | false> {
+    if (!this.igApiCookies) return false;
+
+    const ig = new IgApiClient();
+
+    // Restore device fingerprint
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        ig.state.generateDevice(saved.deviceString ?? "instagram");
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch {
+        ig.state.generateDevice("instagram");
+      }
+    } else {
+      ig.state.generateDevice("instagram");
+    }
+
+    // Restore cookies from igApiCookies (Jarvee semicolon-separated format)
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const now = new Date().toISOString();
+    const cookieEntries = pairs.flatMap(pair => {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) return [];
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+      return [
+        { key, value, domain: "i.instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
+        { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
+      ];
+    });
+    await ig.state.deserializeCookieJar(JSON.stringify({
+      version: "tough-cookie@4.1.3",
+      storeType: "MemoryCookieStore",
+      rejectPublicSuffixes: true,
+      cookies: cookieEntries,
+    }));
+
+    // Patch IgApiClient app version constants to match our current MOBILE_UA.
+    // The library ships with an old version (222.x) that Instagram rejects
+    // with checkpoint_required → unsupported_version.
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+
+    try {
+      console.log(`[webClient] sendDM ${userId}: via IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
+
+      // Validate session: call a lightweight read-only endpoint first.
+      // If this returns login_required the igApiCookies are expired and the
+      // engine must re-run Verify Credentials before retrying DMs.
+      try {
+        const meRes = await ig.account.currentUser() as any;
+        const meId = meRes?.pk ?? meRes?.user?.pk;
+        console.log(`[webClient] sendDM ${userId}: session validated — logged in as pk=${meId}`);
+      } catch (sessErr: any) {
+        const sessBody = sessErr?.response?.body ?? sessErr?.text;
+        console.warn(`[webClient] sendDM ${userId}: session validation FAILED —`, sessErr?.message ?? String(sessErr));
+        if (sessBody) console.warn(`[webClient] sendDM ${userId}: session-check body —`, JSON.stringify(sessBody)?.slice(0, 400));
+        // Treat any auth error as expired — engine will force mobileLogin again
+        if (/login_required|401|403|checkpoint|Bad Request/i.test(String(sessErr?.message ?? ""))) {
+          return "session_expired";
+        }
+      }
+
+      const thread = ig.entity.directThread([userId]);
+      const resp = await thread.broadcastText(text) as any;
+      const threadId: string = resp?.payload?.thread_id ?? resp?.thread_id ?? "";
+      const itemId: string   = resp?.payload?.item_id  ?? resp?.item_id  ?? "";
+      console.log(`[webClient] sendDM ${userId}: IgApiClient SUCCESS threadId=${threadId} itemId=${itemId}`);
+      return { threadId, itemId };
+    } catch (err: any) {
+      const msg: string = err?.message ?? String(err);
+      // Log the full response body from IgApiClient (IgResponseError.response.body or .text)
+      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
+      console.warn(`[webClient] sendDM ${userId}: IgApiClient error —`, msg);
+      if (body) console.warn(`[webClient] sendDM ${userId}: IgApiClient raw body —`, JSON.stringify(body)?.slice(0, 600));
+      if (/feedback_required|ActionBlocked/i.test(msg)) return "blocked";
+      if (/login_required|Not authorized/i.test(msg))   return "session_expired";
+      return false;
+    }
+  }
+
   async sendDirectMessage(userId: string, text: string, username?: string): Promise<{ threadId: string; itemId: string } | "blocked" | false> {
     return this.timed("SendDM", async () => {
       if (!this.isMobileLoggedIn()) {
@@ -1219,8 +1384,21 @@ export class InstagramWebClient {
         return false;
       }
 
-      // Use mobile session (i.instagram.com) with mobile App ID.
-      // Web session returns 302 for DM broadcast; mobile session is required.
+      // Preferred path: use IgApiClient's native DM stack when igApiCookies are
+      // available — it sends all required device headers automatically and avoids
+      // the 4415001 / header-mismatch issues of the hand-rolled _mobileDmPost.
+      if (this.igApiCookies) {
+        const igResult = await this._sendDmViaIgClient(userId, text);
+        if (igResult === "session_expired") {
+          this.mobileSessionReady = false;
+          return false;
+        }
+        if (igResult !== false) return igResult;
+        // fall through to _mobileDmPost if IgApiClient itself errors
+        console.warn(`[webClient] sendDM ${userId}: IgApiClient attempt failed, falling back to _mobileDmPost`);
+      }
+
+      // Fallback: hand-rolled mobile POST (kept for accounts without igApiCookies)
       const clientCtx = randomUUID();
       const dmBody = new URLSearchParams({
         recipient_users: `[[${userId}]]`,
@@ -1262,6 +1440,22 @@ export class InstagramWebClient {
   // Used exclusively for DM operations which require a mobile-origin session.
   private async _mobileDmPost(path: string, body = ""): Promise<any> {
     await this.apiThrottle();
+
+    // Extract device identity headers from igDeviceState so Instagram sees the
+    // same device fingerprint that was registered during Verify Credentials.
+    // IgApiClient always sends these; omitting them triggers 4415001 rejections.
+    let deviceUuid = "";
+    let deviceAndroidId = "";
+    if (this.igDeviceState) {
+      try {
+        const ds = JSON.parse(this.igDeviceState) as { uuid?: string; deviceId?: string };
+        deviceUuid     = ds.uuid     ?? "";
+        deviceAndroidId = ds.deviceId ?? "";
+      } catch { /* ignore */ }
+    }
+    const midEntry = this.mobileCookieJar.find(c => c.startsWith("mid="));
+    const midValue = midEntry ? midEntry.slice(4) : "";
+
     const res = await igReq({
       host: "i.instagram.com",
       path,
@@ -1276,6 +1470,10 @@ export class InstagramWebClient {
         "X-CSRFToken": this.mobileCsrf,
         "X-IG-Capabilities": "3brTvwE=",
         "X-IG-Connection-Type": "WIFI",
+        "X-IG-App-Locale": "en_US",
+        ...(deviceUuid      ? { "X-IG-Device-ID":   deviceUuid }      : {}),
+        ...(deviceAndroidId ? { "X-IG-Android-ID":  deviceAndroidId } : {}),
+        ...(midValue        ? { "X-MID":             midValue }        : {}),
       },
       body,
       cookieJar: this.mobileCookieJar,

@@ -967,14 +967,16 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 📩 contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
           if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
         } else {
-          // Non-block send failure — mark as failed so the user can see it in the UI
-          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block)`);
-          await storage.updateContactPendingMessage(msg.id, { status: "failed" });
-          this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed");
+          // Non-block send failure (session error, network, transient Instagram error)
+          // — leave as "pending" so it's automatically retried on the next send cycle.
+          // Only "blocked" results are permanently failed.
+          console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block, will retry)`);
+          this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed (will retry)");
+          break; // stop this batch but keep message pending
         }
       } catch (e: any) {
         console.warn(`[engine] contact DM @${msg.instagramUsername} error: ${e?.message}`);
-        await storage.updateContactPendingMessage(msg.id, { status: "failed" });
+        // Leave as pending for transient errors; only mark failed for known permanent issues
         this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", e?.message ?? "");
       }
     }
@@ -1177,6 +1179,11 @@ class AutomationEngine {
     if (profile.userAgentEmbedded) {
       state.client.setWebUserAgent(profile.userAgentEmbedded);
     }
+
+    // Sync device state and stored API cookies so mobileLogin() can restore the
+    // mobile session from igApiCookies (no new-device email challenge) and uses
+    // the same device fingerprint as the IgApiClient from Verify Credentials.
+    state.client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
 
     const client = state.client;
 
