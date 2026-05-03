@@ -145376,31 +145376,22 @@ var AutomationEngine = class {
               return;
             }
           }
+          const targetCount = randInt(
+            Math.max(1, Number(s.repostMin ?? 1)),
+            Math.max(1, Number(s.repostMax ?? 1))
+          );
           const feedItems = repostHikerClient ? await repostHikerClient.getUserFeedItems(sourceUsername) : await client.getUserFeedItems(sourceUsername);
-          console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items)`);
-          let candidate = null;
+          console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items, target=${targetCount})`);
+          const level = s.repostAlterationLevel ?? "small";
+          const captionTemplate = String(s.repostCaptionText ?? "").trim();
+          let repostedCount = 0;
           for (const item of feedItems) {
+            if (repostedCount >= targetCount) break;
             const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
-            if (!already) {
-              candidate = item;
-              break;
-            }
-          }
-          if (!candidate) {
-            if (s.repostDisableWhenExhausted) {
-              await storage.updateTool(tool.id, { enabled: false });
-              console.log(`[engine] @${profile.username}: \u{1F501} repost auto-disabled (all posts already reposted)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Auto-disabled: no more unique posts from source");
-            } else {
-              console.log(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 no new posts from @${sourceUsername}`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);
-            }
-          } else {
-            const imageBuffer = await client.downloadImage(candidate.imageUrl);
-            const level = s.repostAlterationLevel ?? "small";
+            if (already) continue;
+            const imageBuffer = await client.downloadImage(item.imageUrl);
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
-            const captionTemplate = String(s.repostCaptionText ?? "").trim();
-            const finalCaption = captionTemplate ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username) : candidate.caption.slice(0, 2200);
+            const finalCaption = captionTemplate ? resolveCaption(captionTemplate, item, sourceUsername, profile.username) : item.caption.slice(0, 2200);
             const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
             if (postedMediaId) {
               if (s.repostDisableComments) {
@@ -145414,18 +145405,29 @@ var AutomationEngine = class {
                 profileId: profile.id,
                 toolId: tool.id,
                 sourceUsername,
-                mediaId: candidate.mediaId,
-                shortcode: candidate.shortcode,
-                caption: candidate.caption.slice(0, 2200),
-                thumbnailUrl: candidate.imageUrl,
+                mediaId: item.mediaId,
+                shortcode: item.shortcode,
+                caption: item.caption.slice(0, 2200),
+                thumbnailUrl: item.imageUrl,
                 repostedAt: (/* @__PURE__ */ new Date()).toISOString(),
                 postedShortcode
               });
-              console.log(`[engine] @${profile.username}: \u{1F501} reposted ${candidate.mediaId} from @${sourceUsername} \u2192 own post ${postedShortcode} (alteration=${level})`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level})`);
+              console.log(`[engine] @${profile.username}: \u{1F501} reposted ${item.mediaId} from @${sourceUsername} \u2192 own post ${postedShortcode} (alteration=${level}) [${repostedCount + 1}/${targetCount}]`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, item.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level}) [${repostedCount + 1}/${targetCount}]`);
+              repostedCount++;
             } else {
-              console.warn(`[engine] @${profile.username}: \u{1F501} upload failed for ${candidate.mediaId}`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, "", "fail", "Upload failed");
+              console.warn(`[engine] @${profile.username}: \u{1F501} upload failed for ${item.mediaId}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, "", "fail", "Upload failed");
+            }
+          }
+          if (repostedCount === 0) {
+            if (s.repostDisableWhenExhausted) {
+              await storage.updateTool(tool.id, { enabled: false });
+              console.log(`[engine] @${profile.username}: \u{1F501} repost auto-disabled (all posts already reposted)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Auto-disabled: no more unique posts from source");
+            } else {
+              console.log(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 no new posts from @${sourceUsername}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);
             }
           }
         } catch (e) {

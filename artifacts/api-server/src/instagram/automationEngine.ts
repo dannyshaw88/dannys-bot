@@ -1721,21 +1721,62 @@ class AutomationEngine {
             }
           }
 
+          // How many posts to repost this session
+          const targetCount = randInt(
+            Math.max(1, Number(s.repostMin ?? 1)),
+            Math.max(1, Number(s.repostMax ?? 1)),
+          );
+
           // Use HikerAPI for the scrape call if the per-tool toggle is on and
           // a valid HikerAPI client is available; otherwise fall back to the
           // mobile Instagram session (same account cookies).
           const feedItems = repostHikerClient
             ? await repostHikerClient.getUserFeedItems(sourceUsername)
             : await client.getUserFeedItems(sourceUsername);
-          console.log(`[engine] @${profile.username}: 🔁 repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items)`);
+          console.log(`[engine] @${profile.username}: 🔁 repost feed fetched via ${repostHikerClient ? "HikerAPI" : "mobile session"} (${feedItems.length} items, target=${targetCount})`);
 
-          let candidate: { mediaId: string; shortcode: string; imageUrl: string; caption: string } | null = null;
+          const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
+          const captionTemplate = String(s.repostCaptionText ?? "").trim();
+
+          let repostedCount = 0;
           for (const item of feedItems) {
+            if (repostedCount >= targetCount) break;
             const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
-            if (!already) { candidate = item; break; }
+            if (already) continue;
+
+            const imageBuffer   = await client.downloadImage(item.imageUrl);
+            const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
+            const finalCaption  = captionTemplate
+              ? resolveCaption(captionTemplate, item, sourceUsername, profile.username)
+              : item.caption.slice(0, 2200);
+
+            const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+            if (postedMediaId) {
+              if (s.repostDisableComments) {
+                try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
+              }
+              const postedShortcode = mediaIdToShortcode(postedMediaId);
+              await storage.createRepostedPost({
+                profileId:      profile.id,
+                toolId:         tool.id,
+                sourceUsername,
+                mediaId:        item.mediaId,
+                shortcode:      item.shortcode,
+                caption:        item.caption.slice(0, 2200),
+                thumbnailUrl:   item.imageUrl,
+                repostedAt:     new Date().toISOString(),
+                postedShortcode,
+              });
+              console.log(`[engine] @${profile.username}: 🔁 reposted ${item.mediaId} from @${sourceUsername} → own post ${postedShortcode} (alteration=${level}) [${repostedCount + 1}/${targetCount}]`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, item.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level}) [${repostedCount + 1}/${targetCount}]`);
+              repostedCount++;
+            } else {
+              console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${item.mediaId}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, item.mediaId, "", "fail", "Upload failed");
+            }
           }
 
-          if (!candidate) {
+          if (repostedCount === 0) {
             if (s.repostDisableWhenExhausted) {
               await storage.updateTool(tool.id, { enabled: false });
               console.log(`[engine] @${profile.username}: 🔁 repost auto-disabled (all posts already reposted)`);
@@ -1743,41 +1784,6 @@ class AutomationEngine {
             } else {
               console.log(`[engine] @${profile.username}: 🔁 repost skipped — no new posts from @${sourceUsername}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);
-            }
-          } else {
-            const imageBuffer   = await client.downloadImage(candidate.imageUrl);
-            const level         = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
-            const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
-
-            const captionTemplate = String(s.repostCaptionText ?? "").trim();
-            const finalCaption = captionTemplate
-              ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
-              : candidate.caption.slice(0, 2200);
-
-            const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
-            if (postedMediaId) {
-              if (s.repostDisableComments) {
-                try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
-              }
-              // Convert the uploaded media ID to a shortcode so the UI can
-              // show a direct link to the user's own reposted post.
-              const postedShortcode = mediaIdToShortcode(postedMediaId);
-              await storage.createRepostedPost({
-                profileId:      profile.id,
-                toolId:         tool.id,
-                sourceUsername,
-                mediaId:        candidate.mediaId,
-                shortcode:      candidate.shortcode,
-                caption:        candidate.caption.slice(0, 2200),
-                thumbnailUrl:   candidate.imageUrl,
-                repostedAt:     new Date().toISOString(),
-                postedShortcode,
-              });
-              console.log(`[engine] @${profile.username}: 🔁 reposted ${candidate.mediaId} from @${sourceUsername} → own post ${postedShortcode} (alteration=${level})`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level})`);
-            } else {
-              console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${candidate.mediaId}`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, "", "fail", "Upload failed");
             }
           }
         } catch (e: any) {

@@ -83,6 +83,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       { key: "repost", label: "Repost", description: "Repost settings for source account, alteration, caption and stop conditions", subOptions: [
         { key: "rp_enabled",    label: "Enabled",                           settingKeys: ["repostEnabled"] },
         { key: "rp_source",     label: "Source account",                    settingKeys: ["repostSourceUsername"] },
+        { key: "rp_count",      label: "Posts per session (min / max)",     settingKeys: ["repostMin","repostMax"] },
         { key: "rp_alteration", label: "Alteration & image settings",       settingKeys: ["repostAlterationLevel","repostImageSettings"] },
         { key: "rp_caption",    label: "Caption text",                      settingKeys: ["repostCaptionText"] },
         { key: "rp_comments",   label: "Disable comments",                  settingKeys: ["repostDisableComments"] },
@@ -591,7 +592,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               {pctInputs("repostOrderMin", "repostOrderMax")}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Run Chance</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance</span>
               {pctInputs("repostNotUsedMin", "repostNotUsedMax")}
             </div>
           </div>
@@ -610,6 +611,25 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                   value={settings.repostSourceUsername ?? ""}
                   onChange={(e) => setSettings({ ...settings, repostSourceUsername: e.target.value.replace(/^@/, '') })}
                 />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Posts per session (min / max)</Label>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Min</Label>
+                  <Input type="number" min="1" max="20" className="w-16 h-7 text-xs"
+                    value={settings.repostMin ?? 1}
+                    onChange={(e) => setSettings({ ...settings, repostMin: Math.max(1, Number(e.target.value)) })}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Max</Label>
+                  <Input type="number" min="1" max="20" className="w-16 h-7 text-xs"
+                    value={settings.repostMax ?? 1}
+                    onChange={(e) => setSettings({ ...settings, repostMax: Math.max(1, Number(e.target.value)) })}
+                  />
+                </div>
               </div>
             </div>
             <div className="space-y-1.5">
