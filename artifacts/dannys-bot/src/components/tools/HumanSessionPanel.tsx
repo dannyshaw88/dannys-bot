@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
@@ -31,6 +32,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const { toast } = useToast();
   const [showReposted, setShowReposted] = useState(false);
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
+  const [spinPreview, setSpinPreview] = useState<string | null>(null);
+  const [spinSyntaxMsg, setSpinSyntaxMsg] = useState<string | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
@@ -43,7 +46,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     checkStories:       ["checkTimelineStoriesEnabled","checkTimelineStoriesMin","checkTimelineStoriesMax","checkTimelineStoriesOrderMin","checkTimelineStoriesOrderMax","checkTimelineStoriesNotUsedMin","checkTimelineStoriesNotUsedMax"],
     checkDm:            ["checkDmEnabled","checkDmMin","checkDmMax","checkDmOrderMin","checkDmOrderMax","checkDmNotUsedMin","checkDmNotUsedMax"],
     likeTimelinePosts:  ["likeTimelinePostsEnabled","likeTimelinePostsMin","likeTimelinePostsMax","likeTimelinePostsOrderMin","likeTimelinePostsOrderMax","likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"],
-    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostImageSettings","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
+    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostImageSettings","repostCaptionText","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
   };
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "Timing", options: [
@@ -118,6 +121,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       repostEnabled: false,
       repostSourceUsername: "",
       repostAlterationLevel: "small",
+      repostCaptionText: "",
       repostImageSettings: {
         contrast:   { enabled: true, min: 5,   max: 250 },
         brightness: { enabled: true, min: 5,   max: 250 },
@@ -630,8 +634,110 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             </label>
           </div>
 
+          {/* ── Post Caption Text ──────────────────────────────────── */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground font-semibold">Post Caption Text</Label>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                  onClick={() => {
+                    const t = (settings as any).repostCaptionText ?? "";
+                    let depth = 0;
+                    let err: string | null = null;
+                    for (const ch of t) {
+                      if (ch === "{") depth++;
+                      else if (ch === "}") { depth--; if (depth < 0) { err = "Unexpected }"; break; } }
+                    }
+                    if (!err && depth !== 0) err = `${depth} unclosed {`;
+                    setSpinSyntaxMsg(err ?? "✓ Syntax OK");
+                    setSpinPreview(null);
+                  }}
+                >
+                  Check Spin Syntax
+                </button>
+                <button
+                  type="button"
+                  className="h-6 px-2.5 text-[10px] rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                  onClick={() => {
+                    let result = (settings as any).repostCaptionText ?? "";
+                    let i = 0;
+                    while (result.includes("{") && i++ < 100) {
+                      const prev = result;
+                      result = result.replace(/\{([^{}]+)\}/g, (_: string, g: string) => {
+                        const opts = g.split("|");
+                        return opts[Math.floor(Math.random() * opts.length)];
+                      });
+                      if (prev === result) break;
+                    }
+                    setSpinPreview(result);
+                    setSpinSyntaxMsg(null);
+                  }}
+                >
+                  Spin Text
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground/70">
+              You can use multi-level spin syntax for the caption. Leave blank to use the original post's caption.
+            </p>
+
+            <Textarea
+              className="text-xs font-mono resize-none h-24 leading-relaxed"
+              placeholder={"[ORIGINALPOSTCAPTION]\n\nor mix spin syntax:\n{Great post|Amazing|Love this} {by @USERNAME|from @USERNAME}"}
+              value={(settings as any).repostCaptionText ?? ""}
+              onChange={(e) => {
+                setSettings({ ...settings, repostCaptionText: e.target.value } as any);
+                setSpinPreview(null);
+                setSpinSyntaxMsg(null);
+              }}
+            />
+
+            {/* Token chips */}
+            <div className="flex flex-wrap gap-1">
+              {[
+                "[ORIGINALPOSTCAPTION]",
+                "[ORIGINALPOSTHASHTAGS]",
+                "[ORIGINALPOSTCAPTION NO HASHTAGS]",
+                "@USERNAME",
+                "@CURRENTUSERNAME",
+                "[POSTURL]",
+              ].map((tok) => (
+                <button
+                  key={tok}
+                  type="button"
+                  title={`Click to insert ${tok}`}
+                  className="h-5 px-1.5 text-[9px] font-mono rounded bg-muted/60 border border-border/50 text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-colors"
+                  onClick={() => {
+                    const cur = (settings as any).repostCaptionText ?? "";
+                    setSettings({ ...settings, repostCaptionText: cur ? `${cur}\n${tok}` : tok } as any);
+                    setSpinPreview(null);
+                    setSpinSyntaxMsg(null);
+                  }}
+                >
+                  {tok}
+                </button>
+              ))}
+            </div>
+
+            {/* Spin preview / syntax result */}
+            {spinSyntaxMsg && (
+              <p className={`text-[10px] px-2 py-1 rounded border ${spinSyntaxMsg.startsWith("✓") ? "text-green-600 border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800" : "text-destructive border-destructive/30 bg-destructive/5"}`}>
+                {spinSyntaxMsg}
+              </p>
+            )}
+            {spinPreview !== null && (
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground/70">Spin preview</Label>
+                <p className="text-[10px] text-muted-foreground border border-border/50 rounded px-2 py-1.5 bg-muted/20 whitespace-pre-wrap break-all leading-relaxed">{spinPreview || <em>(empty)</em>}</p>
+              </div>
+            )}
+          </div>
+
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            During each session, picks the latest unreposted post from the source account and reposts it with the original caption.
+            During each session, picks the latest unreposted post from the source account and reposts it.
             <br />
             <strong>Disable at post count</strong> reads the post count from this profile's Instagram bio to stop reposting once the goal is reached.
           </p>

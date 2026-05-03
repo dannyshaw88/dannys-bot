@@ -5,6 +5,44 @@ import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { Profile, Tool, Source } from "../shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves a Jarvee-compatible caption template:
+ *  - Replaces tokens like [ORIGINALPOSTCAPTION], @USERNAME, etc.
+ *  - Processes multi-level spin syntax {option A|option B|option C}
+ */
+function resolveCaption(
+  template: string,
+  candidate: { caption: string; shortcode: string },
+  sourceUsername: string,
+  profileUsername: string,
+): string {
+  const caption = candidate.caption ?? "";
+  const hashtags = (caption.match(/#\w+/g) ?? []).join(" ");
+  const captionNoHashtags = caption.replace(/#\w+/g, "").replace(/\s{2,}/g, " ").trim();
+
+  let result = template
+    .replace(/\[ORIGINALPOSTCAPTION NO HASHTAGS\]/gi, captionNoHashtags)
+    .replace(/\[ORIGINALPOSTCAPTION\]/gi, caption)
+    .replace(/\[ORIGINALPOSTHASHTAGS\]/gi, hashtags)
+    .replace(/\[POSTURL\]/gi, `https://www.instagram.com/p/${candidate.shortcode}/`)
+    .replace(/@CURRENTUSERNAME/gi, profileUsername)
+    .replace(/@USERNAME/gi, sourceUsername);
+
+  // Spin syntax — resolve innermost {a|b|c} groups first (supports nesting)
+  let iterations = 0;
+  while (result.includes("{") && iterations++ < 100) {
+    const prev = result;
+    result = result.replace(/\{([^{}]+)\}/g, (_, group: string) => {
+      const opts = group.split("|");
+      return opts[Math.floor(Math.random() * opts.length)];
+    });
+    if (prev === result) break;
+  }
+
+  return result.trim().slice(0, 2200);
+}
+
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -1611,7 +1649,12 @@ class AutomationEngine {
             const level         = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
 
-            const uploaded = await client.uploadPhoto(alteredBuffer, candidate.caption);
+            const captionTemplate = String(s.repostCaptionText ?? "").trim();
+            const finalCaption = captionTemplate
+              ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
+              : candidate.caption.slice(0, 2200);
+
+            const uploaded = await client.uploadPhoto(alteredBuffer, finalCaption);
             if (uploaded) {
               await storage.createRepostedPost({
                 profileId:      profile.id,
