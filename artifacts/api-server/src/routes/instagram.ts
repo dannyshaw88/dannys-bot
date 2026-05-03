@@ -792,14 +792,15 @@ export async function registerInstagramRoutes(
     }
 
     try {
+      // Parse ds_user_id directly from the stored semicolon-separated cookie string
+      // (format: "sessionid=X;ds_user_id=Y;mid=Z") — no InstagramWebClient needed
+      const cookiePairs = (profile.sessionCookies ?? "").split(";").map(s => s.trim());
+      const dsEntry = cookiePairs.find(s => s.startsWith("ds_user_id="));
+      const ownUserId = dsEntry ? dsEntry.split("=")[1]?.trim() : null;
+      if (!ownUserId) return res.status(400).json({ ok: false, error: "Could not resolve own user ID from session cookies — please re-verify the account." });
+
       const { HikerApiClient } = await import("../instagram/hikerApiClient");
       const hikerClient = new HikerApiClient(globalSettings.hikerApiToken!);
-      const { InstagramWebClient } = await import("../instagram/instagramWebClient");
-      const client = new InstagramWebClient(undefined, profileId);
-      client.setCookies(profile.sessionCookies ?? "");
-      const ownUserId = await client.getOwnUserId();
-      if (!ownUserId) return res.status(400).json({ ok: false, error: "Could not resolve own user ID — is the account verified?" });
-
       const followings = await hikerClient.getFollowings(ownUserId, amount);
       const usernames = followings.map(u => u.username);
       return res.json({ ok: true, usernames, count: usernames.length });
