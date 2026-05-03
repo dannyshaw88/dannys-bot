@@ -329,6 +329,8 @@ function startFrameLoop(profileId: number) {
 
   let cookieSaveTick = 0;
   let popupCheckTick = 0;
+  let pingTick = 0;
+  let busy = false;
 
   session.frameLoop = setInterval(async () => {
     const s = sessions.get(profileId);
@@ -337,37 +339,54 @@ function startFrameLoop(profileId: number) {
       return;
     }
 
+    // Keep-alive ping every ~10 seconds so the proxy doesn't drop the WS
+    pingTick++;
+    if (pingTick >= 50) { // 50 * 200ms = 10s
+      pingTick = 0;
+      try { s.ws.ping(); } catch {}
+    }
+
+    // Skip frame if a screenshot is already in flight (prevents queuing)
+    if (busy) return;
+    busy = true;
+
     try {
       const [screenshot, currentUrl] = await Promise.all([
-        s.page.screenshot({ type: "jpeg", quality: 90, encoding: "base64" }),
+        s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
         s.page.url(),
       ]);
 
-      const frame = JSON.stringify({ type: "frame", data: screenshot, url: currentUrl });
-      s.ws.send(frame);
+      if (s.ws.readyState === WebSocket.OPEN) {
+        const frame = JSON.stringify({ type: "frame", data: screenshot, url: currentUrl });
+        s.ws.send(frame);
+      }
 
       if (currentUrl !== s.lastUrl) {
         s.lastUrl = currentUrl;
-        s.ws.send(JSON.stringify({ type: "urlChange", url: currentUrl }));
+        if (s.ws.readyState === WebSocket.OPEN) {
+          s.ws.send(JSON.stringify({ type: "urlChange", url: currentUrl }));
+        }
       }
 
-      // Check for post-login popups every ~5 seconds
+      // Check for post-login popups every ~10 seconds
       popupCheckTick++;
-      if (popupCheckTick >= 50) { // 50 * 100ms = 5s
+      if (popupCheckTick >= 50) { // 50 * 200ms = 10s
         popupCheckTick = 0;
         dismissInstagramPopups(s.page);
       }
 
       // Save cookies every ~60 seconds to persist any session refreshes
       cookieSaveTick++;
-      if (cookieSaveTick >= 600) { // 600 * 100ms = 60s
+      if (cookieSaveTick >= 300) { // 300 * 200ms = 60s
         cookieSaveTick = 0;
         saveCookies(profileId, s.page);
       }
     } catch {
-      // Page navigating — skip frame
+      // Page navigating or browser busy — skip frame
+    } finally {
+      busy = false;
     }
-  }, 100); // 10 fps
+  }, 200); // 5 fps
 }
 
 export async function browserNavigate(profileId: number, url: string) {

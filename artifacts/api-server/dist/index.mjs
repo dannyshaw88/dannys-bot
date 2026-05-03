@@ -142612,22 +142612,38 @@ function startFrameLoop(profileId) {
   if (session.frameLoop) clearInterval(session.frameLoop);
   let cookieSaveTick = 0;
   let popupCheckTick = 0;
+  let pingTick = 0;
+  let busy = false;
   session.frameLoop = setInterval(async () => {
     const s = sessions.get(profileId);
     if (!s || !s.ws || s.ws.readyState !== import_websocket.default.OPEN) {
       if (s?.frameLoop) clearInterval(s.frameLoop);
       return;
     }
+    pingTick++;
+    if (pingTick >= 50) {
+      pingTick = 0;
+      try {
+        s.ws.ping();
+      } catch {
+      }
+    }
+    if (busy) return;
+    busy = true;
     try {
       const [screenshot, currentUrl] = await Promise.all([
-        s.page.screenshot({ type: "jpeg", quality: 90, encoding: "base64" }),
+        s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
         s.page.url()
       ]);
-      const frame = JSON.stringify({ type: "frame", data: screenshot, url: currentUrl });
-      s.ws.send(frame);
+      if (s.ws.readyState === import_websocket.default.OPEN) {
+        const frame = JSON.stringify({ type: "frame", data: screenshot, url: currentUrl });
+        s.ws.send(frame);
+      }
       if (currentUrl !== s.lastUrl) {
         s.lastUrl = currentUrl;
-        s.ws.send(JSON.stringify({ type: "urlChange", url: currentUrl }));
+        if (s.ws.readyState === import_websocket.default.OPEN) {
+          s.ws.send(JSON.stringify({ type: "urlChange", url: currentUrl }));
+        }
       }
       popupCheckTick++;
       if (popupCheckTick >= 50) {
@@ -142635,13 +142651,15 @@ function startFrameLoop(profileId) {
         dismissInstagramPopups(s.page);
       }
       cookieSaveTick++;
-      if (cookieSaveTick >= 600) {
+      if (cookieSaveTick >= 300) {
         cookieSaveTick = 0;
         saveCookies(profileId, s.page);
       }
     } catch {
+    } finally {
+      busy = false;
     }
-  }, 100);
+  }, 200);
 }
 async function browserNavigate(profileId, url2) {
   const s = sessions.get(profileId);
