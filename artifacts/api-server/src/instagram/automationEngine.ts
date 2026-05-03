@@ -1728,9 +1728,10 @@ class AutomationEngine {
           if (disableAt > 0) {
             const stats = await client.getOwnProfileStats();
             if (stats && stats.postsCount >= disableAt) {
-              await storage.updateTool(tool.id, { enabled: false });
-              console.log(`[engine] @${profile.username}: 🔁 repost auto-disabled (posts=${stats.postsCount} >= target=${disableAt})`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", `Auto-disabled: ${stats.postsCount} posts reached target ${disableAt}`);
+              // Disable only the repost sub-feature — never the entire human_sessions tool
+              await storage.updateTool(tool.id, { settings: { ...s, repostEnabled: false } });
+              console.log(`[engine] @${profile.username}: 🔁 repost sub-feature disabled (posts=${stats.postsCount} >= target=${disableAt})`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", `Repost disabled: ${stats.postsCount} posts reached target ${disableAt}`);
               return;
             }
           }
@@ -1786,9 +1787,10 @@ class AutomationEngine {
 
           if (repostedCount === 0) {
             if (s.repostDisableWhenExhausted) {
-              await storage.updateTool(tool.id, { enabled: false });
-              console.log(`[engine] @${profile.username}: 🔁 repost auto-disabled (all posts already reposted)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Auto-disabled: no more unique posts from source");
+              // Disable only the repost sub-feature — never the entire human_sessions tool
+              await storage.updateTool(tool.id, { settings: { ...s, repostEnabled: false } });
+              console.log(`[engine] @${profile.username}: 🔁 repost sub-feature disabled (source @${sourceUsername} exhausted)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Repost disabled: no more unique posts from source");
             } else {
               console.log(`[engine] @${profile.username}: 🔁 repost skipped — no new posts from @${sourceUsername}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);
