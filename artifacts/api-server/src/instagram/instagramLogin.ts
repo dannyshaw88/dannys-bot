@@ -6,7 +6,23 @@ import type { Profile } from "../shared/schema";
 
 export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
-  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out"; igDeviceState?: string };
+  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out"; igDeviceState?: string; checkpointUrl?: string };
+
+// Extract the Instagram challenge URL from an IgCheckpointError.
+// IgCheckpointError.message getter returns "https://i.instagram.com/challenge/" + api_path.
+function extractCheckpointUrl(err: any): string | undefined {
+  if (!(err instanceof IgCheckpointError)) return undefined;
+  try {
+    const msg: string = err.message ?? "";
+    if (msg.includes("instagram.com/challenge")) return msg;
+    const challenge = err?.response?.body?.challenge;
+    if (challenge?.url) {
+      const u: string = challenge.url;
+      return u.startsWith("http") ? u : `https://i.instagram.com${u}`;
+    }
+  } catch { /* ignore */ }
+  return undefined;
+}
 
 async function logApiCall(
   profileId: number,
@@ -313,6 +329,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               ok: false,
               message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
               accountStatus: "captcha",
+              checkpointUrl: extractCheckpointUrl(famErr),
               igDeviceState: captureDeviceState(),
             };
           }
@@ -342,6 +359,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               ok: false,
               message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
               accountStatus: "captcha",
+              checkpointUrl: extractCheckpointUrl(tlErr),
               igDeviceState: captureDeviceState(),
             };
           }
@@ -444,7 +462,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       await ig.simulate.postLoginFlow();
     } catch (plErr: any) {
       if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
-        return { ok: false, message: `@${profile.username} — logged in but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", igDeviceState: captureDeviceState() };
+        return { ok: false, message: `@${profile.username} — logged in but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: captureDeviceState() };
       }
     }
     return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
@@ -477,7 +495,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           await ig.simulate.postLoginFlow();
         } catch (plErr: any) {
           if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
-            return { ok: false, message: `@${profile.username} — passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", igDeviceState: captureDeviceState() };
+            return { ok: false, message: `@${profile.username} — passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: captureDeviceState() };
           }
         }
         return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
@@ -487,7 +505,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     }
 
     if (err instanceof IgCheckpointError) {
-      return { ok: false, message: `@${profile.username} — security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} — security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: ds };
     }
 
     if (err instanceof IgLoginBadPasswordError) {

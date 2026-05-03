@@ -75,6 +75,14 @@ interface Session {
   proxyKey: string; // "direct" or "host:port" — used to detect proxy changes
 }
 
+// Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
+// Converts mobile API URL (i.instagram.com) → desktop web URL (www.instagram.com) for the browser
+const checkpointUrlCache = new Map<number, string>();
+export function setCheckpointUrl(profileId: number, mobileOrWebUrl: string) {
+  const webUrl = mobileOrWebUrl.replace("https://i.instagram.com", "https://www.instagram.com");
+  checkpointUrlCache.set(profileId, webUrl);
+}
+
 function sseWrite(res: ServerResponse | null, data: object) {
   if (!res || res.writableEnded) return;
   try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
@@ -301,9 +309,16 @@ export async function getOrCreateSession(
   log(`Chrome launched for profile ${profileId}`, "browser");
 
   // Restore saved cookies if available, then navigate to IG home (already logged in)
-  // Otherwise go to the login page so the user can log in
+  // Otherwise go to the login page so the user can log in.
+  // If a checkpoint URL is cached (set by the verify route after IgCheckpointError), navigate
+  // there directly — challenge pages bypass the 429 rate-limit that the home page hits.
   const cookiesLoaded = await loadCookies(profileId, page);
-  if (cookiesLoaded) {
+  const cachedCheckpointUrl = checkpointUrlCache.get(profileId);
+  if (cachedCheckpointUrl) {
+    checkpointUrlCache.delete(profileId);
+    log(`[cookies:${profileId}] Navigating directly to checkpoint URL: ${cachedCheckpointUrl}`, "browser");
+    page.goto(cachedCheckpointUrl, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+  } else if (cookiesLoaded) {
     log(`[cookies:${profileId}] Cookies restored — navigating to Instagram home`, "browser");
     page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
   } else {

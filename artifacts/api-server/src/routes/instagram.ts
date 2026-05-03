@@ -22,6 +22,7 @@ import {
   clearSession,
   browserAutoLogin,
   sendLoginDone,
+  setCheckpointUrl,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -308,6 +309,12 @@ export async function registerInstagramRoutes(
       ...(result.ok ? { credentialsDirty: false } : {}),
       ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
     });
+
+    // If Instagram returned a checkpoint URL, cache it so the EB navigates there directly
+    // on next open (bypassing the 429 rate-limit on the home page)
+    if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
+      setCheckpointUrl(profile.id, result.checkpointUrl);
+    }
 
     res.json(result);
   });

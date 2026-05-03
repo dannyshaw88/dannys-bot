@@ -138493,6 +138493,20 @@ function h3(t2) {
 }
 
 // src/instagram/instagramLogin.ts
+function extractCheckpointUrl(err) {
+  if (!(err instanceof import_instagram_private_api.IgCheckpointError)) return void 0;
+  try {
+    const msg = err.message ?? "";
+    if (msg.includes("instagram.com/challenge")) return msg;
+    const challenge = err?.response?.body?.challenge;
+    if (challenge?.url) {
+      const u = challenge.url;
+      return u.startsWith("http") ? u : `https://i.instagram.com${u}`;
+    }
+  } catch {
+  }
+  return void 0;
+}
 async function logApiCall(profileId, operationName, status, source, navChain, ipAddress, durationMs) {
   try {
     await db.insert(instagramApiCalls).values({
@@ -138705,6 +138719,7 @@ async function verifyInstagramCredentials(profile) {
               ok: false,
               message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
               accountStatus: "captcha",
+              checkpointUrl: extractCheckpointUrl(famErr),
               igDeviceState: captureDeviceState2()
             };
           }
@@ -138731,6 +138746,7 @@ async function verifyInstagramCredentials(profile) {
               ok: false,
               message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
               accountStatus: "captcha",
+              checkpointUrl: extractCheckpointUrl(tlErr),
               igDeviceState: captureDeviceState2()
             };
           }
@@ -138810,7 +138826,7 @@ async function verifyInstagramCredentials(profile) {
       await ig.simulate.postLoginFlow();
     } catch (plErr) {
       if (plErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
-        return { ok: false, message: `@${profile.username} \u2014 logged in but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", igDeviceState: captureDeviceState() };
+        return { ok: false, message: `@${profile.username} \u2014 logged in but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: captureDeviceState() };
       }
     }
     return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
@@ -138843,7 +138859,7 @@ async function verifyInstagramCredentials(profile) {
           await ig.simulate.postLoginFlow();
         } catch (plErr) {
           if (plErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
-            return { ok: false, message: `@${profile.username} \u2014 passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", igDeviceState: captureDeviceState() };
+            return { ok: false, message: `@${profile.username} \u2014 passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: captureDeviceState() };
           }
         }
         return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
@@ -138852,7 +138868,7 @@ async function verifyInstagramCredentials(profile) {
       }
     }
     if (err instanceof import_instagram_private_api.IgCheckpointError) {
-      return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} \u2014 security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: ds };
     }
     if (err instanceof import_instagram_private_api.IgLoginBadPasswordError) {
       const body = err?.response?.body ?? {};
@@ -138928,6 +138944,11 @@ function deleteSavedCookies(profileId) {
     if (fs.existsSync(p)) fs.unlinkSync(p);
   } catch {
   }
+}
+var checkpointUrlCache = /* @__PURE__ */ new Map();
+function setCheckpointUrl(profileId, mobileOrWebUrl) {
+  const webUrl = mobileOrWebUrl.replace("https://i.instagram.com", "https://www.instagram.com");
+  checkpointUrlCache.set(profileId, webUrl);
 }
 function sseWrite(res, data) {
   if (!res || res.writableEnded) return;
@@ -139098,7 +139119,13 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
   const cookiesLoaded = await loadCookies(profileId, page);
-  if (cookiesLoaded) {
+  const cachedCheckpointUrl = checkpointUrlCache.get(profileId);
+  if (cachedCheckpointUrl) {
+    checkpointUrlCache.delete(profileId);
+    log(`[cookies:${profileId}] Navigating directly to checkpoint URL: ${cachedCheckpointUrl}`, "browser");
+    page.goto(cachedCheckpointUrl, { waitUntil: "domcontentloaded", timeout: 2e4 }).catch(() => {
+    });
+  } else if (cookiesLoaded) {
     log(`[cookies:${profileId}] Cookies restored \u2014 navigating to Instagram home`, "browser");
     page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 2e4 }).catch(() => {
     });
@@ -143353,6 +143380,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
       ...result.ok ? { credentialsDirty: false } : {},
       ...result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}
     });
+    if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
+      setCheckpointUrl(profile.id, result.checkpointUrl);
+    }
     res.json(result);
   });
   function resolveImportStatus(raw) {
