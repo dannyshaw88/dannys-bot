@@ -141052,8 +141052,10 @@ var AutomationEngine = class {
           activeDM.add(profile.id);
           if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool);
         }
-        const contactTool = tools2.find((t2) => t2.type === "contact" && t2.enabled);
-        if (contactTool && profile.accountStatus === "valid") {
+        const contactTool = tools2.find((t2) => t2.type === "contact");
+        const cs = contactTool?.settings;
+        const contactEffective = contactTool && (contactTool.enabled || cs?.contactUsersEnabled === true || cs?.contactNewFollowersEnabled === true);
+        if (contactEffective && profile.accountStatus === "valid") {
           activeContact.add(profile.id);
           if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
         }
@@ -141504,7 +141506,9 @@ var AutomationEngine = class {
         }
         const tools2 = await storage.getToolsByProfile(freshProfile.id);
         const contactTool = tools2.find((t2) => t2.type === "contact");
-        if (!contactTool?.enabled || state.stop.stopped) break;
+        const cs2 = contactTool?.settings;
+        const stillEnabled = contactTool && (contactTool.enabled || cs2?.contactUsersEnabled === true || cs2?.contactNewFollowersEnabled === true);
+        if (!stillEnabled || state.stop.stopped) break;
         const s = contactTool.settings;
         const now = Date.now();
         const newFollowersEnabled = s.contactNewFollowersEnabled === true;

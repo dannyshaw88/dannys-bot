@@ -202,10 +202,18 @@ class AutomationEngine {
           if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool);
         }
 
-        const contactTool = tools.find(t => t.type === "contact" && t.enabled);
-        if (contactTool && profile.accountStatus === "valid") {
+        // Contact tool is "effectively enabled" if the top-level flag OR either
+        // sub-feature toggle is on — the sub-toggles live in settings, not t.enabled.
+        const contactTool = tools.find(t => t.type === "contact");
+        const cs = contactTool?.settings as any;
+        const contactEffective = contactTool && (
+          contactTool.enabled ||
+          cs?.contactUsersEnabled === true ||
+          cs?.contactNewFollowersEnabled === true
+        );
+        if (contactEffective && profile.accountStatus === "valid") {
           activeContact.add(profile.id);
-          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool);
+          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!);
         }
 
         // Human session runner has its own tool record — completely independent of all other tools
@@ -692,7 +700,13 @@ class AutomationEngine {
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
         const contactTool = tools.find(t => t.type === "contact");
-        if (!contactTool?.enabled || state.stop.stopped) break;
+        const cs2 = contactTool?.settings as any;
+        const stillEnabled = contactTool && (
+          contactTool.enabled ||
+          cs2?.contactUsersEnabled === true ||
+          cs2?.contactNewFollowersEnabled === true
+        );
+        if (!stillEnabled || state.stop.stopped) break;
 
         const s = contactTool.settings as any;
         const now = Date.now();
