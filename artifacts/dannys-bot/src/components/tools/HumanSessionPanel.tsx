@@ -29,6 +29,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const { navigateTo } = useBrowserWindows();
   const { toast } = useToast();
   const [showReposted, setShowReposted] = useState(false);
+  const [showImageSettings, setShowImageSettings] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
@@ -41,7 +42,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     checkStories:       ["checkTimelineStoriesEnabled","checkTimelineStoriesMin","checkTimelineStoriesMax","checkTimelineStoriesOrderMin","checkTimelineStoriesOrderMax","checkTimelineStoriesNotUsedMin","checkTimelineStoriesNotUsedMax"],
     checkDm:            ["checkDmEnabled","checkDmMin","checkDmMax","checkDmOrderMin","checkDmOrderMax","checkDmNotUsedMin","checkDmNotUsedMax"],
     likeTimelinePosts:  ["likeTimelinePostsEnabled","likeTimelinePostsMin","likeTimelinePostsMax","likeTimelinePostsOrderMin","likeTimelinePostsOrderMax","likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"],
-    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
+    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostImageSettings","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
   };
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "Timing", options: [
@@ -116,6 +117,14 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       repostEnabled: false,
       repostSourceUsername: "",
       repostAlterationLevel: "small",
+      repostImageSettings: {
+        contrast:       { enabled: true, min: 5,   max: 250 },
+        brightness:     { enabled: true, min: 5,   max: 250 },
+        noise:          { enabled: true, min: 5,   max: 15  },
+        sharpen:        { enabled: true, min: 1.0, max: 2.0 },
+        pixelate:       { enabled: true, min: 0.9, max: 2.1 },
+        randomMetadata: true,
+      },
       repostOrderMin: 0,
       repostOrderMax: 0,
       repostNotUsedMin: 0,
@@ -137,6 +146,26 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     }, 600);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [settings]);
+
+  const DEFAULT_IMG_SETTINGS = {
+    contrast:       { enabled: true, min: 5,   max: 250 },
+    brightness:     { enabled: true, min: 5,   max: 250 },
+    noise:          { enabled: true, min: 5,   max: 15  },
+    sharpen:        { enabled: true, min: 1.0, max: 2.0 },
+    pixelate:       { enabled: true, min: 0.9, max: 2.1 },
+    randomMetadata: true,
+  };
+  const imgSettings: typeof DEFAULT_IMG_SETTINGS = (settings as any).repostImageSettings ?? DEFAULT_IMG_SETTINGS;
+  const setImgFilter = (key: string, val: unknown) =>
+    setSettings({ ...settings, repostImageSettings: { ...imgSettings, [key]: val } } as any);
+
+  const IMG_FILTER_DEFS = [
+    { key: "contrast",   label: "Contrast",        step: 1,   isInt: true  },
+    { key: "brightness", label: "Brightness",       step: 1,   isInt: true  },
+    { key: "noise",      label: "Noise",            step: 1,   isInt: true  },
+    { key: "sharpen",    label: "Sharpen Effect",   step: 0.1, isInt: false },
+    { key: "pixelate",   label: "Pixelate Effect",  step: 0.1, isInt: false },
+  ] as const;
 
   const pctInputs = (minKey: string, maxKey: string) => (
     <>
@@ -569,6 +598,21 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               </div>
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Image settings</Label>
+              <button
+                type="button"
+                onClick={() => setShowImageSettings(v => !v)}
+                className={`h-8 px-3 text-xs rounded border transition-colors flex items-center gap-1.5 ${
+                  showImageSettings
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                }`}
+              >
+                <Settings className="w-3 h-3" />
+                Configure
+              </button>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Disable when my posts reach <span className="text-muted-foreground/60">(0 = off)</span></Label>
               <Input
                 type="number" min="0" className="w-20 h-8 text-xs"
@@ -577,6 +621,66 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               />
             </div>
           </div>
+
+          {showImageSettings && (
+            <div className="border border-border rounded-md overflow-hidden bg-background animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="px-3 py-2 bg-muted/40 border-b border-border flex items-center gap-2">
+                <Settings className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-semibold">Image Settings</span>
+                <span className="text-[10px] text-muted-foreground ml-1">— applied randomly from each filter's Min–Max range before uploading</span>
+              </div>
+              <div className="p-3 space-y-0">
+                <div className="grid grid-cols-[18px_1fr_72px_72px] gap-x-3 items-center text-[10px] font-medium text-muted-foreground uppercase tracking-wide pb-1.5 border-b border-border/40 mb-1">
+                  <span />
+                  <span>Filter</span>
+                  <span className="text-center">Min</span>
+                  <span className="text-center">Max</span>
+                </div>
+                {IMG_FILTER_DEFS.map(({ key, label, step }) => {
+                  const f = imgSettings[key] as { enabled: boolean; min: number; max: number };
+                  return (
+                    <div key={key} className="grid grid-cols-[18px_1fr_72px_72px] gap-x-3 items-center py-1.5 border-b border-border/20 last:border-b-0">
+                      <input
+                        type="checkbox"
+                        checked={f.enabled}
+                        onChange={e => setImgFilter(key, { ...f, enabled: e.target.checked })}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                      />
+                      <span className={`text-xs ${f.enabled ? "text-foreground" : "text-muted-foreground/50"}`}>{label}</span>
+                      <input
+                        type="number"
+                        step={step}
+                        disabled={!f.enabled}
+                        className="w-full h-7 text-xs border border-border rounded px-2 bg-background disabled:opacity-40 text-center"
+                        value={f.min}
+                        onChange={e => setImgFilter(key, { ...f, min: Number(e.target.value) })}
+                      />
+                      <input
+                        type="number"
+                        step={step}
+                        disabled={!f.enabled}
+                        className="w-full h-7 text-xs border border-border rounded px-2 bg-background disabled:opacity-40 text-center"
+                        value={f.max}
+                        onChange={e => setImgFilter(key, { ...f, max: Number(e.target.value) })}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="px-3 py-2 border-t border-border/40 bg-muted/20 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="imgRandomMetadata"
+                  checked={!!imgSettings.randomMetadata}
+                  onChange={e => setImgFilter("randomMetadata", e.target.checked)}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                />
+                <label htmlFor="imgRandomMetadata" className="text-xs text-muted-foreground cursor-pointer select-none">
+                  Enable Random US Metadata <span className="text-muted-foreground/60">(injects randomised GPS coordinates and iPhone device info into EXIF)</span>
+                </label>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <input
