@@ -349,20 +349,24 @@ export function attachSSE(profileId: number, res: ServerResponse) {
   // On every (re-)connect, check the current URL.  If the page is on
   // about:blank (silent goto() failure), chrome-error:// (429 / network), or
   // any non-Instagram URL, navigate to Instagram right now rather than waiting
-  // for the frame-loop retry which fires after a 10-second delay.
-  session.page.url().then(async (currentUrl) => {
-    if (currentUrl.includes("instagram.com")) return; // already on IG — nothing to do
-    const hasCookies = await session.page.cookies()
-      .then(c => c.some(ck => ck.name === "sessionid"))
-      .catch(() => false);
-    const target = hasCookies
-      ? "https://www.instagram.com/"
-      : "https://www.instagram.com/accounts/login/";
-    log(`[attachSSE:${profileId}] page is "${currentUrl}" — navigating to ${target}`, "browser");
-    session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {
-      // If this also fails, the frame-loop error-retry will handle the next attempt
-    });
-  }).catch(() => {});
+  // for the frame-loop retry which fires after a 3-second delay.
+  // NOTE: page.url() is synchronous (returns string, not Promise) in this
+  // version of Puppeteer — wrap in an async IIFE so we can await cookies.
+  (async () => {
+    try {
+      const currentUrl = session.page.url();
+      if (currentUrl.includes("instagram.com")) return; // already on IG
+      const cookies = await session.page.cookies().catch(() => [] as any[]);
+      const hasCookies = cookies.some((c: any) => c.name === "sessionid");
+      const target = hasCookies
+        ? "https://www.instagram.com/"
+        : "https://www.instagram.com/accounts/login/";
+      log(`[attachSSE:${profileId}] page is "${currentUrl}" — navigating to ${target}`, "browser");
+      session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {
+        // Frame-loop retry will handle subsequent failures
+      });
+    } catch { /* page may be closing — ignore */ }
+  })();
 
   startFrameLoop(profileId);
 }

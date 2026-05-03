@@ -139159,15 +139159,19 @@ function attachSSE(profileId, res) {
     }
   }
   session.res = res;
-  session.page.url().then(async (currentUrl) => {
-    if (currentUrl.includes("instagram.com")) return;
-    const hasCookies = await session.page.cookies().then((c3) => c3.some((ck) => ck.name === "sessionid")).catch(() => false);
-    const target = hasCookies ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
-    log(`[attachSSE:${profileId}] page is "${currentUrl}" \u2014 navigating to ${target}`, "browser");
-    session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25e3 }).catch(() => {
-    });
-  }).catch(() => {
-  });
+  (async () => {
+    try {
+      const currentUrl = session.page.url();
+      if (currentUrl.includes("instagram.com")) return;
+      const cookies = await session.page.cookies().catch(() => []);
+      const hasCookies = cookies.some((c3) => c3.name === "sessionid");
+      const target = hasCookies ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
+      log(`[attachSSE:${profileId}] page is "${currentUrl}" \u2014 navigating to ${target}`, "browser");
+      session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25e3 }).catch(() => {
+      });
+    } catch {
+    }
+  })();
   startFrameLoop(profileId);
 }
 function startFrameLoop(profileId) {
