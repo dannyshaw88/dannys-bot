@@ -338,6 +338,7 @@ export function ProfileDetailsPage() {
                     <span className="text-2xl font-bold tracking-tight text-foreground truncate">
                       {profile.accountLabel || `@${profile.username}`}
                     </span>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${profile.status === 'running' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
                     <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                   </button>
                 </DropdownMenuTrigger>
@@ -418,8 +419,6 @@ export function ProfileDetailsPage() {
                   </DropdownMenu>
                 );
               })()}
-              {/* Automation running indicator */}
-              <span className={`w-2 h-2 rounded-full ${profile.status === 'running' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
             </div>
           </div>
 
