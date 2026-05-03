@@ -5,6 +5,7 @@
  */
 import * as https from "https";
 import * as fs from "fs";
+import { randomUUID } from "crypto";
 import { generateSync as totpGenerate } from "otplib";
 
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
@@ -1003,38 +1004,46 @@ export class InstagramWebClient {
 
   async sendDirectMessage(userId: string, text: string, username?: string): Promise<{ threadId: string; itemId: string } | "blocked" | false> {
     return this.timed("SendDM", async () => {
+      // Use the web API (www.instagram.com) — same session that follow/unfollow/like use.
+      // i.instagram.com DM-write endpoints (broadcast, create_group_thread) require a mobile
+      // Bearer token, not web session cookies, so they return "login_required" or 4415001.
+      const clientCtx = randomUUID();
       const dmBody = new URLSearchParams({
         recipient_users: `[[${userId}]]`,
-        client_context: String(Date.now()),
+        client_context: clientCtx,
+        offline_threading_id: clientCtx,
+        action: "send_item",
+        is_shh_mode: "0",
         text,
       }).toString();
 
-      // Mobile API (i.instagram.com) — the only endpoint that reaches DM broadcast correctly.
-      // www.instagram.com/api/v1/direct_v2/... returns 302, so webPost cannot be used here.
-      const j = await this.mobilePost(`/api/v1/direct_v2/threads/broadcast/text/`, dmBody);
-      console.log(`[webClient] sendDM ${userId} broadcast response:`, JSON.stringify(j)?.slice(0, 300));
+      console.log(`[webClient] sendDM ${userId}: POST www.instagram.com/api/v1/direct_v2/threads/broadcast/text/`);
+      const r = await this.webPost(`/api/v1/direct_v2/threads/broadcast/text/`, dmBody);
+      console.log(`[webClient] sendDM ${userId} response status=${r.status}:`, JSON.stringify(r.json)?.slice(0, 400) ?? r.rawBody?.slice(0, 400));
 
-      if (!j) return false;
+      if (r.status === 302 || r.json === null) {
+        console.warn(`[webClient] sendDM ${userId}: 302/no-json — CSRF or session issue, HTTP ${r.status}`);
+        return false;
+      }
+
+      const j = r.json;
       if (j?.message === "feedback_required" || j?.feedback_required === true) {
-        console.warn(`[webClient] DM BLOCKED to ${userId}`);
+        console.warn(`[webClient] DM BLOCKED to ${userId}: feedback_required`);
         return "blocked";
+      }
+      if (j?.message === "login_required" || j?.require_login) {
+        console.warn(`[webClient] sendDM ${userId}: login_required`);
+        return false;
       }
       if (j?.status === "ok") {
         const threadId: string = j?.payload?.thread_id ?? j?.thread_id ?? "";
-        const itemId: string = j?.payload?.item_id ?? j?.item_id ?? "";
+        const itemId: string  = j?.payload?.item_id  ?? j?.item_id  ?? "";
+        console.log(`[webClient] sendDM ${userId}: SUCCESS threadId=${threadId} itemId=${itemId}`);
         return { threadId, itemId };
       }
 
-      // Handle "Prompt has contribution" (4415001):
-      // A previous session already sent a DM request to this user — it sits in
-      // the recipient's message-request inbox awaiting acceptance. Treat this as
-      // a successful send; the DM IS delivered, just pending acceptance.
       const errorCode = j?.content?.error_code ?? j?.error_code;
-      if (errorCode === 4415001) {
-        console.log(`[webClient] sendDM ${userId}: 4415001 — DM already in recipient inbox (pending acceptance), marking sent`);
-        return { threadId: "prompt_pending", itemId: "" };
-      }
-
+      console.warn(`[webClient] sendDM ${userId}: failed — HTTP ${r.status} error_code=${errorCode} status=${j?.status} message=${j?.message}`);
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
   }
@@ -1073,6 +1082,9 @@ export class InstagramWebClient {
   // mobile-style POST (i.instagram.com)
   private async mobilePost(path: string, body = ""): Promise<any> {
     await this.apiThrottle();
+    // Must use the mobile App ID (567067343352427) — the web App ID (936619743392459)
+    // routes to the web frontend on i.instagram.com instead of the mobile API backend.
+    const MOBILE_APP_ID = "567067343352427";
     const res = await igReq({
       host: "i.instagram.com",
       path,
@@ -1083,7 +1095,7 @@ export class InstagramWebClient {
         Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Content-Type": "application/x-www-form-urlencoded",
-        "X-IG-App-ID": APP_ID,
+        "X-IG-App-ID": MOBILE_APP_ID,
         "X-CSRFToken": this.csrfToken,
         "X-IG-Capabilities": "3brTvwE=",
         "X-IG-Connection-Type": "WIFI",

@@ -139432,6 +139432,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
 // src/instagram/instagramWebClient.ts
 import * as https from "https";
 import * as fs2 from "fs";
+import { randomUUID } from "crypto";
 function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
@@ -140272,28 +140273,39 @@ var InstagramWebClient = class {
   }
   async sendDirectMessage(userId, text2, username) {
     return this.timed("SendDM", async () => {
+      const clientCtx = randomUUID();
       const dmBody = new URLSearchParams({
         recipient_users: `[[${userId}]]`,
-        client_context: String(Date.now()),
+        client_context: clientCtx,
+        offline_threading_id: clientCtx,
+        action: "send_item",
+        is_shh_mode: "0",
         text: text2
       }).toString();
-      const j = await this.mobilePost(`/api/v1/direct_v2/threads/broadcast/text/`, dmBody);
-      console.log(`[webClient] sendDM ${userId} broadcast response:`, JSON.stringify(j)?.slice(0, 300));
-      if (!j) return false;
+      console.log(`[webClient] sendDM ${userId}: POST www.instagram.com/api/v1/direct_v2/threads/broadcast/text/`);
+      const r2 = await this.webPost(`/api/v1/direct_v2/threads/broadcast/text/`, dmBody);
+      console.log(`[webClient] sendDM ${userId} response status=${r2.status}:`, JSON.stringify(r2.json)?.slice(0, 400) ?? r2.rawBody?.slice(0, 400));
+      if (r2.status === 302 || r2.json === null) {
+        console.warn(`[webClient] sendDM ${userId}: 302/no-json \u2014 CSRF or session issue, HTTP ${r2.status}`);
+        return false;
+      }
+      const j = r2.json;
       if (j?.message === "feedback_required" || j?.feedback_required === true) {
-        console.warn(`[webClient] DM BLOCKED to ${userId}`);
+        console.warn(`[webClient] DM BLOCKED to ${userId}: feedback_required`);
         return "blocked";
+      }
+      if (j?.message === "login_required" || j?.require_login) {
+        console.warn(`[webClient] sendDM ${userId}: login_required`);
+        return false;
       }
       if (j?.status === "ok") {
         const threadId = j?.payload?.thread_id ?? j?.thread_id ?? "";
         const itemId = j?.payload?.item_id ?? j?.item_id ?? "";
+        console.log(`[webClient] sendDM ${userId}: SUCCESS threadId=${threadId} itemId=${itemId}`);
         return { threadId, itemId };
       }
       const errorCode = j?.content?.error_code ?? j?.error_code;
-      if (errorCode === 4415001) {
-        console.log(`[webClient] sendDM ${userId}: 4415001 \u2014 DM already in recipient inbox (pending acceptance), marking sent`);
-        return { threadId: "prompt_pending", itemId: "" };
-      }
+      console.warn(`[webClient] sendDM ${userId}: failed \u2014 HTTP ${r2.status} error_code=${errorCode} status=${j?.status} message=${j?.message}`);
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
   }
@@ -140328,6 +140340,7 @@ var InstagramWebClient = class {
   // mobile-style POST (i.instagram.com)
   async mobilePost(path4, body = "") {
     await this.apiThrottle();
+    const MOBILE_APP_ID = "567067343352427";
     const res = await igReq({
       host: "i.instagram.com",
       path: path4,
@@ -140338,7 +140351,7 @@ var InstagramWebClient = class {
         Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Content-Type": "application/x-www-form-urlencoded",
-        "X-IG-App-ID": APP_ID,
+        "X-IG-App-ID": MOBILE_APP_ID,
         "X-CSRFToken": this.csrfToken,
         "X-IG-Capabilities": "3brTvwE=",
         "X-IG-Connection-Type": "WIFI"
