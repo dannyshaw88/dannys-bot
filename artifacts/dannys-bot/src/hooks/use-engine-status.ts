@@ -8,6 +8,7 @@ interface EngineStatusEntry {
   nextHumanSessionAt: number;
   nextFollowAt: number;
   nextContactAt: number;
+  nextUnfollowAt: number;
 }
 
 export function useEngineStatus() {

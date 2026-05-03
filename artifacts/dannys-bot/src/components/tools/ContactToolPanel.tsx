@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, UserPlus, MessageSquare, Copy, Clock } from "lucide-react";
+import { Users, UserPlus, MessageSquare, Copy, Clock, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile } from "@shared/schema";
 import { useProfileEngineStatus } from "@/hooks/use-engine-status";
@@ -86,14 +86,30 @@ export function ContactToolPanel({ tool, profile }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Status badge */}
-      {contactRunStatus && (
-        <div className="flex items-center gap-1.5 text-[11px]" style={{ color: contactRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-          <Clock className="w-3 h-3 shrink-0" />
-          {contactRunStatus.executing
-            ? <span className="font-medium">Executing</span>
-            : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{contactRunStatus.label}</span></>
-          }
+      {/* Status badge + items/hr estimate */}
+      {(contactRunStatus || tool.enabled) && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {contactRunStatus && (
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: contactRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {contactRunStatus.executing
+                ? <span className="font-medium">Executing</span>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{contactRunStatus.label}</span></>
+              }
+            </div>
+          )}
+          {tool.enabled && (() => {
+            const s = (tool.settings as any) ?? {};
+            const nfDelay   = ((s.newFollowerDelayMin ?? 60) + (s.newFollowerDelayMax ?? 240)) / 2;
+            const nfCount   = ((s.newFollowerProcessMin ?? 1) + (s.newFollowerProcessMax ?? 3)) / 2;
+            const perHour   = nfDelay > 0 ? Math.round((nfCount / (nfDelay / 60))) : 0;
+            return perHour > 0 ? (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <TrendingUp className="w-3 h-3 shrink-0" />
+                <span>~{perHour} contacts/hr</span>
+              </div>
+            ) : null;
+          })()}
         </div>
       )}
       {/* Sub-tab bar + Copy button */}

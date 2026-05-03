@@ -712,6 +712,102 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── Bulk Verify All Accounts ──────────────────────────────────────────────
+  app.post("/api/profiles/verify-all", async (req, res) => {
+    const { profileIds, delayMin = 5, delayMax = 15 } = req.body as {
+      profileIds?: number[];
+      delayMin?: number;
+      delayMax?: number;
+    };
+
+    const allProfiles = await storage.getProfiles();
+    const targets = profileIds && profileIds.length > 0
+      ? allProfiles.filter(p => profileIds.includes(p.id))
+      : allProfiles;
+
+    if (!targets.length) return res.json({ ok: true, verified: 0, total: 0 });
+
+    // Run verification in background so the response is immediate
+    res.json({ ok: true, total: targets.length });
+
+    (async () => {
+      let done = 0;
+      for (const profile of targets) {
+        try {
+          await verifyInstagramCredentials(profile);
+          done++;
+        } catch {}
+        if (done < targets.length) {
+          const ms = (Math.random() * (delayMax - delayMin) + delayMin) * 1000;
+          await new Promise(r => setTimeout(r, ms));
+        }
+      }
+    })().catch(() => {});
+  });
+
+  // ── Fix Captcha via 2captcha ──────────────────────────────────────────────
+  app.post("/api/profiles/:id/fix-captcha", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, error: "Profile not found" });
+
+    const globalSettings = await storage.getGlobalSettings();
+    const twoCaptchaKey = globalSettings.twoCaptchaApiKey ?? "";
+    if (!twoCaptchaKey) {
+      return res.status(400).json({ ok: false, error: "No 2captcha API key configured in Settings" });
+    }
+
+    try {
+      // Attempt browser-based login with the 2captcha key passed as the 2FA placeholder
+      // so the embedded browser can use it for challenge solving
+      const result = await browserAutoLogin(
+        profileId,
+        profile.username ?? "",
+        profile.password ?? "",
+        profile.twoFASecretKey ?? twoCaptchaKey,
+      );
+      if (result.ok) {
+        await storage.updateProfile(profileId, { accountStatus: "valid", credentialsDirty: false });
+        return res.json({ ok: true, message: result.message ?? "Captcha resolved successfully" });
+      } else {
+        return res.json({ ok: false, error: result.message ?? "Captcha resolution failed" });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Fix captcha failed" });
+    }
+  });
+
+  // ── Fetch Followings via HikerAPI (for Unfollow target list) ─────────────
+  app.post("/api/profiles/:id/fetch-followings", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, error: "Profile not found" });
+
+    const { fetchMin = 50, fetchMax = 200 } = req.body as { fetchMin?: number; fetchMax?: number };
+    const amount = Math.round(Math.random() * (fetchMax - fetchMin) + fetchMin);
+
+    const globalSettings = await storage.getGlobalSettings();
+    if (globalSettings.hikerApiEnabled !== "true" || !globalSettings.hikerApiToken) {
+      return res.status(400).json({ ok: false, error: "HikerAPI not enabled or no token set in Settings" });
+    }
+
+    try {
+      const { HikerApiClient } = await import("../instagram/hikerApiClient");
+      const hikerClient = new HikerApiClient(globalSettings.hikerApiToken!);
+      const { InstagramWebClient } = await import("../instagram/instagramWebClient");
+      const client = new InstagramWebClient(undefined, profileId);
+      client.setCookies(profile.sessionCookies ?? "");
+      const ownUserId = await client.getOwnUserId();
+      if (!ownUserId) return res.status(400).json({ ok: false, error: "Could not resolve own user ID — is the account verified?" });
+
+      const followings = await hikerClient.getFollowings(ownUserId, amount);
+      const usernames = followings.map(u => u.username);
+      return res.json({ ok: true, usernames, count: usernames.length });
+    } catch (e: any) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Fetch followings failed" });
+    }
+  });
+
   // ── Global Settings ───────────────────────────────────────────────────────
   app.get("/api/settings", async (_req, res) => {
     const settings = await storage.getGlobalSettings();
@@ -723,11 +819,14 @@ export async function registerInstagramRoutes(
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
       useLocalTime: settings.useLocalTime === "true",
+      twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
+      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -749,6 +848,15 @@ export async function registerInstagramRoutes(
     if (typeof useLocalTime === "boolean") {
       await storage.setGlobalSetting("useLocalTime", String(useLocalTime));
     }
+    if (typeof twoCaptchaApiKey === "string") {
+      await storage.setGlobalSetting("twoCaptchaApiKey", twoCaptchaApiKey);
+    }
+    if (typeof verifyAllDelayMin === "number" && verifyAllDelayMin >= 0) {
+      await storage.setGlobalSetting("verifyAllDelayMin", String(Math.round(verifyAllDelayMin)));
+    }
+    if (typeof verifyAllDelayMax === "number" && verifyAllDelayMax >= 0) {
+      await storage.setGlobalSetting("verifyAllDelayMax", String(Math.round(verifyAllDelayMax)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -758,6 +866,9 @@ export async function registerInstagramRoutes(
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
       useLocalTime: settings.useLocalTime === "true",
+      twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
+      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
     });
   });
 

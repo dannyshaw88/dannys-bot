@@ -832,7 +832,23 @@ export class InstagramWebClient {
   // If a post is a reel/video (media_type === 2), it is marked as watched
   // before being liked, so Instagram sees a realistic view → like sequence.
   // Returns the number of posts liked and reels watched.
-  async likeTimelinePosts(count: number = 3): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string }> }> {
+  async saveMedia(mediaId: string): Promise<boolean> {
+    return this.timed("SaveMedia", async () => {
+      const body = new URLSearchParams({ added_via: "save_to_collection" }).toString();
+      const j = await this.mobilePost(`/api/v1/media/${mediaId}/save/`, body);
+      return j?.status === "ok";
+    }, `Save media ${mediaId}`);
+  }
+
+  async likeDirectMessage(threadId: string, itemId: string): Promise<boolean> {
+    return this.timed("LikeDM", async () => {
+      const body = new URLSearchParams({}).toString();
+      const j = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/like/`, body);
+      return j?.status === "ok";
+    }, `Like DM thread=${threadId} item=${itemId}`);
+  }
+
+  async likeTimelinePosts(count: number = 3): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> }> {
     return this.timed("LikeTimelinePosts", async () => {
       // As of 2024 the timeline endpoint requires POST (GET returns 405).
       const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
@@ -847,7 +863,7 @@ export class InstagramWebClient {
       const toProcess = items.slice(0, count);
       let liked = 0;
       let watched = 0;
-      const likedPosts: Array<{ shortcode: string; ownerUsername: string }> = [];
+      const likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> = [];
 
       for (const media of toProcess) {
         const mediaId = String(media?.id ?? media?.pk ?? "");
@@ -876,7 +892,7 @@ export class InstagramWebClient {
           liked++;
           const shortcode    = String(media?.code ?? "");
           const ownerUsername = String(media?.user?.username ?? "");
-          if (shortcode) likedPosts.push({ shortcode, ownerUsername });
+          likedPosts.push({ shortcode, ownerUsername, mediaId });
         }
       }
 

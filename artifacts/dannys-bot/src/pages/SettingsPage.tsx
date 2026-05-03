@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState } from "react";
 
@@ -30,17 +30,21 @@ export function SettingsPage() {
   const [testingHiker, setTestingHiker] = useState(false);
   const [hikerStatus, setHikerStatus] = useState<"idle" | "ok" | "fail">("idle");
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
+  const [twoCaptchaKeyDraft, setTwoCaptchaKeyDraft] = useState<string | null>(null);
+  const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
 
   const { data: settings, isLoading } = useQuery<GlobalSettings>({
     queryKey: ["/api/settings"],
     queryFn: fetchSettings,
   });
 
-  // Sync token input from DB on first load only (don't overwrite while user is typing)
+  // Sync token inputs from DB on first load only (don't overwrite while user is typing)
   const [tokenInitialized, setTokenInitialized] = useState(false);
   if (settings && !tokenInitialized) {
     setTokenDraft(settings.hikerApiToken ?? "");
+    setTwoCaptchaKeyDraft(settings.twoCaptchaApiKey ?? "");
     setTokenInitialized(true);
+    setTwoCaptchaKeyInitialized(true);
   }
 
   const mutation = useMutation({
@@ -289,6 +293,84 @@ export function SettingsPage() {
               <p className="text-xs text-muted-foreground">
                 Default 365 days — effectively means never scrape the same user twice.
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 2Captcha Integration */}
+        <div className="desktop-card p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">2Captcha Integration</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            When accounts hit a captcha challenge, the "Fix Captcha" action uses this API key to auto-solve it via the embedded browser.
+            Get your key at <span className="font-medium">2captcha.com</span>.
+          </p>
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">API Key</Label>
+            <Input
+              type="password"
+              placeholder="Enter your 2captcha API key"
+              value={twoCaptchaKeyDraft ?? ""}
+              onChange={(e) => setTwoCaptchaKeyDraft(e.target.value)}
+              onBlur={(e) => {
+                const v = e.target.value;
+                if (v !== (settings?.twoCaptchaApiKey ?? "")) {
+                  mutation.mutate({ twoCaptchaApiKey: v });
+                }
+              }}
+              className="font-mono text-sm"
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
+        {/* Verify All Delay */}
+        <div className="desktop-card p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-green-100 text-green-600">
+              <Timer className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Verify All Accounts Delay</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            When "Verify All Accounts" is triggered from the Accounts page, this delay is applied between each verification to avoid rate limiting.
+          </p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Min delay (seconds)</Label>
+              <Input
+                type="number" min={0} max={300}
+                className="w-28"
+                defaultValue={settings?.verifyAllDelayMin ?? 5}
+                key={settings?.verifyAllDelayMin}
+                onBlur={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!isNaN(v) && v !== settings?.verifyAllDelayMin) {
+                    mutation.mutate({ verifyAllDelayMin: v });
+                  }
+                }}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Max delay (seconds)</Label>
+              <Input
+                type="number" min={0} max={300}
+                className="w-28"
+                defaultValue={settings?.verifyAllDelayMax ?? 15}
+                key={settings?.verifyAllDelayMax}
+                onBlur={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!isNaN(v) && v !== settings?.verifyAllDelayMax) {
+                    mutation.mutate({ verifyAllDelayMax: v });
+                  }
+                }}
+                disabled={isLoading}
+              />
             </div>
           </div>
         </div>

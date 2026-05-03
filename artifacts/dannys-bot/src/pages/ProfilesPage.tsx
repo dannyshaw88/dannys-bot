@@ -99,6 +99,8 @@ export function ProfilesPage() {
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
+  const [verifyingAll, setVerifyingAll] = useState(false);
+  const [fixingCaptcha, setFixingCaptcha] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
   const [sortField, setSortField] = useState<"account" | "status" | null>(() => {
     const v = sessionStorage.getItem("profiles:sortField");
@@ -255,6 +257,101 @@ export function ProfilesPage() {
     updateAccountStatus.mutate({ id, accountStatus: next });
   };
 
+  // ── Bulk: Verify All ─────────────────────────────────────────────────────
+  const handleVerifyAll = useCallback(async () => {
+    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : (profiles ?? []).map(p => p.id);
+    if (!ids.length) return;
+    setVerifyingAll(true);
+    try {
+      const res = await fetch("/api/profiles/verify-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ profileIds: ids }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        toast({ title: "Verify All started", description: `Verifying ${data.total} account(s) in the background with staggered delays.` });
+      } else {
+        toast({ title: "Error", description: data.error ?? "Failed to start verification.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to reach server.", variant: "destructive" });
+    } finally {
+      setVerifyingAll(false);
+    }
+  }, [selectedProfileIds, profiles, toast]);
+
+  // ── Bulk: Fix Captcha ────────────────────────────────────────────────────
+  const handleBulkFixCaptcha = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    setFixingCaptcha(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedProfileIds.map(id =>
+          fetch(`/api/profiles/${id}/fix-captcha`, { method: "POST", credentials: "include" }).then(r => r.json())
+        )
+      );
+      const ok = results.filter(r => r.status === "fulfilled" && (r as any).value?.ok).length;
+      toast({ title: "Fix Captcha", description: `${ok} / ${selectedProfileIds.length} account(s) resolved.` });
+    } catch {
+      toast({ title: "Error", description: "Fix captcha failed.", variant: "destructive" });
+    } finally {
+      setFixingCaptcha(false);
+    }
+  }, [selectedProfileIds, toast]);
+
+  // ── Bulk: Remove Proxies → Pending ───────────────────────────────────────
+  const handleBulkRemoveProxies = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    try {
+      for (const id of selectedProfileIds) {
+        await updateProfileMutation.mutateAsync({
+          id,
+          proxyHost: "",
+          proxyPort: null,
+          proxyUsername: "",
+          proxyPassword: "",
+          accountStatus: "pending" as const,
+          credentialsDirty: true,
+        });
+      }
+      toast({ title: "Proxies Removed", description: `${selectedProfileIds.length} account(s) set to Pending.` });
+    } catch {
+      toast({ title: "Error", description: "Failed to remove proxies.", variant: "destructive" });
+    }
+  }, [selectedProfileIds, updateProfileMutation, toast]);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ignore if focus is on an input/textarea/select
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (!e.ctrlKey && !e.metaKey) return;
+      switch (e.key.toLowerCase()) {
+        case "d":
+          e.preventDefault();
+          handleBulkDelete();
+          break;
+        case "p":
+          e.preventDefault();
+          handleBulkRemoveProxies();
+          break;
+        case "r":
+          e.preventDefault();
+          handleVerifyAll();
+          break;
+        case "f":
+          e.preventDefault();
+          handleBulkFixCaptcha();
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha]);
+
   const setSlot = useSidebarSetSlot();
 
   useEffect(() => {
@@ -270,7 +367,7 @@ export function ProfilesPage() {
               Actions <ChevronDown className="ml-1 w-3.5 h-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-56 p-2 mb-2">
+          <DropdownMenuContent align="start" side="top" className="w-60 p-2 mb-2">
             <DropdownMenuItem onClick={() => setImportOpen(true)} className="cursor-pointer font-medium p-3">
               <Upload className="w-4 h-4 mr-2" /> Import Profiles
             </DropdownMenuItem>
@@ -295,6 +392,36 @@ export function ProfilesPage() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
+              onClick={handleVerifyAll}
+              disabled={verifyingAll}
+              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {verifyingAll
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <RefreshCw className="w-4 h-4 mr-2" />
+              }
+              Verify All Accounts <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleBulkFixCaptcha}
+              disabled={selectedProfileIds.length === 0 || fixingCaptcha}
+              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {fixingCaptcha
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <ScanFace className="w-4 h-4 mr-2" />
+              }
+              Fix Captcha <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+F</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleBulkRemoveProxies}
+              disabled={selectedProfileIds.length === 0}
+              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Globe className="w-4 h-4 mr-2" /> Remove Proxies → Pending <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+P</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
               onClick={handleBulkResetDeviceIds}
               disabled={selectedProfileIds.length === 0}
               className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -307,14 +434,14 @@ export function ProfilesPage() {
               disabled={selectedProfileIds.length === 0}
               className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Trash2 className="w-4 h-4 mr-2" /> Delete Selected
+              <Trash2 className="w-4 h-4 mr-2" /> Delete Selected <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+D</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     );
     return () => setSlot(null);
-  }, [selectedProfileIds, profiles, toggleAll, handleBulkDelete, handleBulkResetDeviceIds, handleExportProfiles, setImportOpen]);
+  }, [selectedProfileIds, profiles, toggleAll, handleBulkDelete, handleBulkResetDeviceIds, handleExportProfiles, setImportOpen, handleVerifyAll, handleBulkFixCaptcha, handleBulkRemoveProxies, verifyingAll, fixingCaptcha]);
 
   // Parse filter: split on | or ||, trim, lowercase
   const filterTokens = statusFilter

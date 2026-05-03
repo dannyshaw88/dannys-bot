@@ -249,4 +249,7 @@ export type GlobalSettings = {
   skipScrapedUsers: boolean;
   scrapedUserIgnoreDays: number;
   useLocalTime: boolean;
+  twoCaptchaApiKey: string;
+  verifyAllDelayMin: number;
+  verifyAllDelayMax: number;
 };

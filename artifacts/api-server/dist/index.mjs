@@ -114430,6 +114430,1358 @@ var require_dist2 = __commonJS({
   }
 });
 
+// ../../node_modules/.pnpm/@otplib+core@13.4.0/node_modules/@otplib/core/dist/index.js
+function y(r2, e, t2) {
+  if (typeof e != "number" || !Number.isSafeInteger(e)) throw new a(`Guardrail '${r2}' must be a safe integer`);
+  if (e < t2) throw new a(`Guardrail '${r2}' must be >= ${t2}`);
+}
+function hr(r2) {
+  if (!r2) return d;
+  r2.MIN_SECRET_BYTES !== void 0 && y("MIN_SECRET_BYTES", r2.MIN_SECRET_BYTES, 1), r2.MAX_SECRET_BYTES !== void 0 && y("MAX_SECRET_BYTES", r2.MAX_SECRET_BYTES, 1), r2.MIN_PERIOD !== void 0 && y("MIN_PERIOD", r2.MIN_PERIOD, 1), r2.MAX_PERIOD !== void 0 && y("MAX_PERIOD", r2.MAX_PERIOD, 1), r2.MAX_COUNTER !== void 0 && y("MAX_COUNTER", r2.MAX_COUNTER, 0), r2.MAX_WINDOW !== void 0 && y("MAX_WINDOW", r2.MAX_WINDOW, 1);
+  let e = { ...d, ...r2 };
+  if (e.MIN_SECRET_BYTES > e.MAX_SECRET_BYTES) throw new a("Guardrail 'MIN_SECRET_BYTES' must be <= 'MAX_SECRET_BYTES'");
+  if (e.MIN_PERIOD > e.MAX_PERIOD) throw new a("Guardrail 'MIN_PERIOD' must be <= 'MAX_PERIOD'");
+  return Object.freeze({ ...e, [er]: true });
+}
+function Or(r2, e = d) {
+  if (r2.length < e.MIN_SECRET_BYTES) throw new h(e.MIN_SECRET_BYTES, r2.length);
+  if (r2.length > e.MAX_SECRET_BYTES) throw new P(e.MAX_SECRET_BYTES, r2.length);
+}
+function br(r2, e = d) {
+  if (typeof r2 == "number") {
+    if (!Number.isFinite(r2) || !Number.isInteger(r2)) throw new b();
+    if (!Number.isSafeInteger(r2)) throw new T();
+  }
+  let t2 = typeof r2 == "bigint" ? r2 : BigInt(r2);
+  if (t2 < 0n) throw new O();
+  if (t2 > BigInt(e.MAX_COUNTER)) throw new T();
+}
+function Ar(r2) {
+  if (!Number.isFinite(r2)) throw new S();
+  if (r2 < 0) throw new C();
+}
+function Cr(r2, e = d) {
+  if (!Number.isInteger(r2) || r2 < e.MIN_PERIOD) throw new w(e.MIN_PERIOD);
+  if (r2 > e.MAX_PERIOD) throw new _(e.MAX_PERIOD);
+}
+function _r(r2) {
+  let e = typeof r2 == "bigint" ? r2 : BigInt(r2), t2 = new ArrayBuffer(8);
+  return new DataView(t2).setBigUint64(0, e, false), new Uint8Array(t2);
+}
+function Rr(r2) {
+  let e = r2[r2.length - 1] & 15;
+  return (r2[e] & 127) << 24 | r2[e + 1] << 16 | r2[e + 2] << 8 | r2[e + 3];
+}
+function Ir(r2, e) {
+  let t2 = 10 ** e;
+  return (r2 % t2).toString().padStart(e, "0");
+}
+function gr(r2, e) {
+  return r2.length === e.length;
+}
+function tr(r2, e) {
+  let t2 = rr(r2), o = rr(e);
+  if (!gr(t2, o)) return false;
+  let n = 0;
+  for (let s = 0; s < t2.length; s++) n |= t2[s] ^ o[s];
+  return n === 0;
+}
+function rr(r2) {
+  return typeof r2 == "string" ? yr.encode(r2) : r2;
+}
+function vr(r2, e) {
+  return typeof r2 == "string" ? (nr(e), e.decode(r2)) : r2;
+}
+function dr(r2) {
+  if (!r2) throw new Y();
+}
+function nr(r2) {
+  if (!r2) throw new L();
+}
+function Xr(r2) {
+  if (!r2) throw new W();
+}
+function Wr(r2) {
+  return new K(r2);
+}
+var i, x, h, P, m, O, T, b, A, C, S, B, w, _, N, c, v, G, Y, L, a, W, yr, xr, or2, sr, ar, ur, pr, lr, er, d, K;
+var init_dist = __esm({
+  "../../node_modules/.pnpm/@otplib+core@13.4.0/node_modules/@otplib/core/dist/index.js"() {
+    i = class extends Error {
+      constructor(e, t2) {
+        super(e, t2), this.name = "OTPError";
+      }
+    };
+    x = class extends i {
+      constructor(e) {
+        super(e), this.name = "SecretError";
+      }
+    };
+    h = class extends x {
+      constructor(e, t2) {
+        super(`Secret must be at least ${e} bytes (${e * 8} bits), got ${t2} bytes`), this.name = "SecretTooShortError";
+      }
+    };
+    P = class extends x {
+      constructor(e, t2) {
+        super(`Secret must not exceed ${e} bytes, got ${t2} bytes`), this.name = "SecretTooLongError";
+      }
+    };
+    m = class extends i {
+      constructor(e) {
+        super(e), this.name = "CounterError";
+      }
+    };
+    O = class extends m {
+      constructor() {
+        super("Counter must be non-negative"), this.name = "CounterNegativeError";
+      }
+    };
+    T = class extends m {
+      constructor() {
+        super("Counter exceeds maximum safe integer value"), this.name = "CounterOverflowError";
+      }
+    };
+    b = class extends m {
+      constructor() {
+        super("Counter must be a finite integer"), this.name = "CounterNotIntegerError";
+      }
+    };
+    A = class extends i {
+      constructor(e) {
+        super(e), this.name = "TimeError";
+      }
+    };
+    C = class extends A {
+      constructor() {
+        super("Time must be non-negative"), this.name = "TimeNegativeError";
+      }
+    };
+    S = class extends A {
+      constructor() {
+        super("Time must be a finite number"), this.name = "TimeNotFiniteError";
+      }
+    };
+    B = class extends i {
+      constructor(e) {
+        super(e), this.name = "PeriodError";
+      }
+    };
+    w = class extends B {
+      constructor(e) {
+        super(`Period must be at least ${e} second(s)`), this.name = "PeriodTooSmallError";
+      }
+    };
+    _ = class extends B {
+      constructor(e) {
+        super(`Period must not exceed ${e} seconds`), this.name = "PeriodTooLargeError";
+      }
+    };
+    N = class extends i {
+      constructor(e, t2) {
+        super(e, t2), this.name = "CryptoError";
+      }
+    };
+    c = class extends N {
+      constructor(e, t2) {
+        super(`HMAC computation failed: ${e}`, t2), this.name = "HMACError";
+      }
+    };
+    v = class extends N {
+      constructor(e, t2) {
+        super(`Random byte generation failed: ${e}`, t2), this.name = "RandomBytesError";
+      }
+    };
+    G = class extends i {
+      constructor(e) {
+        super(e), this.name = "PluginError";
+      }
+    };
+    Y = class extends G {
+      constructor() {
+        super("Crypto plugin is required."), this.name = "CryptoPluginMissingError";
+      }
+    };
+    L = class extends G {
+      constructor() {
+        super("Base32 plugin is required."), this.name = "Base32PluginMissingError";
+      }
+    };
+    a = class extends i {
+      constructor(e) {
+        super(e), this.name = "ConfigurationError";
+      }
+    };
+    W = class extends a {
+      constructor() {
+        super("Secret is required. Use generateSecret() to create one, or provide via { secret: 'YOUR_BASE32_SECRET' }"), this.name = "SecretMissingError";
+      }
+    };
+    yr = new TextEncoder();
+    xr = new TextDecoder();
+    or2 = 16;
+    sr = 64;
+    ar = 1;
+    ur = 3600;
+    pr = Number.MAX_SAFE_INTEGER;
+    lr = 99;
+    er = /* @__PURE__ */ Symbol("otplib.guardrails.override");
+    d = Object.freeze({ MIN_SECRET_BYTES: or2, MAX_SECRET_BYTES: sr, MIN_PERIOD: ar, MAX_PERIOD: ur, MAX_COUNTER: pr, MAX_WINDOW: lr, [er]: false });
+    K = class {
+      constructor(e) {
+        this.crypto = e;
+      }
+      get plugin() {
+        return this.crypto;
+      }
+      async hmac(e, t2, o) {
+        try {
+          let n = this.crypto.hmac(e, t2, o);
+          return n instanceof Promise ? await n : n;
+        } catch (n) {
+          let s = n instanceof Error ? n.message : String(n);
+          throw new c(s, { cause: n });
+        }
+      }
+      hmacSync(e, t2, o) {
+        try {
+          let n = this.crypto.hmac(e, t2, o);
+          if (n instanceof Promise) throw new c("Crypto plugin does not support synchronous HMAC operations");
+          return n;
+        } catch (n) {
+          if (n instanceof c) throw n;
+          let s = n instanceof Error ? n.message : String(n);
+          throw new c(s, { cause: n });
+        }
+      }
+      randomBytes(e) {
+        try {
+          return this.crypto.randomBytes(e);
+        } catch (t2) {
+          let o = t2 instanceof Error ? t2.message : String(t2);
+          throw new v(o, { cause: t2 });
+        }
+      }
+    };
+  }
+});
+
+// ../../node_modules/.pnpm/@otplib+hotp@13.4.0/node_modules/@otplib/hotp/dist/index.js
+function v2(u) {
+  let { secret: t2, counter: e, algorithm: r2 = "sha1", digits: i2 = 6, crypto: n, base32: o, guardrails: a2, hooks: s } = u;
+  Xr(t2), dr(n);
+  let c3 = vr(t2, o);
+  Or(c3, a2), br(e, a2);
+  let p = Wr(n), l2 = _r(e);
+  return { ctx: p, algorithm: r2, digits: i2, secretBytes: c3, counterBytes: l2, hooks: s };
+}
+async function O2(u) {
+  let { ctx: t2, algorithm: e, digits: r2, secretBytes: i2, counterBytes: n, hooks: o } = v2(u), a2 = await t2.hmac(e, i2, n), s = o?.truncateDigest ? o.truncateDigest(a2) : Rr(a2);
+  return o?.encodeToken ? o.encodeToken(s, r2) : Ir(s, r2);
+}
+function F(u) {
+  let { ctx: t2, algorithm: e, digits: r2, secretBytes: i2, counterBytes: n, hooks: o } = v2(u), a2 = t2.hmacSync(e, i2, n), s = o?.truncateDigest ? o.truncateDigest(a2) : Rr(a2);
+  return o?.encodeToken ? o.encodeToken(s, r2) : Ir(s, r2);
+}
+var init_dist2 = __esm({
+  "../../node_modules/.pnpm/@otplib+hotp@13.4.0/node_modules/@otplib/hotp/dist/index.js"() {
+    init_dist();
+  }
+});
+
+// ../../node_modules/.pnpm/@otplib+totp@13.4.0/node_modules/@otplib/totp/dist/index.js
+function k(r2) {
+  let { secret: e, epoch: n = Math.floor(Date.now() / 1e3), t0: o = 0, period: i2 = 30, algorithm: s = "sha1", digits: l2 = 6, crypto: a2, base32: u, guardrails: c3 = hr(), hooks: t2 } = r2;
+  Xr(e), dr(a2);
+  let p = vr(e, u);
+  Or(p, c3), Ar(n), Cr(i2, c3);
+  let f = Math.floor((n - o) / i2);
+  return { secret: p, counter: f, algorithm: s, digits: l2, crypto: a2, guardrails: c3, hooks: t2 };
+}
+async function b2(r2) {
+  let e = k(r2);
+  return O2(e);
+}
+function Z2(r2) {
+  let e = k(r2);
+  return F(e);
+}
+var init_dist3 = __esm({
+  "../../node_modules/.pnpm/@otplib+totp@13.4.0/node_modules/@otplib/totp/dist/index.js"() {
+    init_dist();
+    init_dist2();
+  }
+});
+
+// ../../node_modules/.pnpm/@scure+base@2.2.0/node_modules/@scure/base/index.js
+function isBytes(a2) {
+  return a2 instanceof Uint8Array || ArrayBuffer.isView(a2) && a2.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a2 && a2.BYTES_PER_ELEMENT === 1;
+}
+function isArrayOf(isString, arr) {
+  if (!Array.isArray(arr))
+    return false;
+  if (arr.length === 0)
+    return true;
+  if (isString) {
+    return arr.every((item) => typeof item === "string");
+  } else {
+    return arr.every((item) => Number.isSafeInteger(item));
+  }
+}
+function astr(label, input) {
+  if (typeof input !== "string")
+    throw new TypeError(`${label}: string expected`);
+  return true;
+}
+function anumber(n) {
+  if (typeof n !== "number")
+    throw new TypeError(`number expected, got ${typeof n}`);
+  if (!Number.isSafeInteger(n))
+    throw new RangeError(`invalid integer: ${n}`);
+}
+function aArr(input) {
+  if (!Array.isArray(input))
+    throw new TypeError("array expected");
+}
+function astrArr(label, input) {
+  if (!isArrayOf(true, input))
+    throw new TypeError(`${label}: array of strings expected`);
+}
+function anumArr(label, input) {
+  if (!isArrayOf(false, input))
+    throw new TypeError(`${label}: array of numbers expected`);
+}
+// @__NO_SIDE_EFFECTS__
+function chain(...args) {
+  const id = (a2) => a2;
+  const wrap = (a2, b3) => (c3) => a2(b3(c3));
+  const encode = args.map((x3) => x3.encode).reduceRight(wrap, id);
+  const decode = args.map((x3) => x3.decode).reduce(wrap, id);
+  return { encode, decode };
+}
+// @__NO_SIDE_EFFECTS__
+function alphabet(letters) {
+  const lettersA = typeof letters === "string" ? letters.split("") : letters;
+  const len = lettersA.length;
+  astrArr("alphabet", lettersA);
+  const indexes = new Map(lettersA.map((l2, i2) => [l2, i2]));
+  return {
+    encode: (digits) => {
+      aArr(digits);
+      return digits.map((i2) => {
+        if (!Number.isSafeInteger(i2) || i2 < 0 || i2 >= len)
+          throw new Error(`alphabet.encode: digit index outside alphabet "${i2}". Allowed: ${letters}`);
+        return lettersA[i2];
+      });
+    },
+    decode: (input) => {
+      aArr(input);
+      return input.map((letter) => {
+        astr("alphabet.decode", letter);
+        const i2 = indexes.get(letter);
+        if (i2 === void 0)
+          throw new Error(`Unknown letter: "${letter}". Allowed: ${letters}`);
+        return i2;
+      });
+    }
+  };
+}
+// @__NO_SIDE_EFFECTS__
+function join(separator = "") {
+  astr("join", separator);
+  return {
+    encode: (from) => {
+      astrArr("join.decode", from);
+      return from.join(separator);
+    },
+    decode: (to) => {
+      astr("join.decode", to);
+      return to.split(separator);
+    }
+  };
+}
+// @__NO_SIDE_EFFECTS__
+function padding(bits, chr = "=") {
+  anumber(bits);
+  astr("padding", chr);
+  return {
+    encode(data) {
+      astrArr("padding.encode", data);
+      while (data.length * bits % 8)
+        data.push(chr);
+      return data;
+    },
+    decode(input) {
+      astrArr("padding.decode", input);
+      let end = input.length;
+      if (end * bits % 8)
+        throw new Error("padding: invalid, string should have whole number of bytes");
+      for (; end > 0 && input[end - 1] === chr; end--) {
+        const last = end - 1;
+        const byte = last * bits;
+        if (byte % 8 === 0)
+          throw new Error("padding: invalid, string has too much padding");
+      }
+      return input.slice(0, end);
+    }
+  };
+}
+function convertRadix2(data, from, to, padding2) {
+  aArr(data);
+  if (from <= 0 || from > 32)
+    throw new RangeError(`convertRadix2: wrong from=${from}`);
+  if (to <= 0 || to > 32)
+    throw new RangeError(`convertRadix2: wrong to=${to}`);
+  if (/* @__PURE__ */ radix2carry(from, to) > 32) {
+    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry(from, to)}`);
+  }
+  let carry = 0;
+  let pos = 0;
+  const max = powers[from];
+  const mask = powers[to] - 1;
+  const res = [];
+  for (const n of data) {
+    anumber(n);
+    if (n >= max)
+      throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
+    carry = carry << from | n;
+    if (pos + from > 32)
+      throw new Error(`convertRadix2: carry overflow pos=${pos} from=${from}`);
+    pos += from;
+    for (; pos >= to; pos -= to)
+      res.push((carry >> pos - to & mask) >>> 0);
+    const pow = powers[pos];
+    if (pow === void 0)
+      throw new Error("invalid carry");
+    carry &= pow - 1;
+  }
+  carry = carry << to - pos & mask;
+  if (!padding2 && pos >= from)
+    throw new Error("Excess padding");
+  if (!padding2 && carry > 0)
+    throw new Error(`Non-zero padding: ${carry}`);
+  if (padding2 && pos > 0)
+    res.push(carry >>> 0);
+  return res;
+}
+// @__NO_SIDE_EFFECTS__
+function radix2(bits, revPadding = false) {
+  anumber(bits);
+  if (bits <= 0 || bits > 32)
+    throw new RangeError("radix2: bits should be in (0..32]");
+  if (/* @__PURE__ */ radix2carry(8, bits) > 32 || /* @__PURE__ */ radix2carry(bits, 8) > 32)
+    throw new RangeError("radix2: carry overflow");
+  return {
+    encode: (bytes) => {
+      if (!isBytes(bytes))
+        throw new TypeError("radix2.encode input should be Uint8Array");
+      return convertRadix2(Array.from(bytes), 8, bits, !revPadding);
+    },
+    decode: (digits) => {
+      anumArr("radix2.decode", digits);
+      return Uint8Array.from(convertRadix2(digits, bits, 8, revPadding));
+    }
+  };
+}
+var gcd, radix2carry, powers, base32;
+var init_base = __esm({
+  "../../node_modules/.pnpm/@scure+base@2.2.0/node_modules/@scure/base/index.js"() {
+    gcd = (a2, b3) => b3 === 0 ? a2 : gcd(b3, a2 % b3);
+    radix2carry = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd(from, to));
+    powers = /* @__PURE__ */ (() => {
+      let res = [];
+      for (let i2 = 0; i2 < 40; i2++)
+        res.push(2 ** i2);
+      return res;
+    })();
+    base32 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ chain(/* @__PURE__ */ radix2(5), /* @__PURE__ */ alphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join("")));
+  }
+});
+
+// ../../node_modules/.pnpm/@otplib+plugin-base32-scure@13.4.0/node_modules/@otplib/plugin-base32-scure/dist/index.js
+var r, d2;
+var init_dist4 = __esm({
+  "../../node_modules/.pnpm/@otplib+plugin-base32-scure@13.4.0/node_modules/@otplib/plugin-base32-scure/dist/index.js"() {
+    init_base();
+    r = class {
+      name = "scure";
+      encode(o, e = {}) {
+        let { padding: t2 = false } = e, n = base32.encode(o);
+        return t2 ? n : n.replace(/=+$/, "");
+      }
+      decode(o) {
+        try {
+          let e = o.toUpperCase(), t2 = e.padEnd(Math.ceil(e.length / 8) * 8, "=");
+          return base32.decode(t2);
+        } catch (e) {
+          throw e instanceof Error ? new Error(`Invalid Base32 string: ${e.message}`) : new Error("Invalid Base32 string");
+        }
+      }
+    };
+    d2 = Object.freeze(new r());
+  }
+});
+
+// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/utils.js
+function isBytes2(a2) {
+  return a2 instanceof Uint8Array || ArrayBuffer.isView(a2) && a2.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a2 && a2.BYTES_PER_ELEMENT === 1;
+}
+function anumber2(n, title = "") {
+  if (typeof n !== "number") {
+    const prefix = title && `"${title}" `;
+    throw new TypeError(`${prefix}expected number, got ${typeof n}`);
+  }
+  if (!Number.isSafeInteger(n) || n < 0) {
+    const prefix = title && `"${title}" `;
+    throw new RangeError(`${prefix}expected integer >= 0, got ${n}`);
+  }
+}
+function abytes(value, length, title = "") {
+  const bytes = isBytes2(value);
+  const len = value?.length;
+  const needsLen = length !== void 0;
+  if (!bytes || needsLen && len !== length) {
+    const prefix = title && `"${title}" `;
+    const ofLen = needsLen ? ` of length ${length}` : "";
+    const got = bytes ? `length=${len}` : `type=${typeof value}`;
+    const message = prefix + "expected Uint8Array" + ofLen + ", got " + got;
+    if (!bytes)
+      throw new TypeError(message);
+    throw new RangeError(message);
+  }
+  return value;
+}
+function ahash(h4) {
+  if (typeof h4 !== "function" || typeof h4.create !== "function")
+    throw new TypeError("Hash must wrapped by utils.createHasher");
+  anumber2(h4.outputLen);
+  anumber2(h4.blockLen);
+  if (h4.outputLen < 1)
+    throw new Error('"outputLen" must be >= 1');
+  if (h4.blockLen < 1)
+    throw new Error('"blockLen" must be >= 1');
+}
+function aexists(instance, checkFinished = true) {
+  if (instance.destroyed)
+    throw new Error("Hash instance has been destroyed");
+  if (checkFinished && instance.finished)
+    throw new Error("Hash#digest() has already been called");
+}
+function aoutput(out, instance) {
+  abytes(out, void 0, "digestInto() output");
+  const min = instance.outputLen;
+  if (out.length < min) {
+    throw new RangeError('"digestInto() output" expected to be of length >=' + min);
+  }
+}
+function clean(...arrays) {
+  for (let i2 = 0; i2 < arrays.length; i2++) {
+    arrays[i2].fill(0);
+  }
+}
+function createView(arr) {
+  return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+}
+function rotr(word, shift) {
+  return word << 32 - shift | word >>> shift;
+}
+function rotl(word, shift) {
+  return word << shift | word >>> 32 - shift >>> 0;
+}
+function createHasher(hashCons, info = {}) {
+  const hashC = (msg, opts) => hashCons(opts).update(msg).digest();
+  const tmp = hashCons(void 0);
+  hashC.outputLen = tmp.outputLen;
+  hashC.blockLen = tmp.blockLen;
+  hashC.canXOF = tmp.canXOF;
+  hashC.create = (opts) => hashCons(opts);
+  Object.assign(hashC, info);
+  return Object.freeze(hashC);
+}
+function randomBytes(bytesLength = 32) {
+  anumber2(bytesLength, "bytesLength");
+  const cr = typeof globalThis === "object" ? globalThis.crypto : null;
+  if (typeof cr?.getRandomValues !== "function")
+    throw new Error("crypto.getRandomValues must be defined");
+  if (bytesLength > 65536)
+    throw new RangeError(`"bytesLength" expected <= 65536, got ${bytesLength}`);
+  return cr.getRandomValues(new Uint8Array(bytesLength));
+}
+var oidNist;
+var init_utils = __esm({
+  "../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/utils.js"() {
+    oidNist = (suffix) => ({
+      // Current NIST hashAlgs suffixes used here fit in one DER subidentifier octet.
+      // Larger suffix values would need base-128 OID encoding and a different length byte.
+      oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
+    });
+  }
+});
+
+// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/hmac.js
+var _HMAC, hmac;
+var init_hmac = __esm({
+  "../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/hmac.js"() {
+    init_utils();
+    _HMAC = class {
+      oHash;
+      iHash;
+      blockLen;
+      outputLen;
+      canXOF = false;
+      finished = false;
+      destroyed = false;
+      constructor(hash, key) {
+        ahash(hash);
+        abytes(key, void 0, "key");
+        this.iHash = hash.create();
+        if (typeof this.iHash.update !== "function")
+          throw new Error("Expected instance of class which extends utils.Hash");
+        this.blockLen = this.iHash.blockLen;
+        this.outputLen = this.iHash.outputLen;
+        const blockLen = this.blockLen;
+        const pad = new Uint8Array(blockLen);
+        pad.set(key.length > blockLen ? hash.create().update(key).digest() : key);
+        for (let i2 = 0; i2 < pad.length; i2++)
+          pad[i2] ^= 54;
+        this.iHash.update(pad);
+        this.oHash = hash.create();
+        for (let i2 = 0; i2 < pad.length; i2++)
+          pad[i2] ^= 54 ^ 92;
+        this.oHash.update(pad);
+        clean(pad);
+      }
+      update(buf) {
+        aexists(this);
+        this.iHash.update(buf);
+        return this;
+      }
+      digestInto(out) {
+        aexists(this);
+        aoutput(out, this);
+        this.finished = true;
+        const buf = out.subarray(0, this.outputLen);
+        this.iHash.digestInto(buf);
+        this.oHash.update(buf);
+        this.oHash.digestInto(buf);
+        this.destroy();
+      }
+      digest() {
+        const out = new Uint8Array(this.oHash.outputLen);
+        this.digestInto(out);
+        return out;
+      }
+      _cloneInto(to) {
+        to ||= Object.create(Object.getPrototypeOf(this), {});
+        const { oHash, iHash, finished, destroyed, blockLen, outputLen } = this;
+        to = to;
+        to.finished = finished;
+        to.destroyed = destroyed;
+        to.blockLen = blockLen;
+        to.outputLen = outputLen;
+        to.oHash = oHash._cloneInto(to.oHash);
+        to.iHash = iHash._cloneInto(to.iHash);
+        return to;
+      }
+      clone() {
+        return this._cloneInto();
+      }
+      destroy() {
+        this.destroyed = true;
+        this.oHash.destroy();
+        this.iHash.destroy();
+      }
+    };
+    hmac = /* @__PURE__ */ (() => {
+      const hmac_ = ((hash, key, message) => new _HMAC(hash, key).update(message).digest());
+      hmac_.create = (hash, key) => new _HMAC(hash, key);
+      return hmac_;
+    })();
+  }
+});
+
+// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_md.js
+function Chi(a2, b3, c3) {
+  return a2 & b3 ^ ~a2 & c3;
+}
+function Maj(a2, b3, c3) {
+  return a2 & b3 ^ a2 & c3 ^ b3 & c3;
+}
+var HashMD, SHA256_IV, SHA512_IV;
+var init_md = __esm({
+  "../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_md.js"() {
+    init_utils();
+    HashMD = class {
+      blockLen;
+      outputLen;
+      canXOF = false;
+      padOffset;
+      isLE;
+      // For partial updates less than block size
+      buffer;
+      view;
+      finished = false;
+      length = 0;
+      pos = 0;
+      destroyed = false;
+      constructor(blockLen, outputLen, padOffset, isLE) {
+        this.blockLen = blockLen;
+        this.outputLen = outputLen;
+        this.padOffset = padOffset;
+        this.isLE = isLE;
+        this.buffer = new Uint8Array(blockLen);
+        this.view = createView(this.buffer);
+      }
+      update(data) {
+        aexists(this);
+        abytes(data);
+        const { view, buffer, blockLen } = this;
+        const len = data.length;
+        for (let pos = 0; pos < len; ) {
+          const take = Math.min(blockLen - this.pos, len - pos);
+          if (take === blockLen) {
+            const dataView = createView(data);
+            for (; blockLen <= len - pos; pos += blockLen)
+              this.process(dataView, pos);
+            continue;
+          }
+          buffer.set(data.subarray(pos, pos + take), this.pos);
+          this.pos += take;
+          pos += take;
+          if (this.pos === blockLen) {
+            this.process(view, 0);
+            this.pos = 0;
+          }
+        }
+        this.length += data.length;
+        this.roundClean();
+        return this;
+      }
+      digestInto(out) {
+        aexists(this);
+        aoutput(out, this);
+        this.finished = true;
+        const { buffer, view, blockLen, isLE } = this;
+        let { pos } = this;
+        buffer[pos++] = 128;
+        clean(this.buffer.subarray(pos));
+        if (this.padOffset > blockLen - pos) {
+          this.process(view, 0);
+          pos = 0;
+        }
+        for (let i2 = pos; i2 < blockLen; i2++)
+          buffer[i2] = 0;
+        view.setBigUint64(blockLen - 8, BigInt(this.length * 8), isLE);
+        this.process(view, 0);
+        const oview = createView(out);
+        const len = this.outputLen;
+        if (len % 4)
+          throw new Error("_sha2: outputLen must be aligned to 32bit");
+        const outLen = len / 4;
+        const state = this.get();
+        if (outLen > state.length)
+          throw new Error("_sha2: outputLen bigger than state");
+        for (let i2 = 0; i2 < outLen; i2++)
+          oview.setUint32(4 * i2, state[i2], isLE);
+      }
+      digest() {
+        const { buffer, outputLen } = this;
+        this.digestInto(buffer);
+        const res = buffer.slice(0, outputLen);
+        this.destroy();
+        return res;
+      }
+      _cloneInto(to) {
+        to ||= new this.constructor();
+        to.set(...this.get());
+        const { blockLen, buffer, length, finished, destroyed, pos } = this;
+        to.destroyed = destroyed;
+        to.finished = finished;
+        to.length = length;
+        to.pos = pos;
+        if (length % blockLen)
+          to.buffer.set(buffer);
+        return to;
+      }
+      clone() {
+        return this._cloneInto();
+      }
+    };
+    SHA256_IV = /* @__PURE__ */ Uint32Array.from([
+      1779033703,
+      3144134277,
+      1013904242,
+      2773480762,
+      1359893119,
+      2600822924,
+      528734635,
+      1541459225
+    ]);
+    SHA512_IV = /* @__PURE__ */ Uint32Array.from([
+      1779033703,
+      4089235720,
+      3144134277,
+      2227873595,
+      1013904242,
+      4271175723,
+      2773480762,
+      1595750129,
+      1359893119,
+      2917565137,
+      2600822924,
+      725511199,
+      528734635,
+      4215389547,
+      1541459225,
+      327033209
+    ]);
+  }
+});
+
+// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/legacy.js
+var SHA1_IV, SHA1_W, _SHA1, sha1;
+var init_legacy = __esm({
+  "../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/legacy.js"() {
+    init_md();
+    init_utils();
+    SHA1_IV = /* @__PURE__ */ Uint32Array.from([
+      1732584193,
+      4023233417,
+      2562383102,
+      271733878,
+      3285377520
+    ]);
+    SHA1_W = /* @__PURE__ */ new Uint32Array(80);
+    _SHA1 = class extends HashMD {
+      A = SHA1_IV[0] | 0;
+      B = SHA1_IV[1] | 0;
+      C = SHA1_IV[2] | 0;
+      D = SHA1_IV[3] | 0;
+      E = SHA1_IV[4] | 0;
+      constructor() {
+        super(64, 20, 8, false);
+      }
+      get() {
+        const { A: A3, B: B2, C: C2, D, E } = this;
+        return [A3, B2, C2, D, E];
+      }
+      set(A3, B2, C2, D, E) {
+        this.A = A3 | 0;
+        this.B = B2 | 0;
+        this.C = C2 | 0;
+        this.D = D | 0;
+        this.E = E | 0;
+      }
+      process(view, offset) {
+        for (let i2 = 0; i2 < 16; i2++, offset += 4)
+          SHA1_W[i2] = view.getUint32(offset, false);
+        for (let i2 = 16; i2 < 80; i2++)
+          SHA1_W[i2] = rotl(SHA1_W[i2 - 3] ^ SHA1_W[i2 - 8] ^ SHA1_W[i2 - 14] ^ SHA1_W[i2 - 16], 1);
+        let { A: A3, B: B2, C: C2, D, E } = this;
+        for (let i2 = 0; i2 < 80; i2++) {
+          let F2, K2;
+          if (i2 < 20) {
+            F2 = Chi(B2, C2, D);
+            K2 = 1518500249;
+          } else if (i2 < 40) {
+            F2 = B2 ^ C2 ^ D;
+            K2 = 1859775393;
+          } else if (i2 < 60) {
+            F2 = Maj(B2, C2, D);
+            K2 = 2400959708;
+          } else {
+            F2 = B2 ^ C2 ^ D;
+            K2 = 3395469782;
+          }
+          const T2 = rotl(A3, 5) + F2 + E + K2 + SHA1_W[i2] | 0;
+          E = D;
+          D = C2;
+          C2 = rotl(B2, 30);
+          B2 = A3;
+          A3 = T2;
+        }
+        A3 = A3 + this.A | 0;
+        B2 = B2 + this.B | 0;
+        C2 = C2 + this.C | 0;
+        D = D + this.D | 0;
+        E = E + this.E | 0;
+        this.set(A3, B2, C2, D, E);
+      }
+      roundClean() {
+        clean(SHA1_W);
+      }
+      destroy() {
+        this.destroyed = true;
+        this.set(0, 0, 0, 0, 0);
+        clean(this.buffer);
+      }
+    };
+    sha1 = /* @__PURE__ */ createHasher(() => new _SHA1());
+  }
+});
+
+// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_u64.js
+function fromBig(n, le = false) {
+  if (le)
+    return { h: Number(n & U32_MASK64), l: Number(n >> _32n & U32_MASK64) };
+  return { h: Number(n >> _32n & U32_MASK64) | 0, l: Number(n & U32_MASK64) | 0 };
+}
+function split(lst, le = false) {
+  const len = lst.length;
+  let Ah = new Uint32Array(len);
+  let Al = new Uint32Array(len);
+  for (let i2 = 0; i2 < len; i2++) {
+    const { h: h4, l: l2 } = fromBig(lst[i2], le);
+    [Ah[i2], Al[i2]] = [h4, l2];
+  }
+  return [Ah, Al];
+}
+function add(Ah, Al, Bh, Bl) {
+  const l2 = (Al >>> 0) + (Bl >>> 0);
+  return { h: Ah + Bh + (l2 / 2 ** 32 | 0) | 0, l: l2 | 0 };
+}
+var U32_MASK64, _32n, shrSH, shrSL, rotrSH, rotrSL, rotrBH, rotrBL, add3L, add3H, add4L, add4H, add5L, add5H;
+var init_u64 = __esm({
+  "../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_u64.js"() {
+    U32_MASK64 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
+    _32n = /* @__PURE__ */ BigInt(32);
+    shrSH = (h4, _l, s) => h4 >>> s;
+    shrSL = (h4, l2, s) => h4 << 32 - s | l2 >>> s;
+    rotrSH = (h4, l2, s) => h4 >>> s | l2 << 32 - s;
+    rotrSL = (h4, l2, s) => h4 << 32 - s | l2 >>> s;
+    rotrBH = (h4, l2, s) => h4 << 64 - s | l2 >>> s - 32;
+    rotrBL = (h4, l2, s) => h4 >>> s - 32 | l2 << 64 - s;
+    add3L = (Al, Bl, Cl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0);
+    add3H = (low, Ah, Bh, Ch) => Ah + Bh + Ch + (low / 2 ** 32 | 0) | 0;
+    add4L = (Al, Bl, Cl, Dl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0);
+    add4H = (low, Ah, Bh, Ch, Dh) => Ah + Bh + Ch + Dh + (low / 2 ** 32 | 0) | 0;
+    add5L = (Al, Bl, Cl, Dl, El) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0) + (El >>> 0);
+    add5H = (low, Ah, Bh, Ch, Dh, Eh) => Ah + Bh + Ch + Dh + Eh + (low / 2 ** 32 | 0) | 0;
+  }
+});
+
+// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/sha2.js
+var SHA256_K, SHA256_W, SHA2_32B, _SHA256, K512, SHA512_Kh, SHA512_Kl, SHA512_W_H, SHA512_W_L, SHA2_64B, _SHA512, sha256, sha512;
+var init_sha2 = __esm({
+  "../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/sha2.js"() {
+    init_md();
+    init_u64();
+    init_utils();
+    SHA256_K = /* @__PURE__ */ Uint32Array.from([
+      1116352408,
+      1899447441,
+      3049323471,
+      3921009573,
+      961987163,
+      1508970993,
+      2453635748,
+      2870763221,
+      3624381080,
+      310598401,
+      607225278,
+      1426881987,
+      1925078388,
+      2162078206,
+      2614888103,
+      3248222580,
+      3835390401,
+      4022224774,
+      264347078,
+      604807628,
+      770255983,
+      1249150122,
+      1555081692,
+      1996064986,
+      2554220882,
+      2821834349,
+      2952996808,
+      3210313671,
+      3336571891,
+      3584528711,
+      113926993,
+      338241895,
+      666307205,
+      773529912,
+      1294757372,
+      1396182291,
+      1695183700,
+      1986661051,
+      2177026350,
+      2456956037,
+      2730485921,
+      2820302411,
+      3259730800,
+      3345764771,
+      3516065817,
+      3600352804,
+      4094571909,
+      275423344,
+      430227734,
+      506948616,
+      659060556,
+      883997877,
+      958139571,
+      1322822218,
+      1537002063,
+      1747873779,
+      1955562222,
+      2024104815,
+      2227730452,
+      2361852424,
+      2428436474,
+      2756734187,
+      3204031479,
+      3329325298
+    ]);
+    SHA256_W = /* @__PURE__ */ new Uint32Array(64);
+    SHA2_32B = class extends HashMD {
+      constructor(outputLen) {
+        super(64, outputLen, 8, false);
+      }
+      get() {
+        const { A: A3, B: B2, C: C2, D, E, F: F2, G: G2, H } = this;
+        return [A3, B2, C2, D, E, F2, G2, H];
+      }
+      // prettier-ignore
+      set(A3, B2, C2, D, E, F2, G2, H) {
+        this.A = A3 | 0;
+        this.B = B2 | 0;
+        this.C = C2 | 0;
+        this.D = D | 0;
+        this.E = E | 0;
+        this.F = F2 | 0;
+        this.G = G2 | 0;
+        this.H = H | 0;
+      }
+      process(view, offset) {
+        for (let i2 = 0; i2 < 16; i2++, offset += 4)
+          SHA256_W[i2] = view.getUint32(offset, false);
+        for (let i2 = 16; i2 < 64; i2++) {
+          const W15 = SHA256_W[i2 - 15];
+          const W2 = SHA256_W[i2 - 2];
+          const s0 = rotr(W15, 7) ^ rotr(W15, 18) ^ W15 >>> 3;
+          const s1 = rotr(W2, 17) ^ rotr(W2, 19) ^ W2 >>> 10;
+          SHA256_W[i2] = s1 + SHA256_W[i2 - 7] + s0 + SHA256_W[i2 - 16] | 0;
+        }
+        let { A: A3, B: B2, C: C2, D, E, F: F2, G: G2, H } = this;
+        for (let i2 = 0; i2 < 64; i2++) {
+          const sigma1 = rotr(E, 6) ^ rotr(E, 11) ^ rotr(E, 25);
+          const T1 = H + sigma1 + Chi(E, F2, G2) + SHA256_K[i2] + SHA256_W[i2] | 0;
+          const sigma0 = rotr(A3, 2) ^ rotr(A3, 13) ^ rotr(A3, 22);
+          const T2 = sigma0 + Maj(A3, B2, C2) | 0;
+          H = G2;
+          G2 = F2;
+          F2 = E;
+          E = D + T1 | 0;
+          D = C2;
+          C2 = B2;
+          B2 = A3;
+          A3 = T1 + T2 | 0;
+        }
+        A3 = A3 + this.A | 0;
+        B2 = B2 + this.B | 0;
+        C2 = C2 + this.C | 0;
+        D = D + this.D | 0;
+        E = E + this.E | 0;
+        F2 = F2 + this.F | 0;
+        G2 = G2 + this.G | 0;
+        H = H + this.H | 0;
+        this.set(A3, B2, C2, D, E, F2, G2, H);
+      }
+      roundClean() {
+        clean(SHA256_W);
+      }
+      destroy() {
+        this.destroyed = true;
+        this.set(0, 0, 0, 0, 0, 0, 0, 0);
+        clean(this.buffer);
+      }
+    };
+    _SHA256 = class extends SHA2_32B {
+      // We cannot use array here since array allows indexing by variable
+      // which means optimizer/compiler cannot use registers.
+      A = SHA256_IV[0] | 0;
+      B = SHA256_IV[1] | 0;
+      C = SHA256_IV[2] | 0;
+      D = SHA256_IV[3] | 0;
+      E = SHA256_IV[4] | 0;
+      F = SHA256_IV[5] | 0;
+      G = SHA256_IV[6] | 0;
+      H = SHA256_IV[7] | 0;
+      constructor() {
+        super(32);
+      }
+    };
+    K512 = /* @__PURE__ */ (() => split([
+      "0x428a2f98d728ae22",
+      "0x7137449123ef65cd",
+      "0xb5c0fbcfec4d3b2f",
+      "0xe9b5dba58189dbbc",
+      "0x3956c25bf348b538",
+      "0x59f111f1b605d019",
+      "0x923f82a4af194f9b",
+      "0xab1c5ed5da6d8118",
+      "0xd807aa98a3030242",
+      "0x12835b0145706fbe",
+      "0x243185be4ee4b28c",
+      "0x550c7dc3d5ffb4e2",
+      "0x72be5d74f27b896f",
+      "0x80deb1fe3b1696b1",
+      "0x9bdc06a725c71235",
+      "0xc19bf174cf692694",
+      "0xe49b69c19ef14ad2",
+      "0xefbe4786384f25e3",
+      "0x0fc19dc68b8cd5b5",
+      "0x240ca1cc77ac9c65",
+      "0x2de92c6f592b0275",
+      "0x4a7484aa6ea6e483",
+      "0x5cb0a9dcbd41fbd4",
+      "0x76f988da831153b5",
+      "0x983e5152ee66dfab",
+      "0xa831c66d2db43210",
+      "0xb00327c898fb213f",
+      "0xbf597fc7beef0ee4",
+      "0xc6e00bf33da88fc2",
+      "0xd5a79147930aa725",
+      "0x06ca6351e003826f",
+      "0x142929670a0e6e70",
+      "0x27b70a8546d22ffc",
+      "0x2e1b21385c26c926",
+      "0x4d2c6dfc5ac42aed",
+      "0x53380d139d95b3df",
+      "0x650a73548baf63de",
+      "0x766a0abb3c77b2a8",
+      "0x81c2c92e47edaee6",
+      "0x92722c851482353b",
+      "0xa2bfe8a14cf10364",
+      "0xa81a664bbc423001",
+      "0xc24b8b70d0f89791",
+      "0xc76c51a30654be30",
+      "0xd192e819d6ef5218",
+      "0xd69906245565a910",
+      "0xf40e35855771202a",
+      "0x106aa07032bbd1b8",
+      "0x19a4c116b8d2d0c8",
+      "0x1e376c085141ab53",
+      "0x2748774cdf8eeb99",
+      "0x34b0bcb5e19b48a8",
+      "0x391c0cb3c5c95a63",
+      "0x4ed8aa4ae3418acb",
+      "0x5b9cca4f7763e373",
+      "0x682e6ff3d6b2b8a3",
+      "0x748f82ee5defb2fc",
+      "0x78a5636f43172f60",
+      "0x84c87814a1f0ab72",
+      "0x8cc702081a6439ec",
+      "0x90befffa23631e28",
+      "0xa4506cebde82bde9",
+      "0xbef9a3f7b2c67915",
+      "0xc67178f2e372532b",
+      "0xca273eceea26619c",
+      "0xd186b8c721c0c207",
+      "0xeada7dd6cde0eb1e",
+      "0xf57d4f7fee6ed178",
+      "0x06f067aa72176fba",
+      "0x0a637dc5a2c898a6",
+      "0x113f9804bef90dae",
+      "0x1b710b35131c471b",
+      "0x28db77f523047d84",
+      "0x32caab7b40c72493",
+      "0x3c9ebe0a15c9bebc",
+      "0x431d67c49c100d4c",
+      "0x4cc5d4becb3e42b6",
+      "0x597f299cfc657e2a",
+      "0x5fcb6fab3ad6faec",
+      "0x6c44198c4a475817"
+    ].map((n) => BigInt(n))))();
+    SHA512_Kh = /* @__PURE__ */ (() => K512[0])();
+    SHA512_Kl = /* @__PURE__ */ (() => K512[1])();
+    SHA512_W_H = /* @__PURE__ */ new Uint32Array(80);
+    SHA512_W_L = /* @__PURE__ */ new Uint32Array(80);
+    SHA2_64B = class extends HashMD {
+      constructor(outputLen) {
+        super(128, outputLen, 16, false);
+      }
+      // prettier-ignore
+      get() {
+        const { Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl } = this;
+        return [Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl];
+      }
+      // prettier-ignore
+      set(Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl) {
+        this.Ah = Ah | 0;
+        this.Al = Al | 0;
+        this.Bh = Bh | 0;
+        this.Bl = Bl | 0;
+        this.Ch = Ch | 0;
+        this.Cl = Cl | 0;
+        this.Dh = Dh | 0;
+        this.Dl = Dl | 0;
+        this.Eh = Eh | 0;
+        this.El = El | 0;
+        this.Fh = Fh | 0;
+        this.Fl = Fl | 0;
+        this.Gh = Gh | 0;
+        this.Gl = Gl | 0;
+        this.Hh = Hh | 0;
+        this.Hl = Hl | 0;
+      }
+      process(view, offset) {
+        for (let i2 = 0; i2 < 16; i2++, offset += 4) {
+          SHA512_W_H[i2] = view.getUint32(offset);
+          SHA512_W_L[i2] = view.getUint32(offset += 4);
+        }
+        for (let i2 = 16; i2 < 80; i2++) {
+          const W15h = SHA512_W_H[i2 - 15] | 0;
+          const W15l = SHA512_W_L[i2 - 15] | 0;
+          const s0h = rotrSH(W15h, W15l, 1) ^ rotrSH(W15h, W15l, 8) ^ shrSH(W15h, W15l, 7);
+          const s0l = rotrSL(W15h, W15l, 1) ^ rotrSL(W15h, W15l, 8) ^ shrSL(W15h, W15l, 7);
+          const W2h = SHA512_W_H[i2 - 2] | 0;
+          const W2l = SHA512_W_L[i2 - 2] | 0;
+          const s1h = rotrSH(W2h, W2l, 19) ^ rotrBH(W2h, W2l, 61) ^ shrSH(W2h, W2l, 6);
+          const s1l = rotrSL(W2h, W2l, 19) ^ rotrBL(W2h, W2l, 61) ^ shrSL(W2h, W2l, 6);
+          const SUMl = add4L(s0l, s1l, SHA512_W_L[i2 - 7], SHA512_W_L[i2 - 16]);
+          const SUMh = add4H(SUMl, s0h, s1h, SHA512_W_H[i2 - 7], SHA512_W_H[i2 - 16]);
+          SHA512_W_H[i2] = SUMh | 0;
+          SHA512_W_L[i2] = SUMl | 0;
+        }
+        let { Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl } = this;
+        for (let i2 = 0; i2 < 80; i2++) {
+          const sigma1h = rotrSH(Eh, El, 14) ^ rotrSH(Eh, El, 18) ^ rotrBH(Eh, El, 41);
+          const sigma1l = rotrSL(Eh, El, 14) ^ rotrSL(Eh, El, 18) ^ rotrBL(Eh, El, 41);
+          const CHIh = Eh & Fh ^ ~Eh & Gh;
+          const CHIl = El & Fl ^ ~El & Gl;
+          const T1ll = add5L(Hl, sigma1l, CHIl, SHA512_Kl[i2], SHA512_W_L[i2]);
+          const T1h = add5H(T1ll, Hh, sigma1h, CHIh, SHA512_Kh[i2], SHA512_W_H[i2]);
+          const T1l = T1ll | 0;
+          const sigma0h = rotrSH(Ah, Al, 28) ^ rotrBH(Ah, Al, 34) ^ rotrBH(Ah, Al, 39);
+          const sigma0l = rotrSL(Ah, Al, 28) ^ rotrBL(Ah, Al, 34) ^ rotrBL(Ah, Al, 39);
+          const MAJh = Ah & Bh ^ Ah & Ch ^ Bh & Ch;
+          const MAJl = Al & Bl ^ Al & Cl ^ Bl & Cl;
+          Hh = Gh | 0;
+          Hl = Gl | 0;
+          Gh = Fh | 0;
+          Gl = Fl | 0;
+          Fh = Eh | 0;
+          Fl = El | 0;
+          ({ h: Eh, l: El } = add(Dh | 0, Dl | 0, T1h | 0, T1l | 0));
+          Dh = Ch | 0;
+          Dl = Cl | 0;
+          Ch = Bh | 0;
+          Cl = Bl | 0;
+          Bh = Ah | 0;
+          Bl = Al | 0;
+          const All = add3L(T1l, sigma0l, MAJl);
+          Ah = add3H(All, T1h, sigma0h, MAJh);
+          Al = All | 0;
+        }
+        ({ h: Ah, l: Al } = add(this.Ah | 0, this.Al | 0, Ah | 0, Al | 0));
+        ({ h: Bh, l: Bl } = add(this.Bh | 0, this.Bl | 0, Bh | 0, Bl | 0));
+        ({ h: Ch, l: Cl } = add(this.Ch | 0, this.Cl | 0, Ch | 0, Cl | 0));
+        ({ h: Dh, l: Dl } = add(this.Dh | 0, this.Dl | 0, Dh | 0, Dl | 0));
+        ({ h: Eh, l: El } = add(this.Eh | 0, this.El | 0, Eh | 0, El | 0));
+        ({ h: Fh, l: Fl } = add(this.Fh | 0, this.Fl | 0, Fh | 0, Fl | 0));
+        ({ h: Gh, l: Gl } = add(this.Gh | 0, this.Gl | 0, Gh | 0, Gl | 0));
+        ({ h: Hh, l: Hl } = add(this.Hh | 0, this.Hl | 0, Hh | 0, Hl | 0));
+        this.set(Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl);
+      }
+      roundClean() {
+        clean(SHA512_W_H, SHA512_W_L);
+      }
+      destroy() {
+        this.destroyed = true;
+        clean(this.buffer);
+        this.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      }
+    };
+    _SHA512 = class extends SHA2_64B {
+      Ah = SHA512_IV[0] | 0;
+      Al = SHA512_IV[1] | 0;
+      Bh = SHA512_IV[2] | 0;
+      Bl = SHA512_IV[3] | 0;
+      Ch = SHA512_IV[4] | 0;
+      Cl = SHA512_IV[5] | 0;
+      Dh = SHA512_IV[6] | 0;
+      Dl = SHA512_IV[7] | 0;
+      Eh = SHA512_IV[8] | 0;
+      El = SHA512_IV[9] | 0;
+      Fh = SHA512_IV[10] | 0;
+      Fl = SHA512_IV[11] | 0;
+      Gh = SHA512_IV[12] | 0;
+      Gl = SHA512_IV[13] | 0;
+      Hh = SHA512_IV[14] | 0;
+      Hl = SHA512_IV[15] | 0;
+      constructor() {
+        super(64);
+      }
+    };
+    sha256 = /* @__PURE__ */ createHasher(
+      () => new _SHA256(),
+      /* @__PURE__ */ oidNist(1)
+    );
+    sha512 = /* @__PURE__ */ createHasher(
+      () => new _SHA512(),
+      /* @__PURE__ */ oidNist(3)
+    );
+  }
+});
+
+// ../../node_modules/.pnpm/@otplib+plugin-crypto-noble@13.4.0/node_modules/@otplib/plugin-crypto-noble/dist/index.js
+var t, A2;
+var init_dist5 = __esm({
+  "../../node_modules/.pnpm/@otplib+plugin-crypto-noble@13.4.0/node_modules/@otplib/plugin-crypto-noble/dist/index.js"() {
+    init_hmac();
+    init_legacy();
+    init_sha2();
+    init_utils();
+    init_dist();
+    t = class {
+      name = "noble";
+      hmac(r2, n, a2) {
+        return hmac(r2 === "sha1" ? sha1 : r2 === "sha256" ? sha256 : sha512, n, a2);
+      }
+      randomBytes(r2) {
+        return randomBytes(r2);
+      }
+      constantTimeEqual(r2, n) {
+        return tr(r2, n);
+      }
+    };
+    A2 = Object.freeze(new t());
+  }
+});
+
+// ../../node_modules/.pnpm/otplib@13.4.0/node_modules/otplib/dist/index.js
+function c2(t2) {
+  return { secret: t2.secret, strategy: t2.strategy ?? "totp", crypto: t2.crypto ?? A2, base32: t2.base32 ?? d2, algorithm: t2.algorithm ?? "sha1", digits: t2.digits ?? 6, period: t2.period ?? 30, epoch: t2.epoch ?? Math.floor(Date.now() / 1e3), t0: t2.t0 ?? 0, counter: t2.counter, guardrails: t2.guardrails ?? hr(), hooks: t2.hooks };
+}
+function l(t2, e, r2) {
+  if (t2 === "totp") return r2.totp();
+  if (t2 === "hotp") {
+    if (e === void 0) throw new a("Counter is required for HOTP strategy. Example: { strategy: 'hotp', counter: 0 }");
+    return r2.hotp(e);
+  }
+  throw new a(`Unknown OTP strategy: ${t2}. Valid strategies are 'totp' or 'hotp'.`);
+}
+async function m2(t2) {
+  let e = c2(t2), { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s, hooks: n } = e, p = { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s, hooks: n };
+  return l(e.strategy, e.counter, { totp: () => b2({ ...p, period: e.period, epoch: e.epoch, t0: e.t0, guardrails: e.guardrails }), hotp: (y2) => O2({ ...p, counter: y2, guardrails: e.guardrails }) });
+}
+function h3(t2) {
+  let e = c2(t2), { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s } = e, n = { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s };
+  return l(e.strategy, e.counter, { totp: () => Z2({ ...n, period: e.period, epoch: e.epoch, t0: e.t0, guardrails: e.guardrails }), hotp: (p) => F({ ...n, counter: p, guardrails: e.guardrails }) });
+}
+var init_dist6 = __esm({
+  "../../node_modules/.pnpm/otplib@13.4.0/node_modules/otplib/dist/index.js"() {
+    init_dist();
+    init_dist2();
+    init_dist3();
+    init_dist();
+    init_dist4();
+    init_dist5();
+  }
+});
+
 // ../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/lib/constants.js
 var require_constants3 = __commonJS({
   "../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/lib/constants.js"(exports2, module2) {
@@ -118057,7 +119409,7 @@ import * as net from "net";
 import * as http from "http";
 import { Agent as HttpsAgent } from "https";
 var INTERNAL, Agent2;
-var init_dist = __esm({
+var init_dist7 = __esm({
   "../../node_modules/.pnpm/agent-base@9.0.0/node_modules/agent-base/dist/index.js"() {
     init_helpers();
     INTERNAL = /* @__PURE__ */ Symbol("AgentBaseInternalState");
@@ -118288,10 +119640,10 @@ function omit2(obj2, ...keys) {
   return ret2;
 }
 var import_debug2, debug2, setServernameFromNonIpHost, HttpsProxyAgent;
-var init_dist2 = __esm({
+var init_dist8 = __esm({
   "../../node_modules/.pnpm/https-proxy-agent@9.0.0/node_modules/https-proxy-agent/dist/index.js"() {
     import_debug2 = __toESM(require_src(), 1);
-    init_dist();
+    init_dist7();
     init_parse_proxy_response();
     debug2 = (0, import_debug2.default)("https-proxy-agent");
     setServernameFromNonIpHost = (options) => {
@@ -118383,6 +119735,1074 @@ var init_dist2 = __esm({
       }
     };
     HttpsProxyAgent.protocols = ["http", "https"];
+  }
+});
+
+// src/instagram/instagramWebClient.ts
+var instagramWebClient_exports = {};
+__export(instagramWebClient_exports, {
+  InstagramWebClient: () => InstagramWebClient
+});
+import * as https from "https";
+import * as fs2 from "fs";
+function httpsRequest(options, body) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
+        resolve({ status: res.statusCode ?? 0, headers: res.headers, body: data });
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(6e4, () => {
+      req.destroy(new Error("timeout"));
+    });
+    if (body) req.write(body);
+    req.end();
+  });
+}
+async function igReq(opts) {
+  const { host = "www.instagram.com", path: path4, method, headers, body, cookieJar = [], proxyUrl } = opts;
+  const reqHeaders = {
+    ...headers,
+    ...cookieJar.length ? { Cookie: cookieJar.join("; ") } : {},
+    ...body ? { "Content-Length": String(Buffer.byteLength(body)) } : {}
+  };
+  let agent;
+  if (proxyUrl) {
+    const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist8(), dist_exports));
+    agent = new HttpsProxyAgent2(proxyUrl);
+  }
+  const res = await httpsRequest(
+    { host, port: 443, path: path4, method, headers: reqHeaders, ...agent ? { agent } : {} },
+    body
+  );
+  const raw = res.headers["set-cookie"];
+  const newCookies = (Array.isArray(raw) ? raw : raw ? [raw] : []).map((c3) => c3.split(";")[0]);
+  let json2 = null;
+  try {
+    json2 = JSON.parse(res.body);
+  } catch {
+  }
+  return { status: res.status, cookies: newCookies, json: json2, rawBody: res.body };
+}
+function mergeCookies(base, overrides) {
+  const map2 = /* @__PURE__ */ new Map();
+  for (const c3 of [...base, ...overrides]) map2.set(c3.split("=")[0], c3);
+  return Array.from(map2.values());
+}
+function extractCsrf(cookies) {
+  for (const c3 of cookies) {
+    if (c3.startsWith("csrftoken=")) return c3.split("=")[1];
+  }
+  return "";
+}
+var WEB_UA, APP_ID, InstagramWebClient;
+var init_instagramWebClient = __esm({
+  "src/instagram/instagramWebClient.ts"() {
+    "use strict";
+    init_dist6();
+    WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+    APP_ID = "936619743392459";
+    InstagramWebClient = class {
+      cookieJar = [];
+      csrfToken = "";
+      proxyUrl;
+      logCallFn;
+      profileId;
+      // User-agent to use for web (www.instagram.com) POST requests.
+      // Should match the EB browser's UA so that cookies and UA are consistent.
+      webUserAgent = WEB_UA;
+      // API throttle — enforces the per-profile "x calls every y seconds" limit.
+      // Computed as a per-call delay = everySeconds / requestsCount, so all calls
+      // are evenly spaced rather than firing in an instant burst.
+      throttleRequestsMin = 5;
+      throttleRequestsMax = 10;
+      throttleSecondsMin = 3;
+      throttleSecondsMax = 8;
+      constructor(proxyUrl, profileId) {
+        this.proxyUrl = proxyUrl;
+        this.profileId = profileId;
+      }
+      setApiLimits(limits) {
+        this.throttleRequestsMin = Math.max(1, limits.requestsMin);
+        this.throttleRequestsMax = Math.max(1, limits.requestsMax);
+        this.throttleSecondsMin = Math.max(0, limits.everySecondsMin);
+        this.throttleSecondsMax = Math.max(0, limits.everySecondsMax);
+      }
+      async apiThrottle() {
+        const calls = this.throttleRequestsMin + Math.random() * (this.throttleRequestsMax - this.throttleRequestsMin);
+        const secs = this.throttleSecondsMin + Math.random() * (this.throttleSecondsMax - this.throttleSecondsMin);
+        const delayMs = Math.floor(secs / Math.max(1, calls) * 1e3);
+        if (delayMs > 10) {
+          await new Promise((r2) => setTimeout(r2, delayMs));
+        }
+      }
+      setLogger(fn) {
+        this.logCallFn = fn;
+      }
+      // Set the user-agent for web POST requests so it matches the EB browser's UA.
+      // This is critical — cookies are bound to the UA that created them.
+      // Using a different UA than the EB browser causes Instagram to 302-redirect to login.
+      setWebUserAgent(ua) {
+        if (ua) this.webUserAgent = ua;
+      }
+      // ── Load cookies from the EB browser session ───────────────────────────────
+      // Reads the Puppeteer cookie file and syncs those cookies into our jar so
+      // the engine shares the same Instagram session as the embedded browser.
+      // Returns true if a valid sessionid was found.
+      loadBrowserCookies() {
+        if (!this.profileId) return false;
+        const filePath = `${process.cwd()}/server/browser-data/cookies-${this.profileId}.json`;
+        try {
+          if (!fs2.existsSync(filePath)) return false;
+          const raw = fs2.readFileSync(filePath, "utf8");
+          const puppeteerCookies = JSON.parse(raw);
+          if (!Array.isArray(puppeteerCookies)) return false;
+          const igCookies = puppeteerCookies.filter((c3) => (c3.domain ?? "").includes("instagram.com"));
+          if (!igCookies.length) return false;
+          const asSetCookie = igCookies.map((c3) => `${c3.name}=${c3.value}`);
+          this.cookieJar = mergeCookies(this.cookieJar, asSetCookie);
+          const csrf = igCookies.find((c3) => c3.name === "csrftoken");
+          if (csrf) this.csrfToken = csrf.value;
+          const hasSession = igCookies.some((c3) => c3.name === "sessionid");
+          console.log(`[webClient] loadBrowserCookies: synced ${igCookies.length} cookies, sessionid=${hasSession}, csrf=${!!csrf}`);
+          return hasSession;
+        } catch (err) {
+          console.warn("[webClient] loadBrowserCookies failed:", err?.message);
+          return false;
+        }
+      }
+      async timed(opName, fn, message) {
+        const t0 = Date.now();
+        const result = await fn();
+        const ms = Date.now() - t0;
+        const msg = typeof message === "function" ? message(result) : message;
+        this.logCallFn?.(opName, ms, msg);
+        return result;
+      }
+      // ── Login (web + 2FA TOTP) ─────────────────────────────────────────────────
+      async login(username, password, twoFaSecret) {
+        return this.timed("Login", () => this._login(username, password, twoFaSecret), `@${username} login`);
+      }
+      async _login(username, password, twoFaSecret) {
+        const pageRes = await igReq({
+          path: "/accounts/login/",
+          method: "GET",
+          headers: {
+            Host: "www.instagram.com",
+            "User-Agent": WEB_UA,
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9"
+          },
+          proxyUrl: this.proxyUrl
+        });
+        let csrf = extractCsrf(pageRes.cookies);
+        if (!csrf) {
+          const m3 = pageRes.rawBody.match(/"csrf_token":"([^"]+)"/);
+          if (m3) csrf = m3[1];
+        }
+        if (!csrf) {
+          console.error("[webClient] login: no csrf on login page");
+          return false;
+        }
+        this.cookieJar = pageRes.cookies;
+        this.csrfToken = csrf;
+        const ts = Math.floor(Date.now() / 1e3);
+        const body = new URLSearchParams({
+          username,
+          enc_password: `#PWD_INSTAGRAM:0:${ts}:${password}`,
+          queryParams: "{}",
+          optIntoOneTap: "false"
+        }).toString();
+        const loginRes = await igReq({
+          path: "/accounts/login/ajax/",
+          method: "POST",
+          headers: {
+            Host: "www.instagram.com",
+            "User-Agent": WEB_UA,
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRFToken": this.csrfToken,
+            "X-IG-App-ID": APP_ID,
+            "X-Requested-With": "XMLHttpRequest",
+            Referer: "https://www.instagram.com/accounts/login/",
+            Origin: "https://www.instagram.com"
+          },
+          body,
+          cookieJar: this.cookieJar,
+          proxyUrl: this.proxyUrl
+        });
+        const j = loginRes.json;
+        this.cookieJar = mergeCookies(this.cookieJar, loginRes.cookies);
+        const newCsrf = extractCsrf(loginRes.cookies);
+        if (newCsrf) this.csrfToken = newCsrf;
+        if (j?.authenticated === true) {
+          console.log(`[webClient] @${username}: logged in`);
+          return true;
+        }
+        if (j?.two_factor_required) {
+          const identifier = j?.two_factor_info?.two_factor_identifier ?? "";
+          const secret = twoFaSecret?.replace(/\s+/g, "");
+          if (!secret) {
+            console.error(`[webClient] @${username}: 2FA required but no secret`);
+            return false;
+          }
+          let code;
+          try {
+            code = h3({ secret });
+          } catch {
+            console.error(`[webClient] @${username}: invalid 2FA secret`);
+            return false;
+          }
+          const twoFaBody = new URLSearchParams({
+            username,
+            verificationCode: code,
+            identifier,
+            queryParams: "{}",
+            verificationMethod: "3"
+          }).toString();
+          const tfRes = await igReq({
+            path: "/accounts/login/ajax/two_factor/",
+            method: "POST",
+            headers: {
+              Host: "www.instagram.com",
+              "User-Agent": WEB_UA,
+              Accept: "*/*",
+              "Accept-Language": "en-US,en;q=0.9",
+              "Content-Type": "application/x-www-form-urlencoded",
+              "X-CSRFToken": this.csrfToken,
+              "X-IG-App-ID": APP_ID,
+              "X-Requested-With": "XMLHttpRequest",
+              Referer: "https://www.instagram.com/accounts/login/",
+              Origin: "https://www.instagram.com"
+            },
+            body: twoFaBody,
+            cookieJar: this.cookieJar,
+            proxyUrl: this.proxyUrl
+          });
+          this.cookieJar = mergeCookies(this.cookieJar, tfRes.cookies);
+          const tfCsrf = extractCsrf(tfRes.cookies);
+          if (tfCsrf) this.csrfToken = tfCsrf;
+          if (tfRes.json?.authenticated === true) {
+            console.log(`[webClient] @${username}: 2FA OK`);
+            return true;
+          }
+          console.error(`[webClient] @${username}: 2FA rejected: ${tfRes.rawBody.slice(0, 200)}`);
+          return false;
+        }
+        console.error(`[webClient] @${username}: login failed: ${loginRes.rawBody.slice(0, 200)}`);
+        return false;
+      }
+      isLoggedIn() {
+        return this.cookieJar.some((c3) => c3.startsWith("sessionid="));
+      }
+      // ── Common authenticated request helper ────────────────────────────────────
+      // web session GET (www.instagram.com)
+      async webGet(path4) {
+        const res = await igReq({
+          path: path4,
+          method: "GET",
+          headers: {
+            Host: "www.instagram.com",
+            "User-Agent": WEB_UA,
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-IG-App-ID": APP_ID,
+            "X-CSRFToken": this.csrfToken,
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          cookieJar: this.cookieJar,
+          proxyUrl: this.proxyUrl
+        });
+        if (!res.json) console.log(`[webClient] webGet ${path4} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+        return res.json;
+      }
+      // mobile-style GET (i.instagram.com) — same cookies, mobile app headers
+      async mobileGet(path4) {
+        await this.apiThrottle();
+        const res = await igReq({
+          host: "i.instagram.com",
+          path: path4,
+          method: "GET",
+          headers: {
+            Host: "i.instagram.com",
+            "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-IG-App-ID": APP_ID,
+            "X-CSRFToken": this.csrfToken,
+            "X-IG-Capabilities": "3brTvwE=",
+            "X-IG-Connection-Type": "WIFI"
+          },
+          cookieJar: this.cookieJar,
+          proxyUrl: this.proxyUrl
+        });
+        if (!res.json) console.log(`[webClient] mobileGet ${path4} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+        return res.json;
+      }
+      // Anonymous mobile GET — NO account cookies sent, account identity never exposed.
+      // Used for source-account scraping (repost) so the account is not linked to the lookup.
+      async mobileGetAnonymous(path4) {
+        const res = await igReq({
+          host: "i.instagram.com",
+          path: path4,
+          method: "GET",
+          headers: {
+            Host: "i.instagram.com",
+            "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-IG-App-ID": APP_ID,
+            "X-IG-Capabilities": "3brTvwE=",
+            "X-IG-Connection-Type": "WIFI"
+          },
+          cookieJar: [],
+          // deliberately empty — no session cookies
+          proxyUrl: this.proxyUrl
+        });
+        return res.json;
+      }
+      async webPost(path4, body = "") {
+        await this.apiThrottle();
+        const sessionCookie = this.cookieJar.find((c3) => c3.startsWith("sessionid="));
+        console.log(`[webClient] webPost ${path4} csrf=${this.csrfToken.slice(0, 8)}... session=${sessionCookie ? "present" : "MISSING"}`);
+        const res = await igReq({
+          path: path4,
+          method: "POST",
+          headers: {
+            Host: "www.instagram.com",
+            "User-Agent": WEB_UA,
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-IG-App-ID": APP_ID,
+            "X-CSRFToken": this.csrfToken,
+            "X-Requested-With": "XMLHttpRequest",
+            Referer: "https://www.instagram.com/",
+            Origin: "https://www.instagram.com"
+          },
+          body,
+          cookieJar: this.cookieJar,
+          proxyUrl: this.proxyUrl
+        });
+        if (res.status < 300) {
+          this.cookieJar = mergeCookies(this.cookieJar, res.cookies);
+          const newCsrf = extractCsrf(res.cookies);
+          if (newCsrf) this.csrfToken = newCsrf;
+        }
+        if (!res.json) console.log(`[webClient] webPost ${path4} status=${res.status} body:`, res.rawBody.slice(0, 300));
+        return { json: res.json, status: res.status, rawBody: res.rawBody };
+      }
+      // ── Follow a user by numeric ID ────────────────────────────────────────────
+      async followUser(userId, username) {
+        return this.timed("Follow", async () => {
+          const r1 = await this.webPost(`/api/v1/friendships/create/${userId}/`);
+          if (r1.status === 302 || r1.json === null) return { ok: false, status: "follow_blocked", reason: `HTTP ${r1.status} redirect \u2014 CSRF/session issue` };
+          const j = r1.json;
+          console.log(`[webClient] follow ${userId} HTTP ${r1.status}:`, JSON.stringify(j) ?? r1.rawBody.slice(0, 400));
+          if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
+            const url2 = j?.checkpoint_url ?? "";
+            console.warn(`[webClient] follow ${userId} checkpoint_required \u2014 challenge URL: ${url2}`);
+            return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: url2 };
+          }
+          if (j?.spam === true) {
+            console.warn(`[webClient] follow ${userId} spam \u2014 Instagram blocked this follow as spam`);
+            return { ok: false, status: "follow_blocked", reason: "spam \u2014 Instagram flagged this follow attempt" };
+          }
+          if (j?.require_login || j?.feedback_required || j?.message === "login_required") {
+            const reason = j?.message ?? j?.feedback_message ?? "unknown";
+            console.warn(`[webClient] follow ${userId} blocked:`, reason);
+            return { ok: false, status: "follow_blocked", reason };
+          }
+          if (j?.message && typeof j.message === "string" && j.message.toLowerCase().includes("please wait")) {
+            console.warn(`[webClient] follow ${userId} rate limited:`, j.message);
+            return { ok: false, status: "follow_blocked", reason: j.message };
+          }
+          if (j?.friendship_status) {
+            return { ok: true, status: j.friendship_status.following ? "following" : "requested" };
+          }
+          if (j?.status === "fail") {
+            const reason = j?.message || "Instagram declined (status: fail)";
+            console.warn(`[webClient] follow ${userId} failed:`, reason);
+            return { ok: false, status: "follow_blocked", reason };
+          }
+          console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
+          return { ok: false, status: "follow_blocked", reason: "unexpected response" };
+        }, username ? `Follow @${username}` : `Follow user ${userId}`);
+      }
+      // ── Convert a numeric Instagram media ID to its shortcode ─────────────────
+      mediaIdToShortcode(id) {
+        const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        const numericPart = id.split("_")[0];
+        let n = BigInt(numericPart);
+        let result = "";
+        while (n > 0n) {
+          result = ALPHA[Number(n % 64n)] + result;
+          n = n / 64n;
+        }
+        return result || "0";
+      }
+      // ── Like a media post by ID ────────────────────────────────────────────────
+      // Returns the post URL on success, "blocked" when Instagram issues a
+      // feedback_required/action-block, or false for any other failure.
+      async likeMedia(mediaId, username) {
+        return this.timed("LikeMedia", async () => {
+          const j = await this.mobilePost(`/api/v1/media/${mediaId}/like/`);
+          const ok = j?.status === "ok";
+          if (!ok) console.log(`[webClient] likeMedia ${mediaId} response:`, JSON.stringify(j));
+          if (!ok) {
+            if (j?.message === "feedback_required" || j?.feedback_required === true) {
+              const title = j?.feedback_title ?? "Action blocked";
+              const expires = j?.expiration_time ? new Date(Number(j.expiration_time) * 1e3).toISOString().split("T")[0] : "unknown";
+              console.warn(`[webClient] likeMedia BLOCKED: ${title} (expires ~${expires})`);
+              return "blocked";
+            }
+            return false;
+          }
+          const shortcode = this.mediaIdToShortcode(mediaId);
+          return `https://www.instagram.com/p/${shortcode}/`;
+        }, username ? `Like post of @${username}` : `Like media ${mediaId}`);
+      }
+      // ── Get a user's recent feed media IDs ────────────────────────────────────
+      async getUserRecentMediaId(userId) {
+        const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=3`);
+        const items = j?.items;
+        if (!Array.isArray(items) || items.length === 0) return null;
+        return String(items[0].id ?? items[0].pk ?? "");
+      }
+      // ── View stories for a user (fetch + mark seen) ───────────────────────────
+      // Returns the stories URL on success, false on failure.
+      async viewStories(userId, username) {
+        return this.timed("ViewStories", async () => {
+          const j = await this.mobileGet(`/api/v1/feed/reels_media/?reel_ids=${userId}`);
+          const reel = j?.reels?.[userId] ?? j?.reels_media?.[0];
+          const items = reel?.items ?? [];
+          if (!items.length) return false;
+          const seenEntries = items.map((item) => {
+            const mediaId = String(item.id ?? item.pk ?? "");
+            const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
+            const seenAt = takenAt + 2;
+            return `${mediaId}_${takenAt}_${seenAt}`;
+          });
+          const body = new URLSearchParams({
+            [`reels[${userId}]`]: seenEntries.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: ""
+          }).toString();
+          await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
+          return username ? `https://www.instagram.com/stories/${username}/` : `https://www.instagram.com/`;
+        }, username ? `View stories of @${username}` : `View stories of ${userId}`);
+      }
+      // ── View highlights for a user ────────────────────────────────────────────
+      // Returns the specific highlight URL on success, false on failure.
+      async viewHighlights(userId, username) {
+        return this.timed("ViewHighlights", async () => {
+          const j = await this.mobileGet(`/api/v1/highlights/${userId}/highlights_tray/`);
+          const trays = j?.tray ?? [];
+          if (!trays.length) return false;
+          const first = trays[0];
+          const reelId = String(first.id ?? "");
+          if (!reelId) return false;
+          const details = await this.mobileGet(`/api/v1/feed/reels_media/?reel_ids=${reelId}`);
+          const items = details?.reels?.[reelId]?.items ?? details?.reels_media?.[0]?.items ?? [];
+          if (!items.length) return false;
+          const seenEntries = items.map((item) => {
+            const mediaId = String(item.id ?? item.pk ?? "");
+            const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
+            return `${mediaId}_${takenAt}_${takenAt + 2}`;
+          });
+          const body = new URLSearchParams({
+            [`reels[${reelId}]`]: seenEntries.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: ""
+          }).toString();
+          await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
+          const highlightNumericId = reelId.replace(/^highlight:/, "");
+          return `https://www.instagram.com/stories/highlights/${highlightNumericId}/`;
+        }, username ? `View highlights of @${username}` : `View highlights of ${userId}`);
+      }
+      // ── View reels from the user's feed ─────────────────────────────────────
+      // Returns the first reel URL on success, false on failure.
+      // Marks ALL fetched reels as seen (up to count=6).
+      async viewReels(userId, username) {
+        return this.timed("ViewReels", async () => {
+          const body = new URLSearchParams({ user_id: userId, max_id: "", count: "6", include_feed_video: "true" }).toString();
+          const j = await this.mobilePost(`/api/v1/clips/user/`, body);
+          const items = j?.items ?? [];
+          if (!items.length) return false;
+          const seenEntries = [];
+          let firstShortcode = "";
+          for (const raw of items) {
+            const media = raw?.media ?? raw;
+            const mediaId = String(media?.id ?? media?.pk ?? "");
+            if (!mediaId) continue;
+            const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+            seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
+            if (!firstShortcode) firstShortcode = this.mediaIdToShortcode(mediaId);
+          }
+          if (!seenEntries.length) return false;
+          const seenBody = new URLSearchParams({
+            [`reels[${userId}]`]: seenEntries.join(","),
+            live_vods_skipped: "",
+            nuxes_skipped: ""
+          }).toString();
+          await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+          return `https://www.instagram.com/reel/${firstShortcode}/`;
+        }, username ? `View reels of @${username}` : `View reels of ${userId}`);
+      }
+      // ── Visit notifications inbox ─────────────────────────────────────────────
+      // Simulates a user tapping the heart/notification icon.
+      async visitNotifications() {
+        return this.timed("VisitNotifications", async () => {
+          const j = await this.mobileGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
+          return !!(j?.new_stories || j?.old_stories || j?.counts);
+        }, "Visit notifications");
+      }
+      // ── Visit own profile ─────────────────────────────────────────────────────
+      // Simulates a user tapping their own profile tab.
+      async visitOwnProfile() {
+        return this.timed("VisitOwnProfile", async () => {
+          const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+          return !!j?.user;
+        }, "Visit own profile");
+      }
+      // ── Fetch own profile stats (followers / following / posts) ───────────────
+      // Uses the same current_user endpoint but extracts the counts.
+      async getOwnProfileStats() {
+        try {
+          const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+          const u = j?.user;
+          if (!u) return null;
+          return {
+            followersCount: Number(u.follower_count ?? u.followed_by_count ?? 0),
+            followingCount: Number(u.following_count ?? 0),
+            postsCount: Number(u.media_count ?? 0)
+          };
+        } catch {
+          return null;
+        }
+      }
+      // ── Refresh own profile feed ──────────────────────────────────────────────
+      // Simulates a user pull-to-refreshing their profile page.
+      // /api/v1/feed/self/ is a dead endpoint as of 2024 — replaced by
+      // /api/v1/feed/user/{userId}/ which requires the numeric user ID extracted
+      // from the ds_user_id cookie (always present after login).
+      async refreshOwnProfile() {
+        return this.timed("RefreshOwnProfile", async () => {
+          const userIdCookie = this.cookieJar.find((c3) => c3.startsWith("ds_user_id="));
+          const userId = userIdCookie ? userIdCookie.split("=")[1] : null;
+          if (!userId) return false;
+          const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=12`);
+          return !!(j?.items || j?.profile_grid_items);
+        }, "Refresh own profile");
+      }
+      // ── Click Settings and Activity ───────────────────────────────────────────
+      // Simulates visiting the Settings page — fetches account security info.
+      // This endpoint requires POST as of 2024 (GET returns 405).
+      async visitSettingsAndActivity() {
+        return this.timed("VisitSettingsAndActivity", async () => {
+          const j = await this.mobilePost(`/api/v1/accounts/account_security_info/`);
+          return !!(j?.status !== "fail");
+        }, "Visit settings and activity");
+      }
+      // ── Scroll the home timeline feed ────────────────────────────────────────
+      // Fetches the main home feed and marks up to `count` posts as seen,
+      // simulating a user scrolling through their Instagram home feed.
+      async viewTimelineFeed(count = 5) {
+        const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+        const rawItems = j?.feed_items ?? j?.items ?? [];
+        if (!rawItems.length) return 0;
+        const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk).slice(0, count);
+        let viewed = 0;
+        for (const media of items) {
+          const mediaId = String(media?.id ?? media?.pk ?? "");
+          if (!mediaId) continue;
+          const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+          await this.timed("ViewTimelineFeed", async () => {
+            await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
+              reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
+              live_vods_skipped: "",
+              nuxes_skipped: ""
+            }).toString());
+            return ++viewed;
+          }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+        }
+        return viewed;
+      }
+      // ── Watch reels from the home feed Reels tab ─────────────────────────────
+      // Fetches the reels explore/home feed and marks up to `count` reels as seen,
+      // simulating a user scrolling through the Reels tab.
+      async viewTimelineReels(count = 5) {
+        return this.timed("ViewTimelineReels", async () => {
+          const body = new URLSearchParams({ reason: "pull_to_refresh", max_id: "" }).toString();
+          const j = await this.mobilePost(`/api/v1/clips/feed/`, body);
+          const items = j?.items ?? [];
+          if (!items.length) return 0;
+          const toView = items.slice(0, count);
+          const seenEntries = [];
+          for (const raw of toView) {
+            const media = raw?.media ?? raw;
+            const mediaId = String(media?.id ?? media?.pk ?? "");
+            if (!mediaId) continue;
+            const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+            seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
+          }
+          if (seenEntries.length) {
+            const seenBody = new URLSearchParams({
+              reels: seenEntries.join(","),
+              live_vods_skipped: "",
+              nuxes_skipped: ""
+            }).toString();
+            await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+          }
+          return toView.length;
+        }, (n) => `Viewed ${n} timeline reel${n === 1 ? "" : "s"}`);
+      }
+      // ── Watch stories from the timeline tray ─────────────────────────────────
+      // Fetches the stories tray at the top of the home feed and marks up to
+      // `count` story reels as seen, simulating a user swiping through stories.
+      async viewTimelineStories(count = 5) {
+        return this.timed("ViewTimelineStories", async () => {
+          const j = await this.mobileGet(`/api/v1/feed/reels_tray/`);
+          const tray = j?.tray ?? [];
+          if (!tray.length) return 0;
+          const toView = tray.slice(0, count);
+          const seenBody = new URLSearchParams({ live_vods_skipped: "", nuxes_skipped: "" });
+          for (const reel of toView) {
+            const userId = String(reel.user?.pk ?? reel.id ?? "");
+            const items = reel.items ?? [];
+            if (!items.length || !userId) continue;
+            const seenEntries = items.map((item) => {
+              const mediaId = String(item.id ?? item.pk ?? "");
+              const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
+              return `${mediaId}_${takenAt}_${takenAt + 2}`;
+            });
+            seenBody.set(`reels[${userId}]`, seenEntries.join(","));
+          }
+          await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
+          return toView.length;
+        }, (n) => `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`);
+      }
+      // ── Check direct messages inbox ──────────────────────────────────────────
+      // Fetches the DM inbox to simulate a user checking their messages.
+      // Returns true if the inbox was fetched successfully.
+      async getDirectMessages(count = 5) {
+        return this.timed("GetDirectMessages", async () => {
+          const j = await this.mobileGet(
+            `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`
+          );
+          const threads = j?.inbox?.threads ?? j?.threads ?? [];
+          return { ok: !!(j?.inbox ?? j?.threads), count: threads.length };
+        }, (r2) => `Checked ${r2.count} direct message${r2.count === 1 ? "" : "s"}`);
+      }
+      // ── Fetch pending / message-request inbox (GetDirectMessagesInternal) ────
+      // Simulates a user opening the message requests folder — non-followers'
+      // DMs land here. Jarvee calls this as a second DM pass after the main inbox.
+      async getDirectMessagesInternal() {
+        return this.timed("GetDirectMessagesInternal", async () => {
+          const j = await this.mobileGet(
+            `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
+          );
+          const threads = j?.inbox?.threads ?? j?.threads ?? [];
+          return { count: threads.length };
+        }, (r2) => `Checked DM inbox \u2014 ${r2.count} thread${r2.count === 1 ? "" : "s"}`);
+      }
+      // Like getDirectMessages but returns thread content for auto-reply scanning.
+      // Returns up to `count` threads, each with recent messages from the other user.
+      async getDMThreadsWithContent(count = 10) {
+        return this.timed("GetDMThreadsContent", async () => {
+          const j = await this.mobileGet(
+            `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=10&cursor=&limit=${count}`
+          );
+          const threads = j?.inbox?.threads ?? j?.threads ?? [];
+          return threads.map((thread) => {
+            const otherUser = (thread.users ?? [])[0];
+            const myUserId = String(thread.viewer_id ?? thread.viewerId ?? "");
+            const items = (thread.items ?? []).filter((item) => item?.item_type === "text" && item?.text).map((item) => ({
+              itemId: String(item.item_id ?? ""),
+              text: String(item.text ?? ""),
+              fromMe: String(item.user_id) === myUserId
+            }));
+            return {
+              threadId: String(thread.thread_id ?? ""),
+              username: String(otherUser?.username ?? ""),
+              userId: String(otherUser?.pk ?? ""),
+              items
+            };
+          }).filter((t2) => t2.threadId && t2.username);
+        }, `Check DMs with content (limit=${count})`);
+      }
+      // ── Like posts from the home timeline feed ───────────────────────────────
+      // Fetches the home feed and likes up to `count` posts.
+      // If a post is a reel/video (media_type === 2), it is marked as watched
+      // before being liked, so Instagram sees a realistic view → like sequence.
+      // Returns the number of posts liked and reels watched.
+      async saveMedia(mediaId) {
+        return this.timed("SaveMedia", async () => {
+          const body = new URLSearchParams({ added_via: "save_to_collection" }).toString();
+          const j = await this.mobilePost(`/api/v1/media/${mediaId}/save/`, body);
+          return j?.status === "ok";
+        }, `Save media ${mediaId}`);
+      }
+      async likeDirectMessage(threadId, itemId) {
+        return this.timed("LikeDM", async () => {
+          const body = new URLSearchParams({}).toString();
+          const j = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/like/`, body);
+          return j?.status === "ok";
+        }, `Like DM thread=${threadId} item=${itemId}`);
+      }
+      async likeTimelinePosts(count = 3) {
+        return this.timed("LikeTimelinePosts", async () => {
+          const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+          const rawItems = j?.feed_items ?? j?.items ?? [];
+          if (!rawItems.length) return { liked: 0, watched: 0, likedPosts: [] };
+          const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk);
+          const toProcess = items.slice(0, count);
+          let liked = 0;
+          let watched = 0;
+          const likedPosts = [];
+          for (const media of toProcess) {
+            const mediaId = String(media?.id ?? media?.pk ?? "");
+            if (!mediaId) continue;
+            const isReel = media?.media_type === 2 || media?.product_type === "clips";
+            if (isReel) {
+              try {
+                const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+                const seenBody = new URLSearchParams({
+                  reels: `${mediaId}_${takenAt}_${takenAt + 4}`,
+                  live_vods_skipped: "",
+                  nuxes_skipped: ""
+                }).toString();
+                await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+                watched++;
+              } catch (_2) {
+              }
+            }
+            const result = await this.likeMedia(mediaId);
+            if (result === "blocked") break;
+            if (result) {
+              liked++;
+              const shortcode = String(media?.code ?? "");
+              const ownerUsername = String(media?.user?.username ?? "");
+              likedPosts.push({ shortcode, ownerUsername, mediaId });
+            }
+          }
+          return { liked, watched, likedPosts };
+        }, (r2) => r2.watched > 0 ? `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"} (watched ${r2.watched} reel${r2.watched === 1 ? "" : "s"})` : `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"}`);
+      }
+      // ── Unfollow a user ───────────────────────────────────────────────────────
+      // Returns true on success, "blocked" on Instagram action-block, false otherwise.
+      async unfollowUser(userId, username) {
+        return this.timed("UnfollowUser", async () => {
+          const body = new URLSearchParams({ user_id: userId }).toString();
+          const j = await this.webPost(`/api/v1/friendships/destroy/${userId}/`, body);
+          if (!j) return false;
+          if (j?.friendship_status) return true;
+          if (j?.status === "fail") {
+            const reason = j?.message ?? "Instagram declined";
+            if (reason.includes("feedback_required") || j?.feedback_required === true) return "blocked";
+            console.warn(`[webClient] unfollowUser ${userId} fail:`, reason);
+            return false;
+          }
+          return false;
+        }, username ? `Unfollow @${username}` : `Unfollow user ${userId}`);
+      }
+      // ── Send a direct message to a user ───────────────────────────────────────
+      // Returns true on success, "blocked" on action-block, false otherwise.
+      async sendDirectMessage(userId, text2, username) {
+        return this.timed("SendDM", async () => {
+          const body = new URLSearchParams({
+            recipient_users: `[[${userId}]]`,
+            client_context: String(Date.now()),
+            text: text2
+          }).toString();
+          const j = await this.mobilePost(`/api/v1/direct_v2/threads/broadcast/text/`, body);
+          if (!j) return false;
+          if (j?.message === "feedback_required" || j?.feedback_required === true) {
+            console.warn(`[webClient] DM BLOCKED to ${userId}`);
+            return "blocked";
+          }
+          if (j?.status === "ok") {
+            const threadId = j?.payload?.thread_id ?? j?.thread_id ?? "";
+            const itemId = j?.payload?.item_id ?? j?.item_id ?? "";
+            return { threadId, itemId };
+          }
+          console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
+          return false;
+        }, username ? `DM @${username}` : `DM user ${userId}`);
+      }
+      async unsendDirectMessage(threadId, itemId) {
+        return this.timed("UnsendDM", async () => {
+          const body = new URLSearchParams({}).toString();
+          const j = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/delete/`, body);
+          return j?.status === "ok";
+        }, `Unsend thread=${threadId} item=${itemId}`);
+      }
+      // ── Get user ID + username by username ────────────────────────────────────
+      async getUserByUsername(username) {
+        return this.timed("GetUserByUsername", async () => {
+          const j = await this.webGet(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`);
+          const user = j?.data?.user;
+          if (!user) return null;
+          return { pk: String(user.id), username: user.username };
+        }, `Lookup @${username}`);
+      }
+      // ── Get user biography + full name ───────────────────────────────────────
+      async getUserProfile(username) {
+        return this.timed("GetUserProfile", async () => {
+          const j = await this.webGet(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`);
+          const user = j?.data?.user;
+          if (!user) return null;
+          return {
+            biography: user.biography ?? null,
+            fullName: user.full_name ?? null
+          };
+        }, `Profile @${username}`);
+      }
+      // mobile-style POST (i.instagram.com)
+      async mobilePost(path4, body = "") {
+        await this.apiThrottle();
+        const res = await igReq({
+          host: "i.instagram.com",
+          path: path4,
+          method: "POST",
+          headers: {
+            Host: "i.instagram.com",
+            "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-IG-App-ID": APP_ID,
+            "X-CSRFToken": this.csrfToken,
+            "X-IG-Capabilities": "3brTvwE=",
+            "X-IG-Connection-Type": "WIFI"
+          },
+          body,
+          cookieJar: this.cookieJar,
+          proxyUrl: this.proxyUrl
+        });
+        const safeCookies = res.cookies.filter((c3) => !c3.startsWith("csrftoken="));
+        this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
+        if (!res.json) console.log(`[webClient] mobilePost ${path4} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
+        return res.json;
+      }
+      // ── Multipart/form-data POST to i.instagram.com ──────────────────────────
+      // Used for photo upload via /api/v1/media/upload/ — a regular /api/v1/
+      // path that accepts our web-session cookies (same auth as like/follow/
+      // comment which are confirmed working).  Avoids the rupload binary protocol
+      // which requires a genuine mobile Bearer-token session and rejects web
+      // sessionids with HTML 404.
+      async mobilePostMultipart(path4, parts) {
+        await this.apiThrottle();
+        const boundary = `----InstaBoundary${Date.now()}`;
+        const chunks = [];
+        for (const part of parts) {
+          let header = `--${boundary}\r
+Content-Disposition: form-data; name="${part.name}"`;
+          if (part.filename) header += `; filename="${part.filename}"`;
+          header += "\r\n";
+          if (part.contentType) header += `Content-Type: ${part.contentType}\r
+`;
+          header += "\r\n";
+          chunks.push(Buffer.from(header));
+          chunks.push(typeof part.value === "string" ? Buffer.from(part.value) : part.value);
+          chunks.push(Buffer.from("\r\n"));
+        }
+        chunks.push(Buffer.from(`--${boundary}--\r
+`));
+        const body = Buffer.concat(chunks);
+        const MOBILE_UA = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+        const MOBILE_AID = "567067343352427";
+        const headers = {
+          "User-Agent": MOBILE_UA,
+          Accept: "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": String(body.length),
+          "X-IG-App-ID": MOBILE_AID,
+          "X-CSRFToken": this.csrfToken,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+          Cookie: this.cookieJar.join("; ")
+        };
+        let agent;
+        if (this.proxyUrl) {
+          const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist8(), dist_exports));
+          agent = new HttpsProxyAgent2(this.proxyUrl);
+        }
+        const res = await httpsRequest(
+          { host: "i.instagram.com", port: 443, path: path4, method: "POST", headers, ...agent ? { agent } : {} },
+          body
+        );
+        let json2 = null;
+        try {
+          json2 = JSON.parse(res.body);
+        } catch {
+        }
+        if (!json2) console.log(`[webClient] mobilePostMultipart ${path4} status=${res.status} body:`, res.body.slice(0, 400));
+        return json2;
+      }
+      // ── Download an image from a CDN URL into a Buffer ────────────────────────
+      async downloadImage(url2) {
+        return new Promise((resolve, reject) => {
+          const parsedUrl = new URL(url2);
+          const options = {
+            host: parsedUrl.hostname,
+            port: 443,
+            path: parsedUrl.pathname + parsedUrl.search,
+            method: "GET",
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+              Accept: "image/*,*/*"
+            }
+          };
+          https.get(options, (res) => {
+            const chunks = [];
+            res.on("data", (chunk) => chunks.push(chunk));
+            res.on("end", () => resolve(Buffer.concat(chunks)));
+            res.on("error", reject);
+          }).on("error", reject);
+        });
+      }
+      // ── Get recent photo posts from a user's feed (with image URLs) ───────────
+      // Used when repostUseHikerApi is OFF — the account's own session does the scrape.
+      async getUserFeedItems(username) {
+        return this.timed("GetUserFeed", async () => {
+          const user = await this.getUserByUsername(username);
+          if (!user) return [];
+          const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+          const items = j?.items ?? [];
+          return items.flatMap((item) => {
+            const mediaType = item?.media_type ?? 1;
+            if (mediaType !== 1 && mediaType !== 8) return [];
+            const mediaId = String(item.id ?? item.pk ?? "");
+            const caption = item.caption?.text ?? "";
+            const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
+            const firstMedia = mediaType === 8 ? item.carousel_media?.[0] ?? item : item;
+            const candidates = firstMedia.image_versions2?.candidates ?? [];
+            const imageUrl = candidates[0]?.url ?? "";
+            if (!mediaId || !imageUrl) return [];
+            return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
+          });
+        }, `Get feed of @${username}`);
+      }
+      // ── Upload a photo and create the Instagram post ──────────────────────────
+      /** Uploads a photo and returns the new media ID string on success, or null on failure. */
+      async uploadPhoto(imageBuffer, caption) {
+        return this.timed("UploadPhoto", async () => {
+          const uploadId = String(Date.now());
+          const uploadRes = await this.mobilePostMultipart("/api/v1/media/upload/", [
+            { name: "upload_id", value: uploadId },
+            { name: "media_type", value: "1" },
+            { name: "image_compression", value: JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "95" }) },
+            { name: "photo", value: imageBuffer, filename: `photo_${uploadId}.jpg`, contentType: "image/jpeg" }
+          ]);
+          const uploaded = uploadRes?.upload_id != null || uploadRes?.status === "ok";
+          if (!uploaded) {
+            console.warn(`[webClient] media/upload failed: ${JSON.stringify(uploadRes)}`);
+            return null;
+          }
+          const body = new URLSearchParams({
+            upload_id: uploadId,
+            caption,
+            source_type: "4",
+            timezone_offset: "0",
+            date_time_original: (/* @__PURE__ */ new Date()).toISOString().replace(/[^0-9]/g, "").slice(0, 14)
+          }).toString();
+          const confRes = await this.mobilePost("/api/v1/media/configure/", body);
+          const mediaId = confRes?.media?.id ? String(confRes.media.id) : null;
+          if (!mediaId && confRes?.status === "ok") return uploadId;
+          return mediaId;
+        }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
+      }
+      /** Disables comments on a post via the Instagram private API. */
+      async disableComments(mediaId) {
+        return this.timed("DisableComments", async () => {
+          const body = new URLSearchParams({ media_id: mediaId }).toString();
+          await this.mobilePost(`/api/v1/media/${mediaId}/disable_comments/`, body);
+        }, `Disable comments on ${mediaId}`);
+      }
+      // ── Scrape recent posts from a hashtag → returns users ────────────────────
+      // The sections endpoint requires POST, not GET
+      async getHashtagUsers(hashtag, maxUsers = 50) {
+        return this.timed("HashtagScrape", async () => {
+          const tag = hashtag.replace(/^#/, "");
+          const users = [];
+          const seen = /* @__PURE__ */ new Set();
+          let maxId = "";
+          let page = 0;
+          const maxPages = Math.min(Math.ceil(maxUsers / 12) + 2, 25);
+          while (users.length < maxUsers && page < maxPages) {
+            const body = new URLSearchParams({
+              tab_type: "recent",
+              page: String(page + 1),
+              surface: "grid",
+              ...maxId ? { max_id: maxId } : {}
+            }).toString();
+            const j = await this.mobilePost(`/api/v1/tags/${encodeURIComponent(tag)}/sections/`, body);
+            if (!j?.sections?.length) break;
+            for (const section of j.sections) {
+              const medias = section.layout_content?.medias ?? section.layout_content?.fill_items ?? [];
+              for (const item of medias) {
+                const media = item.media ?? item;
+                const u = media?.user;
+                if (!u?.pk || !u?.username) continue;
+                if (seen.has(String(u.pk))) continue;
+                seen.add(String(u.pk));
+                users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
+              }
+            }
+            maxId = j.next_max_id ?? "";
+            if (!maxId || !j.more_available) break;
+            page++;
+          }
+          console.log(`[webClient] hashtag #${tag}: found ${users.length} users`);
+          return users.slice(0, maxUsers);
+        }, `Scrape #${hashtag.replace(/^#/, "")}`);
+      }
+      // ── Scrape followers of a target account ──────────────────────────────────
+      async getFollowers(userId, maxFollowers = 50) {
+        return this.timed("FollowersScrape", async () => {
+          const users = [];
+          let maxId = "";
+          const maxPages = Math.min(Math.ceil(maxFollowers / 50) + 2, 25);
+          for (let page = 0; page < maxPages && users.length < maxFollowers; page++) {
+            const qs = new URLSearchParams({ count: "50", ...maxId ? { max_id: maxId } : {} });
+            const j = await this.mobileGet(`/api/v1/friendships/${userId}/followers/?${qs}`);
+            if (!j?.users?.length) break;
+            for (const u of j.users) {
+              if (u.pk && u.username) users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
+            }
+            maxId = j.next_max_id ?? "";
+            if (!maxId) break;
+          }
+          console.log(`[webClient] followers of ${userId}: found ${users.length}`);
+          return users.slice(0, maxFollowers);
+        }, `Followers of ${userId}`);
+      }
+      // ── Resolve own account pk (reuses current_user endpoint, no extra call) ──
+      async getOwnUserId() {
+        return this.timed("GetOwnUser", async () => {
+          const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+          return j?.user?.pk ? String(j.user.pk) : null;
+        }, "Get own user ID");
+      }
+      // ── Search for a user by username (safer than web_profile_info lookup) ────
+      // Uses the search bar endpoint — looks like a human typing in the search box.
+      async searchUserByUsername(username) {
+        return this.timed("SearchUser", async () => {
+          const j = await this.mobileGet(`/api/v1/users/search/?timezone_offset=0&count=5&q=${encodeURIComponent(username)}`);
+          const users = j?.users ?? [];
+          const match = users.find((u) => String(u.username).toLowerCase() === username.toLowerCase());
+          return match ? { pk: String(match.pk), username: String(match.username) } : null;
+        }, `Search @${username}`);
+      }
+    };
   }
 });
 
@@ -118500,6 +120920,17 @@ var init_hikerApiClient = __esm({
           return users.filter((u) => u?.pk && u?.username).map((u) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") })).slice(0, max);
         } catch (e) {
           console.error(`[hikerApi] getFollowers ${userId} error: ${e?.message}`);
+          return [];
+        }
+      }
+      async getFollowings(userId, max = 50) {
+        try {
+          const amount = Math.min(Math.max(max, 1), 200);
+          const j = await hikerGet(`/v1/user/following?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
+          const users = Array.isArray(j) ? j : Array.isArray(j?.users) ? j.users : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : [];
+          return users.filter((u) => u?.pk && u?.username).map((u) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") })).slice(0, max);
+        } catch (e) {
+          console.error(`[hikerApi] getFollowings ${userId} error: ${e?.message}`);
           return [];
         }
       }
@@ -140795,1276 +143226,7 @@ var api = {
 
 // src/instagram/instagramLogin.ts
 var import_instagram_private_api = __toESM(require_dist2(), 1);
-
-// ../../node_modules/.pnpm/@otplib+core@13.4.0/node_modules/@otplib/core/dist/index.js
-var i = class extends Error {
-  constructor(e, t2) {
-    super(e, t2), this.name = "OTPError";
-  }
-};
-var x = class extends i {
-  constructor(e) {
-    super(e), this.name = "SecretError";
-  }
-};
-var h = class extends x {
-  constructor(e, t2) {
-    super(`Secret must be at least ${e} bytes (${e * 8} bits), got ${t2} bytes`), this.name = "SecretTooShortError";
-  }
-};
-var P = class extends x {
-  constructor(e, t2) {
-    super(`Secret must not exceed ${e} bytes, got ${t2} bytes`), this.name = "SecretTooLongError";
-  }
-};
-var m = class extends i {
-  constructor(e) {
-    super(e), this.name = "CounterError";
-  }
-};
-var O = class extends m {
-  constructor() {
-    super("Counter must be non-negative"), this.name = "CounterNegativeError";
-  }
-};
-var T = class extends m {
-  constructor() {
-    super("Counter exceeds maximum safe integer value"), this.name = "CounterOverflowError";
-  }
-};
-var b = class extends m {
-  constructor() {
-    super("Counter must be a finite integer"), this.name = "CounterNotIntegerError";
-  }
-};
-var A = class extends i {
-  constructor(e) {
-    super(e), this.name = "TimeError";
-  }
-};
-var C = class extends A {
-  constructor() {
-    super("Time must be non-negative"), this.name = "TimeNegativeError";
-  }
-};
-var S = class extends A {
-  constructor() {
-    super("Time must be a finite number"), this.name = "TimeNotFiniteError";
-  }
-};
-var B = class extends i {
-  constructor(e) {
-    super(e), this.name = "PeriodError";
-  }
-};
-var w = class extends B {
-  constructor(e) {
-    super(`Period must be at least ${e} second(s)`), this.name = "PeriodTooSmallError";
-  }
-};
-var _ = class extends B {
-  constructor(e) {
-    super(`Period must not exceed ${e} seconds`), this.name = "PeriodTooLargeError";
-  }
-};
-var N = class extends i {
-  constructor(e, t2) {
-    super(e, t2), this.name = "CryptoError";
-  }
-};
-var c = class extends N {
-  constructor(e, t2) {
-    super(`HMAC computation failed: ${e}`, t2), this.name = "HMACError";
-  }
-};
-var v = class extends N {
-  constructor(e, t2) {
-    super(`Random byte generation failed: ${e}`, t2), this.name = "RandomBytesError";
-  }
-};
-var G = class extends i {
-  constructor(e) {
-    super(e), this.name = "PluginError";
-  }
-};
-var Y = class extends G {
-  constructor() {
-    super("Crypto plugin is required."), this.name = "CryptoPluginMissingError";
-  }
-};
-var L = class extends G {
-  constructor() {
-    super("Base32 plugin is required."), this.name = "Base32PluginMissingError";
-  }
-};
-var a = class extends i {
-  constructor(e) {
-    super(e), this.name = "ConfigurationError";
-  }
-};
-var W = class extends a {
-  constructor() {
-    super("Secret is required. Use generateSecret() to create one, or provide via { secret: 'YOUR_BASE32_SECRET' }"), this.name = "SecretMissingError";
-  }
-};
-var yr = new TextEncoder();
-var xr = new TextDecoder();
-var or2 = 16;
-var sr = 64;
-var ar = 1;
-var ur = 3600;
-var pr = Number.MAX_SAFE_INTEGER;
-var lr = 99;
-var er = /* @__PURE__ */ Symbol("otplib.guardrails.override");
-function y(r2, e, t2) {
-  if (typeof e != "number" || !Number.isSafeInteger(e)) throw new a(`Guardrail '${r2}' must be a safe integer`);
-  if (e < t2) throw new a(`Guardrail '${r2}' must be >= ${t2}`);
-}
-var d = Object.freeze({ MIN_SECRET_BYTES: or2, MAX_SECRET_BYTES: sr, MIN_PERIOD: ar, MAX_PERIOD: ur, MAX_COUNTER: pr, MAX_WINDOW: lr, [er]: false });
-function hr(r2) {
-  if (!r2) return d;
-  r2.MIN_SECRET_BYTES !== void 0 && y("MIN_SECRET_BYTES", r2.MIN_SECRET_BYTES, 1), r2.MAX_SECRET_BYTES !== void 0 && y("MAX_SECRET_BYTES", r2.MAX_SECRET_BYTES, 1), r2.MIN_PERIOD !== void 0 && y("MIN_PERIOD", r2.MIN_PERIOD, 1), r2.MAX_PERIOD !== void 0 && y("MAX_PERIOD", r2.MAX_PERIOD, 1), r2.MAX_COUNTER !== void 0 && y("MAX_COUNTER", r2.MAX_COUNTER, 0), r2.MAX_WINDOW !== void 0 && y("MAX_WINDOW", r2.MAX_WINDOW, 1);
-  let e = { ...d, ...r2 };
-  if (e.MIN_SECRET_BYTES > e.MAX_SECRET_BYTES) throw new a("Guardrail 'MIN_SECRET_BYTES' must be <= 'MAX_SECRET_BYTES'");
-  if (e.MIN_PERIOD > e.MAX_PERIOD) throw new a("Guardrail 'MIN_PERIOD' must be <= 'MAX_PERIOD'");
-  return Object.freeze({ ...e, [er]: true });
-}
-function Or(r2, e = d) {
-  if (r2.length < e.MIN_SECRET_BYTES) throw new h(e.MIN_SECRET_BYTES, r2.length);
-  if (r2.length > e.MAX_SECRET_BYTES) throw new P(e.MAX_SECRET_BYTES, r2.length);
-}
-function br(r2, e = d) {
-  if (typeof r2 == "number") {
-    if (!Number.isFinite(r2) || !Number.isInteger(r2)) throw new b();
-    if (!Number.isSafeInteger(r2)) throw new T();
-  }
-  let t2 = typeof r2 == "bigint" ? r2 : BigInt(r2);
-  if (t2 < 0n) throw new O();
-  if (t2 > BigInt(e.MAX_COUNTER)) throw new T();
-}
-function Ar(r2) {
-  if (!Number.isFinite(r2)) throw new S();
-  if (r2 < 0) throw new C();
-}
-function Cr(r2, e = d) {
-  if (!Number.isInteger(r2) || r2 < e.MIN_PERIOD) throw new w(e.MIN_PERIOD);
-  if (r2 > e.MAX_PERIOD) throw new _(e.MAX_PERIOD);
-}
-function _r(r2) {
-  let e = typeof r2 == "bigint" ? r2 : BigInt(r2), t2 = new ArrayBuffer(8);
-  return new DataView(t2).setBigUint64(0, e, false), new Uint8Array(t2);
-}
-function Rr(r2) {
-  let e = r2[r2.length - 1] & 15;
-  return (r2[e] & 127) << 24 | r2[e + 1] << 16 | r2[e + 2] << 8 | r2[e + 3];
-}
-function Ir(r2, e) {
-  let t2 = 10 ** e;
-  return (r2 % t2).toString().padStart(e, "0");
-}
-function gr(r2, e) {
-  return r2.length === e.length;
-}
-function tr(r2, e) {
-  let t2 = rr(r2), o = rr(e);
-  if (!gr(t2, o)) return false;
-  let n = 0;
-  for (let s = 0; s < t2.length; s++) n |= t2[s] ^ o[s];
-  return n === 0;
-}
-function rr(r2) {
-  return typeof r2 == "string" ? yr.encode(r2) : r2;
-}
-function vr(r2, e) {
-  return typeof r2 == "string" ? (nr(e), e.decode(r2)) : r2;
-}
-function dr(r2) {
-  if (!r2) throw new Y();
-}
-function nr(r2) {
-  if (!r2) throw new L();
-}
-function Xr(r2) {
-  if (!r2) throw new W();
-}
-var K = class {
-  constructor(e) {
-    this.crypto = e;
-  }
-  get plugin() {
-    return this.crypto;
-  }
-  async hmac(e, t2, o) {
-    try {
-      let n = this.crypto.hmac(e, t2, o);
-      return n instanceof Promise ? await n : n;
-    } catch (n) {
-      let s = n instanceof Error ? n.message : String(n);
-      throw new c(s, { cause: n });
-    }
-  }
-  hmacSync(e, t2, o) {
-    try {
-      let n = this.crypto.hmac(e, t2, o);
-      if (n instanceof Promise) throw new c("Crypto plugin does not support synchronous HMAC operations");
-      return n;
-    } catch (n) {
-      if (n instanceof c) throw n;
-      let s = n instanceof Error ? n.message : String(n);
-      throw new c(s, { cause: n });
-    }
-  }
-  randomBytes(e) {
-    try {
-      return this.crypto.randomBytes(e);
-    } catch (t2) {
-      let o = t2 instanceof Error ? t2.message : String(t2);
-      throw new v(o, { cause: t2 });
-    }
-  }
-};
-function Wr(r2) {
-  return new K(r2);
-}
-
-// ../../node_modules/.pnpm/@otplib+hotp@13.4.0/node_modules/@otplib/hotp/dist/index.js
-function v2(u) {
-  let { secret: t2, counter: e, algorithm: r2 = "sha1", digits: i2 = 6, crypto: n, base32: o, guardrails: a2, hooks: s } = u;
-  Xr(t2), dr(n);
-  let c3 = vr(t2, o);
-  Or(c3, a2), br(e, a2);
-  let p = Wr(n), l2 = _r(e);
-  return { ctx: p, algorithm: r2, digits: i2, secretBytes: c3, counterBytes: l2, hooks: s };
-}
-async function O2(u) {
-  let { ctx: t2, algorithm: e, digits: r2, secretBytes: i2, counterBytes: n, hooks: o } = v2(u), a2 = await t2.hmac(e, i2, n), s = o?.truncateDigest ? o.truncateDigest(a2) : Rr(a2);
-  return o?.encodeToken ? o.encodeToken(s, r2) : Ir(s, r2);
-}
-function F(u) {
-  let { ctx: t2, algorithm: e, digits: r2, secretBytes: i2, counterBytes: n, hooks: o } = v2(u), a2 = t2.hmacSync(e, i2, n), s = o?.truncateDigest ? o.truncateDigest(a2) : Rr(a2);
-  return o?.encodeToken ? o.encodeToken(s, r2) : Ir(s, r2);
-}
-
-// ../../node_modules/.pnpm/@otplib+totp@13.4.0/node_modules/@otplib/totp/dist/index.js
-function k(r2) {
-  let { secret: e, epoch: n = Math.floor(Date.now() / 1e3), t0: o = 0, period: i2 = 30, algorithm: s = "sha1", digits: l2 = 6, crypto: a2, base32: u, guardrails: c3 = hr(), hooks: t2 } = r2;
-  Xr(e), dr(a2);
-  let p = vr(e, u);
-  Or(p, c3), Ar(n), Cr(i2, c3);
-  let f = Math.floor((n - o) / i2);
-  return { secret: p, counter: f, algorithm: s, digits: l2, crypto: a2, guardrails: c3, hooks: t2 };
-}
-async function b2(r2) {
-  let e = k(r2);
-  return O2(e);
-}
-function Z2(r2) {
-  let e = k(r2);
-  return F(e);
-}
-
-// ../../node_modules/.pnpm/@scure+base@2.2.0/node_modules/@scure/base/index.js
-function isBytes(a2) {
-  return a2 instanceof Uint8Array || ArrayBuffer.isView(a2) && a2.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a2 && a2.BYTES_PER_ELEMENT === 1;
-}
-function isArrayOf(isString, arr) {
-  if (!Array.isArray(arr))
-    return false;
-  if (arr.length === 0)
-    return true;
-  if (isString) {
-    return arr.every((item) => typeof item === "string");
-  } else {
-    return arr.every((item) => Number.isSafeInteger(item));
-  }
-}
-function astr(label, input) {
-  if (typeof input !== "string")
-    throw new TypeError(`${label}: string expected`);
-  return true;
-}
-function anumber(n) {
-  if (typeof n !== "number")
-    throw new TypeError(`number expected, got ${typeof n}`);
-  if (!Number.isSafeInteger(n))
-    throw new RangeError(`invalid integer: ${n}`);
-}
-function aArr(input) {
-  if (!Array.isArray(input))
-    throw new TypeError("array expected");
-}
-function astrArr(label, input) {
-  if (!isArrayOf(true, input))
-    throw new TypeError(`${label}: array of strings expected`);
-}
-function anumArr(label, input) {
-  if (!isArrayOf(false, input))
-    throw new TypeError(`${label}: array of numbers expected`);
-}
-// @__NO_SIDE_EFFECTS__
-function chain(...args) {
-  const id = (a2) => a2;
-  const wrap = (a2, b3) => (c3) => a2(b3(c3));
-  const encode = args.map((x3) => x3.encode).reduceRight(wrap, id);
-  const decode = args.map((x3) => x3.decode).reduce(wrap, id);
-  return { encode, decode };
-}
-// @__NO_SIDE_EFFECTS__
-function alphabet(letters) {
-  const lettersA = typeof letters === "string" ? letters.split("") : letters;
-  const len = lettersA.length;
-  astrArr("alphabet", lettersA);
-  const indexes = new Map(lettersA.map((l2, i2) => [l2, i2]));
-  return {
-    encode: (digits) => {
-      aArr(digits);
-      return digits.map((i2) => {
-        if (!Number.isSafeInteger(i2) || i2 < 0 || i2 >= len)
-          throw new Error(`alphabet.encode: digit index outside alphabet "${i2}". Allowed: ${letters}`);
-        return lettersA[i2];
-      });
-    },
-    decode: (input) => {
-      aArr(input);
-      return input.map((letter) => {
-        astr("alphabet.decode", letter);
-        const i2 = indexes.get(letter);
-        if (i2 === void 0)
-          throw new Error(`Unknown letter: "${letter}". Allowed: ${letters}`);
-        return i2;
-      });
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function join(separator = "") {
-  astr("join", separator);
-  return {
-    encode: (from) => {
-      astrArr("join.decode", from);
-      return from.join(separator);
-    },
-    decode: (to) => {
-      astr("join.decode", to);
-      return to.split(separator);
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function padding(bits, chr = "=") {
-  anumber(bits);
-  astr("padding", chr);
-  return {
-    encode(data) {
-      astrArr("padding.encode", data);
-      while (data.length * bits % 8)
-        data.push(chr);
-      return data;
-    },
-    decode(input) {
-      astrArr("padding.decode", input);
-      let end = input.length;
-      if (end * bits % 8)
-        throw new Error("padding: invalid, string should have whole number of bytes");
-      for (; end > 0 && input[end - 1] === chr; end--) {
-        const last = end - 1;
-        const byte = last * bits;
-        if (byte % 8 === 0)
-          throw new Error("padding: invalid, string has too much padding");
-      }
-      return input.slice(0, end);
-    }
-  };
-}
-var gcd = (a2, b3) => b3 === 0 ? a2 : gcd(b3, a2 % b3);
-var radix2carry = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd(from, to));
-var powers = /* @__PURE__ */ (() => {
-  let res = [];
-  for (let i2 = 0; i2 < 40; i2++)
-    res.push(2 ** i2);
-  return res;
-})();
-function convertRadix2(data, from, to, padding2) {
-  aArr(data);
-  if (from <= 0 || from > 32)
-    throw new RangeError(`convertRadix2: wrong from=${from}`);
-  if (to <= 0 || to > 32)
-    throw new RangeError(`convertRadix2: wrong to=${to}`);
-  if (/* @__PURE__ */ radix2carry(from, to) > 32) {
-    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry(from, to)}`);
-  }
-  let carry = 0;
-  let pos = 0;
-  const max = powers[from];
-  const mask = powers[to] - 1;
-  const res = [];
-  for (const n of data) {
-    anumber(n);
-    if (n >= max)
-      throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
-    carry = carry << from | n;
-    if (pos + from > 32)
-      throw new Error(`convertRadix2: carry overflow pos=${pos} from=${from}`);
-    pos += from;
-    for (; pos >= to; pos -= to)
-      res.push((carry >> pos - to & mask) >>> 0);
-    const pow = powers[pos];
-    if (pow === void 0)
-      throw new Error("invalid carry");
-    carry &= pow - 1;
-  }
-  carry = carry << to - pos & mask;
-  if (!padding2 && pos >= from)
-    throw new Error("Excess padding");
-  if (!padding2 && carry > 0)
-    throw new Error(`Non-zero padding: ${carry}`);
-  if (padding2 && pos > 0)
-    res.push(carry >>> 0);
-  return res;
-}
-// @__NO_SIDE_EFFECTS__
-function radix2(bits, revPadding = false) {
-  anumber(bits);
-  if (bits <= 0 || bits > 32)
-    throw new RangeError("radix2: bits should be in (0..32]");
-  if (/* @__PURE__ */ radix2carry(8, bits) > 32 || /* @__PURE__ */ radix2carry(bits, 8) > 32)
-    throw new RangeError("radix2: carry overflow");
-  return {
-    encode: (bytes) => {
-      if (!isBytes(bytes))
-        throw new TypeError("radix2.encode input should be Uint8Array");
-      return convertRadix2(Array.from(bytes), 8, bits, !revPadding);
-    },
-    decode: (digits) => {
-      anumArr("radix2.decode", digits);
-      return Uint8Array.from(convertRadix2(digits, bits, 8, revPadding));
-    }
-  };
-}
-var base32 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ chain(/* @__PURE__ */ radix2(5), /* @__PURE__ */ alphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join("")));
-
-// ../../node_modules/.pnpm/@otplib+plugin-base32-scure@13.4.0/node_modules/@otplib/plugin-base32-scure/dist/index.js
-var r = class {
-  name = "scure";
-  encode(o, e = {}) {
-    let { padding: t2 = false } = e, n = base32.encode(o);
-    return t2 ? n : n.replace(/=+$/, "");
-  }
-  decode(o) {
-    try {
-      let e = o.toUpperCase(), t2 = e.padEnd(Math.ceil(e.length / 8) * 8, "=");
-      return base32.decode(t2);
-    } catch (e) {
-      throw e instanceof Error ? new Error(`Invalid Base32 string: ${e.message}`) : new Error("Invalid Base32 string");
-    }
-  }
-};
-var d2 = Object.freeze(new r());
-
-// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/utils.js
-function isBytes2(a2) {
-  return a2 instanceof Uint8Array || ArrayBuffer.isView(a2) && a2.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a2 && a2.BYTES_PER_ELEMENT === 1;
-}
-function anumber2(n, title = "") {
-  if (typeof n !== "number") {
-    const prefix = title && `"${title}" `;
-    throw new TypeError(`${prefix}expected number, got ${typeof n}`);
-  }
-  if (!Number.isSafeInteger(n) || n < 0) {
-    const prefix = title && `"${title}" `;
-    throw new RangeError(`${prefix}expected integer >= 0, got ${n}`);
-  }
-}
-function abytes(value, length, title = "") {
-  const bytes = isBytes2(value);
-  const len = value?.length;
-  const needsLen = length !== void 0;
-  if (!bytes || needsLen && len !== length) {
-    const prefix = title && `"${title}" `;
-    const ofLen = needsLen ? ` of length ${length}` : "";
-    const got = bytes ? `length=${len}` : `type=${typeof value}`;
-    const message = prefix + "expected Uint8Array" + ofLen + ", got " + got;
-    if (!bytes)
-      throw new TypeError(message);
-    throw new RangeError(message);
-  }
-  return value;
-}
-function ahash(h4) {
-  if (typeof h4 !== "function" || typeof h4.create !== "function")
-    throw new TypeError("Hash must wrapped by utils.createHasher");
-  anumber2(h4.outputLen);
-  anumber2(h4.blockLen);
-  if (h4.outputLen < 1)
-    throw new Error('"outputLen" must be >= 1');
-  if (h4.blockLen < 1)
-    throw new Error('"blockLen" must be >= 1');
-}
-function aexists(instance, checkFinished = true) {
-  if (instance.destroyed)
-    throw new Error("Hash instance has been destroyed");
-  if (checkFinished && instance.finished)
-    throw new Error("Hash#digest() has already been called");
-}
-function aoutput(out, instance) {
-  abytes(out, void 0, "digestInto() output");
-  const min = instance.outputLen;
-  if (out.length < min) {
-    throw new RangeError('"digestInto() output" expected to be of length >=' + min);
-  }
-}
-function clean(...arrays) {
-  for (let i2 = 0; i2 < arrays.length; i2++) {
-    arrays[i2].fill(0);
-  }
-}
-function createView(arr) {
-  return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
-}
-function rotr(word, shift) {
-  return word << 32 - shift | word >>> shift;
-}
-function rotl(word, shift) {
-  return word << shift | word >>> 32 - shift >>> 0;
-}
-function createHasher(hashCons, info = {}) {
-  const hashC = (msg, opts) => hashCons(opts).update(msg).digest();
-  const tmp = hashCons(void 0);
-  hashC.outputLen = tmp.outputLen;
-  hashC.blockLen = tmp.blockLen;
-  hashC.canXOF = tmp.canXOF;
-  hashC.create = (opts) => hashCons(opts);
-  Object.assign(hashC, info);
-  return Object.freeze(hashC);
-}
-function randomBytes(bytesLength = 32) {
-  anumber2(bytesLength, "bytesLength");
-  const cr = typeof globalThis === "object" ? globalThis.crypto : null;
-  if (typeof cr?.getRandomValues !== "function")
-    throw new Error("crypto.getRandomValues must be defined");
-  if (bytesLength > 65536)
-    throw new RangeError(`"bytesLength" expected <= 65536, got ${bytesLength}`);
-  return cr.getRandomValues(new Uint8Array(bytesLength));
-}
-var oidNist = (suffix) => ({
-  // Current NIST hashAlgs suffixes used here fit in one DER subidentifier octet.
-  // Larger suffix values would need base-128 OID encoding and a different length byte.
-  oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
-});
-
-// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/hmac.js
-var _HMAC = class {
-  oHash;
-  iHash;
-  blockLen;
-  outputLen;
-  canXOF = false;
-  finished = false;
-  destroyed = false;
-  constructor(hash, key) {
-    ahash(hash);
-    abytes(key, void 0, "key");
-    this.iHash = hash.create();
-    if (typeof this.iHash.update !== "function")
-      throw new Error("Expected instance of class which extends utils.Hash");
-    this.blockLen = this.iHash.blockLen;
-    this.outputLen = this.iHash.outputLen;
-    const blockLen = this.blockLen;
-    const pad = new Uint8Array(blockLen);
-    pad.set(key.length > blockLen ? hash.create().update(key).digest() : key);
-    for (let i2 = 0; i2 < pad.length; i2++)
-      pad[i2] ^= 54;
-    this.iHash.update(pad);
-    this.oHash = hash.create();
-    for (let i2 = 0; i2 < pad.length; i2++)
-      pad[i2] ^= 54 ^ 92;
-    this.oHash.update(pad);
-    clean(pad);
-  }
-  update(buf) {
-    aexists(this);
-    this.iHash.update(buf);
-    return this;
-  }
-  digestInto(out) {
-    aexists(this);
-    aoutput(out, this);
-    this.finished = true;
-    const buf = out.subarray(0, this.outputLen);
-    this.iHash.digestInto(buf);
-    this.oHash.update(buf);
-    this.oHash.digestInto(buf);
-    this.destroy();
-  }
-  digest() {
-    const out = new Uint8Array(this.oHash.outputLen);
-    this.digestInto(out);
-    return out;
-  }
-  _cloneInto(to) {
-    to ||= Object.create(Object.getPrototypeOf(this), {});
-    const { oHash, iHash, finished, destroyed, blockLen, outputLen } = this;
-    to = to;
-    to.finished = finished;
-    to.destroyed = destroyed;
-    to.blockLen = blockLen;
-    to.outputLen = outputLen;
-    to.oHash = oHash._cloneInto(to.oHash);
-    to.iHash = iHash._cloneInto(to.iHash);
-    return to;
-  }
-  clone() {
-    return this._cloneInto();
-  }
-  destroy() {
-    this.destroyed = true;
-    this.oHash.destroy();
-    this.iHash.destroy();
-  }
-};
-var hmac = /* @__PURE__ */ (() => {
-  const hmac_ = ((hash, key, message) => new _HMAC(hash, key).update(message).digest());
-  hmac_.create = (hash, key) => new _HMAC(hash, key);
-  return hmac_;
-})();
-
-// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_md.js
-function Chi(a2, b3, c3) {
-  return a2 & b3 ^ ~a2 & c3;
-}
-function Maj(a2, b3, c3) {
-  return a2 & b3 ^ a2 & c3 ^ b3 & c3;
-}
-var HashMD = class {
-  blockLen;
-  outputLen;
-  canXOF = false;
-  padOffset;
-  isLE;
-  // For partial updates less than block size
-  buffer;
-  view;
-  finished = false;
-  length = 0;
-  pos = 0;
-  destroyed = false;
-  constructor(blockLen, outputLen, padOffset, isLE) {
-    this.blockLen = blockLen;
-    this.outputLen = outputLen;
-    this.padOffset = padOffset;
-    this.isLE = isLE;
-    this.buffer = new Uint8Array(blockLen);
-    this.view = createView(this.buffer);
-  }
-  update(data) {
-    aexists(this);
-    abytes(data);
-    const { view, buffer, blockLen } = this;
-    const len = data.length;
-    for (let pos = 0; pos < len; ) {
-      const take = Math.min(blockLen - this.pos, len - pos);
-      if (take === blockLen) {
-        const dataView = createView(data);
-        for (; blockLen <= len - pos; pos += blockLen)
-          this.process(dataView, pos);
-        continue;
-      }
-      buffer.set(data.subarray(pos, pos + take), this.pos);
-      this.pos += take;
-      pos += take;
-      if (this.pos === blockLen) {
-        this.process(view, 0);
-        this.pos = 0;
-      }
-    }
-    this.length += data.length;
-    this.roundClean();
-    return this;
-  }
-  digestInto(out) {
-    aexists(this);
-    aoutput(out, this);
-    this.finished = true;
-    const { buffer, view, blockLen, isLE } = this;
-    let { pos } = this;
-    buffer[pos++] = 128;
-    clean(this.buffer.subarray(pos));
-    if (this.padOffset > blockLen - pos) {
-      this.process(view, 0);
-      pos = 0;
-    }
-    for (let i2 = pos; i2 < blockLen; i2++)
-      buffer[i2] = 0;
-    view.setBigUint64(blockLen - 8, BigInt(this.length * 8), isLE);
-    this.process(view, 0);
-    const oview = createView(out);
-    const len = this.outputLen;
-    if (len % 4)
-      throw new Error("_sha2: outputLen must be aligned to 32bit");
-    const outLen = len / 4;
-    const state = this.get();
-    if (outLen > state.length)
-      throw new Error("_sha2: outputLen bigger than state");
-    for (let i2 = 0; i2 < outLen; i2++)
-      oview.setUint32(4 * i2, state[i2], isLE);
-  }
-  digest() {
-    const { buffer, outputLen } = this;
-    this.digestInto(buffer);
-    const res = buffer.slice(0, outputLen);
-    this.destroy();
-    return res;
-  }
-  _cloneInto(to) {
-    to ||= new this.constructor();
-    to.set(...this.get());
-    const { blockLen, buffer, length, finished, destroyed, pos } = this;
-    to.destroyed = destroyed;
-    to.finished = finished;
-    to.length = length;
-    to.pos = pos;
-    if (length % blockLen)
-      to.buffer.set(buffer);
-    return to;
-  }
-  clone() {
-    return this._cloneInto();
-  }
-};
-var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
-  1779033703,
-  3144134277,
-  1013904242,
-  2773480762,
-  1359893119,
-  2600822924,
-  528734635,
-  1541459225
-]);
-var SHA512_IV = /* @__PURE__ */ Uint32Array.from([
-  1779033703,
-  4089235720,
-  3144134277,
-  2227873595,
-  1013904242,
-  4271175723,
-  2773480762,
-  1595750129,
-  1359893119,
-  2917565137,
-  2600822924,
-  725511199,
-  528734635,
-  4215389547,
-  1541459225,
-  327033209
-]);
-
-// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/legacy.js
-var SHA1_IV = /* @__PURE__ */ Uint32Array.from([
-  1732584193,
-  4023233417,
-  2562383102,
-  271733878,
-  3285377520
-]);
-var SHA1_W = /* @__PURE__ */ new Uint32Array(80);
-var _SHA1 = class extends HashMD {
-  A = SHA1_IV[0] | 0;
-  B = SHA1_IV[1] | 0;
-  C = SHA1_IV[2] | 0;
-  D = SHA1_IV[3] | 0;
-  E = SHA1_IV[4] | 0;
-  constructor() {
-    super(64, 20, 8, false);
-  }
-  get() {
-    const { A: A3, B: B2, C: C2, D, E } = this;
-    return [A3, B2, C2, D, E];
-  }
-  set(A3, B2, C2, D, E) {
-    this.A = A3 | 0;
-    this.B = B2 | 0;
-    this.C = C2 | 0;
-    this.D = D | 0;
-    this.E = E | 0;
-  }
-  process(view, offset) {
-    for (let i2 = 0; i2 < 16; i2++, offset += 4)
-      SHA1_W[i2] = view.getUint32(offset, false);
-    for (let i2 = 16; i2 < 80; i2++)
-      SHA1_W[i2] = rotl(SHA1_W[i2 - 3] ^ SHA1_W[i2 - 8] ^ SHA1_W[i2 - 14] ^ SHA1_W[i2 - 16], 1);
-    let { A: A3, B: B2, C: C2, D, E } = this;
-    for (let i2 = 0; i2 < 80; i2++) {
-      let F2, K2;
-      if (i2 < 20) {
-        F2 = Chi(B2, C2, D);
-        K2 = 1518500249;
-      } else if (i2 < 40) {
-        F2 = B2 ^ C2 ^ D;
-        K2 = 1859775393;
-      } else if (i2 < 60) {
-        F2 = Maj(B2, C2, D);
-        K2 = 2400959708;
-      } else {
-        F2 = B2 ^ C2 ^ D;
-        K2 = 3395469782;
-      }
-      const T2 = rotl(A3, 5) + F2 + E + K2 + SHA1_W[i2] | 0;
-      E = D;
-      D = C2;
-      C2 = rotl(B2, 30);
-      B2 = A3;
-      A3 = T2;
-    }
-    A3 = A3 + this.A | 0;
-    B2 = B2 + this.B | 0;
-    C2 = C2 + this.C | 0;
-    D = D + this.D | 0;
-    E = E + this.E | 0;
-    this.set(A3, B2, C2, D, E);
-  }
-  roundClean() {
-    clean(SHA1_W);
-  }
-  destroy() {
-    this.destroyed = true;
-    this.set(0, 0, 0, 0, 0);
-    clean(this.buffer);
-  }
-};
-var sha1 = /* @__PURE__ */ createHasher(() => new _SHA1());
-
-// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/_u64.js
-var U32_MASK64 = /* @__PURE__ */ BigInt(2 ** 32 - 1);
-var _32n = /* @__PURE__ */ BigInt(32);
-function fromBig(n, le = false) {
-  if (le)
-    return { h: Number(n & U32_MASK64), l: Number(n >> _32n & U32_MASK64) };
-  return { h: Number(n >> _32n & U32_MASK64) | 0, l: Number(n & U32_MASK64) | 0 };
-}
-function split(lst, le = false) {
-  const len = lst.length;
-  let Ah = new Uint32Array(len);
-  let Al = new Uint32Array(len);
-  for (let i2 = 0; i2 < len; i2++) {
-    const { h: h4, l: l2 } = fromBig(lst[i2], le);
-    [Ah[i2], Al[i2]] = [h4, l2];
-  }
-  return [Ah, Al];
-}
-var shrSH = (h4, _l, s) => h4 >>> s;
-var shrSL = (h4, l2, s) => h4 << 32 - s | l2 >>> s;
-var rotrSH = (h4, l2, s) => h4 >>> s | l2 << 32 - s;
-var rotrSL = (h4, l2, s) => h4 << 32 - s | l2 >>> s;
-var rotrBH = (h4, l2, s) => h4 << 64 - s | l2 >>> s - 32;
-var rotrBL = (h4, l2, s) => h4 >>> s - 32 | l2 << 64 - s;
-function add(Ah, Al, Bh, Bl) {
-  const l2 = (Al >>> 0) + (Bl >>> 0);
-  return { h: Ah + Bh + (l2 / 2 ** 32 | 0) | 0, l: l2 | 0 };
-}
-var add3L = (Al, Bl, Cl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0);
-var add3H = (low, Ah, Bh, Ch) => Ah + Bh + Ch + (low / 2 ** 32 | 0) | 0;
-var add4L = (Al, Bl, Cl, Dl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0);
-var add4H = (low, Ah, Bh, Ch, Dh) => Ah + Bh + Ch + Dh + (low / 2 ** 32 | 0) | 0;
-var add5L = (Al, Bl, Cl, Dl, El) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0) + (El >>> 0);
-var add5H = (low, Ah, Bh, Ch, Dh, Eh) => Ah + Bh + Ch + Dh + Eh + (low / 2 ** 32 | 0) | 0;
-
-// ../../node_modules/.pnpm/@noble+hashes@2.2.0/node_modules/@noble/hashes/sha2.js
-var SHA256_K = /* @__PURE__ */ Uint32Array.from([
-  1116352408,
-  1899447441,
-  3049323471,
-  3921009573,
-  961987163,
-  1508970993,
-  2453635748,
-  2870763221,
-  3624381080,
-  310598401,
-  607225278,
-  1426881987,
-  1925078388,
-  2162078206,
-  2614888103,
-  3248222580,
-  3835390401,
-  4022224774,
-  264347078,
-  604807628,
-  770255983,
-  1249150122,
-  1555081692,
-  1996064986,
-  2554220882,
-  2821834349,
-  2952996808,
-  3210313671,
-  3336571891,
-  3584528711,
-  113926993,
-  338241895,
-  666307205,
-  773529912,
-  1294757372,
-  1396182291,
-  1695183700,
-  1986661051,
-  2177026350,
-  2456956037,
-  2730485921,
-  2820302411,
-  3259730800,
-  3345764771,
-  3516065817,
-  3600352804,
-  4094571909,
-  275423344,
-  430227734,
-  506948616,
-  659060556,
-  883997877,
-  958139571,
-  1322822218,
-  1537002063,
-  1747873779,
-  1955562222,
-  2024104815,
-  2227730452,
-  2361852424,
-  2428436474,
-  2756734187,
-  3204031479,
-  3329325298
-]);
-var SHA256_W = /* @__PURE__ */ new Uint32Array(64);
-var SHA2_32B = class extends HashMD {
-  constructor(outputLen) {
-    super(64, outputLen, 8, false);
-  }
-  get() {
-    const { A: A3, B: B2, C: C2, D, E, F: F2, G: G2, H } = this;
-    return [A3, B2, C2, D, E, F2, G2, H];
-  }
-  // prettier-ignore
-  set(A3, B2, C2, D, E, F2, G2, H) {
-    this.A = A3 | 0;
-    this.B = B2 | 0;
-    this.C = C2 | 0;
-    this.D = D | 0;
-    this.E = E | 0;
-    this.F = F2 | 0;
-    this.G = G2 | 0;
-    this.H = H | 0;
-  }
-  process(view, offset) {
-    for (let i2 = 0; i2 < 16; i2++, offset += 4)
-      SHA256_W[i2] = view.getUint32(offset, false);
-    for (let i2 = 16; i2 < 64; i2++) {
-      const W15 = SHA256_W[i2 - 15];
-      const W2 = SHA256_W[i2 - 2];
-      const s0 = rotr(W15, 7) ^ rotr(W15, 18) ^ W15 >>> 3;
-      const s1 = rotr(W2, 17) ^ rotr(W2, 19) ^ W2 >>> 10;
-      SHA256_W[i2] = s1 + SHA256_W[i2 - 7] + s0 + SHA256_W[i2 - 16] | 0;
-    }
-    let { A: A3, B: B2, C: C2, D, E, F: F2, G: G2, H } = this;
-    for (let i2 = 0; i2 < 64; i2++) {
-      const sigma1 = rotr(E, 6) ^ rotr(E, 11) ^ rotr(E, 25);
-      const T1 = H + sigma1 + Chi(E, F2, G2) + SHA256_K[i2] + SHA256_W[i2] | 0;
-      const sigma0 = rotr(A3, 2) ^ rotr(A3, 13) ^ rotr(A3, 22);
-      const T2 = sigma0 + Maj(A3, B2, C2) | 0;
-      H = G2;
-      G2 = F2;
-      F2 = E;
-      E = D + T1 | 0;
-      D = C2;
-      C2 = B2;
-      B2 = A3;
-      A3 = T1 + T2 | 0;
-    }
-    A3 = A3 + this.A | 0;
-    B2 = B2 + this.B | 0;
-    C2 = C2 + this.C | 0;
-    D = D + this.D | 0;
-    E = E + this.E | 0;
-    F2 = F2 + this.F | 0;
-    G2 = G2 + this.G | 0;
-    H = H + this.H | 0;
-    this.set(A3, B2, C2, D, E, F2, G2, H);
-  }
-  roundClean() {
-    clean(SHA256_W);
-  }
-  destroy() {
-    this.destroyed = true;
-    this.set(0, 0, 0, 0, 0, 0, 0, 0);
-    clean(this.buffer);
-  }
-};
-var _SHA256 = class extends SHA2_32B {
-  // We cannot use array here since array allows indexing by variable
-  // which means optimizer/compiler cannot use registers.
-  A = SHA256_IV[0] | 0;
-  B = SHA256_IV[1] | 0;
-  C = SHA256_IV[2] | 0;
-  D = SHA256_IV[3] | 0;
-  E = SHA256_IV[4] | 0;
-  F = SHA256_IV[5] | 0;
-  G = SHA256_IV[6] | 0;
-  H = SHA256_IV[7] | 0;
-  constructor() {
-    super(32);
-  }
-};
-var K512 = /* @__PURE__ */ (() => split([
-  "0x428a2f98d728ae22",
-  "0x7137449123ef65cd",
-  "0xb5c0fbcfec4d3b2f",
-  "0xe9b5dba58189dbbc",
-  "0x3956c25bf348b538",
-  "0x59f111f1b605d019",
-  "0x923f82a4af194f9b",
-  "0xab1c5ed5da6d8118",
-  "0xd807aa98a3030242",
-  "0x12835b0145706fbe",
-  "0x243185be4ee4b28c",
-  "0x550c7dc3d5ffb4e2",
-  "0x72be5d74f27b896f",
-  "0x80deb1fe3b1696b1",
-  "0x9bdc06a725c71235",
-  "0xc19bf174cf692694",
-  "0xe49b69c19ef14ad2",
-  "0xefbe4786384f25e3",
-  "0x0fc19dc68b8cd5b5",
-  "0x240ca1cc77ac9c65",
-  "0x2de92c6f592b0275",
-  "0x4a7484aa6ea6e483",
-  "0x5cb0a9dcbd41fbd4",
-  "0x76f988da831153b5",
-  "0x983e5152ee66dfab",
-  "0xa831c66d2db43210",
-  "0xb00327c898fb213f",
-  "0xbf597fc7beef0ee4",
-  "0xc6e00bf33da88fc2",
-  "0xd5a79147930aa725",
-  "0x06ca6351e003826f",
-  "0x142929670a0e6e70",
-  "0x27b70a8546d22ffc",
-  "0x2e1b21385c26c926",
-  "0x4d2c6dfc5ac42aed",
-  "0x53380d139d95b3df",
-  "0x650a73548baf63de",
-  "0x766a0abb3c77b2a8",
-  "0x81c2c92e47edaee6",
-  "0x92722c851482353b",
-  "0xa2bfe8a14cf10364",
-  "0xa81a664bbc423001",
-  "0xc24b8b70d0f89791",
-  "0xc76c51a30654be30",
-  "0xd192e819d6ef5218",
-  "0xd69906245565a910",
-  "0xf40e35855771202a",
-  "0x106aa07032bbd1b8",
-  "0x19a4c116b8d2d0c8",
-  "0x1e376c085141ab53",
-  "0x2748774cdf8eeb99",
-  "0x34b0bcb5e19b48a8",
-  "0x391c0cb3c5c95a63",
-  "0x4ed8aa4ae3418acb",
-  "0x5b9cca4f7763e373",
-  "0x682e6ff3d6b2b8a3",
-  "0x748f82ee5defb2fc",
-  "0x78a5636f43172f60",
-  "0x84c87814a1f0ab72",
-  "0x8cc702081a6439ec",
-  "0x90befffa23631e28",
-  "0xa4506cebde82bde9",
-  "0xbef9a3f7b2c67915",
-  "0xc67178f2e372532b",
-  "0xca273eceea26619c",
-  "0xd186b8c721c0c207",
-  "0xeada7dd6cde0eb1e",
-  "0xf57d4f7fee6ed178",
-  "0x06f067aa72176fba",
-  "0x0a637dc5a2c898a6",
-  "0x113f9804bef90dae",
-  "0x1b710b35131c471b",
-  "0x28db77f523047d84",
-  "0x32caab7b40c72493",
-  "0x3c9ebe0a15c9bebc",
-  "0x431d67c49c100d4c",
-  "0x4cc5d4becb3e42b6",
-  "0x597f299cfc657e2a",
-  "0x5fcb6fab3ad6faec",
-  "0x6c44198c4a475817"
-].map((n) => BigInt(n))))();
-var SHA512_Kh = /* @__PURE__ */ (() => K512[0])();
-var SHA512_Kl = /* @__PURE__ */ (() => K512[1])();
-var SHA512_W_H = /* @__PURE__ */ new Uint32Array(80);
-var SHA512_W_L = /* @__PURE__ */ new Uint32Array(80);
-var SHA2_64B = class extends HashMD {
-  constructor(outputLen) {
-    super(128, outputLen, 16, false);
-  }
-  // prettier-ignore
-  get() {
-    const { Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl } = this;
-    return [Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl];
-  }
-  // prettier-ignore
-  set(Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl) {
-    this.Ah = Ah | 0;
-    this.Al = Al | 0;
-    this.Bh = Bh | 0;
-    this.Bl = Bl | 0;
-    this.Ch = Ch | 0;
-    this.Cl = Cl | 0;
-    this.Dh = Dh | 0;
-    this.Dl = Dl | 0;
-    this.Eh = Eh | 0;
-    this.El = El | 0;
-    this.Fh = Fh | 0;
-    this.Fl = Fl | 0;
-    this.Gh = Gh | 0;
-    this.Gl = Gl | 0;
-    this.Hh = Hh | 0;
-    this.Hl = Hl | 0;
-  }
-  process(view, offset) {
-    for (let i2 = 0; i2 < 16; i2++, offset += 4) {
-      SHA512_W_H[i2] = view.getUint32(offset);
-      SHA512_W_L[i2] = view.getUint32(offset += 4);
-    }
-    for (let i2 = 16; i2 < 80; i2++) {
-      const W15h = SHA512_W_H[i2 - 15] | 0;
-      const W15l = SHA512_W_L[i2 - 15] | 0;
-      const s0h = rotrSH(W15h, W15l, 1) ^ rotrSH(W15h, W15l, 8) ^ shrSH(W15h, W15l, 7);
-      const s0l = rotrSL(W15h, W15l, 1) ^ rotrSL(W15h, W15l, 8) ^ shrSL(W15h, W15l, 7);
-      const W2h = SHA512_W_H[i2 - 2] | 0;
-      const W2l = SHA512_W_L[i2 - 2] | 0;
-      const s1h = rotrSH(W2h, W2l, 19) ^ rotrBH(W2h, W2l, 61) ^ shrSH(W2h, W2l, 6);
-      const s1l = rotrSL(W2h, W2l, 19) ^ rotrBL(W2h, W2l, 61) ^ shrSL(W2h, W2l, 6);
-      const SUMl = add4L(s0l, s1l, SHA512_W_L[i2 - 7], SHA512_W_L[i2 - 16]);
-      const SUMh = add4H(SUMl, s0h, s1h, SHA512_W_H[i2 - 7], SHA512_W_H[i2 - 16]);
-      SHA512_W_H[i2] = SUMh | 0;
-      SHA512_W_L[i2] = SUMl | 0;
-    }
-    let { Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl } = this;
-    for (let i2 = 0; i2 < 80; i2++) {
-      const sigma1h = rotrSH(Eh, El, 14) ^ rotrSH(Eh, El, 18) ^ rotrBH(Eh, El, 41);
-      const sigma1l = rotrSL(Eh, El, 14) ^ rotrSL(Eh, El, 18) ^ rotrBL(Eh, El, 41);
-      const CHIh = Eh & Fh ^ ~Eh & Gh;
-      const CHIl = El & Fl ^ ~El & Gl;
-      const T1ll = add5L(Hl, sigma1l, CHIl, SHA512_Kl[i2], SHA512_W_L[i2]);
-      const T1h = add5H(T1ll, Hh, sigma1h, CHIh, SHA512_Kh[i2], SHA512_W_H[i2]);
-      const T1l = T1ll | 0;
-      const sigma0h = rotrSH(Ah, Al, 28) ^ rotrBH(Ah, Al, 34) ^ rotrBH(Ah, Al, 39);
-      const sigma0l = rotrSL(Ah, Al, 28) ^ rotrBL(Ah, Al, 34) ^ rotrBL(Ah, Al, 39);
-      const MAJh = Ah & Bh ^ Ah & Ch ^ Bh & Ch;
-      const MAJl = Al & Bl ^ Al & Cl ^ Bl & Cl;
-      Hh = Gh | 0;
-      Hl = Gl | 0;
-      Gh = Fh | 0;
-      Gl = Fl | 0;
-      Fh = Eh | 0;
-      Fl = El | 0;
-      ({ h: Eh, l: El } = add(Dh | 0, Dl | 0, T1h | 0, T1l | 0));
-      Dh = Ch | 0;
-      Dl = Cl | 0;
-      Ch = Bh | 0;
-      Cl = Bl | 0;
-      Bh = Ah | 0;
-      Bl = Al | 0;
-      const All = add3L(T1l, sigma0l, MAJl);
-      Ah = add3H(All, T1h, sigma0h, MAJh);
-      Al = All | 0;
-    }
-    ({ h: Ah, l: Al } = add(this.Ah | 0, this.Al | 0, Ah | 0, Al | 0));
-    ({ h: Bh, l: Bl } = add(this.Bh | 0, this.Bl | 0, Bh | 0, Bl | 0));
-    ({ h: Ch, l: Cl } = add(this.Ch | 0, this.Cl | 0, Ch | 0, Cl | 0));
-    ({ h: Dh, l: Dl } = add(this.Dh | 0, this.Dl | 0, Dh | 0, Dl | 0));
-    ({ h: Eh, l: El } = add(this.Eh | 0, this.El | 0, Eh | 0, El | 0));
-    ({ h: Fh, l: Fl } = add(this.Fh | 0, this.Fl | 0, Fh | 0, Fl | 0));
-    ({ h: Gh, l: Gl } = add(this.Gh | 0, this.Gl | 0, Gh | 0, Gl | 0));
-    ({ h: Hh, l: Hl } = add(this.Hh | 0, this.Hl | 0, Hh | 0, Hl | 0));
-    this.set(Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl);
-  }
-  roundClean() {
-    clean(SHA512_W_H, SHA512_W_L);
-  }
-  destroy() {
-    this.destroyed = true;
-    clean(this.buffer);
-    this.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-  }
-};
-var _SHA512 = class extends SHA2_64B {
-  Ah = SHA512_IV[0] | 0;
-  Al = SHA512_IV[1] | 0;
-  Bh = SHA512_IV[2] | 0;
-  Bl = SHA512_IV[3] | 0;
-  Ch = SHA512_IV[4] | 0;
-  Cl = SHA512_IV[5] | 0;
-  Dh = SHA512_IV[6] | 0;
-  Dl = SHA512_IV[7] | 0;
-  Eh = SHA512_IV[8] | 0;
-  El = SHA512_IV[9] | 0;
-  Fh = SHA512_IV[10] | 0;
-  Fl = SHA512_IV[11] | 0;
-  Gh = SHA512_IV[12] | 0;
-  Gl = SHA512_IV[13] | 0;
-  Hh = SHA512_IV[14] | 0;
-  Hl = SHA512_IV[15] | 0;
-  constructor() {
-    super(64);
-  }
-};
-var sha256 = /* @__PURE__ */ createHasher(
-  () => new _SHA256(),
-  /* @__PURE__ */ oidNist(1)
-);
-var sha512 = /* @__PURE__ */ createHasher(
-  () => new _SHA512(),
-  /* @__PURE__ */ oidNist(3)
-);
-
-// ../../node_modules/.pnpm/@otplib+plugin-crypto-noble@13.4.0/node_modules/@otplib/plugin-crypto-noble/dist/index.js
-var t = class {
-  name = "noble";
-  hmac(r2, n, a2) {
-    return hmac(r2 === "sha1" ? sha1 : r2 === "sha256" ? sha256 : sha512, n, a2);
-  }
-  randomBytes(r2) {
-    return randomBytes(r2);
-  }
-  constantTimeEqual(r2, n) {
-    return tr(r2, n);
-  }
-};
-var A2 = Object.freeze(new t());
-
-// ../../node_modules/.pnpm/otplib@13.4.0/node_modules/otplib/dist/index.js
-function c2(t2) {
-  return { secret: t2.secret, strategy: t2.strategy ?? "totp", crypto: t2.crypto ?? A2, base32: t2.base32 ?? d2, algorithm: t2.algorithm ?? "sha1", digits: t2.digits ?? 6, period: t2.period ?? 30, epoch: t2.epoch ?? Math.floor(Date.now() / 1e3), t0: t2.t0 ?? 0, counter: t2.counter, guardrails: t2.guardrails ?? hr(), hooks: t2.hooks };
-}
-function l(t2, e, r2) {
-  if (t2 === "totp") return r2.totp();
-  if (t2 === "hotp") {
-    if (e === void 0) throw new a("Counter is required for HOTP strategy. Example: { strategy: 'hotp', counter: 0 }");
-    return r2.hotp(e);
-  }
-  throw new a(`Unknown OTP strategy: ${t2}. Valid strategies are 'totp' or 'hotp'.`);
-}
-async function m2(t2) {
-  let e = c2(t2), { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s, hooks: n } = e, p = { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s, hooks: n };
-  return l(e.strategy, e.counter, { totp: () => b2({ ...p, period: e.period, epoch: e.epoch, t0: e.t0, guardrails: e.guardrails }), hotp: (y2) => O2({ ...p, counter: y2, guardrails: e.guardrails }) });
-}
-function h3(t2) {
-  let e = c2(t2), { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s } = e, n = { secret: r2, crypto: a2, base32: o, algorithm: i2, digits: s };
-  return l(e.strategy, e.counter, { totp: () => Z2({ ...n, period: e.period, epoch: e.epoch, t0: e.t0, guardrails: e.guardrails }), hotp: (p) => F({ ...n, counter: p, guardrails: e.guardrails }) });
-}
-
-// src/instagram/instagramLogin.ts
+init_dist6();
 async function logApiCall(profileId, operationName, status, source, navChain, ipAddress, durationMs) {
   try {
     await db.insert(instagramApiCalls).values({
@@ -142346,6 +143508,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // src/instagram/browserSession.ts
+init_dist6();
 import fs from "fs";
 import path2 from "path";
 function log(msg, _category) {
@@ -142915,1050 +144078,8 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
   }
 }
 
-// src/instagram/instagramWebClient.ts
-import * as https from "https";
-import * as fs2 from "fs";
-function httpsRequest(options, body) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => {
-        data += chunk;
-      });
-      res.on("end", () => {
-        resolve({ status: res.statusCode ?? 0, headers: res.headers, body: data });
-      });
-    });
-    req.on("error", reject);
-    req.setTimeout(6e4, () => {
-      req.destroy(new Error("timeout"));
-    });
-    if (body) req.write(body);
-    req.end();
-  });
-}
-async function igReq(opts) {
-  const { host = "www.instagram.com", path: path4, method, headers, body, cookieJar = [], proxyUrl } = opts;
-  const reqHeaders = {
-    ...headers,
-    ...cookieJar.length ? { Cookie: cookieJar.join("; ") } : {},
-    ...body ? { "Content-Length": String(Buffer.byteLength(body)) } : {}
-  };
-  let agent;
-  if (proxyUrl) {
-    const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
-    agent = new HttpsProxyAgent2(proxyUrl);
-  }
-  const res = await httpsRequest(
-    { host, port: 443, path: path4, method, headers: reqHeaders, ...agent ? { agent } : {} },
-    body
-  );
-  const raw = res.headers["set-cookie"];
-  const newCookies = (Array.isArray(raw) ? raw : raw ? [raw] : []).map((c3) => c3.split(";")[0]);
-  let json2 = null;
-  try {
-    json2 = JSON.parse(res.body);
-  } catch {
-  }
-  return { status: res.status, cookies: newCookies, json: json2, rawBody: res.body };
-}
-function mergeCookies(base, overrides) {
-  const map2 = /* @__PURE__ */ new Map();
-  for (const c3 of [...base, ...overrides]) map2.set(c3.split("=")[0], c3);
-  return Array.from(map2.values());
-}
-function extractCsrf(cookies) {
-  for (const c3 of cookies) {
-    if (c3.startsWith("csrftoken=")) return c3.split("=")[1];
-  }
-  return "";
-}
-var WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-var APP_ID = "936619743392459";
-var InstagramWebClient = class {
-  cookieJar = [];
-  csrfToken = "";
-  proxyUrl;
-  logCallFn;
-  profileId;
-  // User-agent to use for web (www.instagram.com) POST requests.
-  // Should match the EB browser's UA so that cookies and UA are consistent.
-  webUserAgent = WEB_UA;
-  // API throttle — enforces the per-profile "x calls every y seconds" limit.
-  // Computed as a per-call delay = everySeconds / requestsCount, so all calls
-  // are evenly spaced rather than firing in an instant burst.
-  throttleRequestsMin = 5;
-  throttleRequestsMax = 10;
-  throttleSecondsMin = 3;
-  throttleSecondsMax = 8;
-  constructor(proxyUrl, profileId) {
-    this.proxyUrl = proxyUrl;
-    this.profileId = profileId;
-  }
-  setApiLimits(limits) {
-    this.throttleRequestsMin = Math.max(1, limits.requestsMin);
-    this.throttleRequestsMax = Math.max(1, limits.requestsMax);
-    this.throttleSecondsMin = Math.max(0, limits.everySecondsMin);
-    this.throttleSecondsMax = Math.max(0, limits.everySecondsMax);
-  }
-  async apiThrottle() {
-    const calls = this.throttleRequestsMin + Math.random() * (this.throttleRequestsMax - this.throttleRequestsMin);
-    const secs = this.throttleSecondsMin + Math.random() * (this.throttleSecondsMax - this.throttleSecondsMin);
-    const delayMs = Math.floor(secs / Math.max(1, calls) * 1e3);
-    if (delayMs > 10) {
-      await new Promise((r2) => setTimeout(r2, delayMs));
-    }
-  }
-  setLogger(fn) {
-    this.logCallFn = fn;
-  }
-  // Set the user-agent for web POST requests so it matches the EB browser's UA.
-  // This is critical — cookies are bound to the UA that created them.
-  // Using a different UA than the EB browser causes Instagram to 302-redirect to login.
-  setWebUserAgent(ua) {
-    if (ua) this.webUserAgent = ua;
-  }
-  // ── Load cookies from the EB browser session ───────────────────────────────
-  // Reads the Puppeteer cookie file and syncs those cookies into our jar so
-  // the engine shares the same Instagram session as the embedded browser.
-  // Returns true if a valid sessionid was found.
-  loadBrowserCookies() {
-    if (!this.profileId) return false;
-    const filePath = `${process.cwd()}/server/browser-data/cookies-${this.profileId}.json`;
-    try {
-      if (!fs2.existsSync(filePath)) return false;
-      const raw = fs2.readFileSync(filePath, "utf8");
-      const puppeteerCookies = JSON.parse(raw);
-      if (!Array.isArray(puppeteerCookies)) return false;
-      const igCookies = puppeteerCookies.filter((c3) => (c3.domain ?? "").includes("instagram.com"));
-      if (!igCookies.length) return false;
-      const asSetCookie = igCookies.map((c3) => `${c3.name}=${c3.value}`);
-      this.cookieJar = mergeCookies(this.cookieJar, asSetCookie);
-      const csrf = igCookies.find((c3) => c3.name === "csrftoken");
-      if (csrf) this.csrfToken = csrf.value;
-      const hasSession = igCookies.some((c3) => c3.name === "sessionid");
-      console.log(`[webClient] loadBrowserCookies: synced ${igCookies.length} cookies, sessionid=${hasSession}, csrf=${!!csrf}`);
-      return hasSession;
-    } catch (err) {
-      console.warn("[webClient] loadBrowserCookies failed:", err?.message);
-      return false;
-    }
-  }
-  async timed(opName, fn, message) {
-    const t0 = Date.now();
-    const result = await fn();
-    const ms = Date.now() - t0;
-    const msg = typeof message === "function" ? message(result) : message;
-    this.logCallFn?.(opName, ms, msg);
-    return result;
-  }
-  // ── Login (web + 2FA TOTP) ─────────────────────────────────────────────────
-  async login(username, password, twoFaSecret) {
-    return this.timed("Login", () => this._login(username, password, twoFaSecret), `@${username} login`);
-  }
-  async _login(username, password, twoFaSecret) {
-    const pageRes = await igReq({
-      path: "/accounts/login/",
-      method: "GET",
-      headers: {
-        Host: "www.instagram.com",
-        "User-Agent": WEB_UA,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9"
-      },
-      proxyUrl: this.proxyUrl
-    });
-    let csrf = extractCsrf(pageRes.cookies);
-    if (!csrf) {
-      const m3 = pageRes.rawBody.match(/"csrf_token":"([^"]+)"/);
-      if (m3) csrf = m3[1];
-    }
-    if (!csrf) {
-      console.error("[webClient] login: no csrf on login page");
-      return false;
-    }
-    this.cookieJar = pageRes.cookies;
-    this.csrfToken = csrf;
-    const ts = Math.floor(Date.now() / 1e3);
-    const body = new URLSearchParams({
-      username,
-      enc_password: `#PWD_INSTAGRAM:0:${ts}:${password}`,
-      queryParams: "{}",
-      optIntoOneTap: "false"
-    }).toString();
-    const loginRes = await igReq({
-      path: "/accounts/login/ajax/",
-      method: "POST",
-      headers: {
-        Host: "www.instagram.com",
-        "User-Agent": WEB_UA,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-CSRFToken": this.csrfToken,
-        "X-IG-App-ID": APP_ID,
-        "X-Requested-With": "XMLHttpRequest",
-        Referer: "https://www.instagram.com/accounts/login/",
-        Origin: "https://www.instagram.com"
-      },
-      body,
-      cookieJar: this.cookieJar,
-      proxyUrl: this.proxyUrl
-    });
-    const j = loginRes.json;
-    this.cookieJar = mergeCookies(this.cookieJar, loginRes.cookies);
-    const newCsrf = extractCsrf(loginRes.cookies);
-    if (newCsrf) this.csrfToken = newCsrf;
-    if (j?.authenticated === true) {
-      console.log(`[webClient] @${username}: logged in`);
-      return true;
-    }
-    if (j?.two_factor_required) {
-      const identifier = j?.two_factor_info?.two_factor_identifier ?? "";
-      const secret = twoFaSecret?.replace(/\s+/g, "");
-      if (!secret) {
-        console.error(`[webClient] @${username}: 2FA required but no secret`);
-        return false;
-      }
-      let code;
-      try {
-        code = h3({ secret });
-      } catch {
-        console.error(`[webClient] @${username}: invalid 2FA secret`);
-        return false;
-      }
-      const twoFaBody = new URLSearchParams({
-        username,
-        verificationCode: code,
-        identifier,
-        queryParams: "{}",
-        verificationMethod: "3"
-      }).toString();
-      const tfRes = await igReq({
-        path: "/accounts/login/ajax/two_factor/",
-        method: "POST",
-        headers: {
-          Host: "www.instagram.com",
-          "User-Agent": WEB_UA,
-          Accept: "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Content-Type": "application/x-www-form-urlencoded",
-          "X-CSRFToken": this.csrfToken,
-          "X-IG-App-ID": APP_ID,
-          "X-Requested-With": "XMLHttpRequest",
-          Referer: "https://www.instagram.com/accounts/login/",
-          Origin: "https://www.instagram.com"
-        },
-        body: twoFaBody,
-        cookieJar: this.cookieJar,
-        proxyUrl: this.proxyUrl
-      });
-      this.cookieJar = mergeCookies(this.cookieJar, tfRes.cookies);
-      const tfCsrf = extractCsrf(tfRes.cookies);
-      if (tfCsrf) this.csrfToken = tfCsrf;
-      if (tfRes.json?.authenticated === true) {
-        console.log(`[webClient] @${username}: 2FA OK`);
-        return true;
-      }
-      console.error(`[webClient] @${username}: 2FA rejected: ${tfRes.rawBody.slice(0, 200)}`);
-      return false;
-    }
-    console.error(`[webClient] @${username}: login failed: ${loginRes.rawBody.slice(0, 200)}`);
-    return false;
-  }
-  isLoggedIn() {
-    return this.cookieJar.some((c3) => c3.startsWith("sessionid="));
-  }
-  // ── Common authenticated request helper ────────────────────────────────────
-  // web session GET (www.instagram.com)
-  async webGet(path4) {
-    const res = await igReq({
-      path: path4,
-      method: "GET",
-      headers: {
-        Host: "www.instagram.com",
-        "User-Agent": WEB_UA,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "X-IG-App-ID": APP_ID,
-        "X-CSRFToken": this.csrfToken,
-        "X-Requested-With": "XMLHttpRequest"
-      },
-      cookieJar: this.cookieJar,
-      proxyUrl: this.proxyUrl
-    });
-    if (!res.json) console.log(`[webClient] webGet ${path4} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
-    return res.json;
-  }
-  // mobile-style GET (i.instagram.com) — same cookies, mobile app headers
-  async mobileGet(path4) {
-    await this.apiThrottle();
-    const res = await igReq({
-      host: "i.instagram.com",
-      path: path4,
-      method: "GET",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "X-IG-App-ID": APP_ID,
-        "X-CSRFToken": this.csrfToken,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI"
-      },
-      cookieJar: this.cookieJar,
-      proxyUrl: this.proxyUrl
-    });
-    if (!res.json) console.log(`[webClient] mobileGet ${path4} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
-    return res.json;
-  }
-  // Anonymous mobile GET — NO account cookies sent, account identity never exposed.
-  // Used for source-account scraping (repost) so the account is not linked to the lookup.
-  async mobileGetAnonymous(path4) {
-    const res = await igReq({
-      host: "i.instagram.com",
-      path: path4,
-      method: "GET",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "X-IG-App-ID": APP_ID,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI"
-      },
-      cookieJar: [],
-      // deliberately empty — no session cookies
-      proxyUrl: this.proxyUrl
-    });
-    return res.json;
-  }
-  async webPost(path4, body = "") {
-    await this.apiThrottle();
-    const sessionCookie = this.cookieJar.find((c3) => c3.startsWith("sessionid="));
-    console.log(`[webClient] webPost ${path4} csrf=${this.csrfToken.slice(0, 8)}... session=${sessionCookie ? "present" : "MISSING"}`);
-    const res = await igReq({
-      path: path4,
-      method: "POST",
-      headers: {
-        Host: "www.instagram.com",
-        "User-Agent": WEB_UA,
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-IG-App-ID": APP_ID,
-        "X-CSRFToken": this.csrfToken,
-        "X-Requested-With": "XMLHttpRequest",
-        Referer: "https://www.instagram.com/",
-        Origin: "https://www.instagram.com"
-      },
-      body,
-      cookieJar: this.cookieJar,
-      proxyUrl: this.proxyUrl
-    });
-    if (res.status < 300) {
-      this.cookieJar = mergeCookies(this.cookieJar, res.cookies);
-      const newCsrf = extractCsrf(res.cookies);
-      if (newCsrf) this.csrfToken = newCsrf;
-    }
-    if (!res.json) console.log(`[webClient] webPost ${path4} status=${res.status} body:`, res.rawBody.slice(0, 300));
-    return { json: res.json, status: res.status, rawBody: res.rawBody };
-  }
-  // ── Follow a user by numeric ID ────────────────────────────────────────────
-  async followUser(userId, username) {
-    return this.timed("Follow", async () => {
-      const r1 = await this.webPost(`/api/v1/friendships/create/${userId}/`);
-      if (r1.status === 302 || r1.json === null) return { ok: false, status: "follow_blocked", reason: `HTTP ${r1.status} redirect \u2014 CSRF/session issue` };
-      const j = r1.json;
-      console.log(`[webClient] follow ${userId} HTTP ${r1.status}:`, JSON.stringify(j) ?? r1.rawBody.slice(0, 400));
-      if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
-        const url2 = j?.checkpoint_url ?? "";
-        console.warn(`[webClient] follow ${userId} checkpoint_required \u2014 challenge URL: ${url2}`);
-        return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: url2 };
-      }
-      if (j?.spam === true) {
-        console.warn(`[webClient] follow ${userId} spam \u2014 Instagram blocked this follow as spam`);
-        return { ok: false, status: "follow_blocked", reason: "spam \u2014 Instagram flagged this follow attempt" };
-      }
-      if (j?.require_login || j?.feedback_required || j?.message === "login_required") {
-        const reason = j?.message ?? j?.feedback_message ?? "unknown";
-        console.warn(`[webClient] follow ${userId} blocked:`, reason);
-        return { ok: false, status: "follow_blocked", reason };
-      }
-      if (j?.message && typeof j.message === "string" && j.message.toLowerCase().includes("please wait")) {
-        console.warn(`[webClient] follow ${userId} rate limited:`, j.message);
-        return { ok: false, status: "follow_blocked", reason: j.message };
-      }
-      if (j?.friendship_status) {
-        return { ok: true, status: j.friendship_status.following ? "following" : "requested" };
-      }
-      if (j?.status === "fail") {
-        const reason = j?.message || "Instagram declined (status: fail)";
-        console.warn(`[webClient] follow ${userId} failed:`, reason);
-        return { ok: false, status: "follow_blocked", reason };
-      }
-      console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
-      return { ok: false, status: "follow_blocked", reason: "unexpected response" };
-    }, username ? `Follow @${username}` : `Follow user ${userId}`);
-  }
-  // ── Convert a numeric Instagram media ID to its shortcode ─────────────────
-  mediaIdToShortcode(id) {
-    const ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    const numericPart = id.split("_")[0];
-    let n = BigInt(numericPart);
-    let result = "";
-    while (n > 0n) {
-      result = ALPHA[Number(n % 64n)] + result;
-      n = n / 64n;
-    }
-    return result || "0";
-  }
-  // ── Like a media post by ID ────────────────────────────────────────────────
-  // Returns the post URL on success, "blocked" when Instagram issues a
-  // feedback_required/action-block, or false for any other failure.
-  async likeMedia(mediaId, username) {
-    return this.timed("LikeMedia", async () => {
-      const j = await this.mobilePost(`/api/v1/media/${mediaId}/like/`);
-      const ok = j?.status === "ok";
-      if (!ok) console.log(`[webClient] likeMedia ${mediaId} response:`, JSON.stringify(j));
-      if (!ok) {
-        if (j?.message === "feedback_required" || j?.feedback_required === true) {
-          const title = j?.feedback_title ?? "Action blocked";
-          const expires = j?.expiration_time ? new Date(Number(j.expiration_time) * 1e3).toISOString().split("T")[0] : "unknown";
-          console.warn(`[webClient] likeMedia BLOCKED: ${title} (expires ~${expires})`);
-          return "blocked";
-        }
-        return false;
-      }
-      const shortcode = this.mediaIdToShortcode(mediaId);
-      return `https://www.instagram.com/p/${shortcode}/`;
-    }, username ? `Like post of @${username}` : `Like media ${mediaId}`);
-  }
-  // ── Get a user's recent feed media IDs ────────────────────────────────────
-  async getUserRecentMediaId(userId) {
-    const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=3`);
-    const items = j?.items;
-    if (!Array.isArray(items) || items.length === 0) return null;
-    return String(items[0].id ?? items[0].pk ?? "");
-  }
-  // ── View stories for a user (fetch + mark seen) ───────────────────────────
-  // Returns the stories URL on success, false on failure.
-  async viewStories(userId, username) {
-    return this.timed("ViewStories", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/reels_media/?reel_ids=${userId}`);
-      const reel = j?.reels?.[userId] ?? j?.reels_media?.[0];
-      const items = reel?.items ?? [];
-      if (!items.length) return false;
-      const seenEntries = items.map((item) => {
-        const mediaId = String(item.id ?? item.pk ?? "");
-        const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
-        const seenAt = takenAt + 2;
-        return `${mediaId}_${takenAt}_${seenAt}`;
-      });
-      const body = new URLSearchParams({
-        [`reels[${userId}]`]: seenEntries.join(","),
-        live_vods_skipped: "",
-        nuxes_skipped: ""
-      }).toString();
-      await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
-      return username ? `https://www.instagram.com/stories/${username}/` : `https://www.instagram.com/`;
-    }, username ? `View stories of @${username}` : `View stories of ${userId}`);
-  }
-  // ── View highlights for a user ────────────────────────────────────────────
-  // Returns the specific highlight URL on success, false on failure.
-  async viewHighlights(userId, username) {
-    return this.timed("ViewHighlights", async () => {
-      const j = await this.mobileGet(`/api/v1/highlights/${userId}/highlights_tray/`);
-      const trays = j?.tray ?? [];
-      if (!trays.length) return false;
-      const first = trays[0];
-      const reelId = String(first.id ?? "");
-      if (!reelId) return false;
-      const details = await this.mobileGet(`/api/v1/feed/reels_media/?reel_ids=${reelId}`);
-      const items = details?.reels?.[reelId]?.items ?? details?.reels_media?.[0]?.items ?? [];
-      if (!items.length) return false;
-      const seenEntries = items.map((item) => {
-        const mediaId = String(item.id ?? item.pk ?? "");
-        const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
-        return `${mediaId}_${takenAt}_${takenAt + 2}`;
-      });
-      const body = new URLSearchParams({
-        [`reels[${reelId}]`]: seenEntries.join(","),
-        live_vods_skipped: "",
-        nuxes_skipped: ""
-      }).toString();
-      await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
-      const highlightNumericId = reelId.replace(/^highlight:/, "");
-      return `https://www.instagram.com/stories/highlights/${highlightNumericId}/`;
-    }, username ? `View highlights of @${username}` : `View highlights of ${userId}`);
-  }
-  // ── View reels from the user's feed ─────────────────────────────────────
-  // Returns the first reel URL on success, false on failure.
-  // Marks ALL fetched reels as seen (up to count=6).
-  async viewReels(userId, username) {
-    return this.timed("ViewReels", async () => {
-      const body = new URLSearchParams({ user_id: userId, max_id: "", count: "6", include_feed_video: "true" }).toString();
-      const j = await this.mobilePost(`/api/v1/clips/user/`, body);
-      const items = j?.items ?? [];
-      if (!items.length) return false;
-      const seenEntries = [];
-      let firstShortcode = "";
-      for (const raw of items) {
-        const media = raw?.media ?? raw;
-        const mediaId = String(media?.id ?? media?.pk ?? "");
-        if (!mediaId) continue;
-        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
-        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
-        if (!firstShortcode) firstShortcode = this.mediaIdToShortcode(mediaId);
-      }
-      if (!seenEntries.length) return false;
-      const seenBody = new URLSearchParams({
-        [`reels[${userId}]`]: seenEntries.join(","),
-        live_vods_skipped: "",
-        nuxes_skipped: ""
-      }).toString();
-      await this.mobilePost(`/api/v1/media/seen/`, seenBody);
-      return `https://www.instagram.com/reel/${firstShortcode}/`;
-    }, username ? `View reels of @${username}` : `View reels of ${userId}`);
-  }
-  // ── Visit notifications inbox ─────────────────────────────────────────────
-  // Simulates a user tapping the heart/notification icon.
-  async visitNotifications() {
-    return this.timed("VisitNotifications", async () => {
-      const j = await this.mobileGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
-      return !!(j?.new_stories || j?.old_stories || j?.counts);
-    }, "Visit notifications");
-  }
-  // ── Visit own profile ─────────────────────────────────────────────────────
-  // Simulates a user tapping their own profile tab.
-  async visitOwnProfile() {
-    return this.timed("VisitOwnProfile", async () => {
-      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
-      return !!j?.user;
-    }, "Visit own profile");
-  }
-  // ── Fetch own profile stats (followers / following / posts) ───────────────
-  // Uses the same current_user endpoint but extracts the counts.
-  async getOwnProfileStats() {
-    try {
-      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
-      const u = j?.user;
-      if (!u) return null;
-      return {
-        followersCount: Number(u.follower_count ?? u.followed_by_count ?? 0),
-        followingCount: Number(u.following_count ?? 0),
-        postsCount: Number(u.media_count ?? 0)
-      };
-    } catch {
-      return null;
-    }
-  }
-  // ── Refresh own profile feed ──────────────────────────────────────────────
-  // Simulates a user pull-to-refreshing their profile page.
-  // /api/v1/feed/self/ is a dead endpoint as of 2024 — replaced by
-  // /api/v1/feed/user/{userId}/ which requires the numeric user ID extracted
-  // from the ds_user_id cookie (always present after login).
-  async refreshOwnProfile() {
-    return this.timed("RefreshOwnProfile", async () => {
-      const userIdCookie = this.cookieJar.find((c3) => c3.startsWith("ds_user_id="));
-      const userId = userIdCookie ? userIdCookie.split("=")[1] : null;
-      if (!userId) return false;
-      const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=12`);
-      return !!(j?.items || j?.profile_grid_items);
-    }, "Refresh own profile");
-  }
-  // ── Click Settings and Activity ───────────────────────────────────────────
-  // Simulates visiting the Settings page — fetches account security info.
-  // This endpoint requires POST as of 2024 (GET returns 405).
-  async visitSettingsAndActivity() {
-    return this.timed("VisitSettingsAndActivity", async () => {
-      const j = await this.mobilePost(`/api/v1/accounts/account_security_info/`);
-      return !!(j?.status !== "fail");
-    }, "Visit settings and activity");
-  }
-  // ── Scroll the home timeline feed ────────────────────────────────────────
-  // Fetches the main home feed and marks up to `count` posts as seen,
-  // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count = 5) {
-    const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
-    const rawItems = j?.feed_items ?? j?.items ?? [];
-    if (!rawItems.length) return 0;
-    const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk).slice(0, count);
-    let viewed = 0;
-    for (const media of items) {
-      const mediaId = String(media?.id ?? media?.pk ?? "");
-      if (!mediaId) continue;
-      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
-      await this.timed("ViewTimelineFeed", async () => {
-        await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
-          live_vods_skipped: "",
-          nuxes_skipped: ""
-        }).toString());
-        return ++viewed;
-      }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
-    }
-    return viewed;
-  }
-  // ── Watch reels from the home feed Reels tab ─────────────────────────────
-  // Fetches the reels explore/home feed and marks up to `count` reels as seen,
-  // simulating a user scrolling through the Reels tab.
-  async viewTimelineReels(count = 5) {
-    return this.timed("ViewTimelineReels", async () => {
-      const body = new URLSearchParams({ reason: "pull_to_refresh", max_id: "" }).toString();
-      const j = await this.mobilePost(`/api/v1/clips/feed/`, body);
-      const items = j?.items ?? [];
-      if (!items.length) return 0;
-      const toView = items.slice(0, count);
-      const seenEntries = [];
-      for (const raw of toView) {
-        const media = raw?.media ?? raw;
-        const mediaId = String(media?.id ?? media?.pk ?? "");
-        if (!mediaId) continue;
-        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
-        seenEntries.push(`${mediaId}_${takenAt}_${takenAt + 3}`);
-      }
-      if (seenEntries.length) {
-        const seenBody = new URLSearchParams({
-          reels: seenEntries.join(","),
-          live_vods_skipped: "",
-          nuxes_skipped: ""
-        }).toString();
-        await this.mobilePost(`/api/v1/media/seen/`, seenBody);
-      }
-      return toView.length;
-    }, (n) => `Viewed ${n} timeline reel${n === 1 ? "" : "s"}`);
-  }
-  // ── Watch stories from the timeline tray ─────────────────────────────────
-  // Fetches the stories tray at the top of the home feed and marks up to
-  // `count` story reels as seen, simulating a user swiping through stories.
-  async viewTimelineStories(count = 5) {
-    return this.timed("ViewTimelineStories", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/reels_tray/`);
-      const tray = j?.tray ?? [];
-      if (!tray.length) return 0;
-      const toView = tray.slice(0, count);
-      const seenBody = new URLSearchParams({ live_vods_skipped: "", nuxes_skipped: "" });
-      for (const reel of toView) {
-        const userId = String(reel.user?.pk ?? reel.id ?? "");
-        const items = reel.items ?? [];
-        if (!items.length || !userId) continue;
-        const seenEntries = items.map((item) => {
-          const mediaId = String(item.id ?? item.pk ?? "");
-          const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
-          return `${mediaId}_${takenAt}_${takenAt + 2}`;
-        });
-        seenBody.set(`reels[${userId}]`, seenEntries.join(","));
-      }
-      await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
-      return toView.length;
-    }, (n) => `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`);
-  }
-  // ── Check direct messages inbox ──────────────────────────────────────────
-  // Fetches the DM inbox to simulate a user checking their messages.
-  // Returns true if the inbox was fetched successfully.
-  async getDirectMessages(count = 5) {
-    return this.timed("GetDirectMessages", async () => {
-      const j = await this.mobileGet(
-        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`
-      );
-      const threads = j?.inbox?.threads ?? j?.threads ?? [];
-      return { ok: !!(j?.inbox ?? j?.threads), count: threads.length };
-    }, (r2) => `Checked ${r2.count} direct message${r2.count === 1 ? "" : "s"}`);
-  }
-  // ── Fetch pending / message-request inbox (GetDirectMessagesInternal) ────
-  // Simulates a user opening the message requests folder — non-followers'
-  // DMs land here. Jarvee calls this as a second DM pass after the main inbox.
-  async getDirectMessagesInternal() {
-    return this.timed("GetDirectMessagesInternal", async () => {
-      const j = await this.mobileGet(
-        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
-      );
-      const threads = j?.inbox?.threads ?? j?.threads ?? [];
-      return { count: threads.length };
-    }, (r2) => `Checked DM inbox \u2014 ${r2.count} thread${r2.count === 1 ? "" : "s"}`);
-  }
-  // Like getDirectMessages but returns thread content for auto-reply scanning.
-  // Returns up to `count` threads, each with recent messages from the other user.
-  async getDMThreadsWithContent(count = 10) {
-    return this.timed("GetDMThreadsContent", async () => {
-      const j = await this.mobileGet(
-        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=10&cursor=&limit=${count}`
-      );
-      const threads = j?.inbox?.threads ?? j?.threads ?? [];
-      return threads.map((thread) => {
-        const otherUser = (thread.users ?? [])[0];
-        const myUserId = String(thread.viewer_id ?? thread.viewerId ?? "");
-        const items = (thread.items ?? []).filter((item) => item?.item_type === "text" && item?.text).map((item) => ({
-          itemId: String(item.item_id ?? ""),
-          text: String(item.text ?? ""),
-          fromMe: String(item.user_id) === myUserId
-        }));
-        return {
-          threadId: String(thread.thread_id ?? ""),
-          username: String(otherUser?.username ?? ""),
-          userId: String(otherUser?.pk ?? ""),
-          items
-        };
-      }).filter((t2) => t2.threadId && t2.username);
-    }, `Check DMs with content (limit=${count})`);
-  }
-  // ── Like posts from the home timeline feed ───────────────────────────────
-  // Fetches the home feed and likes up to `count` posts.
-  // If a post is a reel/video (media_type === 2), it is marked as watched
-  // before being liked, so Instagram sees a realistic view → like sequence.
-  // Returns the number of posts liked and reels watched.
-  async likeTimelinePosts(count = 3) {
-    return this.timed("LikeTimelinePosts", async () => {
-      const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
-      const rawItems = j?.feed_items ?? j?.items ?? [];
-      if (!rawItems.length) return { liked: 0, watched: 0, likedPosts: [] };
-      const items = rawItems.map((raw) => raw?.media_or_ad ?? raw?.media ?? raw).filter((m3) => m3?.id || m3?.pk);
-      const toProcess = items.slice(0, count);
-      let liked = 0;
-      let watched = 0;
-      const likedPosts = [];
-      for (const media of toProcess) {
-        const mediaId = String(media?.id ?? media?.pk ?? "");
-        if (!mediaId) continue;
-        const isReel = media?.media_type === 2 || media?.product_type === "clips";
-        if (isReel) {
-          try {
-            const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
-            const seenBody = new URLSearchParams({
-              reels: `${mediaId}_${takenAt}_${takenAt + 4}`,
-              live_vods_skipped: "",
-              nuxes_skipped: ""
-            }).toString();
-            await this.mobilePost(`/api/v1/media/seen/`, seenBody);
-            watched++;
-          } catch (_2) {
-          }
-        }
-        const result = await this.likeMedia(mediaId);
-        if (result === "blocked") break;
-        if (result) {
-          liked++;
-          const shortcode = String(media?.code ?? "");
-          const ownerUsername = String(media?.user?.username ?? "");
-          if (shortcode) likedPosts.push({ shortcode, ownerUsername });
-        }
-      }
-      return { liked, watched, likedPosts };
-    }, (r2) => r2.watched > 0 ? `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"} (watched ${r2.watched} reel${r2.watched === 1 ? "" : "s"})` : `Liked ${r2.liked} timeline post${r2.liked === 1 ? "" : "s"}`);
-  }
-  // ── Unfollow a user ───────────────────────────────────────────────────────
-  // Returns true on success, "blocked" on Instagram action-block, false otherwise.
-  async unfollowUser(userId, username) {
-    return this.timed("UnfollowUser", async () => {
-      const body = new URLSearchParams({ user_id: userId }).toString();
-      const j = await this.webPost(`/api/v1/friendships/destroy/${userId}/`, body);
-      if (!j) return false;
-      if (j?.friendship_status) return true;
-      if (j?.status === "fail") {
-        const reason = j?.message ?? "Instagram declined";
-        if (reason.includes("feedback_required") || j?.feedback_required === true) return "blocked";
-        console.warn(`[webClient] unfollowUser ${userId} fail:`, reason);
-        return false;
-      }
-      return false;
-    }, username ? `Unfollow @${username}` : `Unfollow user ${userId}`);
-  }
-  // ── Send a direct message to a user ───────────────────────────────────────
-  // Returns true on success, "blocked" on action-block, false otherwise.
-  async sendDirectMessage(userId, text2, username) {
-    return this.timed("SendDM", async () => {
-      const body = new URLSearchParams({
-        recipient_users: `[[${userId}]]`,
-        client_context: String(Date.now()),
-        text: text2
-      }).toString();
-      const j = await this.mobilePost(`/api/v1/direct_v2/threads/broadcast/text/`, body);
-      if (!j) return false;
-      if (j?.message === "feedback_required" || j?.feedback_required === true) {
-        console.warn(`[webClient] DM BLOCKED to ${userId}`);
-        return "blocked";
-      }
-      if (j?.status === "ok") {
-        const threadId = j?.payload?.thread_id ?? j?.thread_id ?? "";
-        const itemId = j?.payload?.item_id ?? j?.item_id ?? "";
-        return { threadId, itemId };
-      }
-      console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
-      return false;
-    }, username ? `DM @${username}` : `DM user ${userId}`);
-  }
-  async unsendDirectMessage(threadId, itemId) {
-    return this.timed("UnsendDM", async () => {
-      const body = new URLSearchParams({}).toString();
-      const j = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/delete/`, body);
-      return j?.status === "ok";
-    }, `Unsend thread=${threadId} item=${itemId}`);
-  }
-  // ── Get user ID + username by username ────────────────────────────────────
-  async getUserByUsername(username) {
-    return this.timed("GetUserByUsername", async () => {
-      const j = await this.webGet(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`);
-      const user = j?.data?.user;
-      if (!user) return null;
-      return { pk: String(user.id), username: user.username };
-    }, `Lookup @${username}`);
-  }
-  // ── Get user biography + full name ───────────────────────────────────────
-  async getUserProfile(username) {
-    return this.timed("GetUserProfile", async () => {
-      const j = await this.webGet(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`);
-      const user = j?.data?.user;
-      if (!user) return null;
-      return {
-        biography: user.biography ?? null,
-        fullName: user.full_name ?? null
-      };
-    }, `Profile @${username}`);
-  }
-  // mobile-style POST (i.instagram.com)
-  async mobilePost(path4, body = "") {
-    await this.apiThrottle();
-    const res = await igReq({
-      host: "i.instagram.com",
-      path: path4,
-      method: "POST",
-      headers: {
-        Host: "i.instagram.com",
-        "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
-        Accept: "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-IG-App-ID": APP_ID,
-        "X-CSRFToken": this.csrfToken,
-        "X-IG-Capabilities": "3brTvwE=",
-        "X-IG-Connection-Type": "WIFI"
-      },
-      body,
-      cookieJar: this.cookieJar,
-      proxyUrl: this.proxyUrl
-    });
-    const safeCookies = res.cookies.filter((c3) => !c3.startsWith("csrftoken="));
-    this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
-    if (!res.json) console.log(`[webClient] mobilePost ${path4} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
-    return res.json;
-  }
-  // ── Multipart/form-data POST to i.instagram.com ──────────────────────────
-  // Used for photo upload via /api/v1/media/upload/ — a regular /api/v1/
-  // path that accepts our web-session cookies (same auth as like/follow/
-  // comment which are confirmed working).  Avoids the rupload binary protocol
-  // which requires a genuine mobile Bearer-token session and rejects web
-  // sessionids with HTML 404.
-  async mobilePostMultipart(path4, parts) {
-    await this.apiThrottle();
-    const boundary = `----InstaBoundary${Date.now()}`;
-    const chunks = [];
-    for (const part of parts) {
-      let header = `--${boundary}\r
-Content-Disposition: form-data; name="${part.name}"`;
-      if (part.filename) header += `; filename="${part.filename}"`;
-      header += "\r\n";
-      if (part.contentType) header += `Content-Type: ${part.contentType}\r
-`;
-      header += "\r\n";
-      chunks.push(Buffer.from(header));
-      chunks.push(typeof part.value === "string" ? Buffer.from(part.value) : part.value);
-      chunks.push(Buffer.from("\r\n"));
-    }
-    chunks.push(Buffer.from(`--${boundary}--\r
-`));
-    const body = Buffer.concat(chunks);
-    const MOBILE_UA = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
-    const MOBILE_AID = "567067343352427";
-    const headers = {
-      "User-Agent": MOBILE_UA,
-      Accept: "*/*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Content-Type": `multipart/form-data; boundary=${boundary}`,
-      "Content-Length": String(body.length),
-      "X-IG-App-ID": MOBILE_AID,
-      "X-CSRFToken": this.csrfToken,
-      "X-IG-Capabilities": "3brTvwE=",
-      "X-IG-Connection-Type": "WIFI",
-      Cookie: this.cookieJar.join("; ")
-    };
-    let agent;
-    if (this.proxyUrl) {
-      const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
-      agent = new HttpsProxyAgent2(this.proxyUrl);
-    }
-    const res = await httpsRequest(
-      { host: "i.instagram.com", port: 443, path: path4, method: "POST", headers, ...agent ? { agent } : {} },
-      body
-    );
-    let json2 = null;
-    try {
-      json2 = JSON.parse(res.body);
-    } catch {
-    }
-    if (!json2) console.log(`[webClient] mobilePostMultipart ${path4} status=${res.status} body:`, res.body.slice(0, 400));
-    return json2;
-  }
-  // ── Download an image from a CDN URL into a Buffer ────────────────────────
-  async downloadImage(url2) {
-    return new Promise((resolve, reject) => {
-      const parsedUrl = new URL(url2);
-      const options = {
-        host: parsedUrl.hostname,
-        port: 443,
-        path: parsedUrl.pathname + parsedUrl.search,
-        method: "GET",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-          Accept: "image/*,*/*"
-        }
-      };
-      https.get(options, (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => resolve(Buffer.concat(chunks)));
-        res.on("error", reject);
-      }).on("error", reject);
-    });
-  }
-  // ── Get recent photo posts from a user's feed (with image URLs) ───────────
-  // Used when repostUseHikerApi is OFF — the account's own session does the scrape.
-  async getUserFeedItems(username) {
-    return this.timed("GetUserFeed", async () => {
-      const user = await this.getUserByUsername(username);
-      if (!user) return [];
-      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
-      const items = j?.items ?? [];
-      return items.flatMap((item) => {
-        const mediaType = item?.media_type ?? 1;
-        if (mediaType !== 1 && mediaType !== 8) return [];
-        const mediaId = String(item.id ?? item.pk ?? "");
-        const caption = item.caption?.text ?? "";
-        const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
-        const firstMedia = mediaType === 8 ? item.carousel_media?.[0] ?? item : item;
-        const candidates = firstMedia.image_versions2?.candidates ?? [];
-        const imageUrl = candidates[0]?.url ?? "";
-        if (!mediaId || !imageUrl) return [];
-        return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
-      });
-    }, `Get feed of @${username}`);
-  }
-  // ── Upload a photo and create the Instagram post ──────────────────────────
-  /** Uploads a photo and returns the new media ID string on success, or null on failure. */
-  async uploadPhoto(imageBuffer, caption) {
-    return this.timed("UploadPhoto", async () => {
-      const uploadId = String(Date.now());
-      const uploadRes = await this.mobilePostMultipart("/api/v1/media/upload/", [
-        { name: "upload_id", value: uploadId },
-        { name: "media_type", value: "1" },
-        { name: "image_compression", value: JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "95" }) },
-        { name: "photo", value: imageBuffer, filename: `photo_${uploadId}.jpg`, contentType: "image/jpeg" }
-      ]);
-      const uploaded = uploadRes?.upload_id != null || uploadRes?.status === "ok";
-      if (!uploaded) {
-        console.warn(`[webClient] media/upload failed: ${JSON.stringify(uploadRes)}`);
-        return null;
-      }
-      const body = new URLSearchParams({
-        upload_id: uploadId,
-        caption,
-        source_type: "4",
-        timezone_offset: "0",
-        date_time_original: (/* @__PURE__ */ new Date()).toISOString().replace(/[^0-9]/g, "").slice(0, 14)
-      }).toString();
-      const confRes = await this.mobilePost("/api/v1/media/configure/", body);
-      const mediaId = confRes?.media?.id ? String(confRes.media.id) : null;
-      if (!mediaId && confRes?.status === "ok") return uploadId;
-      return mediaId;
-    }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
-  }
-  /** Disables comments on a post via the Instagram private API. */
-  async disableComments(mediaId) {
-    return this.timed("DisableComments", async () => {
-      const body = new URLSearchParams({ media_id: mediaId }).toString();
-      await this.mobilePost(`/api/v1/media/${mediaId}/disable_comments/`, body);
-    }, `Disable comments on ${mediaId}`);
-  }
-  // ── Scrape recent posts from a hashtag → returns users ────────────────────
-  // The sections endpoint requires POST, not GET
-  async getHashtagUsers(hashtag, maxUsers = 50) {
-    return this.timed("HashtagScrape", async () => {
-      const tag = hashtag.replace(/^#/, "");
-      const users = [];
-      const seen = /* @__PURE__ */ new Set();
-      let maxId = "";
-      let page = 0;
-      const maxPages = Math.min(Math.ceil(maxUsers / 12) + 2, 25);
-      while (users.length < maxUsers && page < maxPages) {
-        const body = new URLSearchParams({
-          tab_type: "recent",
-          page: String(page + 1),
-          surface: "grid",
-          ...maxId ? { max_id: maxId } : {}
-        }).toString();
-        const j = await this.mobilePost(`/api/v1/tags/${encodeURIComponent(tag)}/sections/`, body);
-        if (!j?.sections?.length) break;
-        for (const section of j.sections) {
-          const medias = section.layout_content?.medias ?? section.layout_content?.fill_items ?? [];
-          for (const item of medias) {
-            const media = item.media ?? item;
-            const u = media?.user;
-            if (!u?.pk || !u?.username) continue;
-            if (seen.has(String(u.pk))) continue;
-            seen.add(String(u.pk));
-            users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
-          }
-        }
-        maxId = j.next_max_id ?? "";
-        if (!maxId || !j.more_available) break;
-        page++;
-      }
-      console.log(`[webClient] hashtag #${tag}: found ${users.length} users`);
-      return users.slice(0, maxUsers);
-    }, `Scrape #${hashtag.replace(/^#/, "")}`);
-  }
-  // ── Scrape followers of a target account ──────────────────────────────────
-  async getFollowers(userId, maxFollowers = 50) {
-    return this.timed("FollowersScrape", async () => {
-      const users = [];
-      let maxId = "";
-      const maxPages = Math.min(Math.ceil(maxFollowers / 50) + 2, 25);
-      for (let page = 0; page < maxPages && users.length < maxFollowers; page++) {
-        const qs = new URLSearchParams({ count: "50", ...maxId ? { max_id: maxId } : {} });
-        const j = await this.mobileGet(`/api/v1/friendships/${userId}/followers/?${qs}`);
-        if (!j?.users?.length) break;
-        for (const u of j.users) {
-          if (u.pk && u.username) users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
-        }
-        maxId = j.next_max_id ?? "";
-        if (!maxId) break;
-      }
-      console.log(`[webClient] followers of ${userId}: found ${users.length}`);
-      return users.slice(0, maxFollowers);
-    }, `Followers of ${userId}`);
-  }
-  // ── Resolve own account pk (reuses current_user endpoint, no extra call) ──
-  async getOwnUserId() {
-    return this.timed("GetOwnUser", async () => {
-      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
-      return j?.user?.pk ? String(j.user.pk) : null;
-    }, "Get own user ID");
-  }
-  // ── Search for a user by username (safer than web_profile_info lookup) ────
-  // Uses the search bar endpoint — looks like a human typing in the search box.
-  async searchUserByUsername(username) {
-    return this.timed("SearchUser", async () => {
-      const j = await this.mobileGet(`/api/v1/users/search/?timezone_offset=0&count=5&q=${encodeURIComponent(username)}`);
-      const users = j?.users ?? [];
-      const match = users.find((u) => String(u.username).toLowerCase() === username.toLowerCase());
-      return match ? { pk: String(match.pk), username: String(match.username) } : null;
-    }, `Search @${username}`);
-  }
-};
-
 // src/instagram/automationEngine.ts
+init_instagramWebClient();
 init_hikerApiClient();
 init_imageAlteration();
 function mediaIdToShortcode(id) {
@@ -144199,7 +144320,8 @@ var AutomationEngine = class {
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: true,
       nextFollowAt: 0,
-      nextContactAt: 0
+      nextContactAt: 0,
+      nextUnfollowAt: 0
     };
     this.states.set(profile.id, state);
     console.log(`[engine] Launching runner for @${profile.username}`);
@@ -144306,7 +144428,8 @@ var AutomationEngine = class {
       // run immediately on first tick
       lastHumanToolsEnabled: true,
       nextFollowAt: 0,
-      nextContactAt: 0
+      nextContactAt: 0,
+      nextUnfollowAt: 0
     };
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
@@ -144363,7 +144486,8 @@ var AutomationEngine = class {
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
       nextFollowAt: 0,
-      nextContactAt: 0
+      nextContactAt: 0,
+      nextUnfollowAt: 0
     };
     this.unfollowStates.set(profile.id, state);
     console.log(`[engine] Launching unfollow runner for @${profile.username}`);
@@ -144414,7 +144538,9 @@ var AutomationEngine = class {
         const s = unfollowTool.settings;
         const waitMs = randInt((s.delayMin ?? 5) * 6e4, (s.delayMax ?? 15) * 6e4);
         console.log(`[engine] @${freshProfile.username}: next unfollow session in ${Math.round(waitMs / 6e4)}min`);
+        state.nextUnfollowAt = Date.now() + waitMs;
         await sleepInterruptible(waitMs, state.stop);
+        state.nextUnfollowAt = 0;
       }
       this.unfollowStates.delete(profile.id);
       console.log(`[engine] Unfollow runner exited for @${profile.username}`);
@@ -144441,7 +144567,8 @@ var AutomationEngine = class {
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
       nextFollowAt: 0,
-      nextContactAt: 0
+      nextContactAt: 0,
+      nextUnfollowAt: 0
     };
     this.dmStates.set(profile.id, state);
     console.log(`[engine] Launching DM runner for @${profile.username}`);
@@ -144493,7 +144620,8 @@ var AutomationEngine = class {
       nextHumanSessionAt: 0,
       lastHumanToolsEnabled: false,
       nextFollowAt: 0,
-      nextContactAt: 0
+      nextContactAt: 0,
+      nextUnfollowAt: 0
     };
     this.contactStates.set(profile.id, state);
     console.log(`[engine] Launching contact runner for @${profile.username}`);
@@ -144717,11 +144845,17 @@ var AutomationEngine = class {
     if (!s.autoReplyEnabled) return;
     const rules = Array.isArray(s.autoReplies) ? s.autoReplies : [];
     if (!rules.length) return;
+    let appFollowedSet = null;
+    if (s.autoReplyOnlyAppFollowed) {
+      const followedUsers2 = await storage.getFollowedUsersByProfile(profile.id);
+      appFollowedSet = new Set(followedUsers2.map((u) => u.instagramUsername.toLowerCase()));
+    }
     const threads = await client.getDMThreadsWithContent(20);
     if (!threads.length) return;
     let queued = 0;
     for (const thread of threads) {
       if (!thread.username || !thread.userId) continue;
+      if (appFollowedSet && !appFollowedSet.has(thread.username.toLowerCase())) continue;
       const incomingMessages = thread.items.filter((i2) => !i2.fromMe);
       if (!incomingMessages.length) continue;
       if (await storage.isAutoReplyAlreadyQueued(profile.id, thread.username)) continue;
@@ -144729,8 +144863,8 @@ var AutomationEngine = class {
       for (const rule of rules) {
         if (!rule.word.trim() || !rule.reply.trim()) continue;
         const triggerLower = rule.word.trim().toLowerCase();
-        const hit = incomingMessages.some((msg) => msg.text.toLowerCase().includes(triggerLower));
-        if (hit) {
+        const triggeringMsg = incomingMessages.find((msg) => msg.text.toLowerCase().includes(triggerLower));
+        if (triggeringMsg) {
           const text2 = this.applySpintax(rule.reply);
           await storage.createContactPendingMessage({
             profileId: profile.id,
@@ -144744,6 +144878,14 @@ var AutomationEngine = class {
           console.log(`[engine] @${profile.username}: auto-reply queued for @${thread.username} (trigger: "${rule.word}")`);
           queued++;
           matched = true;
+          if (s.autoReplyLikeDm && thread.threadId && triggeringMsg.itemId) {
+            try {
+              await client.likeDirectMessage(thread.threadId, triggeringMsg.itemId);
+              console.log(`[engine] @${profile.username}: \u2665 liked DM from @${thread.username}`);
+            } catch (e) {
+              console.warn(`[engine] @${profile.username}: like DM error: ${e?.message}`);
+            }
+          }
           break;
         }
       }
@@ -145132,8 +145274,18 @@ var AutomationEngine = class {
     if (!client) return { unfollowed: 0 };
     const all = await storage.getFollowedUsersByProfile(profile.id, 1e5);
     const cutoff = Date.now() - minAgeDays * 864e5;
-    const candidates = all.filter((u) => new Date(u.followedAt).getTime() < cutoff);
-    console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
+    let candidates = all.filter((u) => new Date(u.followedAt).getTime() < cutoff);
+    const targetListEnabled = !!s.unfollowTargetListEnabled;
+    const targetListRaw = s.unfollowTargetList ?? "";
+    if (targetListEnabled && targetListRaw.trim()) {
+      const targetSet = new Set(
+        targetListRaw.split(/[\n,]+/).map((u) => u.trim().replace(/^@/, "").toLowerCase()).filter(Boolean)
+      );
+      candidates = candidates.filter((u) => targetSet.has(u.instagramUsername.toLowerCase()));
+      console.log(`[engine] @${profile.username}: unfollow target list active \u2014 ${candidates.length} matched`);
+    } else {
+      console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
+    }
     let unfollowed = 0;
     for (const fu of candidates) {
       if (unfollowed >= processCount || state.stop.stopped) break;
@@ -145445,6 +145597,22 @@ var AutomationEngine = class {
             }
           } else {
             this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+          }
+          const saveEnabled = !!s.saveMediaEnabled;
+          const savePct = Number(s.saveMediaPercent ?? 0);
+          if (saveEnabled && savePct > 0 && likedPosts.length > 0) {
+            for (const post of likedPosts) {
+              if (!post.mediaId) continue;
+              if (Math.random() * 100 < savePct) {
+                try {
+                  await client.saveMedia(post.mediaId);
+                  console.log(`[engine] @${profile.username}: \u{1F516} saved post ${post.shortcode} by @${post.ownerUsername}`);
+                  this.logAction(profile.id, tool.id, "save_media", post.ownerUsername, post.shortcode, "post", "ok", "Saved liked timeline post");
+                } catch (se) {
+                  console.warn(`[engine] @${profile.username}: save media error: ${se?.message}`);
+                }
+              }
+            }
           }
         } catch (e) {
           console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
@@ -145807,7 +145975,8 @@ var AutomationEngine = class {
         nextHumanSessionAt: 0,
         lastHumanToolsEnabled: false,
         nextFollowAt: 0,
-        nextContactAt: 0
+        nextContactAt: 0,
+        nextUnfollowAt: 0
       };
     }
     const client = await this.ensureClient(profile, state);
@@ -145891,13 +146060,15 @@ var AutomationEngine = class {
       ...this.states.keys(),
       ...this.humanSessionStates.keys(),
       ...this.contactStates.keys(),
-      ...this.dmStates.keys()
+      ...this.dmStates.keys(),
+      ...this.unfollowStates.keys()
     ]);
     return Array.from(allIds).map((profileId) => {
       const followState = this.states.get(profileId);
       const humanState = this.humanSessionStates.get(profileId);
       const contactState = this.contactStates.get(profileId);
-      const anyState = followState ?? humanState ?? contactState;
+      const unfollowState = this.unfollowStates.get(profileId);
+      const anyState = followState ?? humanState ?? contactState ?? unfollowState;
       return {
         profileId,
         loggedIn: !!anyState?.client?.isLoggedIn(),
@@ -145905,7 +146076,8 @@ var AutomationEngine = class {
         hourlyCount: followState ? this.hourly(followState) : 0,
         nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0,
         nextFollowAt: followState?.nextFollowAt ?? 0,
-        nextContactAt: contactState?.nextContactAt ?? 0
+        nextContactAt: contactState?.nextContactAt ?? 0,
+        nextUnfollowAt: unfollowState?.nextUnfollowAt ?? 0
       };
     });
   }
@@ -146017,7 +146189,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
   app2.post("/api/proxies/:id/ping", async (req, res) => {
     const proxy = (await storage.getProxies()).find((p) => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
-    const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
+    const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist8(), dist_exports));
     const https3 = await import("https");
     const auth = proxy.username && proxy.password ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@` : "";
     const proxyUrl = `http://${auth}${proxy.host}:${proxy.port}`;
@@ -146544,6 +146716,79 @@ async function registerInstagramRoutes(httpServer2, app2) {
     await storage.deleteContactPendingMessage(id);
     res.json({ ok: true });
   });
+  app2.post("/api/profiles/verify-all", async (req, res) => {
+    const { profileIds: profileIds2, delayMin = 5, delayMax = 15 } = req.body;
+    const allProfiles = await storage.getProfiles();
+    const targets = profileIds2 && profileIds2.length > 0 ? allProfiles.filter((p) => profileIds2.includes(p.id)) : allProfiles;
+    if (!targets.length) return res.json({ ok: true, verified: 0, total: 0 });
+    res.json({ ok: true, total: targets.length });
+    (async () => {
+      let done = 0;
+      for (const profile of targets) {
+        try {
+          await verifyInstagramCredentials(profile);
+          done++;
+        } catch {
+        }
+        if (done < targets.length) {
+          const ms = (Math.random() * (delayMax - delayMin) + delayMin) * 1e3;
+          await new Promise((r2) => setTimeout(r2, ms));
+        }
+      }
+    })().catch(() => {
+    });
+  });
+  app2.post("/api/profiles/:id/fix-captcha", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, error: "Profile not found" });
+    const globalSettings2 = await storage.getGlobalSettings();
+    const twoCaptchaKey = globalSettings2.twoCaptchaApiKey ?? "";
+    if (!twoCaptchaKey) {
+      return res.status(400).json({ ok: false, error: "No 2captcha API key configured in Settings" });
+    }
+    try {
+      const result = await browserAutoLogin(
+        profileId,
+        profile.username ?? "",
+        profile.password ?? "",
+        profile.twoFASecretKey ?? twoCaptchaKey
+      );
+      if (result.ok) {
+        await storage.updateProfile(profileId, { accountStatus: "valid", credentialsDirty: false });
+        return res.json({ ok: true, message: result.message ?? "Captcha resolved successfully" });
+      } else {
+        return res.json({ ok: false, error: result.message ?? "Captcha resolution failed" });
+      }
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Fix captcha failed" });
+    }
+  });
+  app2.post("/api/profiles/:id/fetch-followings", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, error: "Profile not found" });
+    const { fetchMin = 50, fetchMax = 200 } = req.body;
+    const amount = Math.round(Math.random() * (fetchMax - fetchMin) + fetchMin);
+    const globalSettings2 = await storage.getGlobalSettings();
+    if (globalSettings2.hikerApiEnabled !== "true" || !globalSettings2.hikerApiToken) {
+      return res.status(400).json({ ok: false, error: "HikerAPI not enabled or no token set in Settings" });
+    }
+    try {
+      const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
+      const hikerClient = new HikerApiClient2(globalSettings2.hikerApiToken);
+      const { InstagramWebClient: InstagramWebClient2 } = await Promise.resolve().then(() => (init_instagramWebClient(), instagramWebClient_exports));
+      const client = new InstagramWebClient2(void 0, profileId);
+      client.setCookies(profile.sessionCookies ?? "");
+      const ownUserId = await client.getOwnUserId();
+      if (!ownUserId) return res.status(400).json({ ok: false, error: "Could not resolve own user ID \u2014 is the account verified?" });
+      const followings = await hikerClient.getFollowings(ownUserId, amount);
+      const usernames = followings.map((u) => u.username);
+      return res.json({ ok: true, usernames, count: usernames.length });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Fetch followings failed" });
+    }
+  });
   app2.get("/api/settings", async (_req, res) => {
     const settings = await storage.getGlobalSettings();
     res.json({
@@ -146553,11 +146798,14 @@ async function registerInstagramRoutes(httpServer2, app2) {
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
-      useLocalTime: settings.useLocalTime === "true"
+      useLocalTime: settings.useLocalTime === "true",
+      twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
+      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10)
     });
   });
   app2.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -146579,6 +146827,15 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (typeof useLocalTime === "boolean") {
       await storage.setGlobalSetting("useLocalTime", String(useLocalTime));
     }
+    if (typeof twoCaptchaApiKey === "string") {
+      await storage.setGlobalSetting("twoCaptchaApiKey", twoCaptchaApiKey);
+    }
+    if (typeof verifyAllDelayMin === "number" && verifyAllDelayMin >= 0) {
+      await storage.setGlobalSetting("verifyAllDelayMin", String(Math.round(verifyAllDelayMin)));
+    }
+    if (typeof verifyAllDelayMax === "number" && verifyAllDelayMax >= 0) {
+      await storage.setGlobalSetting("verifyAllDelayMax", String(Math.round(verifyAllDelayMax)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -146587,7 +146844,10 @@ async function registerInstagramRoutes(httpServer2, app2) {
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
-      useLocalTime: settings.useLocalTime === "true"
+      useLocalTime: settings.useLocalTime === "true",
+      twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
+      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10)
     });
   });
   app2.post("/api/settings/test-hiker", async (req, res) => {

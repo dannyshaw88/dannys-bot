@@ -4,8 +4,10 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Plus, Trash2, Shuffle, Info } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Shuffle, Info, UserCheck, Heart, Clock } from "lucide-react";
+import { format } from "date-fns";
 import { type Tool, type Profile } from "@shared/schema";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 
 interface AutoReplyRule {
   word: string;
@@ -24,13 +26,16 @@ function applySpintax(text: string): string {
   });
 }
 
-export function AutoReplyPanel({ tool, profile: _profile }: Props) {
+export function AutoReplyPanel({ tool, profile }: Props) {
   const updateToolMutation = useUpdateTool();
+  const engineStatus = useProfileEngineStatus(tool.profileId);
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
       autoReplyEnabled: false,
       autoReplies: [] as AutoReplyRule[],
+      autoReplyOnlyAppFollowed: false,
+      autoReplyLikeDm: false,
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -81,6 +86,18 @@ export function AutoReplyPanel({ tool, profile: _profile }: Props) {
         <div>
           <p className="text-sm font-semibold">Auto Reply</p>
           <p className="text-[11px] text-muted-foreground">Automatically reply to DMs containing specific trigger words.</p>
+          {settings.autoReplyEnabled && (() => {
+            const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
+            if (!nextAt) return null;
+            const label = nextAt <= Date.now() ? null : format(new Date(nextAt), "HH:mm:ss");
+            if (!label) return null;
+            return (
+              <p className="text-[11px] flex items-center gap-1 text-muted-foreground mt-0.5">
+                <Clock className="w-3 h-3 shrink-0" />
+                <span>Next DM check:</span>&nbsp;<span className="font-mono font-medium text-foreground">{label}</span>
+              </p>
+            );
+          })()}
         </div>
       </div>
 
@@ -91,6 +108,51 @@ export function AutoReplyPanel({ tool, profile: _profile }: Props) {
           Auto Reply scans your DMs each time the <strong>Check DMs</strong> action fires in the Human Session Tools tab.
           Adjust the check frequency there.
         </span>
+      </div>
+
+      {/* Filters & behaviour */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Behaviour</p>
+
+        {/* Only app-followed users */}
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            id="autoReplyOnlyAppFollowed"
+            checked={!!settings.autoReplyOnlyAppFollowed}
+            onChange={(e) => setSettings({ ...settings, autoReplyOnlyAppFollowed: e.target.checked })}
+            className="w-3.5 h-3.5 mt-0.5 accent-primary cursor-pointer shrink-0"
+          />
+          <div>
+            <label htmlFor="autoReplyOnlyAppFollowed" className="text-sm font-medium cursor-pointer select-none flex items-center gap-1.5">
+              <UserCheck className="w-3.5 h-3.5 text-green-600" />
+              Only reply to app-followed users
+            </label>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Only send auto-replies to DMs from users who appear in the Follow Tool's Followed Users list for this profile.
+            </p>
+          </div>
+        </div>
+
+        {/* Like the DM */}
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            id="autoReplyLikeDm"
+            checked={!!settings.autoReplyLikeDm}
+            onChange={(e) => setSettings({ ...settings, autoReplyLikeDm: e.target.checked })}
+            className="w-3.5 h-3.5 mt-0.5 accent-primary cursor-pointer shrink-0"
+          />
+          <div>
+            <label htmlFor="autoReplyLikeDm" className="text-sm font-medium cursor-pointer select-none flex items-center gap-1.5">
+              <Heart className="w-3.5 h-3.5 text-red-500" />
+              Like the incoming DM when replying
+            </label>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Reacts to the triggering message with a ❤️ before queuing the auto-reply. Feels more natural to the sender.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Add trigger rule */}

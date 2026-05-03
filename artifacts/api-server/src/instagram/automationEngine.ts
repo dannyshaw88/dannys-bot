@@ -126,6 +126,7 @@ interface ProfileState {
   // Scheduled next-run timestamps for status display (0 = currently executing)
   nextFollowAt: number;
   nextContactAt: number;
+  nextUnfollowAt: number;
 }
 
 class AutomationEngine {
@@ -321,6 +322,7 @@ class AutomationEngine {
       lastHumanToolsEnabled: true,
       nextFollowAt: 0,
       nextContactAt: 0,
+      nextUnfollowAt: 0,
     };
     this.states.set(profile.id, state);
     console.log(`[engine] Launching runner for @${profile.username}`);
@@ -443,6 +445,7 @@ class AutomationEngine {
       lastHumanToolsEnabled: true,
       nextFollowAt: 0,
       nextContactAt: 0,
+      nextUnfollowAt: 0,
     };
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
@@ -504,6 +507,7 @@ class AutomationEngine {
       lastHumanToolsEnabled: false,
       nextFollowAt: 0,
       nextContactAt: 0,
+      nextUnfollowAt: 0,
     };
     this.unfollowStates.set(profile.id, state);
     console.log(`[engine] Launching unfollow runner for @${profile.username}`);
@@ -558,7 +562,9 @@ class AutomationEngine {
         const s = unfollowTool.settings as any;
         const waitMs = randInt((s.delayMin ?? 5) * 60_000, (s.delayMax ?? 15) * 60_000);
         console.log(`[engine] @${freshProfile.username}: next unfollow session in ${Math.round(waitMs / 60000)}min`);
+        state.nextUnfollowAt = Date.now() + waitMs;
         await sleepInterruptible(waitMs, state.stop);
+        state.nextUnfollowAt = 0;
       }
       this.unfollowStates.delete(profile.id);
       console.log(`[engine] Unfollow runner exited for @${profile.username}`);
@@ -584,6 +590,7 @@ class AutomationEngine {
       lastHumanToolsEnabled: false,
       nextFollowAt: 0,
       nextContactAt: 0,
+      nextUnfollowAt: 0,
     };
     this.dmStates.set(profile.id, state);
     console.log(`[engine] Launching DM runner for @${profile.username}`);
@@ -635,6 +642,7 @@ class AutomationEngine {
       lastHumanToolsEnabled: false,
       nextFollowAt: 0,
       nextContactAt: 0,
+      nextUnfollowAt: 0,
     };
     this.contactStates.set(profile.id, state);
     console.log(`[engine] Launching contact runner for @${profile.username}`);
@@ -893,12 +901,22 @@ class AutomationEngine {
     const rules: { word: string; reply: string }[] = Array.isArray(s.autoReplies) ? s.autoReplies : [];
     if (!rules.length) return;
 
+    // Build app-followed set if filter is enabled
+    let appFollowedSet: Set<string> | null = null;
+    if (s.autoReplyOnlyAppFollowed) {
+      const followedUsers = await storage.getFollowedUsersByProfile(profile.id);
+      appFollowedSet = new Set(followedUsers.map(u => u.instagramUsername.toLowerCase()));
+    }
+
     const threads = await client.getDMThreadsWithContent(20);
     if (!threads.length) return;
 
     let queued = 0;
     for (const thread of threads) {
       if (!thread.username || !thread.userId) continue;
+
+      // Only app-followed users filter
+      if (appFollowedSet && !appFollowedSet.has(thread.username.toLowerCase())) continue;
 
       // Only look at messages NOT sent by the account (fromMe === false)
       const incomingMessages = thread.items.filter(i => !i.fromMe);
@@ -912,8 +930,8 @@ class AutomationEngine {
       for (const rule of rules) {
         if (!rule.word.trim() || !rule.reply.trim()) continue;
         const triggerLower = rule.word.trim().toLowerCase();
-        const hit = incomingMessages.some(msg => msg.text.toLowerCase().includes(triggerLower));
-        if (hit) {
+        const triggeringMsg = incomingMessages.find(msg => msg.text.toLowerCase().includes(triggerLower));
+        if (triggeringMsg) {
           const text = this.applySpintax(rule.reply);
           await storage.createContactPendingMessage({
             profileId: profile.id,
@@ -927,6 +945,17 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: auto-reply queued for @${thread.username} (trigger: "${rule.word}")`);
           queued++;
           matched = true;
+
+          // Like the triggering DM if enabled
+          if (s.autoReplyLikeDm && thread.threadId && triggeringMsg.itemId) {
+            try {
+              await client.likeDirectMessage(thread.threadId, triggeringMsg.itemId);
+              console.log(`[engine] @${profile.username}: ♥ liked DM from @${thread.username}`);
+            } catch (e: any) {
+              console.warn(`[engine] @${profile.username}: like DM error: ${e?.message}`);
+            }
+          }
+
           break; // one reply per thread per scan
         }
       }
@@ -1374,8 +1403,20 @@ class AutomationEngine {
     // Fetch followed users older than minAgeDays
     const all = await storage.getFollowedUsersByProfile(profile.id, 100_000);
     const cutoff = Date.now() - minAgeDays * 86_400_000;
-    const candidates = all.filter(u => new Date(u.followedAt).getTime() < cutoff);
-    console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
+    let candidates = all.filter(u => new Date(u.followedAt).getTime() < cutoff);
+
+    // Custom target list — if enabled, only unfollow users in the list
+    const targetListEnabled = !!s.unfollowTargetListEnabled;
+    const targetListRaw: string = s.unfollowTargetList ?? "";
+    if (targetListEnabled && targetListRaw.trim()) {
+      const targetSet = new Set(
+        targetListRaw.split(/[\n,]+/).map((u: string) => u.trim().replace(/^@/, "").toLowerCase()).filter(Boolean)
+      );
+      candidates = candidates.filter(u => targetSet.has(u.instagramUsername.toLowerCase()));
+      console.log(`[engine] @${profile.username}: unfollow target list active — ${candidates.length} matched`);
+    } else {
+      console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
+    }
 
     let unfollowed = 0;
     for (const fu of candidates) {
@@ -1707,6 +1748,23 @@ class AutomationEngine {
             }
           } else {
             this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+          }
+          // Save media from liked posts at the configured percentage
+          const saveEnabled = !!s.saveMediaEnabled;
+          const savePct = Number(s.saveMediaPercent ?? 0);
+          if (saveEnabled && savePct > 0 && likedPosts.length > 0) {
+            for (const post of likedPosts) {
+              if (!post.mediaId) continue;
+              if (Math.random() * 100 < savePct) {
+                try {
+                  await client.saveMedia(post.mediaId);
+                  console.log(`[engine] @${profile.username}: 🔖 saved post ${post.shortcode} by @${post.ownerUsername}`);
+                  this.logAction(profile.id, tool.id, "save_media", post.ownerUsername, post.shortcode, "post", "ok", "Saved liked timeline post");
+                } catch (se: any) {
+                  console.warn(`[engine] @${profile.username}: save media error: ${se?.message}`);
+                }
+              }
+            }
           }
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
@@ -2127,7 +2185,7 @@ class AutomationEngine {
         actionSuspensions: {},
         nextHumanSessionAt: 0,
         lastHumanToolsEnabled: false,
-        nextFollowAt: 0, nextContactAt: 0,
+        nextFollowAt: 0, nextContactAt: 0, nextUnfollowAt: 0,
       };
     }
 
@@ -2222,19 +2280,21 @@ class AutomationEngine {
   }
 
   // ── Status API ────────────────────────────────────────────────────────────
-  getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number }[] {
+  getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
     // Collect every profileId that has at least one active runner
     const allIds = new Set<number>([
       ...this.states.keys(),
       ...this.humanSessionStates.keys(),
       ...this.contactStates.keys(),
       ...this.dmStates.keys(),
+      ...this.unfollowStates.keys(),
     ]);
     return Array.from(allIds).map(profileId => {
       const followState   = this.states.get(profileId);
       const humanState    = this.humanSessionStates.get(profileId);
       const contactState  = this.contactStates.get(profileId);
-      const anyState      = followState ?? humanState ?? contactState;
+      const unfollowState = this.unfollowStates.get(profileId);
+      const anyState      = followState ?? humanState ?? contactState ?? unfollowState;
       return {
         profileId,
         loggedIn:           !!anyState?.client?.isLoggedIn(),
@@ -2243,6 +2303,7 @@ class AutomationEngine {
         nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0,
         nextFollowAt:       followState?.nextFollowAt ?? 0,
         nextContactAt:      contactState?.nextContactAt ?? 0,
+        nextUnfollowAt:     unfollowState?.nextUnfollowAt ?? 0,
       };
     });
   }

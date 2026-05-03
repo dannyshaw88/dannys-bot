@@ -6,8 +6,10 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { UserMinus, Timer, Users, Clock, CalendarDays, Repeat2, Copy } from "lucide-react";
+import { UserMinus, Timer, Users, Clock, CalendarDays, Repeat2, Copy, List, Upload, Loader2, Download, TrendingUp } from "lucide-react";
+import { format } from "date-fns";
 import { type Tool, type Profile } from "@shared/schema";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 
@@ -42,6 +44,10 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
   const [copyOpen, setCopyOpen] = useState(false);
+  const [fetchingFollowings, setFetchingFollowings] = useState(false);
+  const [hikerFetchMin, setHikerFetchMin] = useState(50);
+  const [hikerFetchMax, setHikerFetchMax] = useState(200);
+  const engineStatus = useProfileEngineStatus(tool.profileId);
   const otherProfiles = allProfiles.filter(p => p.id !== profile.id);
 
   const [settings, setSettings] = useState(() => {
@@ -58,6 +64,8 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
       autoStopUnfollowAtFollowingsMax: 7000,
       autoStartFollowAfterMin: 60,
       autoStartFollowAfterMax: 135,
+      unfollowTargetListEnabled: false,
+      unfollowTargetList: "",
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -122,13 +130,43 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
 
   const autoEnabled = !!(settings as any).autoFollowUnfollowEnabled;
 
+  const s = settings as any;
+  const avgDelay   = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
+  const avgProcess = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
+  const perHour    = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+
+  const nextUnfollowStatus: { label: string; executing: boolean } | null = (() => {
+    if (!tool.enabled) return null;
+    const nextAt = engineStatus?.nextUnfollowAt ?? 0;
+    if (!nextAt) return null;
+    if (nextAt <= Date.now()) return { label: "Executing", executing: true };
+    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
+  })();
+
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
       {/* Master toggle */}
       <div className="border border-border rounded-xl p-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <UserMinus className="w-4 h-4 text-muted-foreground" />
-          <h4 className="font-semibold text-sm">Unfollow Tool</h4>
+        <div>
+          <div className="flex items-center gap-2">
+            <UserMinus className="w-4 h-4 text-muted-foreground" />
+            <h4 className="font-semibold text-sm">Unfollow Tool</h4>
+          </div>
+          {nextUnfollowStatus && (
+            <p className="text-[11px] mt-0.5 flex items-center gap-1" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {nextUnfollowStatus.executing
+                ? <span className="font-medium">Executing</span>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextUnfollowStatus.label}</span></>
+              }
+            </p>
+          )}
+          {tool.enabled && perHour > 0 && (
+            <p className="text-[11px] mt-0.5 flex items-center gap-1 text-muted-foreground">
+              <TrendingUp className="w-3 h-3 shrink-0" />
+              ~{perHour} unfollows/hr
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Switch
@@ -159,6 +197,129 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
       {row(<Timer className="w-4 h-4" />, "Wait between executions", "minutes", "delayMin", "delayMax", 1)}
       {row(<Users className="w-4 h-4" />, "Process users", "users", "processMin", "processMax", 1)}
       {row(<Clock className="w-4 h-4" />, "Delay between each", "seconds", "delayAfterUnfollowMin", "delayAfterUnfollowMax", 1)}
+
+      {/* Custom Unfollow Target List */}
+      <div className="border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="unfollowTargetListEnabled"
+            checked={!!(settings as any).unfollowTargetListEnabled}
+            onChange={(e) => setSettings(s => ({ ...s, unfollowTargetListEnabled: e.target.checked }))}
+            className="w-3.5 h-3.5 accent-primary cursor-pointer"
+          />
+          <label htmlFor="unfollowTargetListEnabled" className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+            <List className="w-3.5 h-3.5" />
+            Unfollow Target List (Custom Users)
+          </label>
+        </div>
+        <p className="text-[11px] text-muted-foreground pl-1">
+          When enabled, only users in this list will be unfollowed (ignoring the followed-users database). Usernames, one per line or comma-separated.
+        </p>
+        <div className={`space-y-3 transition-opacity ${!(settings as any).unfollowTargetListEnabled ? "opacity-40 pointer-events-none" : ""}`}>
+          <textarea
+            rows={6}
+            className="w-full text-xs border border-border rounded-lg p-3 bg-background resize-y focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+            placeholder={"@user1\n@user2\nuser3"}
+            value={(settings as any).unfollowTargetList ?? ""}
+            onChange={(e) => setSettings(s => ({ ...s, unfollowTargetList: e.target.value }))}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Import from file */}
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept=".txt,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const text = ev.target?.result as string ?? "";
+                    const existing = (settings as any).unfollowTargetList ?? "";
+                    const combined = existing ? existing + "\n" + text.trim() : text.trim();
+                    setSettings(s => ({ ...s, unfollowTargetList: combined }));
+                    toast({ title: "Imported from file" });
+                  };
+                  reader.readAsText(file);
+                  e.target.value = "";
+                }}
+              />
+              <Button variant="outline" size="sm" className="gap-1.5 pointer-events-none" asChild>
+                <span>
+                  <Upload className="w-3.5 h-3.5" />
+                  Import from File
+                </span>
+              </Button>
+            </label>
+
+            {/* Import from HikerAPI */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Get</span>
+              <Input
+                type="number" min={1} max={2000}
+                className="w-16 h-7 text-xs"
+                value={hikerFetchMin}
+                onChange={(e) => setHikerFetchMin(Math.max(1, Number(e.target.value)))}
+              />
+              <span className="text-xs text-muted-foreground">–</span>
+              <Input
+                type="number" min={1} max={2000}
+                className="w-16 h-7 text-xs"
+                value={hikerFetchMax}
+                onChange={(e) => setHikerFetchMax(Math.max(1, Number(e.target.value)))}
+              />
+              <Button
+                variant="outline" size="sm"
+                className="gap-1.5 shrink-0"
+                disabled={fetchingFollowings}
+                onClick={async () => {
+                  setFetchingFollowings(true);
+                  try {
+                    const res = await fetch(`/api/profiles/${profile.id}/fetch-followings`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({ fetchMin: hikerFetchMin, fetchMax: hikerFetchMax }),
+                    });
+                    const data = await res.json();
+                    if (data.ok && Array.isArray(data.usernames)) {
+                      const existing = (settings as any).unfollowTargetList ?? "";
+                      const combined = existing ? existing + "\n" + data.usernames.join("\n") : data.usernames.join("\n");
+                      setSettings(s => ({ ...s, unfollowTargetList: combined }));
+                      toast({ title: `Imported ${data.count} followings from HikerAPI` });
+                    } else {
+                      toast({ title: "Import failed", description: data.error, variant: "destructive" });
+                    }
+                  } catch {
+                    toast({ title: "Import failed", variant: "destructive" });
+                  } finally {
+                    setFetchingFollowings(false);
+                  }
+                }}
+              >
+                {fetchingFollowings ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                Import from HikerAPI
+              </Button>
+            </div>
+
+            {/* Clear */}
+            <Button
+              variant="ghost" size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setSettings(s => ({ ...s, unfollowTargetList: "" }))}
+            >
+              Clear
+            </Button>
+          </div>
+          {(settings as any).unfollowTargetList && (
+            <p className="text-[11px] text-muted-foreground">
+              {((settings as any).unfollowTargetList as string).split(/[\n,]+/).filter((u: string) => u.trim()).length} users in list
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Enable automatic follow/unfollow */}
       <div className="border border-border rounded-xl p-4 space-y-3">

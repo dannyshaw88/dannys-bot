@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign } from "lucide-react";
+import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign, TrendingUp } from "lucide-react";
 import { useRef } from "react";
 import { type Tool, type Profile, type FollowedUser, type SessionAction } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -682,6 +682,18 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                     }
                   </div>
                 )}
+                {tool.enabled && (() => {
+                  const s = (tool.settings as any) ?? {};
+                  const avgDelay   = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
+                  const avgProcess = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
+                  const perHour    = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+                  return perHour > 0 ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <TrendingUp className="w-3 h-3 shrink-0" />
+                      <span>~{perHour} follows/hr</span>
+                    </div>
+                  ) : null;
+                })()}
                 <div className="flex items-center gap-3">
                   <Switch
                     checked={tool.enabled}

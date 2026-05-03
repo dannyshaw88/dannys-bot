@@ -114,6 +114,25 @@ export class HikerApiClient {
     }
   }
 
+  async getFollowings(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
+    try {
+      const amount = Math.min(Math.max(max, 1), 200);
+      const j = await hikerGet(`/v1/user/following?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
+      const users: any[] = Array.isArray(j) ? j
+        : Array.isArray(j?.users) ? j.users
+        : Array.isArray(j?.items) ? j.items
+        : Array.isArray(j?.data) ? j.data
+        : [];
+      return users
+        .filter((u: any) => u?.pk && u?.username)
+        .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }))
+        .slice(0, max);
+    } catch (e: any) {
+      console.error(`[hikerApi] getFollowings ${userId} error: ${e?.message}`);
+      return [];
+    }
+  }
+
   // Converts a numeric media ID (e.g. "3123456789012345678_123") to the
   // base64url shortcode Instagram uses in post URLs.
   private mediaIdToShortcode(id: string): string {

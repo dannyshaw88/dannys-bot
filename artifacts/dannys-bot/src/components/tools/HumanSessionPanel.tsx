@@ -149,6 +149,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       likeTimelinePostsOrderMax: 0,
       likeTimelinePostsNotUsedMin: 0,
       likeTimelinePostsNotUsedMax: 0,
+      saveMediaEnabled: false,
+      saveMediaPercent: 20,
       repostEnabled: false,
       repostUseHikerApi: false,
       repostSourceUsername: "",
@@ -569,6 +571,32 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 onChange={(e) => setSettings({ ...settings, likeTimelinePostsMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
+          </div>
+        </div>
+
+        {/* Save Media (% of liked posts) */}
+        <div className={`border-t border-border/40 pt-3 space-y-2 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="saveMediaEnabled"
+              checked={!!settings.saveMediaEnabled}
+              onChange={(e) => setSettings({ ...settings, saveMediaEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="saveMediaEnabled" className="text-sm font-medium cursor-pointer select-none">
+              Save Media from Liked Posts
+            </label>
+          </div>
+          <div className={`flex items-center gap-3 pl-1 transition-opacity ${!settings.saveMediaEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <span className="text-xs text-muted-foreground">Save</span>
+            <Input
+              type="number" min={1} max={100}
+              className="w-16 h-7 text-xs"
+              value={settings.saveMediaPercent ?? 20}
+              onChange={(e) => setSettings({ ...settings, saveMediaPercent: Math.min(100, Math.max(1, Number(e.target.value))) })}
+            />
+            <span className="text-xs text-muted-foreground">% of liked posts to your saved collection.</span>
           </div>
         </div>
       </div>
