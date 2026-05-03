@@ -1654,8 +1654,11 @@ class AutomationEngine {
               ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
               : candidate.caption.slice(0, 2200);
 
-            const uploaded = await client.uploadPhoto(alteredBuffer, finalCaption);
-            if (uploaded) {
+            const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+            if (postedMediaId) {
+              if (s.repostDisableComments) {
+                try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
+              }
               await storage.createRepostedPost({
                 profileId:      profile.id,
                 toolId:         tool.id,
@@ -1671,6 +1674,7 @@ class AutomationEngine {
             } else {
               console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${candidate.mediaId}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, "", "fail", "Upload failed");
+
             }
           }
         } catch (e: any) {

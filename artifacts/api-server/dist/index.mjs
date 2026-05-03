@@ -143703,6 +143703,7 @@ var InstagramWebClient = class {
     }, `Get feed of @${username}`);
   }
   // ── Upload a photo and create the Instagram post ──────────────────────────
+  /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer, caption) {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
@@ -143720,7 +143721,7 @@ var InstagramWebClient = class {
       const uploaded = ruploadRes?.upload_id != null || ruploadRes?.status === "ok";
       if (!uploaded) {
         console.warn(`[webClient] rupload failed: ${JSON.stringify(ruploadRes)}`);
-        return false;
+        return null;
       }
       const body = new URLSearchParams({
         upload_id: uploadId,
@@ -143730,8 +143731,17 @@ var InstagramWebClient = class {
         date_time_original: (/* @__PURE__ */ new Date()).toISOString().replace(/[^0-9]/g, "").slice(0, 14)
       }).toString();
       const confRes = await this.mobilePost("/api/v1/media/configure/", body);
-      return confRes?.status === "ok" || confRes?.media?.id != null;
+      const mediaId = confRes?.media?.id ? String(confRes.media.id) : null;
+      if (!mediaId && confRes?.status === "ok") return uploadId;
+      return mediaId;
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
+  }
+  /** Disables comments on a post via the Instagram private API. */
+  async disableComments(mediaId) {
+    return this.timed("DisableComments", async () => {
+      const body = new URLSearchParams({ media_id: mediaId }).toString();
+      await this.mobilePost(`/api/v1/media/${mediaId}/disable_comments/`, body);
+    }, `Disable comments on ${mediaId}`);
   }
   // ── Scrape recent posts from a hashtag → returns users ────────────────────
   // The sections endpoint requires POST, not GET
@@ -143813,6 +143823,22 @@ var InstagramWebClient = class {
 // src/instagram/automationEngine.ts
 init_hikerApiClient();
 init_imageAlteration();
+function resolveCaption(template, candidate, sourceUsername, profileUsername) {
+  const caption = candidate.caption ?? "";
+  const hashtags = (caption.match(/#\w+/g) ?? []).join(" ");
+  const captionNoHashtags = caption.replace(/#\w+/g, "").replace(/\s{2,}/g, " ").trim();
+  let result = template.replace(/\[ORIGINALPOSTCAPTION NO HASHTAGS\]/gi, captionNoHashtags).replace(/\[ORIGINALPOSTCAPTION\]/gi, caption).replace(/\[ORIGINALPOSTHASHTAGS\]/gi, hashtags).replace(/\[POSTURL\]/gi, `https://www.instagram.com/p/${candidate.shortcode}/`).replace(/@CURRENTUSERNAME/gi, profileUsername).replace(/@USERNAME/gi, sourceUsername);
+  let iterations = 0;
+  while (result.includes("{") && iterations++ < 100) {
+    const prev = result;
+    result = result.replace(/\{([^{}]+)\}/g, (_2, group) => {
+      const opts = group.split("|");
+      return opts[Math.floor(Math.random() * opts.length)];
+    });
+    if (prev === result) break;
+  }
+  return result.trim().slice(0, 2200);
+}
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -145222,8 +145248,16 @@ var AutomationEngine = class {
             const imageBuffer = await client.downloadImage(candidate.imageUrl);
             const level = s.repostAlterationLevel ?? "small";
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
-            const uploaded = await client.uploadPhoto(alteredBuffer, candidate.caption);
-            if (uploaded) {
+            const captionTemplate = String(s.repostCaptionText ?? "").trim();
+            const finalCaption = captionTemplate ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username) : candidate.caption.slice(0, 2200);
+            const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+            if (postedMediaId) {
+              if (s.repostDisableComments) {
+                try {
+                  await client.disableComments(postedMediaId);
+                } catch {
+                }
+              }
               await storage.createRepostedPost({
                 profileId: profile.id,
                 toolId: tool.id,

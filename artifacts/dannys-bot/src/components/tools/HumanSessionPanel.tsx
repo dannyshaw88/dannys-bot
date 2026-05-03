@@ -46,7 +46,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     checkStories:       ["checkTimelineStoriesEnabled","checkTimelineStoriesMin","checkTimelineStoriesMax","checkTimelineStoriesOrderMin","checkTimelineStoriesOrderMax","checkTimelineStoriesNotUsedMin","checkTimelineStoriesNotUsedMax"],
     checkDm:            ["checkDmEnabled","checkDmMin","checkDmMax","checkDmOrderMin","checkDmOrderMax","checkDmNotUsedMin","checkDmNotUsedMax"],
     likeTimelinePosts:  ["likeTimelinePostsEnabled","likeTimelinePostsMin","likeTimelinePostsMax","likeTimelinePostsOrderMin","likeTimelinePostsOrderMax","likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"],
-    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostImageSettings","repostCaptionText","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
+    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostImageSettings","repostCaptionText","repostDisableComments","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
   };
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "Timing", options: [
@@ -133,6 +133,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       repostOrderMax: 0,
       repostNotUsedMin: 0,
       repostNotUsedMax: 0,
+      repostDisableComments: false,
       repostDisableAtPostCount: 0,
       repostDisableWhenExhausted: true,
     };
@@ -619,6 +620,19 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 onChange={(e) => setSettings({ ...settings, repostDisableAtPostCount: Math.max(0, Number(e.target.value)) })}
               />
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="repostDisableComments"
+              checked={!!settings.repostDisableComments}
+              onChange={(e) => setSettings({ ...settings, repostDisableComments: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="repostDisableComments" className="text-xs text-muted-foreground cursor-pointer select-none">
+              Disable comments after repost
+            </label>
           </div>
 
           <div className="flex items-center gap-2">

@@ -1050,7 +1050,8 @@ export class InstagramWebClient {
   }
 
   // ── Upload a photo and create the Instagram post ──────────────────────────
-  async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<boolean> {
+  /** Uploads a photo and returns the new media ID string on success, or null on failure. */
+  async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
 
@@ -1069,7 +1070,7 @@ export class InstagramWebClient {
       const uploaded = ruploadRes?.upload_id != null || (ruploadRes?.status === "ok");
       if (!uploaded) {
         console.warn(`[webClient] rupload failed: ${JSON.stringify(ruploadRes)}`);
-        return false;
+        return null;
       }
 
       // Step 2 — configure (creates the post)
@@ -1082,8 +1083,19 @@ export class InstagramWebClient {
       }).toString();
 
       const confRes = await this.mobilePost("/api/v1/media/configure/", body);
-      return confRes?.status === "ok" || confRes?.media?.id != null;
+      const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
+      // Treat "ok" without an ID as success but return a placeholder so callers know it worked
+      if (!mediaId && confRes?.status === "ok") return uploadId;
+      return mediaId;
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
+  }
+
+  /** Disables comments on a post via the Instagram private API. */
+  async disableComments(mediaId: string): Promise<void> {
+    return this.timed("DisableComments", async () => {
+      const body = new URLSearchParams({ media_id: mediaId }).toString();
+      await this.mobilePost(`/api/v1/media/${mediaId}/disable_comments/`, body);
+    }, `Disable comments on ${mediaId}`);
   }
 
   // ── Scrape recent posts from a hashtag → returns users ────────────────────
