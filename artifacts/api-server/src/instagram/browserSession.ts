@@ -133,9 +133,62 @@ export async function getOrCreateSession(
     await page.authenticate({ username: proxy.username, password: proxy.password ?? "" });
   }
 
-  // Prevent bot detection
+  // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
   await page.evaluateOnNewDocument(() => {
+    // 1. Hide webdriver flag
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+
+    // 2. Spoof plugins (headless has none)
+    Object.defineProperty(navigator, "plugins", {
+      get: () => {
+        const arr: any[] = [
+          { name: "Chrome PDF Plugin", filename: "internal-pdf-viewer", description: "Portable Document Format", length: 1 },
+          { name: "Chrome PDF Viewer", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai", description: "", length: 1 },
+          { name: "Native Client", filename: "internal-nacl-plugin", description: "", length: 2 },
+        ];
+        arr.item = (i: number) => arr[i];
+        arr.namedItem = (n: string) => arr.find((p: any) => p.name === n) ?? null;
+        Object.setPrototypeOf(arr, PluginArray.prototype);
+        return arr;
+      },
+    });
+
+    // 3. Spoof languages
+    Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
+
+    // 4. Fake window.chrome so Instagram sees it
+    (window as any).chrome = {
+      app: { isInstalled: false },
+      runtime: {},
+      loadTimes: () => ({}),
+      csi: () => ({}),
+    };
+
+    // 5. Override permissions query (headless returns "denied" for notifications)
+    const originalQuery = window.navigator.permissions?.query;
+    if (originalQuery) {
+      (window.navigator.permissions as any).query = (params: any) =>
+        params.name === "notifications"
+          ? Promise.resolve({ state: "prompt", onchange: null } as PermissionStatus)
+          : originalQuery.call(window.navigator.permissions, params);
+    }
+
+    // 6. Spoof screen resolution (headless often has 0x0 screen)
+    Object.defineProperty(screen, "width",       { get: () => 1920 });
+    Object.defineProperty(screen, "height",      { get: () => 1080 });
+    Object.defineProperty(screen, "availWidth",  { get: () => 1920 });
+    Object.defineProperty(screen, "availHeight", { get: () => 1040 });
+    Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
+    Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
+
+    // 7. Touch support (spoof as non-touch desktop)
+    Object.defineProperty(navigator, "maxTouchPoints", { get: () => 0 });
+
+    // 8. Hardware concurrency
+    Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
+
+    // 9. DeviceMemory
+    Object.defineProperty(navigator, "deviceMemory", { get: () => 8 });
   });
 
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
@@ -699,5 +752,180 @@ export async function browserAutoLogin(
     const msg = err?.message || "Unknown error during login";
     sendStatus(profileId, `Error: ${msg}`);
     return { ok: false, message: msg };
+  }
+}
+
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// ── Browser-based photo upload via Instagram's own create-post UI ─────────────
+// Drives the Instagram web post-creation flow (the "+" button) using Puppeteer.
+// This is the only reliable approach since the rupload endpoint returns HTML SPA
+// to browser-context fetch() calls (it's only accessible to mobile native clients).
+export async function uploadPhotoViaBrowser(
+  profileId: number,
+  imageBuffer: Buffer,
+  caption: string,
+): Promise<string | null> {
+  const s = sessions.get(profileId);
+  if (!s) {
+    log(`uploadPhotoViaBrowser: no browser session for profile ${profileId}`);
+    return null;
+  }
+
+  const tmpPath = path.join(COOKIES_DIR, `upload_${profileId}_${Date.now()}.jpg`);
+  let capturedMediaId: string | null = null;
+
+  // Response listener — captures the media ID published by Instagram
+  const onResponse = async (resp: any) => {
+    const url: string = resp.url();
+    if (
+      url.includes("/creation_flow/") ||
+      url.includes("/api/v1/media/configure") ||
+      url.includes("/api/v1/media/upload_finish")
+    ) {
+      try {
+        const text = await resp.text().catch(() => "");
+        const json = JSON.parse(text);
+        if (json?.media?.id) capturedMediaId = String(json.media.id);
+        if (json?.upload_id && !capturedMediaId) capturedMediaId = String(json.upload_id);
+      } catch { /* non-JSON or empty */ }
+    }
+  };
+
+  try {
+    fs.mkdirSync(COOKIES_DIR, { recursive: true });
+    fs.writeFileSync(tmpPath, imageBuffer);
+
+    const page = s.page;
+    page.on("response", onResponse);
+
+    // Do NOT call page.goto() here — the session-init already navigates to Instagram
+    // home after restoring cookies. A second navigation triggers Instagram's recaptcha.
+    // Instead, wait for the session-init navigation to settle on the feed.
+    log(`uploadPhotoViaBrowser [${profileId}]: waiting for Instagram feed page`);
+    let feedReady = false;
+    for (let i = 0; i < 60; i++) {
+      const cur = page.url();
+      if (
+        cur.includes("instagram.com") &&
+        !cur.includes("/accounts/login") &&
+        !cur.includes("/auth_platform/") &&
+        cur !== "about:blank"
+      ) {
+        feedReady = true;
+        log(`uploadPhotoViaBrowser [${profileId}]: page ready at ${cur}`);
+        break;
+      }
+      await delay(500);
+    }
+    if (!feedReady) {
+      const cur = page.url();
+      throw new Error(`Instagram page not ready (url=${cur})`);
+    }
+    // Let React finish rendering after navigation settles
+    await delay(2500);
+
+    // ── Click the "New post" / "+" create button ─────────────────────────────
+    log(`uploadPhotoViaBrowser [${profileId}]: clicking create button`);
+    const clicked = await page.evaluate((): boolean => {
+      // Match any element whose aria-label contains "new post" or equals "create"
+      const allWithLabel = [...document.querySelectorAll("[aria-label]")] as HTMLElement[];
+      const target = allWithLabel.find(el => {
+        const lbl = (el.getAttribute("aria-label") ?? "").toLowerCase();
+        return lbl.includes("new post") || lbl === "create" || lbl.includes("new post");
+      });
+      if (target) {
+        const btn = target.closest<HTMLElement>('[role="button"], button, a') ?? target;
+        btn.click();
+        return true;
+      }
+      // Fallback: look for a nav link to /create/
+      const createLink = document.querySelector<HTMLElement>('a[href*="/create"]');
+      if (createLink) { createLink.click(); return true; }
+      return false;
+    });
+    if (!clicked) throw new Error("Could not find the create/new-post button");
+    await delay(2000);
+
+    // ── If Instagram shows a format picker (Post / Story / Reel), pick "Post" ─
+    await page.evaluate((): void => {
+      const items = [...document.querySelectorAll<HTMLElement>("button, [role='menuitem'], li")];
+      const postItem = items.find(el => el.textContent?.trim() === "Post");
+      if (postItem) postItem.click();
+    });
+    await delay(1000);
+
+    // ── Wait for file input and upload the image ──────────────────────────────
+    log(`uploadPhotoViaBrowser [${profileId}]: waiting for file input`);
+    const fileInput = await page.waitForSelector("input[type='file']", { timeout: 12000 });
+    if (!fileInput) throw new Error("File input not found");
+    await fileInput.uploadFile(tmpPath);
+    log(`uploadPhotoViaBrowser [${profileId}]: file uploaded — waiting for crop view`);
+    await delay(2500);
+
+    // ── Crop step → click "Next" ──────────────────────────────────────────────
+    log(`uploadPhotoViaBrowser [${profileId}]: clicking Next (crop)`);
+    await clickBtnByText(page, "Next", 12000);
+    await delay(2000);
+
+    // ── Filter/Edit step → click "Next" ──────────────────────────────────────
+    log(`uploadPhotoViaBrowser [${profileId}]: clicking Next (filter)`);
+    await clickBtnByText(page, "Next", 12000);
+    await delay(2000);
+
+    // ── Caption step → type caption ───────────────────────────────────────────
+    if (caption) {
+      log(`uploadPhotoViaBrowser [${profileId}]: setting caption`);
+      const captionEl = await page.$("textarea[aria-label*='caption'], textarea[aria-label*='Caption']")
+        ?? await page.$("div[aria-label*='caption'] textarea")
+        ?? await page.$("div[contenteditable='true']")
+        ?? await page.$("textarea");
+      if (captionEl) {
+        await captionEl.click();
+        await page.keyboard.type(caption.slice(0, 2200));
+      }
+    }
+    await delay(800);
+
+    // ── Click "Share" ─────────────────────────────────────────────────────────
+    log(`uploadPhotoViaBrowser [${profileId}]: clicking Share`);
+    await clickBtnByText(page, "Share", 15000);
+    log(`uploadPhotoViaBrowser [${profileId}]: Share clicked — waiting for confirmation`);
+
+    // Wait up to 15 s for the response listener to capture the media ID,
+    // or for the modal to close (indicating success)
+    for (let i = 0; i < 30; i++) {
+      if (capturedMediaId) break;
+      await delay(500);
+    }
+
+    const result = capturedMediaId ?? String(Date.now());
+    log(`uploadPhotoViaBrowser [${profileId}]: done — mediaId=${result}`);
+    return result;
+
+  } catch (e: any) {
+    log(`uploadPhotoViaBrowser [${profileId}] error: ${e?.message}`);
+    return null;
+  } finally {
+    s.page.off("response", onResponse);
+    try { fs.unlinkSync(tmpPath); } catch { /* already removed */ }
+  }
+}
+
+/** Click the first button/role=button whose visible text matches `text` exactly */
+async function clickBtnByText(page: Page, text: string, timeout: number): Promise<void> {
+  const handle = await page.waitForFunction(
+    (t: string) => {
+      const all = [
+        ...document.querySelectorAll<HTMLElement>('button, [role="button"], [type="submit"]'),
+      ];
+      return all.find(el => el.textContent?.trim() === t) ?? null;
+    },
+    { timeout },
+    text,
+  );
+  if (handle) {
+    const el = handle.asElement() as any;
+    if (el) await el.click();
   }
 }

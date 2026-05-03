@@ -2,6 +2,7 @@ import { storage } from "../storage";
 import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
+import { getOrCreateSession, uploadPhotoViaBrowser, type ProxyConfig } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -958,6 +959,28 @@ class AutomationEngine {
     return undefined;
   }
 
+  private async buildProxyConfig(profile: Profile): Promise<ProxyConfig | undefined> {
+    if (profile.proxyId) {
+      const proxies = await storage.getProxies();
+      const p = proxies.find(px => px.id === profile.proxyId);
+      if (p) return { host: p.host, port: p.port, username: p.username ?? undefined, password: p.password ?? undefined };
+    }
+    if (profile.proxyHost && profile.proxyPort) {
+      return {
+        host: profile.proxyHost,
+        port: Number(profile.proxyPort),
+        username: profile.proxyUsername ?? undefined,
+        password: profile.proxyPassword ?? undefined,
+      };
+    }
+    return undefined;
+  }
+
+  private defaultUA(profile: Profile): string {
+    return profile.userAgentEmbedded ||
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  }
+
   // ── Ensure logged-in client ───────────────────────────────────────────────
   private async ensureClient(profile: Profile, state: ProfileState): Promise<InstagramWebClient | null> {
     const proxyUrl = await this.buildProxyUrl(profile);
@@ -1747,6 +1770,10 @@ class AutomationEngine {
           const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
 
+          // Launch Chrome ONCE before the loop — calling getOrCreateSession inside
+          // the loop causes alternating proxy checks that restart the browser between posts.
+          await getOrCreateSession(profile.id, this.defaultUA(profile), await this.buildProxyConfig(profile));
+
           let repostedCount = 0;
           let uploadAttempted = 0;  // items where we actually tried to upload (not already reposted)
           for (const item of feedItems) {
@@ -1761,7 +1788,8 @@ class AutomationEngine {
               ? resolveCaption(captionTemplate, item, sourceUsername, profile.username)
               : item.caption.slice(0, 2200);
 
-            const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+            // Upload via the embedded browser (Chrome) — uses correct TLS fingerprint + live session
+            const postedMediaId = await uploadPhotoViaBrowser(profile.id, alteredBuffer, finalCaption);
             if (postedMediaId) {
               if (s.repostDisableComments) {
                 try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
@@ -2147,7 +2175,10 @@ class AutomationEngine {
         ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
         : candidate.caption.slice(0, 2200);
 
-      const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
+      // Ensure the Chrome browser session is running (auto-launch if not already up)
+      await getOrCreateSession(profileId, this.defaultUA(profile), await this.buildProxyConfig(profile));
+      // Upload via the embedded browser (Chrome) — uses correct TLS fingerprint + live session
+      const postedMediaId = await uploadPhotoViaBrowser(profileId, alteredBuffer, finalCaption);
       if (!postedMediaId) return { ok: false, message: "Upload failed — Instagram rejected the photo" };
 
       if (s.repostDisableComments) {
