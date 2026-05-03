@@ -118501,14 +118501,11 @@ var init_hikerApiClient = __esm({
       async getFollowers(userId, max = 50) {
         try {
           const amount = Math.min(Math.max(max, 1), 200);
-          const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
+          const j = await hikerGet(`/sc/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
           if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
             const detail = j.detail ?? j.exc_type ?? JSON.stringify(j);
             const msg = `HikerAPI getFollowers error: ${detail}`;
             console.error(`[hikerApi] ${msg}`);
-            if (/entries not found/i.test(detail) || /not found/i.test(detail)) {
-              throw new HikerCacheMissError(msg);
-            }
             throw new Error(msg);
           }
           const users = Array.isArray(j) ? j : Array.isArray(j?.users) ? j.users : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : Array.isArray(j?.response?.users) ? j.response.users : [];
@@ -144729,16 +144726,7 @@ var AutomationEngine = class {
     if (!client) return;
     let followers = [];
     if (hikerClient) {
-      try {
-        followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
-      } catch (e) {
-        if (e instanceof HikerCacheMissError) {
-          console.warn(`[engine] @${profile.username}: HikerAPI cache miss for own followers, falling back to account API`);
-          followers = await client.getFollowers(ownUserId, usersToCheck);
-        } else {
-          throw e;
-        }
-      }
+      followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
     } else {
       followers = await client.getFollowers(ownUserId, usersToCheck);
     }
