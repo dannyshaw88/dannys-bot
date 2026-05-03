@@ -785,24 +785,18 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                     <FolderOpen className="w-3.5 h-3.5" />
                     Browse…
                   </button>
-                  {/* Hidden directory picker — webkitdirectory lets the OS open the folder-select dialog */}
+                  {/* Hidden image picker — select multiple images from a folder */}
                   <input
                     ref={localFolderPickerRef}
                     type="file"
-                    // @ts-ignore — webkitdirectory is a valid attribute but not in TS typedefs
-                    webkitdirectory=""
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                     multiple
                     className="hidden"
                     onChange={(e) => {
                       const files = Array.from(e.target.files ?? []);
                       if (!files.length) return;
-                      const IMAGE_EXTS = new Set(["jpg","jpeg","png","webp","gif"]);
-                      const imgCount = files.filter(f => IMAGE_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? "")).length;
-                      // Extract top-level folder name from the relative path
-                      const topFolder = files[0].webkitRelativePath.split("/")[0];
-                      setSettings({ ...settings, repostLocalFolderPath: topFolder });
-                      setLocalFolderFileCount(imgCount);
-                      // Reset the input so the same folder can be re-selected
+                      setLocalFolderFileCount(files.length);
+                      // Reset so the same selection can be repeated
                       e.target.value = "";
                     }}
                   />
@@ -810,7 +804,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 {localFolderFileCount !== null && (
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                     <FolderOpen className="w-3 h-3 shrink-0" />
-                    {localFolderFileCount} image{localFolderFileCount !== 1 ? "s" : ""} found in selected folder — verify the full path above is correct for the server.
+                    {localFolderFileCount} image{localFolderFileCount !== 1 ? "s" : ""} selected — now type the full folder path above so the server knows where to find them (e.g. C:\Users\You\Pictures\Repost).
                   </p>
                 )}
               </div>
