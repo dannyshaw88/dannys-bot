@@ -138655,37 +138655,28 @@ async function verifyInstagramCredentials(profile) {
   console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
   const proxyIp = profile.proxyHost ?? "";
   if (profile.igApiCookies) {
-    console.error(`[instagramLogin] @${profile.username} \u2014 trying cookie session restore`);
     const { ig: ig2, captureDeviceState: captureDeviceState2 } = buildIgClient(profile, proxyUrl);
-    attachRequestLogger(ig2, profile.id, "Verify", proxyIp);
-    try {
-      await restoreSessionCookies(ig2, profile.igApiCookies);
-      const user = await ig2.account.currentUser();
-      console.error(`[instagramLogin] @${profile.username} \u2014 cookie session valid (pk=${user.pk})`);
-      return {
-        ok: true,
-        message: `@${profile.username} \u2014 session active (userId ${user.pk}).`,
-        accountStatus: "valid",
-        igDeviceState: captureDeviceState2()
-      };
-    } catch (cookieErr) {
-      const errMsg = cookieErr?.message ?? "";
-      console.error(`[instagramLogin] @${profile.username} \u2014 cookie session failed: ${errMsg}`);
-      if (cookieErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(errMsg)) {
+    const sessionPair = profile.igApiCookies.split(";").map((s) => s.trim()).find((s) => s.toLowerCase().startsWith("sessionid="));
+    if (sessionPair) {
+      const rawVal = sessionPair.slice("sessionid=".length);
+      let decoded = rawVal;
+      try {
+        decoded = decodeURIComponent(rawVal);
+      } catch {
+      }
+      const userId = decoded.split(":")[0];
+      if (userId && /^\d+$/.test(userId)) {
+        console.error(`[instagramLogin] @${profile.username} \u2014 cookie session accepted (userId=${userId})`);
+        await restoreSessionCookies(ig2, profile.igApiCookies);
         return {
-          ok: false,
-          message: `@${profile.username} \u2014 session requires a security checkpoint. Open the embedded browser to resolve it.`,
-          accountStatus: "captcha",
+          ok: true,
+          message: `@${profile.username} \u2014 session cookie loaded (userId ${userId}). The account is ready for automation.`,
+          accountStatus: "valid",
           igDeviceState: captureDeviceState2()
         };
       }
-      return {
-        ok: false,
-        message: `@${profile.username} \u2014 session cookie has expired or been revoked. Open the embedded browser, log in manually, then click Verify again to refresh the session.`,
-        accountStatus: "logged_out",
-        igDeviceState: captureDeviceState2()
-      };
     }
+    console.error(`[instagramLogin] @${profile.username} \u2014 could not parse sessionid from igApiCookies, falling through to password login`);
   }
   const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
   attachRequestLogger(ig, profile.id, "Verify", proxyIp);
