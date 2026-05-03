@@ -178,7 +178,11 @@ function parseJarveeFile(text: string): ParsedProfile[] {
       }
 
       const field = COLUMN_MAP[header];
-      if (field) row[field] = val;
+      // Only write if the value is non-empty, or if nothing has been set yet.
+      // This prevents a later empty column (e.g. "Cookies" at col 23) from
+      // overwriting a value already captured from an earlier column
+      // (e.g. "ApiCookies" at col 19) when both map to the same field.
+      if (field && (val || !row[field])) row[field] = val;
     });
 
     if (!row.username && row.email && !row.email.includes("@")) {
