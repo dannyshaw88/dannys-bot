@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
+import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { Profile, Tool, Source } from "../shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1565,6 +1566,74 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", detail);
       } catch (e: any) {
         console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
+      }
+    }
+
+    // ── Repost ───────────────────────────────────────────────────────────────
+    if (s.repostEnabled && s.repostSourceUsername) {
+      const sourceUsername = String(s.repostSourceUsername ?? "").trim();
+      if (sourceUsername) {
+        try {
+          // Check disable-at-post-count first (reads own bio stats)
+          const disableAt = Number(s.repostDisableAtPostCount ?? 0);
+          if (disableAt > 0) {
+            const stats = await client.getOwnProfileStats();
+            if (stats && stats.postsCount >= disableAt) {
+              await storage.updateTool(tool.id, { enabled: false });
+              console.log(`[engine] @${profile.username}: 🔁 repost auto-disabled (posts=${stats.postsCount} >= target=${disableAt})`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", `Auto-disabled: ${stats.postsCount} posts reached target ${disableAt}`);
+              return;
+            }
+          }
+
+          // Fetch source account's recent feed (photos only)
+          const feedItems = await client.getUserFeedItems(sourceUsername);
+
+          // Find first post that hasn't been reposted yet
+          let candidate: { mediaId: string; shortcode: string; imageUrl: string; caption: string } | null = null;
+          for (const item of feedItems) {
+            const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
+            if (!already) { candidate = item; break; }
+          }
+
+          if (!candidate) {
+            if (s.repostDisableWhenExhausted) {
+              await storage.updateTool(tool.id, { enabled: false });
+              console.log(`[engine] @${profile.username}: 🔁 repost auto-disabled (all posts already reposted)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Auto-disabled: no more unique posts from source");
+            } else {
+              console.log(`[engine] @${profile.username}: 🔁 repost skipped — no new posts from @${sourceUsername}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);
+            }
+          } else {
+            // Download, alter, upload
+            const imageBuffer   = await client.downloadImage(candidate.imageUrl);
+            const level         = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
+            const alteredBuffer = alterJpegBuffer(imageBuffer, level);
+
+            const uploaded = await client.uploadPhoto(alteredBuffer, candidate.caption);
+            if (uploaded) {
+              await storage.createRepostedPost({
+                profileId:      profile.id,
+                toolId:         tool.id,
+                sourceUsername,
+                mediaId:        candidate.mediaId,
+                shortcode:      candidate.shortcode,
+                caption:        candidate.caption.slice(0, 2200),
+                thumbnailUrl:   candidate.imageUrl,
+                repostedAt:     new Date().toISOString(),
+              });
+              console.log(`[engine] @${profile.username}: 🔁 reposted ${candidate.mediaId} from @${sourceUsername} (alteration=${level})`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level})`);
+            } else {
+              console.warn(`[engine] @${profile.username}: 🔁 upload failed for ${candidate.mediaId}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, "", "fail", "Upload failed");
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[engine] @${profile.username}: repost error: ${e?.message}`);
+          this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", e?.message ?? "unknown error");
+        }
       }
     }
   }

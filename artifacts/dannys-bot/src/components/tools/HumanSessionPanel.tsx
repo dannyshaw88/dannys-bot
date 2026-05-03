@@ -41,7 +41,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     checkStories:       ["checkTimelineStoriesEnabled","checkTimelineStoriesMin","checkTimelineStoriesMax","checkTimelineStoriesOrderMin","checkTimelineStoriesOrderMax","checkTimelineStoriesNotUsedMin","checkTimelineStoriesNotUsedMax"],
     checkDm:            ["checkDmEnabled","checkDmMin","checkDmMax","checkDmOrderMin","checkDmOrderMax","checkDmNotUsedMin","checkDmNotUsedMax"],
     likeTimelinePosts:  ["likeTimelinePostsEnabled","likeTimelinePostsMin","likeTimelinePostsMax","likeTimelinePostsOrderMin","likeTimelinePostsOrderMax","likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"],
-    repost:             ["repostEnabled","repostSourceUsername","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
+    repost:             ["repostEnabled","repostSourceUsername","repostAlterationLevel","repostOrderMin","repostOrderMax","repostNotUsedMin","repostNotUsedMax","repostDisableAtPostCount","repostDisableWhenExhausted"],
   };
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "Timing", options: [
@@ -115,6 +115,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       likeTimelinePostsNotUsedMax: 0,
       repostEnabled: false,
       repostSourceUsername: "",
+      repostAlterationLevel: "small",
       repostOrderMin: 0,
       repostOrderMax: 0,
       repostNotUsedMin: 0,
@@ -546,6 +547,25 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                   value={settings.repostSourceUsername ?? ""}
                   onChange={(e) => setSettings({ ...settings, repostSourceUsername: e.target.value.replace(/^@/, '') })}
                 />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Alteration level</Label>
+              <div className="flex gap-1">
+                {(["small", "medium", "high"] as const).map((lvl) => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => setSettings({ ...settings, repostAlterationLevel: lvl })}
+                    className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
+                      (settings.repostAlterationLevel ?? "small") === lvl
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                    }`}
+                  >
+                    {lvl}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="space-y-1.5">

@@ -10,7 +10,7 @@ import { generateSync as totpGenerate } from "otplib";
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
 function httpsRequest(
   options: https.RequestOptions,
-  body?: string,
+  body?: string | Buffer,
 ): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }> {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
@@ -21,7 +21,7 @@ function httpsRequest(
       });
     });
     req.on("error", reject);
-    req.setTimeout(20000, () => { req.destroy(new Error("timeout")); });
+    req.setTimeout(60000, () => { req.destroy(new Error("timeout")); });
     if (body) req.write(body);
     req.end();
   });
@@ -956,6 +956,134 @@ export class InstagramWebClient {
     this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
     if (!res.json) console.log(`[webClient] mobilePost ${path} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
     return res.json;
+  }
+
+  // ── Binary POST for rupload (photo upload) ───────────────────────────────
+  private async mobilePostBinary(path: string, body: Buffer, extraHeaders: Record<string, string> = {}): Promise<any> {
+    const ua = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+    const headers: Record<string, string> = {
+      Host: "i.instagram.com",
+      "User-Agent": ua,
+      Accept: "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "X-IG-App-ID": APP_ID,
+      "X-CSRFToken": this.csrfToken,
+      "X-IG-Capabilities": "3brTvwE=",
+      "X-IG-Connection-Type": "WIFI",
+      "Content-Length": String(body.length),
+      Cookie: this.cookieJar.join("; "),
+      ...extraHeaders,
+    };
+
+    let agent: any;
+    if (this.proxyUrl) {
+      const { HttpsProxyAgent } = await import("https-proxy-agent");
+      agent = new HttpsProxyAgent(this.proxyUrl);
+    }
+
+    const res = await httpsRequest(
+      { host: "i.instagram.com", port: 443, path, method: "POST", headers, ...(agent ? { agent } : {}) },
+      body,
+    );
+    let json: any = null;
+    try { json = JSON.parse(res.body); } catch {}
+    if (!json) console.log(`[webClient] mobilePostBinary ${path} status=${res.status} body:`, res.body.slice(0, 200));
+    return json;
+  }
+
+  // ── Download an image from a CDN URL into a Buffer ────────────────────────
+  async downloadImage(url: string): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
+      const options: https.RequestOptions = {
+        host: parsedUrl.hostname,
+        port: 443,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+          Accept: "image/*,*/*",
+        },
+      };
+      https.get(options, (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end",  () => resolve(Buffer.concat(chunks)));
+        res.on("error", reject);
+      }).on("error", reject);
+    });
+  }
+
+  // ── Get recent photo posts from a user's feed (with image URLs) ───────────
+  async getUserFeedItems(username: string): Promise<Array<{
+    mediaId: string;
+    shortcode: string;
+    imageUrl: string;
+    caption: string;
+    takenAt: number;
+  }>> {
+    return this.timed("GetUserFeed", async () => {
+      const user = await this.getUserByUsername(username);
+      if (!user) return [];
+
+      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+      const items: any[] = j?.items ?? [];
+
+      return items.flatMap((item: any) => {
+        // Only handle photo (1) and album (8) — skip videos/reels
+        const mediaType: number = item?.media_type ?? 1;
+        if (mediaType !== 1 && mediaType !== 8) return [];
+
+        const mediaId  = String(item.id ?? item.pk ?? "");
+        const caption  = item.caption?.text ?? "";
+        const takenAt  = item.taken_at ?? Math.floor(Date.now() / 1000);
+
+        // For albums use the first carousel image
+        const firstMedia = mediaType === 8 ? (item.carousel_media?.[0] ?? item) : item;
+        const candidates: any[] = firstMedia.image_versions2?.candidates ?? [];
+        const imageUrl = candidates[0]?.url ?? "";
+
+        if (!mediaId || !imageUrl) return [];
+        return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
+      });
+    }, `Get feed of @${username}`);
+  }
+
+  // ── Upload a photo and create the Instagram post ──────────────────────────
+  async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<boolean> {
+    return this.timed("UploadPhoto", async () => {
+      const uploadId = String(Date.now());
+
+      // Step 1 — binary upload via rupload
+      const ruploadRes = await this.mobilePostBinary(
+        `/rupload/igphoto/${uploadId}`,
+        imageBuffer,
+        {
+          "Content-Type": "image/jpeg",
+          "X-Entity-Type": "image/jpeg",
+          "X-Entity-Name": `photo_${uploadId}`,
+          "Offset": "0",
+          "X-Entity-Length": String(imageBuffer.length),
+        },
+      );
+      const uploaded = ruploadRes?.upload_id != null || (ruploadRes?.status === "ok");
+      if (!uploaded) {
+        console.warn(`[webClient] rupload failed: ${JSON.stringify(ruploadRes)}`);
+        return false;
+      }
+
+      // Step 2 — configure (creates the post)
+      const body = new URLSearchParams({
+        upload_id: uploadId,
+        caption,
+        source_type: "4",
+        timezone_offset: "0",
+        date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      }).toString();
+
+      const confRes = await this.mobilePost("/api/v1/media/configure/", body);
+      return confRes?.status === "ok" || confRes?.media?.id != null;
+    }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
   }
 
   // ── Scrape recent posts from a hashtag → returns users ────────────────────

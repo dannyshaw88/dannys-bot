@@ -1056,12 +1056,12 @@ var require_depd = __commonJS({
       if ("value" in descriptor) {
         descriptor = convertDataDescriptorToAccessor(obj2, prop, message);
       }
-      var get = descriptor.get;
+      var get2 = descriptor.get;
       var set2 = descriptor.set;
-      if (typeof get === "function") {
+      if (typeof get2 === "function") {
         descriptor.get = function getter() {
           log2.call(deprecate, message, site);
-          return get.apply(this, arguments);
+          return get2.apply(this, arguments);
         };
       }
       if (typeof set2 === "function") {
@@ -30440,7 +30440,7 @@ var require_lodash = __commonJS({
         function baseAt(object2, paths) {
           var index = -1, length = paths.length, result2 = Array2(length), skip = object2 == null;
           while (++index < length) {
-            result2[index] = skip ? undefined2 : get(object2, paths[index]);
+            result2[index] = skip ? undefined2 : get2(object2, paths[index]);
           }
           return result2;
         }
@@ -30885,7 +30885,7 @@ var require_lodash = __commonJS({
             return matchesStrictComparable(toKey(path4), srcValue);
           }
           return function(object2) {
-            var objValue = get(object2, path4);
+            var objValue = get2(object2, path4);
             return objValue === undefined2 && objValue === srcValue ? hasIn(object2, path4) : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
           };
         }
@@ -33653,7 +33653,7 @@ var require_lodash = __commonJS({
         function functionsIn(object2) {
           return object2 == null ? [] : baseFunctions(object2, keysIn(object2));
         }
-        function get(object2, path4, defaultValue) {
+        function get2(object2, path4, defaultValue) {
           var result2 = object2 == null ? undefined2 : baseGet(object2, path4);
           return result2 === undefined2 ? defaultValue : result2;
         }
@@ -34516,7 +34516,7 @@ var require_lodash = __commonJS({
         lodash.forInRight = forInRight;
         lodash.forOwn = forOwn;
         lodash.forOwnRight = forOwnRight;
-        lodash.get = get;
+        lodash.get = get2;
         lodash.gt = gt2;
         lodash.gte = gte2;
         lodash.has = has;
@@ -116633,7 +116633,7 @@ var require_websocket = __commonJS({
     var http2 = __require("http");
     var net3 = __require("net");
     var tls2 = __require("tls");
-    var { randomBytes: randomBytes2, createHash } = __require("crypto");
+    var { randomBytes: randomBytes3, createHash } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL3 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -117163,7 +117163,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes2(16).toString("base64");
+      const key = randomBytes3(16).toString("base64");
       const request3 = isSecure ? https3.request : http2.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -142740,7 +142740,7 @@ function httpsRequest(options, body) {
       });
     });
     req.on("error", reject);
-    req.setTimeout(2e4, () => {
+    req.setTimeout(6e4, () => {
       req.destroy(new Error("timeout"));
     });
     if (body) req.write(body);
@@ -143526,6 +143526,113 @@ var InstagramWebClient = class {
     if (!res.json) console.log(`[webClient] mobilePost ${path4} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
     return res.json;
   }
+  // ── Binary POST for rupload (photo upload) ───────────────────────────────
+  async mobilePostBinary(path4, body, extraHeaders = {}) {
+    const ua = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+    const headers = {
+      Host: "i.instagram.com",
+      "User-Agent": ua,
+      Accept: "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "X-IG-App-ID": APP_ID,
+      "X-CSRFToken": this.csrfToken,
+      "X-IG-Capabilities": "3brTvwE=",
+      "X-IG-Connection-Type": "WIFI",
+      "Content-Length": String(body.length),
+      Cookie: this.cookieJar.join("; "),
+      ...extraHeaders
+    };
+    let agent;
+    if (this.proxyUrl) {
+      const { HttpsProxyAgent: HttpsProxyAgent2 } = await Promise.resolve().then(() => (init_dist2(), dist_exports));
+      agent = new HttpsProxyAgent2(this.proxyUrl);
+    }
+    const res = await httpsRequest(
+      { host: "i.instagram.com", port: 443, path: path4, method: "POST", headers, ...agent ? { agent } : {} },
+      body
+    );
+    let json2 = null;
+    try {
+      json2 = JSON.parse(res.body);
+    } catch {
+    }
+    if (!json2) console.log(`[webClient] mobilePostBinary ${path4} status=${res.status} body:`, res.body.slice(0, 200));
+    return json2;
+  }
+  // ── Download an image from a CDN URL into a Buffer ────────────────────────
+  async downloadImage(url2) {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url2);
+      const options = {
+        host: parsedUrl.hostname,
+        port: 443,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: "GET",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+          Accept: "image/*,*/*"
+        }
+      };
+      https.get(options, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => resolve(Buffer.concat(chunks)));
+        res.on("error", reject);
+      }).on("error", reject);
+    });
+  }
+  // ── Get recent photo posts from a user's feed (with image URLs) ───────────
+  async getUserFeedItems(username) {
+    return this.timed("GetUserFeed", async () => {
+      const user = await this.getUserByUsername(username);
+      if (!user) return [];
+      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+      const items = j?.items ?? [];
+      return items.flatMap((item) => {
+        const mediaType = item?.media_type ?? 1;
+        if (mediaType !== 1 && mediaType !== 8) return [];
+        const mediaId = String(item.id ?? item.pk ?? "");
+        const caption = item.caption?.text ?? "";
+        const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
+        const firstMedia = mediaType === 8 ? item.carousel_media?.[0] ?? item : item;
+        const candidates = firstMedia.image_versions2?.candidates ?? [];
+        const imageUrl = candidates[0]?.url ?? "";
+        if (!mediaId || !imageUrl) return [];
+        return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
+      });
+    }, `Get feed of @${username}`);
+  }
+  // ── Upload a photo and create the Instagram post ──────────────────────────
+  async uploadPhoto(imageBuffer, caption) {
+    return this.timed("UploadPhoto", async () => {
+      const uploadId = String(Date.now());
+      const ruploadRes = await this.mobilePostBinary(
+        `/rupload/igphoto/${uploadId}`,
+        imageBuffer,
+        {
+          "Content-Type": "image/jpeg",
+          "X-Entity-Type": "image/jpeg",
+          "X-Entity-Name": `photo_${uploadId}`,
+          "Offset": "0",
+          "X-Entity-Length": String(imageBuffer.length)
+        }
+      );
+      const uploaded = ruploadRes?.upload_id != null || ruploadRes?.status === "ok";
+      if (!uploaded) {
+        console.warn(`[webClient] rupload failed: ${JSON.stringify(ruploadRes)}`);
+        return false;
+      }
+      const body = new URLSearchParams({
+        upload_id: uploadId,
+        caption,
+        source_type: "4",
+        timezone_offset: "0",
+        date_time_original: (/* @__PURE__ */ new Date()).toISOString().replace(/[^0-9]/g, "").slice(0, 14)
+      }).toString();
+      const confRes = await this.mobilePost("/api/v1/media/configure/", body);
+      return confRes?.status === "ok" || confRes?.media?.id != null;
+    }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
+  }
   // ── Scrape recent posts from a hashtag → returns users ────────────────────
   // The sections endpoint requires POST, not GET
   async getHashtagUsers(hashtag, maxUsers = 50) {
@@ -143605,6 +143712,45 @@ var InstagramWebClient = class {
 
 // src/instagram/automationEngine.ts
 init_hikerApiClient();
+
+// src/instagram/imageAlteration.ts
+import { randomBytes as randomBytes2 } from "crypto";
+var COMMENT_SIZE = {
+  small: 8,
+  medium: 32,
+  high: 64
+};
+var FLIP_COUNT = {
+  small: 0,
+  medium: 3,
+  high: 8
+};
+function alterJpegBuffer(input, level) {
+  if (input.length < 4 || input[0] !== 255 || input[1] !== 216) return input;
+  const commentBytes = randomBytes2(COMMENT_SIZE[level]);
+  const segmentLen = 2 + COMMENT_SIZE[level];
+  const comSegment = Buffer.allocUnsafe(2 + 2 + COMMENT_SIZE[level]);
+  comSegment[0] = 255;
+  comSegment[1] = 254;
+  comSegment[2] = segmentLen >> 8 & 255;
+  comSegment[3] = segmentLen & 255;
+  commentBytes.copy(comSegment, 4);
+  const result = Buffer.concat([input.subarray(0, 2), comSegment, input.subarray(2)]);
+  const flipCount = FLIP_COUNT[level];
+  if (flipCount > 0) {
+    const start = Math.floor(result.length * 0.4);
+    const range = Math.floor(result.length * 0.4);
+    for (let i2 = 0; i2 < flipCount; i2++) {
+      const offset = start + Math.floor(Math.random() * range);
+      if (offset >= result.length - 2) continue;
+      const flipped = (result[offset] ^ 1 + i2 % 7) & 255;
+      result[offset] = flipped === 255 ? 254 : flipped;
+    }
+  }
+  return result;
+}
+
+// src/instagram/automationEngine.ts
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -143861,6 +144007,32 @@ var AutomationEngine = class {
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
         }
         if (state.stop.stopped) break;
+        {
+          const sa = followTool.settings;
+          if (sa.autoFollowUnfollowEnabled && (freshProfile.followingCount ?? 0) > 0) {
+            const stopAt = randInt(
+              sa.autoStopFollowAtFollowingsMin ?? 7400,
+              sa.autoStopFollowAtFollowingsMax ?? 7400
+            );
+            if ((freshProfile.followingCount ?? 0) >= stopAt) {
+              console.log(`[engine] @${freshProfile.username}: followings ${freshProfile.followingCount} >= ${stopAt} \u2014 auto: disabling follow tool`);
+              await storage.updateTool(followTool.id, { enabled: false });
+              const delayMs = randInt(
+                (sa.autoStartUnfollowAfterMin ?? 60) * 6e4,
+                (sa.autoStartUnfollowAfterMax ?? 135) * 6e4
+              );
+              console.log(`[engine] @${freshProfile.username}: auto: enabling unfollow tool in ${Math.round(delayMs / 6e4)}min`);
+              await sleepInterruptible(delayMs, state.stop);
+              if (!state.stop.stopped) {
+                const tools22 = await storage.getToolsByProfile(freshProfile.id);
+                const unfollowTool2 = tools22.find((t2) => t2.type === "unfollow");
+                if (unfollowTool2) await storage.updateTool(unfollowTool2.id, { enabled: true });
+                console.log(`[engine] @${freshProfile.username}: auto: unfollow tool enabled`);
+              }
+              break;
+            }
+          }
+        }
         const s = followTool.settings;
         const waitMs = randInt(
           (s.delayMin ?? 1) * 6e4,
@@ -143976,6 +144148,32 @@ var AutomationEngine = class {
           console.error(`[engine] @${freshProfile.username}: unfollow session error: ${err?.message}`);
         }
         if (state.stop.stopped) break;
+        {
+          const sa = unfollowTool.settings;
+          if (sa.autoFollowUnfollowEnabled && (freshProfile.followingCount ?? 0) > 0) {
+            const stopAt = randInt(
+              sa.autoStopUnfollowAtFollowingsMin ?? 7e3,
+              sa.autoStopUnfollowAtFollowingsMax ?? 7e3
+            );
+            if ((freshProfile.followingCount ?? 0) <= stopAt) {
+              console.log(`[engine] @${freshProfile.username}: followings ${freshProfile.followingCount} <= ${stopAt} \u2014 auto: disabling unfollow tool`);
+              await storage.updateTool(unfollowTool.id, { enabled: false });
+              const delayMs = randInt(
+                (sa.autoStartFollowAfterMin ?? 60) * 6e4,
+                (sa.autoStartFollowAfterMax ?? 135) * 6e4
+              );
+              console.log(`[engine] @${freshProfile.username}: auto: enabling follow tool in ${Math.round(delayMs / 6e4)}min`);
+              await sleepInterruptible(delayMs, state.stop);
+              if (!state.stop.stopped) {
+                const tools22 = await storage.getToolsByProfile(freshProfile.id);
+                const followTool2 = tools22.find((t2) => t2.type === "follow");
+                if (followTool2) await storage.updateTool(followTool2.id, { enabled: true });
+                console.log(`[engine] @${freshProfile.username}: auto: follow tool enabled`);
+              }
+              break;
+            }
+          }
+        }
         const s = unfollowTool.settings;
         const waitMs = randInt((s.delayMin ?? 5) * 6e4, (s.delayMax ?? 15) * 6e4);
         console.log(`[engine] @${freshProfile.username}: next unfollow session in ${Math.round(waitMs / 6e4)}min`);
@@ -144924,6 +145122,67 @@ var AutomationEngine = class {
         this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", detail);
       } catch (e) {
         console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
+      }
+    }
+    if (s.repostEnabled && s.repostSourceUsername) {
+      const sourceUsername = String(s.repostSourceUsername ?? "").trim();
+      if (sourceUsername) {
+        try {
+          const disableAt = Number(s.repostDisableAtPostCount ?? 0);
+          if (disableAt > 0) {
+            const stats2 = await client.getOwnProfileStats();
+            if (stats2 && stats2.postsCount >= disableAt) {
+              await storage.updateTool(tool.id, { enabled: false });
+              console.log(`[engine] @${profile.username}: \u{1F501} repost auto-disabled (posts=${stats2.postsCount} >= target=${disableAt})`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", `Auto-disabled: ${stats2.postsCount} posts reached target ${disableAt}`);
+              return;
+            }
+          }
+          const feedItems = await client.getUserFeedItems(sourceUsername);
+          let candidate = null;
+          for (const item of feedItems) {
+            const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
+            if (!already) {
+              candidate = item;
+              break;
+            }
+          }
+          if (!candidate) {
+            if (s.repostDisableWhenExhausted) {
+              await storage.updateTool(tool.id, { enabled: false });
+              console.log(`[engine] @${profile.username}: \u{1F501} repost auto-disabled (all posts already reposted)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Auto-disabled: no more unique posts from source");
+            } else {
+              console.log(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 no new posts from @${sourceUsername}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);
+            }
+          } else {
+            const imageBuffer = await client.downloadImage(candidate.imageUrl);
+            const level = s.repostAlterationLevel ?? "small";
+            const alteredBuffer = alterJpegBuffer(imageBuffer, level);
+            const uploaded = await client.uploadPhoto(alteredBuffer, candidate.caption);
+            if (uploaded) {
+              await storage.createRepostedPost({
+                profileId: profile.id,
+                toolId: tool.id,
+                sourceUsername,
+                mediaId: candidate.mediaId,
+                shortcode: candidate.shortcode,
+                caption: candidate.caption.slice(0, 2200),
+                thumbnailUrl: candidate.imageUrl,
+                repostedAt: (/* @__PURE__ */ new Date()).toISOString()
+              });
+              console.log(`[engine] @${profile.username}: \u{1F501} reposted ${candidate.mediaId} from @${sourceUsername} (alteration=${level})`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, candidate.shortcode, "ok", `Reposted from @${sourceUsername} (alteration: ${level})`);
+            } else {
+              console.warn(`[engine] @${profile.username}: \u{1F501} upload failed for ${candidate.mediaId}`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, candidate.mediaId, "", "fail", "Upload failed");
+            }
+          }
+        } catch (e) {
+          console.warn(`[engine] @${profile.username}: repost error: ${e?.message}`);
+          this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", e?.message ?? "unknown error");
+        }
       }
     }
   }
