@@ -1748,11 +1748,13 @@ class AutomationEngine {
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
 
           let repostedCount = 0;
+          let uploadAttempted = 0;  // items where we actually tried to upload (not already reposted)
           for (const item of feedItems) {
             if (repostedCount >= targetCount) break;
             const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
             if (already) continue;
 
+            uploadAttempted++;
             const imageBuffer   = await client.downloadImage(item.imageUrl);
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
             const finalCaption  = captionTemplate
@@ -1789,14 +1791,19 @@ class AutomationEngine {
             if (feedItems.length === 0) {
               // Feed returned nothing — likely a temporary API failure or empty source account.
               // Never auto-disable on an empty feed response.
-              console.warn(`[engine] @${profile.username}: 🔁 repost skipped — HikerAPI returned 0 items for @${sourceUsername} (possible API issue)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `HikerAPI returned no feed items for @${sourceUsername}`);
+              console.warn(`[engine] @${profile.username}: 🔁 repost skipped — feed returned 0 items for @${sourceUsername} (possible API issue)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `Feed returned no items for @${sourceUsername}`);
+            } else if (uploadAttempted > 0) {
+              // We found new posts but the upload itself failed — session/network issue, not exhausted.
+              // Do NOT auto-disable; the next session will retry.
+              console.warn(`[engine] @${profile.username}: 🔁 repost skipped — ${uploadAttempted} upload(s) failed for @${sourceUsername} (session issue, will retry)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed for @${sourceUsername} — will retry next session`);
             } else if (s.repostDisableWhenExhausted) {
-              // Feed had items but every one was already reposted — truly exhausted.
+              // uploadAttempted === 0: every item in the feed was already in our reposted DB — truly exhausted.
               // Disable only the repost sub-feature — never the entire human_sessions tool.
               await storage.updateTool(tool.id, { settings: { ...s, repostEnabled: false } });
               console.log(`[engine] @${profile.username}: 🔁 repost sub-feature disabled (source @${sourceUsername} exhausted — all ${feedItems.length} posts already reposted)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Repost disabled: no more unique posts from source");
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Repost disabled: all source posts already reposted");
             } else {
               console.log(`[engine] @${profile.username}: 🔁 repost skipped — no new posts from @${sourceUsername}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);

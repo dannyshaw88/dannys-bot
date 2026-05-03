@@ -143794,6 +143794,14 @@ var InstagramWebClient = class {
   async uploadPhoto(imageBuffer, caption) {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
+      const ruploadParams = JSON.stringify({
+        media_type: 1,
+        upload_id: uploadId,
+        upload_media_height: 1080,
+        upload_media_width: 1080,
+        upload_media_duration_ms: 0,
+        xsharing_user_ids: []
+      });
       const ruploadRes = await this.mobilePostBinary(
         `/rupload/igphoto/${uploadId}`,
         imageBuffer,
@@ -143802,7 +143810,8 @@ var InstagramWebClient = class {
           "X-Entity-Type": "image/jpeg",
           "X-Entity-Name": `photo_${uploadId}`,
           "Offset": "0",
-          "X-Entity-Length": String(imageBuffer.length)
+          "X-Entity-Length": String(imageBuffer.length),
+          "X-Instagram-Rupload-Params": ruploadParams
         }
       );
       const uploaded = ruploadRes?.upload_id != null || ruploadRes?.status === "ok";
@@ -145424,10 +145433,12 @@ var AutomationEngine = class {
           const level = s.repostAlterationLevel ?? "small";
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
           let repostedCount = 0;
+          let uploadAttempted = 0;
           for (const item of feedItems) {
             if (repostedCount >= targetCount) break;
             const already = await storage.isAlreadyReposted(profile.id, item.mediaId);
             if (already) continue;
+            uploadAttempted++;
             const imageBuffer = await client.downloadImage(item.imageUrl);
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
             const finalCaption = captionTemplate ? resolveCaption(captionTemplate, item, sourceUsername, profile.username) : item.caption.slice(0, 2200);
@@ -145461,12 +145472,15 @@ var AutomationEngine = class {
           }
           if (repostedCount === 0) {
             if (feedItems.length === 0) {
-              console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 HikerAPI returned 0 items for @${sourceUsername} (possible API issue)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `HikerAPI returned no feed items for @${sourceUsername}`);
+              console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 feed returned 0 items for @${sourceUsername} (possible API issue)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `Feed returned no items for @${sourceUsername}`);
+            } else if (uploadAttempted > 0) {
+              console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 ${uploadAttempted} upload(s) failed for @${sourceUsername} (session issue, will retry)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed for @${sourceUsername} \u2014 will retry next session`);
             } else if (s.repostDisableWhenExhausted) {
               await storage.updateTool(tool.id, { settings: { ...s, repostEnabled: false } });
               console.log(`[engine] @${profile.username}: \u{1F501} repost sub-feature disabled (source @${sourceUsername} exhausted \u2014 all ${feedItems.length} posts already reposted)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Repost disabled: no more unique posts from source");
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Repost disabled: all source posts already reposted");
             } else {
               console.log(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 no new posts from @${sourceUsername}`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `No new unique posts from @${sourceUsername}`);

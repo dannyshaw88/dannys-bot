@@ -1089,6 +1089,15 @@ export class InstagramWebClient {
       const uploadId = String(Date.now());
 
       // Step 1 — binary upload via rupload
+      // X-Instagram-Rupload-Params is required; without it Instagram returns 404
+      const ruploadParams = JSON.stringify({
+        media_type: 1,
+        upload_id: uploadId,
+        upload_media_height: 1080,
+        upload_media_width: 1080,
+        upload_media_duration_ms: 0,
+        xsharing_user_ids: [],
+      });
       const ruploadRes = await this.mobilePostBinary(
         `/rupload/igphoto/${uploadId}`,
         imageBuffer,
@@ -1098,6 +1107,7 @@ export class InstagramWebClient {
           "X-Entity-Name": `photo_${uploadId}`,
           "Offset": "0",
           "X-Entity-Length": String(imageBuffer.length),
+          "X-Instagram-Rupload-Params": ruploadParams,
         },
       );
       const uploaded = ruploadRes?.upload_id != null || (ruploadRes?.status === "ok");
