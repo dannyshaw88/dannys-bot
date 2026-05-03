@@ -142738,23 +142738,84 @@ async function dismissCookieBanner(page) {
 async function dismissInstagramPopups(page) {
   try {
     await page.evaluate(() => {
+      const ACCEPT_TEXTS = /* @__PURE__ */ new Set([
+        "save info",
+        "save login info",
+        "ok",
+        "got it",
+        "continue",
+        "i agree",
+        "agree",
+        "allow",
+        "accept",
+        "confirm",
+        "done"
+      ]);
+      const DISMISS_TEXTS = /* @__PURE__ */ new Set([
+        "not now",
+        "maybe later",
+        "skip",
+        "dismiss",
+        "close",
+        "not interested",
+        "no thanks",
+        "cancel"
+      ]);
       const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
       for (const btn of allBtns) {
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-        if (txt === "save info" || txt === "save login info") {
+        if (ACCEPT_TEXTS.has(txt) && (txt === "save info" || txt === "save login info")) {
           btn.click();
           return;
         }
       }
-      const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"]'));
+      const dialogs = Array.from(document.querySelectorAll(
+        '[role="dialog"], [role="alertdialog"], ._a9-z, ._ab8w'
+      ));
       for (const dialog of dialogs) {
         const body = (dialog.innerText || dialog.textContent || "").toLowerCase();
-        if (body.includes("messaging tab") || body.includes("new look")) {
-          const okBtn = Array.from(dialog.querySelectorAll('button, [role="button"]')).find((b3) => (b3.innerText || b3.textContent || "").trim().toLowerCase() === "ok");
-          if (okBtn) {
-            okBtn.click();
+        const btns = Array.from(dialog.querySelectorAll('button, [role="button"]'));
+        if (body.includes("save your login info") || body.includes("save login info")) {
+          const btn = btns.find((b3) => ACCEPT_TEXTS.has((b3.innerText || b3.textContent || "").trim().toLowerCase()));
+          if (btn) {
+            btn.click();
             return;
           }
+        }
+        if (body.includes("turn on notifications") || body.includes("never miss") || body.includes("stay notified")) {
+          const btn = btns.find((b3) => DISMISS_TEXTS.has((b3.innerText || b3.textContent || "").trim().toLowerCase()));
+          if (btn) {
+            btn.click();
+            return;
+          }
+        }
+        if (body.includes("home screen") || body.includes("add to home")) {
+          const btn = btns.find((b3) => DISMISS_TEXTS.has((b3.innerText || b3.textContent || "").trim().toLowerCase()));
+          if (btn) {
+            btn.click();
+            return;
+          }
+        }
+        if (body.includes("messaging tab") || body.includes("new look")) {
+          const btn = btns.find((b3) => (b3.innerText || b3.textContent || "").trim().toLowerCase() === "ok");
+          if (btn) {
+            btn.click();
+            return;
+          }
+        }
+        if (btns.length <= 3) {
+          const dismissBtn = btns.find((b3) => DISMISS_TEXTS.has((b3.innerText || b3.textContent || "").trim().toLowerCase()));
+          if (dismissBtn) {
+            dismissBtn.click();
+            return;
+          }
+        }
+      }
+      for (const btn of allBtns) {
+        const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+        if (txt === "not now") {
+          btn.click();
+          return;
         }
       }
     });

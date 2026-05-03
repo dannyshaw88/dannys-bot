@@ -25,6 +25,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const addressFocusedRef = useRef(false);
 
   const [status, setStatus] = useState<WSStatus>("idle");
   const [isLoading, setIsLoading] = useState(false);
@@ -76,13 +77,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         switch (msg.type) {
           case "frame":
             drawFrame(msg.data);
-            if (msg.url && msg.url !== "about:blank") setAddressBar(msg.url);
+            // Don't overwrite while the user is typing in the address bar
+            if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) setAddressBar(msg.url);
             break;
           case "loading":
             setIsLoading(msg.loading);
             break;
           case "urlChange":
-            setAddressBar(msg.url);
+            if (!addressFocusedRef.current) setAddressBar(msg.url);
             break;
           case "error":
             setErrorMsg(msg.message ?? "Unknown error");
@@ -281,6 +283,8 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             <Input
               value={addressBar}
               onChange={e => setAddressBar(e.target.value)}
+              onFocus={() => { addressFocusedRef.current = true; }}
+              onBlur={() => { addressFocusedRef.current = false; }}
               className="pl-8 h-8 text-sm font-mono bg-muted/50 border-muted focus:bg-background"
               placeholder="https://www.instagram.com/"
               disabled={!connected}

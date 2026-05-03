@@ -18,6 +18,16 @@ Danny's Bot — an Instagram automation dashboard. pnpm workspace monorepo using
 - **Browser automation**: Puppeteer
 - **Instagram API**: instagram-private-api
 
+## IMPORTANT — API-First Architecture
+
+This is an **API-based Instagram bot**, not a web-scraping or session-cookie bot.
+
+- All Instagram data retrieval (user lookups, followings, followers, feed) must go through **HikerAPI** (`hikerApiClient.ts`) or the **instagram-private-api** mobile client (`instagramWebClient.ts` / `instagramLogin.ts`).
+- **Never** use `profile.sessionCookies` to extract user IDs or session data for API calls. Session cookies exist only for the Puppeteer embedded browser (human browsing sessions).
+- **Never** call `InstagramWebClient` or any web-client method just to resolve a username to a user ID — always use `hikerClient.getUserByUsername()` for that.
+- The embedded browser (Puppeteer) is used **only** for human-like browsing actions (notifications, explore, stories) and manual account verification. It is **not** the primary data source.
+- When in doubt: HikerAPI first, instagram-private-api second, browser never for data.
+
 ## Architecture
 
 ### Frontend (`artifacts/dannys-bot`)

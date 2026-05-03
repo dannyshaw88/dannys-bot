@@ -487,35 +487,80 @@ async function dismissCookieBanner(page: Page): Promise<void> {
 }
 
 // ── Instagram post-login popup auto-dismissal ─────────────────────────────────
-// Handles two common popups that appear after first login:
-//   1. "The messaging tab has a new look" → click "OK"
-//   2. "Save your login info?"            → click "Save Info"
+// Handles all common Instagram popups/dialogs that appear after login or browsing.
 // Safe to call repeatedly — does nothing when no matching popup is visible.
 async function dismissInstagramPopups(page: Page): Promise<void> {
   try {
     await page.evaluate(() => {
+      // Texts that mean "accept / confirm / save" — click these
+      const ACCEPT_TEXTS = new Set([
+        "save info", "save login info", "ok", "got it", "continue",
+        "i agree", "agree", "allow", "accept", "confirm", "done",
+      ]);
+
+      // Texts that mean "dismiss without saving / not now" — click these
+      // Instagram uses "Not Now" for notifications, 2FA prompts, home-screen prompts, etc.
+      const DISMISS_TEXTS = new Set([
+        "not now", "maybe later", "skip", "dismiss", "close",
+        "not interested", "no thanks", "cancel",
+      ]);
+
       const allBtns = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
 
       for (const btn of allBtns) {
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
 
-        // "Save your login info?" dialog → click "Save Info"
-        if (txt === "save info" || txt === "save login info") {
+        // Priority 1: "Save your login info?" → always save
+        if (ACCEPT_TEXTS.has(txt) && (txt === "save info" || txt === "save login info")) {
           btn.click();
           return;
         }
       }
 
-      // "The messaging tab has a new look" dialog → click "OK"
-      // Look for a dialog/sheet whose body text mentions the messaging tab
-      const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]'));
+      // Check every visible dialog/sheet for known patterns
+      const dialogs = Array.from(document.querySelectorAll<HTMLElement>(
+        '[role="dialog"], [role="alertdialog"], ._a9-z, ._ab8w'
+      ));
+
       for (const dialog of dialogs) {
         const body = (dialog.innerText || dialog.textContent || "").toLowerCase();
-        if (body.includes("messaging tab") || body.includes("new look")) {
-          const okBtn = Array.from(dialog.querySelectorAll<HTMLElement>('button, [role="button"]'))
-            .find(b => (b.innerText || b.textContent || "").trim().toLowerCase() === "ok");
-          if (okBtn) { okBtn.click(); return; }
+        const btns = Array.from(dialog.querySelectorAll<HTMLElement>('button, [role="button"]'));
+
+        // "Save your login info?" → click "Save Info"
+        if (body.includes("save your login info") || body.includes("save login info")) {
+          const btn = btns.find(b => ACCEPT_TEXTS.has((b.innerText || b.textContent || "").trim().toLowerCase()));
+          if (btn) { btn.click(); return; }
         }
+
+        // "Turn on Notifications" / "Never Miss a Moment" → click "Not Now"
+        if (body.includes("turn on notifications") || body.includes("never miss") || body.includes("stay notified")) {
+          const btn = btns.find(b => DISMISS_TEXTS.has((b.innerText || b.textContent || "").trim().toLowerCase()));
+          if (btn) { btn.click(); return; }
+        }
+
+        // "Add Instagram to your Home Screen" → dismiss
+        if (body.includes("home screen") || body.includes("add to home")) {
+          const btn = btns.find(b => DISMISS_TEXTS.has((b.innerText || b.textContent || "").trim().toLowerCase()));
+          if (btn) { btn.click(); return; }
+        }
+
+        // "The messaging tab has a new look" → click "OK"
+        if (body.includes("messaging tab") || body.includes("new look")) {
+          const btn = btns.find(b => (b.innerText || b.textContent || "").trim().toLowerCase() === "ok");
+          if (btn) { btn.click(); return; }
+        }
+
+        // Generic: any dialog with ONLY a "Not Now" / dismiss button → click it
+        if (btns.length <= 3) {
+          const dismissBtn = btns.find(b => DISMISS_TEXTS.has((b.innerText || b.textContent || "").trim().toLowerCase()));
+          if (dismissBtn) { dismissBtn.click(); return; }
+        }
+      }
+
+      // Final pass: standalone "Not Now" buttons outside dialogs (e.g. notification bar)
+      for (const btn of allBtns) {
+        const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+        if (txt === "not now") { btn.click(); return; }
       }
     });
   } catch {
