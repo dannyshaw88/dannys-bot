@@ -119,12 +119,11 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       repostSourceUsername: "",
       repostAlterationLevel: "small",
       repostImageSettings: {
-        contrast:       { enabled: true, min: 5,   max: 250 },
-        brightness:     { enabled: true, min: 5,   max: 250 },
-        noise:          { enabled: true, min: 5,   max: 15  },
-        sharpen:        { enabled: true, min: 1.0, max: 2.0 },
-        pixelate:       { enabled: true, min: 0.9, max: 2.1 },
-        randomMetadata: true,
+        contrast:   { enabled: true, min: 5,   max: 250 },
+        brightness: { enabled: true, min: 5,   max: 250 },
+        noise:      { enabled: true, min: 5,   max: 15  },
+        sharpen:    { enabled: true, min: 1.0, max: 2.0 },
+        pixelate:   { enabled: true, min: 0.9, max: 2.1 },
       },
       repostOrderMin: 0,
       repostOrderMax: 0,
@@ -149,12 +148,11 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   }, [settings]);
 
   const DEFAULT_IMG_SETTINGS = {
-    contrast:       { enabled: true, min: 5,   max: 250 },
-    brightness:     { enabled: true, min: 5,   max: 250 },
-    noise:          { enabled: true, min: 5,   max: 15  },
-    sharpen:        { enabled: true, min: 1.0, max: 2.0 },
-    pixelate:       { enabled: true, min: 0.9, max: 2.1 },
-    randomMetadata: true,
+    contrast:   { enabled: true, min: 5,   max: 250 },
+    brightness: { enabled: true, min: 5,   max: 250 },
+    noise:      { enabled: true, min: 5,   max: 15  },
+    sharpen:    { enabled: true, min: 1.0, max: 2.0 },
+    pixelate:   { enabled: true, min: 0.9, max: 2.1 },
   };
   const imgSettings: typeof DEFAULT_IMG_SETTINGS = (settings as any).repostImageSettings ?? DEFAULT_IMG_SETTINGS;
   const setImgFilter = (key: string, val: unknown) =>

@@ -118562,40 +118562,6 @@ function injectComSegment(buf, commentLen) {
   comment.copy(com, 4);
   return Buffer.concat([buf.subarray(0, 2), com, buf.subarray(2)]);
 }
-function buildRandomMetadata() {
-  const iphones = [
-    "iPhone 13",
-    "iPhone 13 Pro",
-    "iPhone 14",
-    "iPhone 14 Pro",
-    "iPhone 15",
-    "iPhone 15 Pro",
-    "iPhone 15 Pro Max"
-  ];
-  const ios = ["16.6.1", "17.0", "17.1.2", "17.2", "17.3", "17.4"];
-  const model = iphones[Math.floor(Math.random() * iphones.length)];
-  const iosVer = ios[Math.floor(Math.random() * ios.length)];
-  const lat = 25 + Math.random() * 24;
-  const lon = 66 + Math.random() * 59;
-  function toDMS(deg) {
-    const d3 = Math.floor(deg);
-    const mf = (deg - d3) * 60;
-    const m3 = Math.floor(mf);
-    const s = Math.floor((mf - m3) * 60 * 100);
-    return `${d3} 1 ${m3} 1 ${s} 100`;
-  }
-  return {
-    exif: {
-      IFD0: { Make: "Apple", Model: model, Software: `${model} ${iosVer}` },
-      GPS: {
-        GPSLatitudeRef: "N",
-        GPSLatitude: toDMS(lat),
-        GPSLongitudeRef: "W",
-        GPSLongitude: toDMS(lon)
-      }
-    }
-  };
-}
 function buildConfig(level, custom2) {
   if (!custom2) return CONFIGS[level];
   return {
@@ -118603,10 +118569,7 @@ function buildConfig(level, custom2) {
     brightness: custom2.brightness.enabled ? { min: custom2.brightness.min, max: custom2.brightness.max } : { min: 0, max: 0 },
     noise: custom2.noise.enabled ? { min: custom2.noise.min, max: custom2.noise.max } : { min: 0, max: 0 },
     sharpen: custom2.sharpen.enabled ? { min: custom2.sharpen.min, max: custom2.sharpen.max } : { min: 1, max: 1 },
-    // sigma 0 = no sharpen
-    pixelate: custom2.pixelate.enabled ? { min: custom2.pixelate.min, max: custom2.pixelate.max } : { min: 0.3, max: 0.3 },
-    // near-zero blur
-    randomMetadata: custom2.randomMetadata
+    pixelate: custom2.pixelate.enabled ? { min: custom2.pixelate.min, max: custom2.pixelate.max } : { min: 0.3, max: 0.3 }
   };
 }
 async function alterJpegBuffer(input, level, customSettings) {
@@ -118639,12 +118602,6 @@ async function alterJpegBuffer(input, level, customSettings) {
       pipeline = pipeline.sharpen({ sigma: Math.min(sharpenSigma, 10) });
     }
     pipeline = pipeline.blur(blurSigma);
-    if (cfg.randomMetadata) {
-      try {
-        pipeline = pipeline.withMetadata(buildRandomMetadata());
-      } catch {
-      }
-    }
     const processed = await pipeline.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
     const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
     return injectComSegment(processed, comLen);
@@ -118663,24 +118620,21 @@ var init_imageAlteration = __esm({
         brightness: { min: 5, max: 50 },
         noise: { min: 5, max: 8 },
         sharpen: { min: 1, max: 1.3 },
-        pixelate: { min: 0.3, max: 0.7 },
-        randomMetadata: true
+        pixelate: { min: 0.3, max: 0.7 }
       },
       medium: {
         contrast: { min: 5, max: 150 },
         brightness: { min: 5, max: 150 },
         noise: { min: 5, max: 12 },
         sharpen: { min: 1, max: 1.7 },
-        pixelate: { min: 0.3, max: 1.2 },
-        randomMetadata: true
+        pixelate: { min: 0.3, max: 1.2 }
       },
       high: {
         contrast: { min: 5, max: 250 },
         brightness: { min: 5, max: 250 },
         noise: { min: 5, max: 15 },
         sharpen: { min: 1, max: 2 },
-        pixelate: { min: 0.9, max: 2.1 },
-        randomMetadata: true
+        pixelate: { min: 0.9, max: 2.1 }
       }
     };
   }

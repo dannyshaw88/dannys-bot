@@ -13,12 +13,11 @@ export interface FilterSetting {
 }
 
 export interface ImageFilterSettings {
-  contrast:       FilterSetting;
-  brightness:     FilterSetting;
-  noise:          FilterSetting;
-  sharpen:        FilterSetting;
-  pixelate:       FilterSetting;
-  randomMetadata: boolean;
+  contrast:   FilterSetting;
+  brightness: FilterSetting;
+  noise:      FilterSetting;
+  sharpen:    FilterSetting;
+  pixelate:   FilterSetting;
 }
 
 interface Props {
@@ -141,19 +140,6 @@ export function ImageSettingsDialog({ open, onClose, settings, onSave, alteratio
               );
             })}
 
-            {/* Random metadata */}
-            <div className="flex items-start gap-2 pt-2 border-t border-border/50">
-              <input
-                type="checkbox" id="dlg-meta"
-                checked={!!local.randomMetadata}
-                onChange={e => setFilter("randomMetadata", e.target.checked)}
-                className="w-3.5 h-3.5 accent-primary cursor-pointer mt-0.5 shrink-0"
-              />
-              <label htmlFor="dlg-meta" className="text-xs text-muted-foreground cursor-pointer select-none leading-snug">
-                Enable Random US Metadata
-                <span className="block text-[10px] text-muted-foreground/60 mt-0.5">GPS, device & EXIF info</span>
-              </label>
-            </div>
           </div>
 
           {/* ── Right: Original + Preview panels ─────────────────── */}
