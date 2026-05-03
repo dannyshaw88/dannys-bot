@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Activity, Clock, User, Zap, Sparkles, Search } from "lucide-react";
+import { Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
@@ -75,6 +75,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("api-log");
   const [changelogFilter, setChangelogFilter] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
+  const [profilePickerOpen, setProfilePickerOpen] = useState(false);
+  const [profileSearch, setProfileSearch] = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   const { data: apiCalls, isLoading } = useQuery<any[]>({
     queryKey: ["/api/instagram-api-calls"],
@@ -87,6 +91,29 @@ export function Dashboard() {
 
   const getUsername = (profileId: number) =>
     profiles?.find(p => p.id === profileId)?.username || `ID: ${profileId}`;
+
+  const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
+
+  const filteredApiCalls = selectedProfileId != null
+    ? (apiCalls ?? []).filter((c: any) => c.profileId === selectedProfileId)
+    : (apiCalls ?? []);
+
+  const filteredProfileOptions = (profiles ?? []).filter(p =>
+    !profileSearch.trim() ||
+    p.username.toLowerCase().includes(profileSearch.toLowerCase())
+  );
+
+  // Close picker on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setProfilePickerOpen(false);
+        setProfileSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const tabClass = (t: Tab) =>
     `px-4 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px flex items-center gap-2 ${
@@ -126,7 +153,70 @@ export function Dashboard() {
 
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
           {activeTab === "api-log" ? (
-            <p className="text-xs text-muted-foreground">Real-time log of every Instagram API call made by the engine. Refreshes every 5 seconds.</p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-muted-foreground flex-1">Real-time log of every Instagram API call made by the engine. Refreshes every 5 seconds.</p>
+              {/* Profile filter picker */}
+              <div ref={pickerRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setProfilePickerOpen(o => !o); setProfileSearch(""); }}
+                  className="h-7 pl-2.5 pr-2 text-xs rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center gap-1.5 min-w-[160px] max-w-[220px]"
+                >
+                  <User className="w-3 h-3 shrink-0" />
+                  <span className="flex-1 truncate text-left">
+                    {selectedProfile ? selectedProfile.username : "All accounts"}
+                  </span>
+                  {selectedProfile ? (
+                    <X
+                      className="w-3 h-3 shrink-0 hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); setSelectedProfileId(null); setProfilePickerOpen(false); }}
+                    />
+                  ) : (
+                    <ChevronDown className="w-3 h-3 shrink-0" />
+                  )}
+                </button>
+                {profilePickerOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-background border border-border rounded shadow-lg z-50">
+                    <div className="p-2 border-b border-border">
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted/40">
+                        <Search className="w-3 h-3 text-muted-foreground shrink-0" />
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="Filter accounts..."
+                          value={profileSearch}
+                          onChange={e => setProfileSearch(e.target.value)}
+                          className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto py-1">
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedProfileId(null); setProfilePickerOpen(false); setProfileSearch(""); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors ${selectedProfileId === null ? "text-primary font-semibold" : "text-foreground"}`}
+                      >
+                        <Activity className="w-3 h-3 shrink-0" /> All accounts
+                      </button>
+                      {filteredProfileOptions.map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors truncate ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
+                        >
+                          <User className="w-3 h-3 shrink-0 text-primary" />
+                          <span className="truncate">{p.username}</span>
+                        </button>
+                      ))}
+                      {filteredProfileOptions.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-muted-foreground">No accounts match</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -161,16 +251,20 @@ export function Dashboard() {
                         <td colSpan={5} className="px-6 py-4 bg-muted/10 h-12" />
                       </tr>
                     ))
-                  ) : !apiCalls || apiCalls.length === 0 ? (
+                  ) : filteredApiCalls.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
                         <Activity className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
-                        <p className="text-sm font-medium">No API calls recorded yet</p>
-                        <p className="text-xs mt-1">Start an automation tool to see activity here.</p>
+                        <p className="text-sm font-medium">
+                          {selectedProfileId != null ? `No API calls for @${selectedProfile?.username ?? selectedProfileId}` : "No API calls recorded yet"}
+                        </p>
+                        <p className="text-xs mt-1">
+                          {selectedProfileId != null ? "Try selecting a different account or clear the filter." : "Start an automation tool to see activity here."}
+                        </p>
                       </td>
                     </tr>
                   ) : (
-                    apiCalls.map((call: any) => (
+                    filteredApiCalls.map((call: any) => (
                       <tr key={call.id} className="hover:bg-accent/5 transition-colors">
                         <td className="px-6 py-3.5 whitespace-nowrap text-muted-foreground text-xs font-mono">
                           <span className="flex items-center gap-1.5">
