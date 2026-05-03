@@ -1048,6 +1048,40 @@ export class InstagramWebClient {
   }
 
 
+  // ── Get recent photo posts from a user's feed (with image URLs) ───────────
+  // Used when repostUseHikerApi is OFF — the account's own session does the scrape.
+  async getUserFeedItems(username: string): Promise<Array<{
+    mediaId: string;
+    shortcode: string;
+    imageUrl: string;
+    caption: string;
+    takenAt: number;
+  }>> {
+    return this.timed("GetUserFeed", async () => {
+      const user = await this.getUserByUsername(username);
+      if (!user) return [];
+
+      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+      const items: any[] = j?.items ?? [];
+
+      return items.flatMap((item: any) => {
+        const mediaType: number = item?.media_type ?? 1;
+        if (mediaType !== 1 && mediaType !== 8) return [];
+
+        const mediaId  = String(item.id ?? item.pk ?? "");
+        const caption  = item.caption?.text ?? "";
+        const takenAt  = item.taken_at ?? Math.floor(Date.now() / 1000);
+
+        const firstMedia = mediaType === 8 ? (item.carousel_media?.[0] ?? item) : item;
+        const candidates: any[] = firstMedia.image_versions2?.candidates ?? [];
+        const imageUrl = candidates[0]?.url ?? "";
+
+        if (!mediaId || !imageUrl) return [];
+        return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
+      });
+    }, `Get feed of @${username}`);
+  }
+
   // ── Upload a photo and create the Instagram post ──────────────────────────
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer: Buffer, caption: string): Promise<string | null> {

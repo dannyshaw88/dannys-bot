@@ -1694,8 +1694,7 @@ class AutomationEngine {
     // ── Repost ───────────────────────────────────────────────────────────────
     const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
 
-    // Repost source scraping MUST always use HikerAPI — the account must never
-    // make any lookup or feed call for another user's content.
+    // Resolve the HikerAPI client once (used only when repostUseHikerApi is ON).
     const gs_repost = await storage.getGlobalSettings();
     const repostHikerClient: HikerApiClient | null =
       (gs_repost.hikerApiEnabled === "true" && gs_repost.hikerApiToken)
@@ -1709,10 +1708,20 @@ class AutomationEngine {
       async () => {
         const sourceUsername = repostSourceUsername;
         try {
-          if (!repostHikerClient) {
-            console.warn(`[engine] @${profile.username}: 🔁 repost skipped — HikerAPI not configured (required for source scraping)`);
-            this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "error", "HikerAPI not configured — repost source scraping requires HikerAPI");
-            return;
+          const useHiker = !!s.repostUseHikerApi;
+
+          // Toggle ON → HikerAPI only, hard fail if not configured (no fallback to account).
+          // Toggle OFF → account's own session does the scrape.
+          let feedItems: Awaited<ReturnType<HikerApiClient["getUserFeedItems"]>>;
+          if (useHiker) {
+            if (!repostHikerClient) {
+              console.warn(`[engine] @${profile.username}: 🔁 repost skipped — HikerAPI toggled ON but not configured`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "error", "HikerAPI toggled ON but not configured in Global Settings");
+              return;
+            }
+            feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
+          } else {
+            feedItems = await client.getUserFeedItems(sourceUsername);
           }
 
           const disableAt = Number(s.repostDisableAtPostCount ?? 0);
@@ -1732,9 +1741,7 @@ class AutomationEngine {
             Math.max(1, Number(s.repostMax ?? 1)),
           );
 
-          // Source feed always fetched via HikerAPI — never the account's own session.
-          const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
-          console.log(`[engine] @${profile.username}: 🔁 repost feed fetched via HikerAPI (${feedItems.length} items, target=${targetCount})`);
+          console.log(`[engine] @${profile.username}: 🔁 repost feed fetched via ${useHiker ? "HikerAPI" : "account session"} (${feedItems.length} items, target=${targetCount})`);
 
           const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
@@ -2089,20 +2096,24 @@ class AutomationEngine {
     if (!client) return { ok: false, message: "Could not establish Instagram session (check cookies)" };
 
     try {
-      // Source feed MUST always use HikerAPI — the account must never make
-      // any lookup or feed call for another user's content.
-      const gs_now = await storage.getGlobalSettings();
-      const repostHikerClient: HikerApiClient | null =
-        (gs_now.hikerApiEnabled === "true" && gs_now.hikerApiToken)
+      // Toggle ON → HikerAPI only, hard fail if not configured (no fallback to account).
+      // Toggle OFF → account's own session does the scrape.
+      const useHiker = !!s.repostUseHikerApi;
+      let feedItems: Awaited<ReturnType<HikerApiClient["getUserFeedItems"]>>;
+      if (useHiker) {
+        const gs_now = await storage.getGlobalSettings();
+        const hikerClient = (gs_now.hikerApiEnabled === "true" && gs_now.hikerApiToken)
           ? new HikerApiClient(gs_now.hikerApiToken)
           : null;
-
-      if (!repostHikerClient) {
-        return { ok: false, message: "HikerAPI not configured — repost source scraping requires HikerAPI. Enable it in Global Settings." };
+        if (!hikerClient) {
+          return { ok: false, message: "HikerAPI toggled ON but not configured in Global Settings — cannot scrape source feed." };
+        }
+        feedItems = await hikerClient.getUserFeedItems(sourceUsername);
+      } else {
+        feedItems = await client.getUserFeedItems(sourceUsername);
       }
 
-      const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
-      console.log(`[engine] @${profile.username}: 🔁 [MANUAL] feed fetched via HikerAPI (${feedItems.length} items) from @${sourceUsername}`);
+      console.log(`[engine] @${profile.username}: 🔁 [MANUAL] feed fetched via ${useHiker ? "HikerAPI" : "account session"} (${feedItems.length} items) from @${sourceUsername}`);
 
       let candidate: { mediaId: string; shortcode: string; imageUrl: string; caption: string } | null = null;
       for (const item of feedItems) {

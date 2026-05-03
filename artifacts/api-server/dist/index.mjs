@@ -143757,6 +143757,28 @@ var InstagramWebClient = class {
       }).on("error", reject);
     });
   }
+  // ── Get recent photo posts from a user's feed (with image URLs) ───────────
+  // Used when repostUseHikerApi is OFF — the account's own session does the scrape.
+  async getUserFeedItems(username) {
+    return this.timed("GetUserFeed", async () => {
+      const user = await this.getUserByUsername(username);
+      if (!user) return [];
+      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+      const items = j?.items ?? [];
+      return items.flatMap((item) => {
+        const mediaType = item?.media_type ?? 1;
+        if (mediaType !== 1 && mediaType !== 8) return [];
+        const mediaId = String(item.id ?? item.pk ?? "");
+        const caption = item.caption?.text ?? "";
+        const takenAt = item.taken_at ?? Math.floor(Date.now() / 1e3);
+        const firstMedia = mediaType === 8 ? item.carousel_media?.[0] ?? item : item;
+        const candidates = firstMedia.image_versions2?.candidates ?? [];
+        const imageUrl = candidates[0]?.url ?? "";
+        if (!mediaId || !imageUrl) return [];
+        return [{ mediaId, shortcode: this.mediaIdToShortcode(mediaId), imageUrl, caption, takenAt }];
+      });
+    }, `Get feed of @${username}`);
+  }
   // ── Upload a photo and create the Instagram post ──────────────────────────
   /** Uploads a photo and returns the new media ID string on success, or null on failure. */
   async uploadPhoto(imageBuffer, caption) {
@@ -145362,10 +145384,17 @@ var AutomationEngine = class {
       async () => {
         const sourceUsername = repostSourceUsername;
         try {
-          if (!repostHikerClient) {
-            console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 HikerAPI not configured (required for source scraping)`);
-            this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "error", "HikerAPI not configured \u2014 repost source scraping requires HikerAPI");
-            return;
+          const useHiker = !!s.repostUseHikerApi;
+          let feedItems;
+          if (useHiker) {
+            if (!repostHikerClient) {
+              console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 HikerAPI toggled ON but not configured`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "error", "HikerAPI toggled ON but not configured in Global Settings");
+              return;
+            }
+            feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
+          } else {
+            feedItems = await client.getUserFeedItems(sourceUsername);
           }
           const disableAt = Number(s.repostDisableAtPostCount ?? 0);
           if (disableAt > 0) {
@@ -145381,8 +145410,7 @@ var AutomationEngine = class {
             Math.max(1, Number(s.repostMin ?? 1)),
             Math.max(1, Number(s.repostMax ?? 1))
           );
-          const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
-          console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via HikerAPI (${feedItems.length} items, target=${targetCount})`);
+          console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via ${useHiker ? "HikerAPI" : "account session"} (${feedItems.length} items, target=${targetCount})`);
           const level = s.repostAlterationLevel ?? "small";
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
           let repostedCount = 0;
@@ -145697,13 +145725,19 @@ var AutomationEngine = class {
     const client = await this.ensureClient(profile, state);
     if (!client) return { ok: false, message: "Could not establish Instagram session (check cookies)" };
     try {
-      const gs_now = await storage.getGlobalSettings();
-      const repostHikerClient = gs_now.hikerApiEnabled === "true" && gs_now.hikerApiToken ? new HikerApiClient(gs_now.hikerApiToken) : null;
-      if (!repostHikerClient) {
-        return { ok: false, message: "HikerAPI not configured \u2014 repost source scraping requires HikerAPI. Enable it in Global Settings." };
+      const useHiker = !!s.repostUseHikerApi;
+      let feedItems;
+      if (useHiker) {
+        const gs_now = await storage.getGlobalSettings();
+        const hikerClient = gs_now.hikerApiEnabled === "true" && gs_now.hikerApiToken ? new HikerApiClient(gs_now.hikerApiToken) : null;
+        if (!hikerClient) {
+          return { ok: false, message: "HikerAPI toggled ON but not configured in Global Settings \u2014 cannot scrape source feed." };
+        }
+        feedItems = await hikerClient.getUserFeedItems(sourceUsername);
+      } else {
+        feedItems = await client.getUserFeedItems(sourceUsername);
       }
-      const feedItems = await repostHikerClient.getUserFeedItems(sourceUsername);
-      console.log(`[engine] @${profile.username}: \u{1F501} [MANUAL] feed fetched via HikerAPI (${feedItems.length} items) from @${sourceUsername}`);
+      console.log(`[engine] @${profile.username}: \u{1F501} [MANUAL] feed fetched via ${useHiker ? "HikerAPI" : "account session"} (${feedItems.length} items) from @${sourceUsername}`);
       let candidate = null;
       for (const item of feedItems) {
         const already = await storage.isAlreadyReposted(profileId, item.mediaId);
