@@ -148,6 +148,11 @@ export class HikerApiClient {
         `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
         this.token,
       );
+      // HikerAPI may return an error object like { detail: "..." } — detect and throw early
+      if (j && !Array.isArray(j) && typeof j.detail === "string") {
+        console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): HikerAPI error — "${j.detail}"`);
+        return [];
+      }
       // HikerAPI may return a plain array OR a wrapper object — handle both
       const items: any[] = Array.isArray(j)
         ? j
@@ -155,7 +160,9 @@ export class HikerApiClient {
         : Array.isArray(j?.items)    ? j.items
         : Array.isArray(j?.data)     ? j.data
         : [];
-      console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): raw top-level keys=${JSON.stringify(Object.keys(j ?? {}))}, isArray=${Array.isArray(j)}, resolvedItems=${items.length}`);
+      if (items.length === 0) {
+        console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): unexpected response shape — keys=${JSON.stringify(Object.keys(j ?? {}))}`);
+      }
       const results: { mediaId: string; shortcode: string; imageUrl: string; caption: string; takenAt: number }[] = [];
       for (const item of items) {
         const mediaType: number = item?.media_type ?? 1;

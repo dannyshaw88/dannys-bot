@@ -118530,8 +118530,14 @@ var init_hikerApiClient = __esm({
             `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
             this.token
           );
+          if (j && !Array.isArray(j) && typeof j.detail === "string") {
+            console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): HikerAPI error \u2014 "${j.detail}"`);
+            return [];
+          }
           const items = Array.isArray(j) ? j : Array.isArray(j?.response) ? j.response : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : [];
-          console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): raw top-level keys=${JSON.stringify(Object.keys(j ?? {}))}, isArray=${Array.isArray(j)}, resolvedItems=${items.length}`);
+          if (items.length === 0) {
+            console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): unexpected response shape \u2014 keys=${JSON.stringify(Object.keys(j ?? {}))}`);
+          }
           const results = [];
           for (const item of items) {
             const mediaType = item?.media_type ?? 1;
