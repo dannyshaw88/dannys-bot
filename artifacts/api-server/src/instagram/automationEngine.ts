@@ -2,7 +2,7 @@ import { storage } from "../storage";
 import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
-import { uploadPhotoViaFetch, type ProxyConfig } from "./browserSession";
+import type { ProxyConfig } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1784,8 +1784,8 @@ class AutomationEngine {
               ? resolveCaption(captionTemplate, item, sourceUsername, profile.username)
               : item.caption.slice(0, 2200);
 
-            // Upload via browser fetch (same-origin, Chrome TLS + cookies, existing session)
-            const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
+            // Upload via private API
+            const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
             if (postedMediaId) {
               if (s.repostDisableComments) {
                 try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
@@ -2171,8 +2171,8 @@ class AutomationEngine {
         ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
         : candidate.caption.slice(0, 2200);
 
-      // Upload via browser fetch (same-origin, Chrome TLS + cookies, existing session)
-      const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
+      // Upload via private API
+      const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
       if (!postedMediaId) return { ok: false, message: "Upload failed — Instagram rejected the photo" };
 
       if (s.repostDisableComments) {

@@ -33238,7 +33238,7 @@ var require_lodash = __commonJS({
         var defer = baseRest(function(func, args) {
           return baseDelay(func, 1, args);
         });
-        var delay2 = baseRest(function(func, wait, args) {
+        var delay = baseRest(function(func, wait, args) {
           return baseDelay(func, toNumber(wait) || 0, args);
         });
         function flip(func) {
@@ -34357,7 +34357,7 @@ var require_lodash = __commonJS({
         lodash.defaults = defaults;
         lodash.defaultsDeep = defaultsDeep;
         lodash.defer = defer;
-        lodash.delay = delay2;
+        lodash.delay = delay;
         lodash.difference = difference;
         lodash.differenceBy = differenceBy;
         lodash.differenceWith = differenceWith;
@@ -38996,9 +38996,9 @@ var require_timers = __commonJS({
         clearTimeout(this.handle);
       };
       var afterValue = function(value) {
-        return delay2(+this).thenReturn(value);
+        return delay(+this).thenReturn(value);
       };
-      var delay2 = Promise2.delay = function(ms, value) {
+      var delay = Promise2.delay = function(ms, value) {
         var ret2;
         var handle;
         if (value !== void 0) {
@@ -39020,7 +39020,7 @@ var require_timers = __commonJS({
         return ret2;
       };
       Promise2.prototype.delay = function(ms) {
-        return delay2(ms, this);
+        return delay(ms, this);
       };
       var afterTimeout = function(promise2, message, parent) {
         var err;
@@ -90924,9 +90924,9 @@ var require_Action = __commonJS({
       function Action2(scheduler, work) {
         return _super.call(this) || this;
       }
-      Action2.prototype.schedule = function(state, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      Action2.prototype.schedule = function(state, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
         return this;
       };
@@ -90968,9 +90968,9 @@ var require_AsyncAction = __commonJS({
         _this.pending = false;
         return _this;
       }
-      AsyncAction2.prototype.schedule = function(state, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AsyncAction2.prototype.schedule = function(state, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
         if (this.closed) {
           return this;
@@ -90979,42 +90979,42 @@ var require_AsyncAction = __commonJS({
         var id = this.id;
         var scheduler = this.scheduler;
         if (id != null) {
-          this.id = this.recycleAsyncId(scheduler, id, delay2);
+          this.id = this.recycleAsyncId(scheduler, id, delay);
         }
         this.pending = true;
-        this.delay = delay2;
-        this.id = this.id || this.requestAsyncId(scheduler, this.id, delay2);
+        this.delay = delay;
+        this.id = this.id || this.requestAsyncId(scheduler, this.id, delay);
         return this;
       };
-      AsyncAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AsyncAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        return setInterval(scheduler.flush.bind(scheduler, this), delay2);
+        return setInterval(scheduler.flush.bind(scheduler, this), delay);
       };
-      AsyncAction2.prototype.recycleAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AsyncAction2.prototype.recycleAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        if (delay2 !== null && this.delay === delay2 && this.pending === false) {
+        if (delay !== null && this.delay === delay && this.pending === false) {
           return id;
         }
         clearInterval(id);
         return void 0;
       };
-      AsyncAction2.prototype.execute = function(state, delay2) {
+      AsyncAction2.prototype.execute = function(state, delay) {
         if (this.closed) {
           return new Error("executing a cancelled action");
         }
         this.pending = false;
-        var error40 = this._execute(state, delay2);
+        var error40 = this._execute(state, delay);
         if (error40) {
           return error40;
         } else if (this.pending === false && this.id != null) {
           this.id = this.recycleAsyncId(this.scheduler, this.id, null);
         }
       };
-      AsyncAction2.prototype._execute = function(state, delay2) {
+      AsyncAction2.prototype._execute = function(state, delay) {
         var errored = false;
         var errorValue = void 0;
         try {
@@ -91082,27 +91082,27 @@ var require_QueueAction = __commonJS({
         _this.work = work;
         return _this;
       }
-      QueueAction2.prototype.schedule = function(state, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      QueueAction2.prototype.schedule = function(state, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        if (delay2 > 0) {
-          return _super.prototype.schedule.call(this, state, delay2);
+        if (delay > 0) {
+          return _super.prototype.schedule.call(this, state, delay);
         }
-        this.delay = delay2;
+        this.delay = delay;
         this.state = state;
         this.scheduler.flush(this);
         return this;
       };
-      QueueAction2.prototype.execute = function(state, delay2) {
-        return delay2 > 0 || this.closed ? _super.prototype.execute.call(this, state, delay2) : this._execute(state, delay2);
+      QueueAction2.prototype.execute = function(state, delay) {
+        return delay > 0 || this.closed ? _super.prototype.execute.call(this, state, delay) : this._execute(state, delay);
       };
-      QueueAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      QueueAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        if (delay2 !== null && delay2 > 0 || delay2 === null && this.delay > 0) {
-          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay2);
+        if (delay !== null && delay > 0 || delay === null && this.delay > 0) {
+          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay);
         }
         return scheduler.flush(this);
       };
@@ -91125,11 +91125,11 @@ var require_Scheduler = __commonJS({
         this.SchedulerAction = SchedulerAction;
         this.now = now;
       }
-      Scheduler2.prototype.schedule = function(work, delay2, state) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      Scheduler2.prototype.schedule = function(work, delay, state) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        return new this.SchedulerAction(this, work).schedule(state, delay2);
+        return new this.SchedulerAction(this, work).schedule(state, delay);
       };
       Scheduler2.now = function() {
         return Date.now();
@@ -91181,14 +91181,14 @@ var require_AsyncScheduler = __commonJS({
         _this.scheduled = void 0;
         return _this;
       }
-      AsyncScheduler2.prototype.schedule = function(work, delay2, state) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AsyncScheduler2.prototype.schedule = function(work, delay, state) {
+        if (delay === void 0) {
+          delay = 0;
         }
         if (AsyncScheduler2.delegate && AsyncScheduler2.delegate !== this) {
-          return AsyncScheduler2.delegate.schedule(work, delay2, state);
+          return AsyncScheduler2.delegate.schedule(work, delay, state);
         } else {
-          return _super.prototype.schedule.call(this, work, delay2, state);
+          return _super.prototype.schedule.call(this, work, delay, state);
         }
       };
       AsyncScheduler2.prototype.flush = function(action) {
@@ -91517,22 +91517,22 @@ var require_observeOn = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     var Subscriber_1 = require_Subscriber();
     var Notification_1 = require_Notification();
-    function observeOn(scheduler, delay2) {
-      if (delay2 === void 0) {
-        delay2 = 0;
+    function observeOn(scheduler, delay) {
+      if (delay === void 0) {
+        delay = 0;
       }
       return function observeOnOperatorFunction(source) {
-        return source.lift(new ObserveOnOperator(scheduler, delay2));
+        return source.lift(new ObserveOnOperator(scheduler, delay));
       };
     }
     exports2.observeOn = observeOn;
     var ObserveOnOperator = (function() {
-      function ObserveOnOperator2(scheduler, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      function ObserveOnOperator2(scheduler, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
         this.scheduler = scheduler;
-        this.delay = delay2;
+        this.delay = delay;
       }
       ObserveOnOperator2.prototype.call = function(subscriber, source) {
         return source.subscribe(new ObserveOnSubscriber(subscriber, this.scheduler, this.delay));
@@ -91542,13 +91542,13 @@ var require_observeOn = __commonJS({
     exports2.ObserveOnOperator = ObserveOnOperator;
     var ObserveOnSubscriber = (function(_super) {
       __extends(ObserveOnSubscriber2, _super);
-      function ObserveOnSubscriber2(destination, scheduler, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      function ObserveOnSubscriber2(destination, scheduler, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
         var _this = _super.call(this, destination) || this;
         _this.scheduler = scheduler;
-        _this.delay = delay2;
+        _this.delay = delay;
         return _this;
       }
       ObserveOnSubscriber2.dispatch = function(arg) {
@@ -91861,22 +91861,22 @@ var require_AsapAction = __commonJS({
         _this.work = work;
         return _this;
       }
-      AsapAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AsapAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        if (delay2 !== null && delay2 > 0) {
-          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay2);
+        if (delay !== null && delay > 0) {
+          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay);
         }
         scheduler.actions.push(this);
         return scheduler.scheduled || (scheduler.scheduled = Immediate_1.Immediate.setImmediate(scheduler.flush.bind(scheduler, null)));
       };
-      AsapAction2.prototype.recycleAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AsapAction2.prototype.recycleAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        if (delay2 !== null && delay2 > 0 || delay2 === null && this.delay > 0) {
-          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay2);
+        if (delay !== null && delay > 0 || delay === null && this.delay > 0) {
+          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay);
         }
         if (scheduler.actions.length === 0) {
           Immediate_1.Immediate.clearImmediate(id);
@@ -92000,24 +92000,24 @@ var require_AnimationFrameAction = __commonJS({
         _this.work = work;
         return _this;
       }
-      AnimationFrameAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AnimationFrameAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        if (delay2 !== null && delay2 > 0) {
-          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay2);
+        if (delay !== null && delay > 0) {
+          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay);
         }
         scheduler.actions.push(this);
         return scheduler.scheduled || (scheduler.scheduled = requestAnimationFrame(function() {
           return scheduler.flush(null);
         }));
       };
-      AnimationFrameAction2.prototype.recycleAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      AnimationFrameAction2.prototype.recycleAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        if (delay2 !== null && delay2 > 0 || delay2 === null && this.delay > 0) {
-          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay2);
+        if (delay !== null && delay > 0 || delay === null && this.delay > 0) {
+          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay);
         }
         if (scheduler.actions.length === 0) {
           cancelAnimationFrame(id);
@@ -92174,37 +92174,37 @@ var require_VirtualTimeScheduler = __commonJS({
         _this.index = scheduler.index = index;
         return _this;
       }
-      VirtualAction2.prototype.schedule = function(state, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      VirtualAction2.prototype.schedule = function(state, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
         if (!this.id) {
-          return _super.prototype.schedule.call(this, state, delay2);
+          return _super.prototype.schedule.call(this, state, delay);
         }
         this.active = false;
         var action = new VirtualAction2(this.scheduler, this.work);
         this.add(action);
-        return action.schedule(state, delay2);
+        return action.schedule(state, delay);
       };
-      VirtualAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      VirtualAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
-        this.delay = scheduler.frame + delay2;
+        this.delay = scheduler.frame + delay;
         var actions = scheduler.actions;
         actions.push(this);
         actions.sort(VirtualAction2.sortActions);
         return true;
       };
-      VirtualAction2.prototype.recycleAsyncId = function(scheduler, id, delay2) {
-        if (delay2 === void 0) {
-          delay2 = 0;
+      VirtualAction2.prototype.recycleAsyncId = function(scheduler, id, delay) {
+        if (delay === void 0) {
+          delay = 0;
         }
         return void 0;
       };
-      VirtualAction2.prototype._execute = function(state, delay2) {
+      VirtualAction2.prototype._execute = function(state, delay) {
         if (this.active === true) {
-          return _super.prototype._execute.call(this, state, delay2);
+          return _super.prototype._execute.call(this, state, delay);
         }
       };
       VirtualAction2.sortActions = function(a2, b3) {
@@ -94755,27 +94755,27 @@ var require_src2 = __commonJS({
         calculateDelay: options.calculateDelay === void 0 ? null : options.calculateDelay
       };
     }
-    async function sleep2(delay2) {
-      return new Promise((resolve) => setTimeout(resolve, delay2));
+    async function sleep2(delay) {
+      return new Promise((resolve) => setTimeout(resolve, delay));
     }
     exports2.sleep = sleep2;
     function defaultCalculateDelay(context, options) {
-      let delay2 = options.delay;
-      if (delay2 === 0) {
+      let delay = options.delay;
+      if (delay === 0) {
         return 0;
       }
       if (options.factor) {
-        delay2 *= Math.pow(options.factor, context.attemptNum - 1);
+        delay *= Math.pow(options.factor, context.attemptNum - 1);
         if (options.maxDelay !== 0) {
-          delay2 = Math.min(delay2, options.maxDelay);
+          delay = Math.min(delay, options.maxDelay);
         }
       }
       if (options.jitter) {
         const min = Math.ceil(options.minDelay);
-        const max = Math.floor(delay2);
-        delay2 = Math.floor(Math.random() * (max - min + 1)) + min;
+        const max = Math.floor(delay);
+        delay = Math.floor(Math.random() * (max - min + 1)) + min;
       }
-      return Math.round(delay2);
+      return Math.round(delay);
     }
     exports2.defaultCalculateDelay = defaultCalculateDelay;
     async function retry(attemptFunc, attemptOptions) {
@@ -94825,9 +94825,9 @@ var require_src2 = __commonJS({
             throw err;
           }
           context.attemptNum++;
-          const delay2 = calculateDelay(context, options);
-          if (delay2) {
-            await sleep2(delay2);
+          const delay = calculateDelay(context, options);
+          if (delay) {
+            await sleep2(delay);
           }
           return makeAttempt();
         };
@@ -94866,9 +94866,9 @@ var require_src2 = __commonJS({
         await sleep2(initialDelay);
       }
       if (context.attemptNum < 1 && options.initialJitter) {
-        const delay2 = calculateDelay(context, options);
-        if (delay2) {
-          await sleep2(delay2);
+        const delay = calculateDelay(context, options);
+        if (delay) {
+          await sleep2(delay);
         }
       }
       return makeAttempt();
@@ -142775,7 +142775,7 @@ async function fillField(page, selector, text2) {
 async function browserAutoLogin(profileId, username, password, twoFAKey) {
   const s = sessions.get(profileId);
   if (!s) return { ok: false, message: "No active browser session" };
-  const delay2 = (ms) => new Promise((r2) => setTimeout(r2, ms));
+  const delay = (ms) => new Promise((r2) => setTimeout(r2, ms));
   try {
     const currentUrl = s.page.url();
     if (!currentUrl.includes("instagram.com/accounts/login")) {
@@ -142785,9 +142785,9 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
         timeout: 3e4
       }).catch(() => null);
     }
-    await delay2(1500);
+    await delay(1500);
     await dismissCookieBanner(s.page);
-    await delay2(400);
+    await delay(400);
     sendStatus(profileId, "Looking for login form\u2026");
     const usernameInput = await s.page.waitForSelector('input[name="username"]', { timeout: 15e3 }).catch(() => null);
     if (!usernameInput) {
@@ -142801,13 +142801,13 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
       return { ok: false, message: "Login form not found. Check the browser window." };
     }
     sendStatus(profileId, "Filling username\u2026");
-    await delay2(500 + Math.random() * 300);
+    await delay(500 + Math.random() * 300);
     await fillField(s.page, 'input[name="username"]', username);
-    await delay2(300 + Math.random() * 200);
+    await delay(300 + Math.random() * 200);
     sendStatus(profileId, "Filling password\u2026");
     await fillField(s.page, 'input[name="password"]', password);
     sendStatus(profileId, "Waiting for login button\u2026");
-    await delay2(500);
+    await delay(500);
     const allBtns = await s.page.evaluate(
       () => Array.from(document.querySelectorAll('button, [role="button"]')).map((el) => {
         const r2 = el.getBoundingClientRect();
@@ -142833,13 +142833,13 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
       const cx = loginBtn.x + loginBtn.w / 2;
       const cy = loginBtn.y + loginBtn.h / 2;
       await s.page.mouse.move(cx, cy);
-      await delay2(120);
+      await delay(120);
       await s.page.mouse.click(cx, cy);
     } else {
       log(`[autoLogin:${profileId}] No button found \u2014 using Tab+Enter`, "browser");
       await s.page.focus('input[name="password"]');
       await s.page.keyboard.press("Tab");
-      await delay2(200);
+      await delay(200);
       await s.page.keyboard.press("Enter");
     }
     sendStatus(profileId, "Login submitted \u2014 waiting for Instagram\u2026");
@@ -142854,7 +142854,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
       () => (document.body?.innerText || "").length > 80,
       { timeout: 6e3 }
     ).catch(() => null);
-    await delay2(300);
+    await delay(300);
     await dismissCookieBanner(s.page);
     const pageText = await s.page.evaluate(
       () => (document.body?.innerText || "").slice(0, 600).trim()
@@ -142871,7 +142871,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
         const codeInput = await s.page.$('input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]').catch(() => null);
         if (codeInput) {
           await fillField(s.page, 'input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]', code);
-          await delay2(400);
+          await delay(400);
           const contBtns = await s.page.evaluate(
             () => Array.from(document.querySelectorAll('button, [role="button"]')).map((el) => {
               const r2 = el.getBoundingClientRect();
@@ -142881,12 +142881,12 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           const contBtn = contBtns.find((b3) => /continue|verify|submit/i.test(b3.text) && b3.w > 50);
           if (contBtn) {
             await s.page.mouse.move(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
-            await delay2(100);
+            await delay(100);
             await s.page.mouse.click(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
           } else {
             await s.page.keyboard.press("Enter");
           }
-          await delay2(3e3);
+          await delay(3e3);
           await saveCookies(profileId, s.page);
           sendStatus(profileId, `TOTP code entered \u2014 check browser for result.`);
           return { ok: true, message: "2FA code submitted" };
@@ -142912,110 +142912,6 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
     const msg = err?.message || "Unknown error during login";
     sendStatus(profileId, `Error: ${msg}`);
     return { ok: false, message: msg };
-  }
-}
-var delay = (ms) => new Promise((r2) => setTimeout(r2, ms));
-async function uploadPhotoViaFetch(profileId, imageBuffer, caption) {
-  let s = sessions.get(profileId);
-  if (!s) {
-    log(`uploadPhotoViaFetch [${profileId}]: waiting for browser session...`);
-    for (let i2 = 0; i2 < 90; i2++) {
-      await delay(1e3);
-      s = sessions.get(profileId);
-      if (s) {
-        log(`uploadPhotoViaFetch [${profileId}]: browser session ready after ${i2 + 1}s`);
-        break;
-      }
-    }
-  }
-  if (!s) {
-    log(`uploadPhotoViaFetch [${profileId}]: timeout \u2014 no browser session available`);
-    return null;
-  }
-  const uploadId = String(Date.now());
-  const b64 = imageBuffer.toString("base64");
-  const ruploadParams = JSON.stringify({
-    media_type: 1,
-    upload_id: uploadId,
-    upload_media_height: 1080,
-    upload_media_width: 1080,
-    upload_media_duration_ms: 0,
-    xsharing_user_ids: []
-  });
-  try {
-    const ruploadResult = await s.page.evaluate(async (b64img, uid, rparams) => {
-      const bytes = Uint8Array.from(atob(b64img), (c3) => c3.charCodeAt(0));
-      const blob2 = new Blob([bytes], { type: "image/jpeg" });
-      const csrfCookie = document.cookie.split(";").find((c3) => c3.trim().startsWith("csrftoken="));
-      const csrf = csrfCookie ? csrfCookie.split("=")[1].trim() : "";
-      const resp = await fetch(`https://www.instagram.com/rupload/igphoto/${uid}`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "X-IG-App-ID": "936619743392459",
-          "X-CSRFToken": csrf,
-          "X-IG-Capabilities": "3brTvwE=",
-          "X-IG-Connection-Type": "WIFI",
-          "Content-Type": "image/jpeg",
-          "X-Entity-Type": "image/jpeg",
-          "X-Entity-Name": `photo_${uid}`,
-          "Offset": "0",
-          "X-Entity-Length": String(bytes.length),
-          "X-Instagram-Rupload-Params": rparams
-        },
-        body: blob2
-      });
-      const text2 = await resp.text();
-      return { status: resp.status, text: text2 };
-    }, b64, uploadId, ruploadParams);
-    log(`uploadPhotoViaFetch [${profileId}]: rupload status=${ruploadResult.status} body=${ruploadResult.text.slice(0, 200)}`);
-    let uploadJson = null;
-    try {
-      uploadJson = JSON.parse(ruploadResult.text);
-    } catch {
-    }
-    const uploaded = uploadJson?.upload_id != null || uploadJson?.status === "ok";
-    if (!uploaded) {
-      log(`uploadPhotoViaFetch [${profileId}]: rupload failed`);
-      return null;
-    }
-    const configureResult = await s.page.evaluate(async (uid, cap) => {
-      const csrfCookie = document.cookie.split(";").find((c3) => c3.trim().startsWith("csrftoken="));
-      const csrf = csrfCookie ? csrfCookie.split("=")[1].trim() : "";
-      const body = new URLSearchParams({
-        upload_id: uid,
-        caption: cap,
-        source_type: "4",
-        timezone_offset: "0",
-        date_time_original: (/* @__PURE__ */ new Date()).toISOString().replace(/[^0-9]/g, "").slice(0, 14)
-      });
-      const resp = await fetch("https://i.instagram.com/api/v1/media/configure/", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "X-IG-App-ID": "936619743392459",
-          "X-CSRFToken": csrf,
-          "X-IG-Capabilities": "3brTvwE=",
-          "X-IG-Connection-Type": "WIFI"
-        },
-        body: body.toString()
-      });
-      const text2 = await resp.text();
-      return { status: resp.status, text: text2 };
-    }, uploadId, caption);
-    log(`uploadPhotoViaFetch [${profileId}]: configure status=${configureResult.status} body=${configureResult.text.slice(0, 200)}`);
-    let confJson = null;
-    try {
-      confJson = JSON.parse(configureResult.text);
-    } catch {
-    }
-    const mediaId = confJson?.media?.id ? String(confJson.media.id) : null;
-    if (!mediaId && confJson?.status === "ok") return uploadId;
-    return mediaId;
-  } catch (err) {
-    log(`uploadPhotoViaFetch [${profileId}]: error: ${err?.message}`);
-    return null;
   }
 }
 
@@ -145607,7 +145503,7 @@ var AutomationEngine = class {
             const imageBuffer = await client.downloadImage(item.imageUrl);
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
             const finalCaption = captionTemplate ? resolveCaption(captionTemplate, item, sourceUsername, profile.username) : item.caption.slice(0, 2200);
-            const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
+            const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
             if (postedMediaId) {
               if (s.repostDisableComments) {
                 try {
@@ -145944,7 +145840,7 @@ var AutomationEngine = class {
       const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
       const captionTemplate = String(s.repostCaptionText ?? "").trim();
       const finalCaption = captionTemplate ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username) : candidate.caption.slice(0, 2200);
-      const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
+      const postedMediaId = await client.uploadPhoto(alteredBuffer, finalCaption);
       if (!postedMediaId) return { ok: false, message: "Upload failed \u2014 Instagram rejected the photo" };
       if (s.repostDisableComments) {
         try {
