@@ -40,7 +40,8 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
 ];
 
 export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
-  const updateToolMutation = useUpdateTool();
+  const updateToolMutation = useUpdateTool();  // settings saves
+  const toggleMutation     = useUpdateTool();  // enable/disable toggle — separate so it's never blocked
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
   const [copyOpen, setCopyOpen] = useState(false);
@@ -172,9 +173,9 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) =>
-              updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })
+              toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })
             }
-            disabled={updateToolMutation.isPending}
+            disabled={toggleMutation.isPending}
           />
           <span className={`text-sm font-medium ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
             {tool.enabled ? "ACTIVE" : "STOPPED"}

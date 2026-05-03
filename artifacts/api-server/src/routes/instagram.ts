@@ -387,10 +387,10 @@ export async function registerInstagramRoutes(
     try {
       const input = api.tools.update.input.parse(req.body);
       const updated = await storage.updateTool(Number(req.params.id), input);
-      // If the human session tool is being enabled, fire immediately rather
-      // than waiting up to 30-60 min for the next scheduled run.
-      if (updated.type === "human_sessions" && updated.enabled) {
-        automationEngine.triggerHumanSession(updated.profileId);
+      if (updated.enabled) {
+        if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
+        if (updated.type === "unfollow")       automationEngine.triggerUnfollow(updated.profileId);
+        if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);
       }
       res.json(updated);
     } catch (err) {

@@ -146116,6 +146116,22 @@ var AutomationEngine = class {
       });
     }
   }
+  // Called when an unfollow tool is explicitly enabled from the UI.
+  // Immediately kicks off a reconcile so the runner starts without waiting
+  // up to 10 seconds for the scheduled interval.
+  triggerUnfollow(profileId) {
+    if (!this.unfollowStates.has(profileId)) {
+      this.reconcile().catch(() => {
+      });
+    }
+  }
+  // Called when a follow tool is explicitly enabled from the UI.
+  triggerFollow(profileId) {
+    if (!this.states.has(profileId)) {
+      this.reconcile().catch(() => {
+      });
+    }
+  }
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus() {
     const allIds = /* @__PURE__ */ new Set([
@@ -146469,8 +146485,10 @@ async function registerInstagramRoutes(httpServer2, app2) {
     try {
       const input = api.tools.update.input.parse(req.body);
       const updated = await storage.updateTool(Number(req.params.id), input);
-      if (updated.type === "human_sessions" && updated.enabled) {
-        automationEngine.triggerHumanSession(updated.profileId);
+      if (updated.enabled) {
+        if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
+        if (updated.type === "unfollow") automationEngine.triggerUnfollow(updated.profileId);
+        if (updated.type === "follow") automationEngine.triggerFollow(updated.profileId);
       }
       res.json(updated);
     } catch (err) {

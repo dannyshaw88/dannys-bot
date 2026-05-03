@@ -25,7 +25,8 @@ interface ToolConfigPanelProps {
 export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   const { toast } = useToast();
   const { navigateTo } = useBrowserWindows();
-  const updateToolMutation = useUpdateTool();
+  const updateToolMutation = useUpdateTool();  // settings saves
+  const toggleMutation     = useUpdateTool();  // enable/disable — never blocked by settings save
   const { data: sources, isLoading: sourcesLoading } = useSources(tool.id);
   const createSourceMutation = useCreateSource();
   const deleteSourceMutation = useDeleteSource();
@@ -328,7 +329,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   };
 
   const handleToggleEnable = (enabled: boolean) => {
-    updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled });
+    toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled });
   };
 
   const isMounted = useRef(false);
@@ -633,7 +634,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
             <Switch
               checked={tool.enabled}
               onCheckedChange={handleToggleEnable}
-              disabled={updateToolMutation.isPending}
+              disabled={toggleMutation.isPending}
             />
             <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
               {tool.enabled ? 'ACTIVE' : 'STOPPED'}
@@ -698,7 +699,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   <Switch
                     checked={tool.enabled}
                     onCheckedChange={handleToggleEnable}
-                    disabled={updateToolMutation.isPending}
+                    disabled={toggleMutation.isPending}
                   />
                   <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
                     {tool.enabled ? 'ACTIVE' : 'STOPPED'}

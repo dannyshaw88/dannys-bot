@@ -2400,6 +2400,22 @@ class AutomationEngine {
     }
   }
 
+  // Called when an unfollow tool is explicitly enabled from the UI.
+  // Immediately kicks off a reconcile so the runner starts without waiting
+  // up to 10 seconds for the scheduled interval.
+  triggerUnfollow(profileId: number) {
+    if (!this.unfollowStates.has(profileId)) {
+      this.reconcile().catch(() => {});
+    }
+  }
+
+  // Called when a follow tool is explicitly enabled from the UI.
+  triggerFollow(profileId: number) {
+    if (!this.states.has(profileId)) {
+      this.reconcile().catch(() => {});
+    }
+  }
+
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
     // Collect every profileId that has at least one active runner
