@@ -481,7 +481,7 @@ export async function registerInstagramRoutes(
 
   app.get("/api/instagram-api-calls", async (_req, res) => {
     const data = await storage.getInstagramApiCalls(500);
-    res.json(data);
+    res.json(data.filter((c: any) => c.source !== "Browser"));
   });
 
   app.get("/api/logs/export", async (req, res) => {

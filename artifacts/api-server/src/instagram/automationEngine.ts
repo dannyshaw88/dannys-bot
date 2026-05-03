@@ -655,6 +655,10 @@ class AutomationEngine {
     let nextFollowerCheckAt = 0;  // run immediately on first tick
     let nextUsersSessionAt  = 0;
 
+    // Toggle-detection: reset timer immediately when sub-features are re-enabled
+    let lastContactNewFollowersEnabled: boolean | undefined = undefined;
+    let lastContactUsersEnabled: boolean | undefined = undefined;
+
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -669,9 +673,23 @@ class AutomationEngine {
         const s = contactTool.settings as any;
         const now = Date.now();
 
+        // Detect toggle-on transitions and reset timers so next run is immediate
+        const newFollowersEnabled = s.contactNewFollowersEnabled !== false;
+        const usersEnabled = s.contactUsersEnabled !== false;
+        if (lastContactNewFollowersEnabled === false && newFollowersEnabled) {
+          nextFollowerCheckAt = 0;
+          console.log(`[engine] @${freshProfile.username}: contactNewFollowers toggled ON — running immediately`);
+        }
+        if (lastContactUsersEnabled === false && usersEnabled) {
+          nextUsersSessionAt = 0;
+          console.log(`[engine] @${freshProfile.username}: contactUsers toggled ON — running immediately`);
+        }
+        lastContactNewFollowersEnabled = newFollowersEnabled;
+        lastContactUsersEnabled = usersEnabled;
+
         // ── New Followers → enqueue to pending ─────────────────────────────
         if (now >= nextFollowerCheckAt) {
-          if (s.contactNewFollowersEnabled !== false) {
+          if (newFollowersEnabled) {
             try {
               await this.runContactNewFollowersSession(freshProfile, contactTool, state);
             } catch (err: any) {
@@ -691,7 +709,7 @@ class AutomationEngine {
 
         // ── Contact Users → send from pending queue ─────────────────────────
         if (now >= nextUsersSessionAt) {
-          if (s.contactUsersEnabled !== false) {
+          if (usersEnabled) {
             try {
               await this.runContactUsersSession(freshProfile, contactTool, state);
             } catch (err: any) {

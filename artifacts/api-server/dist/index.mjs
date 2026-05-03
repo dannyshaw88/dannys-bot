@@ -141040,6 +141040,8 @@ var AutomationEngine = class {
     console.log(`[engine] Launching contact runner for @${profile.username}`);
     let nextFollowerCheckAt = 0;
     let nextUsersSessionAt = 0;
+    let lastContactNewFollowersEnabled = void 0;
+    let lastContactUsersEnabled = void 0;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -141054,8 +141056,20 @@ var AutomationEngine = class {
         if (!contactTool?.enabled || state.stop.stopped) break;
         const s = contactTool.settings;
         const now = Date.now();
+        const newFollowersEnabled = s.contactNewFollowersEnabled !== false;
+        const usersEnabled = s.contactUsersEnabled !== false;
+        if (lastContactNewFollowersEnabled === false && newFollowersEnabled) {
+          nextFollowerCheckAt = 0;
+          console.log(`[engine] @${freshProfile.username}: contactNewFollowers toggled ON \u2014 running immediately`);
+        }
+        if (lastContactUsersEnabled === false && usersEnabled) {
+          nextUsersSessionAt = 0;
+          console.log(`[engine] @${freshProfile.username}: contactUsers toggled ON \u2014 running immediately`);
+        }
+        lastContactNewFollowersEnabled = newFollowersEnabled;
+        lastContactUsersEnabled = usersEnabled;
         if (now >= nextFollowerCheckAt) {
-          if (s.contactNewFollowersEnabled !== false) {
+          if (newFollowersEnabled) {
             try {
               await this.runContactNewFollowersSession(freshProfile, contactTool, state);
             } catch (err) {
@@ -141072,7 +141086,7 @@ var AutomationEngine = class {
         }
         if (state.stop.stopped) break;
         if (now >= nextUsersSessionAt) {
-          if (s.contactUsersEnabled !== false) {
+          if (usersEnabled) {
             try {
               await this.runContactUsersSession(freshProfile, contactTool, state);
             } catch (err) {
@@ -143075,7 +143089,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
   });
   app2.get("/api/instagram-api-calls", async (_req, res) => {
     const data = await storage.getInstagramApiCalls(500);
-    res.json(data);
+    res.json(data.filter((c3) => c3.source !== "Browser"));
   });
   app2.get("/api/logs/export", async (req, res) => {
     try {

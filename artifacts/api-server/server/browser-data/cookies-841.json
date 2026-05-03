@@ -1,7 +1,7 @@
 [
   {
     "name": "rur",
-    "value": "\"SNB\\05477661428511\\0541809356412:01feff9c1626d7901e8068e821d821024e95419bd09a463d45005c25184577225d66ff61\"",
+    "value": "\"SNB\\05477661428511\\0541809357873:01fe7cdb7ef7e84c49c6fd4ed15d64db57d8f06b5ba8cc173cb5d18246fc62edeb34a04e\"",
     "domain": ".instagram.com",
     "path": "/",
     "expires": -1,
@@ -78,7 +78,7 @@
     "value": "77661428511",
     "domain": ".instagram.com",
     "path": "/",
-    "expires": 1785596412.221551,
+    "expires": 1785597874.087295,
     "size": 21,
     "httpOnly": false,
     "secure": true,
@@ -93,7 +93,7 @@
     "value": "jbnwNuLXO1KdVFdn6BKlEfmXXQ2B3JOo",
     "domain": ".instagram.com",
     "path": "/",
-    "expires": 1812380412.221445,
+    "expires": 1812381874.087114,
     "size": 41,
     "httpOnly": false,
     "secure": true,
