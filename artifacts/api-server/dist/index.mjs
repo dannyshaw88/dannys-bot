@@ -140196,15 +140196,36 @@ var InstagramWebClient = class {
   }
   // ── Send a direct message to a user ───────────────────────────────────────
   // Returns true on success, "blocked" on action-block, false otherwise.
+  // Look up the existing DM thread with a specific user.
+  // Checks both the regular inbox (accepted DMs) and the pending inbox (message requests).
   async getThreadIdWithUser(userId) {
     try {
       const j = await this.mobileGet(
-        `/api/v1/direct_v2/threads/get_by_participants/?participant_user_ids=["${userId}"]`
+        `/api/v1/direct_v2/threads/get_by_participants/?participant_user_ids[]=${userId}&seq_id=0&limit=20`
       );
-      return j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
+      const tid = j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
+      if (tid) {
+        console.log(`[webClient] getThreadIdWithUser ${userId}: found in regular inbox \u2192 ${tid}`);
+        return String(tid);
+      }
     } catch {
-      return null;
     }
+    try {
+      const jp = await this.mobileGet(
+        `/api/v1/direct_v2/pending_inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=50`
+      );
+      const pendingThreads = jp?.inbox?.threads ?? jp?.threads ?? [];
+      const matched = pendingThreads.find(
+        (t2) => (t2.users ?? []).some((u) => String(u.pk) === String(userId))
+      );
+      if (matched?.thread_id) {
+        console.log(`[webClient] getThreadIdWithUser ${userId}: found in pending inbox \u2192 ${matched.thread_id}`);
+        return String(matched.thread_id);
+      }
+    } catch {
+    }
+    console.log(`[webClient] getThreadIdWithUser ${userId}: no thread found in regular or pending inbox`);
+    return null;
   }
   async sendDirectMessage(userId, text2, username) {
     return this.timed("SendDM", async () => {
@@ -140226,7 +140247,7 @@ var InstagramWebClient = class {
       }
       const errorCode = j?.content?.error_code ?? j?.error_code;
       if (errorCode === 4415001) {
-        console.log(`[webClient] sendDM ${userId}: existing thread detected (4415001), looking up thread\u2026`);
+        console.log(`[webClient] sendDM ${userId}: 4415001 \u2014 looking up existing thread in both inboxes\u2026`);
         const threadId = await this.getThreadIdWithUser(userId);
         if (threadId) {
           const body2 = new URLSearchParams({ client_context: String(Date.now()), text: text2 }).toString();
@@ -140236,8 +140257,10 @@ var InstagramWebClient = class {
             console.log(`[webClient] sendDM ${userId}: sent to existing thread ${threadId}`);
             return { threadId, itemId };
           }
-          console.log(`[webClient] sendDM ${userId}: existing-thread retry also failed:`, JSON.stringify(j2));
+          console.log(`[webClient] sendDM ${userId}: existing-thread retry failed:`, JSON.stringify(j2));
         }
+        console.log(`[webClient] sendDM ${userId}: treating 4415001 as already-delivered (DM pending acceptance)`);
+        return { threadId: "prompt_pending", itemId: "" };
       }
       console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
       return false;

@@ -922,15 +922,38 @@ export class InstagramWebClient {
 
   // ── Send a direct message to a user ───────────────────────────────────────
   // Returns true on success, "blocked" on action-block, false otherwise.
+  // Look up the existing DM thread with a specific user.
+  // Checks both the regular inbox (accepted DMs) and the pending inbox (message requests).
   private async getThreadIdWithUser(userId: string): Promise<string | null> {
+    // 1. Try get_by_participants (regular accepted threads)
     try {
       const j = await this.mobileGet(
-        `/api/v1/direct_v2/threads/get_by_participants/?participant_user_ids=["${userId}"]`
+        `/api/v1/direct_v2/threads/get_by_participants/?participant_user_ids[]=${userId}&seq_id=0&limit=20`
       );
-      return j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
-    } catch {
-      return null;
-    }
+      const tid = j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
+      if (tid) {
+        console.log(`[webClient] getThreadIdWithUser ${userId}: found in regular inbox → ${tid}`);
+        return String(tid);
+      }
+    } catch {}
+
+    // 2. Try the pending (message requests) inbox
+    try {
+      const jp = await this.mobileGet(
+        `/api/v1/direct_v2/pending_inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=50`
+      );
+      const pendingThreads: any[] = jp?.inbox?.threads ?? jp?.threads ?? [];
+      const matched = pendingThreads.find((t: any) =>
+        (t.users ?? []).some((u: any) => String(u.pk) === String(userId))
+      );
+      if (matched?.thread_id) {
+        console.log(`[webClient] getThreadIdWithUser ${userId}: found in pending inbox → ${matched.thread_id}`);
+        return String(matched.thread_id);
+      }
+    } catch {}
+
+    console.log(`[webClient] getThreadIdWithUser ${userId}: no thread found in regular or pending inbox`);
+    return null;
   }
 
   async sendDirectMessage(userId: string, text: string, username?: string): Promise<{ threadId: string; itemId: string } | "blocked" | false> {
@@ -951,13 +974,15 @@ export class InstagramWebClient {
         const itemId: string = j?.payload?.item_id ?? j?.item_id ?? "";
         return { threadId, itemId };
       }
-      // Handle "Prompt has contribution" (4415001) — an existing DM thread already exists.
-      // Fetch it and send to the existing thread instead.
+      // Handle "Prompt has contribution" (4415001):
+      // A DM request from this account to the user already exists (pending acceptance).
+      // Try to find that thread and send to it; if not found, treat as already-delivered.
       const errorCode = j?.content?.error_code ?? j?.error_code;
       if (errorCode === 4415001) {
-        console.log(`[webClient] sendDM ${userId}: existing thread detected (4415001), looking up thread…`);
+        console.log(`[webClient] sendDM ${userId}: 4415001 — looking up existing thread in both inboxes…`);
         const threadId = await this.getThreadIdWithUser(userId);
         if (threadId) {
+          // Found the thread — try sending to it directly
           const body2 = new URLSearchParams({ client_context: String(Date.now()), text }).toString();
           const j2 = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/broadcast/text/`, body2);
           if (j2?.status === "ok") {
@@ -965,8 +990,12 @@ export class InstagramWebClient {
             console.log(`[webClient] sendDM ${userId}: sent to existing thread ${threadId}`);
             return { threadId, itemId };
           }
-          console.log(`[webClient] sendDM ${userId}: existing-thread retry also failed:`, JSON.stringify(j2));
+          console.log(`[webClient] sendDM ${userId}: existing-thread retry failed:`, JSON.stringify(j2));
         }
+        // No thread found or retry failed: the DM request is already pending on Instagram's side.
+        // Treat as "already delivered" so we don't loop on this user forever.
+        console.log(`[webClient] sendDM ${userId}: treating 4415001 as already-delivered (DM pending acceptance)`);
+        return { threadId: "prompt_pending", itemId: "" };
       }
       console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
       return false;
