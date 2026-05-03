@@ -5,9 +5,12 @@
  * SETTINGS dialog) plus a JPEG COM-segment injection for hash salting.
  * When custom per-filter settings are provided by the caller they override
  * the built-in level presets.
+ *
+ * sharp is loaded lazily so the server starts even when the native binary is
+ * not available for the current platform (e.g. Windows cross-build). If sharp
+ * fails to load the COM-only fallback still runs.
  */
 import { randomBytes } from "crypto";
-import sharp from "sharp";
 
 export type AlterationLevel = "small" | "medium" | "high";
 
@@ -93,6 +96,21 @@ function buildConfig(level: AlterationLevel, custom?: ImageFilterSettings): Alte
   };
 }
 
+// Lazy sharp loader — returns the default export or null if unavailable.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let sharpModule: ((input: Buffer | Uint8Array, options?: any) => any) | null | undefined = undefined;
+
+async function getSharp() {
+  if (sharpModule !== undefined) return sharpModule;
+  try {
+    const mod = await import("sharp");
+    sharpModule = mod.default;
+  } catch {
+    sharpModule = null;
+  }
+  return sharpModule;
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 /**
  * Alters a JPEG image buffer to make it unique before reposting.
@@ -107,6 +125,14 @@ export async function alterJpegBuffer(
   customSettings?: ImageFilterSettings,
 ): Promise<Buffer> {
   const cfg = buildConfig(level, customSettings);
+  const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
+
+  const sharp = await getSharp();
+
+  if (!sharp) {
+    // sharp native binary not available on this platform — COM-only fallback
+    return injectComSegment(input, comLen);
+  }
 
   try {
     // ── 1. Noise: raw-pixel Gaussian perturbation ──────────────────────────
@@ -158,11 +184,10 @@ export async function alterJpegBuffer(
     const processed = await pipeline.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
 
     // ── 7. COM segment injection ───────────────────────────────────────────
-    const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
     return injectComSegment(processed, comLen);
 
   } catch (err) {
     console.warn("[imageAlteration] sharp pipeline failed, using COM-only fallback:", (err as Error).message);
-    return injectComSegment(input, 32);
+    return injectComSegment(input, comLen);
   }
 }

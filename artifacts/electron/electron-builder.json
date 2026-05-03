@@ -15,8 +15,6 @@
     "dist/frontend/**",
     "dist/assets/**",
     "node_modules/better-sqlite3/**",
-    "node_modules/sharp/**",
-    "node_modules/@img/**",
     "**/*.node"
   ],
   "npmRebuild": true,
