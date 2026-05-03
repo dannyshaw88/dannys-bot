@@ -114349,7 +114349,7 @@ var require_client = __commonJS({
     var address_book_repository_1 = require_address_book_repository();
     var status_repository_1 = require_status_repository();
     var igtv_repository_1 = require_igtv_repository();
-    var IgApiClient2 = class {
+    var IgApiClient3 = class {
       constructor() {
         this.state = new state_1.State();
         this.request = new request_1.Request(this);
@@ -114397,7 +114397,7 @@ var require_client = __commonJS({
         this.request.end$.complete();
       }
     };
-    exports2.IgApiClient = IgApiClient2;
+    exports2.IgApiClient = IgApiClient3;
   }
 });
 
@@ -138763,6 +138763,9 @@ async function verifyInstagramCredentials(profile) {
   }
 }
 
+// src/routes/instagram.ts
+var import_instagram_private_api2 = __toESM(require_dist2(), 1);
+
 // src/instagram/browserSession.ts
 import fs from "fs";
 import path2 from "path";
@@ -143250,13 +143253,25 @@ async function registerInstagramRoutes(httpServer2, app2) {
           const devPhoneId = p.phoneId || "";
           const devAdid = p.adid || "";
           const devString = p.userAgentApi || "";
-          if (devId || devUuid || devPhoneId || devAdid) {
+          const hasExplicitDeviceIds = !!(devId || devUuid || devPhoneId || devAdid);
+          if (hasExplicitDeviceIds) {
             igDeviceState = JSON.stringify({
               deviceId: devId || void 0,
               uuid: devUuid || void 0,
               phoneId: devPhoneId || void 0,
               adid: devAdid || void 0,
               deviceString: devString || void 0
+            });
+          } else if (devString) {
+            const ig = new import_instagram_private_api2.IgApiClient();
+            ig.state.generateDevice(devString);
+            ig.state.deviceString = devString;
+            igDeviceState = JSON.stringify({
+              deviceId: ig.state.deviceId,
+              uuid: ig.state.uuid,
+              phoneId: ig.state.phoneId,
+              adid: ig.state.adid,
+              deviceString: ig.state.deviceString
             });
           }
           const igApiCookies = p.apiCookies?.trim() || null;
@@ -143288,7 +143303,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
           const existing = await storage.getProfileByUsername(profileData.username);
           if (existing) {
             const updates = { ...profileData };
-            if (!igDeviceState && existing.igDeviceState) {
+            if (!hasExplicitDeviceIds && existing.igDeviceState) {
               delete updates.igDeviceState;
             }
             await storage.updateProfile(existing.id, updates);

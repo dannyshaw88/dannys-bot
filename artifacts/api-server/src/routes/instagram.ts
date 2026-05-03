@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
+import { IgApiClient } from "instagram-private-api";
 import {
   getOrCreateSession,
   attachSSE,
@@ -312,20 +313,40 @@ export async function registerInstagramRoutes(
       const results: { success: boolean; username: string; action?: string; error?: string }[] = [];
       for (const p of toImport) {
         try {
-          // Build igDeviceState from any device fingerprint fields present in the export
+          // Build igDeviceState from device fingerprint fields in the export.
+          // Priority: explicit Jarvee device columns > derived from API User Agent.
+          // Deriving from the UA string uses the same Chance-seeded algorithm as
+          // instagram-private-api's generateDevice(), so the same UA always yields
+          // the same uuid/deviceId/phoneId/adid — giving Instagram a stable device to trust.
           let igDeviceState: string | null = null;
           const devId: string = p.deviceId || "";
           const devUuid: string = p.deviceUuid || "";
           const devPhoneId: string = p.phoneId || "";
           const devAdid: string = p.adid || "";
           const devString: string = p.userAgentApi || "";
-          if (devId || devUuid || devPhoneId || devAdid) {
+          const hasExplicitDeviceIds = !!(devId || devUuid || devPhoneId || devAdid);
+
+          if (hasExplicitDeviceIds) {
+            // Jarvee exported explicit device IDs — use them exactly
             igDeviceState = JSON.stringify({
               deviceId: devId || undefined,
               uuid: devUuid || undefined,
               phoneId: devPhoneId || undefined,
               adid: devAdid || undefined,
               deviceString: devString || undefined,
+            });
+          } else if (devString) {
+            // No explicit IDs but we have an API User Agent — derive deterministic
+            // device IDs from it so every login uses the same device fingerprint.
+            const ig = new IgApiClient();
+            ig.state.generateDevice(devString); // Chance(seed) → consistent IDs
+            ig.state.deviceString = devString;  // keep the Jarvee UA, not a random pick
+            igDeviceState = JSON.stringify({
+              deviceId: ig.state.deviceId,
+              uuid: ig.state.uuid,
+              phoneId: ig.state.phoneId,
+              adid: ig.state.adid,
+              deviceString: ig.state.deviceString,
             });
           }
 
@@ -360,13 +381,14 @@ export async function registerInstagramRoutes(
           // Upsert: if this username already exists, update it instead of creating a duplicate
           const existing = await storage.getProfileByUsername(profileData.username);
           if (existing) {
-            // Update all fields from the import; preserve igDeviceState already in DB
-            // if the new export doesn't include device IDs (don't wipe good device state)
             const updates: Record<string, any> = { ...profileData };
-            if (!igDeviceState && existing.igDeviceState) {
-              delete updates.igDeviceState; // keep the stored one
+            // Device state strategy for existing accounts:
+            // - Explicit Jarvee device IDs → always update (user exported the real ones)
+            // - Derived from UA → only replace if the account has no stored state yet
+            //   (avoid triggering new-device challenges on accounts Instagram already trusts)
+            if (!hasExplicitDeviceIds && existing.igDeviceState) {
+              delete updates.igDeviceState; // keep the trusted stored state
             }
-            // Always update igApiCookies when present in export
             await storage.updateProfile(existing.id, updates);
             results.push({ success: true, username: profileData.username, action: "updated" });
           } else {

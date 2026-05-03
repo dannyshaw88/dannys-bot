@@ -378,7 +378,8 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
                     </thead>
                     <tbody>
                       {parsed.map((p, i) => {
-                        const hasDeviceIds = !!(p.deviceId || p.deviceUuid || p.phoneId || p.adid);
+                        const hasExplicitDeviceIds = !!(p.deviceId || p.deviceUuid || p.phoneId || p.adid);
+                        const canDeriveDeviceIds = !!p.userAgentApi; // server derives from UA if no explicit IDs
                         return (
                           <tr key={i} className="border-t border-border hover:bg-muted/20">
                             <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
@@ -390,9 +391,11 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
                                 : <span className="text-destructive">✗ missing</span>}
                             </td>
                             <td className="px-3 py-2">
-                              {hasDeviceIds
-                                ? <Badge variant="outline" className="text-[10px] text-green-700 border-green-300">✓ found</Badge>
-                                : <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">✗ none</Badge>}
+                              {hasExplicitDeviceIds
+                                ? <Badge variant="outline" className="text-[10px] text-green-700 border-green-300">✓ from file</Badge>
+                                : canDeriveDeviceIds
+                                  ? <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-300">✓ derived</Badge>
+                                  : <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">✗ none</Badge>}
                             </td>
                             <td className="px-3 py-2">
                               {p.apiCookies
@@ -415,14 +418,13 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
                 </div>
               )}
 
-              {parsed.some(p => !p.apiCookies && !p.deviceId && !p.deviceUuid) && (
+              {parsed.some(p => !p.userAgentApi && !p.deviceId && !p.deviceUuid) && (
                 <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Device IDs missing</strong> — Instagram identifies devices by UUID/DeviceID, not just the User Agent.
-                    Without these, Instagram will treat each login as a new device and may require email verification.
-                    To avoid this: in Jarvee, include the <em>UUID</em>, <em>Device ID</em>, <em>Phone ID</em>, and <em>ADID</em> columns in your export,
-                    or include the <em>API Cookies</em> column (session cookies bypass the device check entirely).
+                    <strong>Some accounts have no API User Agent</strong> — device IDs cannot be derived without it.
+                    Instagram may require email verification on first login for those accounts.
+                    Include the <em>API User Agent</em> column in your Jarvee export, or the <em>UUID / Device ID / Phone ID / ADID</em> columns directly.
                   </span>
                 </div>
               )}
