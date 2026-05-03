@@ -592,7 +592,7 @@ export class InstagramWebClient {
   // Simulates a user tapping the heart/notification icon.
   async visitNotifications(): Promise<boolean> {
     return this.timed("VisitNotifications", async () => {
-      const j = await this.mobileGet(`/api/v1/news/inbox/?mark_as_seen=false&warning_sweep_enabled=true`);
+      const j = await this.mobileGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
       return !!(j?.new_stories || j?.old_stories || j?.counts);
     }, "Visit notifications");
   }
