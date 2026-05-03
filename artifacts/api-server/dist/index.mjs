@@ -143174,6 +143174,7 @@ var AutomationEngine = class {
 var automationEngine = new AutomationEngine();
 
 // src/routes/instagram.ts
+var DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 async function resolveProxyConfig(profile) {
   if (profile.browserDirectConnection === true) return void 0;
   if (profile.proxyId) {
@@ -143726,7 +143727,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
-    const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+    const ua = DESKTOP_BROWSER_UA;
     try {
       await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile));
       res.json({ ok: true });
@@ -143752,9 +143753,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
   app2.delete("/api/browser/:profileId/session", async (req, res) => {
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
-    const ua = profile?.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
     const proxy = profile ? await resolveProxyConfig(profile) : void 0;
-    await clearSession(profileId, ua, proxy);
+    await clearSession(profileId, DESKTOP_BROWSER_UA, proxy);
     res.json({ ok: true });
   });
   app2.get("/api/browser/:profileId/stream", async (req, res) => {
@@ -143769,10 +143769,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
-    const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
     try {
       const proxy = await resolveProxyConfig(profile);
-      await getOrCreateSession(profileId, ua, proxy);
+      await getOrCreateSession(profileId, DESKTOP_BROWSER_UA, proxy);
       attachSSE(profileId, res);
     } catch (err) {
       res.write(`data: ${JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" })}

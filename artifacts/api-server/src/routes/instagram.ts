@@ -27,6 +27,11 @@ import {
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
 
+// The embedded browser always uses a desktop Chrome UA regardless of what
+// userAgentEmbedded/userAgentApi says — Instagram's mobile web UA triggers
+// the app-install interstitial (dark skeleton) instead of the full site.
+const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+
 async function resolveProxyConfig(profile: {
   browserDirectConnection?: boolean | null;
   proxyId?: number | null;
@@ -671,7 +676,7 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
-    const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+    const ua = DESKTOP_BROWSER_UA;
     try {
       await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile));
       res.json({ ok: true });
@@ -703,9 +708,8 @@ export async function registerInstagramRoutes(
   app.delete("/api/browser/:profileId/session", async (req, res) => {
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
-    const ua = profile?.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
     const proxy = profile ? await resolveProxyConfig(profile) : undefined;
-    await clearSession(profileId, ua, proxy);
+    await clearSession(profileId, DESKTOP_BROWSER_UA, proxy);
     res.json({ ok: true });
   });
 
@@ -721,10 +725,9 @@ export async function registerInstagramRoutes(
     res.setHeader("X-Accel-Buffering", "no"); // disable nginx/proxy response buffering
     res.flushHeaders();
 
-    const ua = profile.userAgentEmbedded || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
     try {
       const proxy = await resolveProxyConfig(profile);
-      await getOrCreateSession(profileId, ua, proxy);
+      await getOrCreateSession(profileId, DESKTOP_BROWSER_UA, proxy);
       attachSSE(profileId, res);
     } catch (err: any) {
       res.write(`data: ${JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" })}\n\n`);
