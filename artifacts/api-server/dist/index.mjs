@@ -145130,11 +145130,21 @@ var AutomationEngine = class {
     return /[\u0900-\u0D7F]/.test(text2);
   }
   // ── Human session tools (separate timer from follow) ─────────────────────
+  // Returns true when an action should be SKIPPED this session.
+  // notUsedMin/Max (0–100) are the % chance the action is not used.
+  // Default 0/0 = always run. E.g. min=30,max=50 → 30–50% skip chance.
+  shouldSkipDueToChance(s, minKey, maxKey) {
+    const min = Number(s[minKey] ?? 0);
+    const max = Number(s[maxKey] ?? 0);
+    if (min <= 0 && max <= 0) return false;
+    const skipChance = randInt(min, max);
+    return Math.random() * 100 < skipChance;
+  }
   async runHumanSessionTools(profile, tool, state) {
     const s = tool.settings;
     const client = await this.ensureClient(profile, state);
     if (!client) return;
-    if (s.humanSessionEnabled !== false) {
+    if (s.humanSessionEnabled !== false && !this.shouldSkipDueToChance(s, "humanSessionNotUsedMin", "humanSessionNotUsedMax")) {
       try {
         await client.visitNotifications();
         console.log(`[engine] @${profile.username}: \u{1F514} visited notifications`);
@@ -145164,7 +145174,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
       }
     }
-    if (s.viewTimelineFeedEnabled !== false) {
+    if (s.viewTimelineFeedEnabled !== false && !this.shouldSkipDueToChance(s, "viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax")) {
       const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
       try {
         const viewed = await client.viewTimelineFeed(feedCount);
@@ -145174,7 +145184,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
       }
     }
-    if (s.checkTimelineReelsEnabled !== false) {
+    if (s.checkTimelineReelsEnabled !== false && !this.shouldSkipDueToChance(s, "checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax")) {
       const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
       try {
         const watched = await client.viewTimelineReels(reelCount);
@@ -145184,7 +145194,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
       }
     }
-    if (s.checkTimelineStoriesEnabled !== false) {
+    if (s.checkTimelineStoriesEnabled !== false && !this.shouldSkipDueToChance(s, "checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")) {
       const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
       try {
         const watched = await client.viewTimelineStories(storyCount);
@@ -145194,7 +145204,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
       }
     }
-    if (s.checkDmEnabled !== false) {
+    if (s.checkDmEnabled !== false && !this.shouldSkipDueToChance(s, "checkDmNotUsedMin", "checkDmNotUsedMax")) {
       try {
         const { count: pendingCount } = await client.getDirectMessagesInternal();
         console.log(`[engine] @${profile.username}: \u{1F4AC} checked DMs (${pendingCount} pending request(s))`);
@@ -145208,7 +145218,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
       }
     }
-    if (s.likeTimelinePostsEnabled !== false) {
+    if (s.likeTimelinePostsEnabled !== false && !this.shouldSkipDueToChance(s, "likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax")) {
       const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
       try {
         const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
@@ -145225,7 +145235,7 @@ var AutomationEngine = class {
         console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
       }
     }
-    if (s.repostEnabled && s.repostSourceUsername) {
+    if (s.repostEnabled && s.repostSourceUsername && !this.shouldSkipDueToChance(s, "repostNotUsedMin", "repostNotUsedMax")) {
       const sourceUsername = String(s.repostSourceUsername ?? "").trim();
       if (sourceUsername) {
         try {
