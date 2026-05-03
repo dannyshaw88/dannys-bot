@@ -118501,7 +118501,7 @@ var init_hikerApiClient = __esm({
       async getFollowers(userId, max = 50) {
         try {
           const amount = Math.min(Math.max(max, 1), 200);
-          const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
+          const j = await hikerGet(`/v2/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
           if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
             const detail = j.detail ?? j.exc_type ?? JSON.stringify(j);
             const msg = `HikerAPI getFollowers error: ${detail}`;
