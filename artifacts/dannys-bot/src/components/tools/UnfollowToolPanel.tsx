@@ -287,7 +287,15 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
                     if (data.ok && Array.isArray(data.usernames)) {
                       const existing = (settings as any).unfollowTargetList ?? "";
                       const combined = existing ? existing + "\n" + data.usernames.join("\n") : data.usernames.join("\n");
-                      setSettings(s => ({ ...s, unfollowTargetList: combined }));
+                      // Merge pks into the pks map (used by engine to avoid Instagram API lookups)
+                      let pksMap: Record<string, string> = {};
+                      try { pksMap = JSON.parse((settings as any).unfollowTargetListPks ?? "{}"); } catch {}
+                      if (Array.isArray(data.entries)) {
+                        for (const e of data.entries) {
+                          if (e.username && e.pk) pksMap[e.username.toLowerCase()] = e.pk;
+                        }
+                      }
+                      setSettings(s => ({ ...s, unfollowTargetList: combined, unfollowTargetListPks: JSON.stringify(pksMap) }));
                       toast({ title: `Imported ${data.count} followings from HikerAPI` });
                     } else {
                       toast({ title: "Import failed", description: data.error, variant: "destructive" });
@@ -308,7 +316,7 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
             <Button
               variant="ghost" size="sm"
               className="text-muted-foreground hover:text-destructive"
-              onClick={() => setSettings(s => ({ ...s, unfollowTargetList: "" }))}
+              onClick={() => setSettings(s => ({ ...s, unfollowTargetList: "", unfollowTargetListPks: "{}" }))}
             >
               Clear
             </Button>

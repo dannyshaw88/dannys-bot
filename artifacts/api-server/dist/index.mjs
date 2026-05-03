@@ -145244,6 +145244,11 @@ var AutomationEngine = class {
     let candidates = all.filter((u) => new Date(u.followedAt).getTime() < cutoff);
     const targetListEnabled = !!s.unfollowTargetListEnabled;
     const targetListRaw = s.unfollowTargetList ?? "";
+    let pksMap = {};
+    try {
+      pksMap = JSON.parse(s.unfollowTargetListPks ?? "{}");
+    } catch {
+    }
     if (targetListEnabled && targetListRaw.trim()) {
       const targetUsernames = targetListRaw.split(/[\n,]+/).map((u) => u.trim().replace(/^@/, "").toLowerCase()).filter(Boolean);
       const targetSet = new Set(targetUsernames);
@@ -145253,14 +145258,28 @@ var AutomationEngine = class {
         id: -1,
         profileId: profile.id,
         instagramUsername: username,
-        instagramUserId: "",
+        instagramUserId: pksMap[username] ?? "",
+        // use pk from import map if available
         followedAt: (/* @__PURE__ */ new Date(0)).toISOString(),
         unfollowedAt: null
       }));
-      candidates = [...fromDb, ...synthetic];
-      console.log(`[engine] @${profile.username}: unfollow target list \u2014 ${fromDb.length} from DB + ${synthetic.length} manual entries = ${candidates.length} total`);
+      const merged = [
+        ...fromDb.map((u) => ({
+          ...u,
+          instagramUserId: u.instagramUserId || pksMap[u.instagramUsername.toLowerCase()] || ""
+        })),
+        ...synthetic
+      ];
+      candidates = merged;
+      console.log(`[engine] @${profile.username}: unfollow target list \u2014 ${fromDb.length} from DB + ${synthetic.length} manual = ${candidates.length} total`);
     } else {
       console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
+    }
+    const globalSettings2 = await storage.getGlobalSettings();
+    let hikerClientForLookup = null;
+    if (globalSettings2.hikerApiEnabled === "true" && globalSettings2.hikerApiToken) {
+      const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
+      hikerClientForLookup = new HikerApiClient2(globalSettings2.hikerApiToken);
     }
     let unfollowed = 0;
     for (const fu of candidates) {
@@ -145269,12 +145288,14 @@ var AutomationEngine = class {
       try {
         let userId = fu.instagramUserId ?? "";
         if (!userId) {
-          const found = await client.searchUserByUsername(fu.instagramUsername);
-          if (!found) {
-            console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} \u2014 could not resolve user ID, skipping`);
+          if (hikerClientForLookup) {
+            const found = await hikerClientForLookup.getUserByUsername(fu.instagramUsername);
+            if (found?.pk) userId = found.pk;
+          }
+          if (!userId) {
+            console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} \u2014 no pk available, skipping`);
             continue;
           }
-          userId = found.pk;
         }
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
@@ -145287,6 +145308,14 @@ var AutomationEngine = class {
           console.log(`[engine] @${profile.username}: \u2713 unfollowed @${fu.instagramUsername} [${unfollowed}/${processCount}]`);
           this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "ok", `Unfollowed [${unfollowed}/${processCount}]`);
           await storage.incrementStat(profile.id, "unfollow");
+          if (targetListEnabled) {
+            const lower = fu.instagramUsername.toLowerCase();
+            const updatedList = (s.unfollowTargetList ?? "").split(/[\n,]+/).map((u) => u.trim().replace(/^@/, "")).filter((u) => u && u.toLowerCase() !== lower).join("\n");
+            delete pksMap[lower];
+            s.unfollowTargetList = updatedList;
+            s.unfollowTargetListPks = JSON.stringify(pksMap);
+            await storage.updateTool(tool.id, { settings: { ...s } });
+          }
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e) {
@@ -146816,8 +146845,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
       const user = await hikerClient.getUserByUsername(username);
       if (!user?.pk) return res.status(400).json({ ok: false, error: `HikerAPI could not resolve @${username} \u2014 check your HikerAPI token.` });
       const followings = await hikerClient.getFollowings(user.pk, amount);
-      const usernames = followings.map((u) => u.username);
-      return res.json({ ok: true, usernames, count: usernames.length });
+      const entries = followings.map((u) => ({ username: u.username, pk: u.pk }));
+      const usernames = entries.map((e) => e.username);
+      return res.json({ ok: true, entries, usernames, count: entries.length });
     } catch (e) {
       return res.status(500).json({ ok: false, error: e?.message ?? "Fetch followings failed" });
     }

@@ -804,8 +804,9 @@ export async function registerInstagramRoutes(
       if (!user?.pk) return res.status(400).json({ ok: false, error: `HikerAPI could not resolve @${username} — check your HikerAPI token.` });
 
       const followings = await hikerClient.getFollowings(user.pk, amount);
-      const usernames = followings.map(u => u.username);
-      return res.json({ ok: true, usernames, count: usernames.length });
+      const entries = followings.map(u => ({ username: u.username, pk: u.pk }));
+      const usernames = entries.map(e => e.username);
+      return res.json({ ok: true, entries, usernames, count: entries.length });
     } catch (e: any) {
       return res.status(500).json({ ok: false, error: e?.message ?? "Fetch followings failed" });
     }

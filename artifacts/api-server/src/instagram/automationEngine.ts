@@ -1410,32 +1410,54 @@ class AutomationEngine {
     // Custom target list — if enabled, only unfollow users in the list
     const targetListEnabled = !!s.unfollowTargetListEnabled;
     const targetListRaw: string = s.unfollowTargetList ?? "";
+
+    // Parse stored pk map — populated when user imports via HikerAPI
+    let pksMap: Record<string, string> = {};
+    try { pksMap = JSON.parse(s.unfollowTargetListPks ?? "{}"); } catch {}
+
     if (targetListEnabled && targetListRaw.trim()) {
       const targetUsernames = targetListRaw.split(/[\n,]+/)
         .map((u: string) => u.trim().replace(/^@/, "").toLowerCase())
         .filter(Boolean);
       const targetSet = new Set(targetUsernames);
 
-      // Match from DB (users originally followed by the tool)
+      // Match from DB (users originally followed by the tool) — carry over their stored userId
       const fromDb = all.filter(u => targetSet.has(u.instagramUsername.toLowerCase()));
       const fromDbNames = new Set(fromDb.map(u => u.instagramUsername.toLowerCase()));
 
-      // Also include list entries NOT in the DB — user manually added / imported via HikerAPI
+      // Also include list entries NOT in the DB — manually added or imported via HikerAPI
       const synthetic: typeof candidates = targetUsernames
         .filter(username => !fromDbNames.has(username))
         .map(username => ({
           id: -1,
           profileId: profile.id,
           instagramUsername: username,
-          instagramUserId: "",
+          instagramUserId: pksMap[username] ?? "",   // use pk from import map if available
           followedAt: new Date(0).toISOString(),
           unfollowedAt: null,
         } as any));
 
-      candidates = [...fromDb, ...synthetic];
-      console.log(`[engine] @${profile.username}: unfollow target list — ${fromDb.length} from DB + ${synthetic.length} manual entries = ${candidates.length} total`);
+      // Merge: prefer db entry (has userId); for db entries missing userId also check pksMap
+      const merged = [
+        ...fromDb.map(u => ({
+          ...u,
+          instagramUserId: u.instagramUserId || pksMap[u.instagramUsername.toLowerCase()] || "",
+        })),
+        ...synthetic,
+      ];
+
+      candidates = merged;
+      console.log(`[engine] @${profile.username}: unfollow target list — ${fromDb.length} from DB + ${synthetic.length} manual = ${candidates.length} total`);
     } else {
       console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
+    }
+
+    // Resolve HikerAPI client once (used only when pk is missing — never use Instagram session for lookup)
+    const globalSettings = await storage.getGlobalSettings();
+    let hikerClientForLookup: import("./hikerApiClient").HikerApiClient | null = null;
+    if (globalSettings.hikerApiEnabled === "true" && globalSettings.hikerApiToken) {
+      const { HikerApiClient } = await import("./hikerApiClient");
+      hikerClientForLookup = new HikerApiClient(globalSettings.hikerApiToken);
     }
 
     let unfollowed = 0;
@@ -1444,15 +1466,17 @@ class AutomationEngine {
       if (maxPerDay > 0 && this.daily(state) >= maxPerDay) break;
 
       try {
-        // Use stored pk; fall back to search-bar lookup (no profile info endpoint)
+        // Use stored pk directly — NEVER call Instagram searchUserByUsername
         let userId = fu.instagramUserId ?? "";
         if (!userId) {
-          const found = await client.searchUserByUsername(fu.instagramUsername);
-          if (!found) {
-            console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} — could not resolve user ID, skipping`);
+          if (hikerClientForLookup) {
+            const found = await hikerClientForLookup.getUserByUsername(fu.instagramUsername);
+            if (found?.pk) userId = found.pk;
+          }
+          if (!userId) {
+            console.log(`[engine] @${profile.username}: unfollow @${fu.instagramUsername} — no pk available, skipping`);
             continue;
           }
-          userId = found.pk;
         }
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
@@ -1465,6 +1489,21 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: ✓ unfollowed @${fu.instagramUsername} [${unfollowed}/${processCount}]`);
           this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "ok", `Unfollowed [${unfollowed}/${processCount}]`);
           await storage.incrementStat(profile.id, "unfollow");
+
+          // Remove from target list so it won't be attempted again next session
+          if (targetListEnabled) {
+            const lower = fu.instagramUsername.toLowerCase();
+            const updatedList = (s.unfollowTargetList ?? "")
+              .split(/[\n,]+/)
+              .map((u: string) => u.trim().replace(/^@/, ""))
+              .filter((u: string) => u && u.toLowerCase() !== lower)
+              .join("\n");
+            delete pksMap[lower];
+            s.unfollowTargetList = updatedList;
+            s.unfollowTargetListPks = JSON.stringify(pksMap);
+            await storage.updateTool(tool.id, { settings: { ...s } });
+          }
+
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
