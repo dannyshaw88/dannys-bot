@@ -449,6 +449,7 @@ export class DatabaseStorage implements IStorage {
       .from(contactPendingMessages)
       .where(and(
         eq(contactPendingMessages.profileId, profileId),
+        eq(contactPendingMessages.status, "pending"),
         sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`
       ))
       .limit(1);

@@ -140650,6 +140650,7 @@ var DatabaseStorage = class {
   async isContactAlreadyQueued(profileId, instagramUsername) {
     const rows = await db.select({ id: contactPendingMessages.id }).from(contactPendingMessages).where(and(
       eq(contactPendingMessages.profileId, profileId),
+      eq(contactPendingMessages.status, "pending"),
       sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`
     )).limit(1);
     return rows.length > 0;
