@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -154,6 +154,10 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       repostEnabled: false,
       repostUseHikerApi: false,
       repostSourceUsername: "",
+      repostDisableUsernameSource: false,
+      repostLocalFolderEnabled: false,
+      repostLocalFolderPath: "",
+      repostLocalFolderDeleteAfterUpload: true,
       repostAlterationLevel: "small",
       repostCaptionText: "",
       repostImageSettings: {
@@ -628,9 +632,26 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
         </div>
 
         <div className={`space-y-3 transition-opacity ${!settings.repostEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <div className="flex flex-wrap items-end gap-4">
+          {/* Source 1: @username */}
+          <div className="border border-border/60 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <AtSign className="w-3.5 h-3.5 text-muted-foreground" /> Source: Instagram Account
+              </Label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  id="repostDisableUsernameSource"
+                  checked={!!settings.repostDisableUsernameSource}
+                  onChange={(e) => setSettings({ ...settings, repostDisableUsernameSource: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor="repostDisableUsernameSource" className="text-[11px] text-muted-foreground cursor-pointer select-none">Disable this source</label>
+              </div>
+            </div>
+            <div className={`flex flex-wrap items-end gap-4 transition-opacity ${settings.repostDisableUsernameSource ? 'opacity-40 pointer-events-none' : ''}`}>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Repost from account <span className="text-muted-foreground/60">(without @)</span></Label>
+              <Label className="text-xs text-muted-foreground">Account username <span className="text-muted-foreground/60">(without @)</span></Label>
               <div className="relative max-w-[220px]">
                 <AtSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <Input
@@ -699,21 +720,77 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 onChange={(e) => setSettings({ ...settings, repostDisableAtPostCount: Math.max(0, Number(e.target.value)) })}
               />
             </div>
-          </div>
+            </div>{/* end flex-wrap */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="repostUseHikerApi"
+                checked={!!settings.repostUseHikerApi}
+                onChange={(e) => setSettings({ ...settings, repostUseHikerApi: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+              <label htmlFor="repostUseHikerApi" className="text-xs text-muted-foreground cursor-pointer select-none">
+                Use HikerAPI to scrape source account feed (GetNewMedia)
+              </label>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="repostUseHikerApi"
-              checked={!!settings.repostUseHikerApi}
-              onChange={(e) => setSettings({ ...settings, repostUseHikerApi: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="repostUseHikerApi" className="text-xs text-muted-foreground cursor-pointer select-none">
-              Use HikerAPI to scrape source account feed (GetNewMedia)
-            </label>
-          </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="repostDisableWhenExhausted"
+                checked={!!settings.repostDisableWhenExhausted}
+                onChange={(e) => setSettings({ ...settings, repostDisableWhenExhausted: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+              <label htmlFor="repostDisableWhenExhausted" className="text-xs text-muted-foreground cursor-pointer select-none">
+                Auto-disable when no more unique posts are found from the source account
+              </label>
+            </div>
+          </div>{/* end Source 1 border */}
 
+          {/* Source 2: Local PC Folder */}
+          <div className="border border-border/60 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  id="repostLocalFolderEnabled"
+                  checked={!!settings.repostLocalFolderEnabled}
+                  onChange={(e) => setSettings({ ...settings, repostLocalFolderEnabled: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor="repostLocalFolderEnabled" className="text-xs font-semibold text-foreground flex items-center gap-1.5 cursor-pointer select-none">
+                  <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" /> Source: Local PC Folder
+                </label>
+              </div>
+            </div>
+            <div className={`space-y-2 transition-opacity ${!settings.repostLocalFolderEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Folder path on your PC <span className="text-muted-foreground/60">(e.g. C:\Images\Repost)</span></Label>
+                <Input
+                  type="text"
+                  placeholder="C:\Users\You\Pictures\Repost"
+                  className="h-8 text-xs font-mono"
+                  value={settings.repostLocalFolderPath ?? ""}
+                  onChange={(e) => setSettings({ ...settings, repostLocalFolderPath: e.target.value })}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="repostLocalFolderDeleteAfterUpload"
+                  checked={settings.repostLocalFolderDeleteAfterUpload !== false}
+                  onChange={(e) => setSettings({ ...settings, repostLocalFolderDeleteAfterUpload: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                />
+                <label htmlFor="repostLocalFolderDeleteAfterUpload" className="text-xs text-muted-foreground cursor-pointer select-none">
+                  Delete image from PC folder after successful upload
+                </label>
+              </div>
+            </div>
+          </div>{/* end Source 2 border */}
+
+          {/* Shared options */}
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -724,19 +801,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             />
             <label htmlFor="repostDisableComments" className="text-xs text-muted-foreground cursor-pointer select-none">
               Disable comments after repost
-            </label>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="repostDisableWhenExhausted"
-              checked={!!settings.repostDisableWhenExhausted}
-              onChange={(e) => setSettings({ ...settings, repostDisableWhenExhausted: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="repostDisableWhenExhausted" className="text-xs text-muted-foreground cursor-pointer select-none">
-              Auto-disable when no more unique posts are found from the source account
             </label>
           </div>
 

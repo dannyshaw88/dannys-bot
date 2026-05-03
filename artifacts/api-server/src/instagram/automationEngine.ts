@@ -4,6 +4,8 @@ import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
+import * as fsPromises from "node:fs/promises";
+import * as nodePath from "node:path";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1774,6 +1776,9 @@ class AutomationEngine {
 
     // ── Repost ───────────────────────────────────────────────────────────────
     const repostSourceUsername = String(s.repostSourceUsername ?? "").trim();
+    const repostLocalFolderPath = String(s.repostLocalFolderPath ?? "").trim();
+    const repostLocalFolderEnabled = !!(s.repostLocalFolderEnabled && repostLocalFolderPath);
+    const repostUsernameSourceActive = !s.repostDisableUsernameSource && !!repostSourceUsername;
 
     // Resolve the HikerAPI client once (used only when repostUseHikerApi is ON).
     const gs_repost = await storage.getGlobalSettings();
@@ -1783,10 +1788,69 @@ class AutomationEngine {
         : null;
 
     enqueue("repost",
-      !!(s.repostEnabled && repostSourceUsername),
+      !!(s.repostEnabled && (repostUsernameSourceActive || repostLocalFolderEnabled)),
       "repostNotUsedMin", "repostNotUsedMax",
       "repostOrderMin",   "repostOrderMax",
       async () => {
+        // ── Local folder source ───────────────────────────────────────────────
+        if (repostLocalFolderEnabled) {
+          try {
+            const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+            const entries = await fsPromises.readdir(repostLocalFolderPath);
+            const imageFiles = entries.filter(f => IMAGE_EXTS.has(nodePath.extname(f).toLowerCase()));
+            if (imageFiles.length === 0) {
+              console.warn(`[engine] @${profile.username}: 🔁 local folder repost — no image files found in "${repostLocalFolderPath}"`);
+              this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "skip", "No image files found in local folder");
+              return;
+            }
+
+            const targetCount = randInt(
+              Math.max(1, Number(s.repostMin ?? 1)),
+              Math.max(1, Number(s.repostMax ?? 1)),
+            );
+            const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
+            const captionTemplate = String(s.repostCaptionText ?? "").trim();
+            const deleteAfterUpload = s.repostLocalFolderDeleteAfterUpload !== false;
+
+            // Shuffle and pick targetCount files
+            const shuffled = [...imageFiles].sort(() => Math.random() - 0.5);
+            const picked = shuffled.slice(0, targetCount);
+            let uploadedCount = 0;
+
+            for (const fileName of picked) {
+              const filePath = nodePath.join(repostLocalFolderPath, fileName);
+              const rawBuffer = await fsPromises.readFile(filePath);
+              const alteredBuffer = await alterJpegBuffer(rawBuffer, level, s.repostImageSettings);
+              const caption = captionTemplate
+                ? captionTemplate.replace(/\{own_username\}/g, profile.username)
+                : "";
+
+              const postedMediaId = await client.uploadPhoto(alteredBuffer, caption);
+              if (postedMediaId) {
+                if (s.repostDisableComments) {
+                  try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
+                }
+                console.log(`[engine] @${profile.username}: 🔁 uploaded from local folder: ${fileName} [${uploadedCount + 1}/${targetCount}]`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "ok", `Uploaded from local folder: ${fileName} (alteration: ${level}) [${uploadedCount + 1}/${targetCount}]`);
+                uploadedCount++;
+                if (deleteAfterUpload) {
+                  try { await fsPromises.unlink(filePath); } catch (e: any) {
+                    console.warn(`[engine] @${profile.username}: could not delete ${filePath}: ${e?.message}`);
+                  }
+                }
+              } else {
+                console.warn(`[engine] @${profile.username}: 🔁 local folder upload failed: ${fileName}`);
+                this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, fileName, "", "fail", `Upload failed for: ${fileName}`);
+              }
+            }
+          } catch (e: any) {
+            console.warn(`[engine] @${profile.username}: local folder repost error: ${e?.message}`);
+            this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "fail", e?.message ?? "unknown error");
+          }
+          return;
+        }
+
+        // ── @username source ──────────────────────────────────────────────────
         const sourceUsername = repostSourceUsername;
         try {
           const useHiker = !!s.repostUseHikerApi;
