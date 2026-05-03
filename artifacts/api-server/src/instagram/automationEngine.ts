@@ -1786,10 +1786,16 @@ class AutomationEngine {
           }
 
           if (repostedCount === 0) {
-            if (s.repostDisableWhenExhausted) {
-              // Disable only the repost sub-feature — never the entire human_sessions tool
+            if (feedItems.length === 0) {
+              // Feed returned nothing — likely a temporary API failure or empty source account.
+              // Never auto-disable on an empty feed response.
+              console.warn(`[engine] @${profile.username}: 🔁 repost skipped — HikerAPI returned 0 items for @${sourceUsername} (possible API issue)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `HikerAPI returned no feed items for @${sourceUsername}`);
+            } else if (s.repostDisableWhenExhausted) {
+              // Feed had items but every one was already reposted — truly exhausted.
+              // Disable only the repost sub-feature — never the entire human_sessions tool.
               await storage.updateTool(tool.id, { settings: { ...s, repostEnabled: false } });
-              console.log(`[engine] @${profile.username}: 🔁 repost sub-feature disabled (source @${sourceUsername} exhausted)`);
+              console.log(`[engine] @${profile.username}: 🔁 repost sub-feature disabled (source @${sourceUsername} exhausted — all ${feedItems.length} posts already reposted)`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Repost disabled: no more unique posts from source");
             } else {
               console.log(`[engine] @${profile.username}: 🔁 repost skipped — no new posts from @${sourceUsername}`);

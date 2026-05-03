@@ -118522,12 +118522,16 @@ var init_hikerApiClient = __esm({
       async getUserFeedItems(username) {
         try {
           const user = await this.getUserByUsername(username);
-          if (!user) return [];
+          if (!user) {
+            console.error(`[hikerApi] getUserFeedItems @${username}: user lookup returned null`);
+            return [];
+          }
           const j = await hikerGet(
             `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
             this.token
           );
-          const items = Array.isArray(j) ? j : [];
+          const items = Array.isArray(j) ? j : Array.isArray(j?.response) ? j.response : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : [];
+          console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): raw top-level keys=${JSON.stringify(Object.keys(j ?? {}))}, isArray=${Array.isArray(j)}, resolvedItems=${items.length}`);
           const results = [];
           for (const item of items) {
             const mediaType = item?.media_type ?? 1;
@@ -145450,9 +145454,12 @@ var AutomationEngine = class {
             }
           }
           if (repostedCount === 0) {
-            if (s.repostDisableWhenExhausted) {
+            if (feedItems.length === 0) {
+              console.warn(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 HikerAPI returned 0 items for @${sourceUsername} (possible API issue)`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "skip", `HikerAPI returned no feed items for @${sourceUsername}`);
+            } else if (s.repostDisableWhenExhausted) {
               await storage.updateTool(tool.id, { settings: { ...s, repostEnabled: false } });
-              console.log(`[engine] @${profile.username}: \u{1F501} repost sub-feature disabled (source @${sourceUsername} exhausted)`);
+              console.log(`[engine] @${profile.username}: \u{1F501} repost sub-feature disabled (source @${sourceUsername} exhausted \u2014 all ${feedItems.length} posts already reposted)`);
               this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "ok", "Repost disabled: no more unique posts from source");
             } else {
               console.log(`[engine] @${profile.username}: \u{1F501} repost skipped \u2014 no new posts from @${sourceUsername}`);

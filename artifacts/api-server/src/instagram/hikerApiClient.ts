@@ -140,12 +140,22 @@ export class HikerApiClient {
   }>> {
     try {
       const user = await this.getUserByUsername(username);
-      if (!user) return [];
+      if (!user) {
+        console.error(`[hikerApi] getUserFeedItems @${username}: user lookup returned null`);
+        return [];
+      }
       const j = await hikerGet(
         `/v1/user/medias/recent?user_id=${encodeURIComponent(user.pk)}&amount=12`,
         this.token,
       );
-      const items: any[] = Array.isArray(j) ? j : [];
+      // HikerAPI may return a plain array OR a wrapper object — handle both
+      const items: any[] = Array.isArray(j)
+        ? j
+        : Array.isArray(j?.response) ? j.response
+        : Array.isArray(j?.items)    ? j.items
+        : Array.isArray(j?.data)     ? j.data
+        : [];
+      console.error(`[hikerApi] getUserFeedItems @${username} (pk=${user.pk}): raw top-level keys=${JSON.stringify(Object.keys(j ?? {}))}, isArray=${Array.isArray(j)}, resolvedItems=${items.length}`);
       const results: { mediaId: string; shortcode: string; imageUrl: string; caption: string; takenAt: number }[] = [];
       for (const item of items) {
         const mediaType: number = item?.media_type ?? 1;
