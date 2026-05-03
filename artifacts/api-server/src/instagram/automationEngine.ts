@@ -736,23 +736,39 @@ class AutomationEngine {
 
     const usersToCheck = countOverride ?? randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
 
-    const client = await this.ensureClient(profile, state);
-    if (!client) return;
-
-    const ownUserId = await client.getOwnUserId();
-    if (!ownUserId) {
-      console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
-      return;
-    }
-
     const globalSettings = await storage.getGlobalSettings();
     const useHiker = s.contactApiSource === "hiker"
       && globalSettings.hikerApiEnabled === "true"
       && !!globalSettings.hikerApiToken;
 
+    const hikerClient = useHiker ? new HikerApiClient(globalSettings.hikerApiToken!) : null;
+
+    // When HikerAPI is enabled, resolve own user ID through HikerAPI (no account API call).
+    // Otherwise fall back to account client.
+    let ownUserId: string | null = null;
+    if (hikerClient) {
+      const hikerUser = await hikerClient.getUserByUsername(profile.username);
+      ownUserId = hikerUser?.pk ?? null;
+      if (!ownUserId) {
+        throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
+      }
+      console.log(`[engine] @${profile.username}: resolved own userId ${ownUserId} via HikerAPI`);
+    } else {
+      const client = await this.ensureClient(profile, state);
+      if (!client) return;
+      ownUserId = await client.getOwnUserId();
+      if (!ownUserId) {
+        console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
+        return;
+      }
+    }
+
+    // Ensure client is initialised (needed for non-HikerAPI DM send path later).
+    const client = await this.ensureClient(profile, state);
+    if (!client) return;
+
     let followers: { pk: string; username: string; fullName: string }[] = [];
-    if (useHiker) {
-      const hikerClient = new HikerApiClient(globalSettings.hikerApiToken!);
+    if (hikerClient) {
       followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
     } else {
       followers = await client.getFollowers(ownUserId, usersToCheck);

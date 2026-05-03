@@ -98,19 +98,25 @@ export class HikerApiClient {
     try {
       const amount = Math.min(Math.max(max, 1), 200);
       const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
-      console.error(`[hikerApi] getFollowers raw keys: ${JSON.stringify(Object.keys(j ?? {}))}, isArray: ${Array.isArray(j)}`);
+      if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
+        const msg = `HikerAPI getFollowers error: ${j.detail ?? j.exc_type ?? JSON.stringify(j)}`;
+        console.error(`[hikerApi] ${msg}`);
+        throw new Error(msg);
+      }
       const users: any[] = Array.isArray(j) ? j
         : Array.isArray(j?.users) ? j.users
         : Array.isArray(j?.items) ? j.items
         : Array.isArray(j?.data) ? j.data
+        : Array.isArray(j?.response?.users) ? j.response.users
         : [];
+      console.error(`[hikerApi] getFollowers userId=${userId} → ${users.length} users (raw keys: ${JSON.stringify(Object.keys(j ?? {}))})`);
       return users
         .filter((u: any) => u?.pk && u?.username)
         .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }))
         .slice(0, max);
     } catch (e: any) {
       console.error(`[hikerApi] getFollowers ${userId} error: ${e?.message}`);
-      return [];
+      throw e;
     }
   }
 

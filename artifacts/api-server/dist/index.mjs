@@ -118495,12 +118495,17 @@ var init_hikerApiClient = __esm({
         try {
           const amount = Math.min(Math.max(max, 1), 200);
           const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
-          console.error(`[hikerApi] getFollowers raw keys: ${JSON.stringify(Object.keys(j ?? {}))}, isArray: ${Array.isArray(j)}`);
-          const users = Array.isArray(j) ? j : Array.isArray(j?.users) ? j.users : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : [];
+          if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
+            const msg = `HikerAPI getFollowers error: ${j.detail ?? j.exc_type ?? JSON.stringify(j)}`;
+            console.error(`[hikerApi] ${msg}`);
+            throw new Error(msg);
+          }
+          const users = Array.isArray(j) ? j : Array.isArray(j?.users) ? j.users : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : Array.isArray(j?.response?.users) ? j.response.users : [];
+          console.error(`[hikerApi] getFollowers userId=${userId} \u2192 ${users.length} users (raw keys: ${JSON.stringify(Object.keys(j ?? {}))})`);
           return users.filter((u) => u?.pk && u?.username).map((u) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") })).slice(0, max);
         } catch (e) {
           console.error(`[hikerApi] getFollowers ${userId} error: ${e?.message}`);
-          return [];
+          throw e;
         }
       }
       async getFollowings(userId, max = 50) {
@@ -144689,18 +144694,30 @@ var AutomationEngine = class {
       return;
     }
     const usersToCheck = countOverride ?? randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
-    const client = await this.ensureClient(profile, state);
-    if (!client) return;
-    const ownUserId = await client.getOwnUserId();
-    if (!ownUserId) {
-      console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
-      return;
-    }
     const globalSettings2 = await storage.getGlobalSettings();
     const useHiker = s.contactApiSource === "hiker" && globalSettings2.hikerApiEnabled === "true" && !!globalSettings2.hikerApiToken;
+    const hikerClient = useHiker ? new HikerApiClient(globalSettings2.hikerApiToken) : null;
+    let ownUserId = null;
+    if (hikerClient) {
+      const hikerUser = await hikerClient.getUserByUsername(profile.username);
+      ownUserId = hikerUser?.pk ?? null;
+      if (!ownUserId) {
+        throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
+      }
+      console.log(`[engine] @${profile.username}: resolved own userId ${ownUserId} via HikerAPI`);
+    } else {
+      const client2 = await this.ensureClient(profile, state);
+      if (!client2) return;
+      ownUserId = await client2.getOwnUserId();
+      if (!ownUserId) {
+        console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
+        return;
+      }
+    }
+    const client = await this.ensureClient(profile, state);
+    if (!client) return;
     let followers = [];
-    if (useHiker) {
-      const hikerClient = new HikerApiClient(globalSettings2.hikerApiToken);
+    if (hikerClient) {
       followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
     } else {
       followers = await client.getFollowers(ownUserId, usersToCheck);
