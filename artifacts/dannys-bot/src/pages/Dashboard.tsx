@@ -233,12 +233,12 @@ export function Dashboard() {
 
         <CardContent className="p-0">
           {activeTab === "api-log" ? (
-            <div className="overflow-y-auto max-h-[70vh]">
+            <div className="overflow-y-auto overflow-x-hidden max-h-[70vh]">
               <table className="w-full text-sm text-left table-fixed">
                 <colgroup>
                   <col className="w-36" />
-                  <col className="w-28" />
                   <col className="w-40" />
+                  <col className="w-36" />
                   <col className="w-20" />
                   <col />
                 </colgroup>
