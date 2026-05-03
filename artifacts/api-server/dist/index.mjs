@@ -141568,8 +141568,7 @@ var AutomationEngine = class {
     const s = tool.settings;
     const messageTemplate = (s.contactMessage ?? "").trim();
     if (!messageTemplate) {
-      console.log(`[engine] @${profile.username}: no contact message configured \u2014 skipping follower check`);
-      return;
+      throw new Error("No message configured \u2014 type a message in the Contact New Followers settings before extracting.");
     }
     const usersToCheck = countOverride ?? randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
     const globalSettings2 = await storage.getGlobalSettings();

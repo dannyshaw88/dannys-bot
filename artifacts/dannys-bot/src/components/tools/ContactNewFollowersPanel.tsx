@@ -56,7 +56,12 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
       });
     },
     onError: (e: Error) => {
-      toast({ title: "Extract failed", description: e.message, variant: "destructive" });
+      const isNoMsg = e.message.includes("No message configured");
+      toast({
+        title: isNoMsg ? "Message required" : "Extract failed",
+        description: e.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -152,7 +157,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
           </div>
           <textarea
             rows={4}
-            className="w-full text-sm border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+            className={`w-full text-sm border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono ${!(settings.contactMessage ?? "").trim() ? "border-amber-400 focus:ring-amber-400" : "border-border"}`}
             placeholder={`{Hi|Hello|Hey} {there|friend}! Thanks for following — check out our latest posts 🙌`}
             value={settings.contactMessage ?? ""}
             onChange={(e) => {
@@ -160,6 +165,11 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
               setPreviewText("");
             }}
           />
+          {!(settings.contactMessage ?? "").trim() && (
+            <p className="text-[11px] text-amber-600 font-medium">
+              A message is required before Extract Now will find new followers.
+            </p>
+          )}
           <p className="text-[11px] text-muted-foreground">
             Use <code className="bg-muted px-1 rounded">{"{Hi|Hello|Hey}"}</code> syntax to randomly pick one option. Click "Preview spin" to see a sample.
           </p>
