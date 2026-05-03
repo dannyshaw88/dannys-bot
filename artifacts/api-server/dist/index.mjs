@@ -146738,13 +146738,13 @@ async function registerInstagramRoutes(httpServer2, app2) {
       return res.status(400).json({ ok: false, error: "HikerAPI not enabled or no token set in Settings" });
     }
     try {
-      const cookiePairs = (profile.sessionCookies ?? "").split(";").map((s) => s.trim());
-      const dsEntry = cookiePairs.find((s) => s.startsWith("ds_user_id="));
-      const ownUserId = dsEntry ? dsEntry.split("=")[1]?.trim() : null;
-      if (!ownUserId) return res.status(400).json({ ok: false, error: "Could not resolve own user ID from session cookies \u2014 please re-verify the account." });
       const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
       const hikerClient = new HikerApiClient2(globalSettings2.hikerApiToken);
-      const followings = await hikerClient.getFollowings(ownUserId, amount);
+      const username = (profile.username ?? "").replace(/^@/, "");
+      if (!username) return res.status(400).json({ ok: false, error: "Profile has no username set." });
+      const user = await hikerClient.getUserByUsername(username);
+      if (!user?.pk) return res.status(400).json({ ok: false, error: `HikerAPI could not resolve @${username} \u2014 check your HikerAPI token.` });
+      const followings = await hikerClient.getFollowings(user.pk, amount);
       const usernames = followings.map((u) => u.username);
       return res.json({ ok: true, usernames, count: usernames.length });
     } catch (e) {
