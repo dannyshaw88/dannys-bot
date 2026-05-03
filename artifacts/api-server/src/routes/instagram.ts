@@ -767,6 +767,25 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // Image alteration preview
+  app.post("/api/image-alteration-preview", async (req, res) => {
+    try {
+      const { imageBase64, settings, level } = req.body as {
+        imageBase64: string;
+        settings: any;
+        level?: string;
+      };
+      if (!imageBase64) return res.status(400).json({ error: "No image provided" });
+      const { alterJpegBuffer } = await import("../instagram/imageAlteration");
+      const raw = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+      const buf = Buffer.from(raw, "base64");
+      const result = await alterJpegBuffer(buf, (level as any) ?? "medium", settings);
+      return res.json({ previewBase64: `data:image/jpeg;base64,${result.toString("base64")}` });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
   // Engine status
   app.get("/api/engine/status", (_req, res) => {
     res.json(automationEngine.getStatus());
