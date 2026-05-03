@@ -136930,8 +136930,16 @@ var DatabaseStorage = class {
       ipAddress: call.ipAddress ?? "",
       durationMs: call.durationMs ?? 0
     }).returning();
-    if (++this._apiCallInsertCount % 100 === 0) {
-      db.run(sql`DELETE FROM instagram_api_calls WHERE id NOT IN (SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000)`);
+    if (++this._apiCallInsertCount % 50 === 0) {
+      db.run(sql`
+        DELETE FROM instagram_api_calls
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY "profileId" ORDER BY id DESC) AS rn
+            FROM instagram_api_calls
+          ) ranked WHERE rn <= 1000
+        )
+      `);
     }
     return created;
   }
@@ -141576,8 +141584,19 @@ var AutomationEngine = class {
     const hikerClient = useHiker ? new HikerApiClient(globalSettings2.hikerApiToken) : null;
     let ownUserId = null;
     if (hikerClient) {
+      const t0 = Date.now();
       const hikerUser = await hikerClient.getUserByUsername(profile.username);
       ownUserId = hikerUser?.pk ?? null;
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        operationName: "v1/user/by/username",
+        date: (/* @__PURE__ */ new Date()).toISOString(),
+        message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username}` : `Could not resolve @${profile.username}`,
+        source: "HikerAPI",
+        navChain: "",
+        ipAddress: "",
+        durationMs: Date.now() - t0
+      });
       if (!ownUserId) {
         throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
       }
@@ -141595,7 +141614,18 @@ var AutomationEngine = class {
     if (!client) return;
     let followers = [];
     if (hikerClient) {
+      const t1 = Date.now();
       followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        operationName: "v2/user/followers",
+        date: (/* @__PURE__ */ new Date()).toISOString(),
+        message: `Fetched ${followers.length} followers for pk=${ownUserId} (requested ${usersToCheck})`,
+        source: "HikerAPI",
+        navChain: "",
+        ipAddress: "",
+        durationMs: Date.now() - t1
+      });
     } else {
       followers = await client.getFollowers(ownUserId, usersToCheck);
     }

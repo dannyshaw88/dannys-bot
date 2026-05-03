@@ -797,8 +797,19 @@ class AutomationEngine {
     // Otherwise fall back to account client.
     let ownUserId: string | null = null;
     if (hikerClient) {
+      const t0 = Date.now();
       const hikerUser = await hikerClient.getUserByUsername(profile.username);
       ownUserId = hikerUser?.pk ?? null;
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        operationName: "v1/user/by/username",
+        date: new Date().toISOString(),
+        message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username}` : `Could not resolve @${profile.username}`,
+        source: "HikerAPI",
+        navChain: "",
+        ipAddress: "",
+        durationMs: Date.now() - t0,
+      });
       if (!ownUserId) {
         throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
       }
@@ -819,9 +830,20 @@ class AutomationEngine {
 
     let followers: { pk: string; username: string; fullName: string }[] = [];
     if (hikerClient) {
-      followers = await hikerClient.getFollowers(ownUserId, usersToCheck);
+      const t1 = Date.now();
+      followers = await hikerClient.getFollowers(ownUserId!, usersToCheck);
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        operationName: "v2/user/followers",
+        date: new Date().toISOString(),
+        message: `Fetched ${followers.length} followers for pk=${ownUserId} (requested ${usersToCheck})`,
+        source: "HikerAPI",
+        navChain: "",
+        ipAddress: "",
+        durationMs: Date.now() - t1,
+      });
     } else {
-      followers = await client.getFollowers(ownUserId, usersToCheck);
+      followers = await client.getFollowers(ownUserId!, usersToCheck);
     }
 
     if (!followers.length) {

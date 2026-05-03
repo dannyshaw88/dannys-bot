@@ -265,9 +265,17 @@ export class DatabaseStorage implements IStorage {
       ipAddress: call.ipAddress ?? "",
       durationMs: call.durationMs ?? 0,
     }).returning();
-    // Prune to keep only the newest 5000 rows — checked every 100 inserts
-    if (++this._apiCallInsertCount % 100 === 0) {
-      db.run(sql`DELETE FROM instagram_api_calls WHERE id NOT IN (SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000)`);
+    // Prune to keep the 1,000 most recent rows PER profile — checked every 50 inserts
+    if (++this._apiCallInsertCount % 50 === 0) {
+      db.run(sql`
+        DELETE FROM instagram_api_calls
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY "profileId" ORDER BY id DESC) AS rn
+            FROM instagram_api_calls
+          ) ranked WHERE rn <= 1000
+        )
+      `);
     }
     return created;
   }
