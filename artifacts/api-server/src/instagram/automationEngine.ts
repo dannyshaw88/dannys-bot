@@ -723,7 +723,7 @@ class AutomationEngine {
   }
 
   // ── Contact New Followers: scrape followers → enqueue to pending ───────────
-  private async runContactNewFollowersSession(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
+  private async runContactNewFollowersSession(profile: Profile, tool: Tool, state: ProfileState, countOverride?: number): Promise<void> {
     const s = tool.settings as any;
 
     const messageTemplate: string = (s.contactMessage ?? "").trim();
@@ -732,7 +732,7 @@ class AutomationEngine {
       return;
     }
 
-    const usersToCheck = randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
+    const usersToCheck = countOverride ?? randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
 
     const client = await this.ensureClient(profile, state);
     if (!client) return;
@@ -2427,7 +2427,7 @@ class AutomationEngine {
   // Force an immediate new-follower extraction for the given profile,
   // regardless of whether the contact runner is active or scheduled.
   // Returns how many new messages were queued to the pending list.
-  async triggerExtractNow(profileId: number): Promise<{ queued: number; error?: string }> {
+  async triggerExtractNow(profileId: number, countOverride?: number): Promise<{ queued: number; error?: string }> {
     const profile = await storage.getProfile(profileId);
     if (!profile) return { queued: 0, error: "Profile not found" };
 
@@ -2457,7 +2457,7 @@ class AutomationEngine {
 
     const before = (await storage.getContactPendingMessages(profileId, "pending")).length;
     try {
-      await this.runContactNewFollowersSession(profile, contactTool, state);
+      await this.runContactNewFollowersSession(profile, contactTool, state, countOverride);
     } catch (e: any) {
       console.error(`[engine] triggerExtractNow @${profile.username}: ${e?.message}`);
       return { queued: 0, error: e?.message ?? "Unknown error" };

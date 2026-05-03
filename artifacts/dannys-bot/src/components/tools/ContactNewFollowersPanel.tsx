@@ -28,9 +28,15 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
   const [previewText, setPreviewText] = useState("");
   const [extractResult, setExtractResult] = useState<{ queued: number } | null>(null);
 
+  const [extractCount, setExtractCount] = useState(20);
+
   const extractNowMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/profiles/${profile.id}/tools/contact/extract-now`, { method: "POST" });
+      const res = await fetch(`/api/profiles/${profile.id}/tools/contact/extract-now`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: extractCount }),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as any).error ?? "Extract failed");
@@ -236,18 +242,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
       </div>
 
       {/* Extract Now */}
-      <div className="flex items-center justify-between gap-4 pt-1">
-        <div className="text-[11px] text-muted-foreground leading-snug">
-          Fetches up to <strong>{settings.contactUsersPerCheckMax ?? 20}</strong> recent followers now and adds
-          any new ones to the <strong>Pending Messages</strong> queue in the Contact Users tab.
-          {extractResult !== null && (
-            <span className={`ml-2 font-medium ${extractResult.queued > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-              {extractResult.queued > 0
-                ? `↳ ${extractResult.queued} user${extractResult.queued !== 1 ? "s" : ""} queued`
-                : "↳ No new users found"}
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-3 pt-1">
         <Button
           variant="outline"
           size="sm"
@@ -260,6 +255,24 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
             : <><Download className="w-3.5 h-3.5" /> Extract Now</>
           }
         </Button>
+        <Input
+          type="number"
+          min={1}
+          max={10000}
+          className="w-20 h-8 text-xs"
+          value={extractCount}
+          onChange={(e) => setExtractCount(Math.max(1, Number(e.target.value)))}
+        />
+        <div className="text-[11px] text-muted-foreground leading-snug">
+          Fetches this many recent followers now and adds any new ones to the <strong>Pending Messages</strong> queue.
+          {extractResult !== null && (
+            <span className={`ml-2 font-medium ${extractResult.queued > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+              {extractResult.queued > 0
+                ? `↳ ${extractResult.queued} user${extractResult.queued !== 1 ? "s" : ""} queued`
+                : "↳ No new users found"}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

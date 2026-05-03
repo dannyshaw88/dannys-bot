@@ -716,7 +716,8 @@ export async function registerInstagramRoutes(
   // Force an immediate follower extraction into the pending messages queue
   app.post("/api/profiles/:profileId/tools/contact/extract-now", async (req, res) => {
     const profileId = Number(req.params.profileId);
-    const result = await automationEngine.triggerExtractNow(profileId);
+    const count = typeof req.body?.count === "number" && req.body.count > 0 ? req.body.count : undefined;
+    const result = await automationEngine.triggerExtractNow(profileId, count);
     if (result.error) return res.status(400).json({ ok: false, error: result.error });
     res.json({ ok: true, queued: result.queued });
   });
