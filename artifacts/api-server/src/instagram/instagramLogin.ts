@@ -364,10 +364,49 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           console.error(`[instagramLogin] @${profile.username} — news/inbox failed (non-fatal): ${e?.message}`);
         }
 
+        // ── Phase 2e: FetchConfig (qe/sync) ──────────────────────────────
+        // Jarvee calls FetchConfig after notifications (step 10 in cold-start).
+        try {
+          await ig.qe.syncLoginExperiments();
+          console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
+        }
+
+        // ── Phase 2f: GetBanyan (banyan/banyan) ───────────────────────────
+        // Jarvee fires this immediately after FetchConfig (step 11).
+        try {
+          await ig.request.send({
+            url: "/api/v1/banyan/banyan/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid: userId,
+              _uuid: ig.state.uuid,
+              surfaces_to_queries: JSON.stringify([
+                { surface: "interstitial_link_loading" },
+                { surface: "interstitial_link_prefetch" },
+              ]),
+            }),
+          });
+          console.error(`[instagramLogin] @${profile.username} — banyan/banyan (GetBanyan) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
+        }
+
+        // ── Phase 2g: ExecuteDiscoverExplore (discover/topical_explore) ───
+        // Jarvee calls this last in the cold-start sequence (step 12).
+        try {
+          await (ig.discover as any).topicalExplore();
+          console.error(`[instagramLogin] @${profile.username} — discover/topical_explore (ExecuteDiscoverExplore) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — discover/topical_explore failed (non-fatal): ${e?.message}`);
+        }
+
         console.error(`[instagramLogin] @${profile.username} — cold-start handshake complete ✓`);
         return {
           ok: true,
-          message: `@${profile.username} — session active. Cold-start handshake complete (launcher/sync → qe/sync → get_account_family → timeline → reels_tray → inbox).`,
+          message: `@${profile.username} — session active. Cold-start handshake complete (launcher/sync → qe/sync → get_account_family → timeline → reels_tray → inbox → qe/sync → banyan → discover).`,
           accountStatus: "valid",
           igDeviceState: captureDeviceState(),
         };

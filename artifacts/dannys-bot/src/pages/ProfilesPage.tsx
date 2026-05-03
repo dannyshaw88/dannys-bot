@@ -380,11 +380,13 @@ export function ProfilesPage() {
             <DropdownMenuItem
               onClick={() => {
                 const tzOffset = new Date().getTimezoneOffset();
-                window.open(`/api/logs/export?tz=${tzOffset}`, "_blank");
+                const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
+                const url = `/api/logs/export?tz=${tzOffset}${ids ? `&profileIds=${ids}` : ""}`;
+                window.open(url, "_blank");
               }}
               className="cursor-pointer font-medium p-3"
             >
-              <Download className="w-4 h-4 mr-2" /> Export API Calls
+              <Download className="w-4 h-4 mr-2" /> Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

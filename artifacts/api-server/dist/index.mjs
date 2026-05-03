@@ -138748,10 +138748,40 @@ async function verifyInstagramCredentials(profile) {
         } catch (e) {
           console.error(`[instagramLogin] @${profile.username} \u2014 news/inbox failed (non-fatal): ${e?.message}`);
         }
+        try {
+          await ig2.qe.syncLoginExperiments();
+          console.error(`[instagramLogin] @${profile.username} \u2014 qe/sync (FetchConfig) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
+        }
+        try {
+          await ig2.request.send({
+            url: "/api/v1/banyan/banyan/",
+            method: "POST",
+            form: ig2.request.sign({
+              _csrftoken: ig2.state.cookieCsrfToken,
+              _uid: userId,
+              _uuid: ig2.state.uuid,
+              surfaces_to_queries: JSON.stringify([
+                { surface: "interstitial_link_loading" },
+                { surface: "interstitial_link_prefetch" }
+              ])
+            })
+          });
+          console.error(`[instagramLogin] @${profile.username} \u2014 banyan/banyan (GetBanyan) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 banyan/banyan failed (non-fatal): ${e?.message}`);
+        }
+        try {
+          await ig2.discover.topicalExplore();
+          console.error(`[instagramLogin] @${profile.username} \u2014 discover/topical_explore (ExecuteDiscoverExplore) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 discover/topical_explore failed (non-fatal): ${e?.message}`);
+        }
         console.error(`[instagramLogin] @${profile.username} \u2014 cold-start handshake complete \u2713`);
         return {
           ok: true,
-          message: `@${profile.username} \u2014 session active. Cold-start handshake complete (launcher/sync \u2192 qe/sync \u2192 get_account_family \u2192 timeline \u2192 reels_tray \u2192 inbox).`,
+          message: `@${profile.username} \u2014 session active. Cold-start handshake complete (launcher/sync \u2192 qe/sync \u2192 get_account_family \u2192 timeline \u2192 reels_tray \u2192 inbox \u2192 qe/sync \u2192 banyan \u2192 discover).`,
           accountStatus: "valid",
           igDeviceState: captureDeviceState2()
         };
@@ -143557,7 +143587,11 @@ async function registerInstagramRoutes(httpServer2, app2) {
       const allProfiles = await storage.getProfiles();
       const profileMap = new Map(allProfiles.map((p) => [p.id, p]));
       const allApiCalls = await storage.getInstagramApiCalls(1e5);
-      const apiCalls = allApiCalls.filter((c3) => c3.source !== "Browser");
+      const rawIds = req.query.profileIds ?? "";
+      const requestedIds = rawIds ? String(rawIds).split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) : [];
+      const apiCalls = allApiCalls.filter(
+        (c3) => c3.source !== "Browser" && (requestedIds.length === 0 || requestedIds.includes(c3.profileId))
+      );
       const headers = [
         "UniqueNameAccount",
         "Name",
