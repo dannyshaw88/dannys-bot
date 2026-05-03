@@ -146136,6 +146136,46 @@ var AutomationEngine = class {
       });
     }
   }
+  // Force an immediate new-follower extraction for the given profile,
+  // regardless of whether the contact runner is active or scheduled.
+  // Returns how many new messages were queued to the pending list.
+  async triggerExtractNow(profileId) {
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return { queued: 0, error: "Profile not found" };
+    const tools2 = await storage.getToolsByProfile(profileId);
+    const contactTool = tools2.find((t2) => t2.type === "contact");
+    if (!contactTool) return { queued: 0, error: "Contact tool not found" };
+    let state = this.contactStates.get(profileId);
+    if (!state) {
+      state = {
+        stop: { stopped: false },
+        client: null,
+        dailyCount: 0,
+        dailyDate: todayStr(),
+        hourlyCount: 0,
+        hourlyHour: hourStr(),
+        actionDailyCount: {},
+        actionDailyDate: todayStr(),
+        actionHourlyCount: {},
+        actionHourlyHour: hourStr(),
+        actionSuspensions: {},
+        nextHumanSessionAt: 0,
+        lastHumanToolsEnabled: false,
+        nextFollowAt: 0,
+        nextContactAt: 0,
+        nextUnfollowAt: 0
+      };
+    }
+    const before = (await storage.getContactPendingMessages(profileId, "pending")).length;
+    try {
+      await this.runContactNewFollowersSession(profile, contactTool, state);
+    } catch (e) {
+      console.error(`[engine] triggerExtractNow @${profile.username}: ${e?.message}`);
+      return { queued: 0, error: e?.message ?? "Unknown error" };
+    }
+    const after = (await storage.getContactPendingMessages(profileId, "pending")).length;
+    return { queued: Math.max(0, after - before) };
+  }
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus() {
     const allIds = /* @__PURE__ */ new Set([
@@ -146800,6 +146840,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const id = Number(req.params.id);
     await storage.deleteContactPendingMessage(id);
     res.json({ ok: true });
+  });
+  app2.post("/api/profiles/:profileId/tools/contact/extract-now", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    const result = await automationEngine.triggerExtractNow(profileId);
+    if (result.error) return res.status(400).json({ ok: false, error: result.error });
+    res.json({ ok: true, queued: result.queued });
   });
   app2.post("/api/profiles/verify-all", async (req, res) => {
     const { profileIds: profileIds2, delayMin = 5, delayMax = 15 } = req.body;

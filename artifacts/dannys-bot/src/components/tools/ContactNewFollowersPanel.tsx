@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useUpdateTool } from "@/hooks/use-tools";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, UserCheck, Clock, Users, Zap, Shuffle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MessageSquare, UserCheck, Clock, Users, Zap, Shuffle, Loader2, Download } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 interface Props {
   tool: Tool;
@@ -18,9 +21,38 @@ function applySpintax(text: string): string {
   });
 }
 
-export function ContactNewFollowersPanel({ tool, profile: _profile }: Props) {
+export function ContactNewFollowersPanel({ tool, profile }: Props) {
   const updateToolMutation = useUpdateTool();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [previewText, setPreviewText] = useState("");
+  const [extractResult, setExtractResult] = useState<{ queued: number } | null>(null);
+
+  const extractNowMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/profiles/${profile.id}/tools/contact/extract-now`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).error ?? "Extract failed");
+      }
+      return res.json() as Promise<{ ok: boolean; queued: number }>;
+    },
+    onSuccess: (data) => {
+      setExtractResult({ queued: data.queued });
+      queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] });
+      toast({
+        title: data.queued > 0
+          ? `${data.queued} new user${data.queued !== 1 ? "s" : ""} added to Pending Messages`
+          : "No new users found",
+        description: data.queued > 0
+          ? "Switch to the Contact Users tab to see them."
+          : "All recent followers were already queued or messaged.",
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Extract failed", description: e.message, variant: "destructive" });
+    },
+  });
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
@@ -201,6 +233,33 @@ export function ContactNewFollowersPanel({ tool, profile: _profile }: Props) {
             HikerAPI requires a valid token in the global Settings page.
           </p>
         </div>
+      </div>
+
+      {/* Extract Now */}
+      <div className="flex items-center justify-between gap-4 pt-1">
+        <div className="text-[11px] text-muted-foreground leading-snug">
+          Fetches up to <strong>{settings.contactUsersPerCheckMax ?? 20}</strong> recent followers now and adds
+          any new ones to the <strong>Pending Messages</strong> queue in the Contact Users tab.
+          {extractResult !== null && (
+            <span className={`ml-2 font-medium ${extractResult.queued > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+              {extractResult.queued > 0
+                ? `↳ ${extractResult.queued} user${extractResult.queued !== 1 ? "s" : ""} queued`
+                : "↳ No new users found"}
+            </span>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-1.5 text-primary border-primary/40 hover:bg-primary/5"
+          disabled={extractNowMutation.isPending}
+          onClick={() => { setExtractResult(null); extractNowMutation.mutate(); }}
+        >
+          {extractNowMutation.isPending
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Extracting…</>
+            : <><Download className="w-3.5 h-3.5" /> Extract Now</>
+          }
+        </Button>
       </div>
     </div>
   );

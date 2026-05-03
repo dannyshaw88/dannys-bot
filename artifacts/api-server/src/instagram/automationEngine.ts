@@ -2424,6 +2424,48 @@ class AutomationEngine {
     }
   }
 
+  // Force an immediate new-follower extraction for the given profile,
+  // regardless of whether the contact runner is active or scheduled.
+  // Returns how many new messages were queued to the pending list.
+  async triggerExtractNow(profileId: number): Promise<{ queued: number; error?: string }> {
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return { queued: 0, error: "Profile not found" };
+
+    const tools = await storage.getToolsByProfile(profileId);
+    const contactTool = tools.find(t => t.type === "contact");
+    if (!contactTool) return { queued: 0, error: "Contact tool not found" };
+
+    // Reuse live contact state (authenticated client) if the runner is active;
+    // otherwise create a temporary state so ensureClient can build a fresh one.
+    let state = this.contactStates.get(profileId);
+    if (!state) {
+      state = {
+        stop: { stopped: false },
+        client: null,
+        dailyCount: 0,   dailyDate:   todayStr(),
+        hourlyCount: 0,  hourlyHour:  hourStr(),
+        actionDailyCount: {}, actionDailyDate:  todayStr(),
+        actionHourlyCount: {}, actionHourlyHour: hourStr(),
+        actionSuspensions: {},
+        nextHumanSessionAt: 0,
+        lastHumanToolsEnabled: false,
+        nextFollowAt: 0,
+        nextContactAt: 0,
+        nextUnfollowAt: 0,
+      };
+    }
+
+    const before = (await storage.getContactPendingMessages(profileId, "pending")).length;
+    try {
+      await this.runContactNewFollowersSession(profile, contactTool, state);
+    } catch (e: any) {
+      console.error(`[engine] triggerExtractNow @${profile.username}: ${e?.message}`);
+      return { queued: 0, error: e?.message ?? "Unknown error" };
+    }
+    const after = (await storage.getContactPendingMessages(profileId, "pending")).length;
+    return { queued: Math.max(0, after - before) };
+  }
+
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
     // Collect every profileId that has at least one active runner

@@ -713,6 +713,14 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // Force an immediate follower extraction into the pending messages queue
+  app.post("/api/profiles/:profileId/tools/contact/extract-now", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    const result = await automationEngine.triggerExtractNow(profileId);
+    if (result.error) return res.status(400).json({ ok: false, error: result.error });
+    res.json({ ok: true, queued: result.queued });
+  });
+
   // ── Bulk Verify All Accounts ──────────────────────────────────────────────
   app.post("/api/profiles/verify-all", async (req, res) => {
     const { profileIds, delayMin = 5, delayMax = 15 } = req.body as {
