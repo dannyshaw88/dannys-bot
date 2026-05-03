@@ -376,17 +376,7 @@ export function ProfileDetailsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <button
-                onClick={() => nextProfile && navigate(`/profiles/${nextProfile.id}`)}
-                disabled={!nextProfile}
-                title={nextProfile ? (nextProfile.accountLabel || nextProfile.username) : undefined}
-                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex items-center gap-2 mt-2">
-              {/* Account status badge — click to change */}
+              {/* Account status badge — inline, right of the name */}
               {(() => {
                 const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
                 const meta = STATUS_META[acctStatus] ?? STATUS_META.pending;
@@ -419,6 +409,15 @@ export function ProfileDetailsPage() {
                   </DropdownMenu>
                 );
               })()}
+
+              <button
+                onClick={() => nextProfile && navigate(`/profiles/${nextProfile.id}`)}
+                disabled={!nextProfile}
+                title={nextProfile ? (nextProfile.accountLabel || nextProfile.username) : undefined}
+                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
