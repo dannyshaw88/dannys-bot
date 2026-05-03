@@ -350,6 +350,28 @@ export class InstagramWebClient {
     return res.json;
   }
 
+  // Anonymous mobile GET — NO account cookies sent, account identity never exposed.
+  // Used for source-account scraping (repost) so the account is not linked to the lookup.
+  private async mobileGetAnonymous(path: string): Promise<any> {
+    const res = await igReq({
+      host: "i.instagram.com",
+      path,
+      method: "GET",
+      headers: {
+        Host: "i.instagram.com",
+        "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "X-IG-App-ID": APP_ID,
+        "X-IG-Capabilities": "3brTvwE=",
+        "X-IG-Connection-Type": "WIFI",
+      },
+      cookieJar: [],  // deliberately empty — no session cookies
+      proxyUrl: this.proxyUrl,
+    });
+    return res.json;
+  }
+
   private async webPost(path: string, body = ""): Promise<any> {
     await this.apiThrottle();
     const sessionCookie = this.cookieJar.find(c => c.startsWith("sessionid="));
@@ -1034,10 +1056,17 @@ export class InstagramWebClient {
     takenAt: number;
   }>> {
     return this.timed("GetUserFeed", async () => {
-      const user = await this.getUserByUsername(username);
-      if (!user) return [];
+      // Step 1 — resolve username → pk ANONYMOUSLY (no account session cookies).
+      // This prevents Instagram from associating any profile lookup with this account.
+      const userInfo = await this.mobileGetAnonymous(`/api/v1/users/${encodeURIComponent(username)}/usernameinfo/`);
+      const pk: string | undefined = userInfo?.user?.pk_id ?? userInfo?.user?.pk ?? userInfo?.user?.id;
+      if (!pk) {
+        console.warn(`[webClient] getUserFeedItems: anonymous usernameinfo returned no pk for @${username}`);
+        return [];
+      }
 
-      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+      // Step 2 — fetch the feed ANONYMOUSLY (no account session cookies).
+      const j = await this.mobileGetAnonymous(`/api/v1/feed/user/${pk}/?count=12`);
       const items: any[] = j?.items ?? [];
 
       return items.flatMap((item: any) => {

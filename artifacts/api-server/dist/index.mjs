@@ -143170,6 +143170,28 @@ var InstagramWebClient = class {
     if (!res.json) console.log(`[webClient] mobileGet ${path4} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
   }
+  // Anonymous mobile GET — NO account cookies sent, account identity never exposed.
+  // Used for source-account scraping (repost) so the account is not linked to the lookup.
+  async mobileGetAnonymous(path4) {
+    const res = await igReq({
+      host: "i.instagram.com",
+      path: path4,
+      method: "GET",
+      headers: {
+        Host: "i.instagram.com",
+        "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "X-IG-App-ID": APP_ID,
+        "X-IG-Capabilities": "3brTvwE=",
+        "X-IG-Connection-Type": "WIFI"
+      },
+      cookieJar: [],
+      // deliberately empty — no session cookies
+      proxyUrl: this.proxyUrl
+    });
+    return res.json;
+  }
   async webPost(path4, body = "") {
     await this.apiThrottle();
     const sessionCookie = this.cookieJar.find((c3) => c3.startsWith("sessionid="));
@@ -143738,9 +143760,13 @@ var InstagramWebClient = class {
   // ── Get recent photo posts from a user's feed (with image URLs) ───────────
   async getUserFeedItems(username) {
     return this.timed("GetUserFeed", async () => {
-      const user = await this.getUserByUsername(username);
-      if (!user) return [];
-      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+      const userInfo = await this.mobileGetAnonymous(`/api/v1/users/${encodeURIComponent(username)}/usernameinfo/`);
+      const pk = userInfo?.user?.pk_id ?? userInfo?.user?.pk ?? userInfo?.user?.id;
+      if (!pk) {
+        console.warn(`[webClient] getUserFeedItems: anonymous usernameinfo returned no pk for @${username}`);
+        return [];
+      }
+      const j = await this.mobileGetAnonymous(`/api/v1/feed/user/${pk}/?count=12`);
       const items = j?.items ?? [];
       return items.flatMap((item) => {
         const mediaType = item?.media_type ?? 1;
