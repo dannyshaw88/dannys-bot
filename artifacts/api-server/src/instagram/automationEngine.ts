@@ -1,3 +1,27 @@
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                  ARCHITECTURE — READ THIS BEFORE TOUCHING ANYTHING          ║
+// ╠══════════════════════════════════════════════════════════════════════════════╣
+// ║                                                                              ║
+// ║  THIS IS A MOBILE API BOT.  ALL INSTAGRAM ACTIONS ARE PERFORMED VIA THE     ║
+// ║  INSTAGRAM MOBILE PRIVATE API (i.instagram.com).                            ║
+// ║                                                                              ║
+// ║  THE EMBEDDED BROWSER (EB) IS ONLY USED FOR:                                ║
+// ║    • Manual account browsing by the user                                     ║
+// ║    • Resolving login challenges / CAPTCHAs that block API access             ║
+// ║    • NOTHING ELSE                                                            ║
+// ║                                                                              ║
+// ║  THE EB IS NEVER USED TO PERFORM AUTOMATED ACTIONS.                         ║
+// ║  Do NOT add Puppeteer/browser automation for any Instagram action.           ║
+// ║  Do NOT fall back to the EB when an API call fails.                         ║
+// ║                                                                              ║
+// ║  SESSION MODEL:                                                              ║
+// ║    • Web session  (cookieJar)       → follow, unfollow, like, comment       ║
+// ║    • Mobile session (mobileCookieJar) → DM sending ONLY                     ║
+// ║                                                                              ║
+// ║  ensureClient() MUST call mobileLogin() after every successful web login    ║
+// ║  so that sendDirectMessage() always has a valid mobile session available.   ║
+// ║                                                                              ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 import { storage } from "../storage";
 import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
