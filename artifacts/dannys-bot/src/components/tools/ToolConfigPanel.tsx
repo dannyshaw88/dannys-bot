@@ -313,11 +313,16 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         { key: "ft_dmMessages", label: "Message templates", settingKeys: ["dmMessages"] },
       ]},
     ]},
+    { label: "Sources", options: [
+      { key: "ft_sources", label: "Target Sources", description: "Copy all target sources (hashtags and accounts) to other profiles — adds to existing sources" },
+    ]},
   ];
 
   const handleFollowToolCopy = async (targetIds: number[], expandedKeys: string[]) => {
-    const copyEnabled = expandedKeys.includes("startStop");
-    const keysToSend  = expandedKeys.filter(k => k !== "startStop");
+    const copyEnabled  = expandedKeys.includes("startStop");
+    const copySources  = expandedKeys.includes("ft_sources");
+    const keysToSend   = expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources");
+
     await copyToolSettingsToProfiles(
       settings as Record<string, unknown>,
       tool.type,
@@ -325,6 +330,32 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
       keysToSend,
       copyEnabled ? tool.enabled : undefined,
     );
+
+    if (copySources) {
+      const sourcesRes = await fetch(`/api/tools/${tool.id}/sources`, { credentials: "include" });
+      const currentSources: { type: string; value: string; rank?: number | null; nrPosts?: number | null }[] =
+        sourcesRes.ok ? await sourcesRes.json() : [];
+
+      if (currentSources.length > 0) {
+        const payload = currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }));
+        await Promise.all(
+          targetIds.map(async profileId => {
+            const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+            if (!toolsRes.ok) return;
+            const tools: { id: number; type: string }[] = await toolsRes.json();
+            const targetTool = tools.find(t => t.type === "follow");
+            if (!targetTool) return;
+            await fetch(`/api/tools/${targetTool.id}/sources/import`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+              credentials: "include",
+            });
+          })
+        );
+      }
+    }
+
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 
