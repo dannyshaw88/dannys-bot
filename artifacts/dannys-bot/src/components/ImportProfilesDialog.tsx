@@ -209,8 +209,17 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
     setResults(null);
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
+      const buf = e.target?.result as ArrayBuffer;
       try {
+        // Auto-detect encoding from BOM bytes so passwords and user agents
+        // are read correctly regardless of which Jarvee version produced the file.
+        // UTF-16 LE BOM = FF FE, UTF-16 BE BOM = FE FF, UTF-8 BOM = EF BB BF
+        const bytes = new Uint8Array(buf);
+        let encoding = "utf-8";
+        if (bytes[0] === 0xFF && bytes[1] === 0xFE) encoding = "utf-16le";
+        else if (bytes[0] === 0xFE && bytes[1] === 0xFF) encoding = "utf-16be";
+
+        const text = new TextDecoder(encoding).decode(buf);
         const profiles = parseJarveeFile(text);
         if (profiles.length === 0) {
           toast({ title: "No profiles found", description: "The file appears empty or has an unsupported format.", variant: "destructive" });
@@ -222,8 +231,7 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
         toast({ title: "Parse error", description: "Could not read the file. Make sure it's a Jarvee export.", variant: "destructive" });
       }
     };
-    // Try UTF-16 LE (Jarvee default), fall back gracefully
-    reader.readAsText(file, "UTF-16LE");
+    reader.readAsArrayBuffer(file);
   }, [toast]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
