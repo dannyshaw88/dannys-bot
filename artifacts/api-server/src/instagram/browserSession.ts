@@ -357,6 +357,8 @@ function startFrameLoop(profileId: number) {
   let cookieSaveTick = 0;
   let popupCheckTick = 0;
   let keepAliveTick = 0;
+  let errorRetryTick = 0;  // counts frames while on chrome-error:// (429 / net::ERR_*)
+  let errorRetryCount = 0; // how many times we've auto-retried this session
   let busy = false;
 
   session.frameLoop = setInterval(async () => {
@@ -389,6 +391,27 @@ function startFrameLoop(profileId: number) {
         s.lastUrl = currentUrl;
         sseWrite(s.res, { type: "urlChange", url: currentUrl });
       }
+
+      // ── 429 / chrome-error auto-retry ────────────────────────────────────
+      // Chromium's parallel asset requests can trip Instagram's rate limiter
+      // (HTTP 429) on the first navigation.  We wait ~10 seconds and retry
+      // once — the second request, after a delay, nearly always succeeds.
+      if (currentUrl.startsWith("chrome-error://")) {
+        errorRetryTick++;
+        if (errorRetryTick >= 50 && errorRetryCount < 3) { // 50*200ms = 10s
+          errorRetryTick = 0;
+          errorRetryCount++;
+          const hasCookies = await s.page.cookies().then(c => c.some(ck => ck.name === "sessionid")).catch(() => false);
+          const retryTarget = hasCookies
+            ? "https://www.instagram.com/"
+            : "https://www.instagram.com/accounts/login/";
+          log(`[retry:${profileId}] chrome-error — retry #${errorRetryCount} → ${retryTarget}`, "browser");
+          s.page.goto(retryTarget, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+        }
+      } else {
+        errorRetryTick = 0;
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       // Check for post-login popups every ~10 seconds
       popupCheckTick++;

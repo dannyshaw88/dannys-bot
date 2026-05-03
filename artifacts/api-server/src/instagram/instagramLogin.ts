@@ -267,28 +267,38 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       if (!userId || !/^\d+$/.test(userId)) {
         console.error(`[instagramLogin] @${profile.username} — could not parse userId from sessionid, falling through`);
       } else {
-        // Restore all cookies: sessionid (URL-decoded) + synthetic ds_user_id
-        // so the library can populate cookieUserId and cookieCsrfToken after Phase 1.
         const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
-        await restoreSessionCookies(ig, cookiesWithUserId);
-        console.error(`[instagramLogin] @${profile.username} — cookies restored (userId=${userId})`);
 
         // ── Full Jarvee cold-start sequence ────────────────────────────────
         //
-        // Phase 1 — Pre-auth setup (no credentials required)
-        //   These calls happen before any authenticated endpoint and mirror what
-        //   Jarvee labels SendMobileConfig / FetchConfig.  They also cause
-        //   Instagram's server to set a real csrftoken cookie in the jar so that
-        //   the Phase 2 signed POST bodies contain a valid token.
+        // Phase 0 — Pre-auth calls with CLEAN cookie jar (no session loaded yet)
+        //   Jarvee fires GetTokenResult → SendMobileConfig → GetTokenResult
+        //   BEFORE loading the session cookie.  Running them here means Instagram
+        //   sees a fresh device probe, not a checkpointed session — so these calls
+        //   return 200 even when the account is in checkpoint.
+        //
+        // Phase 1 — Load the session cookie
+        //   Only after the pre-auth calls does Jarvee inject the sessionid.
         //
         // Phase 2 — Authenticated session validation
-        //   GetAccountFamily → cold_start timeline → reels_tray → news/inbox
-        //   This is the exact sequence Jarvee performs after a session restore.
-        //   Any checkpoint returned here is genuine (the account truly needs
-        //   verification); we never call currentUser()?edit=true which caused
-        //   false checkpoint errors on freshly-restored sessions.
+        //   GetAccountFamily → cold_start timeline → reels_tray → notifications
+        //   → qe/sync → banyan → discover.  Checkpoint errors here are genuine.
 
-        // ── Phase 1a: SendMobileConfig (launcher/sync, no auth) ──────────
+        // ── Phase 0a: GetTokenResult (/api/v1/accounts/tokens/keyed/) ─────
+        // First call in Jarvee's session-restore sequence — no cookies needed.
+        try {
+          await ig.request.send({
+            url: "/api/v1/accounts/tokens/keyed/",
+            method: "GET",
+            qs: { expires: "0" },
+          });
+          console.error(`[instagramLogin] @${profile.username} — tokens/keyed (GetTokenResult) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — tokens/keyed failed (non-fatal): ${e?.message}`);
+        }
+
+        // ── Phase 0b: SendMobileConfig (launcher/sync) ────────────────────
+        // Called with clean jar — Instagram sees anonymous device probe, not checkpoint.
         try {
           await ig.launcher.preLoginSync();
           console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`);
@@ -296,15 +306,24 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (non-fatal): ${e?.message}`);
         }
 
-        // ── Phase 1b: FetchConfig (qe/sync, no auth) ─────────────────────
-        // This call also makes Instagram set the csrftoken cookie so Phase 2
-        // POST bodies can include a real token instead of "missing".
+        // ── Phase 0c: GetTokenResult #2 ───────────────────────────────────
+        // Jarvee calls GetTokenResult a second time right after launcher/sync.
         try {
-          await ig.qe.syncLoginExperiments();
-          console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
+          await ig.request.send({
+            url: "/api/v1/accounts/tokens/keyed/",
+            method: "GET",
+            qs: { expires: "0" },
+          });
+          console.error(`[instagramLogin] @${profile.username} — tokens/keyed #2 (GetTokenResult) OK`);
         } catch (e: any) {
-          console.error(`[instagramLogin] @${profile.username} — qe/sync failed (non-fatal): ${e?.message}`);
+          console.error(`[instagramLogin] @${profile.username} — tokens/keyed #2 failed (non-fatal): ${e?.message}`);
         }
+
+        // ── Phase 1: Load session cookie ──────────────────────────────────
+        // Session is injected AFTER the unauthenticated Phase 0 calls —
+        // this matches Jarvee exactly and avoids false checkpoints on pre-auth calls.
+        await restoreSessionCookies(ig, cookiesWithUserId);
+        console.error(`[instagramLogin] @${profile.username} — cookies restored (userId=${userId})`);
 
         // ── Phase 2a: GetAccountFamily (accounts/get_account_family) ─────
         // First authenticated call in Jarvee's session-restore sequence.

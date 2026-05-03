@@ -138686,8 +138686,16 @@ async function verifyInstagramCredentials(profile) {
         console.error(`[instagramLogin] @${profile.username} \u2014 could not parse userId from sessionid, falling through`);
       } else {
         const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
-        await restoreSessionCookies(ig2, cookiesWithUserId);
-        console.error(`[instagramLogin] @${profile.username} \u2014 cookies restored (userId=${userId})`);
+        try {
+          await ig2.request.send({
+            url: "/api/v1/accounts/tokens/keyed/",
+            method: "GET",
+            qs: { expires: "0" }
+          });
+          console.error(`[instagramLogin] @${profile.username} \u2014 tokens/keyed (GetTokenResult) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 tokens/keyed failed (non-fatal): ${e?.message}`);
+        }
         try {
           await ig2.launcher.preLoginSync();
           console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync (SendMobileConfig) OK`);
@@ -138695,11 +138703,17 @@ async function verifyInstagramCredentials(profile) {
           console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync failed (non-fatal): ${e?.message}`);
         }
         try {
-          await ig2.qe.syncLoginExperiments();
-          console.error(`[instagramLogin] @${profile.username} \u2014 qe/sync (FetchConfig) OK`);
+          await ig2.request.send({
+            url: "/api/v1/accounts/tokens/keyed/",
+            method: "GET",
+            qs: { expires: "0" }
+          });
+          console.error(`[instagramLogin] @${profile.username} \u2014 tokens/keyed #2 (GetTokenResult) OK`);
         } catch (e) {
-          console.error(`[instagramLogin] @${profile.username} \u2014 qe/sync failed (non-fatal): ${e?.message}`);
+          console.error(`[instagramLogin] @${profile.username} \u2014 tokens/keyed #2 failed (non-fatal): ${e?.message}`);
         }
+        await restoreSessionCookies(ig2, cookiesWithUserId);
+        console.error(`[instagramLogin] @${profile.username} \u2014 cookies restored (userId=${userId})`);
         try {
           await ig2.request.send({
             url: "/api/v1/accounts/get_account_family/",
@@ -139163,6 +139177,8 @@ function startFrameLoop(profileId) {
   let cookieSaveTick = 0;
   let popupCheckTick = 0;
   let keepAliveTick = 0;
+  let errorRetryTick = 0;
+  let errorRetryCount = 0;
   let busy = false;
   session.frameLoop = setInterval(async () => {
     const s = sessions.get(profileId);
@@ -139189,6 +139205,20 @@ function startFrameLoop(profileId) {
       if (currentUrl !== s.lastUrl) {
         s.lastUrl = currentUrl;
         sseWrite(s.res, { type: "urlChange", url: currentUrl });
+      }
+      if (currentUrl.startsWith("chrome-error://")) {
+        errorRetryTick++;
+        if (errorRetryTick >= 50 && errorRetryCount < 3) {
+          errorRetryTick = 0;
+          errorRetryCount++;
+          const hasCookies = await s.page.cookies().then((c3) => c3.some((ck) => ck.name === "sessionid")).catch(() => false);
+          const retryTarget = hasCookies ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
+          log(`[retry:${profileId}] chrome-error \u2014 retry #${errorRetryCount} \u2192 ${retryTarget}`, "browser");
+          s.page.goto(retryTarget, { waitUntil: "domcontentloaded", timeout: 25e3 }).catch(() => {
+          });
+        }
+      } else {
+        errorRetryTick = 0;
       }
       popupCheckTick++;
       if (popupCheckTick >= 50) {
