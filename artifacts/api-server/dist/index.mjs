@@ -144649,10 +144649,12 @@ var AutomationEngine = class {
         }
         if (state.stop.stopped) break;
         if (now >= nextUsersSessionAt) {
-          try {
-            await this.runContactUsersSession(freshProfile, contactTool, state);
-          } catch (err) {
-            console.error(`[engine] @${freshProfile.username}: contact-users send session error: ${err?.message}`);
+          if (s.contactUsersEnabled !== false) {
+            try {
+              await this.runContactUsersSession(freshProfile, contactTool, state);
+            } catch (err) {
+              console.error(`[engine] @${freshProfile.username}: contact-users send session error: ${err?.message}`);
+            }
           }
           const waitMs = randInt(
             (s.contactUsersWaitMin ?? 30) * 6e4,

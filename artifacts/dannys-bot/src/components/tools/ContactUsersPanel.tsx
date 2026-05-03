@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ export function ContactUsersPanel({ tool, profile }: Props) {
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
+      contactUsersEnabled: true,
       contactUsersWaitMin: 30,
       contactUsersWaitMax: 60,
       contactUsersSendCountMin: 1,
@@ -105,7 +107,19 @@ export function ContactUsersPanel({ tool, profile }: Props) {
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
 
-      {/* ── Settings ────────────────────────────────────────── */}
+      {/* Master Enable */}
+      <div className="flex items-center gap-3 px-1">
+        <Switch
+          checked={!!settings.contactUsersEnabled}
+          onCheckedChange={(v) => setSettings({ ...settings, contactUsersEnabled: v })}
+        />
+        <div>
+          <p className="text-sm font-semibold">Contact Users Sending</p>
+          <p className="text-[11px] text-muted-foreground">Automatically send DMs from the Pending Messages queue.</p>
+        </div>
+      </div>
+
+      {/* ── Send Settings ────────────────────────────────────── */}
       <div className="border border-border rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Send className="w-4 h-4 text-blue-500" />
@@ -115,7 +129,7 @@ export function ContactUsersPanel({ tool, profile }: Props) {
         {/* Wait between sessions */}
         <div className="flex items-center gap-2 flex-wrap">
           <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Wait Between Sessions (min)</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Wait Between Batches (min)</span>
           <div className="flex items-center gap-1.5">
             <Label className="text-xs text-muted-foreground">Min</Label>
             {numInput("contactUsersWaitMin", 1, 10000)}
@@ -126,10 +140,10 @@ export function ContactUsersPanel({ tool, profile }: Props) {
           </div>
         </div>
 
-        {/* Send count */}
+        {/* Messages per batch */}
         <div className="flex items-center gap-2 flex-wrap">
           <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Messages per Session</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Messages per Batch</span>
           <div className="flex items-center gap-1.5">
             <Label className="text-xs text-muted-foreground">Min</Label>
             {numInput("contactUsersSendCountMin", 1, 500)}
