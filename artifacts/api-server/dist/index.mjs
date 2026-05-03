@@ -145245,11 +145245,20 @@ var AutomationEngine = class {
     const targetListEnabled = !!s.unfollowTargetListEnabled;
     const targetListRaw = s.unfollowTargetList ?? "";
     if (targetListEnabled && targetListRaw.trim()) {
-      const targetSet = new Set(
-        targetListRaw.split(/[\n,]+/).map((u) => u.trim().replace(/^@/, "").toLowerCase()).filter(Boolean)
-      );
-      candidates = candidates.filter((u) => targetSet.has(u.instagramUsername.toLowerCase()));
-      console.log(`[engine] @${profile.username}: unfollow target list active \u2014 ${candidates.length} matched`);
+      const targetUsernames = targetListRaw.split(/[\n,]+/).map((u) => u.trim().replace(/^@/, "").toLowerCase()).filter(Boolean);
+      const targetSet = new Set(targetUsernames);
+      const fromDb = all.filter((u) => targetSet.has(u.instagramUsername.toLowerCase()));
+      const fromDbNames = new Set(fromDb.map((u) => u.instagramUsername.toLowerCase()));
+      const synthetic = targetUsernames.filter((username) => !fromDbNames.has(username)).map((username) => ({
+        id: -1,
+        profileId: profile.id,
+        instagramUsername: username,
+        instagramUserId: "",
+        followedAt: (/* @__PURE__ */ new Date(0)).toISOString(),
+        unfollowedAt: null
+      }));
+      candidates = [...fromDb, ...synthetic];
+      console.log(`[engine] @${profile.username}: unfollow target list \u2014 ${fromDb.length} from DB + ${synthetic.length} manual entries = ${candidates.length} total`);
     } else {
       console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
     }
@@ -146518,7 +146527,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
     try {
       const allProfiles = await storage.getProfiles();
       const profileMap = new Map(allProfiles.map((p) => [p.id, p]));
-      const apiCalls = await storage.getInstagramApiCalls(1e5);
+      const allApiCalls = await storage.getInstagramApiCalls(1e5);
+      const apiCalls = allApiCalls.filter((c3) => c3.source !== "Browser");
       const headers = [
         "UniqueNameAccount",
         "Name",

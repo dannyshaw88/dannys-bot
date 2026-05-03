@@ -1411,11 +1411,29 @@ class AutomationEngine {
     const targetListEnabled = !!s.unfollowTargetListEnabled;
     const targetListRaw: string = s.unfollowTargetList ?? "";
     if (targetListEnabled && targetListRaw.trim()) {
-      const targetSet = new Set(
-        targetListRaw.split(/[\n,]+/).map((u: string) => u.trim().replace(/^@/, "").toLowerCase()).filter(Boolean)
-      );
-      candidates = candidates.filter(u => targetSet.has(u.instagramUsername.toLowerCase()));
-      console.log(`[engine] @${profile.username}: unfollow target list active — ${candidates.length} matched`);
+      const targetUsernames = targetListRaw.split(/[\n,]+/)
+        .map((u: string) => u.trim().replace(/^@/, "").toLowerCase())
+        .filter(Boolean);
+      const targetSet = new Set(targetUsernames);
+
+      // Match from DB (users originally followed by the tool)
+      const fromDb = all.filter(u => targetSet.has(u.instagramUsername.toLowerCase()));
+      const fromDbNames = new Set(fromDb.map(u => u.instagramUsername.toLowerCase()));
+
+      // Also include list entries NOT in the DB — user manually added / imported via HikerAPI
+      const synthetic: typeof candidates = targetUsernames
+        .filter(username => !fromDbNames.has(username))
+        .map(username => ({
+          id: -1,
+          profileId: profile.id,
+          instagramUsername: username,
+          instagramUserId: "",
+          followedAt: new Date(0).toISOString(),
+          unfollowedAt: null,
+        } as any));
+
+      candidates = [...fromDb, ...synthetic];
+      console.log(`[engine] @${profile.username}: unfollow target list — ${fromDb.length} from DB + ${synthetic.length} manual entries = ${candidates.length} total`);
     } else {
       console.log(`[engine] @${profile.username}: unfollow candidates: ${candidates.length} (older than ${minAgeDays}d)`);
     }

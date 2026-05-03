@@ -487,7 +487,8 @@ export async function registerInstagramRoutes(
     try {
       const allProfiles = await storage.getProfiles();
       const profileMap = new Map(allProfiles.map(p => [p.id, p]));
-      const apiCalls = await storage.getInstagramApiCalls(100000);
+      const allApiCalls = await storage.getInstagramApiCalls(100000);
+      const apiCalls = allApiCalls.filter((c: any) => c.source !== "Browser");
 
       const headers = [
         "UniqueNameAccount", "Name", "Operation Name", "Date",
