@@ -6,6 +6,7 @@
 import * as https from "https";
 import * as fs from "fs";
 import { generateSync as totpGenerate } from "otplib";
+import { browserSendDM } from "./browserSession.js";
 
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
 function httpsRequest(
@@ -922,48 +923,98 @@ export class InstagramWebClient {
 
   // ── Send a direct message to a user ───────────────────────────────────────
   // Returns true on success, "blocked" on action-block, false otherwise.
-  // Look up the existing DM thread with a specific user.
-  // Checks both the regular inbox (accepted DMs) and the pending inbox (message requests).
+  // Look up an existing DM thread with a user via the mobile API (i.instagram.com).
+  // get_by_participants is tried first; the inbox is scanned as a fallback.
+  // Raw responses are logged so we can see exactly what Instagram returns.
   private async getThreadIdWithUser(userId: string): Promise<string | null> {
-    // 1. Try get_by_participants (regular accepted threads)
-    try {
-      const j = await this.mobileGet(
-        `/api/v1/direct_v2/threads/get_by_participants/?participant_user_ids[]=${userId}&seq_id=0&limit=20`
-      );
-      const tid = j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
-      if (tid) {
-        console.log(`[webClient] getThreadIdWithUser ${userId}: found in regular inbox → ${tid}`);
-        return String(tid);
+    // 1. Try get_by_participants (fastest — direct thread lookup)
+    for (const qs of [
+      `participant_user_ids%5B%5D=${userId}`,
+      `participant_user_ids[]=${userId}`,
+      `participant_user_ids=${userId}`,
+    ]) {
+      try {
+        const res = await igReq({
+          host: "i.instagram.com",
+          path: `/api/v1/direct_v2/threads/get_by_participants/?${qs}&seq_id=0&limit=20`,
+          method: "GET",
+          headers: {
+            Host: "i.instagram.com",
+            "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+            Accept: "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "X-IG-App-ID": APP_ID,
+            "X-CSRFToken": this.csrfToken,
+            "X-IG-Capabilities": "3brTvwE=",
+            "X-IG-Connection-Type": "WIFI",
+          },
+          cookieJar: this.cookieJar,
+          proxyUrl: this.proxyUrl,
+        });
+        console.log(`[webClient] get_by_participants(${qs.slice(0, 30)}) HTTP ${res.status}:`, res.rawBody.slice(0, 400));
+        const j = res.json;
+        const tid = j?.thread?.thread_id ?? j?.threads?.[0]?.thread_id ?? null;
+        if (tid) {
+          console.log(`[webClient] getThreadIdWithUser ${userId}: found via get_by_participants → ${tid}`);
+          return String(tid);
+        }
+      } catch (e: any) {
+        console.log(`[webClient] get_by_participants error:`, e?.message);
       }
-    } catch {}
+    }
 
-    // 2. Try the pending (message requests) inbox
+    // 2. Fetch inbox and scan for the thread — sent DM requests appear in sender's inbox
     try {
-      const jp = await this.mobileGet(
-        `/api/v1/direct_v2/pending_inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=50`
-      );
-      const pendingThreads: any[] = jp?.inbox?.threads ?? jp?.threads ?? [];
-      const matched = pendingThreads.find((t: any) =>
+      await this.apiThrottle();
+      const res = await igReq({
+        host: "i.instagram.com",
+        path: `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&limit=100`,
+        method: "GET",
+        headers: {
+          Host: "i.instagram.com",
+          "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+          Accept: "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "X-IG-App-ID": APP_ID,
+          "X-CSRFToken": this.csrfToken,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+        },
+        cookieJar: this.cookieJar,
+        proxyUrl: this.proxyUrl,
+      });
+      console.log(`[webClient] inbox HTTP ${res.status} raw(500):`, res.rawBody.slice(0, 500));
+      const j = res.json;
+      const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
+      console.log(`[webClient] inbox: ${threads.length} threads, top-level keys: ${Object.keys(j ?? {}).join(",")}`);
+      const matched = threads.find((t: any) =>
         (t.users ?? []).some((u: any) => String(u.pk) === String(userId))
       );
       if (matched?.thread_id) {
-        console.log(`[webClient] getThreadIdWithUser ${userId}: found in pending inbox → ${matched.thread_id}`);
+        console.log(`[webClient] getThreadIdWithUser ${userId}: found in inbox → ${matched.thread_id}`);
         return String(matched.thread_id);
       }
-    } catch {}
+    } catch (e: any) {
+      console.log(`[webClient] inbox scan error:`, e?.message);
+    }
 
-    console.log(`[webClient] getThreadIdWithUser ${userId}: no thread found in regular or pending inbox`);
+    console.log(`[webClient] getThreadIdWithUser ${userId}: not found`);
     return null;
   }
 
   async sendDirectMessage(userId: string, text: string, username?: string): Promise<{ threadId: string; itemId: string } | "blocked" | false> {
     return this.timed("SendDM", async () => {
-      const body = new URLSearchParams({
+      const dmBody = new URLSearchParams({
         recipient_users: `[[${userId}]]`,
         client_context: String(Date.now()),
         text,
       }).toString();
-      const j = await this.mobilePost(`/api/v1/direct_v2/threads/broadcast/text/`, body);
+
+      // Mobile API (i.instagram.com) — the only endpoint that reaches DM broadcast correctly.
+      // www.instagram.com/api/v1/direct_v2/... returns 302, so webPost cannot be used here.
+      const j = await this.mobilePost(`/api/v1/direct_v2/threads/broadcast/text/`, dmBody);
+      console.log(`[webClient] sendDM ${userId} broadcast response:`, JSON.stringify(j)?.slice(0, 300));
+
       if (!j) return false;
       if (j?.message === "feedback_required" || j?.feedback_required === true) {
         console.warn(`[webClient] DM BLOCKED to ${userId}`);
@@ -974,30 +1025,38 @@ export class InstagramWebClient {
         const itemId: string = j?.payload?.item_id ?? j?.item_id ?? "";
         return { threadId, itemId };
       }
+
       // Handle "Prompt has contribution" (4415001):
-      // A DM request from this account to the user already exists (pending acceptance).
-      // Try to find that thread and send to it; if not found, treat as already-delivered.
+      // A DM request from this account already exists for this user.
+      // Find the existing thread and send to it directly.
       const errorCode = j?.content?.error_code ?? j?.error_code;
       if (errorCode === 4415001) {
-        console.log(`[webClient] sendDM ${userId}: 4415001 — looking up existing thread in both inboxes…`);
+        console.log(`[webClient] sendDM ${userId}: 4415001 — searching for existing thread…`);
         const threadId = await this.getThreadIdWithUser(userId);
         if (threadId) {
-          // Found the thread — try sending to it directly
-          const body2 = new URLSearchParams({ client_context: String(Date.now()), text }).toString();
-          const j2 = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/broadcast/text/`, body2);
+          const retryBody = new URLSearchParams({ client_context: String(Date.now()), text }).toString();
+          const j2 = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/broadcast/text/`, retryBody);
+          console.log(`[webClient] sendDM ${userId}: thread-retry response:`, JSON.stringify(j2)?.slice(0, 300));
           if (j2?.status === "ok") {
             const itemId = j2?.payload?.item_id ?? j2?.item_id ?? "";
             console.log(`[webClient] sendDM ${userId}: sent to existing thread ${threadId}`);
             return { threadId, itemId };
           }
-          console.log(`[webClient] sendDM ${userId}: existing-thread retry failed:`, JSON.stringify(j2));
         }
-        // No thread found or retry failed: the DM request is already pending on Instagram's side.
-        // Treat as "already delivered" so we don't loop on this user forever.
-        console.log(`[webClient] sendDM ${userId}: treating 4415001 as already-delivered (DM pending acceptance)`);
-        return { threadId: "prompt_pending", itemId: "" };
+        // Mobile API can't find the thread — try sending from the live browser session.
+        // The browser's fetch() uses its own cookie jar and CSRF, bypassing the
+        // mobile API restriction that causes 4415001 on all DM endpoints.
+        if (this.profileId) {
+          console.log(`[webClient] sendDM ${userId}: 4415001 unresolved — trying browser DM fallback…`);
+          const bResult = await browserSendDM(this.profileId, userId, text);
+          console.log(`[webClient] sendDM ${userId}: browser fallback result:`, JSON.stringify(bResult)?.slice(0, 200));
+          if (bResult && bResult !== "blocked") return bResult;
+          if (bResult === "blocked") return "blocked";
+        }
+        console.log(`[webClient] sendDM ${userId}: 4415001 unresolved — marking failed`);
+        return false;
       }
-      console.log(`[webClient] sendDM ${userId} response:`, JSON.stringify(j));
+
       return false;
     }, username ? `DM @${username}` : `DM user ${userId}`);
   }

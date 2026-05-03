@@ -469,6 +469,82 @@ export async function browserReload(profileId: number) {
   try { await s.page.reload({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
 }
 
+// ── Send a DM through the live browser session ────────────────────────────────
+// Uses page.evaluate + fetch() so all cookies/CSRF are included automatically.
+// This bypasses mobile-API restrictions (4415001) by sending from within the
+// browser's authenticated context on www.instagram.com.
+export async function browserSendDM(
+  profileId: number,
+  userId: string,
+  text: string,
+): Promise<{ threadId: string; itemId: string } | "blocked" | null> {
+  const s = sessions.get(profileId);
+  if (!s) {
+    log(`[browserSendDM] no active session for profile ${profileId}`, "browser");
+    return null;
+  }
+
+  try {
+    const result = await s.page.evaluate(
+      async (uid: string, msg: string) => {
+        const csrfToken =
+          document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+        const body = new URLSearchParams({
+          recipient_users: `[[${uid}]]`,
+          client_context: String(Date.now()),
+          text: msg,
+        }).toString();
+
+        const res = await fetch(
+          "https://www.instagram.com/api/v1/direct_v2/threads/broadcast/text/",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "X-CSRFToken": csrfToken,
+              "X-IG-App-ID": "936619743392459",
+              "X-Instagram-AJAX": "1",
+              "X-Requested-With": "XMLHttpRequest",
+            },
+            credentials: "include",
+            body,
+          },
+        );
+
+        let json: any = null;
+        let rawText = "";
+        try {
+          rawText = await res.text();
+          json = JSON.parse(rawText);
+        } catch {}
+        return { status: res.status, json, rawPreview: rawText.slice(0, 300) };
+      },
+      userId,
+      text,
+    );
+
+    log(
+      `[browserSendDM] profile ${profileId} → user ${userId}: HTTP ${result.status} json=${JSON.stringify(result.json)?.slice(0, 200)} raw=${result.rawPreview}`,
+      "browser",
+    );
+
+    const j = result.json;
+    if (!j) return null;
+    if (j?.message === "feedback_required" || j?.feedback_required === true) {
+      return "blocked";
+    }
+    if (j?.status === "ok") {
+      const threadId: string = j?.payload?.thread_id ?? j?.thread_id ?? "";
+      const itemId: string = j?.payload?.item_id ?? j?.item_id ?? "";
+      return { threadId, itemId };
+    }
+    return null;
+  } catch (err: any) {
+    log(`[browserSendDM] error for profile ${profileId}: ${err?.message}`, "browser");
+    return null;
+  }
+}
+
 export async function closeSession(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
