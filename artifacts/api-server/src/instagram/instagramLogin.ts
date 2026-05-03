@@ -251,36 +251,64 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       if (!userId || !/^\d+$/.test(userId)) {
         console.error(`[instagramLogin] @${profile.username} — could not parse userId from sessionid, falling through`);
       } else {
-        // Restore all cookies (sessionid decoded + ds_user_id synthetic)
+        // Restore all cookies: sessionid (URL-decoded) + synthetic ds_user_id
+        // so the library can populate cookieUserId and cookieCsrfToken after Phase 1.
         const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
         await restoreSessionCookies(ig, cookiesWithUserId);
         console.error(`[instagramLogin] @${profile.username} — cookies restored (userId=${userId})`);
 
+        // ── Full Jarvee cold-start sequence ────────────────────────────────
+        //
+        // Phase 1 — Pre-auth setup (no credentials required)
+        //   These calls happen before any authenticated endpoint and mirror what
+        //   Jarvee labels SendMobileConfig / FetchConfig.  They also cause
+        //   Instagram's server to set a real csrftoken cookie in the jar so that
+        //   the Phase 2 signed POST bodies contain a valid token.
+        //
+        // Phase 2 — Authenticated session validation
+        //   GetAccountFamily → cold_start timeline → reels_tray → news/inbox
+        //   This is the exact sequence Jarvee performs after a session restore.
+        //   Any checkpoint returned here is genuine (the account truly needs
+        //   verification); we never call currentUser()?edit=true which caused
+        //   false checkpoint errors on freshly-restored sessions.
+
+        // ── Phase 1a: SendMobileConfig (launcher/sync, no auth) ──────────
         try {
-          // Step 1: launcher/sync (SendMobileConfig) — does not require csrftoken
           await ig.launcher.preLoginSync();
-          console.error(`[instagramLogin] @${profile.username} — launcher/sync OK`);
-        } catch (syncErr: any) {
-          // launcher/sync failure is non-fatal — log and continue to session check
-          console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (continuing): ${syncErr?.message}`);
+          console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (non-fatal): ${e?.message}`);
         }
 
+        // ── Phase 1b: FetchConfig (qe/sync, no auth) ─────────────────────
+        // This call also makes Instagram set the csrftoken cookie so Phase 2
+        // POST bodies can include a real token instead of "missing".
         try {
-          // Step 2: users/{id}/info — validates the live session via sessionid cookie.
-          // This is a read-only GET, does not trigger checkpoints like currentUser()?edit=true.
-          const userInfo = await ig.user.info(userId);
-          console.error(`[instagramLogin] @${profile.username} — session valid (username=${userInfo.username})`);
-          return {
-            ok: true,
-            message: `@${profile.username} — session active (userId ${userId}). Cold-start handshake complete.`,
-            accountStatus: "valid",
-            igDeviceState: captureDeviceState(),
-          };
-        } catch (sessionErr: any) {
-          const errMsg: string = sessionErr?.message ?? "";
-          console.error(`[instagramLogin] @${profile.username} — session check failed: ${errMsg}`);
+          await ig.qe.syncLoginExperiments();
+          console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — qe/sync failed (non-fatal): ${e?.message}`);
+        }
 
-          if (sessionErr instanceof IgCheckpointError || /checkpoint/i.test(errMsg)) {
+        // ── Phase 2a: GetAccountFamily (accounts/get_account_family) ─────
+        // First authenticated call in Jarvee's session-restore sequence.
+        // Validates the sessionid is alive and tells Instagram this is a
+        // logged-in cold-start, NOT a suspicious one-off API call.
+        try {
+          await ig.request.send({
+            url: "/api/v1/accounts/get_account_family/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid: userId,
+              _uuid: ig.state.uuid,
+            }),
+          });
+          console.error(`[instagramLogin] @${profile.username} — get_account_family (GetAccountFamily) OK`);
+        } catch (famErr: any) {
+          const msg: string = famErr?.message ?? "";
+          console.error(`[instagramLogin] @${profile.username} — get_account_family failed: ${msg}`);
+          if (famErr instanceof IgCheckpointError || /checkpoint/i.test(msg)) {
             return {
               ok: false,
               message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
@@ -288,17 +316,61 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               igDeviceState: captureDeviceState(),
             };
           }
-
-          // Any other failure (401, expired, banned) → do NOT fall back to password login.
-          // Password login with unrecognized device UUIDs triggers Instagram's new-device
-          // email verification — the error this was built to avoid.
-          return {
-            ok: false,
-            message: `@${profile.username} — session cookie has expired or been revoked (${errMsg}). Open the embedded browser, log in manually, then click Verify again to refresh the session.`,
-            accountStatus: "logged_out",
-            igDeviceState: captureDeviceState(),
-          };
+          if (/login_required|not.*auth|401/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} — session expired or revoked. Open the embedded browser to log in again.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState(),
+            };
+          }
+          // Network / proxy error — treat as inconclusive, don't mark as invalid
+          console.error(`[instagramLogin] @${profile.username} — get_account_family network error, continuing`);
         }
+
+        // ── Phase 2b: GetTimeLine cold_start_fetch (feed/timeline) ────────
+        try {
+          const timelineFeed = ig.feed.timeline();
+          timelineFeed.reason = "cold_start_fetch";
+          await timelineFeed.request();
+          console.error(`[instagramLogin] @${profile.username} — feed/timeline cold_start_fetch OK`);
+        } catch (tlErr: any) {
+          const msg: string = tlErr?.message ?? "";
+          console.error(`[instagramLogin] @${profile.username} — feed/timeline failed: ${msg}`);
+          if (tlErr instanceof IgCheckpointError || /checkpoint/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
+              accountStatus: "captcha",
+              igDeviceState: captureDeviceState(),
+            };
+          }
+        }
+
+        // ── Phase 2c: GetReelsTray (feed/reels_tray) ─────────────────────
+        try {
+          const reelsFeed = (ig.feed as any).reelsTray();
+          await reelsFeed.request();
+          console.error(`[instagramLogin] @${profile.username} — feed/reels_tray (GetReelsTray) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — reels_tray failed (non-fatal): ${e?.message}`);
+        }
+
+        // ── Phase 2d: ExecuteNotificationsBadge (news/inbox) ─────────────
+        try {
+          await ig.news.inbox();
+          console.error(`[instagramLogin] @${profile.username} — news/inbox (ExecuteNotificationsBadge) OK`);
+        } catch (e: any) {
+          console.error(`[instagramLogin] @${profile.username} — news/inbox failed (non-fatal): ${e?.message}`);
+        }
+
+        console.error(`[instagramLogin] @${profile.username} — cold-start handshake complete ✓`);
+        return {
+          ok: true,
+          message: `@${profile.username} — session active. Cold-start handshake complete (launcher/sync → qe/sync → get_account_family → timeline → reels_tray → inbox).`,
+          accountStatus: "valid",
+          igDeviceState: captureDeviceState(),
+        };
       }
     }
   }

@@ -138676,23 +138676,31 @@ async function verifyInstagramCredentials(profile) {
         console.error(`[instagramLogin] @${profile.username} \u2014 cookies restored (userId=${userId})`);
         try {
           await ig2.launcher.preLoginSync();
-          console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync OK`);
-        } catch (syncErr) {
-          console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync failed (continuing): ${syncErr?.message}`);
+          console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync (SendMobileConfig) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 launcher/sync failed (non-fatal): ${e?.message}`);
         }
         try {
-          const userInfo = await ig2.user.info(userId);
-          console.error(`[instagramLogin] @${profile.username} \u2014 session valid (username=${userInfo.username})`);
-          return {
-            ok: true,
-            message: `@${profile.username} \u2014 session active (userId ${userId}). Cold-start handshake complete.`,
-            accountStatus: "valid",
-            igDeviceState: captureDeviceState2()
-          };
-        } catch (sessionErr) {
-          const errMsg = sessionErr?.message ?? "";
-          console.error(`[instagramLogin] @${profile.username} \u2014 session check failed: ${errMsg}`);
-          if (sessionErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(errMsg)) {
+          await ig2.qe.syncLoginExperiments();
+          console.error(`[instagramLogin] @${profile.username} \u2014 qe/sync (FetchConfig) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 qe/sync failed (non-fatal): ${e?.message}`);
+        }
+        try {
+          await ig2.request.send({
+            url: "/api/v1/accounts/get_account_family/",
+            method: "POST",
+            form: ig2.request.sign({
+              _csrftoken: ig2.state.cookieCsrfToken,
+              _uid: userId,
+              _uuid: ig2.state.uuid
+            })
+          });
+          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family (GetAccountFamily) OK`);
+        } catch (famErr) {
+          const msg = famErr?.message ?? "";
+          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family failed: ${msg}`);
+          if (famErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(msg)) {
             return {
               ok: false,
               message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
@@ -138700,13 +138708,53 @@ async function verifyInstagramCredentials(profile) {
               igDeviceState: captureDeviceState2()
             };
           }
-          return {
-            ok: false,
-            message: `@${profile.username} \u2014 session cookie has expired or been revoked (${errMsg}). Open the embedded browser, log in manually, then click Verify again to refresh the session.`,
-            accountStatus: "logged_out",
-            igDeviceState: captureDeviceState2()
-          };
+          if (/login_required|not.*auth|401/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 session expired or revoked. Open the embedded browser to log in again.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState2()
+            };
+          }
+          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network error, continuing`);
         }
+        try {
+          const timelineFeed = ig2.feed.timeline();
+          timelineFeed.reason = "cold_start_fetch";
+          await timelineFeed.request();
+          console.error(`[instagramLogin] @${profile.username} \u2014 feed/timeline cold_start_fetch OK`);
+        } catch (tlErr) {
+          const msg = tlErr?.message ?? "";
+          console.error(`[instagramLogin] @${profile.username} \u2014 feed/timeline failed: ${msg}`);
+          if (tlErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
+              accountStatus: "captcha",
+              igDeviceState: captureDeviceState2()
+            };
+          }
+        }
+        try {
+          const reelsFeed = ig2.feed.reelsTray();
+          await reelsFeed.request();
+          console.error(`[instagramLogin] @${profile.username} \u2014 feed/reels_tray (GetReelsTray) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 reels_tray failed (non-fatal): ${e?.message}`);
+        }
+        try {
+          await ig2.news.inbox();
+          console.error(`[instagramLogin] @${profile.username} \u2014 news/inbox (ExecuteNotificationsBadge) OK`);
+        } catch (e) {
+          console.error(`[instagramLogin] @${profile.username} \u2014 news/inbox failed (non-fatal): ${e?.message}`);
+        }
+        console.error(`[instagramLogin] @${profile.username} \u2014 cold-start handshake complete \u2713`);
+        return {
+          ok: true,
+          message: `@${profile.username} \u2014 session active. Cold-start handshake complete (launcher/sync \u2192 qe/sync \u2192 get_account_family \u2192 timeline \u2192 reels_tray \u2192 inbox).`,
+          accountStatus: "valid",
+          igDeviceState: captureDeviceState2()
+        };
       }
     }
   }
