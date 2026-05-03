@@ -180,6 +180,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
 
   const isMounted = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localFolderPickerRef = useRef<HTMLInputElement>(null);
+  const [localFolderFileCount, setLocalFolderFileCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
@@ -767,13 +769,50 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             <div className={`space-y-2 transition-opacity ${!settings.repostLocalFolderEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Folder path on your PC <span className="text-muted-foreground/60">(e.g. C:\Images\Repost)</span></Label>
-                <Input
-                  type="text"
-                  placeholder="C:\Users\You\Pictures\Repost"
-                  className="h-8 text-xs font-mono"
-                  value={settings.repostLocalFolderPath ?? ""}
-                  onChange={(e) => setSettings({ ...settings, repostLocalFolderPath: e.target.value })}
-                />
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="text"
+                    placeholder="C:\Users\You\Pictures\Repost"
+                    className="h-8 text-xs font-mono flex-1"
+                    value={settings.repostLocalFolderPath ?? ""}
+                    onChange={(e) => setSettings({ ...settings, repostLocalFolderPath: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => localFolderPickerRef.current?.click()}
+                    className="h-8 px-3 text-xs rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    Browse…
+                  </button>
+                  {/* Hidden directory picker — webkitdirectory lets the OS open the folder-select dialog */}
+                  <input
+                    ref={localFolderPickerRef}
+                    type="file"
+                    // @ts-ignore — webkitdirectory is a valid attribute but not in TS typedefs
+                    webkitdirectory=""
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []);
+                      if (!files.length) return;
+                      const IMAGE_EXTS = new Set(["jpg","jpeg","png","webp","gif"]);
+                      const imgCount = files.filter(f => IMAGE_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? "")).length;
+                      // Extract top-level folder name from the relative path
+                      const topFolder = files[0].webkitRelativePath.split("/")[0];
+                      setSettings({ ...settings, repostLocalFolderPath: topFolder });
+                      setLocalFolderFileCount(imgCount);
+                      // Reset the input so the same folder can be re-selected
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+                {localFolderFileCount !== null && (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <FolderOpen className="w-3 h-3 shrink-0" />
+                    {localFolderFileCount} image{localFolderFileCount !== 1 ? "s" : ""} found in selected folder — verify the full path above is correct for the server.
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <input
