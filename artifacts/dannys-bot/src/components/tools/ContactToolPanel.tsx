@@ -7,10 +7,12 @@ import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
 import { AutoReplyPanel } from "./AutoReplyPanel";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useToast } from "@/hooks/use-toast";
+import { useUpdateTool } from "@/hooks/use-tools";
 
 interface Props {
   tool: Tool;
@@ -54,6 +56,7 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const [copyOpen, setCopyOpen] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
+  const updateToolMutation = useUpdateTool();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
   const engineStatus = useProfileEngineStatus(tool.profileId);
   const contactRunStatus: { label: string; executing: boolean } | null = (() => {
@@ -86,6 +89,21 @@ export function ContactToolPanel({ tool, profile }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Master Enable — always visible regardless of active sub-tab */}
+      <div className="flex items-center gap-3 px-1">
+        <Switch
+          checked={!!tool.enabled}
+          onCheckedChange={(v) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled: v })}
+          disabled={updateToolMutation.isPending}
+        />
+        <div>
+          <p className={`text-sm font-semibold ${tool.enabled ? "text-primary" : "text-foreground"}`}>
+            {tool.enabled ? "ACTIVE" : "STOPPED"}
+          </p>
+          <p className="text-[11px] text-muted-foreground">Contact Tool — queue &amp; send DMs to followers and users.</p>
+        </div>
+      </div>
+
       {/* Status badge + items/hr estimate */}
       {(contactRunStatus || tool.enabled) && (
         <div className="flex items-center gap-3 flex-wrap">

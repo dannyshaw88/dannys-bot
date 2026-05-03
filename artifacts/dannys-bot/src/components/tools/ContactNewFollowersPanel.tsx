@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -98,18 +97,6 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-
-      {/* Master Enable */}
-      <div className="flex items-center gap-3 px-1">
-        <Switch
-          checked={!!tool.enabled}
-          onCheckedChange={(v) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled: v })}
-        />
-        <div>
-          <p className="text-sm font-semibold">Contact Tool</p>
-          <p className="text-[11px] text-muted-foreground">Automatically queue new followers for messaging.</p>
-        </div>
-      </div>
 
       <div className="border border-border rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2">

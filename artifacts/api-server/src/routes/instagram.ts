@@ -391,6 +391,7 @@ export async function registerInstagramRoutes(
         if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
         if (updated.type === "unfollow")       automationEngine.triggerUnfollow(updated.profileId);
         if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);
+        if (updated.type === "contact")        automationEngine.triggerReconcile();
       }
       res.json(updated);
     } catch (err) {

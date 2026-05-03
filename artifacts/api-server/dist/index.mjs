@@ -144168,6 +144168,10 @@ var AutomationEngine = class {
     this.reconcile();
     setInterval(() => this.reconcile(), 1e4);
   }
+  triggerReconcile() {
+    this.reconcile().catch(() => {
+    });
+  }
   async reconcile() {
     try {
       const profiles2 = await storage.getProfiles();
@@ -146585,6 +146589,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
         if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
         if (updated.type === "unfollow") automationEngine.triggerUnfollow(updated.profileId);
         if (updated.type === "follow") automationEngine.triggerFollow(updated.profileId);
+        if (updated.type === "contact") automationEngine.triggerReconcile();
       }
       res.json(updated);
     } catch (err) {

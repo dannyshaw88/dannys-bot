@@ -146,6 +146,8 @@ class AutomationEngine {
     setInterval(() => this.reconcile(), 10_000);
   }
 
+  triggerReconcile() { this.reconcile().catch(() => {}); }
+
   private async reconcile() {
     try {
       const profiles = await storage.getProfiles();
