@@ -929,3 +929,123 @@ async function clickBtnByText(page: Page, text: string, timeout: number): Promis
     if (el) await el.click();
   }
 }
+
+// ── Browser-fetch photo upload (same-origin fetch, no UI automation) ──────────
+// Uses the existing browser session to make a rupload fetch() directly from the
+// browser page context.  Same TLS fingerprint + cookies as Chrome, no new
+// session created, no UI interaction that could trigger recaptcha.
+export async function uploadPhotoViaFetch(
+  profileId: number,
+  imageBuffer: Buffer,
+  caption: string,
+): Promise<string | null> {
+  // The browser session is launched asynchronously after engine start.
+  // Wait up to 90s for it to become available before giving up.
+  let s = sessions.get(profileId);
+  if (!s) {
+    log(`uploadPhotoViaFetch [${profileId}]: waiting for browser session...`);
+    for (let i = 0; i < 90; i++) {
+      await delay(1000);
+      s = sessions.get(profileId);
+      if (s) { log(`uploadPhotoViaFetch [${profileId}]: browser session ready after ${i + 1}s`); break; }
+    }
+  }
+  if (!s) {
+    log(`uploadPhotoViaFetch [${profileId}]: timeout — no browser session available`);
+    return null;
+  }
+
+  const uploadId = String(Date.now());
+  const b64 = imageBuffer.toString("base64");
+  const ruploadParams = JSON.stringify({
+    media_type: 1,
+    upload_id: uploadId,
+    upload_media_height: 1080,
+    upload_media_width: 1080,
+    upload_media_duration_ms: 0,
+    xsharing_user_ids: [],
+  });
+
+  try {
+    // Step 1 — rupload via browser fetch (same-origin, chrome TLS + cookies)
+    const ruploadResult = await s.page.evaluate(async (b64img: string, uid: string, rparams: string) => {
+      const bytes = Uint8Array.from(atob(b64img), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "image/jpeg" });
+
+      const csrfCookie = document.cookie.split(";").find(c => c.trim().startsWith("csrftoken="));
+      const csrf = csrfCookie ? csrfCookie.split("=")[1].trim() : "";
+
+      const resp = await fetch(`https://www.instagram.com/rupload/igphoto/${uid}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "X-IG-App-ID": "936619743392459",
+          "X-CSRFToken": csrf,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+          "Content-Type": "image/jpeg",
+          "X-Entity-Type": "image/jpeg",
+          "X-Entity-Name": `photo_${uid}`,
+          "Offset": "0",
+          "X-Entity-Length": String(bytes.length),
+          "X-Instagram-Rupload-Params": rparams,
+        },
+        body: blob,
+      });
+
+      const text = await resp.text();
+      return { status: resp.status, text };
+    }, b64, uploadId, ruploadParams);
+
+    log(`uploadPhotoViaFetch [${profileId}]: rupload status=${ruploadResult.status} body=${ruploadResult.text.slice(0, 200)}`);
+
+    let uploadJson: any = null;
+    try { uploadJson = JSON.parse(ruploadResult.text); } catch {}
+    const uploaded = uploadJson?.upload_id != null || uploadJson?.status === "ok";
+    if (!uploaded) {
+      log(`uploadPhotoViaFetch [${profileId}]: rupload failed`);
+      return null;
+    }
+
+    // Step 2 — configure via browser fetch
+    const configureResult = await s.page.evaluate(async (uid: string, cap: string) => {
+      const csrfCookie = document.cookie.split(";").find(c => c.trim().startsWith("csrftoken="));
+      const csrf = csrfCookie ? csrfCookie.split("=")[1].trim() : "";
+
+      const body = new URLSearchParams({
+        upload_id: uid,
+        caption: cap,
+        source_type: "4",
+        timezone_offset: "0",
+        date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
+      });
+
+      const resp = await fetch("https://i.instagram.com/api/v1/media/configure/", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-IG-App-ID": "936619743392459",
+          "X-CSRFToken": csrf,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+        },
+        body: body.toString(),
+      });
+
+      const text = await resp.text();
+      return { status: resp.status, text };
+    }, uploadId, caption);
+
+    log(`uploadPhotoViaFetch [${profileId}]: configure status=${configureResult.status} body=${configureResult.text.slice(0, 200)}`);
+
+    let confJson: any = null;
+    try { confJson = JSON.parse(configureResult.text); } catch {}
+    const mediaId: string | null = confJson?.media?.id ? String(confJson.media.id) : null;
+    if (!mediaId && confJson?.status === "ok") return uploadId;
+    return mediaId;
+  } catch (err: any) {
+    log(`uploadPhotoViaFetch [${profileId}]: error: ${err?.message}`);
+    return null;
+  }
+}

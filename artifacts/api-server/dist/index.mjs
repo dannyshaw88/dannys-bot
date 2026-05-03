@@ -142915,130 +142915,107 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
   }
 }
 var delay = (ms) => new Promise((r2) => setTimeout(r2, ms));
-async function uploadPhotoViaBrowser(profileId, imageBuffer, caption) {
-  const s = sessions.get(profileId);
+async function uploadPhotoViaFetch(profileId, imageBuffer, caption) {
+  let s = sessions.get(profileId);
   if (!s) {
-    log(`uploadPhotoViaBrowser: no browser session for profile ${profileId}`);
-    return null;
-  }
-  const tmpPath = path2.join(COOKIES_DIR, `upload_${profileId}_${Date.now()}.jpg`);
-  let capturedMediaId = null;
-  const onResponse = async (resp) => {
-    const url2 = resp.url();
-    if (url2.includes("/creation_flow/") || url2.includes("/api/v1/media/configure") || url2.includes("/api/v1/media/upload_finish")) {
-      try {
-        const text2 = await resp.text().catch(() => "");
-        const json2 = JSON.parse(text2);
-        if (json2?.media?.id) capturedMediaId = String(json2.media.id);
-        if (json2?.upload_id && !capturedMediaId) capturedMediaId = String(json2.upload_id);
-      } catch {
-      }
-    }
-  };
-  try {
-    fs.mkdirSync(COOKIES_DIR, { recursive: true });
-    fs.writeFileSync(tmpPath, imageBuffer);
-    const page = s.page;
-    page.on("response", onResponse);
-    log(`uploadPhotoViaBrowser [${profileId}]: waiting for Instagram feed page`);
-    let feedReady = false;
-    for (let i2 = 0; i2 < 60; i2++) {
-      const cur = page.url();
-      if (cur.includes("instagram.com") && !cur.includes("/accounts/login") && !cur.includes("/auth_platform/") && cur !== "about:blank") {
-        feedReady = true;
-        log(`uploadPhotoViaBrowser [${profileId}]: page ready at ${cur}`);
+    log(`uploadPhotoViaFetch [${profileId}]: waiting for browser session...`);
+    for (let i2 = 0; i2 < 90; i2++) {
+      await delay(1e3);
+      s = sessions.get(profileId);
+      if (s) {
+        log(`uploadPhotoViaFetch [${profileId}]: browser session ready after ${i2 + 1}s`);
         break;
       }
-      await delay(500);
-    }
-    if (!feedReady) {
-      const cur = page.url();
-      throw new Error(`Instagram page not ready (url=${cur})`);
-    }
-    await delay(2500);
-    log(`uploadPhotoViaBrowser [${profileId}]: clicking create button`);
-    const clicked = await page.evaluate(() => {
-      const allWithLabel = [...document.querySelectorAll("[aria-label]")];
-      const target = allWithLabel.find((el) => {
-        const lbl = (el.getAttribute("aria-label") ?? "").toLowerCase();
-        return lbl.includes("new post") || lbl === "create" || lbl.includes("new post");
-      });
-      if (target) {
-        const btn = target.closest('[role="button"], button, a') ?? target;
-        btn.click();
-        return true;
-      }
-      const createLink = document.querySelector('a[href*="/create"]');
-      if (createLink) {
-        createLink.click();
-        return true;
-      }
-      return false;
-    });
-    if (!clicked) throw new Error("Could not find the create/new-post button");
-    await delay(2e3);
-    await page.evaluate(() => {
-      const items = [...document.querySelectorAll("button, [role='menuitem'], li")];
-      const postItem = items.find((el) => el.textContent?.trim() === "Post");
-      if (postItem) postItem.click();
-    });
-    await delay(1e3);
-    log(`uploadPhotoViaBrowser [${profileId}]: waiting for file input`);
-    const fileInput = await page.waitForSelector("input[type='file']", { timeout: 12e3 });
-    if (!fileInput) throw new Error("File input not found");
-    await fileInput.uploadFile(tmpPath);
-    log(`uploadPhotoViaBrowser [${profileId}]: file uploaded \u2014 waiting for crop view`);
-    await delay(2500);
-    log(`uploadPhotoViaBrowser [${profileId}]: clicking Next (crop)`);
-    await clickBtnByText(page, "Next", 12e3);
-    await delay(2e3);
-    log(`uploadPhotoViaBrowser [${profileId}]: clicking Next (filter)`);
-    await clickBtnByText(page, "Next", 12e3);
-    await delay(2e3);
-    if (caption) {
-      log(`uploadPhotoViaBrowser [${profileId}]: setting caption`);
-      const captionEl = await page.$("textarea[aria-label*='caption'], textarea[aria-label*='Caption']") ?? await page.$("div[aria-label*='caption'] textarea") ?? await page.$("div[contenteditable='true']") ?? await page.$("textarea");
-      if (captionEl) {
-        await captionEl.click();
-        await page.keyboard.type(caption.slice(0, 2200));
-      }
-    }
-    await delay(800);
-    log(`uploadPhotoViaBrowser [${profileId}]: clicking Share`);
-    await clickBtnByText(page, "Share", 15e3);
-    log(`uploadPhotoViaBrowser [${profileId}]: Share clicked \u2014 waiting for confirmation`);
-    for (let i2 = 0; i2 < 30; i2++) {
-      if (capturedMediaId) break;
-      await delay(500);
-    }
-    const result = capturedMediaId ?? String(Date.now());
-    log(`uploadPhotoViaBrowser [${profileId}]: done \u2014 mediaId=${result}`);
-    return result;
-  } catch (e) {
-    log(`uploadPhotoViaBrowser [${profileId}] error: ${e?.message}`);
-    return null;
-  } finally {
-    s.page.off("response", onResponse);
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch {
     }
   }
-}
-async function clickBtnByText(page, text2, timeout) {
-  const handle = await page.waitForFunction(
-    (t2) => {
-      const all = [
-        ...document.querySelectorAll('button, [role="button"], [type="submit"]')
-      ];
-      return all.find((el) => el.textContent?.trim() === t2) ?? null;
-    },
-    { timeout },
-    text2
-  );
-  if (handle) {
-    const el = handle.asElement();
-    if (el) await el.click();
+  if (!s) {
+    log(`uploadPhotoViaFetch [${profileId}]: timeout \u2014 no browser session available`);
+    return null;
+  }
+  const uploadId = String(Date.now());
+  const b64 = imageBuffer.toString("base64");
+  const ruploadParams = JSON.stringify({
+    media_type: 1,
+    upload_id: uploadId,
+    upload_media_height: 1080,
+    upload_media_width: 1080,
+    upload_media_duration_ms: 0,
+    xsharing_user_ids: []
+  });
+  try {
+    const ruploadResult = await s.page.evaluate(async (b64img, uid, rparams) => {
+      const bytes = Uint8Array.from(atob(b64img), (c3) => c3.charCodeAt(0));
+      const blob2 = new Blob([bytes], { type: "image/jpeg" });
+      const csrfCookie = document.cookie.split(";").find((c3) => c3.trim().startsWith("csrftoken="));
+      const csrf = csrfCookie ? csrfCookie.split("=")[1].trim() : "";
+      const resp = await fetch(`https://www.instagram.com/rupload/igphoto/${uid}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "X-IG-App-ID": "936619743392459",
+          "X-CSRFToken": csrf,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+          "Content-Type": "image/jpeg",
+          "X-Entity-Type": "image/jpeg",
+          "X-Entity-Name": `photo_${uid}`,
+          "Offset": "0",
+          "X-Entity-Length": String(bytes.length),
+          "X-Instagram-Rupload-Params": rparams
+        },
+        body: blob2
+      });
+      const text2 = await resp.text();
+      return { status: resp.status, text: text2 };
+    }, b64, uploadId, ruploadParams);
+    log(`uploadPhotoViaFetch [${profileId}]: rupload status=${ruploadResult.status} body=${ruploadResult.text.slice(0, 200)}`);
+    let uploadJson = null;
+    try {
+      uploadJson = JSON.parse(ruploadResult.text);
+    } catch {
+    }
+    const uploaded = uploadJson?.upload_id != null || uploadJson?.status === "ok";
+    if (!uploaded) {
+      log(`uploadPhotoViaFetch [${profileId}]: rupload failed`);
+      return null;
+    }
+    const configureResult = await s.page.evaluate(async (uid, cap) => {
+      const csrfCookie = document.cookie.split(";").find((c3) => c3.trim().startsWith("csrftoken="));
+      const csrf = csrfCookie ? csrfCookie.split("=")[1].trim() : "";
+      const body = new URLSearchParams({
+        upload_id: uid,
+        caption: cap,
+        source_type: "4",
+        timezone_offset: "0",
+        date_time_original: (/* @__PURE__ */ new Date()).toISOString().replace(/[^0-9]/g, "").slice(0, 14)
+      });
+      const resp = await fetch("https://i.instagram.com/api/v1/media/configure/", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-IG-App-ID": "936619743392459",
+          "X-CSRFToken": csrf,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI"
+        },
+        body: body.toString()
+      });
+      const text2 = await resp.text();
+      return { status: resp.status, text: text2 };
+    }, uploadId, caption);
+    log(`uploadPhotoViaFetch [${profileId}]: configure status=${configureResult.status} body=${configureResult.text.slice(0, 200)}`);
+    let confJson = null;
+    try {
+      confJson = JSON.parse(configureResult.text);
+    } catch {
+    }
+    const mediaId = confJson?.media?.id ? String(confJson.media.id) : null;
+    if (!mediaId && confJson?.status === "ok") return uploadId;
+    return mediaId;
+  } catch (err) {
+    log(`uploadPhotoViaFetch [${profileId}]: error: ${err?.message}`);
+    return null;
   }
 }
 
@@ -143872,22 +143849,44 @@ var InstagramWebClient = class {
     if (!res.json) console.log(`[webClient] mobilePost ${path4} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
     return res.json;
   }
-  // ── Binary POST for rupload (photo upload) ───────────────────────────────
-  // Must target www.instagram.com — web session cookies are not valid on i.instagram.com for write ops.
-  async mobilePostBinary(path4, body, extraHeaders = {}) {
+  // ── Multipart/form-data POST to i.instagram.com ──────────────────────────
+  // Used for photo upload via /api/v1/media/upload/ — a regular /api/v1/
+  // path that accepts our web-session cookies (same auth as like/follow/
+  // comment which are confirmed working).  Avoids the rupload binary protocol
+  // which requires a genuine mobile Bearer-token session and rejects web
+  // sessionids with HTML 404.
+  async mobilePostMultipart(path4, parts) {
+    await this.apiThrottle();
+    const boundary = `----InstaBoundary${Date.now()}`;
+    const chunks = [];
+    for (const part of parts) {
+      let header = `--${boundary}\r
+Content-Disposition: form-data; name="${part.name}"`;
+      if (part.filename) header += `; filename="${part.filename}"`;
+      header += "\r\n";
+      if (part.contentType) header += `Content-Type: ${part.contentType}\r
+`;
+      header += "\r\n";
+      chunks.push(Buffer.from(header));
+      chunks.push(typeof part.value === "string" ? Buffer.from(part.value) : part.value);
+      chunks.push(Buffer.from("\r\n"));
+    }
+    chunks.push(Buffer.from(`--${boundary}--\r
+`));
+    const body = Buffer.concat(chunks);
+    const MOBILE_UA = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+    const MOBILE_AID = "567067343352427";
     const headers = {
-      Host: "www.instagram.com",
-      "User-Agent": WEB_UA,
+      "User-Agent": MOBILE_UA,
       Accept: "*/*",
       "Accept-Language": "en-US,en;q=0.9",
-      "X-IG-App-ID": APP_ID,
-      "X-CSRFToken": this.csrfToken,
-      "X-Requested-With": "XMLHttpRequest",
-      Referer: "https://www.instagram.com/",
-      Origin: "https://www.instagram.com",
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
       "Content-Length": String(body.length),
-      Cookie: this.cookieJar.join("; "),
-      ...extraHeaders
+      "X-IG-App-ID": MOBILE_AID,
+      "X-CSRFToken": this.csrfToken,
+      "X-IG-Capabilities": "3brTvwE=",
+      "X-IG-Connection-Type": "WIFI",
+      Cookie: this.cookieJar.join("; ")
     };
     let agent;
     if (this.proxyUrl) {
@@ -143895,7 +143894,7 @@ var InstagramWebClient = class {
       agent = new HttpsProxyAgent2(this.proxyUrl);
     }
     const res = await httpsRequest(
-      { host: "www.instagram.com", port: 443, path: path4, method: "POST", headers, ...agent ? { agent } : {} },
+      { host: "i.instagram.com", port: 443, path: path4, method: "POST", headers, ...agent ? { agent } : {} },
       body
     );
     let json2 = null;
@@ -143903,7 +143902,7 @@ var InstagramWebClient = class {
       json2 = JSON.parse(res.body);
     } catch {
     }
-    if (!json2) console.log(`[webClient] mobilePostBinary ${path4} status=${res.status} body:`, res.body.slice(0, 200));
+    if (!json2) console.log(`[webClient] mobilePostMultipart ${path4} status=${res.status} body:`, res.body.slice(0, 400));
     return json2;
   }
   // ── Download an image from a CDN URL into a Buffer ────────────────────────
@@ -143955,29 +143954,15 @@ var InstagramWebClient = class {
   async uploadPhoto(imageBuffer, caption) {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
-      const ruploadParams = JSON.stringify({
-        media_type: 1,
-        upload_id: uploadId,
-        upload_media_height: 1080,
-        upload_media_width: 1080,
-        upload_media_duration_ms: 0,
-        xsharing_user_ids: []
-      });
-      const ruploadRes = await this.mobilePostBinary(
-        `/rupload/igphoto/${uploadId}`,
-        imageBuffer,
-        {
-          "Content-Type": "image/jpeg",
-          "X-Entity-Type": "image/jpeg",
-          "X-Entity-Name": `photo_${uploadId}`,
-          "Offset": "0",
-          "X-Entity-Length": String(imageBuffer.length),
-          "X-Instagram-Rupload-Params": ruploadParams
-        }
-      );
-      const uploaded = ruploadRes?.upload_id != null || ruploadRes?.status === "ok";
+      const uploadRes = await this.mobilePostMultipart("/api/v1/media/upload/", [
+        { name: "upload_id", value: uploadId },
+        { name: "media_type", value: "1" },
+        { name: "image_compression", value: JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "95" }) },
+        { name: "photo", value: imageBuffer, filename: `photo_${uploadId}.jpg`, contentType: "image/jpeg" }
+      ]);
+      const uploaded = uploadRes?.upload_id != null || uploadRes?.status === "ok";
       if (!uploaded) {
-        console.warn(`[webClient] rupload failed: ${JSON.stringify(ruploadRes)}`);
+        console.warn(`[webClient] media/upload failed: ${JSON.stringify(uploadRes)}`);
         return null;
       }
       const body = new URLSearchParams({
@@ -145612,7 +145597,6 @@ var AutomationEngine = class {
           console.log(`[engine] @${profile.username}: \u{1F501} repost feed fetched via ${useHiker ? "HikerAPI" : "account session"} (${feedItems.length} items, target=${targetCount})`);
           const level = s.repostAlterationLevel ?? "small";
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
-          await getOrCreateSession(profile.id, this.defaultUA(profile), await this.buildProxyConfig(profile));
           let repostedCount = 0;
           let uploadAttempted = 0;
           for (const item of feedItems) {
@@ -145623,7 +145607,7 @@ var AutomationEngine = class {
             const imageBuffer = await client.downloadImage(item.imageUrl);
             const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
             const finalCaption = captionTemplate ? resolveCaption(captionTemplate, item, sourceUsername, profile.username) : item.caption.slice(0, 2200);
-            const postedMediaId = await uploadPhotoViaBrowser(profile.id, alteredBuffer, finalCaption);
+            const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
             if (postedMediaId) {
               if (s.repostDisableComments) {
                 try {
@@ -145960,8 +145944,7 @@ var AutomationEngine = class {
       const alteredBuffer = await alterJpegBuffer(imageBuffer, level, s.repostImageSettings);
       const captionTemplate = String(s.repostCaptionText ?? "").trim();
       const finalCaption = captionTemplate ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username) : candidate.caption.slice(0, 2200);
-      await getOrCreateSession(profileId, this.defaultUA(profile), await this.buildProxyConfig(profile));
-      const postedMediaId = await uploadPhotoViaBrowser(profileId, alteredBuffer, finalCaption);
+      const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
       if (!postedMediaId) return { ok: false, message: "Upload failed \u2014 Instagram rejected the photo" };
       if (s.repostDisableComments) {
         try {

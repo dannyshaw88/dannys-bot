@@ -2,7 +2,7 @@ import { storage } from "../storage";
 import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
-import { getOrCreateSession, uploadPhotoViaBrowser, type ProxyConfig } from "./browserSession";
+import { uploadPhotoViaFetch, type ProxyConfig } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1770,10 +1770,6 @@ class AutomationEngine {
           const level = ((s.repostAlterationLevel ?? "small") as AlterationLevel);
           const captionTemplate = String(s.repostCaptionText ?? "").trim();
 
-          // Launch Chrome ONCE before the loop — calling getOrCreateSession inside
-          // the loop causes alternating proxy checks that restart the browser between posts.
-          await getOrCreateSession(profile.id, this.defaultUA(profile), await this.buildProxyConfig(profile));
-
           let repostedCount = 0;
           let uploadAttempted = 0;  // items where we actually tried to upload (not already reposted)
           for (const item of feedItems) {
@@ -1788,8 +1784,8 @@ class AutomationEngine {
               ? resolveCaption(captionTemplate, item, sourceUsername, profile.username)
               : item.caption.slice(0, 2200);
 
-            // Upload via the embedded browser (Chrome) — uses correct TLS fingerprint + live session
-            const postedMediaId = await uploadPhotoViaBrowser(profile.id, alteredBuffer, finalCaption);
+            // Upload via browser fetch (same-origin, Chrome TLS + cookies, existing session)
+            const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
             if (postedMediaId) {
               if (s.repostDisableComments) {
                 try { await client.disableComments(postedMediaId); } catch { /* non-fatal */ }
@@ -2175,10 +2171,8 @@ class AutomationEngine {
         ? resolveCaption(captionTemplate, candidate, sourceUsername, profile.username)
         : candidate.caption.slice(0, 2200);
 
-      // Ensure the Chrome browser session is running (auto-launch if not already up)
-      await getOrCreateSession(profileId, this.defaultUA(profile), await this.buildProxyConfig(profile));
-      // Upload via the embedded browser (Chrome) — uses correct TLS fingerprint + live session
-      const postedMediaId = await uploadPhotoViaBrowser(profileId, alteredBuffer, finalCaption);
+      // Upload via browser fetch (same-origin, Chrome TLS + cookies, existing session)
+      const postedMediaId = await uploadPhotoViaFetch(profile.id, alteredBuffer, finalCaption);
       if (!postedMediaId) return { ok: false, message: "Upload failed — Instagram rejected the photo" };
 
       if (s.repostDisableComments) {

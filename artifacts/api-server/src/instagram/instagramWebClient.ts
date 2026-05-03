@@ -991,22 +991,42 @@ export class InstagramWebClient {
     return res.json;
   }
 
-  // ── Binary POST for rupload (photo upload) ───────────────────────────────
-  // Must target www.instagram.com — web session cookies are not valid on i.instagram.com for write ops.
-  private async mobilePostBinary(path: string, body: Buffer, extraHeaders: Record<string, string> = {}): Promise<any> {
+  // ── Multipart/form-data POST to i.instagram.com ──────────────────────────
+  // Used for photo upload via /api/v1/media/upload/ — a regular /api/v1/
+  // path that accepts our web-session cookies (same auth as like/follow/
+  // comment which are confirmed working).  Avoids the rupload binary protocol
+  // which requires a genuine mobile Bearer-token session and rejects web
+  // sessionids with HTML 404.
+  private async mobilePostMultipart(path: string, parts: Array<{ name: string; value: string | Buffer; filename?: string; contentType?: string }>): Promise<any> {
+    await this.apiThrottle();
+    const boundary = `----InstaBoundary${Date.now()}`;
+    const chunks: Buffer[] = [];
+    for (const part of parts) {
+      let header = `--${boundary}\r\nContent-Disposition: form-data; name="${part.name}"`;
+      if (part.filename) header += `; filename="${part.filename}"`;
+      header += "\r\n";
+      if (part.contentType) header += `Content-Type: ${part.contentType}\r\n`;
+      header += "\r\n";
+      chunks.push(Buffer.from(header));
+      chunks.push(typeof part.value === "string" ? Buffer.from(part.value) : part.value);
+      chunks.push(Buffer.from("\r\n"));
+    }
+    chunks.push(Buffer.from(`--${boundary}--\r\n`));
+    const body = Buffer.concat(chunks);
+
+    const MOBILE_UA  = "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)";
+    const MOBILE_AID = "567067343352427"; // mobile App ID — web App ID routes to web frontend on i.instagram.com
     const headers: Record<string, string> = {
-      Host: "www.instagram.com",
-      "User-Agent": WEB_UA,
+      "User-Agent": MOBILE_UA,
       Accept: "*/*",
       "Accept-Language": "en-US,en;q=0.9",
-      "X-IG-App-ID": APP_ID,
-      "X-CSRFToken": this.csrfToken,
-      "X-Requested-With": "XMLHttpRequest",
-      Referer: "https://www.instagram.com/",
-      Origin: "https://www.instagram.com",
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
       "Content-Length": String(body.length),
+      "X-IG-App-ID": MOBILE_AID,
+      "X-CSRFToken": this.csrfToken,
+      "X-IG-Capabilities": "3brTvwE=",
+      "X-IG-Connection-Type": "WIFI",
       Cookie: this.cookieJar.join("; "),
-      ...extraHeaders,
     };
 
     let agent: any;
@@ -1016,12 +1036,12 @@ export class InstagramWebClient {
     }
 
     const res = await httpsRequest(
-      { host: "www.instagram.com", port: 443, path, method: "POST", headers, ...(agent ? { agent } : {}) },
+      { host: "i.instagram.com", port: 443, path, method: "POST", headers, ...(agent ? { agent } : {}) },
       body,
     );
     let json: any = null;
     try { json = JSON.parse(res.body); } catch {}
-    if (!json) console.log(`[webClient] mobilePostBinary ${path} status=${res.status} body:`, res.body.slice(0, 200));
+    if (!json) console.log(`[webClient] mobilePostMultipart ${path} status=${res.status} body:`, res.body.slice(0, 400));
     return json;
   }
 
@@ -1089,31 +1109,20 @@ export class InstagramWebClient {
     return this.timed("UploadPhoto", async () => {
       const uploadId = String(Date.now());
 
-      // Step 1 — binary upload via rupload
-      // X-Instagram-Rupload-Params is required; without it Instagram returns 404
-      const ruploadParams = JSON.stringify({
-        media_type: 1,
-        upload_id: uploadId,
-        upload_media_height: 1080,
-        upload_media_width: 1080,
-        upload_media_duration_ms: 0,
-        xsharing_user_ids: [],
-      });
-      const ruploadRes = await this.mobilePostBinary(
-        `/rupload/igphoto/${uploadId}`,
-        imageBuffer,
-        {
-          "Content-Type": "image/jpeg",
-          "X-Entity-Type": "image/jpeg",
-          "X-Entity-Name": `photo_${uploadId}`,
-          "Offset": "0",
-          "X-Entity-Length": String(imageBuffer.length),
-          "X-Instagram-Rupload-Params": ruploadParams,
-        },
-      );
-      const uploaded = ruploadRes?.upload_id != null || (ruploadRes?.status === "ok");
+      // Step 1 — multipart/form-data upload via /api/v1/media/upload/
+      // This is a standard /api/v1/ endpoint (same auth path as like/follow)
+      // so it accepts our web session cookies without requiring a Bearer token.
+      // The rupload binary protocol (/rupload/igphoto/...) requires a genuine
+      // mobile session and rejects web sessionids.
+      const uploadRes = await this.mobilePostMultipart("/api/v1/media/upload/", [
+        { name: "upload_id", value: uploadId },
+        { name: "media_type", value: "1" },
+        { name: "image_compression", value: JSON.stringify({ lib_name: "moz", lib_version: "3.1.m", quality: "95" }) },
+        { name: "photo", value: imageBuffer, filename: `photo_${uploadId}.jpg`, contentType: "image/jpeg" },
+      ]);
+      const uploaded = uploadRes?.upload_id != null || uploadRes?.status === "ok";
       if (!uploaded) {
-        console.warn(`[webClient] rupload failed: ${JSON.stringify(ruploadRes)}`);
+        console.warn(`[webClient] media/upload failed: ${JSON.stringify(uploadRes)}`);
         return null;
       }
 
@@ -1128,7 +1137,6 @@ export class InstagramWebClient {
 
       const confRes = await this.mobilePost("/api/v1/media/configure/", body);
       const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
-      // Treat "ok" without an ID as success but return a placeholder so callers know it worked
       if (!mediaId && confRes?.status === "ok") return uploadId;
       return mediaId;
     }, `Upload photo (${imageBuffer.length}B) caption="${caption.slice(0, 30)}"`);
