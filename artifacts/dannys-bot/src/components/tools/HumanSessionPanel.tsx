@@ -260,17 +260,17 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
       {/* ── Master enable/disable ─────────────────────────────── */}
-      <div className="border border-border rounded-xl p-4 flex items-center justify-between gap-4">
-        <div>
+      <div className="border border-border rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2">
           <h4 className="font-semibold text-sm">Human Session Tool</h4>
           {nextRunStatus && (
-            <p className="text-[11px] mt-0.5 flex items-center gap-1" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+            <span className="text-[11px] flex items-center gap-1 ml-1" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
               {nextRunStatus.executing
                 ? <span className="font-medium">Executing</span>
-                : <><span>Scheduled:</span> <span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
               }
-            </p>
+            </span>
           )}
         </div>
         <div className="flex items-center gap-3">
