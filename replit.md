@@ -1,5 +1,9 @@
 # Workspace
 
+> **⚠️ NEVER push to git/GitHub unless explicitly instructed by the user.**
+> All file changes go to GitHub via the REST API only (PUT /repos/dannyshaw88/dannys-bot/contents/...).
+> `git push` and destructive git commands are blocked in this sandbox.
+
 ## Overview
 
 Danny's Bot — an Instagram automation dashboard. pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
