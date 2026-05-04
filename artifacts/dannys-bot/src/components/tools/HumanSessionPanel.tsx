@@ -102,7 +102,9 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   ];
 
   const handleHumanCopy = async (targetIds: number[], expandedKeys: string[]) => {
-    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, expandedKeys);
+    const copyEnabled = expandedKeys.includes("startStop");
+    const keysToSend  = expandedKeys.filter(k => k !== "startStop");
+    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined);
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 
