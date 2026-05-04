@@ -385,7 +385,7 @@ export function ProfilesPage() {
               Actions <ChevronDown className="ml-1 w-3.5 h-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-60 p-2 mb-2">
+          <DropdownMenuContent align="start" side="top" className="w-72 p-2 mb-2">
             <DropdownMenuItem onClick={() => setImportOpen(true)} className="cursor-pointer font-medium p-3">
               <Upload className="w-4 h-4 mr-2" /> Import Profiles
             </DropdownMenuItem>
