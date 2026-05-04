@@ -344,7 +344,7 @@ export async function registerInstagramRoutes(
 
   function resolveImportStatus(raw: string | undefined): string {
     const s = (raw ?? "").toLowerCase().trim().replace(/\s+/g, "_");
-    const valid = ["pending","valid","banned","captcha","email_confirmation","phone_verification","2fa_verification","stopped","logged_out","action_blocked"];
+    const valid = ["pending","valid","banned","captcha","email_confirmation","phone_verification","2fa_verification","stopped","logged_out","bad_password","action_blocked"];
     if (valid.includes(s)) return s;
     const aliases: Record<string, string> = {
       "ok": "valid", "active": "valid", "verified": "valid",

@@ -12,6 +12,7 @@ export const ACCOUNT_STATUSES = [
   '2fa_verification',
   'stopped',
   'logged_out',
+  'bad_password',
   'action_blocked',
   'action_required',
   'post_deleted',

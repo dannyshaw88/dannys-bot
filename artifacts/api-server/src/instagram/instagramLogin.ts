@@ -7,7 +7,7 @@ import { storage } from "../storage";
 
 export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
-  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out"; igDeviceState?: string; checkpointUrl?: string };
+  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password"; igDeviceState?: string; checkpointUrl?: string };
 
 // Extract the Instagram challenge URL from an IgCheckpointError.
 // IgCheckpointError.message getter returns "https://i.instagram.com/challenge/" + api_path.
@@ -568,7 +568,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           igDeviceState: ds,
         };
       }
-      return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "logged_out", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "bad_password", igDeviceState: ds };
     }
 
     if (err instanceof IgLoginInvalidUserError) {
