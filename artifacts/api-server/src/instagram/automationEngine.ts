@@ -363,6 +363,7 @@ class AutomationEngine {
     this.states.set(profile.id, state);
     console.log(`[engine] Launching runner for @${profile.username}`);
 
+    let followFirstRun = true;
     const loop = async () => {
       // Seed daily/hourly counters from DB — survives server restarts
       try {
@@ -407,6 +408,21 @@ class AutomationEngine {
         const tools = await storage.getToolsByProfile(freshProfile.id);
         const followTool = tools.find(t => t.type === "follow");
         if (!followTool?.enabled || state.stop.stopped) break;
+
+        // Randomise timing: scatter the very first follow session across the delay window
+        if (followFirstRun) {
+          followFirstRun = false;
+          const sf = (followTool.settings ?? {}) as any;
+          if (sf.randomiseTiming) {
+            const scatterMs = randInt((sf.delayMin ?? 1) * 60_000, (sf.delayMax ?? 5) * 60_000);
+            console.log(`[engine] @${freshProfile.username}: randomised follow start — first session in ${Math.round(scatterMs / 60000)}min`);
+            state.nextFollowAt = Date.now() + scatterMs;
+            await sleepInterruptible(scatterMs, state.stop);
+            state.nextFollowAt = 0;
+            if (state.stop.stopped) break;
+            continue;
+          }
+        }
 
         let sessionResult: { followed: number } = { followed: 0 };
         try {
@@ -486,6 +502,7 @@ class AutomationEngine {
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
 
+    let hsFirstRun = true;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -502,6 +519,16 @@ class AutomationEngine {
         if (!hsTool?.enabled) break;
 
         const s = hsTool.settings as any;
+
+        // Randomise timing: scatter the very first execution across the delay window
+        if (hsFirstRun) {
+          hsFirstRun = false;
+          if (s.randomiseTiming) {
+            const scatterMs = randInt((s.delayMin ?? 30) * 60_000, (s.delayMax ?? 60) * 60_000);
+            console.log(`[engine] @${freshProfile.username}: randomised human session start — first session in ${Math.round(scatterMs / 60000)}min`);
+            state.nextHumanSessionAt = Date.now() + scatterMs;
+          }
+        }
 
         if (Date.now() >= state.nextHumanSessionAt) {
           try {
@@ -548,6 +575,7 @@ class AutomationEngine {
     this.unfollowStates.set(profile.id, state);
     console.log(`[engine] Launching unfollow runner for @${profile.username}`);
 
+    let unfollowFirstRun = true;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -558,6 +586,20 @@ class AutomationEngine {
         const tools = await storage.getToolsByProfile(freshProfile.id);
         const unfollowTool = tools.find(t => t.type === "unfollow");
         if (!unfollowTool?.enabled || state.stop.stopped) break;
+
+        // Randomise timing: on the very first iteration, scatter the start time
+        if (unfollowFirstRun) {
+          unfollowFirstRun = false;
+          const su = (unfollowTool.settings ?? {}) as any;
+          if (su.randomiseTiming) {
+            const scatterMs = randInt((su.delayMin ?? 5) * 60_000, (su.delayMax ?? 15) * 60_000);
+            console.log(`[engine] @${freshProfile.username}: randomised unfollow start — first session in ${Math.round(scatterMs / 60000)}min`);
+            state.nextUnfollowAt = Date.now() + scatterMs;
+            await sleepInterruptible(scatterMs, state.stop);
+            if (state.stop.stopped) break;
+            continue;
+          }
+        }
 
         try {
           await this.runUnfollowSession(freshProfile, unfollowTool, state);
@@ -631,6 +673,7 @@ class AutomationEngine {
     this.dmStates.set(profile.id, state);
     console.log(`[engine] Launching DM runner for @${profile.username}`);
 
+    let dmFirstRun = true;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -641,6 +684,19 @@ class AutomationEngine {
         const tools = await storage.getToolsByProfile(freshProfile.id);
         const dmTool = tools.find(t => t.type === "dm");
         if (!dmTool?.enabled || state.stop.stopped) break;
+
+        // Randomise timing: scatter the very first DM session
+        if (dmFirstRun) {
+          dmFirstRun = false;
+          const sd = (dmTool.settings ?? {}) as any;
+          if (sd.randomiseTiming) {
+            const scatterMs = randInt((sd.delayMin ?? 10) * 60_000, (sd.delayMax ?? 30) * 60_000);
+            console.log(`[engine] @${freshProfile.username}: randomised DM start — first session in ${Math.round(scatterMs / 60000)}min`);
+            await sleepInterruptible(scatterMs, state.stop);
+            if (state.stop.stopped) break;
+            continue;
+          }
+        }
 
         try {
           await this.runDMSession(freshProfile, dmTool, state);
@@ -683,9 +739,21 @@ class AutomationEngine {
     this.contactStates.set(profile.id, state);
     console.log(`[engine] Launching contact runner for @${profile.username}`);
 
+    // Randomise timing: scatter the first run of each sub-timer across the delay window
+    let _contactInitialScatter: number | undefined;
+    {
+      const sc = (_tool.settings ?? {}) as any;
+      if (sc.randomiseTiming) {
+        const dMin = (sc.contactUsersDelayMin ?? sc.delayMin ?? 30) * 60_000;
+        const dMax = (sc.contactUsersDelayMax ?? sc.delayMax ?? 60) * 60_000;
+        _contactInitialScatter = randInt(dMin, dMax);
+        console.log(`[engine] @${profile.username}: randomised contact start — first run in ${Math.round(_contactInitialScatter / 60000)}min`);
+      }
+    }
+
     // Each timer is tracked separately so they run on their own independent cadence
-    let nextFollowerCheckAt = 0;  // run immediately on first tick
-    let nextUsersSessionAt  = 0;
+    let nextFollowerCheckAt = _contactInitialScatter !== undefined ? Date.now() + _contactInitialScatter : 0;
+    let nextUsersSessionAt  = _contactInitialScatter !== undefined ? Date.now() + _contactInitialScatter : 0;
 
     // Toggle-detection: reset timer immediately when sub-features are re-enabled
     let lastContactNewFollowersEnabled: boolean | undefined = undefined;

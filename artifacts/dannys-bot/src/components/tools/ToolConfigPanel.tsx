@@ -73,6 +73,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   // Local state for settings form
   const [settings, setSettings] = useState(() => {
     const def = { 
+      randomiseTiming: false,
       delayMin: 1, 
       delayMax: 2, 
       maxPerDayMin: 150,
@@ -661,16 +662,29 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
       <div className="desktop-card p-6">
         <h2 className="text-xl font-bold">Create a Human Session</h2>
         {tool.type !== 'follow' && (
-          <div className="flex items-center gap-3 mt-2">
-            <Switch
-              checked={tool.enabled}
-              onCheckedChange={handleToggleEnable}
-              disabled={toggleMutation.isPending}
-            />
-            <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
-              {tool.enabled ? 'ACTIVE' : 'STOPPED'}
-            </span>
-          </div>
+          <>
+            <div className="flex items-center gap-3 mt-2">
+              <Switch
+                checked={tool.enabled}
+                onCheckedChange={handleToggleEnable}
+                disabled={toggleMutation.isPending}
+              />
+              <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
+                {tool.enabled ? 'ACTIVE' : 'STOPPED'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-1.5 ml-0.5">
+              <Switch
+                id="randomiseTiming"
+                checked={!!settings.randomiseTiming}
+                onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
+                className="scale-[0.7] origin-left"
+              />
+              <label htmlFor="randomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
+                Randomise timing — scatter each account's first run across the delay window
+              </label>
+            </div>
+          </>
         )}
         <p className="text-sm text-muted-foreground mt-2">Configure limits and target sources for this tool.</p>
         {tool.type !== 'follow' && (
@@ -735,6 +749,17 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
                     {tool.enabled ? 'ACTIVE' : 'STOPPED'}
                   </span>
+                </div>
+                <div className="flex items-center gap-2 ml-0.5">
+                  <Switch
+                    id="followRandomiseTiming"
+                    checked={!!settings.randomiseTiming}
+                    onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
+                    className="scale-[0.7] origin-left"
+                  />
+                  <label htmlFor="followRandomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Randomise timing — scatter each account's first run across the delay window
+                  </label>
                 </div>
               </div>
             )}
