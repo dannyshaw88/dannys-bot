@@ -538,6 +538,9 @@ importers:
       electron-updater:
         specifier: ^6.3.9
         version: 6.8.3
+      puppeteer-core:
+        specifier: ^24.40.0
+        version: 24.42.0
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
