@@ -1076,4 +1076,26 @@ export async function registerInstagramRoutes(
   app.get("/api/engine/status", (_req, res) => {
     res.json(automationEngine.getStatus());
   });
+
+  // Jarvee import: bulk import followed users for a single account
+  app.post("/api/jarvee/import-followed-users", async (req, res) => {
+    try {
+      const { profileUsername, entries } = req.body as {
+        profileUsername: string;
+        entries: { username: string; userId: string; followedAt: string }[];
+      };
+      if (!profileUsername || !Array.isArray(entries)) {
+        return res.status(400).json({ error: "profileUsername and entries[] are required" });
+      }
+      const profile = await storage.getProfileByUsername(profileUsername);
+      if (!profile) {
+        return res.status(404).json({ error: `No profile found matching username "${profileUsername}"` });
+      }
+      const result = await storage.bulkImportFollowedUsers(profile.id, entries);
+      return res.json({ ok: true, profileId: profile.id, ...result });
+    } catch (e: any) {
+      req.log.error({ err: e }, "jarvee import-followed-users failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
 }
