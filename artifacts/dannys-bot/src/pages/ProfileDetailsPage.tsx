@@ -403,7 +403,7 @@ export function ProfileDetailsPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-52 p-1">
                       {ACCOUNT_STATUSES.map(s => {
-                        const m = STATUS_META[s];
+                        const m = STATUS_META[s] ?? STATUS_META.pending;
                         const I = m.icon;
                         return (
                           <DropdownMenuItem
