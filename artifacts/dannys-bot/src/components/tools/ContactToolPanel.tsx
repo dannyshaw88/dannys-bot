@@ -20,6 +20,9 @@ type SubTab = "new-followers" | "contact-users" | "auto-reply";
 const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
     { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+    { key: "ct_randomiseTiming", label: "Randomise timing", description: "Scatter first run across the delay window when the engine starts", subOptions: [
+      { key: "ct_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
+    ]},
   ]},
   { label: "Contact New Followers", options: [
     { key: "ct_newFollowers", label: "Contact New Followers", description: "Auto-messaging settings for new followers", subOptions: [

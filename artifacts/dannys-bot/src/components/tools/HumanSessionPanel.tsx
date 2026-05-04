@@ -40,6 +40,12 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
+    { label: "General", options: [
+      { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+      { key: "hs_randomiseTiming", label: "Randomise timing", description: "Scatter first run across the delay window when the engine starts", subOptions: [
+        { key: "hs_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
+      ]},
+    ]},
     { label: "Timing", options: [
       { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs", subOptions: [
         { key: "hs_delayRange", label: "Session delay range (min / max)", settingKeys: ["delayMin","delayMax"] },
@@ -309,15 +315,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               />
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border">
-          <Switch
-            id="hsRandomiseTiming"
-            checked={!!(settings as any).randomiseTiming}
-            onCheckedChange={(v) => setSettings({ ...settings, randomiseTiming: v })}
-          />
-          <label htmlFor="hsRandomiseTiming" className="text-sm font-medium cursor-pointer select-none">Randomise timing</label>
-          <span className="text-[11px] text-muted-foreground">Scatter first run across the delay window when the engine starts</span>
         </div>
       </div>
 

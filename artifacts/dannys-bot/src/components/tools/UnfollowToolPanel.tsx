@@ -21,6 +21,9 @@ interface UnfollowToolPanelProps {
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
     { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+    { key: "uf_randomiseTiming", label: "Randomise timing", description: "Scatter first run across the delay window when the engine starts", subOptions: [
+      { key: "uf_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
+    ]},
   ]},
   { label: "Settings", options: [
     { key: "uf_settings", label: "Unfollow Settings", description: "Timing, limits and age filters for unfollow actions", subOptions: [
@@ -204,20 +207,6 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
       </div>
 
       {row(<Timer className="w-4 h-4" />, "Wait between executions", "minutes", "delayMin", "delayMax", 1)}
-
-      {/* Randomise timing */}
-      <div className="border border-border rounded-xl p-4 flex items-center gap-3">
-        <Switch
-          id="unfollowRandomiseTiming"
-          checked={!!(settings as any).randomiseTiming}
-          onCheckedChange={(v) => setSettings(s => ({ ...s, randomiseTiming: v }))}
-        />
-        <div>
-          <label htmlFor="unfollowRandomiseTiming" className="text-sm font-medium cursor-pointer select-none">Randomise timing</label>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Scatter first run across the delay window when the engine starts</p>
-        </div>
-      </div>
-
       {row(<Users className="w-4 h-4" />, "Process users", "users", "processMin", "processMax", 1)}
       {row(<Clock className="w-4 h-4" />, "Delay between each", "seconds", "delayAfterUnfollowMin", "delayAfterUnfollowMax", 1)}
 

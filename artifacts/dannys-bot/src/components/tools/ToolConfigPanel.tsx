@@ -238,6 +238,9 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   const FOLLOW_TOOL_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
       { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
+      { key: "ft_randomiseTiming", label: "Randomise timing", description: "Scatter first run across the delay window when the engine starts", subOptions: [
+        { key: "ft_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
+      ]},
     ]},
     { label: "Timing", options: [
       { key: "ft_timing", label: "Timing", description: "Delays and wait times between actions", subOptions: [
@@ -703,15 +706,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/60">
-              <Switch
-                id="dmRandomiseTiming"
-                checked={!!settings.randomiseTiming}
-                onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
-              />
-              <label htmlFor="dmRandomiseTiming" className="text-sm font-medium cursor-pointer select-none">Randomise timing</label>
-              <span className="text-xs text-muted-foreground">Scatter first run across the delay window when the engine starts</span>
-            </div>
           </>
         )}
       </div>
@@ -841,18 +835,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                     </>
                   )}
                 </div>
-
-                {tool.type === 'follow' && (
-                  <div className="flex items-center gap-3 pt-2 border-t border-border/60">
-                    <Switch
-                      id="followRandomiseTiming"
-                      checked={!!settings.randomiseTiming}
-                      onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
-                    />
-                    <label htmlFor="followRandomiseTiming" className="text-sm font-medium cursor-pointer select-none">Randomise timing</label>
-                    <span className="text-xs text-muted-foreground">Scatter first run across the delay window when the engine starts</span>
-                  </div>
-                )}
 
                 <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-2 border-t border-border/50">
                   <div className="space-y-2">
