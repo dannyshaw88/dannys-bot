@@ -607,7 +607,12 @@ export async function registerInstagramRoutes(
 
   app.get("/api/instagram-api-calls", async (_req, res) => {
     const data = await storage.getInstagramApiCalls(500);
-    res.json(data.filter((c: any) => c.source !== "Browser"));
+    // Exclude Browser (EB remote-control) and Verify (account setup) calls — the
+    // dashboard log is meant to show *automation* activity only.  Verify calls are
+    // account-setup/health-check; some endpoints always return checkpoint_required
+    // for non-fatal reasons during session initialisation, which confuses users into
+    // thinking verified accounts are still broken.
+    res.json(data.filter((c: any) => c.source !== "Browser" && c.source !== "Verify"));
   });
 
   app.get("/api/logs/export", async (req, res) => {

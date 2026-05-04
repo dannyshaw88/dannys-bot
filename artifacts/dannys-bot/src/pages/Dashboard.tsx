@@ -95,7 +95,7 @@ export function Dashboard() {
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
 
   const filteredApiCalls = (apiCalls ?? [])
-    .filter((c: any) => c.source !== "Browser")
+    .filter((c: any) => c.source !== "Browser" && c.source !== "Verify")
     .filter((c: any) => selectedProfileId == null || c.profileId === selectedProfileId);
 
   const filteredProfileOptions = (profiles ?? []).filter(p =>
