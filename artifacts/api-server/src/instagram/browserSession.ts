@@ -968,7 +968,13 @@ export async function browserAutoLogin(
       const keyClean = twoFAKey.replace(/\s+/g, "");
       if (keyClean) {
         sendStatus(profileId, "2FA screen — entering TOTP code automatically…");
-        const code = totpGenerate(keyClean);
+        let code: string;
+        try {
+          code = totpGenerate({ secret: keyClean });
+        } catch (totpErr: any) {
+          sendStatus(profileId, `⚠ Invalid 2FA secret key — ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
+          return { ok: false, message: `Invalid 2FA secret: ${totpErr?.message}` };
+        }
         // Find the code input (could be any visible single input on the 2FA page)
         const codeInput = await s.page.$('input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]').catch(() => null);
         if (codeInput) {
