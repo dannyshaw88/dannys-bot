@@ -6,13 +6,13 @@
 > All Instagram actions and API calls are made via the Instagram Private API only.
 > The Embedded Browser (EB) is used for human-assisted browsing and challenge solving ONLY — never for automation.
 >
-> **2. NEVER push to git/GitHub unless explicitly instructed by the user.**
-> Do not commit or push as a side-effect of any task. Wait for a direct instruction.
+> **2. NEVER push to git/GitHub unless the user explicitly says "push-to-git".**
+> Do NOT push after fixing a bug, completing a task, or proactively. Wait for those exact words.
 >
-> **3. When a git push IS instructed, always use the GitHub REST API — never `git push`.**
-> Method: `PUT https://api.github.com/repos/dannyshaw88/dannys-bot/contents/<path>`
-> Steps: get token via `listConnections('github')` → fetch current SHA → push each file sequentially (re-fetch SHA before each) to avoid 409 conflicts.
-> `git push` is blocked in this sandbox and will always fail.
+> **3. When a git push IS instructed, always use the GitHub Git Data API — NEVER `git push` or the Contents API per-file loop.**
+> Single-commit method: GET ref → GET commit (tree SHA) → POST blobs (one per file) → POST tree (all blobs, base_tree) → POST commit → PATCH ref.
+> Token: `listConnections('github')[0].settings.access_token`. Repo: `dannyshaw88/dannys-bot`.
+> See `.local/github_push_instruction.md` for the full step-by-step.
 
 ## Overview
 

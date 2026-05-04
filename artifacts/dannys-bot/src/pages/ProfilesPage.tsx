@@ -405,11 +405,24 @@ export function ProfilesPage() {
               <FileDown className="w-4 h-4 mr-2" /> Export Profiles
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => {
+              onClick={async () => {
                 const tzOffset = new Date().getTimezoneOffset();
                 const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
                 const url = `/api/logs/export?tz=${tzOffset}${ids ? `&profileIds=${ids}` : ""}`;
-                window.open(url, "_blank");
+                try {
+                  const res = await fetch(url, { credentials: "include" });
+                  const blob = await res.blob();
+                  const objectUrl = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = objectUrl;
+                  a.download = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(objectUrl);
+                } catch {
+                  /* silently ignore network errors */
+                }
               }}
               className="cursor-pointer font-medium p-3"
             >
@@ -573,12 +586,20 @@ export function ProfilesPage() {
         <div className="desktop-card overflow-hidden pb-24">
           {/* Column headers */}
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
-            <div className="w-5 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Checkbox
                 checked={!!(profiles?.length && selectedProfileIds.length === profiles.length)}
                 onCheckedChange={toggleAll}
                 aria-label="Select all profiles"
               />
+              {selectedProfileIds.length > 0 && (
+                <button
+                  onClick={() => setSelectedProfileIds([])}
+                  className="text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                >
+                  Select None
+                </button>
+              )}
             </div>
             <button
               onClick={() => cycleSort("account")}
