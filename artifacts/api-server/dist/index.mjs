@@ -136813,6 +136813,10 @@ var DatabaseStorage = class {
     const [created] = await db.insert(proxies).values(proxy).returning();
     return created;
   }
+  async updateProxy(id, data) {
+    const [updated] = await db.update(proxies).set(data).where(eq(proxies.id, id)).returning();
+    return updated;
+  }
   async deleteProxy(id) {
     await db.delete(proxies).where(eq(proxies.id, id));
   }
@@ -137143,6 +137147,15 @@ var api = {
       responses: {
         201: external_exports.custom(),
         400: errorSchemas.validation
+      }
+    },
+    update: {
+      method: "PATCH",
+      path: "/api/proxies/:id",
+      input: insertProxySchema.partial(),
+      responses: {
+        200: external_exports.custom(),
+        404: errorSchemas.notFound
       }
     },
     delete: {
@@ -139694,7 +139707,13 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
       const keyClean = twoFAKey.replace(/\s+/g, "");
       if (keyClean) {
         sendStatus(profileId, "2FA screen \u2014 entering TOTP code automatically\u2026");
-        const code = h3(keyClean);
+        let code;
+        try {
+          code = h3({ secret: keyClean });
+        } catch (totpErr) {
+          sendStatus(profileId, `\u26A0 Invalid 2FA secret key \u2014 ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
+          return { ok: false, message: `Invalid 2FA secret: ${totpErr?.message}` };
+        }
         const codeInput = await s.page.$('input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]').catch(() => null);
         if (codeInput) {
           await fillField(s.page, 'input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]', code);
@@ -143618,6 +143637,23 @@ async function registerInstagramRoutes(httpServer2, app2) {
     } catch (err) {
       if (err instanceof external_exports.ZodError) {
         return res.status(400).json({ message: err.issues[0].message, field: (err.issues[0].path ?? []).join(".") });
+      }
+      throw err;
+    }
+  });
+  app2.patch(api.proxies.update.path, async (req, res) => {
+    const id = Number(req.params.id);
+    try {
+      const input = api.proxies.update.input.parse(req.body);
+      if (input.host || input.port) {
+        input.name = `${input.host ?? ""}:${input.port ?? ""}`;
+      }
+      const updated = await storage.updateProxy(id, input);
+      if (!updated) return res.status(404).json({ message: "Proxy not found" });
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof external_exports.ZodError) {
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
