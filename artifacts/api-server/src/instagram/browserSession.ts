@@ -521,6 +521,16 @@ export async function browserType(profileId: number, text: string) {
   await s.page.keyboard.type(text, { delay: 30 });
 }
 
+export async function browserKeyCombo(profileId: number, modifier: string, key: string) {
+  const s = sessions.get(profileId);
+  if (!s) return;
+  try {
+    await s.page.keyboard.down(modifier as any);
+    await s.page.keyboard.press(key as any);
+    await s.page.keyboard.up(modifier as any);
+  } catch {}
+}
+
 export async function browserBack(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
@@ -858,7 +868,22 @@ export async function browserAutoLogin(
     await delay(300 + Math.random() * 200);
 
     sendStatus(profileId, "Filling password…");
-    await fillField(s.page, 'input[name="password"]', password);
+    // Wait for the password field with fallback selectors (same resilience as username)
+    const PASSWORD_SELECTORS = [
+      'input[name="password"]',
+      'input[type="password"]',
+      'input[autocomplete="current-password"]',
+    ];
+    let passwordSelector = '';
+    for (const sel of PASSWORD_SELECTORS) {
+      const el = await s.page.waitForSelector(sel, { timeout: sel === PASSWORD_SELECTORS[0] ? 6000 : 2000 }).catch(() => null);
+      if (el) { passwordSelector = sel; break; }
+    }
+    if (!passwordSelector) {
+      sendStatus(profileId, "⚠ Password field not found — Instagram may have changed its login page layout.");
+      return { ok: false, message: "Password field not found. Check the browser window." };
+    }
+    await fillField(s.page, passwordSelector, password);
 
     // ── Step 4: Submit ───────────────────────────────────────────────────────
     sendStatus(profileId, "Waiting for login button…");

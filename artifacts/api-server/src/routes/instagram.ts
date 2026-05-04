@@ -16,6 +16,7 @@ import {
   browserKeyDown,
   browserKeyUp,
   browserType,
+  browserKeyCombo,
   browserBack,
   browserForward,
   browserReload,
@@ -733,9 +734,14 @@ export async function registerInstagramRoutes(
     )
       .then(async result => {
         sendLoginDone(profileId, result.ok, result.message);
-        // Successful EB login means the user has resolved any checkpoint/captcha —
-        // update the profile status to valid so the UI reflects this immediately.
-        if (result.ok) {
+        // Only mark the account valid when login genuinely succeeded.
+        // result.ok is also true for 2FA/challenge screens ("2FA code submitted",
+        // "2FA screen shown", etc.) — those must NOT set the account to valid
+        // because we don't yet know whether the 2FA step passed.
+        const trulyLoggedIn =
+          result.ok &&
+          (result.message === "Login successful" || result.message === "Already logged in");
+        if (trulyLoggedIn) {
           await storage.updateProfile(profileId, { accountStatus: "valid", credentialsDirty: false });
         }
       })
@@ -797,6 +803,7 @@ export async function registerInstagramRoutes(
         case "keydown":    await browserKeyDown(profileId, msg.key); break;
         case "keyup":      await browserKeyUp(profileId, msg.key); break;
         case "type":       await browserType(profileId, msg.text); break;
+        case "keycombo":   await browserKeyCombo(profileId, msg.modifier, msg.key); break;
         case "back":       await browserBack(profileId); break;
         case "forward":    await browserForward(profileId); break;
         case "reload":     await browserReload(profileId); break;

@@ -113,15 +113,22 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetchAndAppend(0, true);
+    let cancelled = false;
     const schedule = () => {
       pollTimerRef.current = setTimeout(async () => {
+        if (cancelled) return;
         await fetchAndAppend(lastIdRef.current);
-        schedule();
+        if (!cancelled) schedule();
       }, 3000);
     };
-    schedule();
+    // Start polling only AFTER the initial fetch completes so lastIdRef is set
+    // before the first incremental poll fires. Without this, a race causes the
+    // poll to re-fetch all rows (since=0) and prepend duplicates.
+    fetchAndAppend(0, true).then(() => {
+      if (!cancelled) schedule();
+    });
     return () => {
+      cancelled = true;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, [fetchAndAppend]);

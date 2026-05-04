@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile } from "@/hooks/use-profiles";
@@ -119,6 +119,40 @@ export function ProfilesPage() {
     setStatusFilter(v);
   };
 
+  // ── Derived: filtered + sorted list ──────────────────────────────────────
+  const filterTokens = useMemo(() =>
+    statusFilter.split(/\|\|?/).map(t => t.trim().toLowerCase()).filter(Boolean),
+    [statusFilter]
+  );
+
+  const filteredProfiles = useMemo(() => {
+    const base = filterTokens.length > 0
+      ? (profiles ?? []).filter(p => {
+          const status   = (p.accountStatus ?? "pending").toLowerCase();
+          const username = (p.username ?? "").toLowerCase();
+          const label    = (p.accountLabel ?? "").toLowerCase();
+          return filterTokens.some(token =>
+            status === token ||
+            username.includes(token) ||
+            label.includes(token)
+          );
+        })
+      : (profiles ?? []);
+    return sortField
+      ? [...base].sort((a, b) => {
+          let va = "", vb = "";
+          if (sortField === "account") {
+            va = (a.accountLabel || a.username || "").toLowerCase();
+            vb = (b.accountLabel || b.username || "").toLowerCase();
+          } else {
+            va = (STATUS_META[a.accountStatus as AccountStatus]?.label ?? a.accountStatus ?? "").toLowerCase();
+            vb = (STATUS_META[b.accountStatus as AccountStatus]?.label ?? b.accountStatus ?? "").toLowerCase();
+          }
+          return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+        })
+      : base;
+  }, [profiles, filterTokens, sortField, sortDir]);
+
   const cycleSort = (field: "account" | "status") => {
     if (sortField !== field) {
       setSortField(field); setSortDir("asc");
@@ -156,12 +190,16 @@ export function ProfilesPage() {
   };
 
   const toggleAll = useCallback(() => {
-    if (profiles) {
-      setSelectedProfileIds(
-        selectedProfileIds.length === profiles.length ? [] : profiles.map(p => p.id)
-      );
+    const filteredIds = filteredProfiles.map(p => p.id);
+    const allFilteredSelected = filteredIds.every(id => selectedProfileIds.includes(id));
+    if (allFilteredSelected) {
+      // Deselect only the filtered ones, keeping any out-of-filter selections
+      setSelectedProfileIds(prev => prev.filter(id => !filteredIds.includes(id)));
+    } else {
+      // Add all filtered ones to the selection
+      setSelectedProfileIds(prev => [...new Set([...prev, ...filteredIds])]);
     }
-  }, [profiles, selectedProfileIds]);
+  }, [filteredProfiles, selectedProfileIds]);
 
   const handleBulkDelete = useCallback(() => {
     if (selectedProfileIds.length === 0) return;
@@ -263,7 +301,7 @@ export function ProfilesPage() {
 
   // ── Bulk: Verify All ─────────────────────────────────────────────────────
   const handleVerifyAll = useCallback(async () => {
-    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : (profiles ?? []).map(p => p.id);
+    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : filteredProfiles.map(p => p.id);
     if (!ids.length) return;
     setVerifyingAll(true);
     // Mark all accounts as "verifying" immediately so the UI reflects the in-progress state
@@ -298,7 +336,7 @@ export function ProfilesPage() {
     } finally {
       setVerifyingAll(false);
     }
-  }, [selectedProfileIds, profiles, toast]);
+  }, [selectedProfileIds, filteredProfiles, toast]);
 
   // ── Bulk: Fix Captcha ────────────────────────────────────────────────────
   const handleBulkFixCaptcha = useCallback(async () => {
@@ -342,12 +380,12 @@ export function ProfilesPage() {
 
   // ── Bulk: Open Embedded Browsers ─────────────────────────────────────────
   const handleBulkOpenBrowsers = useCallback(() => {
-    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : (profiles ?? []).map(p => p.id);
-    const targets = (profiles ?? []).filter(p => ids.includes(p.id));
+    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : filteredProfiles.map(p => p.id);
+    const targets = filteredProfiles.filter(p => ids.includes(p.id));
     for (const p of targets) {
       openWindow(p.id, p.username ?? "", p.userAgentEmbedded ?? "");
     }
-  }, [selectedProfileIds, profiles, openWindow]);
+  }, [selectedProfileIds, filteredProfiles, openWindow]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -382,7 +420,7 @@ export function ProfilesPage() {
   const setSlot = useSidebarSetSlot();
 
   useEffect(() => {
-    const allSelected = !!(profiles?.length && selectedProfileIds.length === profiles.length);
+    const allSelected = !!(filteredProfiles.length && filteredProfiles.every(p => selectedProfileIds.includes(p.id)));
     setSlot(
       <div className="space-y-2">
         <DropdownMenu>
@@ -486,40 +524,7 @@ export function ProfilesPage() {
       </div>
     );
     return () => setSlot(null);
-  }, [selectedProfileIds, profiles, toggleAll, handleBulkDelete, handleBulkResetDeviceIds, handleExportProfiles, setImportOpen, handleVerifyAll, handleBulkFixCaptcha, handleBulkRemoveProxies, verifyingAll, fixingCaptcha]);
-
-  // Parse filter: split on | or ||, trim, lowercase
-  const filterTokens = statusFilter
-    .split(/\|\|?/)
-    .map(t => t.trim().toLowerCase())
-    .filter(Boolean);
-  const baseFiltered = filterTokens.length > 0
-    ? (profiles ?? []).filter(p => {
-        const status   = (p.accountStatus ?? "pending").toLowerCase();
-        const username = (p.username ?? "").toLowerCase();
-        const label    = (p.accountLabel ?? "").toLowerCase();
-        return filterTokens.some(token =>
-          status === token ||
-          username.includes(token) ||
-          label.includes(token)
-        );
-      })
-    : (profiles ?? []);
-
-  const filteredProfiles = sortField
-    ? [...baseFiltered].sort((a, b) => {
-        let va = "";
-        let vb = "";
-        if (sortField === "account") {
-          va = (a.accountLabel || a.username || "").toLowerCase();
-          vb = (b.accountLabel || b.username || "").toLowerCase();
-        } else {
-          va = (STATUS_META[a.accountStatus as AccountStatus]?.label ?? a.accountStatus ?? "").toLowerCase();
-          vb = (STATUS_META[b.accountStatus as AccountStatus]?.label ?? b.accountStatus ?? "").toLowerCase();
-        }
-        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
-      })
-    : baseFiltered;
+  }, [selectedProfileIds, filteredProfiles, toggleAll, handleBulkDelete, handleBulkResetDeviceIds, handleExportProfiles, setImportOpen, handleVerifyAll, handleBulkFixCaptcha, handleBulkRemoveProxies, verifyingAll, fixingCaptcha]);
 
   return (
     <AppLayout>
@@ -588,7 +593,7 @@ export function ProfilesPage() {
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
             <div className="flex items-center gap-1.5 shrink-0">
               <Checkbox
-                checked={!!(profiles?.length && selectedProfileIds.length === profiles.length)}
+                checked={!!(filteredProfiles.length && filteredProfiles.every(p => selectedProfileIds.includes(p.id)))}
                 onCheckedChange={toggleAll}
                 aria-label="Select all profiles"
               />

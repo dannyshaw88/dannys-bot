@@ -211,6 +211,27 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const onKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (status !== "connected") return;
     e.preventDefault();
+
+    const ctrl = e.ctrlKey || e.metaKey;
+
+    // ── Ctrl+V: read clipboard and type its text into the browser ────────────
+    if (ctrl && e.key.toLowerCase() === "v") {
+      navigator.clipboard.readText().then(text => {
+        if (text) send({ type: "type", text });
+      }).catch(() => {});
+      return;
+    }
+
+    // ── Other Ctrl combos: forward as keyboard combos to the page ────────────
+    if (ctrl) {
+      const k = e.key.toLowerCase();
+      // Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+Z, Ctrl+Y, Ctrl+T, Ctrl+W etc.
+      if (k.length === 1) {
+        send({ type: "keycombo", modifier: "Control", key: k });
+      }
+      return;
+    }
+
     const special: Record<string, string> = {
       Enter: "Enter", Backspace: "Backspace", Tab: "Tab", Escape: "Escape",
       ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight",
@@ -223,6 +244,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     } else if (e.key.length === 1) {
       send({ type: "type", text: e.key });
     }
+  };
+
+  // ── Paste via right-click context menu or programmatic paste event ────────
+  const onPaste = (e: React.ClipboardEvent<HTMLCanvasElement>) => {
+    if (status !== "connected") return;
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    if (text) send({ type: "type", text });
   };
 
   const onAddressSubmit = (e: React.FormEvent) => {
@@ -416,6 +445,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onClick={onCanvasClick}
           onMouseMove={onCanvasMouseMove}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
         />
       </div>
     </div>
