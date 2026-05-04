@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProxies, useCreateProxy, useDeleteProxy } from "@/hooks/use-proxies";
@@ -216,6 +216,7 @@ export function ProxiesPage() {
   const [pingResults, setPingResults] = useState<Record<number, PingResult>>({});
   const [pingingIds, setPingingIds] = useState<Set<number>>(new Set());
   const [pingingAll, setPingingAll] = useState(false);
+  const autoPingedRef = useRef(false);
 
   const unassignedProfiles = profiles.filter(p => !p.proxyId);
 
@@ -274,6 +275,13 @@ export function ProxiesPage() {
       setPingingAll(false);
     }
   };
+
+  // Auto-ping all proxies once when the page first loads with data
+  useEffect(() => {
+    if (proxiesLoading || proxies.length === 0 || autoPingedRef.current) return;
+    autoPingedRef.current = true;
+    Promise.all(proxies.map(p => pingOne(p.id))).catch(() => {});
+  }, [proxiesLoading, proxies]);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
