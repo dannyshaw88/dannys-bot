@@ -821,7 +821,21 @@ export async function browserAutoLogin(
 
     // ── Step 2: Check for login form ─────────────────────────────────────────
     sendStatus(profileId, "Looking for login form…");
-    const usernameInput = await s.page.waitForSelector('input[name="username"]', { timeout: 15000 }).catch(() => null);
+
+    // Instagram has used several different name/autocomplete attributes over time.
+    // Try each in order so we're resilient to DOM changes.
+    const USERNAME_SELECTORS = [
+      'input[name="username"]',
+      'input[autocomplete="username"]',
+      'input[name="email"]',
+      'input[type="text"]:not([name="password"])',
+    ];
+    let usernameSelector = '';
+    let usernameInput = null;
+    for (const sel of USERNAME_SELECTORS) {
+      const el = await s.page.waitForSelector(sel, { timeout: sel === USERNAME_SELECTORS[0] ? 12000 : 2000 }).catch(() => null);
+      if (el) { usernameInput = el; usernameSelector = sel; break; }
+    }
 
     if (!usernameInput) {
       const currentUrl = s.page.url();
@@ -834,11 +848,12 @@ export async function browserAutoLogin(
       sendStatus(profileId, "⚠ Login form not found — check the browser window for what Instagram is showing.");
       return { ok: false, message: "Login form not found. Check the browser window." };
     }
+    log(`[autoLogin:${profileId}] Found username input via: ${usernameSelector}`, 'browser');
 
     // ── Step 3: Fill credentials ─────────────────────────────────────────────
     sendStatus(profileId, "Filling username…");
     await delay(500 + Math.random() * 300);
-    await fillField(s.page, 'input[name="username"]', username);
+    await fillField(s.page, usernameSelector, username);
 
     await delay(300 + Math.random() * 200);
 

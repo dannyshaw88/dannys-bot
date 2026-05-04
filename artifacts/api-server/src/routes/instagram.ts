@@ -716,7 +716,14 @@ export async function registerInstagramRoutes(
       profile.password,
       profile.twoFASecretKey || "",
     )
-      .then(result => sendLoginDone(profileId, result.ok, result.message))
+      .then(async result => {
+        sendLoginDone(profileId, result.ok, result.message);
+        // Successful EB login means the user has resolved any checkpoint/captcha —
+        // update the profile status to valid so the UI reflects this immediately.
+        if (result.ok) {
+          await storage.updateProfile(profileId, { accountStatus: "valid", credentialsDirty: false });
+        }
+      })
       .catch(err  => sendLoginDone(profileId, false, String(err)));
   });
 
