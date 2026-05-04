@@ -58,6 +58,7 @@ export interface IStorage {
   deleteFollowedUser(id: number): Promise<void>;
   countFollowsToday(profileId: number, todayPrefix: string): Promise<number>;
   countFollowsThisHour(profileId: number, hourPrefix: string): Promise<number>;
+  bulkImportFollowedUsers(profileId: number, entries: { username: string; userId: string; followedAt: string }[]): Promise<{ imported: number; skipped: number }>;
 
   // Session Actions
   getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
@@ -314,6 +315,36 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFollowedUser(id: number): Promise<void> {
     await db.delete(followedUsers).where(eq(followedUsers.id, id));
+  }
+
+  async bulkImportFollowedUsers(
+    profileId: number,
+    entries: { username: string; userId: string; followedAt: string }[]
+  ): Promise<{ imported: number; skipped: number }> {
+    if (!entries.length) return { imported: 0, skipped: 0 };
+    // Load existing usernames for this profile to deduplicate
+    const existing = await db
+      .select({ u: followedUsers.instagramUsername })
+      .from(followedUsers)
+      .where(eq(followedUsers.profileId, profileId));
+    const existingSet = new Set(existing.map(r => r.u.toLowerCase()));
+    const toInsert = entries.filter(e => !existingSet.has(e.username.toLowerCase()));
+    // Batch insert in chunks of 500 (SQLite parameter limit safety)
+    const BATCH = 500;
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      const batch = toInsert.slice(i, i + BATCH);
+      await db.insert(followedUsers).values(
+        batch.map(e => ({
+          profileId,
+          instagramUsername: e.username,
+          instagramUserId: e.userId,
+          sourceValue: "jarvee_import",
+          sourceType: "jarvee_import",
+          followedAt: e.followedAt,
+        }))
+      );
+    }
+    return { imported: toInsert.length, skipped: entries.length - toInsert.length };
   }
 
   async countFollowsToday(profileId: number, todayPrefix: string): Promise<number> {
