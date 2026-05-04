@@ -139732,10 +139732,31 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           } else {
             await s.page.keyboard.press("Enter");
           }
-          await delay(3e3);
-          await saveCookies(profileId, s.page);
-          sendStatus(profileId, `TOTP code entered \u2014 check browser for result.`);
-          return { ok: true, message: "2FA code submitted" };
+          sendStatus(profileId, "2FA code submitted \u2014 waiting for Instagram\u2026");
+          await Promise.race([
+            s.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 1e4 }).catch(() => null),
+            s.page.waitForFunction(
+              () => !window.location.href.includes("/two_factor") && !window.location.href.includes("/accounts/login"),
+              { timeout: 1e4 }
+            ).catch(() => null)
+          ]);
+          await delay(1e3);
+          await dismissCookieBanner(s.page);
+          await dismissInstagramPopups(s.page);
+          const afterUrl = s.page.url();
+          const afterText = await s.page.evaluate(
+            () => (document.body?.innerText || "").slice(0, 300).trim()
+          ).catch(() => "");
+          log(`[autoLogin:${profileId}] After 2FA submit: url="${afterUrl}" text="${afterText.slice(0, 100)}"`, "browser");
+          const twoFaAccepted = !afterUrl.includes("/two_factor") && !afterUrl.includes("/accounts/login");
+          if (twoFaAccepted) {
+            await saveCookies(profileId, s.page);
+            sendStatus(profileId, "\u2713 2FA accepted \u2014 logged in successfully!");
+            return { ok: true, message: "Login successful" };
+          }
+          const errSnippet = afterText.slice(0, 100);
+          sendStatus(profileId, `\u26A0 2FA code not accepted \u2014 ${errSnippet || "check the browser window"}`);
+          return { ok: false, message: "2FA code rejected" };
         } else {
           sendStatus(profileId, "2FA screen \u2014 enter the code in the browser window.");
           return { ok: true, message: "2FA screen shown" };

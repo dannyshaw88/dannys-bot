@@ -995,10 +995,39 @@ export async function browserAutoLogin(
           } else {
             await s.page.keyboard.press("Enter");
           }
-          await delay(3000);
-          await saveCookies(profileId, s.page);
-          sendStatus(profileId, `TOTP code entered — check browser for result.`);
-          return { ok: true, message: "2FA code submitted" };
+
+          // Wait up to 10s for Instagram to navigate away from the 2FA page
+          sendStatus(profileId, "2FA code submitted — waiting for Instagram…");
+          await Promise.race([
+            s.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => null),
+            s.page.waitForFunction(
+              () => !window.location.href.includes("/two_factor") && !window.location.href.includes("/accounts/login"),
+              { timeout: 10000 }
+            ).catch(() => null),
+          ]);
+
+          // Dismiss any post-login popups (save login info, notifications, etc.)
+          await delay(1000);
+          await dismissCookieBanner(s.page);
+          await dismissInstagramPopups(s.page);
+
+          const afterUrl = s.page.url();
+          const afterText = await s.page.evaluate(
+            () => (document.body?.innerText || "").slice(0, 300).trim()
+          ).catch(() => "");
+          log(`[autoLogin:${profileId}] After 2FA submit: url="${afterUrl}" text="${afterText.slice(0, 100)}"`, "browser");
+
+          const twoFaAccepted = !afterUrl.includes("/two_factor") && !afterUrl.includes("/accounts/login");
+          if (twoFaAccepted) {
+            await saveCookies(profileId, s.page);
+            sendStatus(profileId, "✓ 2FA accepted — logged in successfully!");
+            return { ok: true, message: "Login successful" };
+          }
+
+          // Still on the 2FA / login page — code was likely rejected
+          const errSnippet = afterText.slice(0, 100);
+          sendStatus(profileId, `⚠ 2FA code not accepted — ${errSnippet || "check the browser window"}`);
+          return { ok: false, message: "2FA code rejected" };
         } else {
           sendStatus(profileId, "2FA screen — enter the code in the browser window.");
           return { ok: true, message: "2FA screen shown" };
