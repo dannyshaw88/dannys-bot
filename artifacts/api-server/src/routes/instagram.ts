@@ -253,6 +253,17 @@ export async function registerInstagramRoutes(
     }
   }
 
+  // Bulk-update: apply one patch to many profiles in a single request.
+  // Must be registered BEFORE /api/profiles/:id so "bulk-update" isn't treated as an ID.
+  app.post("/api/profiles/bulk-update", async (req, res) => {
+    const { ids, patch } = req.body ?? {};
+    if (!Array.isArray(ids) || !patch || typeof patch !== "object") {
+      return res.status(400).json({ message: "ids (array) and patch (object) are required" });
+    }
+    await Promise.all((ids as number[]).map(id => storage.updateProfile(id, patch)));
+    res.json({ ok: true, updated: ids.length });
+  });
+
   app.patch("/api/profiles/:id", handleProfileUpdate);
   app.put("/api/profiles/:id", handleProfileUpdate);
 
