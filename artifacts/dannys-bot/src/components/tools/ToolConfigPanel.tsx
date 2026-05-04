@@ -679,40 +679,40 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 Copy Settings
               </button>
             </div>
-            <div className="flex items-center gap-2 mt-1.5 ml-0.5">
-              <Switch
-                id="randomiseTiming"
-                checked={!!settings.randomiseTiming}
-                onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
-                className="scale-[0.7] origin-left"
-              />
-              <label htmlFor="randomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
-                Randomise timing
-              </label>
-            </div>
           </>
         )}
         <p className="text-sm text-muted-foreground mt-2">Configure limits and target sources for this tool.</p>
         {tool.type !== 'follow' && (
-          <div className="flex items-center gap-4 mt-3">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Run Timer (min)</span>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="globalDelayMin" className="text-xs whitespace-nowrap text-muted-foreground">Min</Label>
-                <Input id="globalDelayMin" type="number" min="0" max="10000" className="w-20 h-7 text-xs"
-                  value={settings.delayMin}
-                  onChange={(e) => setSettings({...settings, delayMin: Math.min(10000, Number(e.target.value))})}
-                />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="globalDelayMax" className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
-                <Input id="globalDelayMax" type="number" min="0" max="10000" className="w-20 h-7 text-xs"
-                  value={settings.delayMax}
-                  onChange={(e) => setSettings({...settings, delayMax: Math.min(10000, Number(e.target.value))})}
-                />
+          <>
+            <div className="flex items-center gap-4 mt-3">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Run Timer (min)</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="globalDelayMin" className="text-xs whitespace-nowrap text-muted-foreground">Min</Label>
+                  <Input id="globalDelayMin" type="number" min="0" max="10000" className="w-20 h-7 text-xs"
+                    value={settings.delayMin}
+                    onChange={(e) => setSettings({...settings, delayMin: Math.min(10000, Number(e.target.value))})}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="globalDelayMax" className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
+                  <Input id="globalDelayMax" type="number" min="0" max="10000" className="w-20 h-7 text-xs"
+                    value={settings.delayMax}
+                    onChange={(e) => setSettings({...settings, delayMax: Math.min(10000, Number(e.target.value))})}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/60">
+              <Switch
+                id="dmRandomiseTiming"
+                checked={!!settings.randomiseTiming}
+                onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
+              />
+              <label htmlFor="dmRandomiseTiming" className="text-sm font-medium cursor-pointer select-none">Randomise timing</label>
+              <span className="text-xs text-muted-foreground">Scatter first run across the delay window when the engine starts</span>
+            </div>
+          </>
         )}
       </div>
       )}
@@ -761,17 +761,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   >
                     Copy Settings
                   </button>
-                </div>
-                <div className="flex items-center gap-2 ml-0.5">
-                  <Switch
-                    id="followRandomiseTiming"
-                    checked={!!settings.randomiseTiming}
-                    onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
-                    className="scale-[0.7] origin-left"
-                  />
-                  <label htmlFor="followRandomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Randomise timing
-                  </label>
                 </div>
               </div>
             )}
@@ -852,6 +841,18 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                     </>
                   )}
                 </div>
+
+                {tool.type === 'follow' && (
+                  <div className="flex items-center gap-3 pt-2 border-t border-border/60">
+                    <Switch
+                      id="followRandomiseTiming"
+                      checked={!!settings.randomiseTiming}
+                      onCheckedChange={(v) => setSettings({...settings, randomiseTiming: v})}
+                    />
+                    <label htmlFor="followRandomiseTiming" className="text-sm font-medium cursor-pointer select-none">Randomise timing</label>
+                    <span className="text-xs text-muted-foreground">Scatter first run across the delay window when the engine starts</span>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-2 border-t border-border/50">
                   <div className="space-y-2">
