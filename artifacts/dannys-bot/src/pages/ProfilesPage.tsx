@@ -65,7 +65,7 @@ function AccountStatusBadge({ status }: { status: string }) {
   const meta = STATUS_META[status as AccountStatus] ?? STATUS_META.pending;
   const Icon = meta.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border ${meta.pill}`}>
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}`}>
       <Icon className="w-2.5 h-2.5" />
       {meta.label}
     </span>
