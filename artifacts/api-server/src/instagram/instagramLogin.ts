@@ -3,6 +3,7 @@ import { generateSync as totpGenerate } from "otplib";
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
 import type { Profile } from "../shared/schema";
+import { storage } from "../storage";
 
 export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
@@ -47,12 +48,25 @@ async function logApiCall(
   } catch { /* never crash on logging failure */ }
 }
 
-function buildProxyUrl(profile: Profile): string | null {
-  if (!profile.proxyHost || !profile.proxyPort) return null;
-  const auth = profile.proxyUsername && profile.proxyPassword
-    ? `${encodeURIComponent(profile.proxyUsername)}:${encodeURIComponent(profile.proxyPassword)}@`
-    : "";
-  return `http://${auth}${profile.proxyHost}:${profile.proxyPort}`;
+async function buildProxyUrl(profile: Profile): Promise<{ url: string; host: string } | null> {
+  // proxyId (Proxy Manager entry) takes priority over inline proxyHost/proxyPort fields.
+  if (profile.proxyId) {
+    const proxies = await storage.getProxies();
+    const p = proxies.find(px => px.id === profile.proxyId);
+    if (p && p.host && p.port) {
+      const auth = p.username && p.password
+        ? `${encodeURIComponent(p.username)}:${encodeURIComponent(p.password)}@`
+        : "";
+      return { url: `http://${auth}${p.host}:${p.port}`, host: p.host };
+    }
+  }
+  if (profile.proxyHost && profile.proxyPort) {
+    const auth = profile.proxyUsername && profile.proxyPassword
+      ? `${encodeURIComponent(profile.proxyUsername)}:${encodeURIComponent(profile.proxyPassword)}@`
+      : "";
+    return { url: `http://${auth}${profile.proxyHost}:${profile.proxyPort}`, host: profile.proxyHost };
+  }
+  return null;
 }
 
 /** Strip /api/v1/ prefix and trailing slash to get a clean endpoint label */
@@ -231,18 +245,17 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
 }
 
 export async function verifyInstagramCredentials(profile: Profile): Promise<VerifyResult> {
-  const proxyUrl = buildProxyUrl(profile);
-  if (!proxyUrl) {
+  const resolved = await buildProxyUrl(profile);
+  if (!resolved) {
     return {
       ok: false,
       message: `@${profile.username} — no proxy assigned. Assign a proxy before verifying.`,
       accountStatus: "pending",
     };
   }
-  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl}`);
-
-  // ── Fast path: restore existing session from imported ApiCookies ──────────
-  const proxyIp = profile.proxyHost ?? "";
+  const proxyUrl = resolved.url;
+  const proxyIp = resolved.host;
+  console.error(`[instagramLogin] @${profile.username} proxy=${resolved.host}`);
 
   if (profile.igApiCookies) {
     // ── Cookie session handshake ───────────────────────────────────────────
