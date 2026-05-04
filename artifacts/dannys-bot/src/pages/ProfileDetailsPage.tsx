@@ -545,7 +545,7 @@ export function ProfileDetailsPage() {
           {/* Account Label */}
           <div className="space-y-2 pb-2">
             <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              <Tag className="w-3.5 h-3.5" /> Account Name &amp; Trustscore
+              <Tag className="w-3.5 h-3.5" /> Account Name
             </Label>
             <Input
               placeholder="e.g. @Account1 | Monster Trustscore"
@@ -558,7 +558,7 @@ export function ProfileDetailsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="border-none shadow-none !bg-transparent">
               <CardHeader className="px-0 pt-0">
-                <CardTitle className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Login Information</CardTitle>
+                <CardTitle className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Instagram Login Information</CardTitle>
               </CardHeader>
               <CardContent className="px-0 space-y-4">
                 <div className="space-y-4">
@@ -796,7 +796,7 @@ export function ProfileDetailsPage() {
                 <CardTitle className="flex items-center gap-2"><Zap className="w-5 h-5 text-primary" /> API Limits & Control</CardTitle>
               </CardHeader>
               <CardContent className="px-0 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Allow Min Calls</Label>
                     <Input 
@@ -817,7 +817,7 @@ export function ProfileDetailsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="flex gap-4">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Min (s)</Label>
                     <Input 
