@@ -590,6 +590,7 @@ export function ProfilesPage() {
             const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
             const isStopped  = acctStatus === "stopped";
             const isEven     = idx % 2 === 1;
+            const hasProxy   = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
 
             return (
               <div
@@ -627,7 +628,13 @@ export function ProfilesPage() {
 
                 {/* IG Account Status badge */}
                 <div className="w-24 flex justify-center shrink-0">
-                  <AccountStatusBadge status={acctStatus} />
+                  {hasProxy
+                    ? <AccountStatusBadge status={acctStatus} />
+                    : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
+                        <Globe className="w-2.5 h-2.5" />
+                        No Proxy
+                      </span>
+                  }
                 </div>
 
                 {/* Active toggle */}
@@ -650,19 +657,27 @@ export function ProfilesPage() {
                   >
                     Browser
                   </button>
-                  {(acctStatus !== "valid" || profile.credentialsDirty) && (
-                    <button
-                      onClick={() => handleVerify(profile.id)}
-                      disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
-                      data-testid={`button-verify-${profile.id}`}
-                      className="text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors flex items-center gap-0.5"
-                    >
-                      {verifyMutation.isPending && verifyMutation.variables === profile.id
-                        ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        : null}
-                      Verify
-                    </button>
-                  )}
+                  {!hasProxy
+                    ? <span
+                        title="Assign a proxy to this account before verifying"
+                        className="text-[11px] text-red-400 cursor-not-allowed"
+                      >
+                        No Proxy
+                      </span>
+                    : (acctStatus !== "valid" || profile.credentialsDirty) && (
+                      <button
+                        onClick={() => handleVerify(profile.id)}
+                        disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
+                        data-testid={`button-verify-${profile.id}`}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors flex items-center gap-0.5"
+                      >
+                        {verifyMutation.isPending && verifyMutation.variables === profile.id
+                          ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          : null}
+                        Verify
+                      </button>
+                    )
+                  }
                   <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
                     Config
                   </Link>
