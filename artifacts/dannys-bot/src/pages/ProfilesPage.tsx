@@ -305,8 +305,6 @@ export function ProfilesPage() {
     const ids = selectedProfileIds.length > 0 ? selectedProfileIds : filteredProfiles.map(p => p.id);
     if (!ids.length) return;
     setVerifyingAll(true);
-    // Mark all accounts as "verifying" immediately so the UI reflects the in-progress state
-    await Promise.allSettled(ids.map(id => updateAccountStatus.mutateAsync({ id, accountStatus: "verifying" })));
     try {
       // Fetch the delay settings so the server uses the values from the Settings page
       let delayMin = 5;

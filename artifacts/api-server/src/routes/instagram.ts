@@ -937,6 +937,7 @@ export async function registerInstagramRoutes(
       for (let i = 0; i < eligible.length; i++) {
         const profile = eligible[i];
         try {
+          await storage.updateProfile(profile.id, { accountStatus: "verifying" });
           const result = await verifyInstagramCredentials(profile);
           await storage.updateProfile(profile.id, {
             accountStatus: result.accountStatus,

@@ -138940,7 +138940,7 @@ async function verifyInstagramCredentials(profile) {
           igDeviceState: ds
         };
       }
-      return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "logged_out", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "bad_password", igDeviceState: ds };
     }
     if (err instanceof import_instagram_private_api.IgLoginInvalidUserError) {
       return { ok: false, message: `@${profile.username} \u2014 account does not exist on Instagram.`, accountStatus: "banned", igDeviceState: ds };
@@ -143815,7 +143815,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
   });
   function resolveImportStatus(raw) {
     const s = (raw ?? "").toLowerCase().trim().replace(/\s+/g, "_");
-    const valid = ["pending", "valid", "banned", "captcha", "email_confirmation", "phone_verification", "2fa_verification", "stopped", "logged_out", "action_blocked"];
+    const valid = ["pending", "valid", "banned", "captcha", "email_confirmation", "phone_verification", "2fa_verification", "stopped", "logged_out", "bad_password", "action_blocked"];
     if (valid.includes(s)) return s;
     const aliases = {
       "ok": "valid",
@@ -144337,6 +144337,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       for (let i2 = 0; i2 < eligible.length; i2++) {
         const profile = eligible[i2];
         try {
+          await storage.updateProfile(profile.id, { accountStatus: "verifying" });
           const result = await verifyInstagramCredentials(profile);
           await storage.updateProfile(profile.id, {
             accountStatus: result.accountStatus,
