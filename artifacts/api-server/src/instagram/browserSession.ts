@@ -984,13 +984,38 @@ export async function browserAutoLogin(
         }
 
         // Wait up to 3s for the 2FA overlay to fully render in the DOM
-        sendStatus(profileId, "Waiting for 2FA form to render…");
-        await delay(2000);
+        // Wait until a NEW text input appears that is NOT the login page's email/password fields.
+        // Instagram's SPA mounts the 2FA form asynchronously — the old inputs linger.
+        sendStatus(profileId, "Waiting for 2FA input to appear in DOM…");
+        await s.page.waitForFunction(() => {
+          const SKIP_NAMES  = new Set(["username", "email", "pass", "password"]);
+          const SKIP_TYPES  = new Set(["password", "submit", "button", "hidden", "checkbox", "radio"]);
+          return Array.from(document.querySelectorAll("input")).some(el => {
+            const name = (el as HTMLInputElement).name?.toLowerCase() || "";
+            const type = (el as HTMLInputElement).type?.toLowerCase() || "text";
+            if (SKIP_NAMES.has(name) || SKIP_TYPES.has(type)) return false;
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          });
+        }, { timeout: 12000 }).catch(() => null);
 
-        // ── Input search strategy ─────────────────────────────────────────────
-        // Instagram renders the 2FA code field as a React portal — it may not appear
-        // via document.querySelectorAll. We search: main frame → all child frames.
-        // Within each frame we try named selectors, then a position-based fallback.
+        // Dump ALL inputs so we can diagnose exactly what's in the DOM
+        const allInputs = await s.page.evaluate(() =>
+          Array.from(document.querySelectorAll("input")).map(el => ({
+            name: (el as HTMLInputElement).name,
+            type: (el as HTMLInputElement).type,
+            inputmode: el.getAttribute("inputmode"),
+            autocomplete: (el as HTMLInputElement).autocomplete,
+            placeholder: (el as HTMLInputElement).placeholder.slice(0, 20),
+            visible: el.getBoundingClientRect().width > 0,
+            y: Math.round(el.getBoundingClientRect().top),
+          }))
+        ).catch(() => []);
+        sendStatus(profileId, `DOM inputs after wait: ${JSON.stringify(allInputs)}`);
+
+        const frames = s.page.frames();
+        sendStatus(profileId, `Frames: ${frames.length} — ${frames.map(f => f.url().slice(0, 50)).join(" | ")}`);
+
         const NAMED_SELECTORS = [
           'input[name="verificationCode"]',
           'input[name="security_code"]',
@@ -1001,57 +1026,38 @@ export async function browserAutoLogin(
           'input[type="number"]',
         ];
 
-        // Dump all inputs in main frame for diagnostics
-        const allInputs = await s.page.evaluate(() =>
-          Array.from(document.querySelectorAll("input")).map(el => ({
-            name: el.name, type: el.type, inputmode: el.getAttribute("inputmode"),
-            autocomplete: el.autocomplete, placeholder: el.placeholder.slice(0, 20),
-            visible: el.getBoundingClientRect().width > 0,
-          }))
-        ).catch(() => []);
-        sendStatus(profileId, `Main frame inputs: ${JSON.stringify(allInputs).slice(0, 400)}`);
-
-        // List all frames
-        const frames = s.page.frames();
-        sendStatus(profileId, `Frames on page: ${frames.length} (${frames.map(f => f.url().slice(0, 40)).join(" | ")})`);
-
         let codeInput: any = null;
         let codeSelector = '';
-        let codeFrame: any = s.page;
 
-        // Search all frames (main frame first, then children)
+        // 1. Named selectors across all frames
         outer: for (const frame of frames) {
-          // Named selectors
           for (const sel of NAMED_SELECTORS) {
             const el = await frame.$(sel).catch(() => null);
-            if (el) { codeInput = el; codeSelector = sel; codeFrame = frame; break outer; }
-          }
-          // Position-based fallback: pick the visible input that is NOT the username/email
-          // field (those sit at the top of the viewport; the 2FA input is centered).
-          const posFallback = await frame.evaluateHandle(() => {
-            const SKIP = new Set(["username", "email", "search", "q"]);
-            const allIns = Array.from(document.querySelectorAll("input"));
-            // Sort by vertical position — further down = more likely to be 2FA overlay
-            const visible = allIns
-              .map(el => {
-                const r = el.getBoundingClientRect();
-                return { el, r, name: (el as HTMLInputElement).name?.toLowerCase() || "" };
-              })
-              .filter(({ r, name }) => r.width > 0 && r.height > 0 && !SKIP.has(name));
-            // Pick the input closest to vertical centre of the viewport
-            const mid = window.innerHeight / 2;
-            visible.sort((a, b) => Math.abs(a.r.top - mid) - Math.abs(b.r.top - mid));
-            return visible[0]?.el ?? null;
-          }).catch(() => null);
-          if (posFallback && (posFallback as any).asElement?.()) {
-            codeInput = (posFallback as any).asElement();
-            codeSelector = "position-based fallback (closest to viewport centre)";
-            codeFrame = frame;
-            break;
+            if (el) { codeInput = el; codeSelector = `${sel} [frame: ${frame.url().slice(0, 30)}]`; break outer; }
           }
         }
 
-        sendStatus(profileId, `2FA input found: ${codeSelector || "NONE"} | frame: ${codeFrame === s.page ? "main" : codeFrame.url().slice(0, 40)}`);
+        // 2. Position-based fallback in main frame — only type="text" inputs, skip login fields
+        if (!codeInput) {
+          const SKIP_NAMES = new Set(["username", "email", "pass", "password", "search", "q"]);
+          const handle = await s.page.evaluateHandle(() => {
+            const SKIP_NAMES_INNER = new Set(["username", "email", "pass", "password", "search", "q"]);
+            const candidates = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'))
+              .map(el => {
+                const r = el.getBoundingClientRect();
+                return { el, name: (el as HTMLInputElement).name?.toLowerCase() || "", r };
+              })
+              .filter(({ r, name }) => r.width > 0 && r.height > 0 && !SKIP_NAMES_INNER.has(name));
+            if (!candidates.length) return null;
+            const mid = window.innerHeight / 2;
+            candidates.sort((a, b) => Math.abs(a.r.top - mid) - Math.abs(b.r.top - mid));
+            return candidates[0].el;
+          }).catch(() => null);
+          const el = handle && (handle as any).asElement ? (handle as any).asElement() : null;
+          if (el) { codeInput = el; codeSelector = "type=text nearest to viewport centre"; }
+        }
+
+        sendStatus(profileId, `2FA input: ${codeSelector || "NONE FOUND"}`);
 
         if (codeInput) {
           // Click directly on the element handle's bounding box

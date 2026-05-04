@@ -139720,8 +139720,32 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           sendStatus(profileId, `\u26A0 Invalid 2FA secret key \u2014 ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
           return { ok: false, message: `Invalid 2FA secret: ${totpErr?.message}` };
         }
-        sendStatus(profileId, "Waiting for 2FA form to render\u2026");
-        await delay(2e3);
+        sendStatus(profileId, "Waiting for 2FA input to appear in DOM\u2026");
+        await s.page.waitForFunction(() => {
+          const SKIP_NAMES = /* @__PURE__ */ new Set(["username", "email", "pass", "password"]);
+          const SKIP_TYPES = /* @__PURE__ */ new Set(["password", "submit", "button", "hidden", "checkbox", "radio"]);
+          return Array.from(document.querySelectorAll("input")).some((el) => {
+            const name = el.name?.toLowerCase() || "";
+            const type = el.type?.toLowerCase() || "text";
+            if (SKIP_NAMES.has(name) || SKIP_TYPES.has(type)) return false;
+            const r2 = el.getBoundingClientRect();
+            return r2.width > 0 && r2.height > 0;
+          });
+        }, { timeout: 12e3 }).catch(() => null);
+        const allInputs = await s.page.evaluate(
+          () => Array.from(document.querySelectorAll("input")).map((el) => ({
+            name: el.name,
+            type: el.type,
+            inputmode: el.getAttribute("inputmode"),
+            autocomplete: el.autocomplete,
+            placeholder: el.placeholder.slice(0, 20),
+            visible: el.getBoundingClientRect().width > 0,
+            y: Math.round(el.getBoundingClientRect().top)
+          }))
+        ).catch(() => []);
+        sendStatus(profileId, `DOM inputs after wait: ${JSON.stringify(allInputs)}`);
+        const frames = s.page.frames();
+        sendStatus(profileId, `Frames: ${frames.length} \u2014 ${frames.map((f) => f.url().slice(0, 50)).join(" | ")}`);
         const NAMED_SELECTORS = [
           'input[name="verificationCode"]',
           'input[name="security_code"]',
@@ -139731,51 +139755,38 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           'input[type="tel"]',
           'input[type="number"]'
         ];
-        const allInputs = await s.page.evaluate(
-          () => Array.from(document.querySelectorAll("input")).map((el) => ({
-            name: el.name,
-            type: el.type,
-            inputmode: el.getAttribute("inputmode"),
-            autocomplete: el.autocomplete,
-            placeholder: el.placeholder.slice(0, 20),
-            visible: el.getBoundingClientRect().width > 0
-          }))
-        ).catch(() => []);
-        sendStatus(profileId, `Main frame inputs: ${JSON.stringify(allInputs).slice(0, 400)}`);
-        const frames = s.page.frames();
-        sendStatus(profileId, `Frames on page: ${frames.length} (${frames.map((f) => f.url().slice(0, 40)).join(" | ")})`);
         let codeInput = null;
         let codeSelector = "";
-        let codeFrame = s.page;
         outer: for (const frame of frames) {
           for (const sel of NAMED_SELECTORS) {
             const el = await frame.$(sel).catch(() => null);
             if (el) {
               codeInput = el;
-              codeSelector = sel;
-              codeFrame = frame;
+              codeSelector = `${sel} [frame: ${frame.url().slice(0, 30)}]`;
               break outer;
             }
           }
-          const posFallback = await frame.evaluateHandle(() => {
-            const SKIP = /* @__PURE__ */ new Set(["username", "email", "search", "q"]);
-            const allIns = Array.from(document.querySelectorAll("input"));
-            const visible = allIns.map((el) => {
-              const r2 = el.getBoundingClientRect();
-              return { el, r: r2, name: el.name?.toLowerCase() || "" };
-            }).filter(({ r: r2, name }) => r2.width > 0 && r2.height > 0 && !SKIP.has(name));
+        }
+        if (!codeInput) {
+          const SKIP_NAMES = /* @__PURE__ */ new Set(["username", "email", "pass", "password", "search", "q"]);
+          const handle = await s.page.evaluateHandle(() => {
+            const SKIP_NAMES_INNER = /* @__PURE__ */ new Set(["username", "email", "pass", "password", "search", "q"]);
+            const candidates = Array.from(document.querySelectorAll('input[type="text"], input:not([type])')).map((el2) => {
+              const r2 = el2.getBoundingClientRect();
+              return { el: el2, name: el2.name?.toLowerCase() || "", r: r2 };
+            }).filter(({ r: r2, name }) => r2.width > 0 && r2.height > 0 && !SKIP_NAMES_INNER.has(name));
+            if (!candidates.length) return null;
             const mid = window.innerHeight / 2;
-            visible.sort((a2, b3) => Math.abs(a2.r.top - mid) - Math.abs(b3.r.top - mid));
-            return visible[0]?.el ?? null;
+            candidates.sort((a2, b3) => Math.abs(a2.r.top - mid) - Math.abs(b3.r.top - mid));
+            return candidates[0].el;
           }).catch(() => null);
-          if (posFallback && posFallback.asElement?.()) {
-            codeInput = posFallback.asElement();
-            codeSelector = "position-based fallback (closest to viewport centre)";
-            codeFrame = frame;
-            break;
+          const el = handle && handle.asElement ? handle.asElement() : null;
+          if (el) {
+            codeInput = el;
+            codeSelector = "type=text nearest to viewport centre";
           }
         }
-        sendStatus(profileId, `2FA input found: ${codeSelector || "NONE"} | frame: ${codeFrame === s.page ? "main" : codeFrame.url().slice(0, 40)}`);
+        sendStatus(profileId, `2FA input: ${codeSelector || "NONE FOUND"}`);
         if (codeInput) {
           const box = await codeInput.boundingBox().catch(() => null);
           sendStatus(profileId, `Input bounding box: ${JSON.stringify(box)}`);
