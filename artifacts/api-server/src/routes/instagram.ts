@@ -311,9 +311,10 @@ export async function registerInstagramRoutes(
     let result: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
     try {
       result = await verifyInstagramCredentials(effectiveProfile as typeof profile);
-    } catch (err: any) {
+    } catch (err) {
       await storage.updateProfile(profile.id, { accountStatus: "pending" });
-      return res.status(500).json({ ok: false, message: err?.message ?? "Unexpected verify error" });
+      const msg = err instanceof Error ? err.message : "Unexpected verify error";
+      return res.status(500).json({ ok: false, message: msg });
     }
 
     await storage.updateProfile(profile.id, {
