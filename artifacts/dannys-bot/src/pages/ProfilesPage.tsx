@@ -340,6 +340,15 @@ export function ProfilesPage() {
     }
   }, [selectedProfileIds, updateProfileMutation, toast]);
 
+  // ── Bulk: Open Embedded Browsers ─────────────────────────────────────────
+  const handleBulkOpenBrowsers = useCallback(() => {
+    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : (profiles ?? []).map(p => p.id);
+    const targets = (profiles ?? []).filter(p => ids.includes(p.id));
+    for (const p of targets) {
+      openWindow(p.id, p.username ?? "", p.userAgentEmbedded ?? "");
+    }
+  }, [selectedProfileIds, profiles, openWindow]);
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -368,7 +377,7 @@ export function ProfilesPage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha]);
+  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers]);
 
   const setSlot = useSidebarSetSlot();
 
@@ -405,6 +414,13 @@ export function ProfilesPage() {
               className="cursor-pointer font-medium p-3"
             >
               <Download className="w-4 h-4 mr-2" /> Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleBulkOpenBrowsers}
+              className="cursor-pointer font-medium p-3"
+            >
+              <Globe className="w-4 h-4 mr-2" /> Open Embedded Browsers
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
