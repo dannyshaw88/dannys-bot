@@ -1,8 +1,18 @@
 # Workspace
 
-> **⚠️ NEVER push to git/GitHub unless explicitly instructed by the user.**
-> All file changes go to GitHub via the REST API only (PUT /repos/dannyshaw88/dannys-bot/contents/...).
-> `git push` and destructive git commands are blocked in this sandbox.
+> ## ⚠️ AGENT STANDING RULES — READ BEFORE EVERY SESSION
+>
+> **1. This is an API-driven Windows desktop bot.**
+> All Instagram actions and API calls are made via the Instagram Private API only.
+> The Embedded Browser (EB) is used for human-assisted browsing and challenge solving ONLY — never for automation.
+>
+> **2. NEVER push to git/GitHub unless explicitly instructed by the user.**
+> Do not commit or push as a side-effect of any task. Wait for a direct instruction.
+>
+> **3. When a git push IS instructed, always use the GitHub REST API — never `git push`.**
+> Method: `PUT https://api.github.com/repos/dannyshaw88/dannys-bot/contents/<path>`
+> Steps: get token via `listConnections('github')` → fetch current SHA → push each file sequentially (re-fetch SHA before each) to avoid 409 conflicts.
+> `git push` is blocked in this sandbox and will always fail.
 
 ## Overview
 
