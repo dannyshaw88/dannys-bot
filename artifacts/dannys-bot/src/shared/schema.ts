@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const ACCOUNT_STATUSES = [
   'pending',
+  'verifying',
   'valid',
   'banned',
   'captcha',

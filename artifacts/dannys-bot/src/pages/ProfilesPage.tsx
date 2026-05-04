@@ -29,6 +29,7 @@ const STATUS_META: Record<AccountStatus, {
   pill: string;
 }> = {
   pending:              { label: "Pending",              icon: Clock,       pill: "bg-slate-50  text-slate-600  border-slate-200"  },
+  verifying:            { label: "Verifying",            icon: Loader2,     pill: "bg-blue-50   text-blue-600   border-blue-200"   },
   valid:                { label: "Valid",                icon: ShieldCheck, pill: "bg-green-50  text-green-700  border-green-200"  },
   banned:               { label: "Banned",               icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200"    },
   captcha:              { label: "Captcha",              icon: ScanFace,    pill: "bg-amber-50  text-amber-700  border-amber-200"  },
@@ -82,6 +83,7 @@ export function ProfilesPage() {
   const { openWindow } = useBrowserWindows();
 
   const handleVerify = (id: number) => {
+    updateAccountStatus.mutate({ id, accountStatus: "verifying" });
     verifyMutation.mutate(id, {
       onSuccess: (data) => {
         toast({
@@ -262,6 +264,8 @@ export function ProfilesPage() {
     const ids = selectedProfileIds.length > 0 ? selectedProfileIds : (profiles ?? []).map(p => p.id);
     if (!ids.length) return;
     setVerifyingAll(true);
+    // Mark all accounts as "verifying" immediately so the UI reflects the in-progress state
+    await Promise.allSettled(ids.map(id => updateAccountStatus.mutateAsync({ id, accountStatus: "verifying" })));
     try {
       const res = await fetch("/api/profiles/verify-all", {
         method: "POST",

@@ -13,6 +13,7 @@ export const proxies = sqliteTable("proxies", {
 });
 
 export const ACCOUNT_STATUSES = [
+  'verifying',
   'valid',
   'banned',
   'captcha',
