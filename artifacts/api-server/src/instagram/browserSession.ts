@@ -975,19 +975,48 @@ export async function browserAutoLogin(
           sendStatus(profileId, `⚠ Invalid 2FA secret key — ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
           return { ok: false, message: `Invalid 2FA secret: ${totpErr?.message}` };
         }
-        // Find the code input (could be any visible single input on the 2FA page)
-        const codeInput = await s.page.$('input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]').catch(() => null);
+        // Find the 2FA code input — try specific selectors first, then fall back.
+        // IMPORTANT: use the element handle directly (not a compound selector string)
+        // to avoid accidentally clicking the username input that shares input[type="text"].
+        const CODE_SELECTORS = [
+          'input[name="verificationCode"]',
+          'input[inputmode="numeric"]',
+          'input[name="security_code"]',
+          'input[autocomplete="one-time-code"]',
+          'input[type="tel"]',
+          'input[type="number"]',
+        ];
+        let codeInput: any = null;
+        let codeSelector = '';
+        for (const sel of CODE_SELECTORS) {
+          const el = await s.page.$(sel).catch(() => null);
+          if (el) { codeInput = el; codeSelector = sel; break; }
+        }
+        log(`[autoLogin:${profileId}] 2FA input selector used: ${codeSelector || "none found"}`, "browser");
         if (codeInput) {
-          await fillField(s.page, 'input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]', code);
+          // Click and type directly into the element handle — avoids re-querying the DOM
+          const box = await codeInput.boundingBox().catch(() => null);
+          if (box) {
+            await s.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          } else {
+            await codeInput.click();
+          }
+          await delay(150);
+          // Clear existing content then type code char-by-char
+          await s.page.keyboard.down("Control");
+          await s.page.keyboard.press("a");
+          await s.page.keyboard.up("Control");
+          await s.page.keyboard.press("Backspace");
+          await s.page.keyboard.type(code, { delay: 80 });
           await delay(400);
-          // Click "Continue" button
+          // Click "Confirm" / "Continue" / "Verify" / "Submit" button
           const contBtns = await s.page.evaluate(() =>
             Array.from(document.querySelectorAll('button, [role="button"]')).map((el) => {
               const r = (el as HTMLElement).getBoundingClientRect();
               return { text: (el as HTMLElement).innerText?.trim(), x: r.x, y: r.y, w: r.width, h: r.height };
             })
           ).catch(() => [] as any[]);
-          const contBtn = contBtns.find((b: any) => /continue|verify|submit/i.test(b.text) && b.w > 50);
+          const contBtn = contBtns.find((b: any) => /confirm|continue|verify|submit/i.test(b.text) && b.w > 50);
           if (contBtn) {
             await s.page.mouse.move(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
             await delay(100);

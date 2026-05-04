@@ -139714,9 +139714,38 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           sendStatus(profileId, `\u26A0 Invalid 2FA secret key \u2014 ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
           return { ok: false, message: `Invalid 2FA secret: ${totpErr?.message}` };
         }
-        const codeInput = await s.page.$('input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]').catch(() => null);
+        const CODE_SELECTORS = [
+          'input[name="verificationCode"]',
+          'input[inputmode="numeric"]',
+          'input[name="security_code"]',
+          'input[autocomplete="one-time-code"]',
+          'input[type="tel"]',
+          'input[type="number"]'
+        ];
+        let codeInput = null;
+        let codeSelector = "";
+        for (const sel of CODE_SELECTORS) {
+          const el = await s.page.$(sel).catch(() => null);
+          if (el) {
+            codeInput = el;
+            codeSelector = sel;
+            break;
+          }
+        }
+        log(`[autoLogin:${profileId}] 2FA input selector used: ${codeSelector || "none found"}`, "browser");
         if (codeInput) {
-          await fillField(s.page, 'input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]', code);
+          const box = await codeInput.boundingBox().catch(() => null);
+          if (box) {
+            await s.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          } else {
+            await codeInput.click();
+          }
+          await delay(150);
+          await s.page.keyboard.down("Control");
+          await s.page.keyboard.press("a");
+          await s.page.keyboard.up("Control");
+          await s.page.keyboard.press("Backspace");
+          await s.page.keyboard.type(code, { delay: 80 });
           await delay(400);
           const contBtns = await s.page.evaluate(
             () => Array.from(document.querySelectorAll('button, [role="button"]')).map((el) => {
@@ -139724,7 +139753,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
               return { text: el.innerText?.trim(), x: r2.x, y: r2.y, w: r2.width, h: r2.height };
             })
           ).catch(() => []);
-          const contBtn = contBtns.find((b3) => /continue|verify|submit/i.test(b3.text) && b3.w > 50);
+          const contBtn = contBtns.find((b3) => /confirm|continue|verify|submit/i.test(b3.text) && b3.w > 50);
           if (contBtn) {
             await s.page.mouse.move(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
             await delay(100);
