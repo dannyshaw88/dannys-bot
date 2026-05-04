@@ -127,8 +127,25 @@ export async function getOrCreateSession(
     await closeSession(profileId);
   }
 
-  const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
-  log(`Launching Chrome for profile ${profileId}${proxy ? ` via proxy ${proxy.host}:${proxy.port}` : " (direct)"}`, "browser");
+  // Build --proxy-server arg.
+  // Credentials are embedded directly in the URL (http://user:pass@host:port) so Chromium
+  // sends Proxy-Authorization on the CONNECT request proactively — without waiting for a
+  // 407 challenge that some proxy providers never send (returning 429 instead).
+  let proxyServerUrl: string | null = null;
+  if (proxy) {
+    if (proxy.username) {
+      const u = encodeURIComponent(proxy.username);
+      const p = encodeURIComponent(proxy.password ?? "");
+      proxyServerUrl = `http://${u}:${p}@${proxy.host}:${proxy.port}`;
+      log(`Launching Chrome for profile ${profileId} via authenticated proxy ${proxy.host}:${proxy.port} (user: ${proxy.username})`, "browser");
+    } else {
+      proxyServerUrl = `http://${proxy.host}:${proxy.port}`;
+      log(`Launching Chrome for profile ${profileId} via proxy ${proxy.host}:${proxy.port} (no auth)`, "browser");
+    }
+  } else {
+    log(`Launching Chrome for profile ${profileId} — NO PROXY (direct connection)`, "browser");
+  }
+  const proxyArg = proxyServerUrl ? [`--proxy-server=${proxyServerUrl}`] : [];
 
   // Try puppeteer-core first (ships with Electron app, no bundled Chromium).
   // Fall back to the full puppeteer package (used in Linux dev where it manages its own Chromium).
@@ -156,10 +173,9 @@ export async function getOrCreateSession(
   await page.setUserAgent(userAgent);
   await page.setViewport({ width: 1280, height: 760 });
 
-  // Authenticate proxy if credentials supplied
-  if (proxy?.username) {
-    await page.authenticate({ username: proxy.username, password: proxy.password ?? "" });
-  }
+  // page.authenticate() is intentionally NOT used here.
+  // Credentials are embedded in --proxy-server so Chromium sends Proxy-Authorization
+  // proactively on every CONNECT request without needing a 407 challenge first.
 
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
   await page.evaluateOnNewDocument(() => {
