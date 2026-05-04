@@ -13,6 +13,11 @@ interface Props {
 
 export function BrowserWindow({ window: win }: Props) {
   const { closeWindow, minimizeWindow, focusWindow, moveWindow } = useBrowserWindows();
+
+  const handleClose = useCallback(() => {
+    fetch(`/api/browser/${win.profileId}/close`, { method: "POST" }).catch(() => {});
+    closeWindow(win.profileId);
+  }, [win.profileId, closeWindow]);
   const [maximized, setMaximized] = useState(false);
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -119,7 +124,7 @@ export function BrowserWindow({ window: win }: Props) {
         </button>
         <button
           onMouseDown={e => e.stopPropagation()}
-          onClick={() => closeWindow(win.profileId)}
+          onClick={handleClose}
           className="w-6 h-6 rounded flex items-center justify-center hover:bg-red-100 hover:text-red-600 text-muted-foreground transition-colors"
           title="Close"
         >
