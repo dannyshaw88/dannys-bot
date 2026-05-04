@@ -1,44 +1,44 @@
 {
-  "appId": "com.dannysbot.app",
-  "productName": "Danny's Bot",
-  "copyright": "Copyright © 2025",
-  "artifactName": "dannys-bot-setup-${version}.${ext}",
-  "directories": {
-    "output": "release"
-  },
-  "files": [
-    "dist/**",
-    "!dist/**/*.map"
-  ],
-  "asarUnpack": [
-    "dist/server/**",
-    "dist/frontend/**",
-    "dist/assets/**",
-    "node_modules/better-sqlite3/**",
-    "**/*.node"
-  ],
-  "npmRebuild": true,
-  "publish": {
-    "provider": "github",
-    "owner": "dannyshaw88",
-    "repo": "dannys-bot",
-    "releaseType": "release"
-  },
-  "win": {
-    "icon": "assets/icon.ico",
-    "target": [
-      {
-        "target": "nsis",
-        "arch": ["x64"]
-      }
-    ]
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "createDesktopShortcut": true,
-    "createStartMenuShortcut": true,
-    "shortcutName": "Danny's Bot",
-    "installDir": "$LOCALAPPDATA\\Programs\\DannysBot"
+    "appId": "com.dannysbot.app",
+    "productName": "Danny's Bot",
+    "copyright": "Copyright © 2025",
+    "artifactName": "dannys-bot-setup-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "!dist/**/*.map"
+    ],
+    "asarUnpack": [
+      "dist/server/**",
+      "dist/frontend/**",
+      "dist/assets/**",
+      "node_modules/better-sqlite3/**",
+      "**/*.node"
+    ],
+    "npmRebuild": true,
+    "publish": {
+      "provider": "github",
+      "owner": "dannyshaw88",
+      "repo": "dannys-bot",
+      "releaseType": "release"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Danny's Bot"
+    }
   }
-}
+  
