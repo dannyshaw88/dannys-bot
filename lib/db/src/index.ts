@@ -213,6 +213,13 @@ if (!followedUsersColNames.has("instagram_user_id")) {
   sqlite.exec(`ALTER TABLE followed_users ADD COLUMN instagram_user_id TEXT NOT NULL DEFAULT '';`);
 }
 
+// Add posted_shortcode to reposted_posts if missing (added in schema but not yet migrated)
+const repostedPostsCols = sqlite.prepare("pragma table_info(reposted_posts)").all() as { name: string }[];
+const repostedPostsColNames = new Set(repostedPostsCols.map((c) => c.name));
+if (!repostedPostsColNames.has("posted_shortcode")) {
+  sqlite.exec(`ALTER TABLE reposted_posts ADD COLUMN posted_shortcode TEXT NOT NULL DEFAULT '';`);
+}
+
 // Cleanup: keep only named API operations — remove human-session noise and raw
 // URL-path entries that were logged by older code. Cap to newest 5000 rows.
 sqlite.exec(`
