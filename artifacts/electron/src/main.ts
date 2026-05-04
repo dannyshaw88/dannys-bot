@@ -120,7 +120,7 @@ function startServer(port: number, logPath: string): void {
       DATABASE_PATH: dbPath,
       FRONTEND_DIST_PATH: frontendPath,
       NODE_ENV: "production",
-      LOG_LEVEL: "warn",
+      LOG_LEVEL: "trace",
       LOG_FILE: logPath,
       // The instagram-private-api library uses the old `request-promise` HTTP library
       // which on Windows does not use the system certificate store.  Setting this
@@ -249,10 +249,10 @@ async function createWindow() {
   });
 
   // Place the log file next to the exe in the installation directory so it is
-  // easy to find (e.g. AppData\Local\Programs\DannysBot\server.log).
+  // easy to find (e.g. AppData\Local\Programs\DannysBot\logs.log).
   // path.dirname(app.getPath("exe")) always resolves to the correct install
   // folder regardless of whether the user customised the install location.
-  const logPath = path.join(path.dirname(app.getPath("exe")), "server.log");
+  const logPath = path.join(path.dirname(app.getPath("exe")), "logs.log");
 
   try {
     serverPort = await findFreePort();
@@ -288,11 +288,11 @@ async function createWindow() {
 
   ipcMain.handle("open-log", async () => {
     const { shell } = await import("electron");
-    const logFile = path.join(path.dirname(app.getPath("exe")), "server.log");
+    const logFile = path.join(path.dirname(app.getPath("exe")), "logs.log");
     const err = await shell.openPath(logFile);
     if (err) {
-      // Fall back to the userData location used by older builds
-      await shell.openPath(path.join(app.getPath("userData"), "server.log"));
+      // Fall back to userData location used by older builds
+      await shell.openPath(path.join(app.getPath("userData"), "logs.log"));
     }
   });
 
