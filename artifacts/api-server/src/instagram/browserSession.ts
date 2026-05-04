@@ -419,10 +419,13 @@ function startFrameLoop(profileId: number) {
       //   • chrome-error://  — HTTP 429 / net error from Instagram
       //   • about:blank      — goto() timed out and was silently swallowed
       //   • any non-IG URL   — ended up somewhere unexpected
-      // Wait ~3 seconds then navigate back to Instagram (up to 3 attempts).
+      // Retries indefinitely: fast (3 s) for first 3 attempts, then every 30 s.
+      // Account verification status has NO effect on the browser's network access.
       if (!currentUrl.includes("instagram.com")) {
         errorRetryTick++;
-        if (errorRetryTick >= 15 && errorRetryCount < 3) { // 15*200ms = 3s
+        // First 3 retries: every 3 s (15×200 ms). After that: every 30 s (150×200 ms).
+        const retryThreshold = errorRetryCount < 3 ? 15 : 150;
+        if (errorRetryTick >= retryThreshold) {
           errorRetryTick = 0;
           errorRetryCount++;
           const hasCookies = await s.page.cookies().then(c => c.some(ck => ck.name === "sessionid")).catch(() => false);
@@ -434,7 +437,7 @@ function startFrameLoop(profileId: number) {
         }
       } else {
         errorRetryTick = 0;
-        errorRetryCount = 0; // reset so future failures also get 3 attempts
+        errorRetryCount = 0; // reset so future failures also get fast retries
       }
       // ─────────────────────────────────────────────────────────────────────
 
