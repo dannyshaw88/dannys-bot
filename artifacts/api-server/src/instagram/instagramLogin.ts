@@ -7,7 +7,7 @@ import { storage } from "../storage";
 
 export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
-  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password"; igDeviceState?: string; checkpointUrl?: string };
+  | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password" | "invalid_credentials"; igDeviceState?: string; checkpointUrl?: string };
 
 // Extract the Instagram challenge URL from an IgCheckpointError.
 // IgCheckpointError.message getter returns "https://i.instagram.com/challenge/" + api_path.
@@ -366,8 +366,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           console.error(`[instagramLogin] @${profile.username} — get_account_family (GetAccountFamily) OK`);
         } catch (famErr: any) {
           const msg: string = famErr?.message ?? "";
-          console.error(`[instagramLogin] @${profile.username} — get_account_family failed: ${msg}`);
-          if (famErr instanceof IgCheckpointError || /checkpoint/i.test(msg)) {
+          const responseBody = famErr?.response?.body ?? {};
+          const igMsg: string = (typeof responseBody === "object" && responseBody !== null
+            ? (responseBody?.message ?? "")
+            : "") as string;
+          const statusCode: number | undefined = famErr?.response?.statusCode;
+          console.error(`[instagramLogin] @${profile.username} — get_account_family failed: HTTP ${statusCode ?? "n/a"} igMsg="${igMsg}" raw="${msg}"`);
+
+          if (famErr instanceof IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
             return {
               ok: false,
               message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
@@ -375,19 +381,43 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               checkpointUrl: extractCheckpointUrl(famErr),
               igDeviceState: captureDeviceState(),
             };
-          } else if (/login_required|not.*auth|401/i.test(msg)) {
+          } else if (/login_required|not.*auth/i.test(msg) || /login_required|not.*auth/i.test(igMsg) || statusCode === 401) {
             return {
               ok: false,
               message: `@${profile.username} — session expired or revoked. Open the embedded browser to log in again.`,
               accountStatus: "logged_out",
               igDeviceState: captureDeviceState(),
             };
+          } else if (/invalid_credentials/i.test(igMsg) || /invalid_credentials/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} — Instagram rejected the credentials as invalid.`,
+              accountStatus: "invalid_credentials",
+              igDeviceState: captureDeviceState(),
+            };
+          } else if (/bad_password/i.test(igMsg) || /bad_password/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} — incorrect password.`,
+              accountStatus: "bad_password",
+              igDeviceState: captureDeviceState(),
+            };
+          } else if (statusCode && statusCode >= 400 && statusCode < 600) {
+            // Instagram responded with a real HTTP error — session is dead, not a network issue.
+            // Log the full body so we can refine classification over time.
+            console.error(`[instagramLogin] @${profile.username} — get_account_family Instagram error body: ${JSON.stringify(responseBody)}`);
+            return {
+              ok: false,
+              message: `@${profile.username} — Instagram rejected the session (HTTP ${statusCode}${igMsg ? ": " + igMsg : ""}). The account may need to log in again.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState(),
+            };
           } else {
-            // 404 or network / proxy error — cannot confirm session is valid, abort.
+            // No HTTP status — genuine network/proxy error (ECONNREFUSED, timeout, DNS fail).
             console.error(`[instagramLogin] @${profile.username} — get_account_family network/proxy error, treating as inconclusive`);
             return {
               ok: false,
-              message: `@${profile.username} — could not reach Instagram to verify the session (proxy or network error). Try again.`,
+              message: `@${profile.username} — could not reach Instagram (proxy or network error). Try again.`,
               accountStatus: "logged_out",
               igDeviceState: captureDeviceState(),
             };

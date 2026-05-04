@@ -138773,8 +138773,11 @@ async function verifyInstagramCredentials(profile) {
           console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family (GetAccountFamily) OK`);
         } catch (famErr) {
           const msg = famErr?.message ?? "";
-          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family failed: ${msg}`);
-          if (famErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(msg)) {
+          const responseBody = famErr?.response?.body ?? {};
+          const igMsg = typeof responseBody === "object" && responseBody !== null ? responseBody?.message ?? "" : "";
+          const statusCode = famErr?.response?.statusCode;
+          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family failed: HTTP ${statusCode ?? "n/a"} igMsg="${igMsg}" raw="${msg}"`);
+          if (famErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
             return {
               ok: false,
               message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
@@ -138782,10 +138785,32 @@ async function verifyInstagramCredentials(profile) {
               checkpointUrl: extractCheckpointUrl(famErr),
               igDeviceState: captureDeviceState2()
             };
-          } else if (/login_required|not.*auth|401/i.test(msg)) {
+          } else if (/login_required|not.*auth/i.test(msg) || /login_required|not.*auth/i.test(igMsg) || statusCode === 401) {
             return {
               ok: false,
               message: `@${profile.username} \u2014 session expired or revoked. Open the embedded browser to log in again.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState2()
+            };
+          } else if (/invalid_credentials/i.test(igMsg) || /invalid_credentials/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 Instagram rejected the credentials as invalid.`,
+              accountStatus: "invalid_credentials",
+              igDeviceState: captureDeviceState2()
+            };
+          } else if (/bad_password/i.test(igMsg) || /bad_password/i.test(msg)) {
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 incorrect password.`,
+              accountStatus: "bad_password",
+              igDeviceState: captureDeviceState2()
+            };
+          } else if (statusCode && statusCode >= 400 && statusCode < 600) {
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family Instagram error body: ${JSON.stringify(responseBody)}`);
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 Instagram rejected the session (HTTP ${statusCode}${igMsg ? ": " + igMsg : ""}). The account may need to log in again.`,
               accountStatus: "logged_out",
               igDeviceState: captureDeviceState2()
             };
@@ -138793,7 +138818,7 @@ async function verifyInstagramCredentials(profile) {
             console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network/proxy error, treating as inconclusive`);
             return {
               ok: false,
-              message: `@${profile.username} \u2014 could not reach Instagram to verify the session (proxy or network error). Try again.`,
+              message: `@${profile.username} \u2014 could not reach Instagram (proxy or network error). Try again.`,
               accountStatus: "logged_out",
               igDeviceState: captureDeviceState2()
             };
