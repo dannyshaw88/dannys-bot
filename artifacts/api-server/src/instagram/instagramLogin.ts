@@ -232,7 +232,14 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
 
 export async function verifyInstagramCredentials(profile: Profile): Promise<VerifyResult> {
   const proxyUrl = buildProxyUrl(profile);
-  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
+  if (!proxyUrl) {
+    return {
+      ok: false,
+      message: `@${profile.username} — no proxy assigned. Assign a proxy before verifying.`,
+      accountStatus: "pending",
+    };
+  }
+  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl}`);
 
   // ── Fast path: restore existing session from imported ApiCookies ──────────
   const proxyIp = profile.proxyHost ?? "";
