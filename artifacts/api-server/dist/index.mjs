@@ -20617,27 +20617,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module2.exports = Router3;
+    module2.exports = Router4;
     module2.exports.Route = Route;
-    function Router3(options) {
-      if (!(this instanceof Router3)) {
-        return new Router3(options);
+    function Router4(options) {
+      if (!(this instanceof Router4)) {
+        return new Router4(options);
       }
       const opts = options || {};
-      function router3(req, res, next) {
-        router3.handle(req, res, next);
+      function router4(req, res, next) {
+        router4.handle(req, res, next);
       }
-      Object.setPrototypeOf(router3, this);
-      router3.caseSensitive = opts.caseSensitive;
-      router3.mergeParams = opts.mergeParams;
-      router3.params = {};
-      router3.strict = opts.strict;
-      router3.stack = [];
-      return router3;
+      Object.setPrototypeOf(router4, this);
+      router4.caseSensitive = opts.caseSensitive;
+      router4.mergeParams = opts.mergeParams;
+      router4.params = {};
+      router4.strict = opts.strict;
+      router4.stack = [];
+      return router4;
     }
-    Router3.prototype = function() {
+    Router4.prototype = function() {
     };
-    Router3.prototype.param = function param(name, fn) {
+    Router4.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -20657,7 +20657,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router3.prototype.handle = function handle(req, res, callback) {
+    Router4.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -20784,7 +20784,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router3.prototype.use = function use(handler) {
+    Router4.prototype.use = function use(handler) {
       let offset = 0;
       let path4 = "/";
       if (typeof handler !== "function") {
@@ -20817,7 +20817,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router3.prototype.route = function route(path4) {
+    Router4.prototype.route = function route(path4) {
       const route2 = new Route(path4);
       const layer = new Layer(path4, {
         sensitive: this.caseSensitive,
@@ -20832,7 +20832,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router3.prototype[method] = function(path4) {
+      Router4.prototype[method] = function(path4) {
         const route = this.route(path4);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21015,13 +21015,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router3 = require_router();
+    var Router4 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports2 = module2.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router3 = null;
+      var router4 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21030,13 +21030,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router3 === null) {
-            router3 = new Router3({
+          if (router4 === null) {
+            router4 = new Router4({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router3;
+          return router4;
         }
       });
     };
@@ -21107,15 +21107,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router3 = this.router;
+      var router4 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router3.use(path4, fn2);
+          return router4.use(path4, fn2);
         }
         debug3(".use app under %s", path4);
         fn2.mountpath = path4;
         fn2.parent = this;
-        router3.use(path4, function mounted_app(req, res, next) {
+        router4.use(path4, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -23642,7 +23642,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router3 = require_router();
+    var Router4 = require_router();
     var req = require_request();
     var res = require_response();
     exports2 = module2.exports = createApplication;
@@ -23664,8 +23664,8 @@ var require_express = __commonJS({
     exports2.application = proto;
     exports2.request = req;
     exports2.response = res;
-    exports2.Route = Router3.Route;
-    exports2.Router = Router3;
+    exports2.Route = Router4.Route;
+    exports2.Router = Router4;
     exports2.json = bodyParser.json;
     exports2.raw = bodyParser.raw;
     exports2.static = require_serve_static();
@@ -28520,6 +28520,278 @@ var require_logger = __commonJS({
     module2.exports.startTime = startTime;
     module2.exports.default = pinoLogger;
     module2.exports.pinoHttp = pinoLogger;
+  }
+});
+
+// ../../node_modules/.pnpm/@replit+connectors-sdk@0.4.0/node_modules/@replit/connectors-sdk/identity.js
+var require_identity = __commonJS({
+  "../../node_modules/.pnpm/@replit+connectors-sdk@0.4.0/node_modules/@replit/connectors-sdk/identity.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.resolveAudience = resolveAudience;
+    exports2.createIdentityToken = createIdentityToken;
+    exports2.resolveIdentityToken = resolveIdentityToken;
+    exports2.resolveBaseUrl = resolveBaseUrl;
+    exports2.buildHeaders = buildHeaders;
+    var node_child_process_1 = __require("node:child_process");
+    var node_util_1 = __require("node:util");
+    var execFileAsync = (0, node_util_1.promisify)(node_child_process_1.execFile);
+    var DEFAULT_CONNECTORS_HOST = "connectors.replit.com";
+    function resolveAudience() {
+      const audience = process.env["REPLIT_CONNECTORS_AUDIENCE"];
+      if (audience) {
+        if (audience.startsWith("http://") || audience.startsWith("https://")) {
+          return audience;
+        }
+        return `https://${audience}`;
+      }
+      return `https://${DEFAULT_CONNECTORS_HOST}`;
+    }
+    async function createIdentityToken() {
+      const replitBinary = process.env["REPLIT_CLI"] || "replit";
+      const audience = resolveAudience();
+      const { stdout } = await execFileAsync(replitBinary, [
+        "identity",
+        "create",
+        "--audience",
+        audience
+      ]);
+      const token = stdout.trim();
+      if (!token) {
+        throw new Error(`replit identity create returned an empty token (audience: ${audience})`);
+      }
+      return token;
+    }
+    async function resolveIdentityToken() {
+      try {
+        const token = await createIdentityToken();
+        return token;
+      } catch {
+      }
+      const replIdentity = process.env["REPL_IDENTITY"];
+      if (replIdentity) {
+        return `repl ${replIdentity}`;
+      }
+      const deplToken = process.env["WEB_REPL_RENEWAL"];
+      if (deplToken) {
+        return `depl ${deplToken}`;
+      }
+      throw new Error("Replit identity token not found. Could not run `replit identity create` and neither REPL_IDENTITY nor WEB_REPL_RENEWAL are set in the environment. Are you running this inside a Repl?");
+    }
+    function resolveBaseUrl() {
+      const hostname2 = process.env["REPLIT_CONNECTORS_HOSTNAME"];
+      if (hostname2) {
+        if (hostname2.startsWith("http://") || hostname2.startsWith("https://")) {
+          return hostname2;
+        }
+        return `https://${hostname2}`;
+      }
+      return `https://${DEFAULT_CONNECTORS_HOST}`;
+    }
+    async function buildHeaders() {
+      const token = await resolveIdentityToken();
+      const headers = {
+        Accept: "application/json"
+      };
+      if (token.startsWith("repl ") || token.startsWith("depl ")) {
+        headers["X-Replit-Token"] = token;
+      } else {
+        headers["Replit-Authentication"] = `Bearer ${token}`;
+      }
+      return headers;
+    }
+  }
+});
+
+// ../../node_modules/.pnpm/@replit+connectors-sdk@0.4.0/node_modules/@replit/connectors-sdk/client.js
+var require_client = __commonJS({
+  "../../node_modules/.pnpm/@replit+connectors-sdk@0.4.0/node_modules/@replit/connectors-sdk/client.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.ReplitConnectors = void 0;
+    var identity_1 = require_identity();
+    function resolveProxyTarget(url2, proxyBase) {
+      if (url2.startsWith(proxyBase)) {
+        return url2;
+      }
+      if (url2.startsWith("http://") || url2.startsWith("https://")) {
+        const parsed = new URL(url2);
+        return `${proxyBase}${parsed.pathname}${parsed.search}`;
+      }
+      return `${proxyBase}${url2.startsWith("/") ? "" : "/"}${url2}`;
+    }
+    function flattenHeaders(headers) {
+      if (!headers) {
+        return {};
+      }
+      const result = {};
+      if (headers instanceof Headers) {
+        headers.forEach((value, key) => {
+          result[key] = value;
+        });
+      } else if (Array.isArray(headers)) {
+        for (const pair of headers) {
+          result[pair[0]] = pair[1];
+        }
+      } else {
+        Object.assign(result, headers);
+      }
+      return result;
+    }
+    var ReplitConnectors2 = class {
+      constructor(options) {
+        this.baseUrl = options?.baseUrl ?? (0, identity_1.resolveBaseUrl)();
+      }
+      async proxy(connectorName, path4, options) {
+        const method = options?.method ?? "GET";
+        const normalizedPath = path4.startsWith("/") ? path4 : `/${path4}`;
+        const url2 = `${this.getProxyUrl()}${normalizedPath}`;
+        const headers = {
+          ...await (0, identity_1.buildHeaders)(),
+          "Connector-Name": connectorName,
+          ...options?.headers ?? {}
+        };
+        const init = { method, headers };
+        if (options?.body !== void 0 && options.body !== null) {
+          if (typeof options.body === "string" || typeof Buffer !== "undefined" && options.body instanceof Buffer || options.body instanceof ArrayBuffer || options.body instanceof FormData || options.body instanceof URLSearchParams || options.body instanceof Blob || options.body instanceof ReadableStream) {
+            init.body = options.body;
+          } else {
+            init.body = JSON.stringify(options.body);
+            if (!headers["Content-Type"]) {
+              headers["Content-Type"] = "application/json";
+            }
+          }
+        }
+        const response = await fetch(url2, init);
+        if (response.status === 401) {
+          const freshAuth = await (0, identity_1.buildHeaders)();
+          const retryResponse = await fetch(url2, {
+            ...init,
+            headers: { ...headers, ...freshAuth }
+          });
+          return retryResponse;
+        }
+        return response;
+      }
+      async listConnections(options) {
+        const params = new URLSearchParams();
+        if (options?.connector_names) {
+          params.set("connector_names", options.connector_names);
+        }
+        for (const val of options?.expand ?? ["connector"]) {
+          params.append("expand", val);
+        }
+        params.set("refresh_policy", options?.refresh_policy ?? "none");
+        const qs = params.toString();
+        const url2 = `${this.baseUrl}/api/v2/connection${qs ? `?${qs}` : ""}`;
+        const headers = await (0, identity_1.buildHeaders)();
+        const response = await fetch(url2, { method: "GET", headers });
+        if (response.status === 401) {
+          const freshHeaders = await (0, identity_1.buildHeaders)();
+          const retryResponse = await fetch(url2, {
+            method: "GET",
+            headers: freshHeaders
+          });
+          if (!retryResponse.ok) {
+            throw new Error(`Failed to list connections: ${retryResponse.status} ${retryResponse.statusText}`);
+          }
+          const data2 = await retryResponse.json();
+          return data2.items ?? [];
+        }
+        if (!response.ok) {
+          throw new Error(`Failed to list connections: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json();
+        return data.items ?? [];
+      }
+      getProxyUrl() {
+        return `${this.baseUrl}/api/v2/proxy`;
+      }
+      async getProxyHeaders(connectorName) {
+        const headers = await (0, identity_1.buildHeaders)();
+        return { ...headers, "Connector-Name": connectorName };
+      }
+      async getCliConfig(connectorName) {
+        if (connectorName !== "databricks-m2m" && connectorName !== "databricks") {
+          throw new Error(`getCliConfig() is only supported for databricks-m2m or databricks, got: ${connectorName}`);
+        }
+        const connections = await this.listConnections({
+          connector_names: connectorName
+        });
+        const connection = connections[0];
+        if (!connection) {
+          throw new Error(`No ${connectorName} connection found`);
+        }
+        const headers = await (0, identity_1.buildHeaders)();
+        const identityToken = headers["X-Replit-Token"] ?? headers["Replit-Authentication"];
+        if (!identityToken) {
+          throw new Error("Replit identity token not found");
+        }
+        const rawToken = identityToken.replace(/^Bearer\s+/i, "");
+        return {
+          host: this.baseUrl,
+          token: `${rawToken} dbx:${connection.id}`,
+          connectorName
+        };
+      }
+      createProxyFetch(connectorName) {
+        const proxyBase = this.getProxyUrl();
+        return async (input, init) => {
+          const rawUrl = input instanceof Request ? input.url : String(input);
+          const targetUrl = resolveProxyTarget(rawUrl, proxyBase);
+          const authHeaders = await (0, identity_1.buildHeaders)();
+          const userHeaders = flattenHeaders(init?.headers ?? (input instanceof Request ? input.headers : void 0));
+          const headers = {
+            ...authHeaders,
+            "Connector-Name": connectorName,
+            ...userHeaders
+          };
+          const requestDefaults = input instanceof Request ? {
+            method: input.method,
+            body: input.body,
+            cache: input.cache,
+            credentials: input.credentials,
+            integrity: input.integrity,
+            keepalive: input.keepalive,
+            mode: input.mode,
+            redirect: input.redirect,
+            referrer: input.referrer,
+            referrerPolicy: input.referrerPolicy,
+            signal: input.signal,
+            // @ts-expect-error duplex is required for streaming bodies but missing from RequestInit
+            duplex: input.body ? "half" : void 0
+          } : {};
+          const fetchInit = { ...requestDefaults, ...init, headers };
+          const response = await fetch(targetUrl, fetchInit);
+          if (response.status === 401) {
+            const freshAuth = await (0, identity_1.buildHeaders)();
+            return fetch(targetUrl, {
+              ...fetchInit,
+              headers: {
+                ...freshAuth,
+                "Connector-Name": connectorName,
+                ...userHeaders
+              }
+            });
+          }
+          return response;
+        };
+      }
+    };
+    exports2.ReplitConnectors = ReplitConnectors2;
+  }
+});
+
+// ../../node_modules/.pnpm/@replit+connectors-sdk@0.4.0/node_modules/@replit/connectors-sdk/index.js
+var require_connectors_sdk = __commonJS({
+  "../../node_modules/.pnpm/@replit+connectors-sdk@0.4.0/node_modules/@replit/connectors-sdk/index.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.ReplitConnectors = void 0;
+    var client_1 = require_client();
+    Object.defineProperty(exports2, "ReplitConnectors", { enumerable: true, get: function() {
+      return client_1.ReplitConnectors;
+    } });
   }
 });
 
@@ -64805,7 +65077,7 @@ var require_private_key = __commonJS({
 });
 
 // ../../node_modules/.pnpm/sshpk@1.18.0/node_modules/sshpk/lib/identity.js
-var require_identity = __commonJS({
+var require_identity2 = __commonJS({
   "../../node_modules/.pnpm/sshpk@1.18.0/node_modules/sshpk/lib/identity.js"(exports2, module2) {
     module2.exports = Identity;
     var assert3 = require_assert();
@@ -65132,7 +65404,7 @@ var require_openssh_cert = __commonJS({
     var algs = require_algs();
     var Key = require_key();
     var PrivateKey = require_private_key();
-    var Identity = require_identity();
+    var Identity = require_identity2();
     var rfc4253 = require_rfc4253();
     var Signature = require_signature();
     var utils = require_utils4();
@@ -65416,7 +65688,7 @@ var require_x509 = __commonJS({
     var Key = require_key();
     var PrivateKey = require_private_key();
     var pem = require_pem();
-    var Identity = require_identity();
+    var Identity = require_identity2();
     var Signature = require_signature();
     var Certificate = require_certificate();
     var pkcs8 = require_pkcs8();
@@ -66047,7 +66319,7 @@ var require_x509_pem = __commonJS({
     var Key = require_key();
     var PrivateKey = require_private_key();
     var pem = require_pem();
-    var Identity = require_identity();
+    var Identity = require_identity2();
     var Signature = require_signature();
     var Certificate = require_certificate();
     function read(buf, options) {
@@ -66127,7 +66399,7 @@ var require_certificate = __commonJS({
     var utils = require_utils4();
     var Key = require_key();
     var PrivateKey = require_private_key();
-    var Identity = require_identity();
+    var Identity = require_identity2();
     var formats = {};
     formats["openssh"] = require_openssh_cert();
     formats["x509"] = require_x509();
@@ -66911,7 +67183,7 @@ var require_lib5 = __commonJS({
     var Signature = require_signature();
     var PrivateKey = require_private_key();
     var Certificate = require_certificate();
-    var Identity = require_identity();
+    var Identity = require_identity2();
     var errs = require_errors2();
     module2.exports = {
       /* top-level classes */
@@ -78179,9 +78451,9 @@ var require_form_data = __commonJS({
     var setToStringTag = require_es_set_tostringtag();
     var populate = require_populate();
     var Buffer2 = require_safe_buffer().Buffer;
-    function FormData(options) {
-      if (!(this instanceof FormData)) {
-        return new FormData();
+    function FormData2(options) {
+      if (!(this instanceof FormData2)) {
+        return new FormData2();
       }
       this._overheadLength = 0;
       this._valueLength = 0;
@@ -78192,10 +78464,10 @@ var require_form_data = __commonJS({
         this[option] = options[option];
       }
     }
-    util2.inherits(FormData, CombinedStream);
-    FormData.LINE_BREAK = "\r\n";
-    FormData.DEFAULT_CONTENT_TYPE = "application/octet-stream";
-    FormData.prototype.append = function(field, value, options) {
+    util2.inherits(FormData2, CombinedStream);
+    FormData2.LINE_BREAK = "\r\n";
+    FormData2.DEFAULT_CONTENT_TYPE = "application/octet-stream";
+    FormData2.prototype.append = function(field, value, options) {
       options = options || {};
       if (typeof options === "string") {
         options = { filename: options };
@@ -78215,7 +78487,7 @@ var require_form_data = __commonJS({
       append(footer);
       this._trackLength(header, value, options);
     };
-    FormData.prototype._trackLength = function(header, value, options) {
+    FormData2.prototype._trackLength = function(header, value, options) {
       var valueLength = 0;
       if (options.knownLength != null) {
         valueLength += Number(options.knownLength);
@@ -78225,7 +78497,7 @@ var require_form_data = __commonJS({
         valueLength = Buffer2.byteLength(value);
       }
       this._valueLength += valueLength;
-      this._overheadLength += Buffer2.byteLength(header) + FormData.LINE_BREAK.length;
+      this._overheadLength += Buffer2.byteLength(header) + FormData2.LINE_BREAK.length;
       if (!value || !value.path && !(value.readable && hasOwn(value, "httpVersion"))) {
         return;
       }
@@ -78233,7 +78505,7 @@ var require_form_data = __commonJS({
         this._valuesToMeasure.push(value);
       }
     };
-    FormData.prototype._lengthRetriever = function(value, callback) {
+    FormData2.prototype._lengthRetriever = function(value, callback) {
       if (hasOwn(value, "fd")) {
         if (value.end != null && value.end !== Infinity && value.start != null) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
@@ -78260,7 +78532,7 @@ var require_form_data = __commonJS({
         callback("Unknown stream");
       }
     };
-    FormData.prototype._multiPartHeader = function(field, value, options) {
+    FormData2.prototype._multiPartHeader = function(field, value, options) {
       if (typeof options.header === "string") {
         return options.header;
       }
@@ -78287,13 +78559,13 @@ var require_form_data = __commonJS({
             header = [header];
           }
           if (header.length) {
-            contents += prop + ": " + header.join("; ") + FormData.LINE_BREAK;
+            contents += prop + ": " + header.join("; ") + FormData2.LINE_BREAK;
           }
         }
       }
-      return "--" + this.getBoundary() + FormData.LINE_BREAK + contents + FormData.LINE_BREAK;
+      return "--" + this.getBoundary() + FormData2.LINE_BREAK + contents + FormData2.LINE_BREAK;
     };
-    FormData.prototype._getContentDisposition = function(value, options) {
+    FormData2.prototype._getContentDisposition = function(value, options) {
       var filename, contentDisposition;
       if (typeof options.filepath === "string") {
         filename = path4.normalize(options.filepath).replace(/\\/g, "/");
@@ -78307,7 +78579,7 @@ var require_form_data = __commonJS({
       }
       return contentDisposition;
     };
-    FormData.prototype._getContentType = function(value, options) {
+    FormData2.prototype._getContentType = function(value, options) {
       var contentType = options.contentType;
       if (!contentType && value && value.name) {
         contentType = mime.lookup(value.name);
@@ -78322,13 +78594,13 @@ var require_form_data = __commonJS({
         contentType = mime.lookup(options.filepath || options.filename);
       }
       if (!contentType && value && typeof value === "object") {
-        contentType = FormData.DEFAULT_CONTENT_TYPE;
+        contentType = FormData2.DEFAULT_CONTENT_TYPE;
       }
       return contentType;
     };
-    FormData.prototype._multiPartFooter = function() {
+    FormData2.prototype._multiPartFooter = function() {
       return function(next) {
-        var footer = FormData.LINE_BREAK;
+        var footer = FormData2.LINE_BREAK;
         var lastPart = this._streams.length === 0;
         if (lastPart) {
           footer += this._lastBoundary();
@@ -78336,10 +78608,10 @@ var require_form_data = __commonJS({
         next(footer);
       }.bind(this);
     };
-    FormData.prototype._lastBoundary = function() {
-      return "--" + this.getBoundary() + "--" + FormData.LINE_BREAK;
+    FormData2.prototype._lastBoundary = function() {
+      return "--" + this.getBoundary() + "--" + FormData2.LINE_BREAK;
     };
-    FormData.prototype.getHeaders = function(userHeaders) {
+    FormData2.prototype.getHeaders = function(userHeaders) {
       var header;
       var formHeaders = {
         "content-type": "multipart/form-data; boundary=" + this.getBoundary()
@@ -78351,19 +78623,19 @@ var require_form_data = __commonJS({
       }
       return formHeaders;
     };
-    FormData.prototype.setBoundary = function(boundary) {
+    FormData2.prototype.setBoundary = function(boundary) {
       if (typeof boundary !== "string") {
         throw new TypeError("FormData boundary must be a string");
       }
       this._boundary = boundary;
     };
-    FormData.prototype.getBoundary = function() {
+    FormData2.prototype.getBoundary = function() {
       if (!this._boundary) {
         this._generateBoundary();
       }
       return this._boundary;
     };
-    FormData.prototype.getBuffer = function() {
+    FormData2.prototype.getBuffer = function() {
       var dataBuffer = Buffer2.alloc(0);
       var boundary = this.getBoundary();
       for (var i2 = 0, len = this._streams.length; i2 < len; i2++) {
@@ -78374,16 +78646,16 @@ var require_form_data = __commonJS({
             dataBuffer = Buffer2.concat([dataBuffer, Buffer2.from(this._streams[i2])]);
           }
           if (typeof this._streams[i2] !== "string" || this._streams[i2].substring(2, boundary.length + 2) !== boundary) {
-            dataBuffer = Buffer2.concat([dataBuffer, Buffer2.from(FormData.LINE_BREAK)]);
+            dataBuffer = Buffer2.concat([dataBuffer, Buffer2.from(FormData2.LINE_BREAK)]);
           }
         }
       }
       return Buffer2.concat([dataBuffer, Buffer2.from(this._lastBoundary())]);
     };
-    FormData.prototype._generateBoundary = function() {
+    FormData2.prototype._generateBoundary = function() {
       this._boundary = "--------------------------" + crypto2.randomBytes(12).toString("hex");
     };
-    FormData.prototype.getLengthSync = function() {
+    FormData2.prototype.getLengthSync = function() {
       var knownLength = this._overheadLength + this._valueLength;
       if (this._streams.length) {
         knownLength += this._lastBoundary().length;
@@ -78393,14 +78665,14 @@ var require_form_data = __commonJS({
       }
       return knownLength;
     };
-    FormData.prototype.hasKnownLength = function() {
+    FormData2.prototype.hasKnownLength = function() {
       var hasKnownLength = true;
       if (this._valuesToMeasure.length) {
         hasKnownLength = false;
       }
       return hasKnownLength;
     };
-    FormData.prototype.getLength = function(cb) {
+    FormData2.prototype.getLength = function(cb) {
       var knownLength = this._overheadLength + this._valueLength;
       if (this._streams.length) {
         knownLength += this._lastBoundary().length;
@@ -78420,7 +78692,7 @@ var require_form_data = __commonJS({
         cb(null, knownLength);
       });
     };
-    FormData.prototype.submit = function(params, cb) {
+    FormData2.prototype.submit = function(params, cb) {
       var request3;
       var options;
       var defaults = { method: "post" };
@@ -78458,18 +78730,18 @@ var require_form_data = __commonJS({
       }.bind(this));
       return request3;
     };
-    FormData.prototype._error = function(err) {
+    FormData2.prototype._error = function(err) {
       if (!this.error) {
         this.error = err;
         this.pause();
         this.emit("error", err);
       }
     };
-    FormData.prototype.toString = function() {
+    FormData2.prototype.toString = function() {
       return "[object FormData]";
     };
-    setToStringTag(FormData, "FormData");
-    module2.exports = FormData;
+    setToStringTag(FormData2, "FormData");
+    module2.exports = FormData2;
   }
 });
 
@@ -87118,7 +87390,7 @@ var require_request3 = __commonJS({
     var mime = require_mime_types2();
     var caseless = require_caseless();
     var ForeverAgent = require_forever_agent();
-    var FormData = require_form_data();
+    var FormData2 = require_form_data();
     var extend2 = require_extend();
     var isstream = require_isstream();
     var isTypedArray = require_is_typedarray().strict;
@@ -87181,14 +87453,14 @@ var require_request3 = __commonJS({
         request: requestToJSON.call(self2.request)
       };
     }
-    function Request(options) {
+    function Request2(options) {
       var self2 = this;
       if (options.har) {
         self2._har = new Har(self2);
         options = self2._har.options(options);
       }
       stream.Stream.call(self2);
-      var reserved = Object.keys(Request.prototype);
+      var reserved = Object.keys(Request2.prototype);
       var nonReserved = filterForNonReserved(reserved, options);
       extend2(self2, nonReserved);
       options = filterOutReservedFunctions(reserved, options);
@@ -87205,15 +87477,15 @@ var require_request3 = __commonJS({
       self2._tunnel = new Tunnel(self2);
       self2.init(options);
     }
-    util2.inherits(Request, stream.Stream);
-    Request.debug = process.env.NODE_DEBUG && /\brequest\b/.test(process.env.NODE_DEBUG);
+    util2.inherits(Request2, stream.Stream);
+    Request2.debug = process.env.NODE_DEBUG && /\brequest\b/.test(process.env.NODE_DEBUG);
     function debug3() {
-      if (Request.debug) {
+      if (Request2.debug) {
         console.error("REQUEST %s", util2.format.apply(util2, arguments));
       }
     }
-    Request.prototype.debug = debug3;
-    Request.prototype.init = function(options) {
+    Request2.prototype.debug = debug3;
+    Request2.prototype.init = function(options) {
       var self2 = this;
       if (!options) {
         options = {};
@@ -87576,7 +87848,7 @@ var require_request3 = __commonJS({
         self2.ntick = true;
       });
     };
-    Request.prototype.getNewAgent = function() {
+    Request2.prototype.getNewAgent = function() {
       var self2 = this;
       var Agent3 = self2.agentClass;
       var options = {};
@@ -87675,7 +87947,7 @@ var require_request3 = __commonJS({
       }
       return self2.pool[poolKey];
     };
-    Request.prototype.start = function() {
+    Request2.prototype.start = function() {
       var self2 = this;
       if (self2.timing) {
         var startTime = (/* @__PURE__ */ new Date()).getTime();
@@ -87778,7 +88050,7 @@ var require_request3 = __commonJS({
       });
       self2.emit("request", self2.req);
     };
-    Request.prototype.onRequestError = function(error40) {
+    Request2.prototype.onRequestError = function(error40) {
       var self2 = this;
       if (self2._aborted) {
         return;
@@ -87792,7 +88064,7 @@ var require_request3 = __commonJS({
       self2.clearTimeout();
       self2.emit("error", error40);
     };
-    Request.prototype.onRequestResponse = function(response) {
+    Request2.prototype.onRequestResponse = function(response) {
       var self2 = this;
       if (self2.timing) {
         self2.timings.response = now() - self2.startTimeNow;
@@ -87954,7 +88226,7 @@ var require_request3 = __commonJS({
       }
       debug3("finish init function", self2.uri.href);
     };
-    Request.prototype.readResponseBody = function(response) {
+    Request2.prototype.readResponseBody = function(response) {
       var self2 = this;
       debug3("reading response's body");
       var buffers = [];
@@ -88004,7 +88276,7 @@ var require_request3 = __commonJS({
         self2.emit("complete", response, response.body);
       });
     };
-    Request.prototype.abort = function() {
+    Request2.prototype.abort = function() {
       var self2 = this;
       self2._aborted = true;
       if (self2.req) {
@@ -88015,7 +88287,7 @@ var require_request3 = __commonJS({
       self2.clearTimeout();
       self2.emit("abort");
     };
-    Request.prototype.pipeDest = function(dest) {
+    Request2.prototype.pipeDest = function(dest) {
       var self2 = this;
       var response = self2.response;
       if (dest.headers && !dest.headersSent) {
@@ -88048,7 +88320,7 @@ var require_request3 = __commonJS({
         self2.pipefilter(response, dest);
       }
     };
-    Request.prototype.qs = function(q2, clobber) {
+    Request2.prototype.qs = function(q2, clobber) {
       var self2 = this;
       var base;
       if (!clobber && self2.uri.query) {
@@ -88071,7 +88343,7 @@ var require_request3 = __commonJS({
       }
       return self2;
     };
-    Request.prototype.form = function(form) {
+    Request2.prototype.form = function(form) {
       var self2 = this;
       if (form) {
         if (!/^application\/x-www-form-urlencoded\b/.test(self2.getHeader("content-type"))) {
@@ -88080,7 +88352,7 @@ var require_request3 = __commonJS({
         self2.body = typeof form === "string" ? self2._qs.rfc3986(form.toString("utf8")) : self2._qs.stringify(form).toString("utf8");
         return self2;
       }
-      self2._form = new FormData();
+      self2._form = new FormData2();
       self2._form.on("error", function(err) {
         err.message = "form-data: " + err.message;
         self2.emit("error", err);
@@ -88088,7 +88360,7 @@ var require_request3 = __commonJS({
       });
       return self2._form;
     };
-    Request.prototype.multipart = function(multipart) {
+    Request2.prototype.multipart = function(multipart) {
       var self2 = this;
       self2._multipart.onRequest(multipart);
       if (!self2._multipart.chunked) {
@@ -88096,7 +88368,7 @@ var require_request3 = __commonJS({
       }
       return self2;
     };
-    Request.prototype.json = function(val) {
+    Request2.prototype.json = function(val) {
       var self2 = this;
       if (!self2.hasHeader("accept")) {
         self2.setHeader("accept", "application/json");
@@ -88127,7 +88399,7 @@ var require_request3 = __commonJS({
       }
       return self2;
     };
-    Request.prototype.getHeader = function(name, headers) {
+    Request2.prototype.getHeader = function(name, headers) {
       var self2 = this;
       var result, re, match;
       if (!headers) {
@@ -88145,7 +88417,7 @@ var require_request3 = __commonJS({
       });
       return result;
     };
-    Request.prototype.enableUnixSocket = function() {
+    Request2.prototype.enableUnixSocket = function() {
       var unixParts = this.uri.path.split(":");
       var host = unixParts[0];
       var path4 = unixParts[1];
@@ -88156,12 +88428,12 @@ var require_request3 = __commonJS({
       this.uri.hostname = host;
       this.uri.isUnix = true;
     };
-    Request.prototype.auth = function(user, pass, sendImmediately, bearer) {
+    Request2.prototype.auth = function(user, pass, sendImmediately, bearer) {
       var self2 = this;
       self2._auth.onRequest(user, pass, sendImmediately, bearer);
       return self2;
     };
-    Request.prototype.aws = function(opts, now2) {
+    Request2.prototype.aws = function(opts, now2) {
       var self2 = this;
       if (!now2) {
         self2._aws = opts;
@@ -88215,7 +88487,7 @@ var require_request3 = __commonJS({
       }
       return self2;
     };
-    Request.prototype.httpSignature = function(opts) {
+    Request2.prototype.httpSignature = function(opts) {
       var self2 = this;
       httpSignature.signRequest({
         getHeader: function(header) {
@@ -88230,16 +88502,16 @@ var require_request3 = __commonJS({
       debug3("httpSignature authorization", self2.getHeader("authorization"));
       return self2;
     };
-    Request.prototype.hawk = function(opts) {
+    Request2.prototype.hawk = function(opts) {
       var self2 = this;
       self2.setHeader("Authorization", hawk.header(self2.uri, self2.method, opts));
     };
-    Request.prototype.oauth = function(_oauth) {
+    Request2.prototype.oauth = function(_oauth) {
       var self2 = this;
       self2._oauth.onRequest(_oauth);
       return self2;
     };
-    Request.prototype.jar = function(jar) {
+    Request2.prototype.jar = function(jar) {
       var self2 = this;
       var cookies2;
       if (self2._redirect.redirectsFollowed === 0) {
@@ -88265,7 +88537,7 @@ var require_request3 = __commonJS({
       self2._jar = jar;
       return self2;
     };
-    Request.prototype.pipe = function(dest, opts) {
+    Request2.prototype.pipe = function(dest, opts) {
       var self2 = this;
       if (self2.response) {
         if (self2._destdata) {
@@ -88283,7 +88555,7 @@ var require_request3 = __commonJS({
         return dest;
       }
     };
-    Request.prototype.write = function() {
+    Request2.prototype.write = function() {
       var self2 = this;
       if (self2._aborted) {
         return;
@@ -88295,7 +88567,7 @@ var require_request3 = __commonJS({
         return self2.req.write.apply(self2.req, arguments);
       }
     };
-    Request.prototype.end = function(chunk) {
+    Request2.prototype.end = function(chunk) {
       var self2 = this;
       if (self2._aborted) {
         return;
@@ -88310,7 +88582,7 @@ var require_request3 = __commonJS({
         self2.req.end();
       }
     };
-    Request.prototype.pause = function() {
+    Request2.prototype.pause = function() {
       var self2 = this;
       if (!self2.responseContent) {
         self2._paused = true;
@@ -88318,7 +88590,7 @@ var require_request3 = __commonJS({
         self2.responseContent.pause.apply(self2.responseContent, arguments);
       }
     };
-    Request.prototype.resume = function() {
+    Request2.prototype.resume = function() {
       var self2 = this;
       if (!self2.responseContent) {
         self2._paused = false;
@@ -88326,7 +88598,7 @@ var require_request3 = __commonJS({
         self2.responseContent.resume.apply(self2.responseContent, arguments);
       }
     };
-    Request.prototype.destroy = function() {
+    Request2.prototype.destroy = function() {
       var self2 = this;
       this.clearTimeout();
       if (!self2._ended) {
@@ -88335,16 +88607,16 @@ var require_request3 = __commonJS({
         self2.response.destroy();
       }
     };
-    Request.prototype.clearTimeout = function() {
+    Request2.prototype.clearTimeout = function() {
       if (this.timeoutTimer) {
         clearTimeout(this.timeoutTimer);
         this.timeoutTimer = null;
       }
     };
-    Request.defaultProxyHeaderWhiteList = Tunnel.defaultProxyHeaderWhiteList.slice();
-    Request.defaultProxyHeaderExclusiveList = Tunnel.defaultProxyHeaderExclusiveList.slice();
-    Request.prototype.toJSON = requestToJSON;
-    module2.exports = Request;
+    Request2.defaultProxyHeaderWhiteList = Tunnel.defaultProxyHeaderWhiteList.slice();
+    Request2.defaultProxyHeaderExclusiveList = Tunnel.defaultProxyHeaderExclusiveList.slice();
+    Request2.prototype.toJSON = requestToJSON;
+    module2.exports = Request2;
   }
 });
 
@@ -89976,7 +90248,7 @@ var require_observable = __commonJS({
 });
 
 // ../../node_modules/.pnpm/rxjs@6.6.7/node_modules/rxjs/internal/util/identity.js
-var require_identity2 = __commonJS({
+var require_identity3 = __commonJS({
   "../../node_modules/.pnpm/rxjs@6.6.7/node_modules/rxjs/internal/util/identity.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -89992,7 +90264,7 @@ var require_pipe = __commonJS({
   "../../node_modules/.pnpm/rxjs@6.6.7/node_modules/rxjs/internal/util/pipe.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var identity_1 = require_identity2();
+    var identity_1 = require_identity3();
     function pipe2() {
       var fns = [];
       for (var _i = 0; _i < arguments.length; _i++) {
@@ -93442,7 +93714,7 @@ var require_mergeAll = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var mergeMap_1 = require_mergeMap();
-    var identity_1 = require_identity2();
+    var identity_1 = require_identity3();
     function mergeAll(concurrent) {
       if (concurrent === void 0) {
         concurrent = Number.POSITIVE_INFINITY;
@@ -93711,7 +93983,7 @@ var require_generate = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var Observable_1 = require_Observable();
-    var identity_1 = require_identity2();
+    var identity_1 = require_identity3();
     var isScheduler_1 = require_isScheduler();
     function generate(initialStateOrOptions, condition, iterate, resultSelectorOrObservable, scheduler) {
       var resultSelector;
@@ -94654,7 +94926,7 @@ var require_rxjs = __commonJS({
     exports2.pipe = pipe_1.pipe;
     var noop_1 = require_noop();
     exports2.noop = noop_1.noop;
-    var identity_1 = require_identity2();
+    var identity_1 = require_identity3();
     exports2.identity = identity_1.identity;
     var isObservable_1 = require_isObservable();
     exports2.isObservable = isObservable_1.isObservable;
@@ -97146,7 +97418,7 @@ var require_request5 = __commonJS({
     var JSONbigInt = require_json_bigint();
     var JSONbigString = JSONbigInt({ storeAsString: true });
     var debug_1 = require_src();
-    var Request = class _Request {
+    var Request2 = class _Request {
       constructor(client) {
         this.client = client;
         this.end$ = new rxjs_1.Subject();
@@ -97300,8 +97572,8 @@ ${body}
         };
       }
     };
-    exports2.Request = Request;
-    Request.requestDebug = (0, debug_1.default)("ig:request");
+    exports2.Request = Request2;
+    Request2.requestDebug = (0, debug_1.default)("ig:request");
   }
 });
 
@@ -98207,7 +98479,7 @@ var require_repository = __commonJS({
     };
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.Repository = void 0;
-    var client_1 = require_client();
+    var client_1 = require_client2();
     var decorators_1 = require_decorators();
     var Repository = class {
       constructor(client) {
@@ -114304,7 +114576,7 @@ var require_igtv_repository = __commonJS({
 });
 
 // ../../node_modules/.pnpm/instagram-private-api@1.46.1/node_modules/instagram-private-api/dist/core/client.js
-var require_client = __commonJS({
+var require_client2 = __commonJS({
   "../../node_modules/.pnpm/instagram-private-api@1.46.1/node_modules/instagram-private-api/dist/core/client.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -114419,7 +114691,7 @@ var require_dist2 = __commonJS({
     };
     Object.defineProperty(exports2, "__esModule", { value: true });
     require_Reflect();
-    __exportStar(require_client(), exports2);
+    __exportStar(require_client2(), exports2);
     __exportStar(require_entity(), exports2);
     __exportStar(require_feed(), exports2);
     __exportStar(require_entities(), exports2);
@@ -115119,18 +115391,18 @@ var init_imageAlteration = __esm({
 });
 
 // src/index.ts
-var import_express4 = __toESM(require_express2(), 1);
+var import_express5 = __toESM(require_express2(), 1);
 import { createServer } from "http";
 import path3 from "path";
 import fs3 from "fs";
 
 // src/app.ts
-var import_express3 = __toESM(require_express2(), 1);
+var import_express4 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_pino_http = __toESM(require_logger(), 1);
 
 // src/routes/index.ts
-var import_express2 = __toESM(require_express2(), 1);
+var import_express3 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -119024,10 +119296,53 @@ router.get("/healthz", (_req, res) => {
 });
 var health_default = router;
 
-// src/routes/index.ts
+// src/routes/github.ts
+var import_express2 = __toESM(require_express2(), 1);
+var import_connectors_sdk = __toESM(require_connectors_sdk(), 1);
 var router2 = (0, import_express2.Router)();
-router2.use(health_default);
-var routes_default = router2;
+router2.get("/github/releases", async (_req, res) => {
+  try {
+    const connectors = new import_connectors_sdk.ReplitConnectors();
+    const response = await connectors.proxy("github", "/user/repos", {
+      method: "GET"
+    });
+    const repos = await response.json();
+    if (!Array.isArray(repos) || repos.length === 0) {
+      res.json([]);
+      return;
+    }
+    const allReleases = [];
+    await Promise.all(
+      repos.map(async (repo) => {
+        try {
+          const relResponse = await connectors.proxy(
+            "github",
+            `/repos/${repo.full_name}/releases`,
+            { method: "GET" }
+          );
+          const releases = await relResponse.json();
+          if (Array.isArray(releases)) {
+            releases.forEach((r2) => allReleases.push({ ...r2, repo: repo.full_name }));
+          }
+        } catch {
+        }
+      })
+    );
+    allReleases.sort(
+      (a2, b3) => new Date(b3.published_at ?? b3.created_at ?? 0).getTime() - new Date(a2.published_at ?? a2.created_at ?? 0).getTime()
+    );
+    res.json(allReleases);
+  } catch (err) {
+    res.status(500).json({ error: err?.message ?? "Failed to fetch releases" });
+  }
+});
+var github_default = router2;
+
+// src/routes/index.ts
+var router3 = (0, import_express3.Router)();
+router3.use(health_default);
+router3.use(github_default);
+var routes_default = router3;
 
 // src/lib/logger.ts
 var import_pino = __toESM(require_pino(), 1);
@@ -119048,7 +119363,7 @@ var logger = (0, import_pino.default)({
 });
 
 // src/app.ts
-var app = (0, import_express3.default)();
+var app = (0, import_express4.default)();
 app.use(
   (0, import_pino_http.default)({
     logger,
@@ -119069,8 +119384,8 @@ app.use(
   })
 );
 app.use((0, import_cors.default)());
-app.use(import_express3.default.json({ limit: "10mb" }));
-app.use(import_express3.default.urlencoded({ extended: true, limit: "10mb" }));
+app.use(import_express4.default.json({ limit: "10mb" }));
+app.use(import_express4.default.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api", routes_default);
 var app_default = app;
 
@@ -135949,6 +136264,7 @@ var proxies = sqliteTable("proxies", {
   password: text("password")
 });
 var ACCOUNT_STATUSES = [
+  "verifying",
   "valid",
   "banned",
   "captcha",
@@ -136428,6 +136744,11 @@ var followedUsersCols = sqlite.prepare("pragma table_info(followed_users)").all(
 var followedUsersColNames = new Set(followedUsersCols.map((c3) => c3.name));
 if (!followedUsersColNames.has("instagram_user_id")) {
   sqlite.exec(`ALTER TABLE followed_users ADD COLUMN instagram_user_id TEXT NOT NULL DEFAULT '';`);
+}
+var repostedPostsCols = sqlite.prepare("pragma table_info(reposted_posts)").all();
+var repostedPostsColNames = new Set(repostedPostsCols.map((c3) => c3.name));
+if (!repostedPostsColNames.has("posted_shortcode")) {
+  sqlite.exec(`ALTER TABLE reposted_posts ADD COLUMN posted_shortcode TEXT NOT NULL DEFAULT '';`);
 }
 sqlite.exec(`
   DELETE FROM instagram_api_calls WHERE operation_name NOT IN (
@@ -136918,6 +137239,9 @@ var DatabaseStorage = class {
   async getInstagramApiCalls(limit = 1e5) {
     return await db.select().from(instagramApiCalls).orderBy(desc(instagramApiCalls.id)).limit(limit);
   }
+  async getInstagramApiCallsSince(sinceId, limit = 5e3) {
+    return await db.select().from(instagramApiCalls).where(gt(instagramApiCalls.id, sinceId)).orderBy(desc(instagramApiCalls.id)).limit(limit);
+  }
   _apiCallInsertCount = 0;
   async createInstagramApiCall(call) {
     const [created] = await db.insert(instagramApiCalls).values({
@@ -136967,6 +137291,27 @@ var DatabaseStorage = class {
   }
   async deleteFollowedUser(id) {
     await db.delete(followedUsers).where(eq(followedUsers.id, id));
+  }
+  async bulkImportFollowedUsers(profileId, entries) {
+    if (!entries.length) return { imported: 0, skipped: 0 };
+    const existing = await db.select({ u: followedUsers.instagramUsername }).from(followedUsers).where(eq(followedUsers.profileId, profileId));
+    const existingSet = new Set(existing.map((r2) => r2.u.toLowerCase()));
+    const toInsert = entries.filter((e) => !existingSet.has(e.username.toLowerCase()));
+    const BATCH = 500;
+    for (let i2 = 0; i2 < toInsert.length; i2 += BATCH) {
+      const batch = toInsert.slice(i2, i2 + BATCH);
+      await db.insert(followedUsers).values(
+        batch.map((e) => ({
+          profileId,
+          instagramUsername: e.username,
+          instagramUserId: e.userId,
+          sourceValue: "jarvee_import",
+          sourceType: "jarvee_import",
+          followedAt: e.followedAt
+        }))
+      );
+    }
+    return { imported: toInsert.length, skipped: entries.length - toInsert.length };
   }
   async countFollowsToday(profileId, todayPrefix) {
     const rows = await db.select({ count: sql`count(*)` }).from(followedUsers).where(and(
@@ -138530,10 +138875,20 @@ async function logApiCall(profileId, operationName, status, source, navChain, ip
   } catch {
   }
 }
-function buildProxyUrl(profile) {
-  if (!profile.proxyHost || !profile.proxyPort) return null;
-  const auth = profile.proxyUsername && profile.proxyPassword ? `${encodeURIComponent(profile.proxyUsername)}:${encodeURIComponent(profile.proxyPassword)}@` : "";
-  return `http://${auth}${profile.proxyHost}:${profile.proxyPort}`;
+async function buildProxyUrl(profile) {
+  if (profile.proxyId) {
+    const proxies2 = await storage.getProxies();
+    const p = proxies2.find((px) => px.id === profile.proxyId);
+    if (p && p.host && p.port) {
+      const auth = p.username && p.password ? `${encodeURIComponent(p.username)}:${encodeURIComponent(p.password)}@` : "";
+      return { url: `http://${auth}${p.host}:${p.port}`, host: p.host };
+    }
+  }
+  if (profile.proxyHost && profile.proxyPort) {
+    const auth = profile.proxyUsername && profile.proxyPassword ? `${encodeURIComponent(profile.proxyUsername)}:${encodeURIComponent(profile.proxyPassword)}@` : "";
+    return { url: `http://${auth}${profile.proxyHost}:${profile.proxyPort}`, host: profile.proxyHost };
+  }
+  return null;
 }
 function extractOperationName(rawUrl) {
   const path4 = rawUrl.split("?")[0];
@@ -138673,9 +139028,17 @@ function buildIgClient(profile, proxyUrl) {
   return { ig, captureDeviceState };
 }
 async function verifyInstagramCredentials(profile) {
-  const proxyUrl = buildProxyUrl(profile);
-  console.error(`[instagramLogin] @${profile.username} proxy=${proxyUrl ?? "direct"}`);
-  const proxyIp = profile.proxyHost ?? "";
+  const resolved = await buildProxyUrl(profile);
+  if (!resolved) {
+    return {
+      ok: false,
+      message: `@${profile.username} \u2014 no proxy assigned. Assign a proxy before verifying.`,
+      accountStatus: "pending"
+    };
+  }
+  const proxyUrl = resolved.url;
+  const proxyIp = resolved.host;
+  console.error(`[instagramLogin] @${profile.username} proxy=${resolved.host}`);
   if (profile.igApiCookies) {
     const { ig: ig2, captureDeviceState: captureDeviceState2 } = buildIgClient(profile, proxyUrl);
     attachRequestLogger(ig2, profile.id, "Verify", proxyIp);
@@ -138744,16 +139107,16 @@ async function verifyInstagramCredentials(profile) {
               checkpointUrl: extractCheckpointUrl(famErr),
               igDeviceState: captureDeviceState2()
             };
-          }
-          if (/login_required|not.*auth|401/i.test(msg)) {
+          } else if (/login_required|not.*auth|401/i.test(msg)) {
             return {
               ok: false,
               message: `@${profile.username} \u2014 session expired or revoked. Open the embedded browser to log in again.`,
               accountStatus: "logged_out",
               igDeviceState: captureDeviceState2()
             };
+          } else {
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network error, continuing`);
           }
-          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network error, continuing`);
         }
         try {
           const timelineFeed = ig2.feed.timeline();
@@ -138919,7 +139282,8 @@ var import_instagram_private_api3 = __toESM(require_dist2(), 1);
 import fs from "fs";
 import path2 from "path";
 function log(msg, _category) {
-  console.log(`[browser] ${msg}`);
+  const ts = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
+  console.log(`[${ts}] [browser] ${msg}`);
 }
 var COOKIES_DIR = path2.join(process.cwd(), "server", "browser-data");
 function cookiePath(profileId) {
@@ -138998,8 +139362,12 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
     log(`Proxy changed for profile ${profileId} (${existing.proxyKey} \u2192 ${newProxyKey}), restarting browser`, "browser");
     await closeSession(profileId);
   }
+  if (proxy) {
+    log(`Launching Chrome for profile ${profileId} via proxy ${proxy.host}:${proxy.port}${proxy.username ? ` (user: ${proxy.username})` : " (no auth)"}`, "browser");
+  } else {
+    log(`Launching Chrome for profile ${profileId} \u2014 NO PROXY (direct connection)`, "browser");
+  }
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
-  log(`Launching Chrome for profile ${profileId}${proxy ? ` via proxy ${proxy.host}:${proxy.port}` : " (direct)"}`, "browser");
   let puppeteerLib;
   try {
     puppeteerLib = (await import("puppeteer-core")).default;
@@ -139023,6 +139391,7 @@ async function getOrCreateSession(profileId, userAgent, proxy) {
   if (proxy?.username) {
     await page.authenticate({ username: proxy.username, password: proxy.password ?? "" });
   }
+  log(`Chrome launched for profile ${profileId}`, "browser");
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => void 0 });
     Object.defineProperty(navigator, "plugins", {
@@ -139169,7 +139538,8 @@ function attachSSE(profileId, res) {
   (async () => {
     try {
       const currentUrl = session.page.url();
-      if (currentUrl.includes("instagram.com")) return;
+      const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
+      if (!isErrorPage) return;
       const cookies = await session.page.cookies().catch(() => []);
       const hasCookies = cookies.some((c3) => c3.name === "sessionid");
       const target = hasCookies ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
@@ -139217,9 +139587,11 @@ function startFrameLoop(profileId) {
         s.lastUrl = currentUrl;
         sseWrite(s.res, { type: "urlChange", url: currentUrl });
       }
-      if (!currentUrl.includes("instagram.com")) {
+      const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
+      if (isErrorPage) {
         errorRetryTick++;
-        if (errorRetryTick >= 15 && errorRetryCount < 3) {
+        const retryThreshold = errorRetryCount < 3 ? 15 : 150;
+        if (errorRetryTick >= retryThreshold) {
           errorRetryTick = 0;
           errorRetryCount++;
           const hasCookies = await s.page.cookies().then((c3) => c3.some((ck) => ck.name === "sessionid")).catch(() => false);
@@ -139246,7 +139618,7 @@ function startFrameLoop(profileId) {
     } finally {
       busy = false;
     }
-  }, 200);
+  }, 500);
 }
 async function browserNavigate(profileId, url2) {
   const s = sessions.get(profileId);
@@ -139298,6 +139670,16 @@ async function browserType(profileId, text2) {
   const s = sessions.get(profileId);
   if (!s) return;
   await s.page.keyboard.type(text2, { delay: 30 });
+}
+async function browserKeyCombo(profileId, modifier, key) {
+  const s = sessions.get(profileId);
+  if (!s) return;
+  try {
+    await s.page.keyboard.down(modifier);
+    await s.page.keyboard.press(key);
+    await s.page.keyboard.up(modifier);
+  } catch {
+  }
 }
 async function browserBack(profileId) {
   const s = sessions.get(profileId);
@@ -139500,7 +139882,22 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
     await dismissCookieBanner(s.page);
     await delay(400);
     sendStatus(profileId, "Looking for login form\u2026");
-    const usernameInput = await s.page.waitForSelector('input[name="username"]', { timeout: 15e3 }).catch(() => null);
+    const USERNAME_SELECTORS = [
+      'input[name="username"]',
+      'input[autocomplete="username"]',
+      'input[name="email"]',
+      'input[type="text"]:not([name="password"])'
+    ];
+    let usernameSelector = "";
+    let usernameInput = null;
+    for (const sel of USERNAME_SELECTORS) {
+      const el = await s.page.waitForSelector(sel, { timeout: sel === USERNAME_SELECTORS[0] ? 12e3 : 2e3 }).catch(() => null);
+      if (el) {
+        usernameInput = el;
+        usernameSelector = sel;
+        break;
+      }
+    }
     if (!usernameInput) {
       const currentUrl2 = s.page.url();
       if (!currentUrl2.includes("accounts/login")) {
@@ -139511,12 +139908,30 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
       sendStatus(profileId, "\u26A0 Login form not found \u2014 check the browser window for what Instagram is showing.");
       return { ok: false, message: "Login form not found. Check the browser window." };
     }
+    log(`[autoLogin:${profileId}] Found username input via: ${usernameSelector}`, "browser");
     sendStatus(profileId, "Filling username\u2026");
     await delay(500 + Math.random() * 300);
-    await fillField(s.page, 'input[name="username"]', username);
+    await fillField(s.page, usernameSelector, username);
     await delay(300 + Math.random() * 200);
     sendStatus(profileId, "Filling password\u2026");
-    await fillField(s.page, 'input[name="password"]', password);
+    const PASSWORD_SELECTORS = [
+      'input[name="password"]',
+      'input[type="password"]',
+      'input[autocomplete="current-password"]'
+    ];
+    let passwordSelector = "";
+    for (const sel of PASSWORD_SELECTORS) {
+      const el = await s.page.waitForSelector(sel, { timeout: sel === PASSWORD_SELECTORS[0] ? 6e3 : 2e3 }).catch(() => null);
+      if (el) {
+        passwordSelector = sel;
+        break;
+      }
+    }
+    if (!passwordSelector) {
+      sendStatus(profileId, "\u26A0 Password field not found \u2014 Instagram may have changed its login page layout.");
+      return { ok: false, message: "Password field not found. Check the browser window." };
+    }
+    await fillField(s.page, passwordSelector, password);
     sendStatus(profileId, "Waiting for login button\u2026");
     await delay(500);
     const allBtns = await s.page.evaluate(
@@ -139690,6 +140105,16 @@ var WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 var APP_ID = "936619743392459";
 var MOBILE_VERSION = "361.0.0.32.109";
 var MOBILE_VERSION_CODE = "617571539";
+var MOBILE_VERSION_DATE = "2025-05-03";
+(() => {
+  const ageMs = Date.now() - new Date(MOBILE_VERSION_DATE).getTime();
+  const ageDays = Math.floor(ageMs / 864e5);
+  if (ageDays > 365) {
+    console.warn(
+      `[webClient] \u26A0\uFE0F  MOBILE_VERSION (${MOBILE_VERSION}) was last updated ${ageDays} days ago. Instagram may be rejecting it \u2014 update MOBILE_VERSION + MOBILE_VERSION_CODE in instagramWebClient.ts.`
+    );
+  }
+})();
 var MOBILE_UA = `Instagram ${MOBILE_VERSION} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
 var MOBILE_AID = "567067343352427";
 var InstagramWebClient = class {
@@ -141219,6 +141644,8 @@ var AutomationEngine = class {
       const activeHumanSession = /* @__PURE__ */ new Set();
       for (const profile of profiles2) {
         const tools2 = await storage.getToolsByProfile(profile.id);
+        const hasProxy = profile.proxyId ? true : !!(profile.proxyHost && profile.proxyPort);
+        if (!hasProxy) continue;
         const followTool = tools2.find((t2) => t2.type === "follow" && t2.enabled);
         if (followTool && profile.accountStatus === "valid") {
           activeFollow.add(profile.id);
@@ -141373,6 +141800,7 @@ var AutomationEngine = class {
     };
     this.states.set(profile.id, state);
     console.log(`[engine] Launching runner for @${profile.username}`);
+    let followFirstRun = true;
     const loop = async () => {
       try {
         const [dc, hc] = await Promise.all([
@@ -141407,6 +141835,17 @@ var AutomationEngine = class {
         const tools2 = await storage.getToolsByProfile(freshProfile.id);
         const followTool = tools2.find((t2) => t2.type === "follow");
         if (!followTool?.enabled || state.stop.stopped) break;
+        if (followFirstRun) {
+          followFirstRun = false;
+          const sf = followTool.settings ?? {};
+          const scatterMs = randInt((sf.delayMin ?? 1) * 6e4, (sf.delayMax ?? 5) * 6e4);
+          console.log(`[engine] @${freshProfile.username}: startup scatter \u2014 first follow session in ${Math.round(scatterMs / 6e4)}min`);
+          state.nextFollowAt = Date.now() + scatterMs;
+          await sleepInterruptible(scatterMs, state.stop);
+          state.nextFollowAt = 0;
+          if (state.stop.stopped) break;
+          continue;
+        }
         let sessionResult = { followed: 0 };
         try {
           sessionResult = await this.runSession(freshProfile, followTool, state);
@@ -141481,6 +141920,7 @@ var AutomationEngine = class {
     };
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
+    let hsFirstRun = true;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -141494,6 +141934,12 @@ var AutomationEngine = class {
         const hsTool = freshTools.find((t2) => t2.type === "human_sessions");
         if (!hsTool?.enabled) break;
         const s = hsTool.settings;
+        if (hsFirstRun) {
+          hsFirstRun = false;
+          const scatterMs = randInt((s.delayMin ?? 30) * 6e4, (s.delayMax ?? 60) * 6e4);
+          console.log(`[engine] @${freshProfile.username}: startup scatter \u2014 first human session in ${Math.round(scatterMs / 6e4)}min`);
+          state.nextHumanSessionAt = Date.now() + scatterMs;
+        }
         if (Date.now() >= state.nextHumanSessionAt) {
           try {
             await this.runHumanSessionTools(freshProfile, hsTool, state);
@@ -141539,6 +141985,7 @@ var AutomationEngine = class {
     };
     this.unfollowStates.set(profile.id, state);
     console.log(`[engine] Launching unfollow runner for @${profile.username}`);
+    let unfollowFirstRun = true;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -141551,6 +141998,16 @@ var AutomationEngine = class {
         const tools2 = await storage.getToolsByProfile(freshProfile.id);
         const unfollowTool = tools2.find((t2) => t2.type === "unfollow");
         if (!unfollowTool?.enabled || state.stop.stopped) break;
+        if (unfollowFirstRun) {
+          unfollowFirstRun = false;
+          const su = unfollowTool.settings ?? {};
+          const scatterMs = randInt((su.delayMin ?? 5) * 6e4, (su.delayMax ?? 15) * 6e4);
+          console.log(`[engine] @${freshProfile.username}: startup scatter \u2014 first unfollow session in ${Math.round(scatterMs / 6e4)}min`);
+          state.nextUnfollowAt = Date.now() + scatterMs;
+          await sleepInterruptible(scatterMs, state.stop);
+          if (state.stop.stopped) break;
+          continue;
+        }
         try {
           await this.runUnfollowSession(freshProfile, unfollowTool, state);
         } catch (err) {
@@ -141620,6 +142077,7 @@ var AutomationEngine = class {
     };
     this.dmStates.set(profile.id, state);
     console.log(`[engine] Launching DM runner for @${profile.username}`);
+    let dmFirstRun = true;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -141632,6 +142090,15 @@ var AutomationEngine = class {
         const tools2 = await storage.getToolsByProfile(freshProfile.id);
         const dmTool = tools2.find((t2) => t2.type === "dm");
         if (!dmTool?.enabled || state.stop.stopped) break;
+        if (dmFirstRun) {
+          dmFirstRun = false;
+          const sd = dmTool.settings ?? {};
+          const scatterMs = randInt((sd.delayMin ?? 10) * 6e4, (sd.delayMax ?? 30) * 6e4);
+          console.log(`[engine] @${freshProfile.username}: startup scatter \u2014 first DM session in ${Math.round(scatterMs / 6e4)}min`);
+          await sleepInterruptible(scatterMs, state.stop);
+          if (state.stop.stopped) break;
+          continue;
+        }
         try {
           await this.runDMSession(freshProfile, dmTool, state);
         } catch (err) {
@@ -141673,8 +142140,14 @@ var AutomationEngine = class {
     };
     this.contactStates.set(profile.id, state);
     console.log(`[engine] Launching contact runner for @${profile.username}`);
-    let nextFollowerCheckAt = 0;
-    let nextUsersSessionAt = 0;
+    const sc = _tool.settings ?? {};
+    const _contactScatterMs = randInt(
+      (sc.contactUsersDelayMin ?? sc.delayMin ?? 30) * 6e4,
+      (sc.contactUsersDelayMax ?? sc.delayMax ?? 60) * 6e4
+    );
+    console.log(`[engine] @${profile.username}: startup scatter \u2014 first contact run in ${Math.round(_contactScatterMs / 6e4)}min`);
+    let nextFollowerCheckAt = Date.now() + _contactScatterMs;
+    let nextUsersSessionAt = Date.now() + _contactScatterMs;
     let lastContactNewFollowersEnabled = void 0;
     let lastContactUsersEnabled = void 0;
     const loop = async () => {
@@ -142048,6 +142521,10 @@ var AutomationEngine = class {
   // ── Ensure logged-in client ───────────────────────────────────────────────
   async ensureClient(profile, state) {
     const proxyUrl = await this.buildProxyUrl(profile);
+    if (!proxyUrl) {
+      console.error(`[engine] @${profile.username}: no proxy assigned \u2014 refusing to connect without proxy`);
+      return null;
+    }
     if (!state.client) {
       state.client = new InstagramWebClient(proxyUrl, profile.id);
       const LOGGED_OPS = /* @__PURE__ */ new Set([
@@ -143399,8 +143876,8 @@ var automationEngine = new AutomationEngine();
 
 // src/routes/instagram.ts
 var DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+var SERVER_START = (/* @__PURE__ */ new Date()).toISOString();
 async function resolveProxyConfig(profile) {
-  if (profile.browserDirectConnection === true) return void 0;
   if (profile.proxyId) {
     const proxies2 = await storage.getProxies();
     const linked = proxies2.find((p) => p.id === profile.proxyId);
@@ -143413,13 +143890,15 @@ async function resolveProxyConfig(profile) {
       };
     }
   }
-  if (!profile.proxyHost || !profile.proxyPort) return void 0;
-  return {
-    host: profile.proxyHost,
-    port: profile.proxyPort,
-    username: profile.proxyUsername ?? void 0,
-    password: profile.proxyPassword ?? void 0
-  };
+  if (profile.proxyHost && profile.proxyPort) {
+    return {
+      host: profile.proxyHost,
+      port: profile.proxyPort,
+      username: profile.proxyUsername ?? void 0,
+      password: profile.proxyPassword ?? void 0
+    };
+  }
+  return void 0;
 }
 async function registerInstagramRoutes(httpServer2, app2) {
   automationEngine.start();
@@ -143585,6 +144064,14 @@ async function registerInstagramRoutes(httpServer2, app2) {
       res.status(500).json({ message: "Failed to update profile" });
     }
   }
+  app2.post("/api/profiles/bulk-update", async (req, res) => {
+    const { ids, patch } = req.body ?? {};
+    if (!Array.isArray(ids) || !patch || typeof patch !== "object") {
+      return res.status(400).json({ message: "ids (array) and patch (object) are required" });
+    }
+    await Promise.all(ids.map((id) => storage.updateProfile(id, patch)));
+    res.json({ ok: true, updated: ids.length });
+  });
   app2.patch("/api/profiles/:id", handleProfileUpdate);
   app2.put("/api/profiles/:id", handleProfileUpdate);
   app2.delete(api.profiles.delete.path, async (req, res) => {
@@ -143610,9 +144097,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (!profile.username || !profile.password) {
       return res.status(400).json({ ok: false, message: "Username and password are required before verifying." });
     }
-    const bypassProxy = req.query.bypassProxy === "true";
     let effectiveProfile = { ...profile };
-    if (!bypassProxy && profile.proxyId) {
+    if (profile.proxyId) {
       const proxies2 = await storage.getProxies();
       const linked = proxies2.find((p) => p.id === profile.proxyId);
       if (linked) {
@@ -143624,17 +144110,18 @@ async function registerInstagramRoutes(httpServer2, app2) {
           proxyPassword: linked.password ?? ""
         };
       }
-    } else if (bypassProxy) {
-      effectiveProfile = {
-        ...effectiveProfile,
-        proxyId: null,
-        proxyHost: "",
-        proxyPort: null,
-        proxyUsername: "",
-        proxyPassword: ""
-      };
     }
-    const result = await verifyInstagramCredentials(effectiveProfile);
+    if (!effectiveProfile.proxyHost || !effectiveProfile.proxyPort) {
+      return res.status(400).json({ ok: false, message: "No proxy assigned. Assign a proxy to this account before verifying." });
+    }
+    let result;
+    try {
+      result = await verifyInstagramCredentials(effectiveProfile);
+    } catch (err) {
+      await storage.updateProfile(profile.id, { accountStatus: "pending" });
+      const msg = err instanceof Error ? err.message : "Unexpected verify error";
+      return res.status(500).json({ ok: false, message: msg });
+    }
     await storage.updateProfile(profile.id, {
       accountStatus: result.accountStatus,
       ...result.ok ? { credentialsDirty: false } : {},
@@ -143868,9 +144355,21 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const data = await storage.getSessionActionsByProfile(Number(req.params.profileId));
     res.json(data);
   });
-  app2.get("/api/instagram-api-calls", async (_req, res) => {
-    const data = await storage.getInstagramApiCalls(500);
-    res.json(data.filter((c3) => c3.source !== "Browser"));
+  app2.get("/api/server-info", (_req, res) => {
+    res.json({ startedAt: SERVER_START });
+  });
+  app2.get("/api/instagram-api-calls", async (req, res) => {
+    const sinceParam = req.query.since;
+    const settings = await storage.getGlobalSettings();
+    const logMaxRows = parseInt(settings.logMaxRows ?? "100000", 10);
+    let data;
+    if (sinceParam !== void 0) {
+      const sinceId = parseInt(sinceParam, 10);
+      data = isNaN(sinceId) ? [] : await storage.getInstagramApiCallsSince(sinceId, 5e3);
+    } else {
+      data = await storage.getInstagramApiCalls(logMaxRows);
+    }
+    res.json(data);
   });
   app2.get("/api/logs/export", async (req, res) => {
     try {
@@ -143934,7 +144433,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       const file2 = Buffer.concat([Buffer.from([239, 187, 191]), Buffer.from(content, "utf8")]);
       const filename = `api_calls_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
@@ -143972,7 +144471,17 @@ async function registerInstagramRoutes(httpServer2, app2) {
       profile.username,
       profile.password,
       profile.twoFASecretKey || ""
-    ).then((result) => sendLoginDone(profileId, result.ok, result.message)).catch((err) => sendLoginDone(profileId, false, String(err)));
+    ).then(async (result) => {
+      sendLoginDone(profileId, result.ok, result.message);
+      const trulyLoggedIn = result.ok && (result.message === "Login successful" || result.message === "Already logged in");
+      if (trulyLoggedIn) {
+        await storage.updateProfile(profileId, { accountStatus: "valid", credentialsDirty: false });
+      }
+    }).catch((err) => sendLoginDone(profileId, false, String(err)));
+  });
+  app2.post("/api/browser/:profileId/close", async (req, res) => {
+    await closeSession(Number(req.params.profileId));
+    res.json({ ok: true });
   });
   app2.delete("/api/browser/:profileId/session", async (req, res) => {
     const profileId = Number(req.params.profileId);
@@ -144033,6 +144542,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
           break;
         case "type":
           await browserType(profileId, msg.text);
+          break;
+        case "keycombo":
+          await browserKeyCombo(profileId, msg.modifier, msg.key);
           break;
         case "back":
           await browserBack(profileId);
@@ -144120,20 +144632,43 @@ async function registerInstagramRoutes(httpServer2, app2) {
     res.json({ ok: true, queued: result.queued });
   });
   app2.post("/api/profiles/verify-all", async (req, res) => {
-    const { profileIds: profileIds2, delayMin = 5, delayMax = 15 } = req.body;
+    const { profileIds: profileIds2 } = req.body;
     const allProfiles = await storage.getProfiles();
     const targets = profileIds2 && profileIds2.length > 0 ? allProfiles.filter((p) => profileIds2.includes(p.id)) : allProfiles;
     if (!targets.length) return res.json({ ok: true, verified: 0, total: 0 });
-    res.json({ ok: true, total: targets.length });
+    const globalSettings2 = await storage.getGlobalSettings();
+    const delayMin = parseInt(globalSettings2.verifyAllDelayMin ?? "5", 10);
+    const delayMax = parseInt(globalSettings2.verifyAllDelayMax ?? "15", 10);
+    const allProxies = await storage.getProxies();
+    const eligible = targets.filter((p) => {
+      if (p.proxyId) {
+        const linked = allProxies.find((px) => px.id === p.proxyId);
+        return !!(linked?.host && linked?.port);
+      }
+      return !!(p.proxyHost && p.proxyPort);
+    });
+    const skippedNoProxy = targets.length - eligible.length;
+    if (!eligible.length) {
+      return res.json({ ok: false, error: "No accounts have a proxy assigned. Assign proxies before verifying." });
+    }
+    res.json({ ok: true, total: eligible.length, skippedNoProxy });
     (async () => {
-      let done = 0;
-      for (const profile of targets) {
+      for (let i2 = 0; i2 < eligible.length; i2++) {
+        const profile = eligible[i2];
         try {
-          await verifyInstagramCredentials(profile);
-          done++;
+          const result = await verifyInstagramCredentials(profile);
+          await storage.updateProfile(profile.id, {
+            accountStatus: result.accountStatus,
+            ...result.ok ? { credentialsDirty: false } : {},
+            ...result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}
+          });
+          if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
+            setCheckpointUrl(profile.id, result.checkpointUrl);
+          }
         } catch {
+          await storage.updateProfile(profile.id, { accountStatus: "pending" });
         }
-        if (done < targets.length) {
+        if (i2 < targets.length - 1) {
           const ms = (Math.random() * (delayMax - delayMin) + delayMin) * 1e3;
           await new Promise((r2) => setTimeout(r2, ms));
         }
@@ -144204,11 +144739,12 @@ async function registerInstagramRoutes(httpServer2, app2) {
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
-      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10)
+      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
+      logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10)
     });
   });
   app2.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -144239,6 +144775,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (typeof verifyAllDelayMax === "number" && verifyAllDelayMax >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMax", String(Math.round(verifyAllDelayMax)));
     }
+    if (typeof logMaxRows === "number" && logMaxRows > 0) {
+      await storage.setGlobalSetting("logMaxRows", String(Math.round(logMaxRows)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -144250,8 +144789,25 @@ async function registerInstagramRoutes(httpServer2, app2) {
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
-      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10)
+      verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
+      logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10)
     });
+  });
+  app2.get("/api/settings/test-2captcha", async (_req, res) => {
+    const settings = await storage.getGlobalSettings();
+    const key = settings.twoCaptchaApiKey ?? "";
+    if (!key) return res.json({ ok: false, error: "No API key configured" });
+    try {
+      const r2 = await fetch(`https://2captcha.com/res.php?action=getbalance&key=${encodeURIComponent(key)}`);
+      const text2 = (await r2.text()).trim();
+      const balance = parseFloat(text2);
+      if (!isNaN(balance)) {
+        return res.json({ ok: true, balance });
+      }
+      return res.json({ ok: false, error: text2 });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
+    }
   });
   app2.post("/api/settings/test-hiker", async (req, res) => {
     const { token } = req.body;
@@ -144281,6 +144837,23 @@ async function registerInstagramRoutes(httpServer2, app2) {
   app2.get("/api/engine/status", (_req, res) => {
     res.json(automationEngine.getStatus());
   });
+  app2.post("/api/jarvee/import-followed-users", async (req, res) => {
+    try {
+      const { profileUsername, entries } = req.body;
+      if (!profileUsername || !Array.isArray(entries)) {
+        return res.status(400).json({ error: "profileUsername and entries[] are required" });
+      }
+      const profile = await storage.getProfileByUsername(profileUsername);
+      if (!profile) {
+        return res.status(404).json({ error: `No profile found matching username "${profileUsername}"` });
+      }
+      const result = await storage.bulkImportFollowedUsers(profile.id, entries);
+      return res.json({ ok: true, profileId: profile.id, ...result });
+    } catch (e) {
+      req.log.error({ err: e }, "jarvee import-followed-users failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
 }
 
 // src/index.ts
@@ -144292,7 +144865,7 @@ var httpServer = createServer(app_default);
 registerInstagramRoutes(httpServer, app_default).then(() => {
   const frontendDist = process.env.FRONTEND_DIST_PATH || path3.join(process.cwd(), "artifacts", "dannys-bot", "dist", "public");
   if (fs3.existsSync(frontendDist)) {
-    app_default.use(import_express4.default.static(frontendDist));
+    app_default.use(import_express5.default.static(frontendDist));
     app_default.use((_req, res) => {
       res.sendFile(path3.join(frontendDist, "index.html"));
     });
