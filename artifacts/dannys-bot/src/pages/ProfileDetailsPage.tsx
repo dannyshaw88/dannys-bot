@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { useProxies } from "@/hooks/use-proxies";
+import { useProxies, useUpdateProxy } from "@/hooks/use-proxies";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -79,6 +79,7 @@ export function ProfileDetailsPage() {
   const { data: proxies } = useProxies();
   const updateProfileMutation = useUpdateProfile();
   const updateAccountStatusMutation = useUpdateAccountStatus();
+  const updateProxyMutation = useUpdateProxy();
   const { toast } = useToast();
 
   const { openWindow } = useBrowserWindows();
@@ -90,6 +91,10 @@ export function ProfileDetailsPage() {
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "pending" | "ok" | "fail">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);
+
+  const [linkedHostPort, setLinkedHostPort] = useState("");
+  const [linkedUsername, setLinkedUsername] = useState("");
+  const [linkedPassword, setLinkedPassword] = useState("");
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
@@ -237,6 +242,48 @@ export function ProfileDetailsPage() {
       );
     }, 800);
   }, [profileId, updateProfileMutation]);
+
+  useEffect(() => {
+    const linked = proxies?.find(p => p.id === profile?.proxyId);
+    if (linked) {
+      setLinkedHostPort(`${linked.host}:${linked.port}`);
+      setLinkedUsername(linked.username ?? "");
+      setLinkedPassword(linked.password ?? "");
+    }
+  }, [profile?.proxyId, proxies]);
+
+  const saveLinkedField = useCallback((field: "hostPort" | "username" | "password") => {
+    const linked = proxies?.find(p => p.id === profile?.proxyId);
+    if (!linked) return;
+    let data: Record<string, string | number | null> = {};
+    if (field === "hostPort") {
+      const parts = linkedHostPort.split(":");
+      const host = parts.slice(0, -1).join(":").trim();
+      const port = parseInt(parts[parts.length - 1], 10);
+      if (!host || isNaN(port)) {
+        toast({ title: "Invalid format", description: "Use host:port format", variant: "destructive" });
+        setLinkedHostPort(`${linked.host}:${linked.port}`);
+        return;
+      }
+      data = { host, port };
+    } else if (field === "username") {
+      data = { username: linkedUsername || null };
+    } else {
+      data = { password: linkedPassword || null };
+    }
+    updateProxyMutation.mutate({ id: linked.id, data });
+  }, [linkedHostPort, linkedUsername, linkedPassword, profile?.proxyId, proxies, updateProxyMutation, toast]);
+
+  const saveManualProxyField = useCallback(() => {
+    if (!formData || profile?.proxyId) return;
+    updateProfileMutation.mutate({
+      id: profileId,
+      proxyHost: formData.proxyHost || null,
+      proxyPort: formData.proxyPort ? Number(formData.proxyPort) : null,
+      proxyUsername: formData.proxyUsername || null,
+      proxyPassword: formData.proxyPassword || null,
+    });
+  }, [formData, profile?.proxyId, profileId, updateProfileMutation]);
 
   const updateField = (patch: any) => {
     const next = { ...formData, ...patch };
@@ -576,79 +623,104 @@ export function ProfileDetailsPage() {
                     Reset Device IDs
                   </button>
 
-                  <div className="space-y-4 pt-4 border-t border-border mt-4">
-                    <h4 className="text-sm font-bold mb-2 flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
+                  <div className="space-y-3 pt-4 border-t border-border mt-4">
+                    <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
 
-                    {/* Linked proxy from Proxy Manager */}
                     {(() => {
                       const linked = proxies?.find(p => p.id === profile.proxyId);
                       if (linked) {
                         return (
-                          <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
-                            <Server className="w-4 h-4 text-primary shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold font-mono truncate">{linked.host}:{linked.port}</p>
-                              {linked.username && (
-                                <p className="text-xs text-muted-foreground mt-0.5">{linked.username}</p>
-                              )}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Input
+                                value={linkedHostPort}
+                                onChange={e => setLinkedHostPort(e.target.value)}
+                                onBlur={() => saveLinkedField("hostPort")}
+                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                className="font-mono text-sm h-8 w-48 shrink-0"
+                                placeholder="host:port"
+                              />
+                              <Input
+                                value={linkedUsername}
+                                onChange={e => setLinkedUsername(e.target.value)}
+                                onBlur={() => saveLinkedField("username")}
+                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                placeholder="username"
+                                className="font-mono text-sm h-8 w-32 shrink-0"
+                              />
+                              <Input
+                                value={linkedPassword}
+                                onChange={e => setLinkedPassword(e.target.value)}
+                                onBlur={() => saveLinkedField("password")}
+                                onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                                placeholder="password"
+                                className="font-mono text-sm h-8 w-32 shrink-0"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-2 shrink-0"
+                                onClick={() => updateProfileMutation.mutate({ id: profileId, proxyId: null })}
+                              >
+                                <X className="w-3.5 h-3.5 mr-1" /> Unassign
+                              </Button>
                             </div>
-                            {linked.username
-                              ? <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded shrink-0">Auth</span>
-                              : <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground bg-accent px-2 py-0.5 rounded shrink-0">No Auth</span>
-                            }
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-7 px-2 shrink-0"
-                              onClick={() => updateProfileMutation.mutate({ id: profileId, proxyId: null })}
-                            >
-                              <X className="w-3.5 h-3.5 mr-1" /> Unassign
-                            </Button>
+                            <p className="text-xs text-muted-foreground">Managed by Proxy Manager — changes update the shared proxy.</p>
                           </div>
                         );
                       }
                       return (
-                        <>
-                          <p className="text-xs text-muted-foreground -mt-1">No proxy assigned. Go to the <strong>Proxy Manager</strong> to assign one, or enter details manually below.</p>
-                          <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">IP Address &amp; Port</Label>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <Input
-                              placeholder="45.80.96.251:29842"
-                              className="font-mono"
                               value={formData.proxyHost && formData.proxyPort ? `${formData.proxyHost}:${formData.proxyPort}` : formData.proxyHost || ""}
                               onChange={e => {
                                 const val = e.target.value;
                                 const lastColon = val.lastIndexOf(":");
                                 if (lastColon !== -1) {
-                                  const host = val.slice(0, lastColon);
-                                  const port = val.slice(lastColon + 1);
-                                  updateField({ proxyHost: host, proxyPort: port });
+                                  updateField({ proxyHost: val.slice(0, lastColon), proxyPort: val.slice(lastColon + 1) });
                                 } else {
                                   updateField({ proxyHost: val, proxyPort: "" });
                                 }
                               }}
+                              onBlur={saveManualProxyField}
+                              onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                              placeholder="host:port"
+                              className="font-mono text-sm h-8 w-48 shrink-0"
+                            />
+                            <Input
+                              value={formData.proxyUsername}
+                              onChange={e => updateField({ proxyUsername: e.target.value })}
+                              onBlur={saveManualProxyField}
+                              onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                              placeholder="username"
+                              className="font-mono text-sm h-8 w-32 shrink-0"
+                            />
+                            <Input
+                              value={formData.proxyPassword}
+                              onChange={e => updateField({ proxyPassword: e.target.value })}
+                              onBlur={saveManualProxyField}
+                              onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+                              placeholder="password"
+                              className="font-mono text-sm h-8 w-32 shrink-0"
                             />
                           </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Proxy User</Label>
-                              <Input
-                                placeholder="Optional"
-                                value={formData.proxyUsername}
-                                onChange={e => updateField({ proxyUsername: e.target.value })}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Proxy Pass</Label>
-                              <PasswordInput
-                                placeholder="Optional"
-                                value={formData.proxyPassword}
-                                onChange={e => updateField({ proxyPassword: e.target.value })}
-                              />
-                            </div>
-                          </div>
-                        </>
+                          {proxies && proxies.length > 0 && (
+                            <select
+                              className="h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+                              value=""
+                              onChange={e => {
+                                if (e.target.value) updateProfileMutation.mutate({ id: profileId, proxyId: Number(e.target.value) });
+                              }}
+                            >
+                              <option value="">+ Assign to proxy from Proxy Manager…</option>
+                              {proxies.map(p => (
+                                <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
                       );
                     })()}
 
