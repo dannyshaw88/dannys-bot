@@ -360,26 +360,21 @@ export function attachSSE(profileId: number, res: ServerResponse) {
   }
   session.res = res;
 
-  // ── Guarantee Instagram is loaded ──────────────────────────────────────────
-  // On every (re-)connect, check the current URL.  If the page is on
-  // about:blank (silent goto() failure), chrome-error:// (429 / network), or
-  // any non-Instagram URL, navigate to Instagram right now rather than waiting
-  // for the frame-loop retry which fires after a 3-second delay.
-  // NOTE: page.url() is synchronous (returns string, not Promise) in this
-  // version of Puppeteer — wrap in an async IIFE so we can await cookies.
+  // ── Recover from error/blank pages on reconnect ────────────────────────────
+  // Only navigate to Instagram if the page is stuck on an error page or blank —
+  // NOT if the user has intentionally navigated to another site.
   (async () => {
     try {
       const currentUrl = session.page.url();
-      if (currentUrl.includes("instagram.com")) return; // already on IG
+      const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
+      if (!isErrorPage) return; // user may be browsing freely — leave them alone
       const cookies = await session.page.cookies().catch(() => [] as any[]);
       const hasCookies = cookies.some((c: any) => c.name === "sessionid");
       const target = hasCookies
         ? "https://www.instagram.com/"
         : "https://www.instagram.com/accounts/login/";
       log(`[attachSSE:${profileId}] page is "${currentUrl}" — navigating to ${target}`, "browser");
-      session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {
-        // Frame-loop retry will handle subsequent failures
-      });
+      session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
     } catch { /* page may be closing — ignore */ }
   })();
 
@@ -430,14 +425,14 @@ function startFrameLoop(profileId: number) {
         sseWrite(s.res, { type: "urlChange", url: currentUrl });
       }
 
-      // ── Non-Instagram page auto-retry ────────────────────────────────────
-      // Handles three failure modes:
-      //   • chrome-error://  — HTTP 429 / net error from Instagram
-      //   • about:blank      — goto() timed out and was silently swallowed
-      //   • any non-IG URL   — ended up somewhere unexpected
+      // ── Error-page auto-retry ────────────────────────────────────────────
+      // Only retry when stuck on a genuine error/blank page:
+      //   • chrome-error://  — HTTP 429 / net error
+      //   • about:blank / about:newtab — goto() timed out silently
+      // Do NOT redirect when the user has intentionally browsed to another site.
       // Retries indefinitely: fast (3 s) for first 3 attempts, then every 30 s.
-      // Account verification status has NO effect on the browser's network access.
-      if (!currentUrl.includes("instagram.com")) {
+      const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
+      if (isErrorPage) {
         errorRetryTick++;
         // First 3 retries: every 3 s (15×200 ms). After that: every 30 s (150×200 ms).
         const retryThreshold = errorRetryCount < 3 ? 15 : 150;
