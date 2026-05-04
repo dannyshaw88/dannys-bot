@@ -93,6 +93,8 @@ export function ProfilesPage() {
         });
       },
       onError: () => {
+        // Reset to pending so the account isn't stuck in "verifying"
+        updateAccountStatus.mutate({ id, accountStatus: "pending" });
         toast({ title: "Error", description: "Could not reach Instagram.", variant: "destructive" });
       },
     });
@@ -267,15 +269,27 @@ export function ProfilesPage() {
     // Mark all accounts as "verifying" immediately so the UI reflects the in-progress state
     await Promise.allSettled(ids.map(id => updateAccountStatus.mutateAsync({ id, accountStatus: "verifying" })));
     try {
+      // Fetch the delay settings so the server uses the values from the Settings page
+      let delayMin = 5;
+      let delayMax = 15;
+      try {
+        const settingsRes = await fetch("/api/settings", { credentials: "include" });
+        if (settingsRes.ok) {
+          const s = await settingsRes.json();
+          if (typeof s.verifyAllDelayMin === "number") delayMin = s.verifyAllDelayMin;
+          if (typeof s.verifyAllDelayMax === "number") delayMax = s.verifyAllDelayMax;
+        }
+      } catch { /* use defaults */ }
+
       const res = await fetch("/api/profiles/verify-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ profileIds: ids }),
+        body: JSON.stringify({ profileIds: ids, delayMin, delayMax }),
       });
       const data = await res.json();
       if (data.ok) {
-        toast({ title: "Verify All started", description: `Verifying ${data.total} account(s) in the background with staggered delays.` });
+        toast({ title: "Verify All started", description: `Verifying ${data.total} account(s) in the background with ${delayMin}–${delayMax}s delays.` });
       } else {
         toast({ title: "Error", description: data.error ?? "Failed to start verification.", variant: "destructive" });
       }
