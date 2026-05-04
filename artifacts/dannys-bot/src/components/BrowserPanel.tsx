@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -17,8 +17,19 @@ interface BrowserPanelProps {
 type SSEStatus = "idle" | "connecting" | "connected" | "error";
 type LoginState = "idle" | "running" | "ok" | "fail";
 
+interface LogEntry {
+  ts: string;
+  text: string;
+  kind: "step" | "ok" | "fail" | "error";
+}
+
 const BROWSER_W = 1280;
 const BROWSER_H = 760;
+
+function nowTs() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
+}
 
 export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelProps) {
   const { toast } = useToast();
@@ -26,6 +37,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const esRef = useRef<EventSource | null>(null);
   const addressFocusedRef = useRef(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   const [status, setStatus] = useState<SSEStatus>("idle");
   const statusRef = useRef<SSEStatus>("idle");
@@ -41,8 +53,19 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [loginState, setLoginState] = useState<LoginState>("idle");
-  const [loginMsg, setLoginMsg] = useState<string>("");
+  const [loginLog, setLoginLog] = useState<LogEntry[]>([]);
+  const [showLog, setShowLog] = useState(false);
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
+
+  const appendLog = useCallback((text: string, kind: LogEntry["kind"] = "step") => {
+    setLoginLog(prev => [...prev, { ts: nowTs(), text, kind }]);
+    setShowLog(true);
+  }, []);
+
+  // Auto-scroll log to bottom on new entries
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [loginLog]);
 
   // ── Input sender: POST to /api/browser/:id/input ─────────────────────────
   const send = useCallback((msg: object) => {
@@ -75,7 +98,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    // Close existing EventSource
     if (esRef.current) {
       esRef.current.close();
       esRef.current = null;
@@ -112,23 +134,29 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             es.close();
             esRef.current = null;
             break;
-          case "loginStatus":
-            setLoginMsg(msg.message ?? "");
+          case "loginStatus": {
+            const text = msg.message ?? "";
+            const isErr = text.startsWith("⚠") || text.startsWith("Error");
+            appendLog(text, isErr ? "error" : "step");
             break;
+          }
           case "loginDone":
-            setLoginState(msg.ok ? "ok" : "fail");
-            setLoginMsg(msg.ok ? "Logged in successfully!" : (msg.message || "Login failed"));
-            if (!msg.ok) {
+            if (msg.ok) {
+              setLoginState("ok");
+              appendLog(msg.message || "Done", "ok");
+              setTimeout(() => setLoginState("idle"), 8000);
+            } else {
+              setLoginState("fail");
+              appendLog(msg.message || "Login failed", "fail");
               toast({ title: "Login issue", description: msg.message, variant: "destructive" });
+              setTimeout(() => setLoginState("idle"), 12000);
             }
-            setTimeout(() => { setLoginState("idle"); setLoginMsg(""); }, 8000);
             break;
         }
       } catch {}
     };
 
     es.onerror = () => {
-      // EventSource auto-reconnects by default — suppress that and manage reconnect ourselves
       es.close();
       esRef.current = null;
       setIsLoading(false);
@@ -139,17 +167,15 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         }, 3000);
       }
     };
-  }, [profileId, setStatusSafe]);
+  }, [profileId, setStatusSafe, appendLog]);
 
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
   }, []);
 
-  // Auto-connect on mount
   useEffect(() => { connect(); }, [connect]);
 
-  // Watch for pending navigation requested externally (e.g. clicking @mention in logs)
   useEffect(() => {
     const entry = windows.find(w => w.profileId === profileId);
     if (!entry?.pendingUrl) return;
@@ -164,7 +190,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     }
   }, [windows, profileId, clearPendingUrl, send]);
 
-  // Fire pending navigation once SSE becomes connected
   useEffect(() => {
     if (status !== "connected" || !pendingNavUrl) return;
     const url = pendingNavUrl;
@@ -185,7 +210,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     img.src = `data:image/jpeg;base64,${base64}`;
   };
 
-  // ── Coordinate scaling: display px → browser px ───────────────────────────
   const scale = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const r = canvasRef.current!.getBoundingClientRect();
     return {
@@ -194,7 +218,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     };
   };
 
-  // ── Input handlers ────────────────────────────────────────────────────────
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (status !== "connected") return;
     const { x, y } = scale(e);
@@ -211,27 +234,18 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const onKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (status !== "connected") return;
     e.preventDefault();
-
     const ctrl = e.ctrlKey || e.metaKey;
-
-    // ── Ctrl+V: read clipboard and type its text into the browser ────────────
     if (ctrl && e.key.toLowerCase() === "v") {
       navigator.clipboard.readText().then(text => {
         if (text) send({ type: "type", text });
       }).catch(() => {});
       return;
     }
-
-    // ── Other Ctrl combos: forward as keyboard combos to the page ────────────
     if (ctrl) {
       const k = e.key.toLowerCase();
-      // Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+Z, Ctrl+Y, Ctrl+T, Ctrl+W etc.
-      if (k.length === 1) {
-        send({ type: "keycombo", modifier: "Control", key: k });
-      }
+      if (k.length === 1) send({ type: "keycombo", modifier: "Control", key: k });
       return;
     }
-
     const special: Record<string, string> = {
       Enter: "Enter", Backspace: "Backspace", Tab: "Tab", Escape: "Escape",
       ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight",
@@ -246,7 +260,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     }
   };
 
-  // ── Paste via right-click context menu or programmatic paste event ────────
   const onPaste = (e: React.ClipboardEvent<HTMLCanvasElement>) => {
     if (status !== "connected") return;
     e.preventDefault();
@@ -272,23 +285,23 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     }
   };
 
-  // ── Auto-login ────────────────────────────────────────────────────────────
   const doLogin = () => {
     if (loginState === "running") {
       setLoginState("idle");
-      setLoginMsg("");
       return;
     }
+    setLoginLog([]);
+    setShowLog(true);
     setLoginState("running");
-    setLoginMsg("Starting login…");
+    appendLog("Starting auto-login…", "step");
     fetch(`/api/browser/${profileId}/login`, { method: "POST" }).catch(() => {
       setLoginState("fail");
-      setLoginMsg("Could not reach server");
-      setTimeout(() => { setLoginState("idle"); setLoginMsg(""); }, 4000);
+      appendLog("Could not reach server", "fail");
+      setTimeout(() => setLoginState("idle"), 4000);
     });
   };
 
-  // ── Status display ────────────────────────────────────────────────────────
+  const lastEntry = loginLog[loginLog.length - 1];
   const statusColor = { idle: "text-slate-400", connecting: "text-amber-500", connected: "text-green-600", error: "text-red-500" }[status];
   const statusDot   = { idle: "bg-slate-300", connecting: "bg-amber-400 animate-pulse", connected: "bg-green-500 animate-pulse", error: "bg-red-500" }[status];
   const statusLabel = { idle: "Not started", connecting: "Starting browser…", connected: "Browser active", error: "Error" }[status];
@@ -344,7 +357,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           </div>
         </form>
 
-        {/* Login button */}
         <Button
           variant="outline"
           size="sm"
@@ -372,19 +384,62 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         </Button>
       </div>
 
-      {/* Login status bar */}
-      {loginMsg && (
-        <div className={`flex items-center gap-2 px-4 py-1.5 text-xs shrink-0 border-b ${
-          loginState === "ok"      ? "bg-green-50 text-green-700 border-green-200" :
-          loginState === "fail"    ? "bg-red-50 text-red-700 border-red-200" :
-          loginState === "running" ? "bg-blue-50 text-blue-700 border-blue-200" :
-                                     "bg-muted text-muted-foreground border-border"
-        }`}>
-          {loginState === "running" && <Loader2 className="w-3 h-3 animate-spin shrink-0" />}
-          {loginState === "ok"      && <CheckCircle2 className="w-3 h-3 shrink-0" />}
-          {loginState === "fail"    && <AlertCircle className="w-3 h-3 shrink-0" />}
-          <span className="truncate">{loginMsg}</span>
+      {/* Login step log — shown during/after login, collapsible */}
+      {showLog && loginLog.length > 0 && (
+        <div className="shrink-0 border-b border-border bg-slate-950 text-xs">
+          {/* Log header */}
+          <div className="flex items-center justify-between px-3 py-1 border-b border-slate-800">
+            <span className="text-slate-400 font-mono font-semibold tracking-wide uppercase text-[10px]">Login log</span>
+            <div className="flex items-center gap-2">
+              {loginState === "running" && <Loader2 className="w-3 h-3 animate-spin text-amber-400" />}
+              {loginState === "ok"      && <CheckCircle2 className="w-3 h-3 text-green-400" />}
+              {loginState === "fail"    && <AlertCircle className="w-3 h-3 text-red-400" />}
+              <button
+                onClick={() => setShowLog(false)}
+                className="text-slate-500 hover:text-slate-300 ml-1"
+                title="Hide log"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+          {/* Scrollable entries */}
+          <div className="max-h-32 overflow-y-auto px-3 py-1.5 space-y-0.5 font-mono">
+            {loginLog.map((e, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-slate-600 shrink-0 select-none">{e.ts}</span>
+                <span className={
+                  e.kind === "ok"    ? "text-green-400" :
+                  e.kind === "fail"  ? "text-red-400" :
+                  e.kind === "error" ? "text-amber-400" :
+                  "text-slate-300"
+                }>
+                  {e.kind === "ok"   ? "✓ " :
+                   e.kind === "fail" ? "✗ " :
+                   e.kind === "error"? "⚠ " : "· "}
+                  {e.text}
+                </span>
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+          {/* Latest status pinned at bottom if running */}
+          {loginState === "running" && lastEntry && (
+            <div className="px-3 py-1 border-t border-slate-800 text-amber-300 truncate">
+              {lastEntry.text}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Collapsed log toggle */}
+      {!showLog && loginLog.length > 0 && (
+        <button
+          onClick={() => setShowLog(true)}
+          className="shrink-0 px-4 py-1 text-[11px] text-slate-500 bg-slate-950 border-b border-slate-800 hover:text-slate-300 text-left"
+        >
+          Show login log ({loginLog.length} steps)
+        </button>
       )}
 
       {/* Loading bar */}
@@ -397,7 +452,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       {/* Viewport */}
       <div className="flex-1 relative bg-slate-900 min-h-0 overflow-hidden flex items-center justify-center">
 
-        {/* Idle — disconnected, waiting for user or auto-reconnect */}
         {status === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
             <MonitorPlay className="w-10 h-10 text-slate-400" />
@@ -407,7 +461,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           </div>
         )}
 
-        {/* Connecting */}
         {status === "connecting" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -415,7 +468,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           </div>
         )}
 
-        {/* Error */}
         {status === "error" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
             <WifiOff className="w-10 h-10 text-red-400" />
@@ -425,7 +477,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           </div>
         )}
 
-        {/* Live canvas — letterboxed to preserve 1280×760 aspect ratio */}
         <canvas
           ref={canvasRef}
           width={BROWSER_W}

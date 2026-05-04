@@ -816,6 +816,7 @@ export async function browserAutoLogin(
   try {
     // ── Step 1: Navigate to login page (skip if already there) ──────────────
     const currentUrl = s.page.url();
+    sendStatus(profileId, `Current URL: ${currentUrl.slice(0, 80)}`);
     if (!currentUrl.includes("instagram.com/accounts/login")) {
       sendStatus(profileId, "Navigating to Instagram login…");
       await s.page.goto("https://www.instagram.com/accounts/login/", {
@@ -953,8 +954,10 @@ export async function browserAutoLogin(
     const pageText = await s.page.evaluate(() =>
       (document.body?.innerText || "").slice(0, 600).trim()
     ).catch(() => "");
-    log(`[autoLogin:${profileId}] Page after submit: "${pageText.slice(0, 150)}"`, 'browser');
     const pageUrl = s.page.url();
+    sendStatus(profileId, `After submit → URL: ${pageUrl.slice(0, 80)}`);
+    sendStatus(profileId, `Page text snippet: "${pageText.slice(0, 120)}"`);
+    log(`[autoLogin:${profileId}] Page after submit: "${pageText.slice(0, 150)}"`, 'browser');
 
     const is2FA = /authentication.app|6.digit|two.factor|verif|security.code|confirmation.code|backup.code|enter.the.code/i.test(pageText) ||
                   pageUrl.includes("/two_factor") || pageUrl.includes("challenge");
@@ -963,14 +966,18 @@ export async function browserAutoLogin(
                        !pageText.includes("Create new account") &&
                        !pageUrl.includes("/accounts/login");
 
+    sendStatus(profileId, `2FA detected: ${is2FA} | Logged in: ${isLoggedIn}`);
+
     // ── Step 7: Auto-fill TOTP if 2FA screen detected ────────────────────────
     if (is2FA) {
       const keyClean = twoFAKey.replace(/\s+/g, "");
+      sendStatus(profileId, `TOTP key present: ${!!keyClean} (length ${keyClean.length})`);
       if (keyClean) {
         sendStatus(profileId, "2FA screen — entering TOTP code automatically…");
         let code: string;
         try {
           code = totpGenerate({ secret: keyClean });
+          sendStatus(profileId, `TOTP code generated: ${code.slice(0, 2)}****`);
         } catch (totpErr: any) {
           sendStatus(profileId, `⚠ Invalid 2FA secret key — ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
           return { ok: false, message: `Invalid 2FA secret: ${totpErr?.message}` };
@@ -986,16 +993,27 @@ export async function browserAutoLogin(
           'input[type="tel"]',
           'input[type="number"]',
         ];
+        // Also dump all inputs on the page for visibility
+        const allInputs = await s.page.evaluate(() =>
+          Array.from(document.querySelectorAll("input")).map(el => ({
+            name: el.name, type: el.type, inputmode: el.getAttribute("inputmode"),
+            autocomplete: el.autocomplete, placeholder: el.placeholder.slice(0, 30),
+          }))
+        ).catch(() => []);
+        sendStatus(profileId, `Inputs on page: ${JSON.stringify(allInputs).slice(0, 200)}`);
+
         let codeInput: any = null;
         let codeSelector = '';
         for (const sel of CODE_SELECTORS) {
           const el = await s.page.$(sel).catch(() => null);
           if (el) { codeInput = el; codeSelector = sel; break; }
         }
+        sendStatus(profileId, `2FA input selector: ${codeSelector || "NONE FOUND"}`);
         log(`[autoLogin:${profileId}] 2FA input selector used: ${codeSelector || "none found"}`, "browser");
         if (codeInput) {
           // Click and type directly into the element handle — avoids re-querying the DOM
           const box = await codeInput.boundingBox().catch(() => null);
+          sendStatus(profileId, `Input bounding box: ${JSON.stringify(box)}`);
           if (box) {
             await s.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
           } else {
@@ -1008,6 +1026,7 @@ export async function browserAutoLogin(
           await s.page.keyboard.up("Control");
           await s.page.keyboard.press("Backspace");
           await s.page.keyboard.type(code, { delay: 80 });
+          sendStatus(profileId, `Typed TOTP code into input`);
           await delay(400);
           // Click "Confirm" / "Continue" / "Verify" / "Submit" button
           const contBtns = await s.page.evaluate(() =>
@@ -1016,7 +1035,9 @@ export async function browserAutoLogin(
               return { text: (el as HTMLElement).innerText?.trim(), x: r.x, y: r.y, w: r.width, h: r.height };
             })
           ).catch(() => [] as any[]);
+          sendStatus(profileId, `Buttons found: ${contBtns.map((b: any) => `"${b.text}"`).join(", ").slice(0, 150)}`);
           const contBtn = contBtns.find((b: any) => /confirm|continue|verify|submit/i.test(b.text) && b.w > 50);
+          sendStatus(profileId, `Submit button matched: ${contBtn ? `"${contBtn.text}"` : "NONE — using Enter"}`);
           if (contBtn) {
             await s.page.mouse.move(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
             await delay(100);
@@ -1044,6 +1065,7 @@ export async function browserAutoLogin(
           const afterText = await s.page.evaluate(
             () => (document.body?.innerText || "").slice(0, 300).trim()
           ).catch(() => "");
+          sendStatus(profileId, `After 2FA: URL="${afterUrl.slice(0, 80)}" text="${afterText.slice(0, 80)}"`);
           log(`[autoLogin:${profileId}] After 2FA submit: url="${afterUrl}" text="${afterText.slice(0, 100)}"`, "browser");
 
           const twoFaAccepted = !afterUrl.includes("/two_factor") && !afterUrl.includes("/accounts/login");
@@ -1058,7 +1080,7 @@ export async function browserAutoLogin(
           sendStatus(profileId, `⚠ 2FA code not accepted — ${errSnippet || "check the browser window"}`);
           return { ok: false, message: "2FA code rejected" };
         } else {
-          sendStatus(profileId, "2FA screen — enter the code in the browser window.");
+          sendStatus(profileId, "⚠ 2FA screen — NO input field found. Cannot type code.");
           return { ok: true, message: "2FA screen shown" };
         }
       } else {
