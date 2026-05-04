@@ -380,6 +380,40 @@ export function ProfileDetailsPage() {
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
+              {/* Account status badge — left of name picker */}
+              {(() => {
+                const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
+                const meta = STATUS_META[acctStatus] ?? STATUS_META.pending;
+                const Icon = meta.icon;
+                return (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}`}>
+                        <Icon className="w-3 h-3" />
+                        {meta.label}
+                        <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-52 p-1">
+                      {ACCOUNT_STATUSES.map(s => {
+                        const m = STATUS_META[s] ?? STATUS_META.pending;
+                        const I = m.icon;
+                        return (
+                          <DropdownMenuItem
+                            key={s}
+                            onClick={() => updateAccountStatusMutation.mutate({ id: profileId, accountStatus: s })}
+                            className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md text-sm font-medium ${s === acctStatus ? "bg-accent" : ""}`}
+                          >
+                            <I className="w-3.5 h-3.5" />
+                            {m.label}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              })()}
+
               <DropdownMenu onOpenChange={open => { if (!open) setProfileSearch(""); }}>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent transition-colors max-w-md">
@@ -387,7 +421,6 @@ export function ProfileDetailsPage() {
                     <span className="text-2xl font-bold tracking-tight text-foreground truncate">
                       {profile.accountLabel || `@${profile.username}`}
                     </span>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${profile.status === 'running' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
                     <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                   </button>
                 </DropdownMenuTrigger>
@@ -434,39 +467,6 @@ export function ProfileDetailsPage() {
                 <ChevronRight className="w-4 h-4" />
               </button>
 
-              {/* Account status badge — outside nav, right of the > arrow */}
-              {(() => {
-                const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
-                const meta = STATUS_META[acctStatus] ?? STATUS_META.pending;
-                const Icon = meta.icon;
-                return (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}`}>
-                        <Icon className="w-3 h-3" />
-                        {meta.label}
-                        <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-52 p-1">
-                      {ACCOUNT_STATUSES.map(s => {
-                        const m = STATUS_META[s] ?? STATUS_META.pending;
-                        const I = m.icon;
-                        return (
-                          <DropdownMenuItem
-                            key={s}
-                            onClick={() => updateAccountStatusMutation.mutate({ id: profileId, accountStatus: s })}
-                            className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md text-sm font-medium ${s === acctStatus ? "bg-accent" : ""}`}
-                          >
-                            <I className="w-3.5 h-3.5" />
-                            {m.label}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                );
-              })()}
             </div>
           </div>
 
