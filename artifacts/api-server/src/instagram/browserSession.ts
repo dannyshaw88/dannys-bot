@@ -463,7 +463,7 @@ function startFrameLoop(profileId: number) {
     } finally {
       busy = false;
     }
-  }, 200); // 5 fps
+  }, 500); // 2 fps — balances responsiveness with CPU cost
 }
 
 export async function browserNavigate(profileId: number, url: string) {
