@@ -36,7 +36,7 @@ export function BrowserTaskbar() {
 
             {/* Close */}
             <button
-              onClick={e => { e.stopPropagation(); closeWindow(win.profileId); }}
+              onClick={e => { e.stopPropagation(); fetch(`/api/browser/${win.profileId}/close`, { method: "POST" }).catch(() => {}); closeWindow(win.profileId); }}
               className="w-4 h-4 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all shrink-0"
               title="Close"
             >
