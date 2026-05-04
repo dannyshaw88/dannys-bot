@@ -1,6 +1,26 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertProxy } from "@shared/routes";
 
+export function useUpdateProxy() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<InsertProxy> }) => {
+      const url = buildUrl(api.proxies.update.path, { id });
+      const res = await fetch(url, {
+        method: api.proxies.update.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to update proxy");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.proxies.list.path] });
+    },
+  });
+}
+
 export function useProxies() {
   return useQuery({
     queryKey: [api.proxies.list.path],

@@ -21,6 +21,7 @@ export interface IStorage {
   // Proxies
   getProxies(): Promise<Proxy[]>;
   createProxy(proxy: InsertProxy): Promise<Proxy>;
+  updateProxy(id: number, data: Partial<InsertProxy>): Promise<Proxy>;
   deleteProxy(id: number): Promise<void>;
 
   // Profiles
@@ -112,6 +113,11 @@ export class DatabaseStorage implements IStorage {
   async createProxy(proxy: InsertProxy): Promise<Proxy> {
     const [created] = await db.insert(proxies).values(proxy).returning();
     return created;
+  }
+
+  async updateProxy(id: number, data: Partial<InsertProxy>): Promise<Proxy> {
+    const [updated] = await db.update(proxies).set(data).where(eq(proxies.id, id)).returning();
+    return updated;
   }
 
   async deleteProxy(id: number): Promise<void> {

@@ -100,6 +100,24 @@ export async function registerInstagramRoutes(
     }
   });
 
+  app.patch(api.proxies.update.path, async (req, res) => {
+    const id = Number(req.params.id);
+    try {
+      const input = api.proxies.update.input.parse(req.body);
+      if (input.host || input.port) {
+        input.name = `${input.host ?? ""}:${input.port ?? ""}`;
+      }
+      const updated = await storage.updateProxy(id, input);
+      if (!updated) return res.status(404).json({ message: "Proxy not found" });
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.issues[0].message });
+      }
+      throw err;
+    }
+  });
+
   app.delete(api.proxies.delete.path, async (req, res) => {
     await storage.deleteProxy(Number(req.params.id));
     res.status(204).end();

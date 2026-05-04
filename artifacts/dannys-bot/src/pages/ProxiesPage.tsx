@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useProxies, useCreateProxy, useDeleteProxy } from "@/hooks/use-proxies";
+import { useProxies, useCreateProxy, useUpdateProxy, useDeleteProxy } from "@/hooks/use-proxies";
 import { useProfiles, useUpdateProfile } from "@/hooks/use-profiles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,8 +64,39 @@ interface ProxyCardProps {
 
 function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing }: ProxyCardProps) {
   const deleteProxyMutation = useDeleteProxy();
+  const updateProxyMutation = useUpdateProxy();
   const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
+
+  const [hostPort, setHostPort] = useState(`${proxy.host}:${proxy.port}`);
+  const [username, setUsername] = useState(proxy.username ?? "");
+  const [password, setPassword] = useState(proxy.password ?? "");
+
+  useEffect(() => {
+    setHostPort(`${proxy.host}:${proxy.port}`);
+    setUsername(proxy.username ?? "");
+    setPassword(proxy.password ?? "");
+  }, [proxy]);
+
+  const saveField = useCallback((field: "hostPort" | "username" | "password") => {
+    let data: Record<string, string | number | null> = {};
+    if (field === "hostPort") {
+      const parts = hostPort.split(":");
+      const host = parts.slice(0, -1).join(":").trim();
+      const port = parseInt(parts[parts.length - 1], 10);
+      if (!host || isNaN(port)) {
+        toast({ title: "Invalid format", description: "Use host:port format", variant: "destructive" });
+        setHostPort(`${proxy.host}:${proxy.port}`);
+        return;
+      }
+      data = { host, port };
+    } else if (field === "username") {
+      data = { username: username || null };
+    } else {
+      data = { password: password || null };
+    }
+    updateProxyMutation.mutate({ id: proxy.id, data });
+  }, [hostPort, username, password, proxy, updateProxyMutation, toast]);
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
   const validCount = assigned.filter(p => p.accountStatus === "valid").length;
@@ -85,21 +116,28 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Input
-            readOnly
-            value={`${proxy.host}:${proxy.port}`}
-            className="font-mono text-sm h-8 bg-accent/30 w-48 shrink-0"
+            value={hostPort}
+            onChange={e => setHostPort(e.target.value)}
+            onBlur={() => saveField("hostPort")}
+            onKeyDown={e => e.key === "Enter" && (e.currentTarget.blur())}
+            className="font-mono text-sm h-8 w-48 shrink-0"
+            placeholder="host:port"
           />
           <Input
-            readOnly
-            value={proxy.username ?? ""}
-            placeholder="no username"
-            className="font-mono text-sm h-8 bg-accent/30 w-32 shrink-0"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            onBlur={() => saveField("username")}
+            onKeyDown={e => e.key === "Enter" && (e.currentTarget.blur())}
+            placeholder="username"
+            className="font-mono text-sm h-8 w-32 shrink-0"
           />
           <Input
-            readOnly
-            value={proxy.password ?? ""}
-            placeholder="no password"
-            className="font-mono text-sm h-8 bg-accent/30 w-32 shrink-0"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onBlur={() => saveField("password")}
+            onKeyDown={e => e.key === "Enter" && (e.currentTarget.blur())}
+            placeholder="password"
+            className="font-mono text-sm h-8 w-32 shrink-0"
           />
           {totalCount > 0 && (
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${

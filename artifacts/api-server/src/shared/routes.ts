@@ -33,6 +33,15 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/proxies/:id' as const,
+      input: insertProxySchema.partial(),
+      responses: {
+        200: z.custom<Proxy>(),
+        404: errorSchemas.notFound,
+      },
+    },
     delete: {
       method: 'DELETE' as const,
       path: '/api/proxies/:id' as const,
