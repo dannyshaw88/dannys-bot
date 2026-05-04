@@ -283,9 +283,8 @@ export async function registerInstagramRoutes(
       return res.status(400).json({ ok: false, message: "Username and password are required before verifying." });
     }
 
-    const bypassProxy = req.query.bypassProxy === "true";
     let effectiveProfile = { ...profile };
-    if (!bypassProxy && profile.proxyId) {
+    if (profile.proxyId) {
       const proxies = await storage.getProxies();
       const linked = proxies.find(p => p.id === profile.proxyId);
       if (linked) {
@@ -297,15 +296,11 @@ export async function registerInstagramRoutes(
           proxyPassword: linked.password ?? "",
         };
       }
-    } else if (bypassProxy) {
-      effectiveProfile = {
-        ...effectiveProfile,
-        proxyId: null,
-        proxyHost: "",
-        proxyPort: null,
-        proxyUsername: "",
-        proxyPassword: "",
-      };
+    }
+
+    // Block verify if no proxy is configured — never connect via bare server IP
+    if (!effectiveProfile.proxyHost || !effectiveProfile.proxyPort) {
+      return res.status(400).json({ ok: false, message: "No proxy assigned. Assign a proxy to this account before verifying." });
     }
 
     let result: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
@@ -873,12 +868,26 @@ export async function registerInstagramRoutes(
     const delayMin = parseInt(globalSettings.verifyAllDelayMin ?? "5", 10);
     const delayMax = parseInt(globalSettings.verifyAllDelayMax ?? "15", 10);
 
+    // Block any target without a proxy — never connect via bare server IP
+    const allProxies = await storage.getProxies();
+    const eligible = targets.filter(p => {
+      if (p.proxyId) {
+        const linked = allProxies.find(px => px.id === p.proxyId);
+        return !!(linked?.host && linked?.port);
+      }
+      return !!(p.proxyHost && p.proxyPort);
+    });
+    const skippedNoProxy = targets.length - eligible.length;
+    if (!eligible.length) {
+      return res.json({ ok: false, error: "No accounts have a proxy assigned. Assign proxies before verifying." });
+    }
+
     // Run verification in background so the response is immediate
-    res.json({ ok: true, total: targets.length });
+    res.json({ ok: true, total: eligible.length, skippedNoProxy });
 
     (async () => {
-      for (let i = 0; i < targets.length; i++) {
-        const profile = targets[i];
+      for (let i = 0; i < eligible.length; i++) {
+        const profile = eligible[i];
         try {
           const result = await verifyInstagramCredentials(profile);
           await storage.updateProfile(profile.id, {
