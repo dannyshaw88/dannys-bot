@@ -308,7 +308,14 @@ export async function registerInstagramRoutes(
       };
     }
 
-    const result = await verifyInstagramCredentials(effectiveProfile as typeof profile);
+    let result: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
+    try {
+      result = await verifyInstagramCredentials(effectiveProfile as typeof profile);
+    } catch (err: any) {
+      await storage.updateProfile(profile.id, { accountStatus: "pending" });
+      return res.status(500).json({ ok: false, message: err?.message ?? "Unexpected verify error" });
+    }
+
     await storage.updateProfile(profile.id, {
       accountStatus: result.accountStatus,
       ...(result.ok ? { credentialsDirty: false } : {}),
@@ -851,11 +858,7 @@ export async function registerInstagramRoutes(
 
   // ── Bulk Verify All Accounts ──────────────────────────────────────────────
   app.post("/api/profiles/verify-all", async (req, res) => {
-    const { profileIds, delayMin = 5, delayMax = 15 } = req.body as {
-      profileIds?: number[];
-      delayMin?: number;
-      delayMax?: number;
-    };
+    const { profileIds } = req.body as { profileIds?: number[] };
 
     const allProfiles = await storage.getProfiles();
     const targets = profileIds && profileIds.length > 0
@@ -864,17 +867,32 @@ export async function registerInstagramRoutes(
 
     if (!targets.length) return res.json({ ok: true, verified: 0, total: 0 });
 
+    // Read delay from global settings (set on the Settings page)
+    const globalSettings = await storage.getGlobalSettings();
+    const delayMin = parseInt(globalSettings.verifyAllDelayMin ?? "5", 10);
+    const delayMax = parseInt(globalSettings.verifyAllDelayMax ?? "15", 10);
+
     // Run verification in background so the response is immediate
     res.json({ ok: true, total: targets.length });
 
     (async () => {
-      let done = 0;
-      for (const profile of targets) {
+      for (let i = 0; i < targets.length; i++) {
+        const profile = targets[i];
         try {
-          await verifyInstagramCredentials(profile);
-          done++;
-        } catch {}
-        if (done < targets.length) {
+          const result = await verifyInstagramCredentials(profile);
+          await storage.updateProfile(profile.id, {
+            accountStatus: result.accountStatus,
+            ...(result.ok ? { credentialsDirty: false } : {}),
+            ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
+          });
+          if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
+            setCheckpointUrl(profile.id, result.checkpointUrl);
+          }
+        } catch {
+          // Unexpected error — reset to pending so the account isn't stuck in "verifying"
+          await storage.updateProfile(profile.id, { accountStatus: "pending" });
+        }
+        if (i < targets.length - 1) {
           const ms = (Math.random() * (delayMax - delayMin) + delayMin) * 1000;
           await new Promise(r => setTimeout(r, ms));
         }
