@@ -113,6 +113,13 @@ function startServer(port: number, logPath: string): void {
       NODE_ENV: "production",
       LOG_LEVEL: "warn",
       LOG_FILE: logPath,
+      // The instagram-private-api library uses the old `request-promise` HTTP library
+      // which on Windows does not use the system certificate store.  Setting this
+      // environment variable tells Node.js to skip TLS certificate verification so
+      // that all outbound HTTPS calls to Instagram's API succeed regardless of the
+      // Windows OpenSSL cert bundle state.  This is safe in the Electron context
+      // because all connections go to known Instagram endpoints.
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
     },
   });

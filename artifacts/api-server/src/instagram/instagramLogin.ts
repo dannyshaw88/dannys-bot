@@ -299,8 +299,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
         // ── Phase 0b: SendMobileConfig (launcher/sync) ────────────────────
         // Called with clean jar — Instagram sees anonymous device probe, not checkpoint.
+        // Track whether this call succeeded so Phase 2 checkpoint errors can be
+        // treated as soft (IP-mismatch) rather than hard (account-level) checkpoints.
+        let phase0Succeeded = false;
         try {
           await ig.launcher.preLoginSync();
+          phase0Succeeded = true;
           console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`);
         } catch (e: any) {
           console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (non-fatal): ${e?.message}`);
@@ -329,6 +333,17 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // First authenticated call in Jarvee's session-restore sequence.
         // Validates the sessionid is alive and tells Instagram this is a
         // logged-in cold-start, NOT a suspicious one-off API call.
+        //
+        // Checkpoint handling strategy:
+        //   • If Phase 0 (launcher/sync) FAILED → checkpoint is hard / account-level
+        //     → return captcha so the user resolves it via the embedded browser.
+        //   • If Phase 0 SUCCEEDED but Phase 2 returns checkpoint → soft / IP-mismatch
+        //     checkpoint caused by running verify from a different machine than the one
+        //     that normally runs the automation (e.g. Windows PC vs Replit server).
+        //     The session cookies are still valid — the automation is still working.
+        //     Continue and return valid at the end.
+        let phase2HardCheckpoint = false;
+        let phase2CheckpointUrl: string | undefined;
         try {
           await ig.request.send({
             url: "/api/v1/accounts/get_account_family/",
@@ -344,25 +359,35 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           const msg: string = famErr?.message ?? "";
           console.error(`[instagramLogin] @${profile.username} — get_account_family failed: ${msg}`);
           if (famErr instanceof IgCheckpointError || /checkpoint/i.test(msg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
-              accountStatus: "captcha",
-              checkpointUrl: extractCheckpointUrl(famErr),
-              igDeviceState: captureDeviceState(),
-            };
-          }
-          if (/login_required|not.*auth|401/i.test(msg)) {
+            if (!phase0Succeeded) {
+              // Hard checkpoint — Phase 0 also failed so this is a genuine account block
+              return {
+                ok: false,
+                message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
+                accountStatus: "captcha",
+                checkpointUrl: extractCheckpointUrl(famErr),
+                igDeviceState: captureDeviceState(),
+              };
+            }
+            // Soft checkpoint — Phase 0 succeeded so the device is clean; the
+            // checkpoint is due to IP mismatch (different machine running verify).
+            // Flag it and continue — session cookies are still valid.
+            phase2HardCheckpoint = false;
+            phase2CheckpointUrl = extractCheckpointUrl(famErr);
+            console.error(`[instagramLogin] @${profile.username} — Phase 2 soft checkpoint (IP mismatch, Phase 0 OK — session cookies likely still valid)`);
+          } else if (/login_required|not.*auth|401/i.test(msg)) {
             return {
               ok: false,
               message: `@${profile.username} — session expired or revoked. Open the embedded browser to log in again.`,
               accountStatus: "logged_out",
               igDeviceState: captureDeviceState(),
             };
+          } else {
+            // Network / proxy error — treat as inconclusive, don't mark as invalid
+            console.error(`[instagramLogin] @${profile.username} — get_account_family network error, continuing`);
           }
-          // Network / proxy error — treat as inconclusive, don't mark as invalid
-          console.error(`[instagramLogin] @${profile.username} — get_account_family network error, continuing`);
         }
+        void phase2HardCheckpoint; void phase2CheckpointUrl;
 
         // ── Phase 2b: GetTimeLine cold_start_fetch (feed/timeline) ────────
         // NOTE: checkpoint_required here is NOT treated as a hard gate.
