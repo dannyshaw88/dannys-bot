@@ -276,6 +276,16 @@ async function createWindow() {
 
   if (app.isPackaged) setupAutoUpdater();
 
+  ipcMain.handle("open-log", async () => {
+    const { shell } = await import("electron");
+    const logFile = path.join(path.dirname(app.getPath("exe")), "server.log");
+    const err = await shell.openPath(logFile);
+    if (err) {
+      // Fall back to the userData location used by older builds
+      await shell.openPath(path.join(app.getPath("userData"), "server.log"));
+    }
+  });
+
   ipcMain.handle("check-for-updates", async () => {
     if (!app.isPackaged) {
       dialog.showMessageBox(win!, {

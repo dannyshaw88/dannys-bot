@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState } from "react";
 
@@ -426,20 +426,36 @@ export function SettingsPage() {
           <p className="text-sm text-muted-foreground mb-5">
             Danny's Bot checks for updates automatically on startup. Click below to check right now.
           </p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              const api = (window as unknown as { electronAPI?: { checkForUpdates: () => Promise<void> } }).electronAPI;
-              if (api?.checkForUpdates) {
-                api.checkForUpdates();
-              } else {
-                alert("Update checks are only available in the installed desktop app.");
-              }
-            }}
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Check for Updates
-          </Button>
+          <div className="flex gap-3 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const api = (window as unknown as { electronAPI?: { checkForUpdates: () => Promise<void>; openLog: () => Promise<void> } }).electronAPI;
+                if (api?.checkForUpdates) {
+                  api.checkForUpdates();
+                } else {
+                  alert("Update checks are only available in the installed desktop app.");
+                }
+              }}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Check for Updates
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const api = (window as unknown as { electronAPI?: { checkForUpdates: () => Promise<void>; openLog: () => Promise<void> } }).electronAPI;
+                if (api?.openLog) {
+                  api.openLog();
+                } else {
+                  alert("Log viewing is only available in the installed desktop app.");
+                }
+              }}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              View Log File
+            </Button>
+          </div>
         </div>
 
         {/* Data Management */}
