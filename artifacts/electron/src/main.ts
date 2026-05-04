@@ -31,21 +31,22 @@ function getUserDataPath(): string {
 
 function getServerEntry(): string {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, "app.asar.unpacked", "dist", "server", "start.mjs");
+    // asar:false → files live under resources/app/ (not app.asar.unpacked/)
+    return path.join(process.resourcesPath, "app", "dist", "server", "start.mjs");
   }
   return path.join(__dirname, "..", "dist", "server", "start.mjs");
 }
 
 function getFrontendPath(): string {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, "app.asar.unpacked", "dist", "frontend", "public");
+    return path.join(process.resourcesPath, "app", "dist", "frontend", "public");
   }
   return path.join(__dirname, "..", "dist", "frontend", "public");
 }
 
 function getIconPath(): string {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, "app.asar.unpacked", "dist", "assets", "icon.png");
+    return path.join(process.resourcesPath, "app", "dist", "assets", "icon.png");
   }
   return path.join(__dirname, "..", "assets", "icon.png");
 }
@@ -101,6 +102,14 @@ function startServer(port: number, logPath: string): void {
   const frontendPath = getFrontendPath();
   const chromiumPath = findChromiumPath();
 
+  // With asar:false all files live under resources/app/, so node_modules is a real directory
+  // that plain Node.js (ELECTRON_RUN_AS_NODE=1) can resolve packages from.
+  // NODE_PATH makes it an explicit search root so dynamic imports (puppeteer-core etc.) work
+  // regardless of where in dist/ the entry file lives.
+  const nodeModulesPath = app.isPackaged
+    ? path.join(process.resourcesPath, "app", "node_modules")
+    : "";
+
   serverProc = spawn(process.execPath, [entry], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -120,6 +129,7 @@ function startServer(port: number, logPath: string): void {
       // Windows OpenSSL cert bundle state.  This is safe in the Electron context
       // because all connections go to known Instagram endpoints.
       NODE_TLS_REJECT_UNAUTHORIZED: "0",
+      ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
     },
   });
