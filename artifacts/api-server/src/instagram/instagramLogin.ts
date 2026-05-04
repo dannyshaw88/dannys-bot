@@ -351,6 +351,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // treated as a genuine account-level checkpoint — the user must resolve
         // it via the embedded browser. (Verify always runs on the same machine/
         // proxy as automation, so IP-mismatch false-positives don't apply.)
+        let accountFamilyOk = false;
         try {
           await ig.request.send({
             url: "/api/v1/accounts/get_account_family/",
@@ -361,6 +362,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               _uuid: ig.state.uuid,
             }),
           });
+          accountFamilyOk = true;
           console.error(`[instagramLogin] @${profile.username} — get_account_family (GetAccountFamily) OK`);
         } catch (famErr: any) {
           const msg: string = famErr?.message ?? "";
@@ -381,8 +383,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               igDeviceState: captureDeviceState(),
             };
           } else {
-            // 404 or network / proxy error — treat as inconclusive, continue
-            console.error(`[instagramLogin] @${profile.username} — get_account_family network error, continuing`);
+            // 404 or network / proxy error — cannot confirm session is valid, abort.
+            console.error(`[instagramLogin] @${profile.username} — get_account_family network/proxy error, treating as inconclusive`);
+            return {
+              ok: false,
+              message: `@${profile.username} — could not reach Instagram to verify the session (proxy or network error). Try again.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState(),
+            };
           }
         }
 
@@ -519,7 +527,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         return { ok: false, message: `@${profile.username} — 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       let code: string;
-      try { code = totpGenerate({ secret }); } catch {
+      try { code = totpGenerate(secret); } catch {
         return { ok: false, message: `@${profile.username} — invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       try {

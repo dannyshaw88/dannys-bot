@@ -138758,6 +138758,7 @@ async function verifyInstagramCredentials(profile) {
         }
         await restoreSessionCookies(ig2, cookiesWithUserId);
         console.error(`[instagramLogin] @${profile.username} \u2014 cookies restored (userId=${userId})`);
+        let accountFamilyOk = false;
         try {
           await ig2.request.send({
             url: "/api/v1/accounts/get_account_family/",
@@ -138768,6 +138769,7 @@ async function verifyInstagramCredentials(profile) {
               _uuid: ig2.state.uuid
             })
           });
+          accountFamilyOk = true;
           console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family (GetAccountFamily) OK`);
         } catch (famErr) {
           const msg = famErr?.message ?? "";
@@ -138788,7 +138790,13 @@ async function verifyInstagramCredentials(profile) {
               igDeviceState: captureDeviceState2()
             };
           } else {
-            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network error, continuing`);
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network/proxy error, treating as inconclusive`);
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 could not reach Instagram to verify the session (proxy or network error). Try again.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState2()
+            };
           }
         }
         try {
@@ -138892,7 +138900,7 @@ async function verifyInstagramCredentials(profile) {
       }
       let code;
       try {
-        code = h3({ secret });
+        code = h3(secret);
       } catch {
         return { ok: false, message: `@${profile.username} \u2014 invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
