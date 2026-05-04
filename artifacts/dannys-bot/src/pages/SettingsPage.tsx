@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef } from "react";
 
@@ -83,6 +83,8 @@ export function SettingsPage() {
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [twoCaptchaKeyDraft, setTwoCaptchaKeyDraft] = useState<string | null>(null);
   const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
+  const [captchaTestState, setCaptchaTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+  const [captchaTestResult, setCaptchaTestResult] = useState<string>("");
 
   // ─── Jarvee import state ───────────────────────────────────────────────────
   const jarveeFileRef = useRef<HTMLInputElement>(null);
@@ -371,20 +373,87 @@ export function SettingsPage() {
           </p>
           <div className="space-y-3">
             <Label className="text-sm font-medium">API Key</Label>
-            <Input
-              type="password"
-              placeholder="Enter your 2captcha API key"
-              value={twoCaptchaKeyDraft ?? ""}
-              onChange={(e) => setTwoCaptchaKeyDraft(e.target.value)}
-              onBlur={(e) => {
-                const v = e.target.value;
-                if (v !== (settings?.twoCaptchaApiKey ?? "")) {
-                  mutation.mutate({ twoCaptchaApiKey: v });
-                }
-              }}
-              className="font-mono text-sm"
+            <div className="flex items-center gap-2">
+              <Input
+                type="password"
+                placeholder="Enter your 2captcha API key"
+                value={twoCaptchaKeyDraft ?? ""}
+                onChange={(e) => setTwoCaptchaKeyDraft(e.target.value)}
+                onBlur={(e) => {
+                  const v = e.target.value;
+                  if (v !== (settings?.twoCaptchaApiKey ?? "")) {
+                    mutation.mutate({ twoCaptchaApiKey: v });
+                  }
+                }}
+                className="font-mono text-sm flex-1"
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={captchaTestState === "loading" || !twoCaptchaKeyDraft}
+                onClick={async () => {
+                  setCaptchaTestState("loading");
+                  try {
+                    const r = await fetch("/api/settings/test-2captcha");
+                    const j = await r.json();
+                    if (j.ok) {
+                      setCaptchaTestResult(`Balance: $${Number(j.balance).toFixed(2)}`);
+                      setCaptchaTestState("ok");
+                    } else {
+                      setCaptchaTestResult(j.error ?? "Failed");
+                      setCaptchaTestState("fail");
+                    }
+                  } catch {
+                    setCaptchaTestResult("Request failed");
+                    setCaptchaTestState("fail");
+                  }
+                }}
+                className="shrink-0"
+              >
+                {captchaTestState === "loading" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Test"}
+              </Button>
+            </div>
+            {captchaTestState !== "idle" && captchaTestState !== "loading" && (
+              <p className={`text-xs flex items-center gap-1.5 ${captchaTestState === "ok" ? "text-green-600" : "text-destructive"}`}>
+                {captchaTestState === "ok" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                {captchaTestResult}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* API Log Limit */}
+        <div className="desktop-card p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-indigo-100 text-indigo-600">
+              <ScrollText className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">API Log Limit</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Maximum number of rows loaded in the Dashboard API call log. Older entries beyond this limit are not displayed.
+            Larger limits use more memory but preserve more history.
+          </p>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Max log rows</Label>
+            <select
+              className="flex h-9 w-48 items-center rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              value={settings?.logMaxRows ?? 100000}
               disabled={isLoading}
-            />
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v)) mutation.mutate({ logMaxRows: v });
+              }}
+            >
+              <option value={10000}>10,000</option>
+              <option value={50000}>50,000</option>
+              <option value={100000}>100,000</option>
+              <option value={250000}>250,000</option>
+              <option value={500000}>500,000</option>
+              <option value={1000000}>Unlimited (1M)</option>
+            </select>
           </div>
         </div>
 

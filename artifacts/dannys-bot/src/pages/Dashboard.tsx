@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X } from "lucide-react";
+import { Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
@@ -75,14 +75,60 @@ const CATEGORY_COLORS: Record<string, string> = {
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("api-log");
   const [changelogFilter, setChangelogFilter] = useState("");
+  const [apiLogSearch, setApiLogSearch] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  const { data: apiCalls, isLoading } = useQuery<any[]>({
-    queryKey: ["/api/instagram-api-calls"],
-    refetchInterval: 5000,
+  // ── Real-time API call log (append-only, newest first) ──────────────────────
+  const [apiCalls, setApiCalls] = useState<any[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const lastIdRef = useRef<number>(0);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchAndAppend = useCallback(async (since: number, isInitial = false) => {
+    try {
+      const url = since > 0
+        ? `/api/instagram-api-calls?since=${since}`
+        : "/api/instagram-api-calls";
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const rows: any[] = await res.json();
+      if (rows.length > 0) {
+        const filtered = rows.filter((c: any) => c.source !== "Browser" && c.source !== "Verify");
+        const maxId = Math.max(...rows.map((r: any) => r.id));
+        lastIdRef.current = Math.max(lastIdRef.current, maxId);
+        if (isInitial) {
+          setApiCalls(filtered);
+        } else {
+          setApiCalls(prev => [...filtered, ...prev]);
+        }
+      } else if (isInitial) {
+        setApiCalls([]);
+      }
+    } catch { /* ignore */ } finally {
+      if (isInitial) setInitialLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAndAppend(0, true);
+    const schedule = () => {
+      pollTimerRef.current = setTimeout(async () => {
+        await fetchAndAppend(lastIdRef.current);
+        schedule();
+      }, 3000);
+    };
+    schedule();
+    return () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, [fetchAndAppend]);
+
+  // ── Server startup time ──────────────────────────────────────────────────────
+  const { data: serverInfo } = useQuery<{ startedAt: string }>({
+    queryKey: ["/api/server-info"],
   });
 
   const { data: profiles } = useQuery<Profile[]>({
@@ -94,9 +140,17 @@ export function Dashboard() {
 
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
 
-  const filteredApiCalls = (apiCalls ?? [])
-    .filter((c: any) => c.source !== "Browser" && c.source !== "Verify")
-    .filter((c: any) => selectedProfileId == null || c.profileId === selectedProfileId);
+  const filteredApiCalls = apiCalls
+    .filter((c: any) => selectedProfileId == null || c.profileId === selectedProfileId)
+    .filter((c: any) => {
+      if (!apiLogSearch.trim()) return true;
+      const q = apiLogSearch.toLowerCase();
+      return (
+        (c.operationName ?? "").toLowerCase().includes(q) ||
+        (c.message ?? "").toLowerCase().includes(q) ||
+        getUsername(c.profileId).toLowerCase().includes(q)
+      );
+    });
 
   const filteredProfileOptions = (profiles ?? []).filter(p =>
     !profileSearch.trim() ||
@@ -135,9 +189,17 @@ export function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Live view of all Instagram API calls made by the automation engine.</p>
+        <div className="flex items-center gap-3 mt-1 flex-wrap">
+          <p className="text-muted-foreground">Live view of all Instagram API calls made by the automation engine.</p>
+          {serverInfo?.startedAt && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
+              <RefreshCw className="w-3 h-3" />
+              Server started {format(new Date(serverInfo.startedAt), "MMM d 'at' HH:mm:ss")}
+            </span>
+          )}
+        </div>
       </div>
 
       <Card className="desktop-card border-none shadow-sm">
@@ -153,8 +215,26 @@ export function Dashboard() {
 
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
           {activeTab === "api-log" ? (
-            <div className="flex items-center gap-3">
-              <p className="text-xs text-muted-foreground flex-1">Real-time log of every Instagram API call made by the engine. Refreshes every 5 seconds.</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Search box */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-border bg-background min-w-[200px] flex-1 max-w-xs">
+                <Search className="w-3 h-3 text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search operation, account, message..."
+                  value={apiLogSearch}
+                  onChange={e => setApiLogSearch(e.target.value)}
+                  className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
+                />
+                {apiLogSearch && (
+                  <button onClick={() => setApiLogSearch("")}>
+                    <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground flex-1 text-right hidden sm:block">
+                {apiCalls.length > 0 ? `${filteredApiCalls.length.toLocaleString()} of ${apiCalls.filter(c => selectedProfileId == null || c.profileId === selectedProfileId).length.toLocaleString()} entries` : "Waiting for activity…"}
+              </p>
               {/* Profile filter picker */}
               <div ref={pickerRef} className="relative shrink-0">
                 <button
@@ -205,7 +285,7 @@ export function Dashboard() {
                           onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
                           className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors truncate ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
                         >
-                          <User className="w-3 h-3 shrink-0 text-primary" />
+                          <User className="w-3.5 h-3.5 shrink-0 text-primary" />
                           <span className="truncate">{p.username}</span>
                         </button>
                       ))}
@@ -252,7 +332,7 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {isLoading ? (
+                  {initialLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
                         <td colSpan={5} className="px-3 py-4 bg-muted/10 h-12" />
@@ -263,10 +343,18 @@ export function Dashboard() {
                       <td colSpan={5} className="px-3 py-12 text-center text-muted-foreground">
                         <Activity className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
                         <p className="text-sm font-medium">
-                          {selectedProfileId != null ? `No API calls for @${selectedProfile?.username ?? selectedProfileId}` : "No API calls recorded yet"}
+                          {apiLogSearch.trim()
+                            ? `No results for "${apiLogSearch}"`
+                            : selectedProfileId != null
+                            ? `No API calls for @${selectedProfile?.username ?? selectedProfileId}`
+                            : "No API calls recorded yet"}
                         </p>
                         <p className="text-xs mt-1">
-                          {selectedProfileId != null ? "Try selecting a different account or clear the filter." : "Start an automation tool to see activity here."}
+                          {apiLogSearch.trim()
+                            ? "Try a different search term."
+                            : selectedProfileId != null
+                            ? "Try selecting a different account or clear the filter."
+                            : "Start an automation tool to see activity here."}
                         </p>
                       </td>
                     </tr>

@@ -253,4 +253,5 @@ export type GlobalSettings = {
   twoCaptchaApiKey: string;
   verifyAllDelayMin: number;
   verifyAllDelayMax: number;
+  logMaxRows: number;
 };

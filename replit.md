@@ -1,18 +1,27 @@
 # Workspace
 
-> ## ⚠️ AGENT STANDING RULES — READ BEFORE EVERY SESSION
+> ## 🚫 ABSOLUTE RULE — NO EXCEPTIONS
+>
+> **DO NOT push to GitHub at any time, for any reason, unless the user's message contains the exact words "push-to-git".**
+>
+> - Completing a task → do NOT push
+> - Fixing a bug → do NOT push
+> - User says "done", "looks good", "great" → do NOT push
+> - Finishing a feature → do NOT push
+> - End of session → do NOT push
+>
+> **Only trigger a push when the user literally types: push-to-git**
+>
+> When that trigger IS given, use the GitHub Git Data API (never `git push` or the per-file Contents API).
+> Single-commit method: GET ref → GET commit (treeSha) → POST blobs → POST tree → POST commit → PATCH ref.
+> Token: `listConnections('github')[0].settings.access_token`. Repo: `dannyshaw88/dannys-bot`.
+> See `.local/github_push_instruction.md` for the full step-by-step.
+
+> ## ⚠️ AGENT STANDING RULES
 >
 > **1. This is an API-driven Windows desktop bot.**
 > All Instagram actions and API calls are made via the Instagram Private API only.
 > The Embedded Browser (EB) is used for human-assisted browsing and challenge solving ONLY — never for automation.
->
-> **2. NEVER push to git/GitHub unless the user explicitly says "push-to-git".**
-> Do NOT push after fixing a bug, completing a task, or proactively. Wait for those exact words.
->
-> **3. When a git push IS instructed, always use the GitHub Git Data API — NEVER `git push` or the Contents API per-file loop.**
-> Single-commit method: GET ref → GET commit (tree SHA) → POST blobs (one per file) → POST tree (all blobs, base_tree) → POST commit → PATCH ref.
-> Token: `listConnections('github')[0].settings.access_token`. Repo: `dannyshaw88/dannys-bot`.
-> See `.local/github_push_instruction.md` for the full step-by-step.
 
 ## Overview
 
@@ -112,15 +121,5 @@ The app can be run on a Windows PC with no extra tooling:
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 - `pnpm --filter @workspace/dannys-bot run dev` — run frontend locally
-
-## Git Push to GitHub
-
-`git remote add/set-url` is blocked in this environment, but a direct inline URL push works fine:
-
-```
-git --no-optional-locks push https://dannyshaw88:$GH_TOKEN@github.com/dannyshaw88/dannys-bot.git main
-```
-
-When the user says "push to git", run this command. The `GH_TOKEN` secret is already available in the environment.
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

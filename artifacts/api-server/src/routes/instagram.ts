@@ -33,6 +33,8 @@ import { automationEngine } from "../instagram/automationEngine";
 // the app-install interstitial (dark skeleton) instead of the full site.
 const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
+const SERVER_START = new Date().toISOString();
+
 async function resolveProxyConfig(profile: {
   browserDirectConnection?: boolean | null;
   proxyId?: number | null;
@@ -605,14 +607,22 @@ export async function registerInstagramRoutes(
     res.json(data);
   });
 
-  app.get("/api/instagram-api-calls", async (_req, res) => {
-    const data = await storage.getInstagramApiCalls(500);
-    // Exclude Browser (EB remote-control) and Verify (account setup) calls — the
-    // dashboard log is meant to show *automation* activity only.  Verify calls are
-    // account-setup/health-check; some endpoints always return checkpoint_required
-    // for non-fatal reasons during session initialisation, which confuses users into
-    // thinking verified accounts are still broken.
-    res.json(data.filter((c: any) => c.source !== "Browser" && c.source !== "Verify"));
+  app.get("/api/server-info", (_req, res) => {
+    res.json({ startedAt: SERVER_START });
+  });
+
+  app.get("/api/instagram-api-calls", async (req, res) => {
+    const sinceParam = req.query.since;
+    const settings = await storage.getGlobalSettings();
+    const logMaxRows = parseInt(settings.logMaxRows ?? "100000", 10);
+    let data: any[];
+    if (sinceParam !== undefined) {
+      const sinceId = parseInt(sinceParam as string, 10);
+      data = isNaN(sinceId) ? [] : await storage.getInstagramApiCallsSince(sinceId, 5000);
+    } else {
+      data = await storage.getInstagramApiCalls(logMaxRows);
+    }
+    res.json(data);
   });
 
   app.get("/api/logs/export", async (req, res) => {
@@ -1021,11 +1031,12 @@ export async function registerInstagramRoutes(
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
+      logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -1056,6 +1067,9 @@ export async function registerInstagramRoutes(
     if (typeof verifyAllDelayMax === "number" && verifyAllDelayMax >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMax", String(Math.round(verifyAllDelayMax)));
     }
+    if (typeof logMaxRows === "number" && logMaxRows > 0) {
+      await storage.setGlobalSetting("logMaxRows", String(Math.round(logMaxRows)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -1068,7 +1082,25 @@ export async function registerInstagramRoutes(
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
+      logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
     });
+  });
+
+  app.get("/api/settings/test-2captcha", async (_req, res) => {
+    const settings = await storage.getGlobalSettings();
+    const key = settings.twoCaptchaApiKey ?? "";
+    if (!key) return res.json({ ok: false, error: "No API key configured" });
+    try {
+      const r = await fetch(`https://2captcha.com/res.php?action=getbalance&key=${encodeURIComponent(key)}`);
+      const text = (await r.text()).trim();
+      const balance = parseFloat(text);
+      if (!isNaN(balance)) {
+        return res.json({ ok: true, balance });
+      }
+      return res.json({ ok: false, error: text });
+    } catch (e: any) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
+    }
   });
 
   app.post("/api/settings/test-hiker", async (req, res) => {

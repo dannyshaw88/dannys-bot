@@ -15,7 +15,7 @@ import {
   type ContactDmSent, type InsertContactDmSent,
   type ContactPendingMessage, type InsertContactPendingMessage,
 } from "./shared/schema";
-import { eq, desc, and, sql, like } from "drizzle-orm";
+import { eq, desc, and, sql, like, gt } from "drizzle-orm";
 
 export interface IStorage {
   // Proxies
@@ -251,6 +251,13 @@ export class DatabaseStorage implements IStorage {
 
   async getInstagramApiCalls(limit: number = 100000): Promise<any[]> {
     return await db.select().from(instagramApiCalls).orderBy(desc(instagramApiCalls.id)).limit(limit);
+  }
+
+  async getInstagramApiCallsSince(sinceId: number, limit: number = 5000): Promise<any[]> {
+    return await db.select().from(instagramApiCalls)
+      .where(gt(instagramApiCalls.id, sinceId))
+      .orderBy(desc(instagramApiCalls.id))
+      .limit(limit);
   }
 
   private _apiCallInsertCount = 0;
