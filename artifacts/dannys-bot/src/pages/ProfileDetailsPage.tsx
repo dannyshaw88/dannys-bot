@@ -88,7 +88,7 @@ export function ProfileDetailsPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "pending" | "ok" | "fail">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialLoadRef = useRef(false);
+  const loadedProfileIdRef = useRef<number | null>(null);
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
@@ -157,20 +157,20 @@ export function ProfileDetailsPage() {
       patch.syncIntervalMax = formData.syncIntervalMax;
       patch.syncUseHiker = formData.syncUseHiker;
     }
-    await Promise.all(
-      targetIds.map(id =>
-        new Promise<void>((resolve, reject) =>
-          updateProfileMutation.mutate({ id, ...patch }, { onSuccess: () => resolve(), onError: reject })
-        )
-      )
-    );
-    const names = targetIds.map(id => "@" + (otherProfiles.find(p => p.id === id)?.username ?? id)).join(", ");
-    toast({ title: "Settings copied", description: `Applied to ${names}.` });
+    const res = await fetch("/api/profiles/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: targetIds, patch }),
+      credentials: "include",
+    });
+    if (!res.ok) throw new Error("Bulk update failed");
+    queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+    toast({ title: "Settings copied", description: `Applied to ${targetIds.length} account${targetIds.length === 1 ? "" : "s"}.` });
   };
 
   useEffect(() => {
-    if (profile && !initialLoadRef.current) {
-      initialLoadRef.current = true;
+    if (profile && loadedProfileIdRef.current !== profile.id) {
+      loadedProfileIdRef.current = profile.id;
       if (profile.accountStatus === "valid" && !profile.credentialsDirty) {
         setVerifyStatus("ok");
       }
