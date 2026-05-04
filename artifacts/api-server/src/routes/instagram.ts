@@ -20,6 +20,7 @@ import {
   browserForward,
   browserReload,
   clearSession,
+  closeSession,
   browserAutoLogin,
   sendLoginDone,
   setCheckpointUrl,
@@ -719,6 +720,13 @@ export async function registerInstagramRoutes(
       .catch(err  => sendLoginDone(profileId, false, String(err)));
   });
 
+  // Close Chrome without wiping cookies — called when user dismisses the browser window
+  app.post("/api/browser/:profileId/close", async (req, res) => {
+    await closeSession(Number(req.params.profileId));
+    res.json({ ok: true });
+  });
+
+  // Clear session: wipe cookies + close + reopen (the "Clear" button inside the browser panel)
   app.delete("/api/browser/:profileId/session", async (req, res) => {
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
