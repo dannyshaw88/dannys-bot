@@ -153,16 +153,18 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
       </div>
 
       {/* Assigned profiles */}
-      <div className="border-t border-border/50 px-4 py-3 bg-accent/10">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="border-t border-border/50 px-4 py-2 bg-accent/10">
+        <div className="flex flex-col gap-0.5">
           {assigned.map(profile => (
-            <div key={profile.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
-              <User className="w-3 h-3 shrink-0" />
-              <span>{profile.username}</span>
+            <div key={profile.id} className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-accent/40 transition-colors group">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground min-w-0">
+                <User className="w-3 h-3 shrink-0 text-primary" />
+                <span className="truncate">{profile.username}</span>
+              </div>
               <button
                 onClick={() => handleUnassign(profile)}
                 disabled={updateProfileMutation.isPending}
-                className="ml-0.5 hover:text-destructive transition-colors"
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -171,7 +173,7 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
 
           {unassignedProfiles.length > 0 && (
             <select
-              className="h-7 rounded-full border border-dashed border-border bg-background px-3 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+              className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
               value=""
               onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
               disabled={updateProfileMutation.isPending}
@@ -184,10 +186,10 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
           )}
 
           {assigned.length === 0 && unassignedProfiles.length === 0 && (
-            <span className="text-xs text-muted-foreground italic">All accounts assigned to proxies</span>
+            <span className="text-xs text-muted-foreground italic px-2 py-1">All accounts assigned to proxies</span>
           )}
           {assigned.length === 0 && unassignedProfiles.length > 0 && (
-            <span className="text-xs text-muted-foreground italic">No accounts assigned — use dropdown to add</span>
+            <span className="text-xs text-muted-foreground italic px-2 py-1">No accounts assigned — use dropdown to add</span>
           )}
         </div>
       </div>
