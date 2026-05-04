@@ -416,7 +416,7 @@ export function ProfilesPage() {
                 ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 : <RefreshCw className="w-4 h-4 mr-2" />
               }
-              Verify All Accounts <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
+              Verify Selected Accounts <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handleBulkFixCaptcha}
@@ -434,7 +434,7 @@ export function ProfilesPage() {
               disabled={selectedProfileIds.length === 0}
               className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Globe className="w-4 h-4 mr-2" /> Remove Proxies → Pending <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+P</span>
+              <Globe className="w-4 h-4 mr-2" /> Remove Proxies <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+P</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
