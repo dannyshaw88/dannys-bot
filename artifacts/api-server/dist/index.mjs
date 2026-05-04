@@ -139720,10 +139720,13 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           sendStatus(profileId, `\u26A0 Invalid 2FA secret key \u2014 ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
           return { ok: false, message: `Invalid 2FA secret: ${totpErr?.message}` };
         }
-        const CODE_SELECTORS = [
+        sendStatus(profileId, "Waiting for 2FA form to render\u2026");
+        await delay(2e3);
+        const NAMED_SELECTORS = [
           'input[name="verificationCode"]',
-          'input[inputmode="numeric"]',
           'input[name="security_code"]',
+          'input[name="totp_code"]',
+          'input[inputmode="numeric"]',
           'input[autocomplete="one-time-code"]',
           'input[type="tel"]',
           'input[type="number"]'
@@ -139734,42 +139737,45 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
             type: el.type,
             inputmode: el.getAttribute("inputmode"),
             autocomplete: el.autocomplete,
-            placeholder: el.placeholder.slice(0, 30)
+            placeholder: el.placeholder.slice(0, 20),
+            visible: el.getBoundingClientRect().width > 0
           }))
         ).catch(() => []);
-        sendStatus(profileId, `Inputs on page: ${JSON.stringify(allInputs).slice(0, 400)}`);
+        sendStatus(profileId, `Main frame inputs: ${JSON.stringify(allInputs).slice(0, 400)}`);
+        const frames = s.page.frames();
+        sendStatus(profileId, `Frames on page: ${frames.length} (${frames.map((f) => f.url().slice(0, 40)).join(" | ")})`);
         let codeInput = null;
         let codeSelector = "";
-        for (const sel of CODE_SELECTORS) {
-          const el = await s.page.$(sel).catch(() => null);
-          if (el) {
-            codeInput = el;
-            codeSelector = sel;
+        let codeFrame = s.page;
+        outer: for (const frame of frames) {
+          for (const sel of NAMED_SELECTORS) {
+            const el = await frame.$(sel).catch(() => null);
+            if (el) {
+              codeInput = el;
+              codeSelector = sel;
+              codeFrame = frame;
+              break outer;
+            }
+          }
+          const posFallback = await frame.evaluateHandle(() => {
+            const SKIP = /* @__PURE__ */ new Set(["username", "email", "search", "q"]);
+            const allIns = Array.from(document.querySelectorAll("input"));
+            const visible = allIns.map((el) => {
+              const r2 = el.getBoundingClientRect();
+              return { el, r: r2, name: el.name?.toLowerCase() || "" };
+            }).filter(({ r: r2, name }) => r2.width > 0 && r2.height > 0 && !SKIP.has(name));
+            const mid = window.innerHeight / 2;
+            visible.sort((a2, b3) => Math.abs(a2.r.top - mid) - Math.abs(b3.r.top - mid));
+            return visible[0]?.el ?? null;
+          }).catch(() => null);
+          if (posFallback && posFallback.asElement?.()) {
+            codeInput = posFallback.asElement();
+            codeSelector = "position-based fallback (closest to viewport centre)";
+            codeFrame = frame;
             break;
           }
         }
-        if (!codeInput) {
-          const fallback = await s.page.evaluateHandle(() => {
-            const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
-            for (let i2 = inputs.length - 1; i2 >= 0; i2--) {
-              const el = inputs[i2];
-              const n = (el.name || "").toLowerCase();
-              if (n === "username" || n === "email" || n === "search" || n === "q") continue;
-              const r2 = el.getBoundingClientRect();
-              if (r2.width > 0 && r2.height > 0) return el;
-            }
-            return null;
-          }).catch(() => null);
-          if (fallback && fallback.asElement) {
-            const el = fallback.asElement();
-            if (el) {
-              codeInput = el;
-              codeSelector = "input[type=text] last-visible-fallback";
-            }
-          }
-        }
-        sendStatus(profileId, `2FA input selector: ${codeSelector || "NONE FOUND"}`);
-        log(`[autoLogin:${profileId}] 2FA input selector used: ${codeSelector || "none found"}`, "browser");
+        sendStatus(profileId, `2FA input found: ${codeSelector || "NONE"} | frame: ${codeFrame === s.page ? "main" : codeFrame.url().slice(0, 40)}`);
         if (codeInput) {
           const box = await codeInput.boundingBox().catch(() => null);
           sendStatus(profileId, `Input bounding box: ${JSON.stringify(box)}`);
@@ -139778,7 +139784,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           } else {
             await codeInput.click();
           }
-          await delay(150);
+          await delay(200);
           await s.page.keyboard.down("Control");
           await s.page.keyboard.press("a");
           await s.page.keyboard.up("Control");
@@ -139794,7 +139800,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
           ).catch(() => []);
           sendStatus(profileId, `Buttons found: ${contBtns.map((b3) => `"${b3.text}"`).join(", ").slice(0, 150)}`);
           const contBtn = contBtns.find((b3) => /confirm|continue|verify|submit/i.test(b3.text) && b3.w > 50);
-          sendStatus(profileId, `Submit button matched: ${contBtn ? `"${contBtn.text}"` : "NONE \u2014 using Enter"}`);
+          sendStatus(profileId, `Submit button: ${contBtn ? `"${contBtn.text}"` : "NONE \u2014 using Enter"}`);
           if (contBtn) {
             await s.page.mouse.move(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
             await delay(100);
