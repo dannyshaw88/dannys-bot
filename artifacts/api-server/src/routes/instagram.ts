@@ -40,12 +40,8 @@ async function resolveProxyConfig(profile: {
   proxyUsername?: string | null;
   proxyPassword?: string | null;
 }): Promise<ProxyConfig | undefined> {
-  // Use direct connection only when EXPLICITLY requested.
-  // Default (null/undefined): route through the account's proxy if one is configured —
-  // this keeps the EB on the same IP as the mobile API and avoids Instagram blocking
-  // Replit's server IP when accounts open the embedded browser.
-  if (profile.browserDirectConnection === true) return undefined;
-
+  // Proxy assignment always wins — if an account has a proxy configured, use it.
+  // browserDirectConnection is only respected when NO proxy is configured at all.
   if (profile.proxyId) {
     const proxies = await storage.getProxies();
     const linked = proxies.find(p => p.id === profile.proxyId);
@@ -59,13 +55,17 @@ async function resolveProxyConfig(profile: {
     }
   }
 
-  if (!profile.proxyHost || !profile.proxyPort) return undefined;
-  return {
-    host: profile.proxyHost,
-    port: profile.proxyPort,
-    username: profile.proxyUsername ?? undefined,
-    password: profile.proxyPassword ?? undefined,
-  };
+  if (profile.proxyHost && profile.proxyPort) {
+    return {
+      host: profile.proxyHost,
+      port: profile.proxyPort,
+      username: profile.proxyUsername ?? undefined,
+      password: profile.proxyPassword ?? undefined,
+    };
+  }
+
+  // No proxy configured on this account — direct connection.
+  return undefined;
 }
 
 export async function registerInstagramRoutes(
