@@ -719,6 +719,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
             <div className="rounded-xl p-4 space-y-4">
             {tool.type === 'follow' && (
               <div className="space-y-3 mb-4">
+                <h4 className="font-semibold text-sm">Follow Tool</h4>
                 {nextRunStatus && (
                   <div className="flex items-center gap-1.5 text-[11px]" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
                     <Clock className="w-3 h-3 shrink-0" />

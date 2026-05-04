@@ -151,7 +151,26 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
       {/* Master toggle */}
-      <div className="border border-border rounded-xl p-4 flex items-center gap-4">
+      <div className="border border-border rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <UserMinus className="w-4 h-4 text-muted-foreground" />
+          <h4 className="font-semibold text-sm">Unfollow Tool</h4>
+          {nextUnfollowStatus && (
+            <span className="text-[11px] flex items-center gap-1 ml-1" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {nextUnfollowStatus.executing
+                ? <span className="font-medium">Executing</span>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextUnfollowStatus.label}</span></>
+              }
+            </span>
+          )}
+          {tool.enabled && perHour > 0 && (
+            <span className="text-[11px] flex items-center gap-1 text-muted-foreground ml-1">
+              <TrendingUp className="w-3 h-3 shrink-0" />
+              ~{perHour} unfollows/hr
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <Switch
             checked={tool.enabled}
@@ -170,27 +189,6 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
           >
             Copy Settings
           </button>
-        </div>
-        <div className="ml-auto text-right">
-          <div className="flex items-center gap-2 justify-end">
-            <UserMinus className="w-4 h-4 text-muted-foreground" />
-            <h4 className="font-semibold text-sm">Unfollow Tool</h4>
-          </div>
-          {nextUnfollowStatus && (
-            <p className="text-[11px] mt-0.5 flex items-center justify-end gap-1" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-              <Clock className="w-3 h-3 shrink-0" />
-              {nextUnfollowStatus.executing
-                ? <span className="font-medium">Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextUnfollowStatus.label}</span></>
-              }
-            </p>
-          )}
-          {tool.enabled && perHour > 0 && (
-            <p className="text-[11px] mt-0.5 flex items-center justify-end gap-1 text-muted-foreground">
-              <TrendingUp className="w-3 h-3 shrink-0" />
-              ~{perHour} unfollows/hr
-            </p>
-          )}
         </div>
       </div>
 
