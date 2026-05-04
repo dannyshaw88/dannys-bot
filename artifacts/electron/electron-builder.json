@@ -38,6 +38,7 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Danny's Bot"
+    "shortcutName": "Danny's Bot",
+    "installDir": "$LOCALAPPDATA\\Programs\\DannysBot"
   }
 }

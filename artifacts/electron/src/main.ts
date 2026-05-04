@@ -238,7 +238,11 @@ async function createWindow() {
     }
   });
 
-  const logPath = path.join(getUserDataPath(), "server.log");
+  // Place the log file next to the exe in the installation directory so it is
+  // easy to find (e.g. AppData\Local\Programs\DannysBot\server.log).
+  // path.dirname(app.getPath("exe")) always resolves to the correct install
+  // folder regardless of whether the user customised the install location.
+  const logPath = path.join(path.dirname(app.getPath("exe")), "server.log");
 
   try {
     serverPort = await findFreePort();
