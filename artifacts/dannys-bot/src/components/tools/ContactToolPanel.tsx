@@ -60,7 +60,11 @@ export function ContactToolPanel({ tool, profile }: Props) {
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const copyEnabled = expandedKeys.includes("startStop");
-    const keysToSend  = expandedKeys.filter(k => k !== "startStop");
+    // When copying start/stop, also carry the three sub-tool enabled flags
+    const subEnabledKeys = copyEnabled
+      ? ["contactNewFollowersEnabled", "autoReplyEnabled", "contactUsersEnabled"]
+      : [];
+    const keysToSend = [...expandedKeys.filter(k => k !== "startStop"), ...subEnabledKeys];
     await copyToolSettingsToProfiles(
       (tool.settings as Record<string, unknown>) ?? {},
       tool.type,
