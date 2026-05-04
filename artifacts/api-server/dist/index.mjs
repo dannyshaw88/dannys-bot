@@ -138712,7 +138712,7 @@ async function verifyInstagramCredentials(profile) {
   const proxyUrl = resolved.url;
   const proxyIp = resolved.host;
   console.error(`[instagramLogin] @${profile.username} proxy=${resolved.host}`);
-  if (profile.igApiCookies) {
+  cookiePath: if (profile.igApiCookies) {
     const { ig: ig2, captureDeviceState: captureDeviceState2 } = buildIgClient(profile, proxyUrl);
     attachRequestLogger(ig2, profile.id, "Verify", proxyIp);
     const sessionPair = profile.igApiCookies.split(";").map((s) => s.trim()).find((s) => s.toLowerCase().startsWith("sessionid="));
@@ -138807,13 +138807,8 @@ async function verifyInstagramCredentials(profile) {
               igDeviceState: captureDeviceState2()
             };
           } else if (statusCode && statusCode >= 400 && statusCode < 600) {
-            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family Instagram error body: ${JSON.stringify(responseBody)}`);
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 Instagram rejected the session (HTTP ${statusCode}${igMsg ? ": " + igMsg : ""}). The account may need to log in again.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState2()
-            };
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family HTTP ${statusCode} (body: ${JSON.stringify(responseBody)}); falling through to password login`);
+            break cookiePath;
           } else {
             console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network/proxy error, treating as inconclusive`);
             return {

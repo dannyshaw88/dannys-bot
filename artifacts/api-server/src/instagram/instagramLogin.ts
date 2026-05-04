@@ -257,7 +257,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   const proxyIp = resolved.host;
   console.error(`[instagramLogin] @${profile.username} proxy=${resolved.host}`);
 
-  if (profile.igApiCookies) {
+  cookiePath: if (profile.igApiCookies) {
     // ── Cookie session handshake ───────────────────────────────────────────
     // Mirrors the Jarvee cold-start sequence for a restored session:
     //   1. launcher/sync  (SendMobileConfig)  — establishes app config, no auth needed
@@ -403,17 +403,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               igDeviceState: captureDeviceState(),
             };
           } else if (statusCode && statusCode >= 400 && statusCode < 600) {
-            // Instagram responded with a real HTTP error — session is dead, not a network issue.
-            // Log the full body so we can refine classification over time.
-            console.error(`[instagramLogin] @${profile.username} — get_account_family Instagram error body: ${JSON.stringify(responseBody)}`);
-            return {
-              ok: false,
-              message: `@${profile.username} — Instagram rejected the session (HTTP ${statusCode}${igMsg ? ": " + igMsg : ""}). The account may need to log in again.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState(),
-            };
+            // Instagram responded with a real HTTP error — session cookie is dead.
+            // Fall through to password login so we get the real status
+            // (bad_password, invalid_credentials, valid, etc.) instead of a generic logged_out.
+            console.error(`[instagramLogin] @${profile.username} — get_account_family HTTP ${statusCode} (body: ${JSON.stringify(responseBody)}); falling through to password login`);
+            break cookiePath;
           } else {
             // No HTTP status — genuine network/proxy error (ECONNREFUSED, timeout, DNS fail).
+            // Password login would fail too, so surface the error immediately.
             console.error(`[instagramLogin] @${profile.username} — get_account_family network/proxy error, treating as inconclusive`);
             return {
               ok: false,
