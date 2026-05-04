@@ -3,11 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw, Github, Tag, ExternalLink } from "lucide-react";
+import { Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
-type Tab = "api-log" | "whats-new" | "github";
+type Tab = "api-log" | "whats-new";
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
@@ -72,19 +72,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Fix": "bg-red-100 text-red-700",
 };
 
-type GitHubRelease = {
-  id: number;
-  name: string;
-  tag_name: string;
-  body: string | null;
-  html_url: string;
-  published_at: string | null;
-  created_at: string;
-  prerelease: boolean;
-  draft: boolean;
-  repo: string;
-};
-
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("api-log");
   const [changelogFilter, setChangelogFilter] = useState("");
@@ -92,7 +79,6 @@ export function Dashboard() {
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
-  const [githubSearch, setGithubSearch] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
 
   // ── Real-time API call log (append-only, newest first) ──────────────────────
@@ -135,6 +121,9 @@ export function Dashboard() {
         if (!cancelled) schedule();
       }, 3000);
     };
+    // Start polling only AFTER the initial fetch completes so lastIdRef is set
+    // before the first incremental poll fires. Without this, a race causes the
+    // poll to re-fetch all rows (since=0) and prepend duplicates.
     fetchAndAppend(0, true).then(() => {
       if (!cancelled) schedule();
     });
@@ -151,13 +140,6 @@ export function Dashboard() {
 
   const { data: profiles } = useQuery<Profile[]>({
     queryKey: ["/api/profiles"],
-  });
-
-  // ── GitHub releases ──────────────────────────────────────────────────────────
-  const { data: githubReleases, isLoading: releasesLoading, error: releasesError } = useQuery<GitHubRelease[]>({
-    queryKey: ["/api/github/releases"],
-    enabled: activeTab === "github",
-    staleTime: 5 * 60 * 1000,
   });
 
   const getUsername = (profileId: number) =>
@@ -181,17 +163,6 @@ export function Dashboard() {
     !profileSearch.trim() ||
     p.username.toLowerCase().includes(profileSearch.toLowerCase())
   );
-
-  const filteredReleases = (githubReleases ?? []).filter(r => {
-    if (!githubSearch.trim()) return true;
-    const q = githubSearch.toLowerCase();
-    return (
-      (r.name ?? "").toLowerCase().includes(q) ||
-      (r.tag_name ?? "").toLowerCase().includes(q) ||
-      (r.repo ?? "").toLowerCase().includes(q) ||
-      (r.body ?? "").toLowerCase().includes(q)
-    );
-  });
 
   // Close picker on outside click
   useEffect(() => {
@@ -247,14 +218,12 @@ export function Dashboard() {
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
             <Sparkles className="w-4 h-4" /> What's New
           </button>
-          <button className={tabClass("github")} onClick={() => setActiveTab("github")}>
-            <Github className="w-4 h-4" /> GitHub Releases
-          </button>
         </div>
 
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
           {activeTab === "api-log" ? (
             <div className="flex items-center gap-3 flex-wrap">
+              {/* Search box */}
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-border bg-background min-w-[200px] flex-1 max-w-xs">
                 <Search className="w-3 h-3 text-muted-foreground shrink-0" />
                 <input
@@ -273,6 +242,7 @@ export function Dashboard() {
               <p className="text-xs text-muted-foreground flex-1 text-right hidden sm:block">
                 {apiCalls.length > 0 ? `${filteredApiCalls.length.toLocaleString()} of ${apiCalls.filter(c => selectedProfileId == null || c.profileId === selectedProfileId).length.toLocaleString()} entries` : "Waiting for activity…"}
               </p>
+              {/* Profile filter picker */}
               <div ref={pickerRef} className="relative shrink-0">
                 <button
                   type="button"
@@ -334,7 +304,7 @@ export function Dashboard() {
                 )}
               </div>
             </div>
-          ) : activeTab === "whats-new" ? (
+          ) : (
             <div className="flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <input
@@ -344,25 +314,6 @@ export function Dashboard() {
                 onChange={e => setChangelogFilter(e.target.value)}
                 className="text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground w-64"
               />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <input
-                type="text"
-                placeholder="Search releases, repos, notes..."
-                value={githubSearch}
-                onChange={e => setGithubSearch(e.target.value)}
-                className="text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground w-64"
-              />
-              {githubSearch && (
-                <button onClick={() => setGithubSearch("")}>
-                  <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
-                </button>
-              )}
-              <p className="text-xs text-muted-foreground ml-auto">
-                {releasesLoading ? "Loading…" : `${filteredReleases.length} release${filteredReleases.length !== 1 ? "s" : ""}`}
-              </p>
             </div>
           )}
         </CardHeader>
@@ -451,7 +402,7 @@ export function Dashboard() {
                 </tbody>
               </table>
             </div>
-          ) : activeTab === "whats-new" ? (
+          ) : (
             <div className="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-8">
               {filteredChangelog.length === 0 ? (
                 <div className="py-12 text-center text-muted-foreground">
@@ -477,84 +428,6 @@ export function Dashboard() {
                         </li>
                       ))}
                     </ul>
-                  </div>
-                ))
-              )}
-            </div>
-          ) : (
-            <div className="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-4">
-              {releasesLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="animate-pulse rounded-lg border border-border/50 p-4 space-y-2">
-                    <div className="h-4 bg-muted/40 rounded w-1/3" />
-                    <div className="h-3 bg-muted/30 rounded w-1/4" />
-                    <div className="h-3 bg-muted/20 rounded w-3/4" />
-                  </div>
-                ))
-              ) : releasesError ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  <Github className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
-                  <p className="text-sm font-medium">Could not load GitHub releases</p>
-                  <p className="text-xs mt-1">Check that the GitHub integration is connected and your account has repositories with releases.</p>
-                </div>
-              ) : filteredReleases.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  <Tag className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
-                  <p className="text-sm font-medium">
-                    {githubSearch.trim() ? `No releases match "${githubSearch}"` : "No releases found"}
-                  </p>
-                  <p className="text-xs mt-1">
-                    {githubSearch.trim() ? "Try a different search term." : "Publish a GitHub release to see it here."}
-                  </p>
-                </div>
-              ) : (
-                filteredReleases.map((release) => (
-                  <div key={release.id} className="rounded-lg border border-border/50 p-4 hover:bg-accent/5 transition-colors">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2 flex-wrap min-w-0">
-                        <span className="font-semibold text-foreground truncate">
-                          {release.name || release.tag_name}
-                        </span>
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground text-[10px] font-mono shrink-0">
-                          <Tag className="w-2.5 h-2.5" />
-                          {release.tag_name}
-                        </span>
-                        {release.prerelease && (
-                          <span className="px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 text-[10px] font-bold shrink-0">
-                            PRE-RELEASE
-                          </span>
-                        )}
-                        {release.draft && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold shrink-0">
-                            DRAFT
-                          </span>
-                        )}
-                      </div>
-                      <a
-                        href={release.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors shrink-0"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        View
-                      </a>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Github className="w-3 h-3" />
-                        {release.repo}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {format(new Date(release.published_at ?? release.created_at), "MMM d, yyyy")}
-                      </span>
-                    </div>
-                    {release.body && (
-                      <p className="mt-2 text-sm text-muted-foreground leading-relaxed line-clamp-3 whitespace-pre-line">
-                        {release.body}
-                      </p>
-                    )}
                   </div>
                 ))
               )}
