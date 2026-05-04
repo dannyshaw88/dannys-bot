@@ -1,6 +1,6 @@
 import type { Browser, Page } from "puppeteer";
 import type { ServerResponse } from "http";
-import { generate as totpGenerate } from "otplib";
+import { generateSync as totpGenerate } from "otplib";
 import fs from "fs";
 import path from "path";
 
@@ -968,7 +968,7 @@ export async function browserAutoLogin(
       const keyClean = twoFAKey.replace(/\s+/g, "");
       if (keyClean) {
         sendStatus(profileId, "2FA screen — entering TOTP code automatically…");
-        const code = await totpGenerate({ secret: keyClean });
+        const code = totpGenerate(keyClean);
         // Find the code input (could be any visible single input on the 2FA page)
         const codeInput = await s.page.$('input[inputmode="numeric"], input[name="verificationCode"], input[type="text"], input[type="tel"]').catch(() => null);
         if (codeInput) {
