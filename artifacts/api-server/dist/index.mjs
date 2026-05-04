@@ -139737,7 +139737,7 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
             placeholder: el.placeholder.slice(0, 30)
           }))
         ).catch(() => []);
-        sendStatus(profileId, `Inputs on page: ${JSON.stringify(allInputs).slice(0, 200)}`);
+        sendStatus(profileId, `Inputs on page: ${JSON.stringify(allInputs).slice(0, 400)}`);
         let codeInput = null;
         let codeSelector = "";
         for (const sel of CODE_SELECTORS) {
@@ -139746,6 +139746,26 @@ async function browserAutoLogin(profileId, username, password, twoFAKey) {
             codeInput = el;
             codeSelector = sel;
             break;
+          }
+        }
+        if (!codeInput) {
+          const fallback = await s.page.evaluateHandle(() => {
+            const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
+            for (let i2 = inputs.length - 1; i2 >= 0; i2--) {
+              const el = inputs[i2];
+              const n = (el.name || "").toLowerCase();
+              if (n === "username" || n === "email" || n === "search" || n === "q") continue;
+              const r2 = el.getBoundingClientRect();
+              if (r2.width > 0 && r2.height > 0) return el;
+            }
+            return null;
+          }).catch(() => null);
+          if (fallback && fallback.asElement) {
+            const el = fallback.asElement();
+            if (el) {
+              codeInput = el;
+              codeSelector = "input[type=text] last-visible-fallback";
+            }
           }
         }
         sendStatus(profileId, `2FA input selector: ${codeSelector || "NONE FOUND"}`);

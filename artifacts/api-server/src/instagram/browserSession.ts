@@ -993,14 +993,14 @@ export async function browserAutoLogin(
           'input[type="tel"]',
           'input[type="number"]',
         ];
-        // Also dump all inputs on the page for visibility
+        // Dump all inputs on the page for visibility
         const allInputs = await s.page.evaluate(() =>
           Array.from(document.querySelectorAll("input")).map(el => ({
             name: el.name, type: el.type, inputmode: el.getAttribute("inputmode"),
             autocomplete: el.autocomplete, placeholder: el.placeholder.slice(0, 30),
           }))
         ).catch(() => []);
-        sendStatus(profileId, `Inputs on page: ${JSON.stringify(allInputs).slice(0, 200)}`);
+        sendStatus(profileId, `Inputs on page: ${JSON.stringify(allInputs).slice(0, 400)}`);
 
         let codeInput: any = null;
         let codeSelector = '';
@@ -1008,6 +1008,30 @@ export async function browserAutoLogin(
           const el = await s.page.$(sel).catch(() => null);
           if (el) { codeInput = el; codeSelector = sel; break; }
         }
+
+        // Fallback: on Instagram's 2FA overlay the security code input has type="text"
+        // but the login form's email input is also type="text". Pick the LAST
+        // type="text" input that isn't a username/email/search field by name.
+        if (!codeInput) {
+          const fallback = await s.page.evaluateHandle(() => {
+            const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
+            // Walk backwards — the code input appears after the login inputs in DOM order
+            for (let i = inputs.length - 1; i >= 0; i--) {
+              const el = inputs[i] as HTMLInputElement;
+              const n = (el.name || "").toLowerCase();
+              if (n === "username" || n === "email" || n === "search" || n === "q") continue;
+              // Must be visible (has a bounding box with positive area)
+              const r = el.getBoundingClientRect();
+              if (r.width > 0 && r.height > 0) return el;
+            }
+            return null;
+          }).catch(() => null);
+          if (fallback && (fallback as any).asElement) {
+            const el = (fallback as any).asElement();
+            if (el) { codeInput = el; codeSelector = "input[type=text] last-visible-fallback"; }
+          }
+        }
+
         sendStatus(profileId, `2FA input selector: ${codeSelector || "NONE FOUND"}`);
         log(`[autoLogin:${profileId}] 2FA input selector used: ${codeSelector || "none found"}`, "browser");
         if (codeInput) {
