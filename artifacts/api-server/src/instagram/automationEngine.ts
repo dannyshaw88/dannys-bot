@@ -184,6 +184,12 @@ class AutomationEngine {
       for (const profile of profiles) {
         const tools = await storage.getToolsByProfile(profile.id);
 
+        // Never run automation without a proxy — skip entirely if none is assigned
+        const hasProxy = profile.proxyId
+          ? true
+          : !!(profile.proxyHost && profile.proxyPort);
+        if (!hasProxy) continue;
+
         const followTool = tools.find(t => t.type === "follow" && t.enabled);
         if (followTool && profile.accountStatus === "valid") {
           activeFollow.add(profile.id);
@@ -1203,6 +1209,10 @@ class AutomationEngine {
   // ── Ensure logged-in client ───────────────────────────────────────────────
   private async ensureClient(profile: Profile, state: ProfileState): Promise<InstagramWebClient | null> {
     const proxyUrl = await this.buildProxyUrl(profile);
+    if (!proxyUrl) {
+      console.error(`[engine] @${profile.username}: no proxy assigned — refusing to connect without proxy`);
+      return null;
+    }
 
     // Create client once per profile lifecycle
     if (!state.client) {
