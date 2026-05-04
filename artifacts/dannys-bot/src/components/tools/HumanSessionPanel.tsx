@@ -42,7 +42,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
       { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-      { key: "hs_randomiseTiming", label: "Randomise timing", description: "Scatter first run across the delay window when the engine starts", subOptions: [
+      { key: "hs_randomiseTiming", label: "Randomise timing", description: "When activating across multiple accounts, stagger each account's start time so they don't all run simultaneously", subOptions: [
         { key: "hs_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
       ]},
     ]},
