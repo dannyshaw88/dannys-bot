@@ -130,6 +130,19 @@ type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 // Version 361 ≈ early 2025; update periodically as Instagram raises the floor.
 const MOBILE_VERSION      = "361.0.0.32.109";
 const MOBILE_VERSION_CODE = "617571539";
+// Date this version was last confirmed working. If it's been more than 12
+// months, Instagram may have started rejecting it — update MOBILE_VERSION.
+const MOBILE_VERSION_DATE = "2025-05-03";
+(() => {
+  const ageMs = Date.now() - new Date(MOBILE_VERSION_DATE).getTime();
+  const ageDays = Math.floor(ageMs / 86_400_000);
+  if (ageDays > 365) {
+    console.warn(
+      `[webClient] ⚠️  MOBILE_VERSION (${MOBILE_VERSION}) was last updated ${ageDays} days ago.` +
+      ` Instagram may be rejecting it — update MOBILE_VERSION + MOBILE_VERSION_CODE in instagramWebClient.ts.`
+    );
+  }
+})();
 const MOBILE_UA  = `Instagram ${MOBILE_VERSION} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
 const MOBILE_AID = "567067343352427";
 
