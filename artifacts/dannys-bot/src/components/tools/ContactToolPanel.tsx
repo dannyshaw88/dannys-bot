@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Users, UserPlus, MessageSquare, Copy } from "lucide-react";
+import { Users, UserPlus, MessageSquare } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
 import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
 import { AutoReplyPanel } from "./AutoReplyPanel";
-import { Button } from "@/components/ui/button";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -92,7 +91,13 @@ export function ContactToolPanel({ tool, profile }: Props) {
           <Users className="w-3.5 h-3.5" />
           Contact Users
         </button>
-        <div className="ml-auto pr-1" />
+        <button
+          className="ml-auto pr-2 text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={otherProfiles.length === 0}
+          onClick={() => setCopyOpen(true)}
+        >
+          Copy Settings
+        </button>
       </div>
 
       {/* Panel content */}
@@ -105,20 +110,6 @@ export function ContactToolPanel({ tool, profile }: Props) {
       {activeTab === "auto-reply" && (
         <AutoReplyPanel tool={tool} profile={profile} />
       )}
-
-      <div className="mt-6">
-        <Button
-          variant="outline"
-          className="w-full gap-2"
-          disabled={otherProfiles.length === 0}
-          onClick={() => setCopyOpen(true)}
-        >
-          <Copy className="w-4 h-4" /> Copy Contact Tool Settings to Other Profiles
-        </Button>
-        {otherProfiles.length === 0 && (
-          <p className="text-xs text-center text-muted-foreground mt-2">Add more profiles to enable copying settings.</p>
-        )}
-      </div>
 
       <CopySettingsDialog
         key={copyOpen ? "open" : "closed"}

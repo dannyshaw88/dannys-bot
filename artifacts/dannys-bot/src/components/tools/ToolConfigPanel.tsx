@@ -672,6 +672,12 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
               <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
                 {tool.enabled ? 'ACTIVE' : 'STOPPED'}
               </span>
+              <button
+                onClick={() => setShowCopyModal(true)}
+                className="ml-1 text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer"
+              >
+                Copy Settings
+              </button>
             </div>
             <div className="flex items-center gap-2 mt-1.5 ml-0.5">
               <Switch
@@ -681,7 +687,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 className="scale-[0.7] origin-left"
               />
               <label htmlFor="randomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
-                Randomise timing — scatter each account's first run across the delay window
+                Randomise timing
               </label>
             </div>
           </>
@@ -749,6 +755,12 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
                     {tool.enabled ? 'ACTIVE' : 'STOPPED'}
                   </span>
+                  <button
+                    onClick={() => setShowCopyModal(true)}
+                    className="ml-1 text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer"
+                  >
+                    Copy Settings
+                  </button>
                 </div>
                 <div className="flex items-center gap-2 ml-0.5">
                   <Switch
@@ -758,7 +770,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                     className="scale-[0.7] origin-left"
                   />
                   <label htmlFor="followRandomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Randomise timing — scatter each account's first run across the delay window
+                    Randomise timing
                   </label>
                 </div>
               </div>
@@ -1180,13 +1192,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
             </div>
 
 
-              <Button
-                variant="outline"
-                className="w-full mt-4 gap-2"
-                onClick={() => setShowCopyModal(true)}
-              >
-                <Copy className="w-3.5 h-3.5" /> Copy Settings
-              </Button>
           </div>
         </div>
 

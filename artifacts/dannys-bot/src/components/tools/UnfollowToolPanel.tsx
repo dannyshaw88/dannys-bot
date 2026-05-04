@@ -53,6 +53,7 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
 
   const [settings, setSettings] = useState(() => {
     const def = {
+      randomiseTiming: false,
       delayMin: 5,
       delayMax: 15,
       processMin: 5,
@@ -169,17 +170,37 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <Switch
-            checked={tool.enabled}
-            onCheckedChange={(enabled) =>
-              toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })
-            }
-            disabled={toggleMutation.isPending}
-          />
-          <span className={`text-sm font-medium ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
-            {tool.enabled ? "ACTIVE" : "STOPPED"}
-          </span>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={tool.enabled}
+              onCheckedChange={(enabled) =>
+                toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })
+              }
+              disabled={toggleMutation.isPending}
+            />
+            <span className={`text-sm font-medium ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
+              {tool.enabled ? "ACTIVE" : "STOPPED"}
+            </span>
+            <button
+              disabled={otherProfiles.length === 0}
+              onClick={() => setCopyOpen(true)}
+              className="ml-1 text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Copy Settings
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="unfollowRandomiseTiming"
+              checked={!!(settings as any).randomiseTiming}
+              onCheckedChange={(v) => setSettings(s => ({ ...s, randomiseTiming: v }))}
+              className="scale-[0.7] origin-left"
+            />
+            <label htmlFor="unfollowRandomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
+              Randomise timing
+            </label>
+          </div>
         </div>
       </div>
 
@@ -381,21 +402,6 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
             When your followings count drops below the target, the unfollow tool stops and the follow tool starts automatically after the specified delay. Requires profile sync to stay accurate.
           </p>
         </div>
-      </div>
-
-      {/* Copy Settings */}
-      <div className="pt-2">
-        <Button
-          variant="outline"
-          className="w-full gap-2"
-          disabled={otherProfiles.length === 0}
-          onClick={() => setCopyOpen(true)}
-        >
-          <Copy className="w-4 h-4" /> Copy Unfollow Tool Settings to Other Profiles
-        </Button>
-        {otherProfiles.length === 0 && (
-          <p className="text-xs text-center text-muted-foreground mt-2">Add more profiles to enable copying settings.</p>
-        )}
       </div>
 
       <CopySettingsDialog

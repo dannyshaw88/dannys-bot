@@ -107,6 +107,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {
+      randomiseTiming: false,
       delayMin: 30,
       delayMax: 60,
       viewTimelineFeedEnabled: false,
@@ -266,15 +267,35 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <Switch
-            checked={tool.enabled}
-            onCheckedChange={(enabled) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })}
-            disabled={updateToolMutation.isPending}
-          />
-          <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
-            {tool.enabled ? 'ACTIVE' : 'STOPPED'}
-          </span>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={tool.enabled}
+              onCheckedChange={(enabled) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })}
+              disabled={updateToolMutation.isPending}
+            />
+            <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
+              {tool.enabled ? 'ACTIVE' : 'STOPPED'}
+            </span>
+            <button
+              disabled={otherProfiles.length === 0}
+              onClick={() => setCopyOpen(true)}
+              className="ml-1 text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Copy Settings
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="hsRandomiseTiming"
+              checked={!!(settings as any).randomiseTiming}
+              onCheckedChange={(v) => setSettings({ ...settings, randomiseTiming: v })}
+              className="scale-[0.7] origin-left"
+            />
+            <label htmlFor="hsRandomiseTiming" className="text-xs text-muted-foreground cursor-pointer select-none">
+              Randomise timing
+            </label>
+          </div>
         </div>
       </div>
 
@@ -1091,15 +1112,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           )}
         </div>
       </div>
-
-      <Button
-        variant="outline"
-        className="w-full gap-2"
-        disabled={otherProfiles.length === 0}
-        onClick={() => setCopyOpen(true)}
-      >
-        <Copy className="w-3.5 h-3.5" /> Copy Settings
-      </Button>
 
       <CopySettingsDialog
         key={copyOpen ? "open" : "closed"}
