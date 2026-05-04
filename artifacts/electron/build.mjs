@@ -59,15 +59,27 @@ import { dirname } from 'path';
 
 const LOG_FILE = process.env.LOG_FILE;
 
+function ts() {
+  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
+
 function writeLog(msg) {
-  process.stderr.write(msg + '\\n');
+  const line = '[' + ts() + '] ' + msg;
+  process.stderr.write(line + '\\n');
   if (LOG_FILE) {
     try {
       mkdirSync(dirname(LOG_FILE), { recursive: true });
-      writeFileSync(LOG_FILE, msg + '\\n', { flag: 'a' });
+      writeFileSync(LOG_FILE, line + '\\n', { flag: 'a' });
     } catch {}
   }
 }
+
+// Patch console so all server output (engine, webClient, etc.) gets timestamps
+const _write = (stream, args) => stream.write('[' + ts() + '] ' + args.map(String).join(' ') + '\\n');
+console.log = (...a) => _write(process.stdout, a);
+console.info = (...a) => _write(process.stdout, a);
+console.warn = (...a) => _write(process.stderr, a);
+console.error = (...a) => _write(process.stderr, a);
 
 process.on('uncaughtException', (err) => {
   writeLog('UNCAUGHT: ' + (err && err.stack ? err.stack : String(err)));
