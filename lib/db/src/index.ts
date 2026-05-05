@@ -220,6 +220,34 @@ if (!repostedPostsColNames.has("posted_shortcode")) {
   sqlite.exec(`ALTER TABLE reposted_posts ADD COLUMN posted_shortcode TEXT NOT NULL DEFAULT '';`);
 }
 
+// DEVICE ISOLATION GUARD: clear ig_device_state for any accounts that share
+// the same uuid with another account. This happens when the old seed
+// (userAgentApi only, without username) was used — accounts with the same
+// device model string generated identical fingerprints. On next verify they
+// will regenerate with the new username-inclusive seed, producing unique IDs.
+{
+  const dupeRows = sqlite.prepare(`
+    SELECT id FROM profiles
+    WHERE ig_device_state IS NOT NULL
+      AND json_extract(ig_device_state, '$.uuid') IN (
+        SELECT json_extract(ig_device_state, '$.uuid') AS uuid
+        FROM profiles
+        WHERE ig_device_state IS NOT NULL
+        GROUP BY uuid
+        HAVING COUNT(*) > 1
+      )
+  `).all() as { id: number }[];
+
+  if (dupeRows.length > 0) {
+    const clearDeviceState = sqlite.prepare("UPDATE profiles SET ig_device_state = NULL WHERE id = ?");
+    const clearAll = sqlite.transaction((rows: { id: number }[]) => {
+      for (const row of rows) clearDeviceState.run(row.id);
+    });
+    clearAll(dupeRows);
+    console.error(`[db] DEVICE ISOLATION: cleared ig_device_state for ${dupeRows.length} accounts with shared device UUIDs — they must be re-verified`);
+  }
+}
+
 // Cleanup: keep only named API operations — remove human-session noise and raw
 // URL-path entries that were logged by older code. Cap to newest 5000 rows.
 sqlite.exec(`
