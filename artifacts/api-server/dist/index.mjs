@@ -138712,12 +138712,22 @@ function attachRequestLogger(ig, profileId, source, proxyIp) {
     let statusStr = "";
     try {
       response = await originalSend(userOptions, onlyCheckHttpStatus);
-      statusStr = String(response?.statusCode ?? 200);
+      statusStr = "OK";
     } catch (err) {
       const durationMs2 = Date.now() - t0;
       const code = err?.statusCode ?? err?.response?.statusCode ?? 0;
-      const errShort = err?.message?.slice(0, 80) ?? "error";
-      statusStr = code ? `${code} ${errShort}` : errShort;
+      const body = err?.response?.body ?? {};
+      const igMsg = body.message || body.error_title || (body.two_factor_required ? "Two-factor authentication required" : "") || (body.checkpoint_required ? "Checkpoint required" : "") || "";
+      const HTTP_PHRASES = {
+        400: "Bad Request",
+        401: "Unauthorized",
+        403: "Forbidden",
+        404: "Not Found",
+        429: "Rate Limited",
+        500: "Server Error"
+      };
+      const phrase = HTTP_PHRASES[code] ?? (code ? `HTTP ${code}` : "Error");
+      statusStr = code ? igMsg ? `${code} \u2014 ${igMsg.slice(0, 100)}` : `${code} ${phrase}` : phrase;
       const bodyStr = userOptions?.form ? new URLSearchParams(userOptions.form).toString() : typeof userOptions?.body === "string" ? userOptions.body : "";
       const navChain2 = extractFromBody(bodyStr, "nav_chain");
       logApiCall(profileId, opName, statusStr, source, navChain2, proxyIp, durationMs2).catch(() => {

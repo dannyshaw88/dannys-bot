@@ -208,12 +208,28 @@ export function attachRequestLogger(ig: IgApiClient, profileId: number, source: 
     let statusStr = "";
     try {
       response = await originalSend(userOptions, onlyCheckHttpStatus);
-      statusStr = String(response?.statusCode ?? 200);
+      // Success: show clean "200 OK" — never include the URL
+      statusStr = "OK";
     } catch (err: any) {
       const durationMs = Date.now() - t0;
       const code: number = err?.statusCode ?? err?.response?.statusCode ?? 0;
-      const errShort = err?.message?.slice(0, 80) ?? "error";
-      statusStr = code ? `${code} ${errShort}` : errShort;
+      // Pull Instagram's own message from the response body — it's informative
+      // and doesn't include the URL (unlike err.message which does).
+      const body = err?.response?.body ?? {};
+      const igMsg: string =
+        body.message ||
+        body.error_title ||
+        (body.two_factor_required  ? "Two-factor authentication required"  : "") ||
+        (body.checkpoint_required  ? "Checkpoint required"                 : "") ||
+        "";
+      const HTTP_PHRASES: Record<number, string> = {
+        400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+        404: "Not Found",   429: "Rate Limited", 500: "Server Error",
+      };
+      const phrase = HTTP_PHRASES[code] ?? (code ? `HTTP ${code}` : "Error");
+      statusStr = code
+        ? (igMsg ? `${code} — ${igMsg.slice(0, 100)}` : `${code} ${phrase}`)
+        : (phrase);
       // Extract nav_chain from the original request body even on error
       const bodyStr: string = userOptions?.form
         ? new URLSearchParams(userOptions.form).toString()
