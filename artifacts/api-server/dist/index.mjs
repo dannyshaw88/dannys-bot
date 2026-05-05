@@ -138858,7 +138858,13 @@ async function verifyInstagramCredentials(profile) {
     attachRequestLogger(ig2, profile.id, "Verify", proxyIp);
     const sessionPair = profile.igApiCookies.split(";").map((s) => s.trim()).find((s) => s.toLowerCase().startsWith("sessionid="));
     if (!sessionPair) {
-      console.error(`[instagramLogin] @${profile.username} \u2014 igApiCookies has no sessionid, falling through to password login`);
+      console.error(`[instagramLogin] @${profile.username} \u2014 igApiCookies has no sessionid, returning logged_out`);
+      return {
+        ok: false,
+        message: `@${profile.username} \u2014 saved session is missing a sessionid cookie. Please update the password and re-verify, or restore the session via the embedded browser.`,
+        accountStatus: "logged_out",
+        igDeviceState: captureDeviceState2()
+      };
     } else {
       const rawVal = sessionPair.slice("sessionid=".length);
       let decodedSession = rawVal;
@@ -138868,7 +138874,13 @@ async function verifyInstagramCredentials(profile) {
       }
       const userId = decodedSession.split(":")[0];
       if (!userId || !/^\d+$/.test(userId)) {
-        console.error(`[instagramLogin] @${profile.username} \u2014 could not parse userId from sessionid, falling through`);
+        console.error(`[instagramLogin] @${profile.username} \u2014 could not parse userId from sessionid, returning logged_out`);
+        return {
+          ok: false,
+          message: `@${profile.username} \u2014 could not read user ID from session cookie. Please update the password and re-verify, or restore the session via the embedded browser.`,
+          accountStatus: "logged_out",
+          igDeviceState: captureDeviceState2()
+        };
       } else {
         const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
         try {
@@ -138948,8 +138960,13 @@ async function verifyInstagramCredentials(profile) {
               igDeviceState: captureDeviceState2()
             };
           } else if (statusCode && statusCode >= 400 && statusCode < 600) {
-            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family HTTP ${statusCode} (body: ${JSON.stringify(responseBody)}); falling through to password login`);
-            break cookiePath;
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family HTTP ${statusCode}; session appears expired/dead, returning logged_out`);
+            return {
+              ok: false,
+              message: `@${profile.username} \u2014 session cookie appears to be expired (HTTP ${statusCode} from Instagram). Please update the password and re-verify, or restore the session via the embedded browser.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState2()
+            };
           } else {
             console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network/proxy error, treating as inconclusive`);
             return {

@@ -413,8 +413,17 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       .map(s => s.trim())
       .find(s => s.toLowerCase().startsWith('sessionid='));
     if (!sessionPair) {
-      // No sessionid found — fall through to password login
-      console.error(`[instagramLogin] @${profile.username} — igApiCookies has no sessionid, falling through to password login`);
+      // No sessionid in stored cookies — session is unusable. Return logged_out so the
+      // user is prompted to re-enter credentials. Never fall through to password login:
+      // making a fresh password attempt immediately after a failed cookie probe looks
+      // like an account takeover to Instagram and will trigger an account block.
+      console.error(`[instagramLogin] @${profile.username} — igApiCookies has no sessionid, returning logged_out`);
+      return {
+        ok: false,
+        message: `@${profile.username} — saved session is missing a sessionid cookie. Please update the password and re-verify, or restore the session via the embedded browser.`,
+        accountStatus: "logged_out",
+        igDeviceState: captureDeviceState(),
+      };
     } else {
       const rawVal = sessionPair.slice('sessionid='.length);
       let decodedSession = rawVal;
@@ -422,7 +431,13 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       const userId = decodedSession.split(':')[0];
 
       if (!userId || !/^\d+$/.test(userId)) {
-        console.error(`[instagramLogin] @${profile.username} — could not parse userId from sessionid, falling through`);
+        console.error(`[instagramLogin] @${profile.username} — could not parse userId from sessionid, returning logged_out`);
+        return {
+          ok: false,
+          message: `@${profile.username} — could not read user ID from session cookie. Please update the password and re-verify, or restore the session via the embedded browser.`,
+          accountStatus: "logged_out",
+          igDeviceState: captureDeviceState(),
+        };
       } else {
         const cookiesWithUserId = `${profile.igApiCookies};ds_user_id=${userId}`;
 
@@ -540,11 +555,18 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               igDeviceState: captureDeviceState(),
             };
           } else if (statusCode && statusCode >= 400 && statusCode < 600) {
-            // Instagram responded with a real HTTP error — session cookie is dead.
-            // Fall through to password login so we get the real status
-            // (bad_password, invalid_credentials, valid, etc.) instead of a generic logged_out.
-            console.error(`[instagramLogin] @${profile.username} — get_account_family HTTP ${statusCode} (body: ${JSON.stringify(responseBody)}); falling through to password login`);
-            break cookiePath;
+            // Instagram responded with a real HTTP error — session cookie is dead or
+            // the endpoint is unavailable. Return logged_out immediately.
+            // CRITICAL: do NOT fall through to password login here. Making a fresh
+            // password attempt immediately after a failed cookie probe looks like an
+            // account takeover attempt to Instagram and will trigger an account block.
+            console.error(`[instagramLogin] @${profile.username} — get_account_family HTTP ${statusCode}; session appears expired/dead, returning logged_out`);
+            return {
+              ok: false,
+              message: `@${profile.username} — session cookie appears to be expired (HTTP ${statusCode} from Instagram). Please update the password and re-verify, or restore the session via the embedded browser.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState(),
+            };
           } else {
             // No HTTP status — genuine network/proxy error (ECONNREFUSED, timeout, DNS fail).
             // Password login would fail too, so surface the error immediately.
