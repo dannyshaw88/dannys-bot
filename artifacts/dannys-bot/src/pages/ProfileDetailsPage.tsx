@@ -607,7 +607,7 @@ export function ProfileDetailsPage() {
                           {verifyStatus === "fail" && <XCircle className="w-4 h-4" />}
                           {verifyStatus === "idle" && <ShieldCheck className="w-4 h-4" />}
                           {verifyStatus === "pending" ? "Verifying…"
-                            : verifyStatus === "fail" ? "Retry with Proxy"
+                            : verifyStatus === "fail" ? "Retry Verification"
                             : "Verify Credentials"}
                         </Button>
                       )}

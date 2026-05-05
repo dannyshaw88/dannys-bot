@@ -57,9 +57,20 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [showLog, setShowLog] = useState(false);
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
 
+  // F12 on the canvas toggles the log panel
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F12") {
+        e.preventDefault();
+        setShowLog(prev => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const appendLog = useCallback((text: string, kind: LogEntry["kind"] = "step") => {
     setLoginLog(prev => [...prev, { ts: nowTs(), text, kind }]);
-    setShowLog(true);
   }, []);
 
   // Auto-scroll log to bottom on new entries
@@ -291,7 +302,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       return;
     }
     setLoginLog([]);
-    setShowLog(true);
     setLoginState("running");
     appendLog("Starting auto-login…", "step");
     fetch(`/api/browser/${profileId}/login`, { method: "POST" }).catch(() => {
@@ -432,13 +442,13 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         </div>
       )}
 
-      {/* Collapsed log toggle */}
+      {/* Collapsed log toggle — always show hint when there are log entries */}
       {!showLog && loginLog.length > 0 && (
         <button
           onClick={() => setShowLog(true)}
           className="shrink-0 px-4 py-1 text-[11px] text-slate-500 bg-slate-950 border-b border-slate-800 hover:text-slate-300 text-left"
         >
-          Show login log ({loginLog.length} steps)
+          Login log ({loginLog.length} steps) — press F12 to open
         </button>
       )}
 
