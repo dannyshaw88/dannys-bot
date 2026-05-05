@@ -139051,9 +139051,10 @@ async function verifyInstagramCredentials(profile) {
       }
       let code;
       try {
-        code = h3(secret);
-      } catch {
-        return { ok: false, message: `@${profile.username} \u2014 invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification", igDeviceState: ds };
+        code = h3({ secret });
+      } catch (totpErr) {
+        console.error(`[instagramLogin] TOTP generation failed for @${profile.username}: ${totpErr?.message}`);
+        return { ok: false, message: `@${profile.username} \u2014 could not generate 2FA code: ${totpErr?.message ?? "invalid secret"}. Check the TOTP secret in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       try {
         await ig.account.twoFactorLogin({

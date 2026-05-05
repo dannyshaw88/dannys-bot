@@ -675,8 +675,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         return { ok: false, message: `@${profile.username} — 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       let code: string;
-      try { code = totpGenerate(secret); } catch {
-        return { ok: false, message: `@${profile.username} — invalid 2FA secret key. Please re-enter it.`, accountStatus: "2fa_verification", igDeviceState: ds };
+      try {
+        // otplib v13: generateSync expects { secret } object, not a plain string
+        code = totpGenerate({ secret });
+      } catch (totpErr: any) {
+        console.error(`[instagramLogin] TOTP generation failed for @${profile.username}: ${totpErr?.message}`);
+        return { ok: false, message: `@${profile.username} — could not generate 2FA code: ${totpErr?.message ?? "invalid secret"}. Check the TOTP secret in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
       }
       try {
         await ig.account.twoFactorLogin({
