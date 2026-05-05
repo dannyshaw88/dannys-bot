@@ -1109,11 +1109,13 @@ export async function registerInstagramRoutes(
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
+      backupEnabled: settings.backupEnabled === "true",
+      backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -1147,6 +1149,12 @@ export async function registerInstagramRoutes(
     if (typeof logMaxRows === "number" && logMaxRows > 0) {
       await storage.setGlobalSetting("logMaxRows", String(Math.round(logMaxRows)));
     }
+    if (typeof backupEnabled === "boolean") {
+      await storage.setGlobalSetting("backupEnabled", String(backupEnabled));
+    }
+    if (typeof backupIntervalDays === "number" && backupIntervalDays > 0) {
+      await storage.setGlobalSetting("backupIntervalDays", String(Math.round(backupIntervalDays)));
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -1160,6 +1168,8 @@ export async function registerInstagramRoutes(
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
+      backupEnabled: settings.backupEnabled === "true",
+      backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
     });
   });
 

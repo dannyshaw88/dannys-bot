@@ -1,10 +1,14 @@
 import { app, BrowserWindow, Tray, nativeImage, dialog, ipcMain, screen } from "electron";
 import { autoUpdater } from "electron-updater";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, ChildProcess, exec } from "child_process";
+import { promisify } from "util";
 import http from "http";
 import net from "net";
 import fs from "fs";
 import path from "path";
+import os from "os";
+
+const execAsync = promisify(exec);
 
 let serverPort = 0;
 let serverProc: ChildProcess | null = null;
@@ -313,6 +317,178 @@ function setupAutoUpdater(): void {
   setTimeout(() => autoUpdater.checkForUpdates(), 5000);
 }
 
+// ── Backup & Restore ──────────────────────────────────────────────────────────
+
+type BackupEntry = { id: string; date: string; size: number };
+
+let autoBackupTimer: NodeJS.Timeout | null = null;
+
+function getBackupsDir(): string {
+  return path.join(getUserDataPath(), "backups");
+}
+
+function formatBackupId(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+
+async function runPsScript(script: string): Promise<void> {
+  const tmp = path.join(os.tmpdir(), `db-bak-${Date.now()}.ps1`);
+  fs.writeFileSync(tmp, script, "utf8");
+  try {
+    await execAsync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${tmp}"`);
+  } finally {
+    try { fs.unlinkSync(tmp); } catch {}
+  }
+}
+
+async function createBackupNow(): Promise<{ ok: boolean; entry?: BackupEntry; error?: string }> {
+  const userData = getUserDataPath();
+  const backupsDir = getBackupsDir();
+  const id = formatBackupId(new Date());
+  const backupFolder = path.join(backupsDir, id);
+  const zipPath = path.join(backupFolder, "backup.zip");
+
+  try {
+    fs.mkdirSync(backupFolder, { recursive: true });
+
+    if (process.platform === "win32") {
+      await runPsScript([
+        `$src = '${userData.replace(/'/g, "''")}'`,
+        `$dst = '${zipPath.replace(/'/g, "''")}'`,
+        `$items = Get-ChildItem -Path $src | Where-Object { $_.Name -ne 'backups' } | ForEach-Object { $_.FullName }`,
+        `if ($items) { Compress-Archive -Path $items -DestinationPath $dst -Force }`,
+      ].join("`n"));
+    } else {
+      const items = fs.readdirSync(userData)
+        .filter((n) => n !== "backups")
+        .map((n) => `'${path.join(userData, n).replace(/'/g, "'\\''")}'`)
+        .join(" ");
+      if (items) await execAsync(`zip -r '${zipPath.replace(/'/g, "'\\''")}' ${items}`);
+    }
+
+    const size = fs.existsSync(zipPath) ? fs.statSync(zipPath).size : 0;
+    const meta = { date: new Date().toISOString(), size };
+    fs.writeFileSync(path.join(backupFolder, "meta.json"), JSON.stringify(meta));
+    return { ok: true, entry: { id, date: meta.date, size } };
+  } catch (err: any) {
+    try { fs.rmSync(backupFolder, { recursive: true, force: true }); } catch {}
+    return { ok: false, error: String(err?.message ?? err) };
+  }
+}
+
+function listBackupsNow(): BackupEntry[] {
+  const dir = getBackupsDir();
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((name) => {
+      const d = path.join(dir, name);
+      return fs.statSync(d).isDirectory() && fs.existsSync(path.join(d, "backup.zip"));
+    })
+    .sort((a, b) => b.localeCompare(a))
+    .map((name) => {
+      const metaPath = path.join(dir, name, "meta.json");
+      let date = name;
+      let size = 0;
+      try {
+        const m = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+        date = m.date;
+        size = m.size;
+      } catch {
+        try { size = fs.statSync(path.join(dir, name, "backup.zip")).size; } catch {}
+      }
+      return { id: name, date, size };
+    });
+}
+
+function getLastBackupDate(): Date | null {
+  const entries = listBackupsNow();
+  if (!entries.length) return null;
+  try { return new Date(entries[0].date); } catch { return null; }
+}
+
+async function restoreBackupNow(id: string): Promise<{ ok: boolean; error?: string }> {
+  const zipPath = path.join(getBackupsDir(), id, "backup.zip");
+  if (!fs.existsSync(zipPath)) return { ok: false, error: "Backup file not found" };
+
+  const userData = getUserDataPath();
+  try {
+    if (serverProc) { serverProc.kill(); serverProc = null; }
+    await new Promise((r) => setTimeout(r, 1200));
+
+    if (process.platform === "win32") {
+      await runPsScript([
+        `$zip = '${zipPath.replace(/'/g, "''")}'`,
+        `$dst = '${userData.replace(/'/g, "''")}'`,
+        `Expand-Archive -Path $zip -DestinationPath $dst -Force`,
+      ].join("`n"));
+    } else {
+      await execAsync(`unzip -o '${zipPath.replace(/'/g, "'\\''")}' -d '${userData.replace(/'/g, "'\\''")}'`);
+    }
+
+    app.relaunch();
+    isQuitting = true;
+    app.quit();
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message ?? err) };
+  }
+}
+
+function deleteBackupNow(id: string): { ok: boolean; error?: string } {
+  const backupFolder = path.join(getBackupsDir(), id);
+  if (!fs.existsSync(backupFolder)) return { ok: false, error: "Backup not found" };
+  try {
+    fs.rmSync(backupFolder, { recursive: true, force: true });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: String(err?.message ?? err) };
+  }
+}
+
+function scheduleAutoBackup(enabled: boolean, intervalDays: number) {
+  if (autoBackupTimer) { clearTimeout(autoBackupTimer); autoBackupTimer = null; }
+  if (!enabled || intervalDays <= 0) return;
+
+  const intervalMs = intervalDays * 24 * 60 * 60 * 1000;
+  const last = getLastBackupDate();
+  const msSinceLast = last ? Date.now() - last.getTime() : Infinity;
+
+  const runAndReschedule = () => {
+    createBackupNow().finally(() => scheduleAutoBackup(enabled, intervalDays));
+  };
+
+  if (msSinceLast >= intervalMs) {
+    setTimeout(runAndReschedule, 5000);
+  } else {
+    autoBackupTimer = setTimeout(runAndReschedule, intervalMs - msSinceLast);
+  }
+}
+
+async function initAutoBackup(port: number) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/settings`);
+    const s = await res.json();
+    scheduleAutoBackup(s.backupEnabled ?? false, s.backupIntervalDays ?? 7);
+  } catch {}
+}
+
+function setupBackupHandlers() {
+  ipcMain.handle("backup-create", async () => createBackupNow());
+  ipcMain.handle("backup-list", () => listBackupsNow());
+  ipcMain.handle("backup-restore", async (_e, id: string) => restoreBackupNow(id));
+  ipcMain.handle("backup-delete", (_e, id: string) => deleteBackupNow(id));
+  ipcMain.handle("backup-open-dir", async () => {
+    const dir = getBackupsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const { shell } = await import("electron");
+    await shell.openPath(dir);
+  });
+  ipcMain.on("backup-schedule-update", (_e, { enabled, intervalDays }) => {
+    scheduleAutoBackup(enabled, intervalDays);
+  });
+}
+
 async function createWindow() {
   win = new BrowserWindow({
     width: 1400,
@@ -373,6 +549,8 @@ async function createWindow() {
   win.on("closed", () => { win = null; });
 
   createTray();
+  setupBackupHandlers();
+  initAutoBackup(serverPort).catch(() => {});
 
   if (app.isPackaged) setupAutoUpdater();
 

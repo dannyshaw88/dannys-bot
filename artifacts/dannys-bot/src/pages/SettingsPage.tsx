@@ -5,9 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2 } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+
+type BackupEntry = { id: string; date: string; size: number };
+const eAPI = () => (window as any).electronAPI;
+const isElectron = typeof window !== "undefined" && typeof eAPI()?.createBackup === "function";
 
 // ─── Jarvee parser helpers ───────────────────────────────────────────────────
 
@@ -95,6 +99,25 @@ export function SettingsPage() {
   type ImportResult = { accountUsername: string; imported: number; skipped: number; error?: string };
   const [jarveeResults, setJarveeResults] = useState<ImportResult[] | null>(null);
 
+  // ─── Backup state ────────────────────────────────────────────────────────────
+  const [backupList, setBackupList] = useState<BackupEntry[]>([]);
+  const [backupListLoading, setBackupListLoading] = useState(false);
+  const [backupCreating, setBackupCreating] = useState(false);
+  const [backupRestoring, setBackupRestoring] = useState<string | null>(null);
+  const [backupDeleting, setBackupDeleting] = useState<string | null>(null);
+
+  const refreshBackupList = async () => {
+    if (!isElectron) return;
+    setBackupListLoading(true);
+    try {
+      const list: BackupEntry[] = await eAPI().listBackups();
+      setBackupList(list);
+    } catch {}
+    setBackupListLoading(false);
+  };
+
+  useEffect(() => { refreshBackupList(); }, []);
+
   const { data: settings, isLoading } = useQuery<GlobalSettings>({
     queryKey: ["/api/settings"],
     queryFn: fetchSettings,
@@ -113,6 +136,11 @@ export function SettingsPage() {
     mutationFn: saveSettings,
     onSuccess: (data) => {
       qc.setQueryData(["/api/settings"], data);
+      if (isElectron && (data.backupEnabled !== undefined || data.backupIntervalDays !== undefined)) {
+        try {
+          eAPI().updateBackupSchedule(data.backupEnabled ?? false, data.backupIntervalDays ?? 7);
+        } catch {}
+      }
     },
     onError: () => {
       toast({ title: "Failed to save setting", variant: "destructive" });
@@ -741,6 +769,197 @@ export function SettingsPage() {
             <p className="text-sm text-muted-foreground">No account data found in the file.</p>
           )}
         </div>
+
+        {/* Backup & Restore */}
+        {isElectron && (
+          <div className="desktop-card p-6">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 rounded-lg bg-emerald-100 text-emerald-600">
+                <HardDrive className="w-4 h-4" />
+              </div>
+              <h3 className="text-base font-semibold">Backup &amp; Restore</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-5">
+              Automatically zip your database and settings into dated backup folders.
+              Restore any backup to roll everything back to that point — the app will relaunch automatically.
+            </p>
+
+            {/* Auto-backup toggle + interval */}
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <Label className="text-sm font-medium cursor-pointer" htmlFor="backup-enabled">
+                    Enable Auto-Backup
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Automatically create a backup every N days. Backups are stored in your app data folder.
+                  </p>
+                </div>
+                <Switch
+                  id="backup-enabled"
+                  checked={settings?.backupEnabled ?? false}
+                  onCheckedChange={(v) => mutation.mutate({ backupEnabled: v, backupIntervalDays: settings?.backupIntervalDays ?? 7 })}
+                  disabled={isLoading || mutation.isPending}
+                  className="data-[state=checked]:bg-emerald-500 shrink-0 mt-0.5"
+                />
+              </div>
+
+              <div className="border-t border-border/50 pt-4 flex items-center gap-3">
+                <Label className="text-sm font-medium whitespace-nowrap" htmlFor="backup-interval">
+                  Back up every
+                </Label>
+                <Input
+                  id="backup-interval"
+                  type="number"
+                  min={1}
+                  max={365}
+                  className="w-20"
+                  defaultValue={settings?.backupIntervalDays ?? 7}
+                  key={settings?.backupIntervalDays}
+                  disabled={isLoading || !(settings?.backupEnabled)}
+                  onBlur={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v > 0 && v !== settings?.backupIntervalDays) {
+                      mutation.mutate({ backupEnabled: settings?.backupEnabled ?? false, backupIntervalDays: v });
+                    }
+                  }}
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+
+              {/* Actions */}
+              <div className="border-t border-border/50 pt-4 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={backupCreating}
+                  onClick={async () => {
+                    setBackupCreating(true);
+                    try {
+                      const result = await eAPI().createBackup();
+                      if (result.ok) {
+                        toast({ title: "Backup created successfully" });
+                        await refreshBackupList();
+                      } else {
+                        toast({ title: "Backup failed", description: result.error, variant: "destructive" });
+                      }
+                    } catch (err: any) {
+                      toast({ title: "Backup failed", description: err?.message, variant: "destructive" });
+                    }
+                    setBackupCreating(false);
+                  }}
+                >
+                  {backupCreating ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</>
+                  ) : (
+                    <><HardDrive className="w-4 h-4 mr-2" />Create Backup Now</>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => eAPI().openBackupDir()}
+                >
+                  <FolderOpen className="w-4 h-4 mr-2" />Open Backup Folder
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={backupListLoading}
+                  onClick={refreshBackupList}
+                  title="Refresh list"
+                >
+                  <RefreshCw className={`w-4 h-4 ${backupListLoading ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
+
+              {/* Backup list */}
+              {backupList.length > 0 && (
+                <div className="border-t border-border/50 pt-4 space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    Saved Backups ({backupList.length})
+                  </p>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {backupList.map((entry) => {
+                      const d = new Date(entry.date);
+                      const label = isNaN(d.getTime())
+                        ? entry.id
+                        : d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                      const sizeLabel = entry.size > 1024 * 1024
+                        ? `${(entry.size / 1024 / 1024).toFixed(1)} MB`
+                        : entry.size > 1024
+                        ? `${(entry.size / 1024).toFixed(0)} KB`
+                        : `${entry.size} B`;
+                      return (
+                        <div key={entry.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{label}</p>
+                            <p className="text-xs text-muted-foreground">{sizeLabel}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={backupRestoring !== null || backupDeleting !== null}
+                              onClick={async () => {
+                                const confirmed = window.confirm(
+                                  `Restore backup from ${label}?\n\nAll current data will be replaced and the app will relaunch.`
+                                );
+                                if (!confirmed) return;
+                                setBackupRestoring(entry.id);
+                                try {
+                                  const result = await eAPI().restoreBackup(entry.id);
+                                  if (!result.ok) {
+                                    toast({ title: "Restore failed", description: result.error, variant: "destructive" });
+                                    setBackupRestoring(null);
+                                  }
+                                } catch (err: any) {
+                                  toast({ title: "Restore failed", description: err?.message, variant: "destructive" });
+                                  setBackupRestoring(null);
+                                }
+                              }}
+                              className="h-7 px-2 text-xs"
+                            >
+                              {backupRestoring === entry.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <><RotateCcw className="w-3 h-3 mr-1" />Restore</>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={backupRestoring !== null || backupDeleting !== null}
+                              onClick={async () => {
+                                const confirmed = window.confirm(`Delete backup from ${label}?`);
+                                if (!confirmed) return;
+                                setBackupDeleting(entry.id);
+                                try {
+                                  await eAPI().deleteBackup(entry.id);
+                                  await refreshBackupList();
+                                } catch {}
+                                setBackupDeleting(null);
+                              }}
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            >
+                              {backupDeleting === entry.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {backupList.length === 0 && !backupListLoading && (
+                <p className="text-xs text-muted-foreground pt-1">No backups yet — create one above.</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Data Management */}
         <div className="desktop-card p-6">

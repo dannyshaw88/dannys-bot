@@ -255,4 +255,6 @@ export type GlobalSettings = {
   verifyAllDelayMin: number;
   verifyAllDelayMax: number;
   logMaxRows: number;
+  backupEnabled: boolean;
+  backupIntervalDays: number;
 };
