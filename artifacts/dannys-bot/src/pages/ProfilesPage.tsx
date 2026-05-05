@@ -129,11 +129,13 @@ export function ProfilesPage() {
   const filteredProfiles = useMemo(() => {
     const base = filterTokens.length > 0
       ? (profiles ?? []).filter(p => {
-          const status   = (p.accountStatus ?? "pending").toLowerCase();
-          const username = (p.username ?? "").toLowerCase();
-          const label    = (p.accountLabel ?? "").toLowerCase();
+          const status      = (p.accountStatus ?? "pending").toLowerCase();
+          const statusLabel = (STATUS_META[p.accountStatus as AccountStatus]?.label ?? "").toLowerCase();
+          const username    = (p.username ?? "").toLowerCase();
+          const label       = (p.accountLabel ?? "").toLowerCase();
           return filterTokens.some(token =>
-            status === token ||
+            status.includes(token) ||
+            statusLabel.includes(token) ||
             username.includes(token) ||
             label.includes(token)
           );
