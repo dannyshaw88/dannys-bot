@@ -562,57 +562,60 @@ export function ProfileDetailsPage() {
               </CardHeader>
               <CardContent className="px-0 space-y-4">
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Instagram className="w-3.5 h-3.5" /> Username</Label>
-                    <Input 
-                      value={formData.username}
-                      onChange={e => updateField({ username: e.target.value })}
-                      data-testid="input-username"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Lock className="w-3.5 h-3.5" /> Password</Label>
-                    <PasswordInput
-                      value={formData.password}
-                      onChange={e => updateField({ password: e.target.value })}
-                      data-testid="input-password"
-                    />
-                  </div>
-
-                  {/* Verify button — appears only when credentials are filled */}
-                  {canVerify && (
-                    <div className="flex gap-2">
-                      {verifyStatus === "ok" ? (
-                        <div
-                          data-testid="status-logged-in"
-                          className="flex-1 h-10 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          Logged In
-                        </div>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant={verifyStatus === "fail" ? "outline" : "default"}
-                          className={`flex-1 h-10 gap-2 transition-all ${
-                            verifyStatus === "fail"
-                              ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
-                              : ""
-                          }`}
-                          onClick={() => handleVerify(false)}
-                          disabled={verifyStatus === "pending"}
-                          data-testid="button-verify-credentials"
-                        >
-                          {verifyStatus === "pending" && <Loader2 className="w-4 h-4 animate-spin" />}
-                          {verifyStatus === "fail" && <XCircle className="w-4 h-4" />}
-                          {verifyStatus === "idle" && <ShieldCheck className="w-4 h-4" />}
-                          {verifyStatus === "pending" ? "Verifying…"
-                            : verifyStatus === "fail" ? "Retry Verification"
-                            : "Verify Credentials"}
-                        </Button>
-                      )}
+                  {/* Credentials + verify — constrained to ~half the card width */}
+                  <div className="space-y-3 max-w-[280px]">
+                    <div className="space-y-1.5">
+                      <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Instagram className="w-3.5 h-3.5" /> Username</Label>
+                      <Input
+                        value={formData.username}
+                        onChange={e => updateField({ username: e.target.value })}
+                        data-testid="input-username"
+                      />
                     </div>
-                  )}
+                    <div className="space-y-1.5">
+                      <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Lock className="w-3.5 h-3.5" /> Password</Label>
+                      <PasswordInput
+                        value={formData.password}
+                        onChange={e => updateField({ password: e.target.value })}
+                        data-testid="input-password"
+                      />
+                    </div>
+
+                    {/* Verify button — appears only when credentials are filled */}
+                    {canVerify && (
+                      <div>
+                        {verifyStatus === "ok" ? (
+                          <div
+                            data-testid="status-logged-in"
+                            className="h-9 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Logged In
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant={verifyStatus === "fail" ? "outline" : "default"}
+                            className={`w-full h-9 gap-2 transition-all ${
+                              verifyStatus === "fail"
+                                ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
+                                : ""
+                            }`}
+                            onClick={() => handleVerify(false)}
+                            disabled={verifyStatus === "pending"}
+                            data-testid="button-verify-credentials"
+                          >
+                            {verifyStatus === "pending" && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {verifyStatus === "fail" && <XCircle className="w-4 h-4" />}
+                            {verifyStatus === "idle" && <ShieldCheck className="w-4 h-4" />}
+                            {verifyStatus === "pending" ? "Verifying…"
+                              : verifyStatus === "fail" ? "Retry Verification"
+                              : "Verify Credentials"}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   <button
                     type="button"

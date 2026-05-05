@@ -679,9 +679,29 @@ export async function registerInstagramRoutes(
       const requestedIds = rawIds
         ? String(rawIds).split(",").map((s: string) => parseInt(s.trim(), 10)).filter((n: number) => !isNaN(n))
         : [];
-      const apiCalls = allApiCalls.filter((c: any) =>
-        c.source !== "Browser" && (requestedIds.length === 0 || requestedIds.includes(c.profileId))
-      );
+      // Operations that structurally return 4xx/5xx but are completely non-fatal
+      // (endpoint unavailable for account type, not-eligible for attribution, etc).
+      // We strip their failed entries from the export so the CSV isn't flooded with
+      // alarming-looking errors that have zero operational significance.
+      const NOISY_FAILED_OPS = new Set([
+        "GetTokenResult",       // tokens/keyed — 404 on almost every account
+        "GetAccountFamily",     // get_account_family — 404 for many account types
+        "SuggestedSearches",    // fbsearch/suggested_searches — 404 after IG change
+        "LogAttribution",       // loginattribution/log_attribution — 400 not eligible
+        "LogResurrectAttribution", // log_resurrect_attribution — 400 not eligible
+        "FetchHeaders",         // si/fetch_headers — non-critical probe
+        "ContactPointPrefill",  // contact_point_prefill — 400 non-fatal
+        "GetPrefillCandidates", // get_prefill_candidates — non-fatal
+        "GetPresence",          // presence — 404 for many accounts
+      ]);
+
+      const apiCalls = allApiCalls.filter((c: any) => {
+        if (c.source === "Browser") return false;
+        if (requestedIds.length > 0 && !requestedIds.includes(c.profileId)) return false;
+        // Drop noisy non-fatal failures — keep them only when they succeed ("OK")
+        if (NOISY_FAILED_OPS.has(c.operationName) && c.message !== "OK") return false;
+        return true;
+      });
 
       const headers = [
         "UniqueNameAccount", "Name", "Operation Name", "Date",
