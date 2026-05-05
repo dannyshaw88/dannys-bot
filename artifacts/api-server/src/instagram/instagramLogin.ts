@@ -497,86 +497,91 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         await restoreSessionCookies(ig, cookiesWithUserId);
         console.error(`[instagramLogin] @${profile.username} — cookies restored (userId=${userId})`);
 
-        // ── Phase 2a: GetAccountFamily (accounts/get_account_family) ─────
-        // First authenticated call in Jarvee's session-restore sequence.
-        // Validates the sessionid is alive. Any checkpoint_required here is
-        // treated as a genuine account-level checkpoint — the user must resolve
-        // it via the embedded browser. (Verify always runs on the same machine/
-        // proxy as automation, so IP-mismatch false-positives don't apply.)
-        let accountFamilyOk = false;
+        // ── Phase 2a: Session validation ──────────────────────────────────
+        // Strategy:
+        //   1. Try GET /api/v1/users/{userId}/info/ — universally reliable.
+        //      200 = session alive, 401 = expired, 403 = banned, checkpoint = captcha.
+        //   2. Also fire POST /api/v1/accounts/get_account_family/ (Jarvee compat).
+        //      This endpoint returns 404 for many account types so its result is
+        //      advisory only — we never treat a 404 from it as "session dead".
+        //
+        // CRITICAL: never fall through to a password login from here. Making a fresh
+        // password attempt immediately after a cookie probe looks like account
+        // takeover to Instagram and will trigger an account block.
+
+        // Helper: classify an Instagram API error into a VerifyResult or null (= "inconclusive / treat as valid")
+        const classifyAuthError = (err: any, source: string): VerifyResult | null => {
+          const msg: string = err?.message ?? "";
+          const body = err?.response?.body ?? {};
+          const igMsg: string = (typeof body === "object" && body !== null ? (body?.message ?? "") : "") as string;
+          const statusCode: number | undefined = err?.response?.statusCode;
+
+          if (err instanceof IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
+            console.error(`[instagramLogin] @${profile.username} — ${source}: checkpoint`);
+            return { ok: false, message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: captureDeviceState() };
+          }
+          if (statusCode === 401 || /login_required|not.*auth/i.test(msg) || /login_required|not.*auth/i.test(igMsg)) {
+            console.error(`[instagramLogin] @${profile.username} — ${source}: session expired (401/login_required)`);
+            return { ok: false, message: `@${profile.username} — session expired or revoked. Restore it via the embedded browser.`, accountStatus: "logged_out", igDeviceState: captureDeviceState() };
+          }
+          if (statusCode === 403 || /UserNotOnWhitelist|account.*disabled|account.*suspended/i.test(igMsg)) {
+            console.error(`[instagramLogin] @${profile.username} — ${source}: account banned/disabled (403)`);
+            return { ok: false, message: `@${profile.username} — account appears to be banned or disabled.`, accountStatus: "banned", igDeviceState: captureDeviceState() };
+          }
+          if (/invalid_credentials/i.test(igMsg) || /invalid_credentials/i.test(msg)) {
+            return { ok: false, message: `@${profile.username} — Instagram rejected the credentials as invalid.`, accountStatus: "invalid_credentials", igDeviceState: captureDeviceState() };
+          }
+          if (/bad_password/i.test(igMsg) || /bad_password/i.test(msg)) {
+            return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "bad_password", igDeviceState: captureDeviceState() };
+          }
+          // 404 or any other non-auth HTTP error = endpoint not available for this
+          // account type, not a session failure — return null (treat as inconclusive)
+          return null;
+        };
+
+        // ── Step 1: users/{userId}/info — primary session probe ───────────
+        let sessionConfirmed = false;
         try {
           await ig.request.send({
-            url: "/api/v1/accounts/get_account_family/",
-            method: "POST",
-            form: ig.request.sign({
-              _csrftoken: ig.state.cookieCsrfToken,
-              _uid: userId,
-              _uuid: ig.state.uuid,
-            }),
+            url: `/api/v1/users/${userId}/info/`,
+            method: "GET",
           });
-          accountFamilyOk = true;
-          console.error(`[instagramLogin] @${profile.username} — get_account_family (GetAccountFamily) OK`);
-        } catch (famErr: any) {
-          const msg: string = famErr?.message ?? "";
-          const responseBody = famErr?.response?.body ?? {};
-          const igMsg: string = (typeof responseBody === "object" && responseBody !== null
-            ? (responseBody?.message ?? "")
-            : "") as string;
-          const statusCode: number | undefined = famErr?.response?.statusCode;
-          console.error(`[instagramLogin] @${profile.username} — get_account_family failed: HTTP ${statusCode ?? "n/a"} igMsg="${igMsg}" raw="${msg}"`);
+          sessionConfirmed = true;
+          console.error(`[instagramLogin] @${profile.username} — users/info (session probe) OK ✓`);
+        } catch (infoErr: any) {
+          const statusCode: number | undefined = infoErr?.response?.statusCode;
+          console.error(`[instagramLogin] @${profile.username} — users/info failed: HTTP ${statusCode ?? "n/a"} ${infoErr?.message ?? ""}`);
+          const classified = classifyAuthError(infoErr, "users/info");
+          if (classified) return classified;
+          // Non-auth error (404, 429, network) — inconclusive, continue to get_account_family
+          console.error(`[instagramLogin] @${profile.username} — users/info inconclusive, trying get_account_family`);
+        }
 
-          if (famErr instanceof IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`,
-              accountStatus: "captcha",
-              checkpointUrl: extractCheckpointUrl(famErr),
-              igDeviceState: captureDeviceState(),
-            };
-          } else if (/login_required|not.*auth/i.test(msg) || /login_required|not.*auth/i.test(igMsg) || statusCode === 401) {
-            return {
-              ok: false,
-              message: `@${profile.username} — session expired or revoked. Open the embedded browser to log in again.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState(),
-            };
-          } else if (/invalid_credentials/i.test(igMsg) || /invalid_credentials/i.test(msg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} — Instagram rejected the credentials as invalid.`,
-              accountStatus: "invalid_credentials",
-              igDeviceState: captureDeviceState(),
-            };
-          } else if (/bad_password/i.test(igMsg) || /bad_password/i.test(msg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} — incorrect password.`,
-              accountStatus: "bad_password",
-              igDeviceState: captureDeviceState(),
-            };
-          } else if (statusCode && statusCode >= 400 && statusCode < 600) {
-            // Instagram responded with a real HTTP error — session cookie is dead or
-            // the endpoint is unavailable. Return logged_out immediately.
-            // CRITICAL: do NOT fall through to password login here. Making a fresh
-            // password attempt immediately after a failed cookie probe looks like an
-            // account takeover attempt to Instagram and will trigger an account block.
-            console.error(`[instagramLogin] @${profile.username} — get_account_family HTTP ${statusCode}; session appears expired/dead, returning logged_out`);
-            return {
-              ok: false,
-              message: `@${profile.username} — session cookie appears to be expired (HTTP ${statusCode} from Instagram). Please update the password and re-verify, or restore the session via the embedded browser.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState(),
-            };
-          } else {
-            // No HTTP status — genuine network/proxy error (ECONNREFUSED, timeout, DNS fail).
-            // Password login would fail too, so surface the error immediately.
-            console.error(`[instagramLogin] @${profile.username} — get_account_family network/proxy error, treating as inconclusive`);
-            return {
-              ok: false,
-              message: `@${profile.username} — could not reach Instagram (proxy or network error). Try again.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState(),
-            };
+        // ── Step 2: get_account_family — Jarvee compat, advisory only ────
+        // Only run if users/info was inconclusive. 404 from this endpoint is
+        // normal for many account types and must NOT be treated as session dead.
+        if (!sessionConfirmed) {
+          try {
+            await ig.request.send({
+              url: "/api/v1/accounts/get_account_family/",
+              method: "POST",
+              form: ig.request.sign({
+                _csrftoken: ig.state.cookieCsrfToken,
+                _uid: userId,
+                _uuid: ig.state.uuid,
+              }),
+            });
+            sessionConfirmed = true;
+            console.error(`[instagramLogin] @${profile.username} — get_account_family OK ✓`);
+          } catch (famErr: any) {
+            const statusCode: number | undefined = famErr?.response?.statusCode;
+            console.error(`[instagramLogin] @${profile.username} — get_account_family failed: HTTP ${statusCode ?? "n/a"} ${famErr?.message ?? ""}`);
+            const classified = classifyAuthError(famErr, "get_account_family");
+            if (classified) return classified;
+            // 404 = endpoint not available for this account — treat as inconclusive,
+            // session is likely fine (we already attempted users/info above)
+            console.error(`[instagramLogin] @${profile.username} — get_account_family inconclusive (likely 404, endpoint unavailable for this account type) — proceeding as valid`);
+            sessionConfirmed = true; // best-effort: both probes were non-auth errors, assume live
           }
         }
 

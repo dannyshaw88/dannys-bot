@@ -138911,70 +138911,66 @@ async function verifyInstagramCredentials(profile) {
         }
         await restoreSessionCookies(ig2, cookiesWithUserId);
         console.error(`[instagramLogin] @${profile.username} \u2014 cookies restored (userId=${userId})`);
-        let accountFamilyOk = false;
+        const classifyAuthError = (err, source) => {
+          const msg = err?.message ?? "";
+          const body = err?.response?.body ?? {};
+          const igMsg = typeof body === "object" && body !== null ? body?.message ?? "" : "";
+          const statusCode = err?.response?.statusCode;
+          if (err instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
+            console.error(`[instagramLogin] @${profile.username} \u2014 ${source}: checkpoint`);
+            return { ok: false, message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: captureDeviceState2() };
+          }
+          if (statusCode === 401 || /login_required|not.*auth/i.test(msg) || /login_required|not.*auth/i.test(igMsg)) {
+            console.error(`[instagramLogin] @${profile.username} \u2014 ${source}: session expired (401/login_required)`);
+            return { ok: false, message: `@${profile.username} \u2014 session expired or revoked. Restore it via the embedded browser.`, accountStatus: "logged_out", igDeviceState: captureDeviceState2() };
+          }
+          if (statusCode === 403 || /UserNotOnWhitelist|account.*disabled|account.*suspended/i.test(igMsg)) {
+            console.error(`[instagramLogin] @${profile.username} \u2014 ${source}: account banned/disabled (403)`);
+            return { ok: false, message: `@${profile.username} \u2014 account appears to be banned or disabled.`, accountStatus: "banned", igDeviceState: captureDeviceState2() };
+          }
+          if (/invalid_credentials/i.test(igMsg) || /invalid_credentials/i.test(msg)) {
+            return { ok: false, message: `@${profile.username} \u2014 Instagram rejected the credentials as invalid.`, accountStatus: "invalid_credentials", igDeviceState: captureDeviceState2() };
+          }
+          if (/bad_password/i.test(igMsg) || /bad_password/i.test(msg)) {
+            return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "bad_password", igDeviceState: captureDeviceState2() };
+          }
+          return null;
+        };
+        let sessionConfirmed = false;
         try {
           await ig2.request.send({
-            url: "/api/v1/accounts/get_account_family/",
-            method: "POST",
-            form: ig2.request.sign({
-              _csrftoken: ig2.state.cookieCsrfToken,
-              _uid: userId,
-              _uuid: ig2.state.uuid
-            })
+            url: `/api/v1/users/${userId}/info/`,
+            method: "GET"
           });
-          accountFamilyOk = true;
-          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family (GetAccountFamily) OK`);
-        } catch (famErr) {
-          const msg = famErr?.message ?? "";
-          const responseBody = famErr?.response?.body ?? {};
-          const igMsg = typeof responseBody === "object" && responseBody !== null ? responseBody?.message ?? "" : "";
-          const statusCode = famErr?.response?.statusCode;
-          console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family failed: HTTP ${statusCode ?? "n/a"} igMsg="${igMsg}" raw="${msg}"`);
-          if (famErr instanceof import_instagram_private_api.IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 account requires a security checkpoint. Open the embedded browser to resolve it.`,
-              accountStatus: "captcha",
-              checkpointUrl: extractCheckpointUrl(famErr),
-              igDeviceState: captureDeviceState2()
-            };
-          } else if (/login_required|not.*auth/i.test(msg) || /login_required|not.*auth/i.test(igMsg) || statusCode === 401) {
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 session expired or revoked. Open the embedded browser to log in again.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState2()
-            };
-          } else if (/invalid_credentials/i.test(igMsg) || /invalid_credentials/i.test(msg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 Instagram rejected the credentials as invalid.`,
-              accountStatus: "invalid_credentials",
-              igDeviceState: captureDeviceState2()
-            };
-          } else if (/bad_password/i.test(igMsg) || /bad_password/i.test(msg)) {
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 incorrect password.`,
-              accountStatus: "bad_password",
-              igDeviceState: captureDeviceState2()
-            };
-          } else if (statusCode && statusCode >= 400 && statusCode < 600) {
-            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family HTTP ${statusCode}; session appears expired/dead, returning logged_out`);
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 session cookie appears to be expired (HTTP ${statusCode} from Instagram). Please update the password and re-verify, or restore the session via the embedded browser.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState2()
-            };
-          } else {
-            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family network/proxy error, treating as inconclusive`);
-            return {
-              ok: false,
-              message: `@${profile.username} \u2014 could not reach Instagram (proxy or network error). Try again.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState2()
-            };
+          sessionConfirmed = true;
+          console.error(`[instagramLogin] @${profile.username} \u2014 users/info (session probe) OK \u2713`);
+        } catch (infoErr) {
+          const statusCode = infoErr?.response?.statusCode;
+          console.error(`[instagramLogin] @${profile.username} \u2014 users/info failed: HTTP ${statusCode ?? "n/a"} ${infoErr?.message ?? ""}`);
+          const classified = classifyAuthError(infoErr, "users/info");
+          if (classified) return classified;
+          console.error(`[instagramLogin] @${profile.username} \u2014 users/info inconclusive, trying get_account_family`);
+        }
+        if (!sessionConfirmed) {
+          try {
+            await ig2.request.send({
+              url: "/api/v1/accounts/get_account_family/",
+              method: "POST",
+              form: ig2.request.sign({
+                _csrftoken: ig2.state.cookieCsrfToken,
+                _uid: userId,
+                _uuid: ig2.state.uuid
+              })
+            });
+            sessionConfirmed = true;
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family OK \u2713`);
+          } catch (famErr) {
+            const statusCode = famErr?.response?.statusCode;
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family failed: HTTP ${statusCode ?? "n/a"} ${famErr?.message ?? ""}`);
+            const classified = classifyAuthError(famErr, "get_account_family");
+            if (classified) return classified;
+            console.error(`[instagramLogin] @${profile.username} \u2014 get_account_family inconclusive (likely 404, endpoint unavailable for this account type) \u2014 proceeding as valid`);
+            sessionConfirmed = true;
           }
         }
         try {
