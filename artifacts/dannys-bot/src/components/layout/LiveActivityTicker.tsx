@@ -5,10 +5,19 @@ import { Bell } from "lucide-react";
 export function LiveActivityTicker() {
   const { data: profiles } = useProfiles();
 
+  const NOISY_OPS = new Set([
+    "GetTokenResult", "GetAccountFamily", "SuggestedSearches",
+    "LogAttribution", "LogResurrectAttribution", "FetchHeaders",
+    "ContactPointPrefill", "GetPrefillCandidates", "GetPresence",
+  ]);
+
   const { data: liveApiCalls } = useQuery<any[]>({
     queryKey: ["/api/instagram-api-calls"],
     refetchInterval: 4000,
-    select: (data) => data?.slice(0, 1),
+    select: (data) =>
+      data
+        ?.filter((c: any) => !(NOISY_OPS.has(c.operationName) && c.message !== "OK"))
+        .slice(0, 1),
   });
 
   const latestCall = liveApiCalls?.[0];

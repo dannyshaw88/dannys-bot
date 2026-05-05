@@ -142,8 +142,10 @@ export function Dashboard() {
     queryKey: ["/api/profiles"],
   });
 
-  const getUsername = (profileId: number) =>
-    profiles?.find(p => p.id === profileId)?.username || `ID: ${profileId}`;
+  const getUsername = (profileId: number) => {
+    const p = profiles?.find(p => p.id === profileId);
+    return p?.accountLabel || p?.username || `ID: ${profileId}`;
+  };
 
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
 
@@ -371,7 +373,7 @@ export function Dashboard() {
                         <td className="px-3 py-3.5 text-muted-foreground text-xs font-mono truncate">
                           <span className="flex items-center gap-1 min-w-0">
                             <Clock className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{format(new Date(call.date), "MMM d, HH:mm:ss")}</span>
+                            <span className="truncate">{format(new Date(call.date), "MMM d yyyy, HH:mm:ss")}</span>
                           </span>
                         </td>
                         <td className="px-3 py-3.5 font-medium truncate">
