@@ -9,8 +9,13 @@ export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
   | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password" | "invalid_credentials"; igDeviceState?: string; checkpointUrl?: string };
 
-// Parse app version and version code from an Instagram mobile user-agent string.
+// Must stay in sync with MOBILE_VERSION in instagramWebClient.ts
+const MOBILE_VERSION      = "361.0.0.32.109";
+const MOBILE_VERSION_CODE = "617571539";
+
+// Parse app version and version code from a FULL Instagram mobile user-agent string.
 // UA format: "Instagram 361.0.0.32.109 Android (30/11; 480dpi; 1080x2400; samsung; SM-G998B; ...; en_US; 558538758)"
+// Returns null when the stored value is just the device params string (no version prefix).
 function parseIgUaVersion(ua: string): { version: string; versionCode: string } | null {
   const m = ua.match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
   if (!m) return null;
@@ -243,16 +248,18 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
     console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
   }
 
-  // Patch app version constants from the profile's user-agent string so that
-  // X-IG-App-Version and the User-Agent header both report the same version.
-  // Without this, the library's stale built-in version leaks into the headers
-  // and Instagram rejects the device as a version mismatch.
-  const uaForVersion = profile.userAgentApi ?? "";
-  const parsedUa = parseIgUaVersion(uaForVersion);
-  if (parsedUa) {
-    ig.state.constants.APP_VERSION      = parsedUa.version;
-    ig.state.constants.APP_VERSION_CODE = parsedUa.versionCode;
-    console.error(`[instagramLogin] Patched APP_VERSION=${parsedUa.version} APP_VERSION_CODE=${parsedUa.versionCode} for @${profile.username}`);
+  // Always patch app version constants so X-IG-App-Version matches the User-Agent.
+  // profile.userAgentApi may be stored as either a full UA ("Instagram X.X Android ...")
+  // or just the device params string ("33/13; 400dpi; ...").  When the full UA is
+  // present, parse the version from it; otherwise fall back to MOBILE_VERSION so the
+  // library's stale built-in default (222.x) is never sent.
+  {
+    const parsed = parseIgUaVersion(profile.userAgentApi ?? "");
+    const version     = parsed?.version     ?? MOBILE_VERSION;
+    const versionCode = parsed?.versionCode ?? MOBILE_VERSION_CODE;
+    ig.state.constants.APP_VERSION      = version;
+    ig.state.constants.APP_VERSION_CODE = versionCode;
+    console.error(`[instagramLogin] APP_VERSION=${version} APP_VERSION_CODE=${versionCode} for @${profile.username} (${parsed ? "from UA" : "fallback"})`);
   }
 
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;

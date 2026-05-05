@@ -505,19 +505,19 @@ export class InstagramWebClient {
       if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
     }
 
-    // Patch app version constants from the profile's user-agent string so that
-    // X-IG-App-Version and the User-Agent header both report the same version.
+    // Always patch app version constants — use version from full UA string when present,
+    // otherwise fall back to MOBILE_VERSION so the library's stale default never leaks.
     {
       const m = (this.userAgentApi ?? "").match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
+      let version = MOBILE_VERSION, versionCode = MOBILE_VERSION_CODE, src = "fallback";
       if (m) {
         const parts = m[2].split(";");
-        const versionCode = parts[parts.length - 1].trim();
-        if (/^\d+$/.test(versionCode)) {
-          ig.state.constants.APP_VERSION      = m[1];
-          ig.state.constants.APP_VERSION_CODE = versionCode;
-          console.log(`[webClient] @${username}: patched APP_VERSION=${m[1]} APP_VERSION_CODE=${versionCode}`);
-        }
+        const vc = parts[parts.length - 1].trim();
+        if (/^\d+$/.test(vc)) { version = m[1]; versionCode = vc; src = "from UA"; }
       }
+      ig.state.constants.APP_VERSION      = version;
+      ig.state.constants.APP_VERSION_CODE = versionCode;
+      console.log(`[webClient] @${username}: APP_VERSION=${version} APP_VERSION_CODE=${versionCode} (${src})`);
     }
 
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
