@@ -226,7 +226,11 @@ async function restoreSessionCookies(ig: IgApiClient, cookieString: string): Pro
 
 function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiClient; captureDeviceState: () => string } {
   const ig = new IgApiClient();
-  const deviceSeed = profile.userAgentApi ?? profile.username;
+  // ALWAYS include username in the seed so that accounts sharing the same userAgentApi
+  // (same device model) still generate distinct uuid/deviceId/phoneId fingerprints.
+  // Without the username, two accounts with the same UA string would get identical
+  // device IDs and Instagram would detect the same device logging into multiple accounts.
+  const deviceSeed = (profile.userAgentApi ?? profile.username) + "|" + profile.username;
 
   if (profile.igDeviceState) {
     try {
@@ -237,7 +241,7 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
       if (saved.phoneId) ig.state.phoneId = saved.phoneId;
       if (saved.adid) ig.state.adid = saved.adid;
       if (saved.deviceString) ig.state.deviceString = saved.deviceString;
-      console.error(`[instagramLogin] Restored device state for @${profile.username} (deviceId=${ig.state.deviceId})`);
+      console.error(`[instagramLogin] Restored device state for @${profile.username} (deviceId=${ig.state.deviceId} uuid=${ig.state.uuid?.slice(0,8)}…)`);
     } catch {
       ig.state.generateDevice(deviceSeed);
       if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
@@ -245,7 +249,7 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   } else {
     ig.state.generateDevice(deviceSeed);
     if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
-    console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
+    console.error(`[instagramLogin] Generated NEW device for @${profile.username} (deviceId=${ig.state.deviceId} uuid=${ig.state.uuid?.slice(0,8)}…)`);
   }
 
   // Always patch app version constants so X-IG-App-Version matches the User-Agent.

@@ -485,7 +485,8 @@ export class InstagramWebClient {
     // instagram-private-api handles #PWD_INSTAGRAM:4: — Instagram deprecated
     // the plaintext :0: format and returns "Forgotten password" for it.
     const ig = new IgApiClient();
-    const deviceSeed = this.userAgentApi ?? username;
+    // Include username in seed so accounts sharing the same userAgentApi get distinct device fingerprints.
+    const deviceSeed = (this.userAgentApi ?? username) + "|" + username;
 
     if (this.igDeviceState) {
       try {
@@ -1325,21 +1326,22 @@ export class InstagramWebClient {
 
     const ig = new IgApiClient();
 
-    // Restore device fingerprint
+    // Restore device fingerprint — use username-scoped seed for uniqueness
+    const dmDeviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
         const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
-        ig.state.generateDevice(saved.deviceString ?? "instagram");
+        ig.state.generateDevice(dmDeviceSeed);
         if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
         if (saved.uuid)         ig.state.uuid         = saved.uuid;
         if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
         if (saved.adid)         ig.state.adid         = saved.adid;
         if (saved.deviceString) ig.state.deviceString = saved.deviceString;
       } catch {
-        ig.state.generateDevice("instagram");
+        ig.state.generateDevice(dmDeviceSeed);
       }
     } else {
-      ig.state.generateDevice("instagram");
+      ig.state.generateDevice(dmDeviceSeed);
     }
 
     // Restore cookies from igApiCookies (Jarvee semicolon-separated format)
