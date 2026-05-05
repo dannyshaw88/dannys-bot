@@ -136435,6 +136435,27 @@ var repostedPostsColNames = new Set(repostedPostsCols.map((c3) => c3.name));
 if (!repostedPostsColNames.has("posted_shortcode")) {
   sqlite.exec(`ALTER TABLE reposted_posts ADD COLUMN posted_shortcode TEXT NOT NULL DEFAULT '';`);
 }
+{
+  const dupeRows = sqlite.prepare(`
+    SELECT id FROM profiles
+    WHERE ig_device_state IS NOT NULL
+      AND json_extract(ig_device_state, '$.uuid') IN (
+        SELECT json_extract(ig_device_state, '$.uuid') AS uuid
+        FROM profiles
+        WHERE ig_device_state IS NOT NULL
+        GROUP BY uuid
+        HAVING COUNT(*) > 1
+      )
+  `).all();
+  if (dupeRows.length > 0) {
+    const clearDeviceState = sqlite.prepare("UPDATE profiles SET ig_device_state = NULL WHERE id = ?");
+    const clearAll = sqlite.transaction((rows) => {
+      for (const row of rows) clearDeviceState.run(row.id);
+    });
+    clearAll(dupeRows);
+    console.error(`[db] DEVICE ISOLATION: cleared ig_device_state for ${dupeRows.length} accounts with shared device UUIDs \u2014 they must be re-verified`);
+  }
+}
 sqlite.exec(`
   DELETE FROM instagram_api_calls WHERE operation_name NOT IN (
     'Login','Follow','UnfollowUser','SendDM','UnsendDM',
