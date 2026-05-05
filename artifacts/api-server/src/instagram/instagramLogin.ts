@@ -618,18 +618,22 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       const rawBody = JSON.stringify(body).slice(0, 1500);
       console.error(`[instagramLogin] IgLoginBadPasswordError raw body for @${profile.username}: ${rawBody}`);
       const buttons: any[] = body?.buttons ?? [];
-      const hasEmailAction = buttons.some((b: any) => b?.action === "send_one_click_login_email");
       const errorTitle: string = body?.error_title ?? "";
-      const errorType: string = body?.error_type ?? body?.feedback_title ?? "";
-      if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
+      const errorType: string = body?.error_type ?? "";
+      const invalidCreds: boolean = body?.invalid_credentials === true;
+      // Instagram returns "bad_password" + invalid_credentials:true when the password
+      // is actually wrong (or device version mismatch fakes it).  The email button it
+      // includes is a generic recovery offer — NOT a genuine email-confirmation challenge.
+      // Only treat as email_confirmation when Instagram does NOT say bad_password explicitly.
+      if (!invalidCreds && errorType !== "bad_password" && buttons.some((b: any) => b?.action === "send_one_click_login_email")) {
         return {
           ok: false,
-          message: `@${profile.username} — Instagram says: "${errorTitle || "email verification required"}". Raw: ${rawBody}`,
+          message: `@${profile.username} — Instagram requires email verification. Check the account email and click the confirmation link. Raw: ${rawBody}`,
           accountStatus: "email_confirmation",
           igDeviceState: ds,
         };
       }
-      return { ok: false, message: `@${profile.username} — bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}". Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} — incorrect password (error_type="${errorType}", invalid_credentials=${invalidCreds}). Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
     }
 
     if (err instanceof IgLoginInvalidUserError) {

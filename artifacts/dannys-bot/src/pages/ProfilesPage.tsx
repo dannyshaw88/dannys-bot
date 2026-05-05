@@ -546,8 +546,8 @@ export function ProfilesPage() {
           <Input
             value={statusFilter}
             onChange={e => setFilterPersisted(e.target.value)}
-            placeholder="Filter to show specific profiles"
-            className="h-8 pl-7 pr-7 text-xs font-mono"
+            placeholder="Search accounts"
+            className="h-8 pl-7 pr-7 text-sm"
           />
           {statusFilter && (
             <button
