@@ -8,6 +8,20 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
+function cleanLoginError(msg: string): string {
+  const m = (msg ?? "").toLowerCase();
+  if (m.includes("incorrect") || m.includes("wrong password") || m.includes("bad_password")) return "Incorrect password";
+  if (m.includes("checkpoint") || m.includes("challenge_required")) return "Checkpoint required";
+  if (m.includes("two_factor") || m.includes("2fa") || m.includes("otp") || m.includes("verification code")) return "2FA code required";
+  if (m.includes("rate") || m.includes("too many") || m.includes("flood")) return "Rate limited — try again later";
+  if (m.includes("disabled") || m.includes("banned") || m.includes("suspended")) return "Account disabled";
+  if (m.includes("timeout") || m.includes("timed out")) return "Login timed out";
+  if (m.includes("network") || m.includes("connect") || m.includes("unreachable")) return "Network error";
+  if (m.includes("proxy")) return "Proxy error";
+  if (m.includes("not found") || m.includes("no user")) return "Account not found";
+  return "Login failed";
+}
+
 interface BrowserPanelProps {
   profileId: number;
   userAgent: string;
@@ -160,7 +174,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             } else {
               setLoginState("fail");
               appendLog(msg.message || "Login failed", "fail");
-              toast({ title: "Login issue", description: msg.message, variant: "destructive" });
+              toast({ title: cleanLoginError(msg.message), variant: "destructive" });
               setTimeout(() => setLoginState("idle"), 12000);
             }
             break;
