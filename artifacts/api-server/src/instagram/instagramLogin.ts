@@ -86,10 +86,95 @@ async function buildProxyUrl(profile: Profile): Promise<{ url: string; host: str
   return null;
 }
 
-/** Strip /api/v1/ prefix and trailing slash to get a clean endpoint label */
+/** Map a raw Instagram API URL to a Jarvee-style human-readable operation name */
 function extractOperationName(rawUrl: string): string {
-  const path = rawUrl.split("?")[0];
-  return path.replace(/^(https?:\/\/[^/]+)?\/api\/v\d+\//, "").replace(/\/$/, "") || path;
+  const path = rawUrl.split("?")[0]
+    .replace(/^https?:\/\/[^/]+/, "")
+    .replace(/^\/api\/v\d+\//, "")
+    .replace(/\/$/, "");
+
+  // Exact path → friendly name (Jarvee-compatible where possible)
+  const EXACT: Record<string, string> = {
+    // Pre-login setup
+    "si/fetch_headers":                        "FetchHeaders",
+    "qe/sync":                                 "FetchConfig",
+    "qe/sync_experiments":                     "FetchConfig",
+    "launcher/sync":                           "SendMobileConfig",
+    "zr/token/result":                         "GetTokenResult",
+    "accounts/read_msisdn_header":             "ReadMsisdnHeader",
+    "accounts/msisdn_header_bootstrap":        "SendMsisdnBootstrap",
+    "accounts/contact_point_prefill":          "ContactPointPrefill",
+    "accounts/get_prefill_candidates":         "GetPrefillCandidates",
+    "accounts/tokens/keyed":                   "GetKeyedTokens",
+    "accounts/loginattribution/log_attribution": "LogAttribution",
+    // Login / session
+    "accounts/login":                          "SendLoginRequest",
+    "accounts/two_factor_login":               "SendLoginRequest2FA",
+    "accounts/logout":                         "Logout",
+    "accounts/save_credentials":               "SaveCredentials",
+    "accounts/get_account_family":             "GetAccountFamily",
+    // Own account
+    "accounts/current_user":                   "GetOwnUser",
+    "users/self":                              "GetOwnUser",
+    // Feed & discovery
+    "feed/timeline":                           "GetTimeLineFeed",
+    "feed/reels_tray":                         "GetReelsTray",
+    "feed/liked":                              "GetLikedFeed",
+    "discover/explore":                        "ExecuteDiscoverExplore",
+    "discover/top_live":                       "GetTopLive",
+    // Stories
+    "feed/reels_media":                        "GetStoriesMedia",
+    "feed/user":                               "GetUserFeed",
+    // Notifications
+    "news/inbox":                              "ExecuteNotificationsBadge",
+    "news/activities":                         "GetActivityFeed",
+    // Direct messages
+    "direct_v2/inbox":                         "GetInbox",
+    "direct_v2/pending_inbox":                 "GetPendingInbox",
+    "direct_v2/threads/broadcast/text":        "SendDM",
+    "direct_v2/threads/broadcast/link":        "SendDMLink",
+    "direct_v2/threads/broadcast/unlink_item": "UnsendDM",
+    "direct_v2/threads/broadcast/like":        "SendDMLike",
+    // Media
+    "media/like":                              "LikeMedia",
+    "media/unlike":                            "UnlikeMedia",
+    "media/configure":                         "PostPhoto",
+    "media/configure_sidecar":                 "PostCarousel",
+    "media/upload_finish":                     "UploadMedia",
+    // Tags / hashtags
+    "tags/search":                             "SearchHashtag",
+    // Search
+    "fbsearch/topsearch":                      "SearchUser",
+    "users/search":                            "SearchUser",
+    // Collections / highlights
+    "highlights/create_reel":                  "CreateHighlight",
+  };
+
+  if (EXACT[path]) return EXACT[path];
+
+  // Prefix patterns (paths with dynamic ID segments)
+  const PREFIX: [string, string][] = [
+    ["friendships/create/",        "Follow"],
+    ["friendships/destroy/",       "Unfollow"],
+    ["friendships/show/",          "GetFriendshipStatus"],
+    ["friendships/following/",     "GetFollowing"],
+    ["friendships/followers/",     "GetFollowers"],
+    ["users/",                     "GetUserProfile"],
+    ["media/",                     "GetMediaInfo"],
+    ["direct_v2/threads/",         "GetThread"],
+    ["tags/",                      "GetHashtagFeed"],
+    ["accounts/",                  "AccountAction"],
+    ["launcher/",                  "SendMobileConfig"],
+    ["qe/",                        "FetchConfig"],
+  ];
+
+  for (const [prefix, name] of PREFIX) {
+    if (path.startsWith(prefix)) return name;
+  }
+
+  // Fallback: last meaningful path segment, CamelCased
+  const segment = path.split("/").filter(Boolean).pop() ?? path;
+  return segment.replace(/_([a-z])/g, (_, c) => c.toUpperCase()).replace(/^./, c => c.toUpperCase());
 }
 
 /** Pull a named key out of a URL-encoded form body string */

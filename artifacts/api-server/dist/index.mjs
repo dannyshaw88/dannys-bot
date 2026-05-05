@@ -136465,11 +136465,6 @@ if (!repostedPostsColNames.has("posted_shortcode")) {
   }
 }
 sqlite.exec(`
-  DELETE FROM instagram_api_calls WHERE operation_name NOT IN (
-    'Login','Follow','UnfollowUser','SendDM','UnsendDM',
-    'HashtagScrape','FollowersScrape','GetUserByUsername',
-    'GetUserProfile','GetOwnUser','SearchUser','LikeMedia','Auto Like'
-  );
   DELETE FROM instagram_api_calls WHERE id NOT IN (
     SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000
   );
@@ -138617,8 +138612,82 @@ async function buildProxyUrl(profile) {
   return null;
 }
 function extractOperationName(rawUrl) {
-  const path4 = rawUrl.split("?")[0];
-  return path4.replace(/^(https?:\/\/[^/]+)?\/api\/v\d+\//, "").replace(/\/$/, "") || path4;
+  const path4 = rawUrl.split("?")[0].replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v\d+\//, "").replace(/\/$/, "");
+  const EXACT = {
+    // Pre-login setup
+    "si/fetch_headers": "FetchHeaders",
+    "qe/sync": "FetchConfig",
+    "qe/sync_experiments": "FetchConfig",
+    "launcher/sync": "SendMobileConfig",
+    "zr/token/result": "GetTokenResult",
+    "accounts/read_msisdn_header": "ReadMsisdnHeader",
+    "accounts/msisdn_header_bootstrap": "SendMsisdnBootstrap",
+    "accounts/contact_point_prefill": "ContactPointPrefill",
+    "accounts/get_prefill_candidates": "GetPrefillCandidates",
+    "accounts/tokens/keyed": "GetKeyedTokens",
+    "accounts/loginattribution/log_attribution": "LogAttribution",
+    // Login / session
+    "accounts/login": "SendLoginRequest",
+    "accounts/two_factor_login": "SendLoginRequest2FA",
+    "accounts/logout": "Logout",
+    "accounts/save_credentials": "SaveCredentials",
+    "accounts/get_account_family": "GetAccountFamily",
+    // Own account
+    "accounts/current_user": "GetOwnUser",
+    "users/self": "GetOwnUser",
+    // Feed & discovery
+    "feed/timeline": "GetTimeLineFeed",
+    "feed/reels_tray": "GetReelsTray",
+    "feed/liked": "GetLikedFeed",
+    "discover/explore": "ExecuteDiscoverExplore",
+    "discover/top_live": "GetTopLive",
+    // Stories
+    "feed/reels_media": "GetStoriesMedia",
+    "feed/user": "GetUserFeed",
+    // Notifications
+    "news/inbox": "ExecuteNotificationsBadge",
+    "news/activities": "GetActivityFeed",
+    // Direct messages
+    "direct_v2/inbox": "GetInbox",
+    "direct_v2/pending_inbox": "GetPendingInbox",
+    "direct_v2/threads/broadcast/text": "SendDM",
+    "direct_v2/threads/broadcast/link": "SendDMLink",
+    "direct_v2/threads/broadcast/unlink_item": "UnsendDM",
+    "direct_v2/threads/broadcast/like": "SendDMLike",
+    // Media
+    "media/like": "LikeMedia",
+    "media/unlike": "UnlikeMedia",
+    "media/configure": "PostPhoto",
+    "media/configure_sidecar": "PostCarousel",
+    "media/upload_finish": "UploadMedia",
+    // Tags / hashtags
+    "tags/search": "SearchHashtag",
+    // Search
+    "fbsearch/topsearch": "SearchUser",
+    "users/search": "SearchUser",
+    // Collections / highlights
+    "highlights/create_reel": "CreateHighlight"
+  };
+  if (EXACT[path4]) return EXACT[path4];
+  const PREFIX = [
+    ["friendships/create/", "Follow"],
+    ["friendships/destroy/", "Unfollow"],
+    ["friendships/show/", "GetFriendshipStatus"],
+    ["friendships/following/", "GetFollowing"],
+    ["friendships/followers/", "GetFollowers"],
+    ["users/", "GetUserProfile"],
+    ["media/", "GetMediaInfo"],
+    ["direct_v2/threads/", "GetThread"],
+    ["tags/", "GetHashtagFeed"],
+    ["accounts/", "AccountAction"],
+    ["launcher/", "SendMobileConfig"],
+    ["qe/", "FetchConfig"]
+  ];
+  for (const [prefix, name] of PREFIX) {
+    if (path4.startsWith(prefix)) return name;
+  }
+  const segment = path4.split("/").filter(Boolean).pop() ?? path4;
+  return segment.replace(/_([a-z])/g, (_2, c3) => c3.toUpperCase()).replace(/^./, (c3) => c3.toUpperCase());
 }
 function extractFromBody(body, key) {
   if (!body) return "";

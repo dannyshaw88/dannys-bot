@@ -265,14 +265,8 @@ if (!repostedPostsColNames.has("posted_shortcode")) {
   }
 }
 
-// Cleanup: keep only named API operations — remove human-session noise and raw
-// URL-path entries that were logged by older code. Cap to newest 5000 rows.
+// Cap to newest 5000 rows per account to prevent unbounded growth
 sqlite.exec(`
-  DELETE FROM instagram_api_calls WHERE operation_name NOT IN (
-    'Login','Follow','UnfollowUser','SendDM','UnsendDM',
-    'HashtagScrape','FollowersScrape','GetUserByUsername',
-    'GetUserProfile','GetOwnUser','SearchUser','LikeMedia','Auto Like'
-  );
   DELETE FROM instagram_api_calls WHERE id NOT IN (
     SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000
   );
