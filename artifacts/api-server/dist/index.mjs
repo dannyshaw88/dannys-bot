@@ -138532,6 +138532,8 @@ function h3(t2) {
 }
 
 // src/instagram/instagramLogin.ts
+var MOBILE_VERSION = "361.0.0.32.109";
+var MOBILE_VERSION_CODE = "617571539";
 function parseIgUaVersion(ua) {
   const m2 = ua.match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
   if (!m2) return null;
@@ -138712,12 +138714,13 @@ function buildIgClient(profile, proxyUrl) {
     if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
     console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
   }
-  const uaForVersion = profile.userAgentApi ?? "";
-  const parsedUa = parseIgUaVersion(uaForVersion);
-  if (parsedUa) {
-    ig.state.constants.APP_VERSION = parsedUa.version;
-    ig.state.constants.APP_VERSION_CODE = parsedUa.versionCode;
-    console.error(`[instagramLogin] Patched APP_VERSION=${parsedUa.version} APP_VERSION_CODE=${parsedUa.versionCode} for @${profile.username}`);
+  {
+    const parsed = parseIgUaVersion(profile.userAgentApi ?? "");
+    const version3 = parsed?.version ?? MOBILE_VERSION;
+    const versionCode = parsed?.versionCode ?? MOBILE_VERSION_CODE;
+    ig.state.constants.APP_VERSION = version3;
+    ig.state.constants.APP_VERSION_CODE = versionCode;
+    console.error(`[instagramLogin] APP_VERSION=${version3} APP_VERSION_CODE=${versionCode} for @${profile.username} (${parsed ? "from UA" : "fallback"})`);
   }
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
   const captureDeviceState = () => JSON.stringify({
@@ -139951,19 +139954,19 @@ function extractCsrf(cookies) {
 }
 var WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var APP_ID = "936619743392459";
-var MOBILE_VERSION = "361.0.0.32.109";
-var MOBILE_VERSION_CODE = "617571539";
+var MOBILE_VERSION2 = "361.0.0.32.109";
+var MOBILE_VERSION_CODE2 = "617571539";
 var MOBILE_VERSION_DATE = "2025-05-03";
 (() => {
   const ageMs = Date.now() - new Date(MOBILE_VERSION_DATE).getTime();
   const ageDays = Math.floor(ageMs / 864e5);
   if (ageDays > 365) {
     console.warn(
-      `[webClient] \u26A0\uFE0F  MOBILE_VERSION (${MOBILE_VERSION}) was last updated ${ageDays} days ago. Instagram may be rejecting it \u2014 update MOBILE_VERSION + MOBILE_VERSION_CODE in instagramWebClient.ts.`
+      `[webClient] \u26A0\uFE0F  MOBILE_VERSION (${MOBILE_VERSION2}) was last updated ${ageDays} days ago. Instagram may be rejecting it \u2014 update MOBILE_VERSION + MOBILE_VERSION_CODE in instagramWebClient.ts.`
     );
   }
 })();
-var MOBILE_UA = `Instagram ${MOBILE_VERSION} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
+var MOBILE_UA = `Instagram ${MOBILE_VERSION2} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE2})`;
 var MOBILE_AID = "567067343352427";
 var InstagramWebClient = class {
   cookieJar = [];
@@ -140274,15 +140277,19 @@ var InstagramWebClient = class {
     }
     {
       const m2 = (this.userAgentApi ?? "").match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
+      let version3 = MOBILE_VERSION2, versionCode = MOBILE_VERSION_CODE2, src = "fallback";
       if (m2) {
         const parts = m2[2].split(";");
-        const versionCode = parts[parts.length - 1].trim();
-        if (/^\d+$/.test(versionCode)) {
-          ig.state.constants.APP_VERSION = m2[1];
-          ig.state.constants.APP_VERSION_CODE = versionCode;
-          console.log(`[webClient] @${username}: patched APP_VERSION=${m2[1]} APP_VERSION_CODE=${versionCode}`);
+        const vc = parts[parts.length - 1].trim();
+        if (/^\d+$/.test(vc)) {
+          version3 = m2[1];
+          versionCode = vc;
+          src = "from UA";
         }
       }
+      ig.state.constants.APP_VERSION = version3;
+      ig.state.constants.APP_VERSION_CODE = versionCode;
+      console.log(`[webClient] @${username}: APP_VERSION=${version3} APP_VERSION_CODE=${versionCode} (${src})`);
     }
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
     try {
@@ -141011,11 +141018,11 @@ var InstagramWebClient = class {
       rejectPublicSuffixes: true,
       cookies: cookieEntries
     }));
-    ig.state.constants.APP_VERSION = MOBILE_VERSION;
-    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    ig.state.constants.APP_VERSION = MOBILE_VERSION2;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE2;
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
     try {
-      console.log(`[webClient] sendDM ${userId}: via IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0, 8)}\u2026 v${MOBILE_VERSION})`);
+      console.log(`[webClient] sendDM ${userId}: via IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0, 8)}\u2026 v${MOBILE_VERSION2})`);
       try {
         const meRes = await ig.account.currentUser();
         const meId = meRes?.pk ?? meRes?.user?.pk;
