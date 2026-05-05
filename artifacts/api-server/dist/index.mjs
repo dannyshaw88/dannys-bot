@@ -143858,6 +143858,7 @@ var automationEngine = new AutomationEngine();
 
 // src/routes/instagram.ts
 var DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+var verifyInFlight = /* @__PURE__ */ new Set();
 var SERVER_START = (/* @__PURE__ */ new Date()).toISOString();
 async function resolveProxyConfig(profile) {
   if (profile.proxyId) {
@@ -144091,10 +144092,19 @@ async function registerInstagramRoutes(httpServer2, app2) {
     }
   });
   app2.post("/api/profiles/:id/verify", async (req, res) => {
-    const profile = await storage.getProfile(Number(req.params.id));
-    if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+    const profileId = Number(req.params.id);
+    if (verifyInFlight.has(profileId)) {
+      return res.status(429).json({ ok: false, message: "Verification already in progress for this account. Please wait." });
+    }
+    verifyInFlight.add(profileId);
+    const fail = (status, message) => {
+      verifyInFlight.delete(profileId);
+      return res.status(status).json({ ok: false, message });
+    };
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return fail(404, "Profile not found");
     if (!profile.username || !profile.password) {
-      return res.status(400).json({ ok: false, message: "Username and password are required before verifying." });
+      return fail(400, "Username and password are required before verifying.");
     }
     let effectiveProfile = { ...profile };
     if (profile.proxyId) {
@@ -144111,7 +144121,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       }
     }
     if (!effectiveProfile.proxyHost || !effectiveProfile.proxyPort) {
-      return res.status(400).json({ ok: false, message: "No proxy assigned. Assign a proxy to this account before verifying." });
+      return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
     }
     let result;
     try {
@@ -144119,7 +144129,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     } catch (err) {
       await storage.updateProfile(profile.id, { accountStatus: "pending" });
       const msg = err instanceof Error ? err.message : "Unexpected verify error";
-      return res.status(500).json({ ok: false, message: msg });
+      return fail(500, msg);
+    } finally {
+      verifyInFlight.delete(profileId);
     }
     await storage.updateProfile(profile.id, {
       accountStatus: result.accountStatus,
@@ -144654,6 +144666,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
     (async () => {
       for (let i2 = 0; i2 < eligible.length; i2++) {
         const profile = eligible[i2];
+        if (verifyInFlight.has(profile.id)) continue;
+        verifyInFlight.add(profile.id);
         try {
           await storage.updateProfile(profile.id, { accountStatus: "verifying" });
           const result = await verifyInstagramCredentials(profile);
@@ -144667,6 +144681,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
           }
         } catch {
           await storage.updateProfile(profile.id, { accountStatus: "pending" });
+        } finally {
+          verifyInFlight.delete(profile.id);
         }
         if (i2 < targets.length - 1) {
           const ms = (Math.random() * (delayMax - delayMin) + delayMin) * 1e3;

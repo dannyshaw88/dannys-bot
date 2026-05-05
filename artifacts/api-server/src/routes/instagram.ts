@@ -34,6 +34,11 @@ import { automationEngine } from "../instagram/automationEngine";
 // the app-install interstitial (dark skeleton) instead of the full site.
 const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
+// Per-account verify lock — prevents concurrent logins for the same account.
+// Multiple simultaneous IgApiClient instances logging in with the same device
+// fingerprint look like a device leak to Instagram and cause blocks.
+const verifyInFlight = new Set<number>();
+
 const SERVER_START = new Date().toISOString();
 
 async function resolveProxyConfig(profile: {
@@ -310,10 +315,26 @@ export async function registerInstagramRoutes(
   });
 
   app.post("/api/profiles/:id/verify", async (req, res) => {
-    const profile = await storage.getProfile(Number(req.params.id));
-    if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+    const profileId = Number(req.params.id);
+
+    // Reject concurrent verify calls for the same account — multiple simultaneous
+    // IgApiClient instances logging in with the same device fingerprint look like
+    // a device leak to Instagram and will trigger account blocks.
+    if (verifyInFlight.has(profileId)) {
+      return res.status(429).json({ ok: false, message: "Verification already in progress for this account. Please wait." });
+    }
+    verifyInFlight.add(profileId);
+
+    // Helper: release lock + send error (avoids repeating delete on every early return)
+    const fail = (status: number, message: string) => {
+      verifyInFlight.delete(profileId);
+      return res.status(status).json({ ok: false, message });
+    };
+
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return fail(404, "Profile not found");
     if (!profile.username || !profile.password) {
-      return res.status(400).json({ ok: false, message: "Username and password are required before verifying." });
+      return fail(400, "Username and password are required before verifying.");
     }
 
     let effectiveProfile = { ...profile };
@@ -333,7 +354,7 @@ export async function registerInstagramRoutes(
 
     // Block verify if no proxy is configured — never connect via bare server IP
     if (!effectiveProfile.proxyHost || !effectiveProfile.proxyPort) {
-      return res.status(400).json({ ok: false, message: "No proxy assigned. Assign a proxy to this account before verifying." });
+      return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
     }
 
     let result: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
@@ -342,7 +363,10 @@ export async function registerInstagramRoutes(
     } catch (err) {
       await storage.updateProfile(profile.id, { accountStatus: "pending" });
       const msg = err instanceof Error ? err.message : "Unexpected verify error";
-      return res.status(500).json({ ok: false, message: msg });
+      return fail(500, msg);
+    } finally {
+      // Always release — whether verifyInstagramCredentials threw or returned normally.
+      verifyInFlight.delete(profileId);
     }
 
     await storage.updateProfile(profile.id, {
@@ -954,6 +978,11 @@ export async function registerInstagramRoutes(
     (async () => {
       for (let i = 0; i < eligible.length; i++) {
         const profile = eligible[i];
+
+        // Skip accounts already being verified by a concurrent single-verify call
+        if (verifyInFlight.has(profile.id)) continue;
+        verifyInFlight.add(profile.id);
+
         try {
           await storage.updateProfile(profile.id, { accountStatus: "verifying" });
           const result = await verifyInstagramCredentials(profile);
@@ -968,6 +997,8 @@ export async function registerInstagramRoutes(
         } catch {
           // Unexpected error — reset to pending so the account isn't stuck in "verifying"
           await storage.updateProfile(profile.id, { accountStatus: "pending" });
+        } finally {
+          verifyInFlight.delete(profile.id);
         }
         if (i < targets.length - 1) {
           const ms = (Math.random() * (delayMax - delayMin) + delayMin) * 1000;
