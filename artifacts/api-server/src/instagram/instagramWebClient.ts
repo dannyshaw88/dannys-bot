@@ -505,6 +505,21 @@ export class InstagramWebClient {
       if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
     }
 
+    // Patch app version constants from the profile's user-agent string so that
+    // X-IG-App-Version and the User-Agent header both report the same version.
+    {
+      const m = (this.userAgentApi ?? "").match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
+      if (m) {
+        const parts = m[2].split(";");
+        const versionCode = parts[parts.length - 1].trim();
+        if (/^\d+$/.test(versionCode)) {
+          ig.state.constants.APP_VERSION      = m[1];
+          ig.state.constants.APP_VERSION_CODE = versionCode;
+          console.log(`[webClient] @${username}: patched APP_VERSION=${m[1]} APP_VERSION_CODE=${versionCode}`);
+        }
+      }
+    }
+
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
 
     // Fetch RSA encryption keys — required before login or Instagram rejects
@@ -550,12 +565,16 @@ export class InstagramWebClient {
         }
       } else if (err instanceof IgLoginBadPasswordError) {
         const body = err?.response?.body ?? {};
+        const rawBody = JSON.stringify(body).slice(0, 1500);
+        console.error(`[webClient] @${username}: IgLoginBadPasswordError raw body: ${rawBody}`);
         const buttons: any[] = body?.buttons ?? [];
         const needsEmail = buttons.some((b: any) => b?.action === "send_one_click_login_email");
+        const errorTitle: string = body?.error_title ?? "";
+        const errorType: string = body?.error_type ?? body?.feedback_title ?? "";
         if (needsEmail) {
-          console.error(`[webClient] @${username}: mobile login — Instagram requires email verification. Check account email and click the confirmation link, then retry.`);
+          console.error(`[webClient] @${username}: mobile login — Instagram says: "${errorTitle}" (email action present). error_type="${errorType}"`);
         } else {
-          console.error(`[webClient] @${username}: mobile login — bad password: ${err?.message}`);
+          console.error(`[webClient] @${username}: mobile login — bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}"`);
         }
         return false;
       } else {

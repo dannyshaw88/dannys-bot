@@ -9,6 +9,18 @@ export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
   | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password" | "invalid_credentials"; igDeviceState?: string; checkpointUrl?: string };
 
+// Parse app version and version code from an Instagram mobile user-agent string.
+// UA format: "Instagram 361.0.0.32.109 Android (30/11; 480dpi; 1080x2400; samsung; SM-G998B; ...; en_US; 558538758)"
+function parseIgUaVersion(ua: string): { version: string; versionCode: string } | null {
+  const m = ua.match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
+  if (!m) return null;
+  const version = m[1];
+  const parts = m[2].split(";");
+  const versionCode = parts[parts.length - 1].trim();
+  if (!versionCode || !/^\d+$/.test(versionCode)) return null;
+  return { version, versionCode };
+}
+
 // Extract the Instagram challenge URL from an IgCheckpointError.
 // IgCheckpointError.message getter returns "https://i.instagram.com/challenge/" + api_path.
 function extractCheckpointUrl(err: any): string | undefined {
@@ -229,6 +241,18 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
     ig.state.generateDevice(deviceSeed);
     if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
     console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
+  }
+
+  // Patch app version constants from the profile's user-agent string so that
+  // X-IG-App-Version and the User-Agent header both report the same version.
+  // Without this, the library's stale built-in version leaks into the headers
+  // and Instagram rejects the device as a version mismatch.
+  const uaForVersion = profile.userAgentApi ?? "";
+  const parsedUa = parseIgUaVersion(uaForVersion);
+  if (parsedUa) {
+    ig.state.constants.APP_VERSION      = parsedUa.version;
+    ig.state.constants.APP_VERSION_CODE = parsedUa.versionCode;
+    console.error(`[instagramLogin] Patched APP_VERSION=${parsedUa.version} APP_VERSION_CODE=${parsedUa.versionCode} for @${profile.username}`);
   }
 
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
@@ -584,18 +608,21 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
     if (err instanceof IgLoginBadPasswordError) {
       const body = err?.response?.body ?? {};
+      const rawBody = JSON.stringify(body).slice(0, 1500);
+      console.error(`[instagramLogin] IgLoginBadPasswordError raw body for @${profile.username}: ${rawBody}`);
       const buttons: any[] = body?.buttons ?? [];
       const hasEmailAction = buttons.some((b: any) => b?.action === "send_one_click_login_email");
       const errorTitle: string = body?.error_title ?? "";
+      const errorType: string = body?.error_type ?? body?.feedback_title ?? "";
       if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
         return {
           ok: false,
-          message: `@${profile.username} — Instagram requires email verification before allowing login from this device. Check the account's email inbox and click the confirmation link.`,
+          message: `@${profile.username} — Instagram says: "${errorTitle || "email verification required"}". Raw: ${rawBody}`,
           accountStatus: "email_confirmation",
           igDeviceState: ds,
         };
       }
-      return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "bad_password", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} — bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}". Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
     }
 
     if (err instanceof IgLoginInvalidUserError) {
