@@ -138694,7 +138694,7 @@ async function restoreSessionCookies(ig, cookieString) {
 }
 function buildIgClient(profile, proxyUrl) {
   const ig = new import_instagram_private_api.IgApiClient();
-  const deviceSeed = profile.userAgentApi ?? profile.username;
+  const deviceSeed = (profile.userAgentApi ?? profile.username) + "|" + profile.username;
   if (profile.igDeviceState) {
     try {
       const saved = JSON.parse(profile.igDeviceState);
@@ -138704,7 +138704,7 @@ function buildIgClient(profile, proxyUrl) {
       if (saved.phoneId) ig.state.phoneId = saved.phoneId;
       if (saved.adid) ig.state.adid = saved.adid;
       if (saved.deviceString) ig.state.deviceString = saved.deviceString;
-      console.error(`[instagramLogin] Restored device state for @${profile.username} (deviceId=${ig.state.deviceId})`);
+      console.error(`[instagramLogin] Restored device state for @${profile.username} (deviceId=${ig.state.deviceId} uuid=${ig.state.uuid?.slice(0, 8)}\u2026)`);
     } catch {
       ig.state.generateDevice(deviceSeed);
       if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
@@ -138712,7 +138712,7 @@ function buildIgClient(profile, proxyUrl) {
   } else {
     ig.state.generateDevice(deviceSeed);
     if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
-    console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
+    console.error(`[instagramLogin] Generated NEW device for @${profile.username} (deviceId=${ig.state.deviceId} uuid=${ig.state.uuid?.slice(0, 8)}\u2026)`);
   }
   {
     const parsed = parseIgUaVersion(profile.userAgentApi ?? "");
@@ -140257,7 +140257,7 @@ var InstagramWebClient = class {
       return true;
     }
     const ig = new import_instagram_private_api2.IgApiClient();
-    const deviceSeed = this.userAgentApi ?? username;
+    const deviceSeed = (this.userAgentApi ?? username) + "|" + username;
     if (this.igDeviceState) {
       try {
         const saved = JSON.parse(this.igDeviceState);
@@ -140981,20 +140981,21 @@ var InstagramWebClient = class {
   async _sendDmViaIgClient(userId, text2) {
     if (!this.igApiCookies) return false;
     const ig = new import_instagram_private_api2.IgApiClient();
+    const dmDeviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
         const saved = JSON.parse(this.igDeviceState);
-        ig.state.generateDevice(saved.deviceString ?? "instagram");
+        ig.state.generateDevice(dmDeviceSeed);
         if (saved.deviceId) ig.state.deviceId = saved.deviceId;
         if (saved.uuid) ig.state.uuid = saved.uuid;
         if (saved.phoneId) ig.state.phoneId = saved.phoneId;
         if (saved.adid) ig.state.adid = saved.adid;
         if (saved.deviceString) ig.state.deviceString = saved.deviceString;
       } catch {
-        ig.state.generateDevice("instagram");
+        ig.state.generateDevice(dmDeviceSeed);
       }
     } else {
-      ig.state.generateDevice("instagram");
+      ig.state.generateDevice(dmDeviceSeed);
     }
     const pairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
     const now = (/* @__PURE__ */ new Date()).toISOString();
