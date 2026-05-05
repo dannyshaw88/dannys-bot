@@ -136436,6 +136436,14 @@ if (!repostedPostsColNames.has("posted_shortcode")) {
   sqlite.exec(`ALTER TABLE reposted_posts ADD COLUMN posted_shortcode TEXT NOT NULL DEFAULT '';`);
 }
 {
+  const legacyResult = sqlite.prepare(`
+    UPDATE profiles SET ig_device_state = NULL
+    WHERE ig_device_state IS NOT NULL
+      AND json_extract(ig_device_state, '$.v') IS NULL
+  `).run();
+  if (legacyResult.changes > 0) {
+    console.error(`[db] DEVICE ISOLATION pass1: cleared ${legacyResult.changes} legacy (unversioned) device states \u2014 accounts must be re-verified`);
+  }
   const dupeRows = sqlite.prepare(`
     SELECT id FROM profiles
     WHERE ig_device_state IS NOT NULL
@@ -136453,7 +136461,7 @@ if (!repostedPostsColNames.has("posted_shortcode")) {
       for (const row of rows) clearDeviceState.run(row.id);
     });
     clearAll(dupeRows);
-    console.error(`[db] DEVICE ISOLATION: cleared ig_device_state for ${dupeRows.length} accounts with shared device UUIDs \u2014 they must be re-verified`);
+    console.error(`[db] DEVICE ISOLATION pass2: cleared ${dupeRows.length} accounts with shared device UUIDs \u2014 they must be re-verified`);
   }
 }
 sqlite.exec(`
@@ -138745,6 +138753,7 @@ function buildIgClient(profile, proxyUrl) {
   }
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
   const captureDeviceState = () => JSON.stringify({
+    v: 2,
     deviceId: ig.state.deviceId,
     uuid: ig.state.uuid,
     phoneId: ig.state.phoneId,

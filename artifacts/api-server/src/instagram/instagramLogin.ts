@@ -269,6 +269,7 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
 
   const captureDeviceState = () => JSON.stringify({
+    v: 2,
     deviceId: ig.state.deviceId,
     uuid: ig.state.uuid,
     phoneId: ig.state.phoneId,
