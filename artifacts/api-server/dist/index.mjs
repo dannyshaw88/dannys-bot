@@ -138532,6 +138532,15 @@ function h3(t2) {
 }
 
 // src/instagram/instagramLogin.ts
+function parseIgUaVersion(ua) {
+  const m2 = ua.match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
+  if (!m2) return null;
+  const version3 = m2[1];
+  const parts = m2[2].split(";");
+  const versionCode = parts[parts.length - 1].trim();
+  if (!versionCode || !/^\d+$/.test(versionCode)) return null;
+  return { version: version3, versionCode };
+}
 function extractCheckpointUrl(err) {
   if (!(err instanceof import_instagram_private_api.IgCheckpointError)) return void 0;
   try {
@@ -138702,6 +138711,13 @@ function buildIgClient(profile, proxyUrl) {
     ig.state.generateDevice(deviceSeed);
     if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
     console.error(`[instagramLogin] Generated new device for @${profile.username} (deviceId=${ig.state.deviceId})`);
+  }
+  const uaForVersion = profile.userAgentApi ?? "";
+  const parsedUa = parseIgUaVersion(uaForVersion);
+  if (parsedUa) {
+    ig.state.constants.APP_VERSION = parsedUa.version;
+    ig.state.constants.APP_VERSION_CODE = parsedUa.versionCode;
+    console.error(`[instagramLogin] Patched APP_VERSION=${parsedUa.version} APP_VERSION_CODE=${parsedUa.versionCode} for @${profile.username}`);
   }
   if (proxyUrl) ig.state.proxyUrl = proxyUrl;
   const captureDeviceState = () => JSON.stringify({
@@ -138962,18 +138978,21 @@ async function verifyInstagramCredentials(profile) {
     }
     if (err instanceof import_instagram_private_api.IgLoginBadPasswordError) {
       const body = err?.response?.body ?? {};
+      const rawBody = JSON.stringify(body).slice(0, 1500);
+      console.error(`[instagramLogin] IgLoginBadPasswordError raw body for @${profile.username}: ${rawBody}`);
       const buttons = body?.buttons ?? [];
       const hasEmailAction = buttons.some((b3) => b3?.action === "send_one_click_login_email");
       const errorTitle = body?.error_title ?? "";
+      const errorType = body?.error_type ?? body?.feedback_title ?? "";
       if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
         return {
           ok: false,
-          message: `@${profile.username} \u2014 Instagram requires email verification before allowing login from this device. Check the account's email inbox and click the confirmation link.`,
+          message: `@${profile.username} \u2014 Instagram says: "${errorTitle || "email verification required"}". Raw: ${rawBody}`,
           accountStatus: "email_confirmation",
           igDeviceState: ds
         };
       }
-      return { ok: false, message: `@${profile.username} \u2014 incorrect password.`, accountStatus: "bad_password", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} \u2014 bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}". Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
     }
     if (err instanceof import_instagram_private_api.IgLoginInvalidUserError) {
       return { ok: false, message: `@${profile.username} \u2014 account does not exist on Instagram.`, accountStatus: "banned", igDeviceState: ds };
@@ -140253,6 +140272,18 @@ var InstagramWebClient = class {
       ig.state.generateDevice(deviceSeed);
       if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
     }
+    {
+      const m2 = (this.userAgentApi ?? "").match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
+      if (m2) {
+        const parts = m2[2].split(";");
+        const versionCode = parts[parts.length - 1].trim();
+        if (/^\d+$/.test(versionCode)) {
+          ig.state.constants.APP_VERSION = m2[1];
+          ig.state.constants.APP_VERSION_CODE = versionCode;
+          console.log(`[webClient] @${username}: patched APP_VERSION=${m2[1]} APP_VERSION_CODE=${versionCode}`);
+        }
+      }
+    }
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
     try {
       await ig.request.send({
@@ -140304,12 +140335,16 @@ var InstagramWebClient = class {
         }
       } else if (err instanceof import_instagram_private_api2.IgLoginBadPasswordError) {
         const body = err?.response?.body ?? {};
+        const rawBody = JSON.stringify(body).slice(0, 1500);
+        console.error(`[webClient] @${username}: IgLoginBadPasswordError raw body: ${rawBody}`);
         const buttons = body?.buttons ?? [];
         const needsEmail = buttons.some((b3) => b3?.action === "send_one_click_login_email");
+        const errorTitle = body?.error_title ?? "";
+        const errorType = body?.error_type ?? body?.feedback_title ?? "";
         if (needsEmail) {
-          console.error(`[webClient] @${username}: mobile login \u2014 Instagram requires email verification. Check account email and click the confirmation link, then retry.`);
+          console.error(`[webClient] @${username}: mobile login \u2014 Instagram says: "${errorTitle}" (email action present). error_type="${errorType}"`);
         } else {
-          console.error(`[webClient] @${username}: mobile login \u2014 bad password: ${err?.message}`);
+          console.error(`[webClient] @${username}: mobile login \u2014 bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}"`);
         }
         return false;
       } else {
