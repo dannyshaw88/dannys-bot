@@ -534,19 +534,25 @@ export async function browserKeyCombo(profileId: number, modifier: string, key: 
 export async function browserBack(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
+  sseWrite(s.res, { type: "loading", loading: true });
   try { await s.page.goBack({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
+  sseWrite(s.res, { type: "loading", loading: false });
 }
 
 export async function browserForward(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
+  sseWrite(s.res, { type: "loading", loading: true });
   try { await s.page.goForward({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
+  sseWrite(s.res, { type: "loading", loading: false });
 }
 
 export async function browserReload(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
+  sseWrite(s.res, { type: "loading", loading: true });
   try { await s.page.reload({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
+  sseWrite(s.res, { type: "loading", loading: false });
 }
 
 // ── Send a DM through the live browser session ────────────────────────────────

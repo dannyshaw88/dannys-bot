@@ -122,6 +122,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
     es.onopen = () => {
       setStatusSafe("connected");
+      setIsLoading(false); // clear the loading flag set during connect()
     };
 
     es.onmessage = (evt) => {

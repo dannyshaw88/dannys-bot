@@ -1,0 +1,62 @@
+[
+  {
+    "name": "mid",
+    "value": "afmwmQALAAGFz5-uF9hDZiLu4fQW",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": 1812531357.576395,
+    "size": 31,
+    "httpOnly": true,
+    "secure": true,
+    "session": false,
+    "sameSite": "None",
+    "priority": "Medium",
+    "sameParty": false,
+    "sourceScheme": "Secure"
+  },
+  {
+    "name": "ig_did",
+    "value": "F220191C-9D7D-41F4-9203-905ED23BDFB8",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": 1809507357.576378,
+    "size": 42,
+    "httpOnly": true,
+    "secure": true,
+    "session": false,
+    "sameSite": "None",
+    "priority": "Medium",
+    "sameParty": false,
+    "sourceScheme": "Secure"
+  },
+  {
+    "name": "datr",
+    "value": "mbD5aSTFTySW3cMUjfXnY7Lk",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": 1812531357.576352,
+    "size": 28,
+    "httpOnly": true,
+    "secure": true,
+    "session": false,
+    "sameSite": "None",
+    "priority": "Medium",
+    "sameParty": false,
+    "sourceScheme": "Secure"
+  },
+  {
+    "name": "csrftoken",
+    "value": "eX_G-_BGt-LMINk7FFcR8Q",
+    "domain": ".instagram.com",
+    "path": "/",
+    "expires": 1812531353.363038,
+    "size": 31,
+    "httpOnly": false,
+    "secure": true,
+    "session": false,
+    "sameSite": "None",
+    "priority": "Medium",
+    "sameParty": false,
+    "sourceScheme": "Secure"
+  }
+]
