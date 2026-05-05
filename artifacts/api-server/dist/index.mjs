@@ -138984,18 +138984,18 @@ async function verifyInstagramCredentials(profile) {
       const rawBody = JSON.stringify(body).slice(0, 1500);
       console.error(`[instagramLogin] IgLoginBadPasswordError raw body for @${profile.username}: ${rawBody}`);
       const buttons = body?.buttons ?? [];
-      const hasEmailAction = buttons.some((b3) => b3?.action === "send_one_click_login_email");
       const errorTitle = body?.error_title ?? "";
-      const errorType = body?.error_type ?? body?.feedback_title ?? "";
-      if (hasEmailAction || /forgotten|email/i.test(errorTitle)) {
+      const errorType = body?.error_type ?? "";
+      const invalidCreds = body?.invalid_credentials === true;
+      if (!invalidCreds && errorType !== "bad_password" && buttons.some((b3) => b3?.action === "send_one_click_login_email")) {
         return {
           ok: false,
-          message: `@${profile.username} \u2014 Instagram says: "${errorTitle || "email verification required"}". Raw: ${rawBody}`,
+          message: `@${profile.username} \u2014 Instagram requires email verification. Check the account email and click the confirmation link. Raw: ${rawBody}`,
           accountStatus: "email_confirmation",
           igDeviceState: ds
         };
       }
-      return { ok: false, message: `@${profile.username} \u2014 bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}". Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
+      return { ok: false, message: `@${profile.username} \u2014 incorrect password (error_type="${errorType}", invalid_credentials=${invalidCreds}). Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
     }
     if (err instanceof import_instagram_private_api.IgLoginInvalidUserError) {
       return { ok: false, message: `@${profile.username} \u2014 account does not exist on Instagram.`, accountStatus: "banned", igDeviceState: ds };
