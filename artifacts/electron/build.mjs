@@ -32,6 +32,17 @@ await esbuild({
   format: "cjs",
 });
 
+// 1c. Compile tray menu preload → dist/trayMenuPreload.js (CJS)
+await esbuild({
+  entryPoints: [path.join(__dirname, "src/trayMenuPreload.ts")],
+  bundle: true,
+  platform: "node",
+  target: "node20",
+  external: ["electron"],
+  outfile: path.join(dist, "trayMenuPreload.js"),
+  format: "cjs",
+});
+
 // 2. Copy bundled API server
 const serverSrc = path.join(__dirname, "../api-server/dist");
 if (!existsSync(serverSrc)) {

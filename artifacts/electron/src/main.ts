@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, Tray, nativeImage, dialog, ipcMain, screen } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, ChildProcess } from "child_process";
 import http from "http";
@@ -140,6 +140,47 @@ function startServer(port: number, logPath: string): void {
   serverProc.on("exit", () => logStream.end());
 }
 
+function restartApp(): void {
+  app.relaunch();
+  isQuitting = true;
+  app.quit();
+}
+
+// Inline HTML for the tray popup — sharp corners, no native chrome
+const TRAY_MENU_HTML = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden}
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  font-size:13px;
+  background:#ffffff;
+  border:1px solid #b0b0b0;
+  color:#1a1a1a;
+  user-select:none;
+  cursor:default;
+}
+.item{
+  padding:7px 18px;
+  white-space:nowrap;
+}
+.item:hover{background:#0078d4;color:#ffffff}
+.sep{height:1px;background:#e0e0e0;margin:3px 0}
+</style></head>
+<body>
+<div class="item" onclick="window.trayMenuAPI.openApp()">Open Danny&#39;s Bot</div>
+<div class="sep"></div>
+<div class="item" onclick="window.trayMenuAPI.restartApp()">Restart Danny&#39;s Bot</div>
+<div class="sep"></div>
+<div class="item" onclick="window.trayMenuAPI.closeApp()">Close Danny&#39;s Bot</div>
+</body></html>`;
+
+// Dimensions must match the HTML content exactly
+const POPUP_W = 220;
+const POPUP_H = 3 * 33 + 2 * 7; // 3 items + 2 separators (with margins)
+
+let trayPopup: BrowserWindow | null = null;
+
 function createTray(): void {
   const iconPath = getIconPath();
   let icon: Electron.NativeImage;
@@ -153,33 +194,82 @@ function createTray(): void {
   tray = new Tray(icon);
   tray.setToolTip("Danny's Bot");
 
-  const menu = Menu.buildFromTemplate([
-    {
-      label: "Open Danny's Bot",
-      click: () => {
-        win?.show();
-        win?.focus();
-      },
+  // Create the custom square popup window (hidden until right-click)
+  trayPopup = new BrowserWindow({
+    width: POPUP_W,
+    height: POPUP_H,
+    frame: false,
+    transparent: false,
+    resizable: false,
+    movable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    roundedCorners: false,
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "trayMenuPreload.js"),
     },
-    { type: "separator" },
-    {
-      label: "Close Danny's Bot",
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
+  });
 
-  tray.setContextMenu(menu);
+  trayPopup.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(TRAY_MENU_HTML)}`
+  );
 
+  // Hide popup when it loses focus
+  trayPopup.on("blur", () => trayPopup?.hide());
+
+  // IPC handlers for tray menu actions
+  ipcMain.on("tray-open", () => {
+    trayPopup?.hide();
+    win?.show();
+    win?.focus();
+  });
+
+  ipcMain.on("tray-restart", () => {
+    trayPopup?.hide();
+    restartApp();
+  });
+
+  ipcMain.on("tray-close", () => {
+    trayPopup?.hide();
+    isQuitting = true;
+    app.quit();
+  });
+
+  // Left-click: toggle main window
   tray.on("click", () => {
+    trayPopup?.hide();
     if (win?.isVisible()) {
       win.hide();
     } else {
       win?.show();
       win?.focus();
     }
+  });
+
+  // Right-click: position and show the custom popup above the tray icon
+  tray.on("right-click", () => {
+    if (trayPopup?.isVisible()) {
+      trayPopup.hide();
+      return;
+    }
+    const bounds = tray!.getBounds();
+    const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+    const workArea = display.workArea;
+
+    // Position: above the tray icon, horizontally centred on it
+    let x = Math.round(bounds.x + bounds.width / 2 - POPUP_W / 2);
+    let y = Math.round(bounds.y - POPUP_H - 4);
+
+    // Keep within screen work area
+    x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - POPUP_W));
+    y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - POPUP_H));
+
+    trayPopup!.setPosition(x, y);
+    trayPopup!.show();
+    trayPopup!.focus();
   });
 }
 
