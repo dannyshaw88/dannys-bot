@@ -12,7 +12,7 @@ const ACTION_META: Record<string, { label: string; icon: any; color: string }> =
   follow:                  { label: "Followed",           icon: UserCheck,    color: "text-green-600 bg-green-50 border-green-200" },
   follow_blocked:          { label: "Follow Blocked",     icon: Ban,          color: "text-red-600 bg-red-50 border-red-200" },
   follow_skipped:          { label: "Follow Skipped",     icon: SkipForward,  color: "text-orange-500 bg-orange-50 border-orange-200" },
-  dedup_skip:              { label: "Already Followed",   icon: SkipForward,  color: "text-slate-500 bg-slate-50 border-slate-200" },
+  dedup_skip:              { label: "Skipped",             icon: SkipForward,  color: "text-slate-500 bg-slate-50 border-slate-200" },
   like:                    { label: "Liked Post",          icon: Heart,        color: "text-pink-600 bg-pink-50 border-pink-200" },
   view_stories:            { label: "Viewed Stories",     icon: BookOpen,     color: "text-blue-600 bg-blue-50 border-blue-200" },
   view_reels:              { label: "Viewed Reels",       icon: PlaySquare,   color: "text-violet-600 bg-violet-50 border-violet-200" },
@@ -39,7 +39,8 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
 
   const { data: sessionActionsList, isLoading: sessionActionsLoading } = useQuery<SessionAction[]>({
     queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
-    refetchInterval: 5000,
+    refetchInterval: 3000,
+    staleTime: 0,
   });
 
   return (
@@ -64,7 +65,7 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                 <th className="px-5 py-3 font-bold bg-muted/30 whitespace-nowrap">Action</th>
                 <th className="px-5 py-3 font-bold bg-muted/30 whitespace-nowrap">Username</th>
                 <th className="px-5 py-3 font-bold bg-muted/30 whitespace-nowrap">Source</th>
-                <th className="px-5 py-3 font-bold bg-muted/30 w-full">Detail</th>
+                <th className="px-5 py-3 font-bold bg-muted/30 w-full">Reason / Detail</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -92,7 +93,7 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                       <td className="px-5 py-3 whitespace-nowrap text-muted-foreground text-xs font-mono">
                         <span className="flex items-center gap-1.5">
                           <Clock className="w-3 h-3 shrink-0" />
-                          {format(new Date(sa.timestamp), "MMM d, HH:mm:ss")}
+                          {format(new Date(sa.timestamp), "d MMM yyyy, HH:mm:ss")}
                         </span>
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap">

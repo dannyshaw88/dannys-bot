@@ -375,6 +375,32 @@ export async function registerInstagramRoutes(
       ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
     });
 
+    // Log verify completion as a session action so the LiveActivityTicker can surface it
+    await storage.createSessionAction({
+      profileId: profile.id,
+      toolId: 0,
+      action: result.ok ? "verified" : "verification_failed",
+      targetUsername: profile.username,
+      sourceValue: "",
+      sourceType: "verify",
+      result: result.accountStatus ?? (result.ok ? "valid" : "failed"),
+      detail: result.message ?? "",
+      timestamp: new Date().toISOString(),
+    });
+
+    // Also surface verify result in the Dashboard API Call Log
+    storage.createInstagramApiCall({
+      profileId: profile.id,
+      username: profile.username,
+      operationName: "VerifyAccount",
+      date: new Date().toISOString(),
+      message: result.ok
+        ? `✓ Verified — status: ${result.accountStatus ?? "valid"}`
+        : `✗ Failed — ${result.accountStatus ?? "failed"}: ${result.message ?? ""}`,
+      source: "System",
+      durationMs: 0,
+    }).catch(() => {});
+
     // If Instagram returned a checkpoint URL, cache it so the EB navigates there directly
     // on next open (bypassing the 429 rate-limit on the home page)
     if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
@@ -654,9 +680,37 @@ export async function registerInstagramRoutes(
     res.json({ startedAt: SERVER_START });
   });
 
+  app.get("/api/recent-activity", async (req, res) => {
+    const actions = await storage.getRecentSessionActions(30);
+    res.json(actions);
+  });
+
+  app.get("/api/all-session-actions", async (req, res) => {
+    const limit = Math.min(parseInt((req.query.limit as string) ?? "200", 10), 1000);
+    const profileIdParam = req.query.profileId;
+    const allProfiles = await storage.getProfiles();
+    const profileMap = new Map(allProfiles.map(p => [p.id, p]));
+    let actions: any[];
+    if (profileIdParam !== undefined) {
+      const pid = parseInt(profileIdParam as string, 10);
+      actions = isNaN(pid) ? [] : await storage.getSessionActionsByProfile(pid, limit);
+    } else {
+      actions = await storage.getRecentSessionActions(limit);
+    }
+    const enriched = actions.map(a => {
+      const p = profileMap.get(Number(a.profileId));
+      return { ...a, profileLabel: p?.accountLabel || p?.username || `#${a.profileId}` };
+    });
+    res.json(enriched);
+  });
+
   app.get("/api/instagram-api-calls", async (req, res) => {
     const sinceParam = req.query.since;
-    const settings = await storage.getGlobalSettings();
+    const [settings, allProfiles] = await Promise.all([
+      storage.getGlobalSettings(),
+      storage.getProfiles(),
+    ]);
+    const profileMap = new Map(allProfiles.map(p => [p.id, p]));
     const logMaxRows = parseInt(settings.logMaxRows ?? "100000", 10);
     let data: any[];
     if (sinceParam !== undefined) {
@@ -665,13 +719,24 @@ export async function registerInstagramRoutes(
     } else {
       data = await storage.getInstagramApiCalls(logMaxRows);
     }
-    res.json(data);
+    const enriched = data.map(call => {
+      const storedUsername = call.username && call.username !== "" ? call.username : null;
+      if (storedUsername) return call;
+      const profile = profileMap.get(Number(call.profileId));
+      const resolvedUsername = profile?.accountLabel || profile?.username || null;
+      return { ...call, username: resolvedUsername };
+    });
+    res.json(enriched);
   });
 
   app.get("/api/logs/export", async (req, res) => {
     try {
-      const allProfiles = await storage.getProfiles();
+      const [allProfiles, allProxies] = await Promise.all([
+        storage.getProfiles(),
+        storage.getProxies(),
+      ]);
       const profileMap = new Map(allProfiles.map(p => [p.id, p]));
+      const proxyMap = new Map(allProxies.map(p => [p.id, p]));
       const allApiCalls = await storage.getInstagramApiCalls(100000);
 
       // Filter to only the requested profile IDs when provided (comma-separated)
@@ -679,29 +744,41 @@ export async function registerInstagramRoutes(
       const requestedIds = rawIds
         ? String(rawIds).split(",").map((s: string) => parseInt(s.trim(), 10)).filter((n: number) => !isNaN(n))
         : [];
+
       // Operations that structurally return 4xx/5xx but are completely non-fatal
-      // (endpoint unavailable for account type, not-eligible for attribution, etc).
-      // We strip their failed entries from the export so the CSV isn't flooded with
+      // (endpoint unavailable for account type, expected during login handshake, etc).
+      // Their error messages are replaced with "OK" so the export isn't flooded with
       // alarming-looking errors that have zero operational significance.
       const NOISY_FAILED_OPS = new Set([
-        "GetTokenResult",       // tokens/keyed — 404 on almost every account
-        "GetAccountFamily",     // get_account_family — 404 for many account types
-        "SuggestedSearches",    // fbsearch/suggested_searches — 404 after IG change
-        "LogAttribution",       // loginattribution/log_attribution — 400 not eligible
+        "GetTokenResult",          // tokens/keyed — 404 on almost every account
+        "GetKeyedTokens",          // alternate name for same endpoint
+        "GetAccountFamily",        // get_account_family — 404 for many account types
+        "SuggestedSearches",       // fbsearch/suggested_searches — 404 after IG change
+        "LogAttribution",          // loginattribution/log_attribution — 400 not eligible
         "LogResurrectAttribution", // log_resurrect_attribution — 400 not eligible
-        "FetchHeaders",         // si/fetch_headers — non-critical probe
-        "ContactPointPrefill",  // contact_point_prefill — 400 non-fatal
-        "GetPrefillCandidates", // get_prefill_candidates — non-fatal
-        "GetPresence",          // presence — 404 for many accounts
+        "FetchHeaders",            // si/fetch_headers — non-critical probe
+        "ContactPointPrefill",     // contact_point_prefill — 400 non-fatal
+        "GetPrefillCandidates",    // get_prefill_candidates — non-fatal
+        "GetPresence",             // presence — 404 for many accounts
+        "Banyan",                  // banyan/banyan — 400 expected during cold-start
+        "GetBanyan",               // alternate logged name for banyan/banyan
+        "ExecuteBanyan",           // another alternate name
+        "SendMobileConfig",        // launcher/sync — may 400 on first attempt
       ]);
 
-      const apiCalls = allApiCalls.filter((c: any) => {
-        if (c.source === "Browser") return false;
-        if (requestedIds.length > 0 && !requestedIds.includes(c.profileId)) return false;
-        // Drop noisy non-fatal failures — keep them only when they succeed ("OK")
-        if (NOISY_FAILED_OPS.has(c.operationName) && c.message !== "OK") return false;
-        return true;
-      });
+      const apiCalls = allApiCalls
+        .filter((c: any) => {
+          if (c.source === "Browser") return false;
+          if (requestedIds.length > 0 && !requestedIds.includes(c.profileId)) return false;
+          return true;
+        })
+        .map((c: any) => {
+          // Replace known non-fatal error messages with "OK"
+          if (NOISY_FAILED_OPS.has(c.operationName) && c.message !== "OK") {
+            return { ...c, message: "OK" };
+          }
+          return c;
+        });
 
       const headers = [
         "UniqueNameAccount", "Name", "Operation Name", "Date",
@@ -719,18 +796,30 @@ export async function registerInstagramRoutes(
       const csvRows = apiCalls.map((call: any) => {
         const profile = profileMap.get(call.profileId);
         const username = profile?.username ?? String(call.profileId);
+
         const utcMs = new Date(call.date).getTime();
         const localMs = utcMs + offsetMins * 60 * 1000;
         const localDate = new Date(localMs);
-        const sign = offsetMins >= 0 ? "+" : "-";
-        const absH = Math.abs(Math.floor(Math.abs(offsetMins) / 60)).toString().padStart(2, "0");
-        const absM = (Math.abs(offsetMins) % 60).toString().padStart(2, "0");
-        const tzLabel = useLocal ? ` UTC${sign}${absH}:${absM}` : " UTC";
-        const date = `${localDate.toLocaleString("en-US", {
+        // Date without timezone suffix — just the local time the user requested
+        const date = localDate.toLocaleString("en-US", {
           month: "numeric", day: "numeric", year: "numeric",
           hour: "numeric", minute: "numeric", second: "numeric", hour12: true,
           timeZone: "UTC",
-        })}${tzLabel}`;
+        });
+
+        // Build IP:Port from the api call's recorded IP + the profile's proxy port
+        const ip = call.ipAddress ?? "";
+        let port = "";
+        if (profile) {
+          if (profile.proxyId) {
+            const linked = proxyMap.get(profile.proxyId);
+            port = linked?.port ? String(linked.port) : "";
+          } else if (profile.proxyPort) {
+            port = String(profile.proxyPort);
+          }
+        }
+        const ipPort = ip && port ? `${ip}:${port}` : ip;
+
         return [
           `Instagram_${call.profileId}`,
           username,
@@ -739,7 +828,7 @@ export async function registerInstagramRoutes(
           call.message ?? "",
           call.source ?? "",
           call.navChain ?? "",
-          call.ipAddress ?? "",
+          ipPort,
           String(call.durationMs ?? ""),
         ].map(esc).join(",");
       });
@@ -946,6 +1035,13 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // Force an immediate follow session (bypasses the inter-session wait timer)
+  app.post("/api/profiles/:profileId/tools/follow/run-now", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    automationEngine.forceFollowNow(profileId);
+    res.json({ ok: true });
+  });
+
   // Force an immediate contact-users send session (bypasses wait timer)
   app.post("/api/profiles/:profileId/tools/contact/send-now", async (req, res) => {
     const profileId = Number(req.params.profileId);
@@ -1014,6 +1110,17 @@ export async function registerInstagramRoutes(
           if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
             setCheckpointUrl(profile.id, result.checkpointUrl);
           }
+          await storage.createSessionAction({
+            profileId: profile.id,
+            toolId: 0,
+            action: result.ok ? "verified" : "verification_failed",
+            targetUsername: profile.username,
+            sourceValue: "",
+            sourceType: "verify",
+            result: result.accountStatus ?? (result.ok ? "valid" : "failed"),
+            detail: result.message ?? "",
+            timestamp: new Date().toISOString(),
+          });
         } catch {
           // Unexpected error — reset to pending so the account isn't stuck in "verifying"
           await storage.updateProfile(profile.id, { accountStatus: "pending" });

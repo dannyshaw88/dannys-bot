@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { useUpdateTool } from "@/hooks/use-tools";
@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign, TrendingUp } from "lucide-react";
+import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign, TrendingUp } from "lucide-react";
 import { useRef } from "react";
 import { type Tool, type Profile, type FollowedUser, type SessionAction } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -212,13 +212,15 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
   const { data: followedUsersList, isLoading: followedUsersLoading } = useQuery<FollowedUser[]>({
     queryKey: [`/api/profiles/${tool.profileId}/followed-users`],
-    refetchInterval: 10000,
+    refetchInterval: 5000,
+    staleTime: 0,
     enabled: showFollowedUsers,
   });
 
   const { data: sessionActions } = useQuery<SessionAction[]>({
     queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
-    refetchInterval: 15000,
+    refetchInterval: 5000,
+    staleTime: 0,
   });
   const lastAction = sessionActions?.find(a => a.toolId === tool.id);
   const engineStatus = useProfileEngineStatus(tool.profileId);
@@ -367,6 +369,8 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled });
   };
 
+  const queryClient = useQueryClient();
+
   const isMounted = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -469,7 +473,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         <div className="flex items-center gap-3 mb-6">
           <Button variant="ghost" size="sm" onClick={() => setShowSources(false)}
             className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground -ml-2">
-            <ArrowLeft className="w-4 h-4" /> Back to Create a Session Tool
+            <ArrowLeft className="w-4 h-4" /> Back to Follow Tool
           </Button>
         </div>
         <div className="desktop-card p-6">
@@ -552,7 +556,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setShowFollowedUsers(false)}
             className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground -ml-2">
-            <ArrowLeft className="w-4 h-4" /> Back to Create a Session Tool
+            <ArrowLeft className="w-4 h-4" /> Back to Follow Tool
           </Button>
         </div>
 
@@ -715,33 +719,11 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         
         {/* Settings Column */}
         <div className={`${tool.type === 'follow' ? 'col-span-1' : 'lg:col-span-1'} space-y-6`}>
-          <div className="desktop-card p-6">
-            <div className="rounded-xl p-4 space-y-4">
+          <div className="desktop-card p-6 space-y-4">
             {tool.type === 'follow' && (
-              <div className="space-y-3 mb-4">
+              <div className="space-y-2 mb-2">
                 <h4 className="font-semibold text-sm">Follow Tool</h4>
-                {nextRunStatus && (
-                  <div className="flex items-center gap-1.5 text-[11px]" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-                    <Clock className="w-3 h-3 shrink-0" />
-                    {nextRunStatus.executing
-                      ? <span className="font-medium">Executing</span>
-                      : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
-                    }
-                  </div>
-                )}
-                {tool.enabled && (() => {
-                  const s = (tool.settings as any) ?? {};
-                  const avgDelay   = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
-                  const avgProcess = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
-                  const perHour    = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
-                  return perHour > 0 ? (
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <TrendingUp className="w-3 h-3 shrink-0" />
-                      <span>~{perHour} follows/hr</span>
-                    </div>
-                  ) : null;
-                })()}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <Switch
                     checked={tool.enabled}
                     onCheckedChange={handleToggleEnable}
@@ -756,6 +738,30 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   >
                     Copy Settings
                   </button>
+                  {nextRunStatus && (
+                    <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                      <Clock className="w-3 h-3 shrink-0" />
+                      {nextRunStatus.executing
+                        ? <span className="font-medium">Executing</span>
+                        : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+                      }
+                    </span>
+                  )}
+                  {tool.enabled && (() => {
+                    const s = (tool.settings as any) ?? {};
+                    const avgDelay      = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
+                    const avgProcess    = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
+                    const avgMaxPerDay  = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
+                    const perHour       = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+                    const perDayRaw     = perHour * 24;
+                    const perDay        = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
+                    return perHour > 0 ? (
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <TrendingUp className="w-3 h-3 shrink-0" />
+                        ~{perHour}/hr · ~{perDay}/day
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             )}
@@ -1174,9 +1180,8 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 </div>
               )}
             </div>
-
-
           </div>
+
         </div>
 
         {/* Sources Column — hidden for follow tool (sources are above the toggle) */}
@@ -1286,6 +1291,5 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         onCopy={handleFollowToolCopy}
       />
     </div>
-  </div>
   );
 }

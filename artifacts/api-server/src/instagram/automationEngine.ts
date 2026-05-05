@@ -100,6 +100,15 @@ async function sleepInterruptible(ms: number, stop: { stopped: boolean }): Promi
 function todayStr()    { return new Date().toISOString().split("T")[0]; }
 function hourStr()     { return new Date().toISOString().slice(0, 13); }
 
+// ── Engine file logger — writes to /tmp/engine.log so it's always greppable ──
+import * as fs from "fs";
+const ENGINE_LOG_FILE = "/tmp/engine.log";
+function engineLog(level: "INFO" | "WARN" | "ERROR", msg: string): void {
+  const line = `[${new Date().toISOString()}] [${level}] ${msg}\n`;
+  process.stderr.write(line);
+  try { fs.appendFileSync(ENGINE_LOG_FILE, line); } catch (_) {}
+}
+
 /** Returns true when the current local time is within [start, end] (HH:MM). Handles overnight windows. */
 function isWithinActiveWindow(start: string, end: string): boolean {
   const now = new Date();
@@ -162,6 +171,8 @@ class AutomationEngine {
   private syncTimers           = new Map<number, number>();       // profileId → nextSyncAt (ms)
   private ownUserIdCache       = new Map<number, string>();       // profileId → Instagram pk (HikerAPI, resolved once)
   private contactForceRun      = new Set<number>();               // profileIds to run contact send immediately
+  private followForceRun       = new Set<number>();               // profileIds to skip the inter-session wait immediately
+  private initialized          = false;                          // false until first reconcile completes
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
@@ -174,6 +185,11 @@ class AutomationEngine {
 
   private async reconcile() {
     try {
+      // runImmediately = false on first reconcile (startup: already-enabled tools schedule
+      // their first run using the configured X-Y timers). true on all subsequent reconciles
+      // (user just toggled a tool on → start immediately).
+      const runImmediately = this.initialized;
+
       const profiles = await storage.getProfiles();
       const activeFollow        = new Set<number>();
       const activeUnfollow      = new Set<number>();
@@ -193,19 +209,19 @@ class AutomationEngine {
         const followTool = tools.find(t => t.type === "follow" && t.enabled);
         if (followTool && profile.accountStatus === "valid") {
           activeFollow.add(profile.id);
-          if (!this.states.has(profile.id)) this.launch(profile, followTool);
+          if (!this.states.has(profile.id)) this.launch(profile, followTool, runImmediately);
         }
 
         const unfollowTool = tools.find(t => t.type === "unfollow" && t.enabled);
         if (unfollowTool && profile.accountStatus === "valid") {
           activeUnfollow.add(profile.id);
-          if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool);
+          if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool, runImmediately);
         }
 
         const dmTool = tools.find(t => t.type === "dm" && t.enabled);
         if (dmTool && profile.accountStatus === "valid") {
           activeDM.add(profile.id);
-          if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool);
+          if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, runImmediately);
         }
 
         // Contact tool is "effectively enabled" if the top-level flag OR either
@@ -219,14 +235,14 @@ class AutomationEngine {
         );
         if (contactEffective && profile.accountStatus === "valid") {
           activeContact.add(profile.id);
-          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!);
+          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!, runImmediately);
         }
 
         // Human session runner has its own tool record — completely independent of all other tools
         const humanSessionTool = tools.find(t => t.type === "human_sessions" && t.enabled);
         if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
-          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool);
+          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool, runImmediately);
         }
       }
 
@@ -301,6 +317,9 @@ class AutomationEngine {
       for (const id of this.syncTimers.keys()) {
         if (!profileIds.has(id)) this.syncTimers.delete(id);
       }
+
+      // Mark startup complete — subsequent reconciles treat new runners as user-toggled-on
+      this.initialized = true;
     } catch (err: any) {
       console.error("[engine] Reconcile error:", err?.message);
     }
@@ -351,7 +370,9 @@ class AutomationEngine {
   }
 
   // ── Runner launch ─────────────────────────────────────────────────────────
-  private launch(profile: Profile, _tool: Tool) {
+  private launch(profile: Profile, _tool: Tool, runImmediately = false) {
+    // Guard against double-launch (e.g. rapid toggle OFF→ON)
+    if (this.states.has(profile.id)) return;
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -369,7 +390,6 @@ class AutomationEngine {
     this.states.set(profile.id, state);
     console.log(`[engine] Launching runner for @${profile.username}`);
 
-    let followFirstRun = true;
     const loop = async () => {
       // Seed daily/hourly counters from DB — survives server restarts
       try {
@@ -382,17 +402,37 @@ class AutomationEngine {
         console.log(`[engine] @${profile.username}: restored dailyCount=${dc} hourlyCount=${hc} from DB`);
       } catch { /* non-fatal */ }
 
+      // On startup (tool was already enabled): schedule first run using configured X-Y timers.
+      // On user toggle-on: runImmediately = true → skip this block and run right away.
+      if (!runImmediately) {
+        const si = (_tool.settings ?? {}) as any;
+        const waitMs = randInt((si.delayMin ?? 1) * 60_000, (si.delayMax ?? 5) * 60_000);
+        engineLog("INFO", `@${profile.username}: startup — first follow session in ${Math.round(waitMs / 60000)}min (Run Now will skip this wait)`);
+        state.nextFollowAt = Date.now() + waitMs;
+        // Use 1s-poll loop so "Run Now" can interrupt the startup wait immediately
+        const startupEnd = Date.now() + waitMs;
+        while (!state.stop.stopped && Date.now() < startupEnd && !this.followForceRun.has(profile.id)) {
+          await sleep(1000);
+        }
+        this.followForceRun.delete(profile.id);
+        state.nextFollowAt = 0;
+        if (state.stop.stopped) return;
+      }
+
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
-        if (!freshProfile) break;
+        if (!freshProfile) {
+          engineLog("WARN", `@${profile.username}: profile ${profile.id} not found in DB — exiting runner`);
+          break;
+        }
 
         // ── Account status gate ──────────────────────────────────────────────
         if (freshProfile.accountStatus === "banned") {
-          console.log(`[engine] @${freshProfile.username}: account banned — stopping runner`);
+          engineLog("WARN", `@${freshProfile.username}: account banned — stopping runner`);
           break;
         }
         if (freshProfile.accountStatus === "captcha") {
-          console.log(`[engine] @${freshProfile.username}: captcha/checkpoint pending — pausing sessions. Complete the challenge in the embedded browser.`);
+          engineLog("WARN", `@${freshProfile.username}: captcha/checkpoint pending — pausing 5min`);
           await sleep(5 * 60_000);
           continue;
         }
@@ -404,7 +444,7 @@ class AutomationEngine {
         ) {
           if (!isWithinActiveWindow(freshProfile.activeTimerStart, freshProfile.activeTimerEnd)) {
             const waitMin = minutesUntilWindowOpen(freshProfile.activeTimerStart);
-            console.log(`[engine] @${freshProfile.username}: outside active window (${freshProfile.activeTimerStart}–${freshProfile.activeTimerEnd}) — sleeping ${waitMin}min`);
+            engineLog("INFO", `@${freshProfile.username}: outside active window (${freshProfile.activeTimerStart}–${freshProfile.activeTimerEnd}) — sleeping ${waitMin}min`);
             await sleep(waitMin * 60_000);
             continue;
           }
@@ -413,26 +453,27 @@ class AutomationEngine {
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
         const followTool = tools.find(t => t.type === "follow");
-        if (!followTool?.enabled || state.stop.stopped) break;
-
-        // Startup scatter: always delay the very first follow session across the delay
-        // window so that a restart never causes all tools to fire simultaneously.
-        if (followFirstRun) {
-          followFirstRun = false;
-          const sf = (followTool.settings ?? {}) as any;
-          const scatterMs = randInt((sf.delayMin ?? 1) * 60_000, (sf.delayMax ?? 5) * 60_000);
-          console.log(`[engine] @${freshProfile.username}: startup scatter — first follow session in ${Math.round(scatterMs / 60000)}min`);
-          state.nextFollowAt = Date.now() + scatterMs;
-          await sleepInterruptible(scatterMs, state.stop);
-          state.nextFollowAt = 0;
-          if (state.stop.stopped) break;
-          continue;
+        engineLog("INFO", `@${freshProfile.username}: follow gate — tool=${followTool?.id ?? "NOT FOUND"} enabled=${followTool?.enabled ?? "n/a"} stopped=${state.stop.stopped}`);
+        if (!followTool?.enabled || state.stop.stopped) {
+          engineLog("WARN", `@${freshProfile.username}: follow loop exiting — tool disabled or runner stopped`);
+          break;
         }
 
-        let sessionResult: { followed: number } = { followed: 0 };
+        this.logAction(freshProfile.id, followTool.id, "tool_start", "", "", "", "ok", "Follow Tool session started");
+        let sessionResult: { followed: number; scraped: number; dedupSkipped: number; filterSkipped: number; blocked: number; skipped: number } = { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
         try {
           sessionResult = await this.runSession(freshProfile, followTool, state);
+          const { followed, dedupSkipped, filterSkipped, blocked, skipped } = sessionResult;
+          const parts: string[] = [];
+          if (followed > 0)      parts.push(`${followed} followed`);
+          if (dedupSkipped > 0)  parts.push(`${dedupSkipped} dedup skip`);
+          if (filterSkipped > 0) parts.push(`${filterSkipped} filter skip`);
+          if (blocked > 0)       parts.push(`${blocked} blocked`);
+          if (skipped > 0)       parts.push(`${skipped} skipped`);
+          const summary = parts.length ? parts.join(", ") : "nothing to do";
+          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete — ${summary}`);
         } catch (err: any) {
+          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
         }
 
@@ -473,8 +514,13 @@ class AutomationEngine {
           (s.delayMax ?? 5) * 60_000,
         );
         state.nextFollowAt = Date.now() + waitMs;
-        console.log(`[engine] @${freshProfile.username}: next follow session in ${Math.round(waitMs / 60000)}min`);
-        await sleepInterruptible(waitMs, state.stop);
+        engineLog("INFO", `@${freshProfile.username}: next follow session in ${Math.round(waitMs / 60000)}min (Run Now will skip this wait)`);
+        // Sleep until timer expires, tool stops, or a force-run is requested (Run Now button)
+        const endAt = Date.now() + waitMs;
+        while (!state.stop.stopped && Date.now() < endAt && !this.followForceRun.has(freshProfile.id)) {
+          await sleep(1000);
+        }
+        this.followForceRun.delete(freshProfile.id);
         state.nextFollowAt = 0; // executing
       }
 
@@ -484,12 +530,12 @@ class AutomationEngine {
 
     loop().catch(err => {
       this.states.delete(profile.id);
-      console.error(`[engine] Fatal error for @${profile.username}:`, err?.message);
+      engineLog("ERROR", `@${profile.username}: FATAL follow runner crash: ${err?.message ?? err}\n${err?.stack ?? ""}`);
     });
   }
 
   // ── Human session runner ──────────────────────────────────────────────────
-  private launchHumanSession(profile: Profile, _tool: Tool) {
+  private launchHumanSession(profile: Profile, _tool: Tool, runImmediately = false) {
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -504,10 +550,17 @@ class AutomationEngine {
       nextContactAt: 0,
       nextUnfollowAt: 0,
     };
+    // On startup: schedule first run using configured X-Y timers.
+    // On user toggle-on (runImmediately = true): nextHumanSessionAt = 0 → fires right away.
+    if (!runImmediately) {
+      const si = (_tool.settings ?? {}) as any;
+      const waitMs = randInt((si.delayMin ?? 30) * 60_000, (si.delayMax ?? 60) * 60_000);
+      state.nextHumanSessionAt = Date.now() + waitMs;
+      console.log(`[engine] @${profile.username}: startup — first human session in ${Math.round(waitMs / 60000)}min`);
+    }
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
 
-    let hsFirstRun = true;
     const loop = async () => {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
@@ -525,19 +578,13 @@ class AutomationEngine {
 
         const s = hsTool.settings as any;
 
-        // Startup scatter: always delay the very first human session across the delay
-        // window so that a restart never causes all tools to fire simultaneously.
-        if (hsFirstRun) {
-          hsFirstRun = false;
-          const scatterMs = randInt((s.delayMin ?? 30) * 60_000, (s.delayMax ?? 60) * 60_000);
-          console.log(`[engine] @${freshProfile.username}: startup scatter — first human session in ${Math.round(scatterMs / 60000)}min`);
-          state.nextHumanSessionAt = Date.now() + scatterMs;
-        }
-
         if (Date.now() >= state.nextHumanSessionAt) {
+          this.logAction(freshProfile.id, hsTool.id, "tool_start", "", "", "", "ok", "Human Session started");
           try {
             await this.runHumanSessionTools(freshProfile, hsTool, state);
+            this.logAction(freshProfile.id, hsTool.id, "tool_complete", "", "", "", "ok", "Human Session complete");
           } catch (err: any) {
+            this.logAction(freshProfile.id, hsTool.id, "tool_complete", "", "", "", "error", `Human Session error: ${err?.message ?? "unknown"}`);
             console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
           }
           const waitMs = randInt(
@@ -561,7 +608,7 @@ class AutomationEngine {
   }
 
   // ── Unfollow runner launch ─────────────────────────────────────────────────
-  private launchUnfollow(profile: Profile, _tool: Tool) {
+  private launchUnfollow(profile: Profile, _tool: Tool, runImmediately = false) {
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -579,8 +626,19 @@ class AutomationEngine {
     this.unfollowStates.set(profile.id, state);
     console.log(`[engine] Launching unfollow runner for @${profile.username}`);
 
-    let unfollowFirstRun = true;
     const loop = async () => {
+      // On startup: schedule first run using configured X-Y timers.
+      // On user toggle-on: runImmediately = true → skip and run right away.
+      if (!runImmediately) {
+        const si = (_tool.settings ?? {}) as any;
+        const waitMs = randInt((si.delayMin ?? 5) * 60_000, (si.delayMax ?? 15) * 60_000);
+        console.log(`[engine] @${profile.username}: startup — first unfollow session in ${Math.round(waitMs / 60000)}min`);
+        state.nextUnfollowAt = Date.now() + waitMs;
+        await sleepInterruptible(waitMs, state.stop);
+        state.nextUnfollowAt = 0;
+        if (state.stop.stopped) return;
+      }
+
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
@@ -591,22 +649,12 @@ class AutomationEngine {
         const unfollowTool = tools.find(t => t.type === "unfollow");
         if (!unfollowTool?.enabled || state.stop.stopped) break;
 
-        // Startup scatter: always delay the very first unfollow session across the delay
-        // window so that a restart never causes all tools to fire simultaneously.
-        if (unfollowFirstRun) {
-          unfollowFirstRun = false;
-          const su = (unfollowTool.settings ?? {}) as any;
-          const scatterMs = randInt((su.delayMin ?? 5) * 60_000, (su.delayMax ?? 15) * 60_000);
-          console.log(`[engine] @${freshProfile.username}: startup scatter — first unfollow session in ${Math.round(scatterMs / 60000)}min`);
-          state.nextUnfollowAt = Date.now() + scatterMs;
-          await sleepInterruptible(scatterMs, state.stop);
-          if (state.stop.stopped) break;
-          continue;
-        }
-
+        this.logAction(freshProfile.id, unfollowTool.id, "tool_start", "", "", "", "ok", "Unfollow Tool session started");
         try {
           await this.runUnfollowSession(freshProfile, unfollowTool, state);
+          this.logAction(freshProfile.id, unfollowTool.id, "tool_complete", "", "", "", "ok", "Unfollow Tool session complete");
         } catch (err: any) {
+          this.logAction(freshProfile.id, unfollowTool.id, "tool_complete", "", "", "", "error", `Unfollow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unfollow session error: ${err?.message}`);
         }
 
@@ -658,7 +706,7 @@ class AutomationEngine {
   }
 
   // ── DM runner launch ─────────────────────────────────────────────────────
-  private launchDM(profile: Profile, _tool: Tool) {
+  private launchDM(profile: Profile, _tool: Tool, runImmediately = false) {
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -676,8 +724,17 @@ class AutomationEngine {
     this.dmStates.set(profile.id, state);
     console.log(`[engine] Launching DM runner for @${profile.username}`);
 
-    let dmFirstRun = true;
     const loop = async () => {
+      // On startup: schedule first run using configured X-Y timers.
+      // On user toggle-on: runImmediately = true → skip and run right away.
+      if (!runImmediately) {
+        const si = (_tool.settings ?? {}) as any;
+        const waitMs = randInt((si.delayMin ?? 10) * 60_000, (si.delayMax ?? 30) * 60_000);
+        console.log(`[engine] @${profile.username}: startup — first DM session in ${Math.round(waitMs / 60000)}min`);
+        await sleepInterruptible(waitMs, state.stop);
+        if (state.stop.stopped) return;
+      }
+
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
@@ -688,21 +745,12 @@ class AutomationEngine {
         const dmTool = tools.find(t => t.type === "dm");
         if (!dmTool?.enabled || state.stop.stopped) break;
 
-        // Startup scatter: always delay the very first DM session across the delay
-        // window so that a restart never causes all tools to fire simultaneously.
-        if (dmFirstRun) {
-          dmFirstRun = false;
-          const sd = (dmTool.settings ?? {}) as any;
-          const scatterMs = randInt((sd.delayMin ?? 10) * 60_000, (sd.delayMax ?? 30) * 60_000);
-          console.log(`[engine] @${freshProfile.username}: startup scatter — first DM session in ${Math.round(scatterMs / 60000)}min`);
-          await sleepInterruptible(scatterMs, state.stop);
-          if (state.stop.stopped) break;
-          continue;
-        }
-
+        this.logAction(freshProfile.id, dmTool.id, "tool_start", "", "", "", "ok", "DM Tool session started");
         try {
           await this.runDMSession(freshProfile, dmTool, state);
+          this.logAction(freshProfile.id, dmTool.id, "tool_complete", "", "", "", "ok", "DM Tool session complete");
         } catch (err: any) {
+          this.logAction(freshProfile.id, dmTool.id, "tool_complete", "", "", "", "error", `DM Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: DM session error: ${err?.message}`);
         }
 
@@ -723,7 +771,7 @@ class AutomationEngine {
   }
 
   // ── Contact (new-follower + users send) runner ────────────────────────────
-  private launchContact(profile: Profile, _tool: Tool) {
+  private launchContact(profile: Profile, _tool: Tool, runImmediately = false) {
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -741,18 +789,22 @@ class AutomationEngine {
     this.contactStates.set(profile.id, state);
     console.log(`[engine] Launching contact runner for @${profile.username}`);
 
-    // Startup scatter: always delay the first contact run across the delay window
-    // so that a restart never causes all tools to fire simultaneously.
-    const sc = (_tool.settings ?? {}) as any;
-    const _contactScatterMs = randInt(
-      (sc.contactUsersDelayMin ?? sc.delayMin ?? 30) * 60_000,
-      (sc.contactUsersDelayMax ?? sc.delayMax ?? 60) * 60_000,
+    // Each timer is tracked separately so they run on their own independent cadence.
+    // On startup: schedule using configured X-Y timers. On user toggle-on: start immediately.
+    const _cs = (_tool.settings ?? {}) as any;
+    const _followerWaitMs = runImmediately ? 0 : randInt(
+      (_cs.contactUsersDelayMin ?? _cs.delayMin ?? 30) * 60_000,
+      (_cs.contactUsersDelayMax ?? _cs.delayMax ?? 60) * 60_000,
     );
-    console.log(`[engine] @${profile.username}: startup scatter — first contact run in ${Math.round(_contactScatterMs / 60000)}min`);
-
-    // Each timer is tracked separately so they run on their own independent cadence
-    let nextFollowerCheckAt = Date.now() + _contactScatterMs;
-    let nextUsersSessionAt  = Date.now() + _contactScatterMs;
+    const _usersWaitMs = runImmediately ? 0 : randInt(
+      (_cs.contactUsersDelayMin ?? _cs.delayMin ?? 30) * 60_000,
+      (_cs.contactUsersDelayMax ?? _cs.delayMax ?? 60) * 60_000,
+    );
+    if (!runImmediately) {
+      console.log(`[engine] @${profile.username}: startup — first contact run in ${Math.round(_followerWaitMs / 60000)}min`);
+    }
+    let nextFollowerCheckAt = Date.now() + _followerWaitMs;
+    let nextUsersSessionAt  = Date.now() + _usersWaitMs;
 
     // Toggle-detection: reset timer immediately when sub-features are re-enabled
     let lastContactNewFollowersEnabled: boolean | undefined = undefined;
@@ -795,9 +847,12 @@ class AutomationEngine {
         // ── New Followers → enqueue to pending ─────────────────────────────
         if (now >= nextFollowerCheckAt) {
           if (newFollowersEnabled) {
+            this.logAction(freshProfile.id, contactTool.id, "tool_start", "", "", "", "ok", "Contact Tool: new-follower check started");
             try {
               await this.runContactNewFollowersSession(freshProfile, contactTool, state);
+              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "ok", "Contact Tool: new-follower check complete");
             } catch (err: any) {
+              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool new-follower error: ${err?.message ?? "unknown"}`);
               console.error(`[engine] @${freshProfile.username}: new-follower contact session error: ${err?.message}`);
             }
           }
@@ -815,9 +870,12 @@ class AutomationEngine {
         // ── Contact Users → send from pending queue ─────────────────────────
         if (now >= nextUsersSessionAt) {
           if (usersEnabled) {
+            this.logAction(freshProfile.id, contactTool.id, "tool_start", "", "", "", "ok", "Contact Tool: DM send session started");
             try {
               await this.runContactUsersSession(freshProfile, contactTool, state);
+              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "ok", "Contact Tool: DM send session complete");
             } catch (err: any) {
+              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool DM send error: ${err?.message ?? "unknown"}`);
               console.error(`[engine] @${freshProfile.username}: contact-users send session error: ${err?.message}`);
             }
           }
@@ -890,6 +948,7 @@ class AutomationEngine {
         ownUserId = hikerUser?.pk ?? null;
         storage.createInstagramApiCall({
           profileId: profile.id,
+          username: profile.username,
           operationName: "v1/user/by/username",
           date: new Date().toISOString(),
           message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username} (cached for future runs)` : `Could not resolve @${profile.username}`,
@@ -924,6 +983,7 @@ class AutomationEngine {
       followers = await hikerClient.getFollowers(ownUserId!, usersToCheck);
       storage.createInstagramApiCall({
         profileId: profile.id,
+        username: profile.username,
         operationName: "v2/user/followers",
         date: new Date().toISOString(),
         message: `Fetched ${followers.length} followers for pk=${ownUserId} (requested ${usersToCheck})`,
@@ -1210,21 +1270,11 @@ class AutomationEngine {
     // Create client once per profile lifecycle
     if (!state.client) {
       state.client = new InstagramWebClient(proxyUrl, profile.id);
-      // Only log real API operations — skip human-session browsing noise that
-      // floods the table (timeline reels/stories, DM inbox checks, navigation).
-      const LOGGED_OPS = new Set([
-        "Login", "Follow", "UnfollowUser", "SendDM", "UnsendDM",
-        "HashtagScrape", "FollowersScrape", "GetUserByUsername",
-        "GetUserProfile", "GetOwnUser", "SearchUser", "LikeMedia",
-        // Human session actions — visible in dashboard so user can confirm sessions are running
-        "VisitNotifications", "VisitOwnProfile", "RefreshOwnProfile", "VisitSettingsAndActivity",
-        "ViewTimelineFeed", "ViewTimelineReels", "ViewTimelineStories",
-        "GetDirectMessages", "GetDirectMessagesInternal",
-      ]);
+      // Log every API call — no filtering.
       state.client.setLogger((op, durationMs, message) => {
-        if (!LOGGED_OPS.has(op)) return;
         storage.createInstagramApiCall({
           profileId: profile.id,
+          username: profile.username,
           operationName: op,
           date: new Date().toISOString(),
           message: message ?? "",
@@ -1251,9 +1301,9 @@ class AutomationEngine {
       state.client.setWebUserAgent(profile.userAgentEmbedded);
     }
 
-    // Sync device state and stored API cookies so mobileLogin() can restore the
-    // mobile session from igApiCookies (no new-device email challenge) and uses
-    // the same device fingerprint as the IgApiClient from Verify Credentials.
+    // Sync device state and stored API cookies. setDeviceInfo now eagerly calls
+    // _restoreMobileFromApiCookies, so if the account was previously verified
+    // isMobileLoggedIn() will return true immediately below — no web login needed.
     state.client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
 
     const client = state.client;
@@ -1281,54 +1331,36 @@ class AutomationEngine {
       return client;
     }
 
-    // No EB browser session — fall back to web login
-    if (client.isLoggedIn()) {
-      if (!client.isMobileLoggedIn()) {
-        const mobileOk = await client.mobileLogin(
-          profile.username,
-          profile.password,
-          profile.twoFASecretKey ?? undefined,
-        );
-        console.log(`[engine] @${profile.username}: mobile login (re-auth) ${mobileOk ? "OK" : "FAILED"}`);
-      }
+    // Mobile session already live from stored igApiCookies (set by Verify Credentials).
+    // setDeviceInfo eagerly calls _restoreMobileFromApiCookies so this will be true
+    // for any account that has been verified — no web login needed.
+    if (client.isMobileLoggedIn()) {
+      console.log(`[engine] @${profile.username}: resuming mobile API session from stored cookies`);
       return client;
     }
 
-    const ok = await client.login(
+    // Per architecture rules: this is a pure API bot — web login is never used
+    // for automation. All Instagram actions go through the mobile API.
+    // Attempt a fresh mobile login if no session is available.
+    const mobileOk = await client.mobileLogin(
       profile.username,
       profile.password,
       profile.twoFASecretKey ?? undefined,
     );
 
-    if (ok) {
+    if (mobileOk) {
       const current = await storage.getProfile(profile.id);
       if (current?.accountStatus === "logged_out") {
         await storage.updateProfile(profile.id, { accountStatus: "valid" });
       }
-      console.log(`[engine] @${profile.username}: web login OK`);
-
-      // Establish a separate mobile session for DM sending if not already ready.
-      // The web session cannot send DMs — i.instagram.com DM endpoints require
-      // a session created via the mobile login API.
-      if (!client.isMobileLoggedIn()) {
-        console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
-        const mobileOk = await client.mobileLogin(
-          profile.username,
-          profile.password,
-          profile.twoFASecretKey ?? undefined,
-        );
-        console.log(`[engine] @${profile.username}: mobile login ${mobileOk ? "OK" : "FAILED"}`);
-      }
-
+      console.log(`[engine] @${profile.username}: mobile API login OK`);
       return client;
     }
 
-    // Web login failed — could be a transient network/proxy issue.
-    // Do NOT mark the account as logged_out; that flag should only be set by
-    // an explicit "Verify Credentials" action which gets a definitive bad-
-    // password response from Instagram.  The engine just skips this session
-    // and will retry next interval.
-    console.warn(`[engine] @${profile.username}: web login failed (transient?) — skipping session, status unchanged`);
+    // Mobile login failed — transient network/proxy issue.
+    // Do NOT mark the account as logged_out; that flag is only set by an explicit
+    // Verify Credentials action with a definitive bad-password response.
+    console.warn(`[engine] @${profile.username}: mobile login failed — skipping session, status unchanged`);
     return null;
   }
 
@@ -1791,6 +1823,7 @@ class AutomationEngine {
     const logHikerDM = (op: string, message: string, durationMs: number) => {
       storage.createInstagramApiCall({
         profileId: profile.id,
+        username: profile.username,
         operationName: op,
         date: new Date().toISOString(),
         message,
@@ -2033,8 +2066,10 @@ class AutomationEngine {
       "likeTimelinePostsOrderMin",   "likeTimelinePostsOrderMax",
       async () => {
         const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
+        const likeDelayMin = Number(s.likeTimelinePostsDelayMin ?? 3);
+        const likeDelayMax = Number(s.likeTimelinePostsDelayMax ?? 8);
         try {
-          const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount);
+          const { liked, watched, likedPosts } = await client.likeTimelinePosts(likeCount, likeDelayMin, likeDelayMax);
           const summary = watched > 0
             ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)`
             : `Liked ${liked} post(s) from timeline`;
@@ -2270,7 +2305,7 @@ class AutomationEngine {
   }
 
   // ── Follow session ────────────────────────────────────────────────────────
-  private async runSession(profile: Profile, tool: Tool, state: ProfileState): Promise<{ followed: number }> {
+  private async runSession(profile: Profile, tool: Tool, state: ProfileState): Promise<{ followed: number; scraped: number; dedupSkipped: number; filterSkipped: number; blocked: number; skipped: number }> {
     const s = tool.settings as any;
     const maxPerDay    = randInt(s.maxPerDayMin  ?? 150, s.maxPerDayMax  ?? 200);
     const maxPerHour   = randInt(s.maxPerHourMin ?? 5,   s.maxPerHourMax ?? 15);
@@ -2288,7 +2323,10 @@ class AutomationEngine {
     const hikerEnabled = globalSettings.hikerApiEnabled === "true";
     const hikerToken   = globalSettings.hikerApiToken ?? "";
     const hikerClient: HikerApiClient | null = (hikerEnabled && hikerToken) ? new HikerApiClient(hikerToken) : null;
-    if (hikerClient) console.log(`[engine] @${profile.username}: using HikerAPI for scrape calls`);
+    if (hikerClient) engineLog("INFO", `@${profile.username}: using HikerAPI for scrape calls`);
+    else engineLog("WARN", `@${profile.username}: HikerAPI disabled/no token — no scraping fallback, session will abort`);
+
+    const zero = { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
 
     // Daily limit (0 = no limit)
     if (maxPerDay > 0 && this.daily(state) >= maxPerDay) {
@@ -2296,35 +2334,36 @@ class AutomationEngine {
       const now = new Date();
       const midnight = new Date(now); midnight.setDate(midnight.getDate() + 1); midnight.setHours(0, 0, 0, 0);
       await sleep(midnight.getTime() - now.getTime());
-      return { followed: 0 };
+      return zero;
     }
 
     // Hourly limit (0 = no limit)
     if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) {
       console.log(`[engine] @${profile.username}: hourly limit (${maxPerHour}) hit — sleeping 1h`);
       await sleep(3_600_000);
-      return { followed: 0 };
+      return zero;
     }
 
     const client = await this.ensureClient(profile, state);
-    if (!client) return { followed: 0 };
+    if (!client) return zero;
 
     // Pick source
     const sources = await storage.getSourcesByTool(tool.id);
     if (!sources.length) {
-      console.log(`[engine] @${profile.username}: no sources configured`);
+      engineLog("WARN", `@${profile.username}: follow tool has no sources — add hashtags or accounts in Follow Tool settings`);
+      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No follow sources configured — add hashtag or account sources in Follow Tool settings");
       await sleep(300_000);
-      return { followed: 0 };
+      return zero;
     }
     const source = this.pickSource(sources);
-    console.log(`[engine] @${profile.username}: session [${processCount} follows] from ${source.type}:${source.value}`);
+    engineLog("INFO", `@${profile.username}: session [${processCount} follows] from ${source.type}:${source.value}`);
 
-    let followed = 0;
     let candidates: { pk: string; username: string; fullName: string }[] = [];
 
     const logHiker = (op: string, message: string, durationMs: number) => {
       storage.createInstagramApiCall({
         profileId: profile.id,
+        username: profile.username,
         operationName: op,
         date: new Date().toISOString(),
         message,
@@ -2338,7 +2377,7 @@ class AutomationEngine {
         if (hikerClient) {
           const t0 = Date.now();
           const globalCursor = await storage.getHashtagCursor(source.value);
-          const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, globalCursor);
+          const result = await hikerClient.getHashtagUsers(source.value, processCount + 5, globalCursor);
           candidates = result.users;
           if (result.nextCursor) {
             await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
@@ -2375,19 +2414,21 @@ class AutomationEngine {
         }
         if (hikerClient) {
           const t0 = Date.now();
-          candidates = await hikerClient.getFollowers(targetPk, processCount * 3);
+          candidates = await hikerClient.getFollowers(targetPk, processCount + 5);
           logHiker("FollowersScrape", `Scraped followers of @${targetName} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
-          candidates = await client.getFollowers(targetPk, processCount * 3);
+          candidates = await client.getFollowers(targetPk, processCount + 5);
         }
       }
     } catch (err: any) {
-      console.error(`[engine] @${profile.username}: scrape error: ${err?.message}`);
+      engineLog("ERROR", `@${profile.username}: scrape error: ${err?.message}`);
       if (/login_required|Not authenticated|session/i.test(err?.message ?? "")) state.client = null;
-      return { followed: 0 };
+      return zero;
     }
 
-    console.log(`[engine] @${profile.username}: scraped ${candidates.length} candidates`);
+    engineLog("INFO", `@${profile.username}: scraped ${candidates.length} candidates (target: ${processCount})`);
+
+    let followed = 0, dedupSkipped = 0, filterSkipped = 0, blocked = 0, skipped = 0;
 
     for (const user of candidates) {
       if (followed >= processCount) break;
@@ -2398,13 +2439,17 @@ class AutomationEngine {
       // Dedup check (per-profile)
       if (await this.alreadyFollowed(profile.id, user.username)) {
         this.logAction(profile.id, tool.id, "dedup_skip", user.username, source.value, source.type, "skipped", "Already followed previously");
+        dedupSkipped++;
         continue;
       }
 
       // Global filter: skip if globally followed by any profile
       if (globalSkipFollowed && await storage.isGloballyFollowed(user.username)) {
-        console.log(`[engine] @${profile.username}: skip @${user.username} — globally followed by another profile`);
-        this.logAction(profile.id, tool.id, "dedup_skip", user.username, source.value, source.type, "skipped", "Globally followed by another profile");
+        const followerLabel = await storage.getGlobalFollowerLabel(user.username);
+        const detail = followerLabel ? `Skipped, followed by @${followerLabel}` : "Skipped, followed by another profile";
+        console.log(`[engine] @${profile.username}: skip @${user.username} — ${detail}`);
+        this.logAction(profile.id, tool.id, "dedup_skip", user.username, source.value, source.type, "skipped", detail);
+        dedupSkipped++;
         continue;
       }
 
@@ -2412,6 +2457,7 @@ class AutomationEngine {
       if (globalSkipSkipped && await storage.isGloballySkipped(user.username)) {
         console.log(`[engine] @${profile.username}: skip @${user.username} — in global skip list`);
         this.logAction(profile.id, tool.id, "filter_skip", user.username, source.value, source.type, "skipped", "In global skip list");
+        filterSkipped++;
         continue;
       }
 
@@ -2422,6 +2468,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: skip @${user.username} — Indian script in name`);
           this.logAction(profile.id, tool.id, "filter_skip", user.username, source.value, source.type, "skipped", "Indian script in name");
           await storage.addSkippedUser(user.username, "Indian script in name");
+          filterSkipped++;
           continue;
         }
       }
@@ -2431,6 +2478,7 @@ class AutomationEngine {
         const rem = this.suspensionRemaining(state, "follow");
         console.log(`[engine] @${profile.username}: follow suspended (${rem} remaining) — skipping session`);
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Follow suspended — ${rem} remaining`);
+        blocked++;
         break;
       }
 
@@ -2440,7 +2488,8 @@ class AutomationEngine {
       // Follow
       let result: { ok: boolean; status?: string; reason?: string };
       try {
-        result = await client.followUser(user.pk, user.username);
+        const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;
+        result = await client.followUser(user.pk, user.username, sourceLabel);
       } catch (err: any) {
         console.error(`[engine] @${profile.username}: follow @${user.username} threw: ${err?.message}`);
         this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "error", err?.message ?? "");
@@ -2460,43 +2509,64 @@ class AutomationEngine {
         const reason = result.reason ?? "Instagram declined";
         console.warn(`[engine] @${profile.username}: follow skipped @${user.username} — ${reason}`);
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", reason);
+        blocked++;
+
+        // Session expired — mark logged_out and abort immediately
+        if (reason.includes("login_required") || reason.includes("logged out") || reason.includes("logout")) {
+          console.warn(`[engine] @${profile.username}: session expired (login_required) — marking logged_out, aborting session`);
+          await storage.updateProfile(profile.id, { accountStatus: "logged_out" });
+          state.client = null;
+          break;
+        }
+
         // Only apply suspension for explicit Instagram account-level blocks
         const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required");
         if (isLegitBlock) {
           this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
           break; // Abort session immediately when legitimately blocked
         }
+
+        // Blocked attempts count against the session limit (users per session = real API calls)
+        if (followed + blocked >= processCount) break;
+
+        // Always delay between attempts — even on block — to avoid hammering Instagram
+        await sleep(randInt(followMin, followMax));
         continue;
       }
 
       if (!result.ok) {
         console.log(`[engine] @${profile.username}: skip @${user.username} (already following / private)`);
         this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", "Already following or private account");
+        skipped++;
         continue;
       }
 
       // Record successful follow (store pk so unfollow never needs to look it up)
-      await storage.createFollowedUser({
-        profileId: profile.id,
-        instagramUsername: user.username,
-        instagramUserId: user.pk,
-        sourceValue: source.value,
-        sourceType: source.type,
-        followedAt: new Date().toISOString(),
-      });
-      this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] day:${state.dailyCount + 1}`);
+      try {
+        await storage.createFollowedUser({
+          profileId: profile.id,
+          instagramUsername: user.username,
+          instagramUserId: String(user.pk ?? ""),
+          sourceValue: source.value,
+          sourceType: source.type,
+          followedAt: new Date().toISOString(),
+        });
+      } catch (dbErr: any) {
+        console.error(`[engine] @${profile.username}: failed to persist followed user @${user.username}: ${dbErr?.message}`);
+      }
+      this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}]`);
       await storage.incrementStat(profile.id, "follow");
       this.bump(state);
       followed++;
 
       console.log(`[engine] @${profile.username}: ✓ @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
 
-      // Inter-follow delay
+      // Inter-follow delay after every successful follow
       await sleep(randInt(followMin, followMax));
     }
 
     console.log(`[engine] @${profile.username}: session done — followed ${followed}/${processCount}`);
-    return { followed };
+    return { followed, scraped: candidates.length, dedupSkipped, filterSkipped, blocked, skipped };
   }
 
   // ── Weighted source picker ────────────────────────────────────────────────
@@ -2649,7 +2719,23 @@ class AutomationEngine {
 
   // Called when a follow tool is explicitly enabled from the UI.
   triggerFollow(profileId: number) {
-    if (!this.states.has(profileId)) {
+    if (this.states.has(profileId)) {
+      // Runner is sleeping between sessions — wake it up immediately (within 1s)
+      this.followForceRun.add(profileId);
+    } else {
+      // Runner is not active — reconcile will launch it with runImmediately=true
+      this.reconcile().catch(() => {});
+    }
+  }
+
+  // Force an immediate follow session, bypassing the inter-session wait timer.
+  // If the runner is already sleeping between sessions, it wakes within 1 second.
+  // If the runner is not active, starts it immediately via reconcile.
+  forceFollowNow(profileId: number) {
+    if (this.states.has(profileId)) {
+      this.followForceRun.add(profileId);
+    } else {
+      this.followForceRun.add(profileId);
       this.reconcile().catch(() => {});
     }
   }

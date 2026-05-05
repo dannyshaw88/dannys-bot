@@ -51,7 +51,7 @@ export interface IStorage {
 
   // Instagram API Calls
   getInstagramApiCalls(limit?: number): Promise<any[]>;
-  createInstagramApiCall(call: { profileId: number; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
+  createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
 
   // Followed Users
   getFollowedUsersByProfile(profileId: number, limit?: number): Promise<FollowedUser[]>;
@@ -63,6 +63,7 @@ export interface IStorage {
 
   // Session Actions
   getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
+  getRecentSessionActions(limit?: number): Promise<SessionAction[]>;
   createSessionAction(entry: InsertSessionAction): Promise<SessionAction>;
 
   // Global Settings
@@ -72,6 +73,7 @@ export interface IStorage {
   // Skipped Users (global)
   isGloballySkipped(username: string): Promise<boolean>;
   isGloballyFollowed(username: string): Promise<boolean>;
+  getGlobalFollowerLabel(username: string): Promise<string | null>;
   addSkippedUser(username: string, reason: string): Promise<void>;
   getSkippedUsers(limit?: number): Promise<SkippedUser[]>;
 
@@ -268,9 +270,10 @@ export class DatabaseStorage implements IStorage {
 
   private _apiCallInsertCount = 0;
 
-  async createInstagramApiCall(call: { profileId: number; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any> {
+  async createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any> {
     const [created] = await db.insert(instagramApiCalls).values({
       profileId: call.profileId,
+      username: call.username ?? "",
       operationName: call.operationName,
       date: call.date,
       message: call.message ?? "",
@@ -387,6 +390,12 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
+  async getRecentSessionActions(limit: number = 30): Promise<SessionAction[]> {
+    return await db.select().from(sessionActions)
+      .orderBy(desc(sessionActions.id))
+      .limit(limit);
+  }
+
   async createSessionAction(entry: InsertSessionAction): Promise<SessionAction> {
     const [created] = await db.insert(sessionActions).values(entry).returning();
     return created;
@@ -418,6 +427,18 @@ export class DatabaseStorage implements IStorage {
       .where(sql`LOWER(${followedUsers.instagramUsername}) = LOWER(${username})`)
       .limit(1);
     return rows.length > 0;
+  }
+
+  async getGlobalFollowerLabel(username: string): Promise<string | null> {
+    const rows = await db
+      .select({ accountLabel: profiles.accountLabel, profileUsername: profiles.username })
+      .from(followedUsers)
+      .innerJoin(profiles, eq(followedUsers.profileId, profiles.id))
+      .where(sql`LOWER(${followedUsers.instagramUsername}) = LOWER(${username})`)
+      .orderBy(desc(followedUsers.id))
+      .limit(1);
+    if (!rows.length) return null;
+    return rows[0].accountLabel || rows[0].profileUsername || null;
   }
 
   async addSkippedUser(username: string, reason: string): Promise<void> {

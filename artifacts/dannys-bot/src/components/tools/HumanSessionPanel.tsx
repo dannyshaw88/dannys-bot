@@ -84,6 +84,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       { key: "likeTimelinePosts", label: "Like Timeline Posts", description: "Like posts from your feed", subOptions: [
         { key: "ltp_enabled", label: "Enabled",                            settingKeys: ["likeTimelinePostsEnabled"] },
         { key: "ltp_count",   label: "Likes per session (min / max)",      settingKeys: ["likeTimelinePostsMin","likeTimelinePostsMax"] },
+        { key: "ltp_delay",   label: "Delay between likes in sec (min / max)", settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
         { key: "ltp_order",   label: "Execution order (min / max)",        settingKeys: ["likeTimelinePostsOrderMin","likeTimelinePostsOrderMax"] },
         { key: "ltp_chance",  label: "Skip chance % (0=always run, 100=never)", settingKeys: ["likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"] },
       ]},
@@ -154,6 +155,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       likeTimelinePostsEnabled: false,
       likeTimelinePostsMin: 2,
       likeTimelinePostsMax: 5,
+      likeTimelinePostsDelayMin: 3,
+      likeTimelinePostsDelayMax: 8,
       likeTimelinePostsOrderMin: 0,
       likeTimelinePostsOrderMax: 0,
       likeTimelinePostsNotUsedMin: 0,
@@ -263,19 +266,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     <div className="space-y-4 animate-in fade-in duration-300">
       {/* ── Master enable/disable ─────────────────────────────── */}
       <div className="border border-border rounded-xl p-4 space-y-2">
-        <div className="flex items-center gap-2">
-          <h4 className="font-semibold text-sm">Human Session Tool</h4>
-          {nextRunStatus && (
-            <span className="text-[11px] flex items-center gap-1 ml-1" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-              <Clock className="w-3 h-3 shrink-0" />
-              {nextRunStatus.executing
-                ? <span className="font-medium">Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
-              }
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
+        <h4 className="font-semibold text-sm">Human Session Tool</h4>
+        <div className="flex items-center gap-3 flex-wrap">
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })}
@@ -291,6 +283,15 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           >
             Copy Settings
           </button>
+          {nextRunStatus && (
+            <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {nextRunStatus.executing
+                ? <span className="font-medium">Executing</span>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+              }
+            </span>
+          )}
         </div>
       </div>
 
@@ -592,6 +593,31 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 value={settings.likeTimelinePostsMax ?? 5}
                 onChange={(e) => setSettings({ ...settings, likeTimelinePostsMax: Math.max(1, Number(e.target.value)) })}
               />
+            </div>
+          </div>
+        </div>
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Delay Between Likes</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <div className="relative">
+                <Input type="number" min="0" max="300" className="w-16 h-7 text-xs pr-5"
+                  value={settings.likeTimelinePostsDelayMin ?? 3}
+                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMin: Math.max(0, Number(e.target.value)) })}
+                />
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <div className="relative">
+                <Input type="number" min="0" max="300" className="w-16 h-7 text-xs pr-5"
+                  value={settings.likeTimelinePostsDelayMax ?? 8}
+                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMax: Math.max(0, Number(e.target.value)) })}
+                />
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
+              </div>
             </div>
           </div>
         </div>

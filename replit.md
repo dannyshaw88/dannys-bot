@@ -17,11 +17,38 @@
 > Token: `listConnections('github')[0].settings.access_token`. Repo: `dannyshaw88/dannys-bot`.
 > See `.local/github_push_instruction.md` for the full step-by-step.
 
-> ## ⚠️ AGENT STANDING RULES
+> ## ⚠️ AGENT STANDING RULES — READ BEFORE TOUCHING ANY INSTAGRAM CODE
 >
-> **1. This is an API-driven Windows desktop bot.**
-> All Instagram actions and API calls are made via the Instagram Private API only.
-> The Embedded Browser (EB) is used for human-assisted browsing and challenge solving ONLY — never for automation.
+> ### RULE 1 — EVERYTHING IS API. NO EXCEPTIONS. NO WEB. NO BROWSER AUTOMATION.
+>
+> **All Instagram actions AND all data scraping go through:**
+> 1. **Instagram Private Mobile API** (`i.instagram.com`) — actions (follow, unfollow, like, DM, story view, profile read, comment) AND data retrieval (followers, followings, hashtag posts, user info)
+> 2. **HikerAPI** (`hikerApiClient.ts`) — alternative data retrieval source
+>
+> **The Embedded Browser (EB) is used ONLY for:**
+> - Human manual web browsing (the user is in control of the keyboard/mouse)
+> - Completing login challenges / CAPTCHAs so the API session recovers
+> - NOTHING ELSE — the EB never performs automated actions or data collection
+>
+> **NEVER — not for actions, not for scraping, not for anything automated:**
+> - Use `webPost()` or `webGet()` for any bot-driven operation
+> - Use `www.instagram.com` endpoints for any automated purpose (returns 302)
+> - Use Puppeteer / browser automation for any bot action or data fetch
+> - Fall back to the EB browser when an API call fails
+>
+> **Confirmed dead ends — do not retry:**
+> - `www.instagram.com` DM broadcast → returns 302 (blocked for API use)
+> - `i.instagram.com` DM broadcast with web-origin cookies → error 4415001
+> - `i.instagram.com` create_group_thread with web cookies → login_required
+> - `fetch_headers` as a bootstrap step → returns zero cookies, useless
+>
+> **Correct method for EVERYTHING the bot does:**
+> - Actions → `mobilePost()` in `instagramWebClient.ts` → `i.instagram.com`
+> - Data retrieval → `mobileGet()` in `instagramWebClient.ts` → `i.instagram.com`, OR `hikerApiClient.ts`
+> - DMs → `_mobileDmPost()` / `_sendDmViaIgClient()` in `instagramWebClient.ts`
+>
+> **Before writing or modifying ANY method in `instagramWebClient.ts` or `automationEngine.ts`:**
+> Ask: does this use `mobilePost`, `mobileGet`, `_mobileDmPost`, or HikerAPI? If the answer involves `webPost`, `webGet`, Puppeteer, or `www.instagram.com` — stop and find the correct mobile API endpoint.
 
 ## Overview
 

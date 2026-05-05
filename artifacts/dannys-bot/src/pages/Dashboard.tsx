@@ -3,13 +3,46 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw } from "lucide-react";
+import {
+  Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw,
+} from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
 type Tab = "api-log" | "whats-new";
 
+const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
+  tool_start:          { label: "Started",      cls: "bg-blue-100 text-blue-700" },
+  tool_complete:       { label: "Complete",     cls: "bg-emerald-100 text-emerald-700" },
+  verified:            { label: "Verified",     cls: "bg-emerald-100 text-emerald-700" },
+  verification_failed: { label: "Verify Fail",  cls: "bg-red-100 text-red-700" },
+  follow:              { label: "Follow",        cls: "bg-sky-100 text-sky-700" },
+  follow_blocked:      { label: "Blocked",       cls: "bg-red-100 text-red-700" },
+  follow_skipped:      { label: "Skipped",       cls: "bg-orange-100 text-orange-700" },
+  dedup_skip:          { label: "Skipped",        cls: "bg-yellow-100 text-yellow-700" },
+  filter_skip:         { label: "Skipped",        cls: "bg-yellow-100 text-yellow-700" },
+  unfollow:            { label: "Unfollow",      cls: "bg-orange-100 text-orange-700" },
+  unfollow_blocked:    { label: "UF Block",      cls: "bg-red-100 text-red-700" },
+  dm:                  { label: "DM",            cls: "bg-purple-100 text-purple-700" },
+  dm_blocked:          { label: "DM Block",      cls: "bg-red-100 text-red-700" },
+  contact_dm_blocked:  { label: "DM Block",      cls: "bg-red-100 text-red-700" },
+  no_sources:          { label: "No Sources",    cls: "bg-slate-100 text-slate-600" },
+};
+
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.3.0",
+    date: "5 May 2026 — 11:54",
+    items: [
+      { category: "Engine", text: "Removed all web login fallback from automation engine — only the mobile Instagram API is ever used for automation." },
+      { category: "Engine", text: "Startup scheduling: tools already enabled when the app starts now schedule their first run within the configured X–Y timer window instead of firing immediately." },
+      { category: "Engine", text: "Toggle-on behaviour: enabling any tool from the dashboard now starts it immediately, without any scatter or delay." },
+      { category: "Dashboard", text: "Timestamp columns in both the API Log and Session Log now show full date including year (e.g. 5 May 2026, 11:54:00)." },
+      { category: "Dashboard", text: "Dashboard API Log and profile name list now auto-refresh every 5 seconds so live activity is always visible." },
+      { category: "Dashboard", text: "Removed '(valid)' red annotation from the Live Activity Ticker — status is already communicated by the label." },
+      { category: "Dashboard", text: "CSV export: Banyan 400 calls are now correctly treated as OK and excluded from the error count." },
+    ],
+  },
   {
     version: "1.2.0",
     date: "3 May 2026",
@@ -58,6 +91,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
+  "Engine": "bg-emerald-100 text-emerald-700",
   "Human Sessions": "bg-purple-100 text-purple-700",
   "Profiles": "bg-blue-100 text-blue-700",
   "Unfollow Tool": "bg-orange-100 text-orange-700",
@@ -72,6 +106,19 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Fix": "bg-red-100 text-red-700",
 };
 
+type FeedItem = {
+  key: string;
+  ts: number;
+  profileId: number;
+  kind: "api" | "session";
+  operationName?: string;
+  message?: string;
+  profileLabel?: string;
+  action?: string;
+  targetUsername?: string;
+  detail?: string;
+};
+
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("api-log");
   const [changelogFilter, setChangelogFilter] = useState("");
@@ -81,31 +128,75 @@ export function Dashboard() {
   const [profileSearch, setProfileSearch] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // ── Real-time API call log (append-only, newest first) ──────────────────────
-  const [apiCalls, setApiCalls] = useState<any[]>([]);
+  // ── Unified feed: both API calls + session actions merged by timestamp ────────
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
-  const lastIdRef = useRef<number>(0);
+  const lastApiIdRef = useRef<number>(0);
+  const lastSessionIdRef = useRef<number>(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchAndAppend = useCallback(async (since: number, isInitial = false) => {
+  const fetchFeed = useCallback(async (isInitial = false) => {
     try {
-      const url = since > 0
-        ? `/api/instagram-api-calls?since=${since}`
-        : "/api/instagram-api-calls";
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const rows: any[] = await res.json();
-      if (rows.length > 0) {
-        const filtered = rows.filter((c: any) => c.source !== "Browser" && c.source !== "Verify");
-        const maxId = Math.max(...rows.map((r: any) => r.id));
-        lastIdRef.current = Math.max(lastIdRef.current, maxId);
-        if (isInitial) {
-          setApiCalls(filtered);
-        } else {
-          setApiCalls(prev => [...filtered, ...prev]);
+      const [apiRes, sessionRes] = await Promise.all([
+        fetch(lastApiIdRef.current > 0
+          ? `/api/instagram-api-calls?since=${lastApiIdRef.current}`
+          : "/api/instagram-api-calls"),
+        fetch("/api/all-session-actions?limit=500"),
+      ]);
+      const [apiRows, sessionRows]: [any[], any[]] = await Promise.all([
+        apiRes.ok ? apiRes.json() : Promise.resolve([]),
+        sessionRes.ok ? sessionRes.json() : Promise.resolve([]),
+      ]);
+
+      const newApiRows: FeedItem[] = apiRows
+        // "Account" source = timed() calls from InstagramWebClient — already
+        // surfaced as session_actions, so skip to avoid duplicate entries.
+        // "Browser"/"Verify" = EB and login calls — never useful in the feed.
+        // "HikerAPI" = scrape metadata — shown since it adds unique context.
+        .filter((c: any) => c.source !== "Browser" && c.source !== "Verify" && c.source !== "Account")
+        .map((c: any) => ({
+          key: `api-${c.id}`,
+          ts: new Date(c.date).getTime(),
+          profileId: Number(c.profileId),
+          kind: "api",
+          operationName: c.operationName,
+          message: c.message,
+          profileLabel: c.username,
+        }));
+
+      if (apiRows.length > 0) {
+        const maxApiId = Math.max(...apiRows.map((r: any) => r.id));
+        lastApiIdRef.current = Math.max(lastApiIdRef.current, maxApiId);
+      }
+
+      const newSessionRows = isInitial
+        ? sessionRows
+        : sessionRows.filter((r: any) => r.id > lastSessionIdRef.current);
+
+      if (sessionRows.length > 0) {
+        const maxSessId = Math.max(...sessionRows.map((r: any) => r.id));
+        lastSessionIdRef.current = Math.max(lastSessionIdRef.current, maxSessId);
+      }
+
+      const newSessionItems: FeedItem[] = newSessionRows.map((a: any) => ({
+        key: `sess-${a.id}`,
+        ts: new Date(a.timestamp).getTime(),
+        profileId: Number(a.profileId),
+        kind: "session",
+        action: a.action,
+        targetUsername: a.targetUsername,
+        detail: a.detail,
+        profileLabel: a.profileLabel,
+      }));
+
+      if (isInitial) {
+        const all = [...newApiRows, ...newSessionItems].sort((a, b) => b.ts - a.ts);
+        setFeedItems(all);
+      } else {
+        const incoming = [...newApiRows, ...newSessionItems];
+        if (incoming.length > 0) {
+          setFeedItems(prev => [...incoming, ...prev].sort((a, b) => b.ts - a.ts));
         }
-      } else if (isInitial) {
-        setApiCalls([]);
       }
     } catch { /* ignore */ } finally {
       if (isInitial) setInitialLoading(false);
@@ -117,21 +208,16 @@ export function Dashboard() {
     const schedule = () => {
       pollTimerRef.current = setTimeout(async () => {
         if (cancelled) return;
-        await fetchAndAppend(lastIdRef.current);
+        await fetchFeed(false);
         if (!cancelled) schedule();
-      }, 3000);
+      }, 4000);
     };
-    // Start polling only AFTER the initial fetch completes so lastIdRef is set
-    // before the first incremental poll fires. Without this, a race causes the
-    // poll to re-fetch all rows (since=0) and prepend duplicates.
-    fetchAndAppend(0, true).then(() => {
-      if (!cancelled) schedule();
-    });
+    fetchFeed(true).then(() => { if (!cancelled) schedule(); });
     return () => {
       cancelled = true;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [fetchAndAppend]);
+  }, [fetchFeed]);
 
   // ── Server startup time ──────────────────────────────────────────────────────
   const { data: serverInfo } = useQuery<{ startedAt: string }>({
@@ -140,24 +226,35 @@ export function Dashboard() {
 
   const { data: profiles } = useQuery<Profile[]>({
     queryKey: ["/api/profiles"],
+    refetchInterval: 5000,
   });
 
-  const getUsername = (profileId: number) => {
-    const p = profiles?.find(p => p.id === profileId);
-    return p?.accountLabel || p?.username || `ID: ${profileId}`;
+  const getUsername = (profileId: number, label?: string) => {
+    if (label) return label;
+    const p = profiles?.find(p => Number(p.id) === Number(profileId));
+    return p?.accountLabel || p?.username || `#${profileId}`;
   };
 
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
 
-  const filteredApiCalls = apiCalls
-    .filter((c: any) => selectedProfileId == null || c.profileId === selectedProfileId)
-    .filter((c: any) => {
+  const filteredFeed = feedItems
+    .filter((item) => selectedProfileId == null || item.profileId === selectedProfileId)
+    .filter((item) => {
       if (!apiLogSearch.trim()) return true;
       const q = apiLogSearch.toLowerCase();
+      const label = getUsername(item.profileId, item.profileLabel).toLowerCase();
+      if (item.kind === "api") {
+        return (
+          label.includes(q) ||
+          (item.operationName ?? "").toLowerCase().includes(q) ||
+          (item.message ?? "").toLowerCase().includes(q)
+        );
+      }
       return (
-        (c.operationName ?? "").toLowerCase().includes(q) ||
-        (c.message ?? "").toLowerCase().includes(q) ||
-        getUsername(c.profileId).toLowerCase().includes(q)
+        label.includes(q) ||
+        (item.action ?? "").toLowerCase().includes(q) ||
+        (item.targetUsername ?? "").toLowerCase().includes(q) ||
+        (item.detail ?? "").toLowerCase().includes(q)
       );
     });
 
@@ -166,7 +263,6 @@ export function Dashboard() {
     p.username.toLowerCase().includes(profileSearch.toLowerCase())
   );
 
-  // Close picker on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
@@ -201,7 +297,7 @@ export function Dashboard() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
         <div className="flex items-center gap-3 mt-1 flex-wrap">
-          <p className="text-muted-foreground">Live view of all Instagram API calls made by the automation engine.</p>
+          <p className="text-muted-foreground">Live view of completed tasks.</p>
           {serverInfo?.startedAt && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
               <RefreshCw className="w-3 h-3" />
@@ -212,10 +308,9 @@ export function Dashboard() {
       </div>
 
       <Card className="desktop-card border-none shadow-sm">
-        {/* Tab bar */}
         <div className="flex items-center border-b border-border/50 px-4">
           <button className={tabClass("api-log")} onClick={() => setActiveTab("api-log")}>
-            <Zap className="w-4 h-4" /> API Call Log
+            <Zap className="w-4 h-4" /> Activity Log
           </button>
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
             <Sparkles className="w-4 h-4" /> What's New
@@ -225,7 +320,6 @@ export function Dashboard() {
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
           {activeTab === "api-log" ? (
             <div className="flex items-center gap-3 flex-wrap">
-              {/* Search box */}
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-border bg-background min-w-[200px] flex-1 max-w-xs">
                 <Search className="w-3 h-3 text-muted-foreground shrink-0" />
                 <input
@@ -242,9 +336,10 @@ export function Dashboard() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground flex-1 text-right hidden sm:block">
-                {apiCalls.length > 0 ? `${filteredApiCalls.length.toLocaleString()} of ${apiCalls.filter(c => selectedProfileId == null || c.profileId === selectedProfileId).length.toLocaleString()} entries` : "Waiting for activity…"}
+                {feedItems.length > 0
+                  ? `${filteredFeed.length.toLocaleString()} of ${feedItems.filter(i => selectedProfileId == null || i.profileId === selectedProfileId).length.toLocaleString()} entries`
+                  : "Waiting for activity…"}
               </p>
-              {/* Profile filter picker */}
               <div ref={pickerRef} className="relative shrink-0">
                 <button
                   type="button"
@@ -325,19 +420,19 @@ export function Dashboard() {
             <div className="overflow-y-auto overflow-x-hidden max-h-[70vh]">
               <table className="w-full text-sm text-left table-fixed">
                 <colgroup>
+                  <col className="w-44" />
+                  <col className="w-44" />
+                  <col className="w-[162px]" />
                   <col className="w-36" />
-                  <col className="w-40" />
-                  <col className="w-36" />
-                  <col className="w-20" />
                   <col />
                 </colgroup>
                 <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
                   <tr>
                     <th className="px-3 py-4 font-bold bg-muted/30">Timestamp</th>
                     <th className="px-3 py-4 font-bold bg-muted/30">Account</th>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Operation</th>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Duration</th>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Message</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Event</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Target</th>
+                    <th className="px-3 py-4 font-bold bg-muted/30">Detail</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -347,7 +442,7 @@ export function Dashboard() {
                         <td colSpan={5} className="px-3 py-4 bg-muted/10 h-12" />
                       </tr>
                     ))
-                  ) : filteredApiCalls.length === 0 ? (
+                  ) : filteredFeed.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-3 py-12 text-center text-muted-foreground">
                         <Activity className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
@@ -355,8 +450,8 @@ export function Dashboard() {
                           {apiLogSearch.trim()
                             ? `No results for "${apiLogSearch}"`
                             : selectedProfileId != null
-                            ? `No API calls for @${selectedProfile?.username ?? selectedProfileId}`
-                            : "No API calls recorded yet"}
+                            ? `No activity for @${selectedProfile?.username ?? selectedProfileId}`
+                            : "No activity recorded yet"}
                         </p>
                         <p className="text-xs mt-1">
                           {apiLogSearch.trim()
@@ -368,38 +463,70 @@ export function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    filteredApiCalls.map((call: any) => (
-                      <tr key={call.id} className="hover:bg-accent/5 transition-colors">
-                        <td className="px-3 py-3.5 text-muted-foreground text-xs font-mono truncate">
-                          <span className="flex items-center gap-1 min-w-0">
-                            <Clock className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{format(new Date(call.date), "MMM d yyyy, HH:mm:ss")}</span>
-                          </span>
-                        </td>
-                        <td className="px-3 py-3.5 font-medium truncate">
-                          <Link
-                            href={`/profiles/${call.profileId}?tab=follow`}
-                            className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"
-                          >
-                            <User className="w-3.5 h-3.5 text-primary shrink-0" />
-                            <span className="group-hover:underline underline-offset-2 truncate">
-                              {getUsername(call.profileId)}
+                    filteredFeed.map((item) => {
+                      const label = getUsername(item.profileId, item.profileLabel);
+                      if (item.kind === "api") {
+                        return (
+                          <tr key={item.key} className="hover:bg-accent/5 transition-colors">
+                            <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
+                              <span className="flex items-center gap-1 min-w-0">
+                                <Clock className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 font-medium truncate">
+                              <Link
+                                href={`/profiles/${item.profileId}?tab=follow`}
+                                className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"
+                              >
+                                <User className="w-3.5 h-3.5 text-primary shrink-0" />
+                                <span className="group-hover:underline underline-offset-2 truncate">{label}</span>
+                              </Link>
+                            </td>
+                            <td className="px-3 py-3 truncate">
+                              <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full">
+                                {(item.operationName ?? "").replace(/_/g, " ")}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 text-xs text-muted-foreground truncate">—</td>
+                            <td className="px-3 py-3 text-foreground truncate text-xs" title={item.message || undefined}>
+                              {item.message || "—"}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "bg-muted text-muted-foreground" };
+                      return (
+                        <tr key={item.key} className="hover:bg-accent/5 transition-colors">
+                          <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
+                            <span className="flex items-center gap-1 min-w-0">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span>
                             </span>
-                          </Link>
-                        </td>
-                        <td className="px-3 py-3.5 truncate">
-                          <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full">
-                            {call.operationName}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3.5 text-xs text-muted-foreground font-mono truncate">
-                          {call.durationMs != null ? `${call.durationMs}ms` : "—"}
-                        </td>
-                        <td className="px-3 py-3.5 text-foreground truncate" title={call.message || undefined}>
-                          {call.message || "—"}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="px-3 py-3 font-medium truncate">
+                            <Link
+                              href={`/profiles/${item.profileId}?tab=follow`}
+                              className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"
+                            >
+                              <User className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="group-hover:underline underline-offset-2 truncate">{label}</span>
+                            </Link>
+                          </td>
+                          <td className="px-3 py-3 truncate">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full ${style.cls}`}>
+                              {style.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-xs text-foreground/80 truncate" title={item.targetUsername || undefined}>
+                            {item.targetUsername ? `@${item.targetUsername}` : "—"}
+                          </td>
+                          <td className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>
+                            {item.detail || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

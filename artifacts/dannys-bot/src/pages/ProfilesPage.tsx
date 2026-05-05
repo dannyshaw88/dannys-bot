@@ -103,6 +103,7 @@ export function ProfilesPage() {
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
@@ -419,113 +420,8 @@ export function ProfilesPage() {
   }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers]);
 
   const setSlot = useSidebarSetSlot();
-
-  useEffect(() => {
-    const allSelected = !!(filteredProfiles.length && filteredProfiles.every(p => selectedProfileIds.includes(p.id)));
-    setSlot(
-      <div className="space-y-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              className="w-full bg-foreground text-background hover:bg-foreground/90 font-bold"
-            >
-              Actions <ChevronDown className="ml-1 w-3.5 h-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-72 p-2 mb-2">
-            <DropdownMenuItem onClick={() => setImportOpen(true)} className="cursor-pointer font-medium p-3">
-              <Upload className="w-4 h-4 mr-2" /> Import Profiles
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={handleExportProfiles}
-              className="cursor-pointer font-medium p-3"
-            >
-              <FileDown className="w-4 h-4 mr-2" /> Export Profiles
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={async () => {
-                const tzOffset = new Date().getTimezoneOffset();
-                const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
-                const url = `/api/logs/export?tz=${tzOffset}${ids ? `&profileIds=${ids}` : ""}`;
-                try {
-                  const res = await fetch(url, { credentials: "include" });
-                  const blob = await res.blob();
-                  const objectUrl = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = objectUrl;
-                  a.download = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(objectUrl);
-                } catch {
-                  /* silently ignore network errors */
-                }
-              }}
-              className="cursor-pointer font-medium p-3"
-            >
-              <Download className="w-4 h-4 mr-2" /> Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleBulkOpenBrowsers}
-              className="cursor-pointer font-medium p-3"
-            >
-              <Globe className="w-4 h-4 mr-2" /> Open Embedded Browsers
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleVerifyAll}
-              disabled={verifyingAll}
-              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {verifyingAll
-                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                : <RefreshCw className="w-4 h-4 mr-2" />
-              }
-              Verify Selected Accounts <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={handleBulkFixCaptcha}
-              disabled={selectedProfileIds.length === 0 || fixingCaptcha}
-              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {fixingCaptcha
-                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                : <ScanFace className="w-4 h-4 mr-2" />
-              }
-              Fix Captcha <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+F</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={handleBulkRemoveProxies}
-              disabled={selectedProfileIds.length === 0}
-              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Globe className="w-4 h-4 mr-2" /> Remove Proxies <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+P</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleBulkResetDeviceIds}
-              disabled={selectedProfileIds.length === 0}
-              className="cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Smartphone className="w-4 h-4 mr-2" /> Reset Device IDs
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleBulkDelete}
-              disabled={selectedProfileIds.length === 0}
-              className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer font-medium p-3 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Trash2 className="w-4 h-4 mr-2" /> Delete Selected <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+D</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    );
-    return () => setSlot(null);
-  }, [selectedProfileIds, filteredProfiles, toggleAll, handleBulkDelete, handleBulkResetDeviceIds, handleExportProfiles, setImportOpen, handleVerifyAll, handleBulkFixCaptcha, handleBulkRemoveProxies, verifyingAll, fixingCaptcha]);
+  // Sidebar slot is unused on this page — clear it on mount/unmount
+  useEffect(() => { setSlot(null); return () => setSlot(null); }, [setSlot]);
 
   return (
     <AppLayout>
@@ -589,24 +485,10 @@ export function ProfilesPage() {
           </p>
         </div>
       ) : (
-        <div className="desktop-card overflow-hidden pb-24">
-          {/* Column headers */}
-          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Checkbox
-                checked={!!(filteredProfiles.length && filteredProfiles.every(p => selectedProfileIds.includes(p.id)))}
-                onCheckedChange={toggleAll}
-                aria-label="Select all profiles"
-              />
-              {selectedProfileIds.length > 0 && (
-                <button
-                  onClick={() => setSelectedProfileIds([])}
-                  className="text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
-                >
-                  Select None
-                </button>
-              )}
-            </div>
+        <div className="desktop-card overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 210px)" }}>
+          {/* ── Top column-header bar ─────────────────────────────────────── */}
+          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
+            <div className="w-5 shrink-0" />
             <button
               onClick={() => cycleSort("account")}
               className="flex-1 min-w-0 flex items-center gap-1 text-left hover:text-foreground transition-colors"
@@ -629,6 +511,8 @@ export function ProfilesPage() {
             <div className="w-44 shrink-0 text-right">Actions</div>
           </div>
 
+          {/* ── Scrollable account rows ───────────────────────────────────── */}
+          <div className="overflow-y-auto flex-1 min-h-0">
           {filteredProfiles?.map((profile, idx) => {
             const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
             const isStopped  = acctStatus === "stopped";
@@ -735,10 +619,100 @@ export function ProfilesPage() {
               </div>
             );
           })}
+          </div>{/* end scrollable rows */}
+
+          {/* ── Bottom bar ───────────────────────────────────────────────── */}
+          <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0">
+            <button
+              onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
+              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+            >
+              Select All
+            </button>
+            <button
+              onClick={() => setSelectedProfileIds([])}
+              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+            >
+              Select None
+            </button>
+            {/* Actions — opens centred popup */}
+            <button
+              onClick={() => setActionsOpen(true)}
+              className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+            >
+              Actions <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
+
+      {/* ── Actions popup — no dark overlay, transparent click-away ──────── */}
+      {actionsOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-80 overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b border-border">
+              <p className="text-sm font-semibold">Actions</p>
+            </div>
+            <div className="py-1">
+              <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                <Upload className="w-4 h-4 shrink-0 text-muted-foreground" /> Import Profiles
+              </button>
+              <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles
+              </button>
+              <button
+                onClick={async () => {
+                  setActionsOpen(false);
+                  const tzOffset = new Date().getTimezoneOffset();
+                  const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
+                  const url = `/api/logs/export?tz=${tzOffset}${ids ? `&profileIds=${ids}` : ""}`;
+                  try {
+                    const res = await fetch(url, { credentials: "include" });
+                    const blob = await res.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = objectUrl;
+                    a.download = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    URL.revokeObjectURL(objectUrl);
+                  } catch { /* ignore */ }
+                }}
+                className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
+              >
+                <Download className="w-4 h-4 shrink-0 text-muted-foreground" />
+                Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <div className="mx-5 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Open Embedded Browsers
+              </button>
+              <div className="mx-5 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                Verify Selected Accounts <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
+              </button>
+              <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                Fix Captcha <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+F</span>
+              </button>
+              <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Remove Proxies <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+P</span>
+              </button>
+              <div className="mx-5 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); handleBulkResetDeviceIds(); }} disabled={selectedProfileIds.length === 0} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
+              </button>
+              <div className="mx-5 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <Trash2 className="w-4 h-4 shrink-0" /> Delete Selected <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+D</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <AlertDialog open={!!deleteConfirm} onOpenChange={open => { if (!open) setDeleteConfirm(null); }}>
         <AlertDialogContent>

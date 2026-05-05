@@ -19,7 +19,7 @@ export function useEngineStatus() {
       if (!res.ok) throw new Error("Failed to fetch engine status");
       return res.json();
     },
-    refetchInterval: 10000,
+    refetchInterval: 2000,
   });
 }
 

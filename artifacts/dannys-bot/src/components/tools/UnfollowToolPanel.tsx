@@ -136,9 +136,12 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   const autoEnabled = !!(settings as any).autoFollowUnfollowEnabled;
 
   const s = settings as any;
-  const avgDelay   = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
-  const avgProcess = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
-  const perHour    = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+  const avgDelay     = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
+  const avgProcess   = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
+  const avgMaxPerDay = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
+  const perHour      = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+  const perDayRaw    = perHour * 24;
+  const perDay       = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
 
   const nextUnfollowStatus: { label: string; executing: boolean } | null = (() => {
     if (!tool.enabled) return null;
@@ -155,23 +158,8 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
         <div className="flex items-center gap-2">
           <UserMinus className="w-4 h-4 text-muted-foreground" />
           <h4 className="font-semibold text-sm">Unfollow Tool</h4>
-          {nextUnfollowStatus && (
-            <span className="text-[11px] flex items-center gap-1 ml-1" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-              <Clock className="w-3 h-3 shrink-0" />
-              {nextUnfollowStatus.executing
-                ? <span className="font-medium">Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextUnfollowStatus.label}</span></>
-              }
-            </span>
-          )}
-          {tool.enabled && perHour > 0 && (
-            <span className="text-[11px] flex items-center gap-1 text-muted-foreground ml-1">
-              <TrendingUp className="w-3 h-3 shrink-0" />
-              ~{perHour} unfollows/hr
-            </span>
-          )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) =>
@@ -189,6 +177,21 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
           >
             Copy Settings
           </button>
+          {nextUnfollowStatus && (
+            <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {nextUnfollowStatus.executing
+                ? <span className="font-medium">Executing</span>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextUnfollowStatus.label}</span></>
+              }
+            </span>
+          )}
+          {tool.enabled && perHour > 0 && (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <TrendingUp className="w-3 h-3 shrink-0" />
+              ~{perHour}/hr · ~{perDay}/day
+            </span>
+          )}
         </div>
       </div>
 

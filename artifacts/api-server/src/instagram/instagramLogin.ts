@@ -10,8 +10,8 @@ export type VerifyResult =
   | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password" | "invalid_credentials"; igDeviceState?: string; checkpointUrl?: string };
 
 // Must stay in sync with MOBILE_VERSION in instagramWebClient.ts
-const MOBILE_VERSION      = "361.0.0.32.109";
-const MOBILE_VERSION_CODE = "617571539";
+const MOBILE_VERSION      = "378.1.0.45.111";
+const MOBILE_VERSION_CODE = "651869969";
 
 // Parse app version and version code from a FULL Instagram mobile user-agent string.
 // UA format: "Instagram 361.0.0.32.109 Android (30/11; 480dpi; 1080x2400; samsung; SM-G998B; ...; en_US; 558538758)"
@@ -44,6 +44,7 @@ function extractCheckpointUrl(err: any): string | undefined {
 
 async function logApiCall(
   profileId: number,
+  username: string,
   operationName: string,
   status: string,
   source: string,
@@ -54,6 +55,7 @@ async function logApiCall(
   try {
     await db.insert(instagramApiCalls).values({
       profileId,
+      username,
       operationName,
       date: new Date().toISOString(),
       message: status,
@@ -193,7 +195,7 @@ function extractFromBody(body: string | Buffer | undefined, key: string): string
  * the proxy IP. This works correctly where end$.subscribe does NOT — the library
  * calls end$.next() with zero arguments so subscribers always receive undefined.
  */
-export function attachRequestLogger(ig: IgApiClient, profileId: number, source: string, proxyIp: string) {
+export function attachRequestLogger(ig: IgApiClient, profileId: number, username: string, source: string, proxyIp: string) {
   const req = ig.request as any;
   if (req.__logged) return; // prevent double-patching
   req.__logged = true;
@@ -235,7 +237,7 @@ export function attachRequestLogger(ig: IgApiClient, profileId: number, source: 
         ? new URLSearchParams(userOptions.form).toString()
         : (typeof userOptions?.body === "string" ? userOptions.body : "");
       const navChain = extractFromBody(bodyStr, "nav_chain");
-      logApiCall(profileId, opName, statusStr, source, navChain, proxyIp, durationMs).catch(() => {});
+      logApiCall(profileId, username, opName, statusStr, source, navChain, proxyIp, durationMs).catch(() => {});
       throw err;
     }
 
@@ -243,7 +245,7 @@ export function attachRequestLogger(ig: IgApiClient, profileId: number, source: 
     // nav_chain lives in the outgoing request body (URL-encoded form)
     const sentBody: string | Buffer | undefined = response?.request?.body;
     const navChain = extractFromBody(sentBody, "nav_chain");
-    logApiCall(profileId, opName, statusStr, source, navChain, proxyIp, durationMs).catch(() => {});
+    logApiCall(profileId, username, opName, statusStr, source, navChain, proxyIp, durationMs).catch(() => {});
     return response;
   };
 }
@@ -350,7 +352,7 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   } else {
     ig.state.generateDevice(deviceSeed);
     if (profile.userAgentApi) ig.state.deviceString = profile.userAgentApi;
-    console.error(`[instagramLogin] Generated NEW device for @${profile.username} (deviceId=${ig.state.deviceId} uuid=${ig.state.uuid?.slice(0,8)}…)`);
+    console.error(`[instagramLogin] No saved ig_device_state for @${profile.username} — generated deterministic IDs from seed${profile.userAgentApi ? " + applied device string from profile UA" : ""} (deviceId=${ig.state.deviceId} uuid=${ig.state.uuid?.slice(0,8)}…)`);
   }
 
   // Always patch app version constants so X-IG-App-Version matches the User-Agent.
@@ -405,7 +407,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     // We intentionally avoid currentUser()?edit=true — Instagram treats that as a
     // profile-write attempt on a freshly restored session and raises checkpoint_required.
     const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
-    attachRequestLogger(ig, profile.id, "Verify", proxyIp);
+    attachRequestLogger(ig, profile.id, profile.username, "Verify", proxyIp);
 
     // Parse userId from the sessionid token (format: "userId:hash:seq:token")
     // and inject ds_user_id into the cookie jar so the library can read cookieUserId.
@@ -517,7 +519,26 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           const statusCode: number | undefined = err?.response?.statusCode;
 
           if (err instanceof IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
-            console.error(`[instagramLogin] @${profile.username} — ${source}: checkpoint`);
+            // Inspect explicit boolean fields only — never search the full body string
+            // because checkpoint URLs can contain "bad_password" or "invalid_credentials"
+            // as path segments, causing false bad_password classifications for live sessions.
+            const challengeBody = err?.response?.body ?? {};
+            console.error(`[instagramLogin] @${profile.username} — ${source}: checkpoint body: ${JSON.stringify(challengeBody).slice(0, 600)}`);
+            // challenge.lock=true means Instagram has hard-locked the account (very unusual;
+            // distinct from a soft checkpoint). invalid_credentials=true at the TOP level
+            // (not inside a URL) explicitly flags wrong password from Instagram itself.
+            const hardLocked = challengeBody?.challenge?.lock === true;
+            const explicitBadCreds = challengeBody.invalid_credentials === true;
+            if (hardLocked) {
+              // lock=true = Instagram hard-suspended/banned the account (integrity ban, association ban, etc.)
+              console.error(`[instagramLogin] @${profile.username} — ${source}: challenge.lock=true → account banned/suspended`);
+              return { ok: false, message: `@${profile.username} — account is suspended or banned by Instagram.`, accountStatus: "banned", igDeviceState: captureDeviceState() };
+            }
+            if (explicitBadCreds) {
+              console.error(`[instagramLogin] @${profile.username} — ${source}: invalid_credentials=true → bad_password`);
+              return { ok: false, message: `@${profile.username} — account locked by Instagram (invalid credentials).`, accountStatus: "bad_password", igDeviceState: captureDeviceState() };
+            }
+            console.error(`[instagramLogin] @${profile.username} — ${source}: checkpoint → captcha`);
             return { ok: false, message: `@${profile.username} — account requires a security checkpoint. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: captureDeviceState() };
           }
           if (statusCode === 401 || /login_required|not.*auth/i.test(msg) || /login_required|not.*auth/i.test(igMsg)) {
@@ -672,7 +693,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
   // ── Normal path: fresh password login (only when no cookies are stored) ──
   const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
-  attachRequestLogger(ig, profile.id, "Verify", proxyIp);
+  attachRequestLogger(ig, profile.id, profile.username, "Verify", proxyIp);
 
   // Step 1: Fetch encryption keys (must happen before login)
   await ensureEncryptionKeys(ig);
@@ -747,6 +768,19 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     }
 
     if (err instanceof IgCheckpointError) {
+      // Inspect the body — Instagram sometimes embeds credential failure indicators
+      // inside a challenge_required response even during password login.
+      const cpBody = err?.response?.body ?? {};
+      const cpStr = JSON.stringify(cpBody);
+      console.error(`[instagramLogin] @${profile.username} — password-login IgCheckpointError body: ${cpStr.slice(0, 600)}`);
+      const cpSignalsBadCreds =
+        cpBody.invalid_credentials === true ||
+        cpBody?.challenge?.lock === true ||
+        /\b(bad_password|invalid_credentials)\b/i.test(cpStr);
+      if (cpSignalsBadCreds) {
+        console.error(`[instagramLogin] @${profile.username} — checkpoint body signals bad credentials → bad_password`);
+        return { ok: false, message: `@${profile.username} — incorrect password (Instagram returned a challenge indicating invalid credentials).`, accountStatus: "bad_password", igDeviceState: ds };
+      }
       return { ok: false, message: `@${profile.username} — security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: ds };
     }
 

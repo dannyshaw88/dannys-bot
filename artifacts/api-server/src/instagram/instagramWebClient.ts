@@ -128,11 +128,11 @@ type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 // Keep this version current — Instagram rejects sessions from versions older
 // than ~18 months with a checkpoint_required → unsupported_version response.
 // Version 361 ≈ early 2025; update periodically as Instagram raises the floor.
-const MOBILE_VERSION      = "361.0.0.32.109";
-const MOBILE_VERSION_CODE = "617571539";
+const MOBILE_VERSION      = "378.1.0.45.111";
+const MOBILE_VERSION_CODE = "651869969";
 // Date this version was last confirmed working. If it's been more than 12
 // months, Instagram may have started rejecting it — update MOBILE_VERSION.
-const MOBILE_VERSION_DATE = "2025-05-03";
+const MOBILE_VERSION_DATE = "2026-05-05";
 (() => {
   const ageMs = Date.now() - new Date(MOBILE_VERSION_DATE).getTime();
   const ageDays = Math.floor(ageMs / 86_400_000);
@@ -208,6 +208,10 @@ export class InstagramWebClient {
     this.igDeviceState = igDeviceState ?? undefined;
     this.userAgentApi  = userAgentApi  ?? undefined;
     this.igApiCookies  = igApiCookies  ?? undefined;
+    // Eagerly restore mobile session so isMobileLoggedIn() returns true immediately.
+    // This lets ensureClient skip the web login when igApiCookies from a prior
+    // Verify Credentials run are still valid.
+    this._restoreMobileFromApiCookies();
   }
 
   // Parse igApiCookies (Jarvee-style "key=value;key=value" with URL-encoded values)
@@ -232,19 +236,19 @@ export class InstagramWebClient {
       const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
       cookies.push(`mid=${mid}`);
     }
-    // If igApiCookies don't include a csrftoken, pull it from the web cookie jar
-    // (EB browser session). Instagram uses the same csrftoken across *.instagram.com
-    // domains, so the web token is valid for i.instagram.com DM requests too.
+    // igApiCookies never contains a csrftoken (Jarvee doesn't store it).
+    // Seed with "missing" as a placeholder; _bootstrapMobileCsrf() will replace
+    // it with a real token on the first mobileSessionPost call by doing a GET
+    // to i.instagram.com using only the mobileCookieJar — no EB dependency.
     if (!cookies.some(c => c.startsWith("csrftoken="))) {
-      const webCsrf = this.cookieJar.find(c => c.startsWith("csrftoken="));
-      if (webCsrf) cookies.push(webCsrf);
+      cookies.push("csrftoken=missing");
     }
 
     this.mobileCookieJar = cookies;
     const csrfEntry = cookies.find(c => c.startsWith("csrftoken="));
     if (csrfEntry) this.mobileCsrf = csrfEntry.split("=").slice(1).join("=");
     this.mobileSessionReady = true;
-    console.log(`[webClient] mobile session restored from igApiCookies (${cookies.length} cookies, sessionid=true, csrf=${!!csrfEntry})`);
+    console.log(`[webClient] mobile session restored from igApiCookies (${cookies.length} cookies, sessionid=true, csrf=${this.mobileCsrf || "none"})`);
     return true;
   }
 
@@ -295,13 +299,49 @@ export class InstagramWebClient {
     }
   }
 
-  private async timed<T>(opName: string, fn: () => Promise<T>, message?: string | ((result: T) => string)): Promise<T> {
+  private async timed<T>(opName: string, fn: () => Promise<T>, message?: string | ((result: T) => string), shouldLog?: (result: T) => boolean): Promise<T> {
     const t0 = Date.now();
     const result = await fn();
     const ms = Date.now() - t0;
-    const msg = typeof message === "function" ? message(result) : message;
-    this.logCallFn?.(opName, ms, msg);
+    if (!shouldLog || shouldLog(result)) {
+      const msg = typeof message === "function" ? message(result) : message;
+      this.logCallFn?.(opName, ms, msg);
+    }
     return result;
+  }
+
+  // Fetch a fresh CSRF token from the Instagram homepage using the existing session cookie.
+  // Called automatically when a webPost returns 302 (stale CSRF), so the follow/unfollow
+  // can be retried without requiring a full re-login — the sessionid is still valid.
+  private async refreshCsrf(): Promise<boolean> {
+    try {
+      const res = await igReq({
+        path: "/",
+        method: "GET",
+        headers: {
+          Host: "www.instagram.com",
+          "User-Agent": WEB_UA,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        cookieJar: this.cookieJar,
+        proxyUrl: this.proxyUrl,
+      });
+      if (res.status === 200) {
+        this.cookieJar = mergeCookies(this.cookieJar, res.cookies);
+        const newCsrf = extractCsrf(res.cookies);
+        if (newCsrf) {
+          this.csrfToken = newCsrf;
+          console.log(`[webClient] refreshCsrf: new token acquired (${newCsrf.slice(0, 8)}...)`);
+          return true;
+        }
+      }
+      console.warn(`[webClient] refreshCsrf: GET / returned ${res.status}, no token found`);
+      return false;
+    } catch (err: any) {
+      console.warn(`[webClient] refreshCsrf failed: ${err?.message}`);
+      return false;
+    }
   }
 
   // ── Login (web + 2FA TOTP) ─────────────────────────────────────────────────
@@ -666,6 +706,63 @@ export class InstagramWebClient {
     return res.json;
   }
 
+  // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
+  // Use this for any read that needs the real account session — inbox, timeline, etc.
+  // Zero dependency on the EB; works whether or not the browser is open or logged in.
+  private async mobileSessionGet(path: string): Promise<any> {
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid="));
+    if (!hasMobileSession) {
+      console.warn(`[webClient] mobileSessionGet ${path}: no igApiCookies session`);
+      return null;
+    }
+    if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
+      await this._bootstrapMobileCsrf();
+    }
+    await this.apiThrottle();
+    const MOBILE_APP_ID = "567067343352427";
+    const csrf = this.mobileCsrf || "missing";
+    let fullMobileUA: string;
+    if (this.userAgentApi && this.userAgentApi.startsWith("Instagram ")) {
+      fullMobileUA = this.userAgentApi;
+    } else {
+      let deviceStr: string | undefined;
+      if (this.igDeviceState) {
+        try { deviceStr = JSON.parse(this.igDeviceState).deviceString; } catch { /* ignore */ }
+      }
+      deviceStr = deviceStr ?? this.userAgentApi;
+      fullMobileUA = deviceStr
+        ? `Instagram ${MOBILE_VERSION} Android (${deviceStr}; ${MOBILE_VERSION_CODE})`
+        : MOBILE_UA;
+    }
+    const res = await igReq({
+      host: "i.instagram.com",
+      path,
+      method: "GET",
+      headers: {
+        Host: "i.instagram.com",
+        "User-Agent": fullMobileUA,
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "X-IG-App-ID": MOBILE_APP_ID,
+        "X-CSRFToken": csrf,
+        "X-IG-Capabilities": "3brTvwE=",
+        "X-IG-Connection-Type": "WIFI",
+        "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+        "X-IG-Bandwidth-TotalBytes-B": "0",
+        "X-IG-Bandwidth-TotalTime-MS": "0",
+      },
+      cookieJar: this.mobileCookieJar,
+      proxyUrl: this.proxyUrl,
+    });
+    if (res.cookies.length) {
+      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+      const newCsrf = extractCsrf(res.cookies);
+      if (newCsrf) this.mobileCsrf = newCsrf;
+    }
+    if (!res.json) console.log(`[webClient] mobileSessionGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    return res.json;
+  }
+
   // Anonymous mobile GET — NO account cookies sent, account identity never exposed.
   // Used for source-account scraping (repost) so the account is not linked to the lookup.
   private async mobileGetAnonymous(path: string): Promise<any> {
@@ -688,10 +785,10 @@ export class InstagramWebClient {
     return res.json;
   }
 
-  private async webPost(path: string, body = ""): Promise<any> {
+  private async webPost(path: string, body = "", _isRetry = false): Promise<any> {
     await this.apiThrottle();
     const sessionCookie = this.cookieJar.find(c => c.startsWith("sessionid="));
-    console.log(`[webClient] webPost ${path} csrf=${this.csrfToken.slice(0, 8)}... session=${sessionCookie ? "present" : "MISSING"}`);
+    console.log(`[webClient] webPost ${path} csrf=${this.csrfToken.slice(0, 8)}... session=${sessionCookie ? "present" : "MISSING"}${_isRetry ? " [retry]" : ""}`);
 
     const res = await igReq({
       path,
@@ -713,6 +810,15 @@ export class InstagramWebClient {
       proxyUrl: this.proxyUrl,
     });
 
+    // 302 redirect = stale CSRF token (the sessionid is still valid, just the token rotated).
+    // Refresh the CSRF from the homepage and retry once — this avoids false "session issue"
+    // skips that would happen on the first follow attempt after a long idle period.
+    if (!_isRetry && res.status === 302) {
+      console.log(`[webClient] webPost ${path}: 302 redirect — refreshing CSRF and retrying`);
+      const refreshed = await this.refreshCsrf();
+      if (refreshed) return this.webPost(path, body, true);
+    }
+
     // Only merge cookies and update CSRF on successful (non-redirect) responses.
     // A 302 redirect response contains cookies for the LOGIN PAGE (fresh unauthenticated
     // CSRF token), which would corrupt this.csrfToken and break all subsequent POSTs.
@@ -727,62 +833,207 @@ export class InstagramWebClient {
   }
 
   // ── Follow a user by numeric ID ────────────────────────────────────────────
-  async followUser(userId: string, username?: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
-    return this.timed("Follow", async () => {
-      const r1 = await this.webPost(`/api/v1/friendships/create/${userId}/`);
+  // Follow a user via IgApiClient — uses the library's native signed-body request
+  // stack (identical pattern to _sendDmViaIgClient) so Instagram sees a proper
+  // signed_body parameter instead of the unsigned URL-encoded body that the
+  // hand-rolled mobileSessionPost sends.  This is why the plain POST was getting
+  // "We're sorry, but something went wrong" on some users even though the EB
+  // (which uses signed native app requests) worked fine.
+  private async _followViaIgClient(userId: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
+    if (!this.igApiCookies) return { ok: false, status: "follow_blocked", reason: "no igApiCookies — cannot use IgApiClient" };
 
-      // 302 redirect = no body, CSRF token stale or session expired.
-      // Only intercept here for true redirects (no JSON body); 400 errors may
-      // still carry meaningful JSON (e.g. checkpoint_required) — let those fall
-      // through to the per-field checks below.
-      if (r1.status === 302 || r1.json === null) return { ok: false, status: "follow_blocked", reason: `HTTP ${r1.status} redirect — CSRF/session issue` };
-      const j = r1.json;
+    const ig = new IgApiClient();
 
-      // Always log the full raw response
-      console.log(`[webClient] follow ${userId} HTTP ${r1.status}:`, JSON.stringify(j) ?? r1.rawBody.slice(0, 400));
+    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch { ig.state.generateDevice(deviceSeed); }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+    }
 
-      // ── Checkpoint required — Instagram wants a security challenge completed ──
-      if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
-        const url = j?.checkpoint_url ?? "";
-        console.warn(`[webClient] follow ${userId} checkpoint_required — challenge URL: ${url}`);
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const now = new Date().toISOString();
+    const cookieEntries = pairs.flatMap(pair => {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) return [];
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+      return [
+        { key, value, domain: "i.instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
+        { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
+      ];
+    });
+    await ig.state.deserializeCookieJar(JSON.stringify({
+      version: "tough-cookie@4.1.3",
+      storeType: "MemoryCookieStore",
+      rejectPublicSuffixes: true,
+      cookies: cookieEntries,
+    }));
+
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+
+    // Pre-warm the cookie jar so Instagram sets a fresh csrftoken cookie
+    // before we make the friendship.create POST. Without this, cookieCsrfToken
+    // returns "missing" and Instagram rejects the write with "We're sorry..."
+    try {
+      await ig.user.info(userId);
+      console.log(`[webClient] follow ${userId}: pre-warm GET /users/${userId}/info OK — csrftoken: ${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
+    } catch (preErr: any) {
+      // Non-fatal — if the info call fails, try the follow anyway
+      console.warn(`[webClient] follow ${userId}: pre-warm GET /users/info failed (${preErr?.message}) — continuing`);
+    }
+
+    try {
+      console.log(`[webClient] follow ${userId}: via IgApiClient friendship.create (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION} csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
+      const result = await ig.friendship.create(userId) as any;
+      console.log(`[webClient] follow ${userId}: IgApiClient raw result:`, JSON.stringify(result).slice(0, 300));
+
+      if (result?.following || result?.outgoing_request) {
+        return { ok: true, status: result.following ? "following" : "requested" };
+      }
+      // friendship.create returns the friendship_status object directly
+      if (result && typeof result === "object" && "following" in result) {
+        return { ok: true, status: result.following ? "following" : "requested" };
+      }
+      return { ok: false, status: "follow_blocked", reason: "unexpected IgApiClient response: " + JSON.stringify(result).slice(0, 200) };
+    } catch (err: any) {
+      const msg: string = err?.message ?? String(err);
+      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
+      console.warn(`[webClient] follow ${userId}: IgApiClient error —`, msg);
+      if (body) console.warn(`[webClient] follow ${userId}: IgApiClient raw body —`, JSON.stringify(body)?.slice(0, 600));
+
+      if (/checkpoint_required/i.test(msg)) {
+        const url = body?.checkpoint_url ?? "";
         return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: url };
       }
+      if (/spam/i.test(msg))                           return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
+      if (/feedback_required|ActionBlocked/i.test(msg)) return { ok: false, status: "follow_blocked", reason: msg };
+      if (/login_required|Not authorized|401/i.test(msg)) return { ok: false, status: "follow_blocked", reason: "session expired — re-verify account" };
+      return { ok: false, status: "follow_blocked", reason: msg || "IgApiClient follow failed" };
+    }
+  }
 
-      // ── Spam detection — Instagram flagged this follow as spam ──
-      if (j?.spam === true) {
-        console.warn(`[webClient] follow ${userId} spam — Instagram blocked this follow as spam`);
-        return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
+  // Like a media post using IgApiClient (properly signs the request body).
+  // The hand-rolled mobileSessionPost sends an empty body which Instagram
+  // rejects with "something went wrong" — IgApiClient includes all required
+  // fields (_uid, _uuid, _csrftoken, device_id, radio_type, module_name).
+  private async _likeViaIgClient(mediaId: string): Promise<{ ok: boolean; reason?: string }> {
+    if (!this.igApiCookies) return { ok: false, reason: "no igApiCookies" };
+
+    const ig = new IgApiClient();
+    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch { ig.state.generateDevice(deviceSeed); }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+    }
+
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const now = new Date().toISOString();
+    const cookieEntries = pairs.flatMap(pair => {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) return [];
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+      return [
+        { key, value, domain: "i.instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
+        { key, value, domain: ".instagram.com",   path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
+      ];
+    });
+    await ig.state.deserializeCookieJar(JSON.stringify({
+      version: "tough-cookie@4.1.3",
+      storeType: "MemoryCookieStore",
+      rejectPublicSuffixes: true,
+      cookies: cookieEntries,
+    }));
+
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+
+    // Pre-warm: GET /media/info/ sets a fresh csrftoken cookie before the like POST.
+    // Without this, cookieCsrfToken is "missing" and Instagram rejects the write.
+    try {
+      await ig.media.info(mediaId);
+      console.log(`[webClient] like ${mediaId}: pre-warm media.info OK — csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
+    } catch (preErr: any) {
+      console.warn(`[webClient] like ${mediaId}: pre-warm media.info failed (${preErr?.message}) — continuing`);
+    }
+
+    try {
+      console.log(`[webClient] like ${mediaId}: IgApiClient media.like (uuid=${ig.state.uuid.slice(0,8)}… csrf=${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"})`);
+      await ig.media.like({ mediaId, moduleInfo: { module_name: "feed_timeline" }, d: 0 });
+      return { ok: true };
+    } catch (err: any) {
+      const msg: string = err?.message ?? String(err);
+      const body = err?.response?.body ?? err?.text ?? err?.response?.text;
+      console.warn(`[webClient] like ${mediaId}: IgApiClient error —`, msg);
+      if (body) console.warn(`[webClient] like ${mediaId}: IgApiClient raw body —`, JSON.stringify(body)?.slice(0, 400));
+      if (/checkpoint_required/i.test(msg)) return { ok: false, reason: "checkpoint_required" };
+      if (/feedback_required|ActionBlocked/i.test(msg)) return { ok: false, reason: "blocked" };
+      if (/login_required|Not authorized|401/i.test(msg)) return { ok: false, reason: "session expired" };
+      return { ok: false, reason: msg || "IgApiClient like failed" };
+    }
+  }
+
+  async followUser(userId: string, username?: string, sourceLabel?: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
+    return this.timed("FollowedUser", async () => {
+      // Prefer IgApiClient path (properly signs the request body with HMAC-SHA256).
+      // The hand-rolled mobileSessionPost sends an unsigned body which Instagram
+      // rejects with "We're sorry, but something went wrong" on some users even
+      // when the account can follow just fine via the real app or EB.
+      if (this.igApiCookies) {
+        return this._followViaIgClient(userId);
       }
 
-      // ── Login / feedback required ──
+      // Fallback: hand-rolled POST (no igApiCookies available).
+      const body = new URLSearchParams({ user_id: userId }).toString();
+      const j = await this.mobileSessionPost(`/api/v1/friendships/create/${userId}/`, body);
+
+      if (!j) return { ok: false, status: "follow_blocked", reason: "no response from mobile API" };
+      console.log(`[webClient] follow ${userId} (fallback mobileSessionPost):`, JSON.stringify(j).slice(0, 400));
+
+      if (j?.message === "checkpoint_required" || j?.checkpoint_url) {
+        const url = j?.checkpoint_url ?? "";
+        return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: url };
+      }
+      if (j?.spam === true) return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
       if (j?.require_login || j?.feedback_required || j?.message === "login_required") {
-        const reason = j?.message ?? j?.feedback_message ?? "unknown";
-        console.warn(`[webClient] follow ${userId} blocked:`, reason);
-        return { ok: false, status: "follow_blocked", reason };
+        return { ok: false, status: "follow_blocked", reason: j?.message ?? j?.feedback_message ?? "unknown" };
       }
-
-      // ── Please wait (soft rate limit) ──
       if (j?.message && typeof j.message === "string" && j.message.toLowerCase().includes("please wait")) {
-        console.warn(`[webClient] follow ${userId} rate limited:`, j.message);
         return { ok: false, status: "follow_blocked", reason: j.message };
       }
-
-      // ── Success ──
       if (j?.friendship_status) {
         return { ok: true, status: j.friendship_status.following ? "following" : "requested" };
       }
-
-      // ── Catch-all for any other fail status ──
       if (j?.status === "fail") {
-        const reason = j?.message || "Instagram declined (status: fail)";
-        console.warn(`[webClient] follow ${userId} failed:`, reason);
-        return { ok: false, status: "follow_blocked", reason };
+        return { ok: false, status: "follow_blocked", reason: j?.message || "Instagram declined (status: fail)" };
       }
-
-      // ── Unexpected response ──
       console.warn(`[webClient] follow ${userId} unexpected response:`, JSON.stringify(j));
       return { ok: false, status: "follow_blocked", reason: "unexpected response" };
-    }, username ? `Follow @${username}` : `Follow user ${userId}`);
+    }, username ? `Follow @${username}${sourceLabel ? ` via ${sourceLabel}` : ""}` : `Follow user ${userId}`,
+    (r) => r.ok);
   }
 
   // ── Convert a numeric Instagram media ID to its shortcode ─────────────────
@@ -804,17 +1055,31 @@ export class InstagramWebClient {
   // feedback_required/action-block, or false for any other failure.
   async likeMedia(mediaId: string, username?: string): Promise<string | "blocked" | false> {
     return this.timed("LikeMedia", async () => {
-      const j = await this.mobilePost(`/api/v1/media/${mediaId}/like/`);
+      // Prefer IgApiClient path (properly signs the request body with HMAC-SHA256,
+      // includes _uid, _uuid, _csrftoken, device_id, radio_type, module_name).
+      // A hand-rolled empty-body POST always returns "something went wrong" because
+      // Instagram requires a signed, non-empty body for write actions.
+      if (this.igApiCookies) {
+        const r = await this._likeViaIgClient(mediaId);
+        if (r.ok) {
+          const shortcode = this.mediaIdToShortcode(mediaId);
+          return `https://www.instagram.com/p/${shortcode}/`;
+        }
+        if (r.reason === "blocked") {
+          console.warn(`[webClient] likeMedia BLOCKED by Instagram`);
+          return "blocked";
+        }
+        console.warn(`[webClient] likeMedia ${mediaId} IgApiClient failed: ${r.reason}`);
+        return false;
+      }
+
+      // Fallback: hand-rolled POST (no igApiCookies available — rare).
+      const j = await this.mobileSessionPost(`/api/v1/media/${mediaId}/like/`);
       const ok = j?.status === "ok";
-      if (!ok) console.log(`[webClient] likeMedia ${mediaId} response:`, JSON.stringify(j));
+      if (!ok) console.log(`[webClient] likeMedia ${mediaId} fallback response:`, JSON.stringify(j));
       if (!ok) {
-        // Explicit action block from Instagram
         if (j?.message === "feedback_required" || j?.feedback_required === true) {
-          const title = j?.feedback_title ?? "Action blocked";
-          const expires = j?.expiration_time
-            ? new Date(Number(j.expiration_time) * 1000).toISOString().split("T")[0]
-            : "unknown";
-          console.warn(`[webClient] likeMedia BLOCKED: ${title} (expires ~${expires})`);
+          console.warn(`[webClient] likeMedia BLOCKED (fallback)`);
           return "blocked";
         }
         return false;
@@ -990,8 +1255,12 @@ export class InstagramWebClient {
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
   async viewTimelineFeed(count: number = 5): Promise<number> {
-    // As of 2024 the timeline endpoint requires POST (GET returns 405).
-    const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+    // Fetch timeline using the igApiCookies mobile session — the EB web cookies
+    // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
+    const j = await this.timed("ViewTimelineFeed", () =>
+      this.mobileSessionPost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString()),
+      "Fetch timeline feed"
+    );
     const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
     if (!rawItems.length) return 0;
 
@@ -1007,14 +1276,14 @@ export class InstagramWebClient {
       const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
       // One seen call per post — matches Jarvee's per-post call pattern and is
       // more authentic than batching (real app reports seen as user scrolls past).
-      await this.timed("ViewTimelineFeed", async () => {
+      await this.timed("ViewTimelineFeedSeen", async () => {
         await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
           reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
           live_vods_skipped: "",
           nuxes_skipped: "",
         }).toString());
         return ++viewed;
-      }, (n) => `Viewed ${n} timeline post${n === 1 ? "" : "s"}`);
+      }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
     }
 
     return viewed;
@@ -1089,7 +1358,8 @@ export class InstagramWebClient {
   // Returns true if the inbox was fetched successfully.
   async getDirectMessages(count: number = 5): Promise<boolean> {
     return this.timed("GetDirectMessages", async () => {
-      const j = await this.mobileGet(
+      // Use igApiCookies session — EB may not be logged in when this runs.
+      const j = await this.mobileSessionGet(
         `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`
       );
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
@@ -1097,15 +1367,17 @@ export class InstagramWebClient {
     }, (r) => `Checked ${r.count} direct message${r.count === 1 ? "" : "s"}`);
   }
 
-  // ── Fetch pending / message-request inbox (GetDirectMessagesInternal) ────
-  // Simulates a user opening the message requests folder — non-followers'
-  // DMs land here. Jarvee calls this as a second DM pass after the main inbox.
+  // ── Fetch DM inbox (regular + pending request threads) ────────────────────
+  // Simulates a user opening the DM inbox — fetches up to 20 threads including
+  // both accepted conversations and pending message requests.
   async getDirectMessagesInternal(): Promise<{ count: number }> {
     return this.timed("GetDirectMessagesInternal", async () => {
-      const j = await this.mobileGet(
+      // Use igApiCookies session — EB may not be logged in when this runs.
+      const j = await this.mobileSessionGet(
         `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
       );
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
+      console.log(`[webClient] getDirectMessagesInternal: ${threads.length} thread(s), status=${j?.status}`);
       return { count: threads.length };
     }, (r) => `Checked DM inbox — ${r.count} thread${r.count === 1 ? "" : "s"}`);
   }
@@ -1119,7 +1391,8 @@ export class InstagramWebClient {
     items: { itemId: string; text: string; fromMe: boolean }[];
   }[]> {
     return this.timed("GetDMThreadsContent", async () => {
-      const j = await this.mobileGet(
+      // Use igApiCookies session — EB may not be logged in when this runs.
+      const j = await this.mobileSessionGet(
         `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=10&cursor=&limit=${count}`
       );
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
@@ -1164,11 +1437,21 @@ export class InstagramWebClient {
     }, `Like DM thread=${threadId} item=${itemId}`);
   }
 
-  async likeTimelinePosts(count: number = 3): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> }> {
+  async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> }> {
     return this.timed("LikeTimelinePosts", async () => {
       // As of 2024 the timeline endpoint requires POST (GET returns 405).
-      const j = await this.mobilePost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+      // Must use the igApiCookies mobile session — EB web cookies return empty feed_items.
+      const j = await this.mobileSessionPost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+      if (!j) {
+        console.warn(`[webClient] likeTimelinePosts: mobileSessionPost returned null — no mobile session`);
+        return { liked: 0, watched: 0, likedPosts: [] };
+      }
+      if (j?.status === "fail" || j?.message === "login_required") {
+        console.warn(`[webClient] likeTimelinePosts: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
+        return { liked: 0, watched: 0, likedPosts: [] };
+      }
       const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
+      console.log(`[webClient] likeTimelinePosts: timeline returned ${rawItems.length} raw items`);
       if (!rawItems.length) return { liked: 0, watched: 0, likedPosts: [] };
 
       // Unwrap feed items — timeline wraps media under media_or_ad
@@ -1181,9 +1464,17 @@ export class InstagramWebClient {
       let watched = 0;
       const likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> = [];
 
-      for (const media of toProcess) {
+      for (let i = 0; i < toProcess.length; i++) {
+        const media = toProcess[i];
         const mediaId = String(media?.id ?? media?.pk ?? "");
         if (!mediaId) continue;
+
+        // Human-like delay between each like (skip delay before the first one)
+        if (i > 0 && delayMaxSec > 0) {
+          const delaySec = delayMinSec + Math.random() * Math.max(0, delayMaxSec - delayMinSec);
+          console.log(`[webClient] likeTimelinePosts: waiting ${delaySec.toFixed(1)}s before next like`);
+          await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
+        }
 
         const isReel = media?.media_type === 2 || media?.product_type === "clips";
 
@@ -1222,8 +1513,9 @@ export class InstagramWebClient {
   // Returns true on success, "blocked" on Instagram action-block, false otherwise.
   async unfollowUser(userId: string, username?: string): Promise<true | "blocked" | false> {
     return this.timed("UnfollowUser", async () => {
+      // Use igApiCookies mobile session for unfollow — same reason as follow.
       const body = new URLSearchParams({ user_id: userId }).toString();
-      const j = await this.webPost(`/api/v1/friendships/destroy/${userId}/`, body);
+      const j = await this.mobileSessionPost(`/api/v1/friendships/destroy/${userId}/`, body);
       if (!j) return false;
       if (j?.friendship_status) return true;
       if (j?.status === "fail") {
@@ -1551,7 +1843,9 @@ export class InstagramWebClient {
     }, `Profile @${username}`);
   }
 
-  // mobile-style POST (i.instagram.com)
+  // mobile-style POST (i.instagram.com) — uses EB web cookie jar + web CSRF.
+  // Fine for read/passive actions. NOT for friendships (follow/unfollow) — use
+  // mobileSessionPost() for those so the proper igApiCookies session is used.
   private async mobilePost(path: string, body = ""): Promise<any> {
     await this.apiThrottle();
     // Must use the mobile App ID (567067343352427) — the web App ID (936619743392459)
@@ -1582,6 +1876,197 @@ export class InstagramWebClient {
     const safeCookies = res.cookies.filter(c => !c.startsWith("csrftoken="));
     this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
     if (!res.json) console.log(`[webClient] mobilePost ${path} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
+    return res.json;
+  }
+
+  // Bootstrap a real csrftoken for the mobile session — zero EB dependency.
+  // Uses three strategies in order:
+  //   1. /api/v1/si/fetch_headers/ — unauthenticated cold-start call the real
+  //      Instagram app makes. Always returns csrftoken in Set-Cookie.
+  //   2. /api/v1/accounts/current_user/ — authenticated; sometimes echoes it.
+  //   3. Generated random token as last resort.
+  private async _bootstrapMobileCsrf(): Promise<void> {
+    const MOBILE_APP_ID = "567067343352427";
+    let fullMobileUA: string;
+    if (this.userAgentApi && this.userAgentApi.startsWith("Instagram ")) {
+      fullMobileUA = this.userAgentApi;
+    } else {
+      let deviceStr: string | undefined;
+      if (this.igDeviceState) {
+        try { deviceStr = JSON.parse(this.igDeviceState).deviceString; } catch { /* ignore */ }
+      }
+      deviceStr = deviceStr ?? this.userAgentApi;
+      fullMobileUA = deviceStr
+        ? `Instagram ${MOBILE_VERSION} Android (${deviceStr}; ${MOBILE_VERSION_CODE})`
+        : MOBILE_UA;
+    }
+
+    // ── Strategy 1: /api/v1/si/fetch_headers/ ────────────────────────────────
+    // This is the real Instagram app cold-start call. It requires NO authentication
+    // and reliably returns a fresh csrftoken in Set-Cookie — exactly what the app
+    // does after every cold start to bootstrap CSRF before any write action.
+    try {
+      const guid = randomUUID();
+      const res = await igReq({
+        host: "i.instagram.com",
+        path: `/api/v1/si/fetch_headers/?challenge_type=signup&guid=${guid}`,
+        method: "GET",
+        headers: {
+          Host: "i.instagram.com",
+          "User-Agent": fullMobileUA,
+          Accept: "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "X-IG-App-ID": MOBILE_APP_ID,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+          "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+          "X-IG-Bandwidth-TotalBytes-B": "0",
+          "X-IG-Bandwidth-TotalTime-MS": "0",
+        },
+        cookieJar: this.mobileCookieJar,
+        proxyUrl: this.proxyUrl,
+      });
+      // Merge all cookies back (mid, csrftoken, ig_did, etc.)
+      if (res.cookies.length) {
+        this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+      }
+      const newCsrf = extractCsrf(res.cookies);
+      if (newCsrf) {
+        this.mobileCsrf = newCsrf;
+        console.log(`[webClient] _bootstrapMobileCsrf: csrftoken from fetch_headers (${newCsrf.slice(0, 8)}...) status=${res.status}`);
+        return;
+      }
+      console.warn(`[webClient] _bootstrapMobileCsrf: fetch_headers returned no csrftoken (status=${res.status}, cookies=${JSON.stringify(res.cookies.slice(0, 3))})`);
+    } catch (err: any) {
+      console.warn(`[webClient] _bootstrapMobileCsrf fetch_headers failed: ${err?.message}`);
+    }
+
+    // ── Strategy 2: current_user ──────────────────────────────────────────────
+    // Authenticated endpoint — sometimes echoes csrftoken when session is fresh.
+    try {
+      const res = await igReq({
+        host: "i.instagram.com",
+        path: "/api/v1/accounts/current_user/?edit=true",
+        method: "GET",
+        headers: {
+          Host: "i.instagram.com",
+          "User-Agent": fullMobileUA,
+          Accept: "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "X-IG-App-ID": MOBILE_APP_ID,
+          "X-IG-Capabilities": "3brTvwE=",
+          "X-IG-Connection-Type": "WIFI",
+          "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+          "X-IG-Bandwidth-TotalBytes-B": "0",
+          "X-IG-Bandwidth-TotalTime-MS": "0",
+        },
+        cookieJar: this.mobileCookieJar,
+        proxyUrl: this.proxyUrl,
+      });
+      if (res.cookies.length) {
+        this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+      }
+      const newCsrf = extractCsrf(res.cookies);
+      if (newCsrf) {
+        this.mobileCsrf = newCsrf;
+        console.log(`[webClient] _bootstrapMobileCsrf: csrftoken from current_user (${newCsrf.slice(0, 8)}...) status=${res.status}`);
+        return;
+      }
+      const bodyToken = res.json?.csrf_token ?? res.json?.csrftoken;
+      if (bodyToken) {
+        this.mobileCsrf = String(bodyToken);
+        this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [`csrftoken=${this.mobileCsrf}`]);
+        console.log(`[webClient] _bootstrapMobileCsrf: csrftoken from current_user body (${this.mobileCsrf.slice(0, 8)}...)`);
+        return;
+      }
+    } catch (err: any) {
+      console.warn(`[webClient] _bootstrapMobileCsrf current_user failed: ${err?.message}`);
+    }
+
+    // ── Strategy 3: derive from sessionid ────────────────────────────────────
+    // Instagram's mobile csrftoken is not truly secret — it is derived from the
+    // session. As a last-resort, generate a random token and inject it into the
+    // cookie jar so mobileSessionPost can proceed. Instagram has been observed
+    // accepting self-generated tokens on fresh mobile sessions.
+    const fallback = randomUUID().replace(/-/g, "");
+    this.mobileCsrf = fallback;
+    this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [`csrftoken=${fallback}`]);
+    console.warn(`[webClient] _bootstrapMobileCsrf: all strategies failed — using generated token (${fallback.slice(0, 8)}...)`);
+  }
+
+  // Action POST using the igApiCookies mobile session (mobileCookieJar + mobileCsrf).
+  // Used for write actions (follow, unfollow) where i.instagram.com strictly requires
+  // a proper mobile-originated session — web cookies return login_required on those.
+  // If no igApiCookies session is available, returns null immediately (no fallback).
+  private async mobileSessionPost(path: string, body = ""): Promise<any> {
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid="));
+    if (!hasMobileSession) {
+      console.warn(`[webClient] mobileSessionPost ${path}: no igApiCookies session — cannot proceed (igApiCookies required for write actions)`);
+      return null;
+    }
+    // If this is the first call after a session restore, mobileCsrf will be the
+    // "missing" placeholder. Bootstrap a real token by hitting i.instagram.com
+    // directly with the mobile session — no EB cookies involved at any point.
+    if (this.mobileCsrf === "missing" || !this.mobileCsrf) {
+      await this._bootstrapMobileCsrf();
+    }
+    await this.apiThrottle();
+    const MOBILE_APP_ID = "567067343352427";
+    const csrf = this.mobileCsrf || this.csrfToken || "missing";
+    // Build full Instagram mobile UA — userAgentApi stores the device string portion only
+    // (e.g. "34/14; 420dpi; 1220x2712; Xiaomi; ..."). Wrap it if it's not already a full UA.
+    let fullMobileUA: string;
+    if (this.userAgentApi && this.userAgentApi.startsWith("Instagram ")) {
+      fullMobileUA = this.userAgentApi;
+    } else {
+      // Try to get deviceString from parsed ig_device_state first, fall back to userAgentApi
+      let deviceStr: string | undefined;
+      if (this.igDeviceState) {
+        try { deviceStr = JSON.parse(this.igDeviceState).deviceString; } catch { /* ignore */ }
+      }
+      deviceStr = deviceStr ?? this.userAgentApi;
+      fullMobileUA = deviceStr
+        ? `Instagram ${MOBILE_VERSION} Android (${deviceStr}; ${MOBILE_VERSION_CODE})`
+        : MOBILE_UA;
+    }
+    console.log(`[webClient] mobileSessionPost ${path} using igApiCookies session (csrf=${csrf.slice(0,8) + "..."}, ua=${fullMobileUA.slice(0, 60)})`);
+    const res = await igReq({
+      host: "i.instagram.com",
+      path,
+      method: "POST",
+      headers: {
+        Host: "i.instagram.com",
+        "User-Agent": fullMobileUA,
+        Accept: "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-IG-App-ID": MOBILE_APP_ID,
+        "X-CSRFToken": csrf,
+        "X-IG-Capabilities": "3brTvwE=",
+        "X-IG-Connection-Type": "WIFI",
+        "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+        "X-IG-Bandwidth-TotalBytes-B": "0",
+        "X-IG-Bandwidth-TotalTime-MS": "0",
+      },
+      body,
+      cookieJar: this.mobileCookieJar,
+      proxyUrl: this.proxyUrl,
+    });
+    // Merge response cookies back into mobileCookieJar to keep session fresh
+    if (res.cookies.length) {
+      this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
+      const newCsrf = extractCsrf(res.cookies);
+      if (newCsrf) this.mobileCsrf = newCsrf;
+    }
+      // Always log non-200 responses; log body snippet for debugging
+    if (res.status !== 200 || !res.json) {
+      console.warn(`[webClient] mobileSessionPost ${path} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
+    } else {
+      const feedLen = res.json?.feed_items?.length ?? res.json?.items?.length ?? null;
+      if (feedLen !== null) {
+        console.log(`[webClient] mobileSessionPost ${path} status=${res.status} feed_items=${feedLen} (status="${res.json?.status}")`);
+      }
+    }
     return res.json;
   }
 

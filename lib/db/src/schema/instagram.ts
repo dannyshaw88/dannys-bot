@@ -148,6 +148,7 @@ export const logs = sqliteTable("logs", {
 export const instagramApiCalls = sqliteTable("instagram_api_calls", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   profileId: integer("profile_id").notNull(),
+  username: text("username").default(""),
   operationName: text("operation_name").notNull(),
   date: text("date").notNull(),
   message: text("message").default(""),

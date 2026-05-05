@@ -820,10 +820,19 @@ export async function browserAutoLogin(
   const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
   try {
-    // ── Step 1: Navigate to login page (skip if already there) ──────────────
+    // ── Step 1: Check if already logged in; navigate to login only if needed ──
     const currentUrl = s.page.url();
     sendStatus(profileId, `Current URL: ${currentUrl.slice(0, 80)}`);
-    if (!currentUrl.includes("instagram.com/accounts/login")) {
+    // If the browser is already on Instagram and NOT on the login page,
+    // the session is valid — save cookies and return immediately.
+    const onInstagram = currentUrl.includes("instagram.com") && !currentUrl.startsWith("chrome-error://");
+    const onLoginPage = currentUrl.includes("accounts/login");
+    if (onInstagram && !onLoginPage) {
+      await saveCookies(profileId, s.page);
+      sendStatus(profileId, "✓ Already logged in — browser shows your account.");
+      return { ok: true, message: "Already logged in" };
+    }
+    if (!onLoginPage) {
       sendStatus(profileId, "Navigating to Instagram login…");
       await s.page.goto("https://www.instagram.com/accounts/login/", {
         waitUntil: "domcontentloaded",

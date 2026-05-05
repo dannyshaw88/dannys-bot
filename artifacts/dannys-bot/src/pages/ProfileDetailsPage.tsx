@@ -299,6 +299,11 @@ export function ProfileDetailsPage() {
     try {
       const res = await fetch(url, { method: "POST" });
       const data = await res.json();
+      if (res.status === 429) {
+        // Another verify is already running for this account — keep pending state and wait
+        toast({ title: "Verification In Progress", description: "Already verifying this account — please wait for it to finish." });
+        return;
+      }
       if (data.ok) {
         setVerifyStatus("ok");
         toast({ title: "Credentials Verified", description: data.message });
@@ -363,10 +368,7 @@ export function ProfileDetailsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-8">
-        <Link href="/profiles" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground mb-4 transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Back to Accounts
-        </Link>
+      <div className="mb-4">
         <div className="flex items-center gap-4">
           <div className="flex-1">
             {/* Profile switcher */}
@@ -467,6 +469,11 @@ export function ProfileDetailsPage() {
                 <ChevronRight className="w-4 h-4" />
               </button>
 
+              <span className="text-border mx-1 select-none">|</span>
+              <Link href="/profiles" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft className="w-3 h-3" /> Back to Accounts
+              </Link>
+
             </div>
           </div>
 
@@ -483,27 +490,28 @@ export function ProfileDetailsPage() {
         </div>
       </div>
 
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <Tabs.List className="flex border-b border-border mb-8 overflow-x-auto">
-          <Tabs.Trigger value="settings" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
-            <Settings className="w-4 h-4 mr-2" /> Account Settings
+      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-8 items-start">
+        <Tabs.List className="flex flex-col w-48 shrink-0 sticky top-4 self-start border-r border-border pr-0 py-1">
+          <Tabs.Trigger value="settings" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <Settings className="w-4 h-4 shrink-0" /> Account Settings
           </Tabs.Trigger>
-          <Tabs.Trigger value="follow" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
-            <UserPlus className="w-4 h-4 mr-2" /> Follow Tool
+          <Tabs.Trigger value="follow" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <UserPlus className="w-4 h-4 shrink-0" /> Follow Tool
           </Tabs.Trigger>
-          <Tabs.Trigger value="unfollow" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
-            <UserMinus className="w-4 h-4 mr-2" /> Unfollow Tool
+          <Tabs.Trigger value="unfollow" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <UserMinus className="w-4 h-4 shrink-0" /> Unfollow Tool
           </Tabs.Trigger>
-          <Tabs.Trigger value="contact" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
-            <MessageSquare className="w-4 h-4 mr-2" /> Contact Tool
+          <Tabs.Trigger value="contact" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <MessageSquare className="w-4 h-4 shrink-0" /> Contact Tool
           </Tabs.Trigger>
-          <Tabs.Trigger value="human-session" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
-            <User className="w-4 h-4 mr-2" /> Human Session Tools
+          <Tabs.Trigger value="human-session" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <User className="w-4 h-4 shrink-0" /> Human Session Tools
           </Tabs.Trigger>
-          <Tabs.Trigger value="session-log" className="px-6 py-4 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary transition-all flex items-center whitespace-nowrap">
-            <Activity className="w-4 h-4 mr-2" /> Session Log
+          <Tabs.Trigger value="session-log" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <Activity className="w-4 h-4 shrink-0" /> Session Log
           </Tabs.Trigger>
         </Tabs.List>
+        <div className="flex-1 min-w-0">
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
           {/* Auto-save status bar */}
@@ -1136,6 +1144,7 @@ export function ProfileDetailsPage() {
           }
         </Tabs.Content>
 
+        </div>
       </Tabs.Root>
     </AppLayout>
   );

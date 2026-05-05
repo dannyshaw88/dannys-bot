@@ -1,47 +1,123 @@
 import { useQuery } from "@tanstack/react-query";
 import { useProfiles } from "@/hooks/use-profiles";
-import { Bell } from "lucide-react";
+import { Activity } from "lucide-react";
+
+interface RecentActivity {
+  id: number;
+  profileId: number;
+  toolId: number;
+  action: string;
+  targetUsername: string;
+  sourceValue: string;
+  sourceType: string;
+  result: string;
+  detail: string;
+  timestamp: string;
+}
+
+function getToolLabel(action: string, detail: string): string {
+  switch (action) {
+    case "follow":
+    case "follow_blocked":
+    case "follow_skipped":
+    case "dedup_skip":
+    case "filter_skip":
+      return "Follow Tool";
+    case "unfollow":
+    case "unfollow_blocked":
+      return "Unfollow Tool";
+    case "like":
+    case "view_story":
+    case "view_stories":
+    case "view_reels":
+    case "view_highlights":
+    case "view_profile":
+    case "viewProfile":
+    case "repost":
+    case "save_media":
+    case "saveMedia":
+      return "Human Session";
+    case "contact_dm":
+    case "contact_dm_blocked":
+      return "Contact Tool";
+    case "send_dm":
+    case "sendDm":
+      return "DM Tool";
+    case "tool_start":
+    case "tool_complete": {
+      if (detail.includes("Follow Tool"))   return "Follow Tool";
+      if (detail.includes("Unfollow Tool")) return "Unfollow Tool";
+      if (detail.includes("Human Session")) return "Human Session";
+      if (detail.includes("DM Tool"))       return "DM Tool";
+      if (detail.includes("Contact Tool"))  return "Contact Tool";
+      return "Tool";
+    }
+    default:
+      return "";
+  }
+}
+
+function formatActionPart(action: string, target: string, detail: string): string {
+  switch (action) {
+    case "tool_start":
+    case "tool_complete":   return detail || (action === "tool_start" ? "Session starting…" : "Session complete");
+    case "follow":          return `followed ${target}`;
+    case "unfollow":        return `unfollowed ${target}`;
+    case "dedup_skip":      return `skipped ${target}`;
+    case "filter_skip":     return `skipped ${target}`;
+    case "follow_skipped":  return `skipped ${target}`;
+    case "follow_blocked":  return `blocked${target ? ` @${target.replace(/^@/, "")}` : ""}: ${detail || "blocked"}`;
+    case "like":            return `liked post by ${target}`;
+    case "view_story":
+    case "view_stories":
+    case "viewStory":       return `viewed story${target ? ` of ${target}` : ""}`;
+    case "view_reels":      return `viewed reel${target ? ` by ${target}` : ""}`;
+    case "view_highlights": return `viewed highlights${target ? ` of ${target}` : ""}`;
+    case "contact_dm":      return `sent DM to ${target}`;
+    case "contact_dm_blocked": return `DM blocked`;
+    case "send_dm":
+    case "sendDm":          return `sent DM to ${target}`;
+    case "view_profile":
+    case "viewProfile":     return `visited profile${target ? ` of ${target}` : ""}`;
+    case "verified":        return `session verified`;
+    case "verification_failed": return `verification failed`;
+    case "repost":          return `reposted${target ? ` from ${target}` : ""}`;
+    case "save_media":
+    case "saveMedia":       return `saved post${target ? ` by ${target}` : ""}`;
+    case "unfollow_blocked": return `unfollow blocked (skipped)`;
+    default:
+      return detail || (target ? `${action.replace(/_/g, " ")} ${target}` : action.replace(/_/g, " "));
+  }
+}
 
 export function LiveActivityTicker() {
   const { data: profiles } = useProfiles();
 
-  const NOISY_OPS = new Set([
-    "GetTokenResult", "GetAccountFamily", "SuggestedSearches",
-    "LogAttribution", "LogResurrectAttribution", "FetchHeaders",
-    "ContactPointPrefill", "GetPrefillCandidates", "GetPresence",
-  ]);
-
-  const { data: liveApiCalls } = useQuery<any[]>({
-    queryKey: ["/api/instagram-api-calls"],
-    refetchInterval: 4000,
-    select: (data) =>
-      data
-        ?.filter((c: any) => !(NOISY_OPS.has(c.operationName) && c.message !== "OK"))
-        .slice(0, 1),
+  const { data: activities } = useQuery<RecentActivity[]>({
+    queryKey: ["/api/recent-activity"],
+    refetchInterval: 2000,
   });
 
-  const latestCall = liveApiCalls?.[0];
-  const latestUsername = latestCall
-    ? (profiles?.find(p => p.id === latestCall.profileId)?.accountLabel
-        || profiles?.find(p => p.id === latestCall.profileId)?.username
-        || `#${latestCall.profileId}`)
-    : null;
+  const latest = activities?.[0];
 
-  if (!latestCall || !latestUsername) return null;
+  if (!latest) return null;
+
+  const profile = profiles?.find(p => p.id === latest.profileId);
+  const accountName = profile?.accountLabel || profile?.username || `#${latest.profileId}`;
+  const toolLabel = getToolLabel(latest.action, latest.detail);
+  const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", latest.detail);
+  const label = toolLabel
+    ? `@${accountName} | ${toolLabel}: ${actionPart}`
+    : `@${accountName} — ${actionPart}`;
 
   return (
     <div className="border-b border-border/50 bg-muted/30 px-6 py-1.5 flex items-center gap-2 w-full overflow-hidden">
-      <Bell className="w-3 h-3 text-primary shrink-0" />
+      <Activity className="w-3 h-3 text-primary shrink-0" />
       <span
-        key={latestCall.id}
-        className="animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-1 text-xs text-muted-foreground overflow-hidden min-w-0 flex-1"
+        key={latest.id}
+        className="animate-in fade-in slide-in-from-left-2 duration-300 text-xs text-muted-foreground overflow-hidden min-w-0 flex-1 truncate"
       >
-        <span className="font-semibold text-foreground shrink-0">{latestCall.operationName}</span>
-        <span className="text-muted-foreground/60 mx-0.5 shrink-0">—</span>
-        <span className="text-primary font-medium shrink-0">{latestUsername}</span>
-        {latestCall.message && (
-          <span className="text-muted-foreground truncate"> {latestCall.message}</span>
-        )}
+        {label}
       </span>
     </div>
   );
