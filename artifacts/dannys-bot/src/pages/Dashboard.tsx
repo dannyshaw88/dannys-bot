@@ -11,6 +11,11 @@ import { type Profile } from "@shared/schema";
 
 type Tab = "api-log" | "whats-new";
 
+const ERROR_ACTIONS = new Set([
+  "verification_failed", "follow_blocked", "unfollow_blocked",
+  "dm_blocked", "contact_dm_blocked",
+]);
+
 const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
   tool_start:          { label: "Started",      cls: "bg-blue-100 text-blue-700" },
   tool_complete:       { label: "Complete",     cls: "bg-emerald-100 text-emerald-700" },
@@ -134,6 +139,10 @@ export function Dashboard() {
     const stored = localStorage.getItem("dashboard_cleared_at");
     return stored ? Number(stored) : 0;
   });
+  const [errorsCleared, setErrorsCleared] = useState<number>(() => {
+    const stored = localStorage.getItem("dashboard_errors_cleared_at");
+    return stored ? Number(stored) : 0;
+  });
   const [initialLoading, setInitialLoading] = useState(true);
   const lastApiIdRef = useRef<number>(0);
   const lastSessionIdRef = useRef<number>(0);
@@ -248,6 +257,10 @@ export function Dashboard() {
 
   const filteredFeed = feedItems
     .filter((item) => clearedAt === 0 || item.ts > clearedAt)
+    .filter((item) => {
+      if (errorsCleared === 0 || item.ts > errorsCleared) return true;
+      return !(item.kind === "session" && item.action && ERROR_ACTIONS.has(item.action));
+    })
     .filter((item) => selectedProfileId == null || item.profileId === selectedProfileId)
     .filter((item) => {
       if (!apiLogSearch.trim()) return true;
@@ -311,7 +324,7 @@ export function Dashboard() {
         {serverInfo?.startedAt && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
             <RefreshCw className="w-3 h-3" />
-            Server started {format(new Date(serverInfo.startedAt), "MMM d 'at' HH:mm:ss")}
+            Server started {format(new Date(serverInfo.startedAt), "MMM d yyyy 'at' HH:mm:ss")}
           </span>
         )}
       </div>
@@ -325,8 +338,14 @@ export function Dashboard() {
             <Sparkles className="w-4 h-4" /> What's New
           </button>
           <button
-            onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_cleared_at", String(t)); setClearedAt(t); }}
+            onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_errors_cleared_at", String(t)); setErrorsCleared(t); }}
             className="ml-auto text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
+          >
+            Clear errors
+          </button>
+          <button
+            onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_cleared_at", String(t)); setClearedAt(t); }}
+            className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
           >
             Clear feed
           </button>

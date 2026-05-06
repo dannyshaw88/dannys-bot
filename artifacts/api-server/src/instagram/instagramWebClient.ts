@@ -225,8 +225,9 @@ export class InstagramWebClient {
   setApiLimits(limits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number }) {
     this.throttleRequestsMin = Math.max(1, limits.requestsMin);
     this.throttleRequestsMax = Math.max(1, limits.requestsMax);
-    this.throttleSecondsMin  = Math.max(0, limits.everySecondsMin);
-    this.throttleSecondsMax  = Math.max(0, limits.everySecondsMax);
+    // everySecondsMin/Max are stored as milliseconds in the DB; convert to seconds for throttle logic
+    this.throttleSecondsMin  = Math.max(0, limits.everySecondsMin / 1000);
+    this.throttleSecondsMax  = Math.max(0, limits.everySecondsMax / 1000);
   }
 
   private async apiThrottle(): Promise<void> {

@@ -72,9 +72,13 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
 
-  const filteredProfiles = profiles.filter(p =>
-    p.username.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredProfiles = profiles.filter(p => {
+    const q = search.toLowerCase();
+    return (
+      p.username.toLowerCase().includes(q) ||
+      (p.accountLabel ?? "").toLowerCase().includes(q)
+    );
+  });
 
   const toggleTarget = (id: number) => setTargets(prev => {
     const next = new Set(prev);

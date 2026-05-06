@@ -1348,10 +1348,10 @@ class AutomationEngine {
     const limits = profile.apiLimits as any;
     if (limits && typeof limits === "object") {
       state.client.setApiLimits({
-        requestsMin:   Number(limits.requestsMin   ?? 5),
-        requestsMax:   Number(limits.requestsMax   ?? 10),
-        everySecondsMin: Number(limits.everySecondsMin ?? 3),
-        everySecondsMax: Number(limits.everySecondsMax ?? 8),
+        requestsMin:   Number(limits.requestsMin   ?? 1),
+        requestsMax:   Number(limits.requestsMax   ?? 1),
+        everySecondsMin: Number(limits.everySecondsMin ?? 1000),
+        everySecondsMax: Number(limits.everySecondsMax ?? 30000),
       });
     }
 

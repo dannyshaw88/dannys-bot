@@ -191,10 +191,10 @@ export function ProfileDetailsPage() {
         userAgentApi: profile.userAgentApi || "",
         userAgentEmbedded: profile.userAgentEmbedded || "",
         apiLimits: (profile.apiLimits as any) || {
-          requestsMin: 5,
-          requestsMax: 10,
-          everySecondsMin: 30,
-          everySecondsMax: 60
+          requestsMin: 1,
+          requestsMax: 1,
+          everySecondsMin: 1,
+          everySecondsMax: 30000
         },
         // Account details
         accountLabel: profile.accountLabel || "",
@@ -576,25 +576,27 @@ export function ProfileDetailsPage() {
               </CardHeader>
               <CardContent className="px-0 space-y-4">
                 <div className="space-y-4">
-                  {/* Credentials + verify — constrained to ~half the card width */}
-                  <div className="space-y-3 max-w-[280px]">
-                    <div className="space-y-1.5">
-                      <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Instagram className="w-3.5 h-3.5" /> Username</Label>
-                      <Input
-                        value={formData.username}
-                        onChange={e => updateField({ username: e.target.value })}
-                        data-testid="input-username"
-                      />
+                  {/* Credentials + verify */}
+                  <div className="space-y-3">
+                    <div className="space-y-3 max-w-[280px]">
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Instagram className="w-3.5 h-3.5" /> Username</Label>
+                        <Input
+                          value={formData.username}
+                          onChange={e => updateField({ username: e.target.value })}
+                          data-testid="input-username"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Lock className="w-3.5 h-3.5" /> Password</Label>
+                        <PasswordInput
+                          value={formData.password}
+                          onChange={e => updateField({ password: e.target.value })}
+                          data-testid="input-password"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Lock className="w-3.5 h-3.5" /> Password</Label>
-                      <PasswordInput
-                        value={formData.password}
-                        onChange={e => updateField({ password: e.target.value })}
-                        data-testid="input-password"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 max-w-[336px]">
                       <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><KeyRound className="w-3.5 h-3.5" /> 2FA Secret Key</Label>
                       <Input
                         placeholder="TOTP secret (e.g. M5ZM ZRDO…)"
@@ -604,7 +606,8 @@ export function ProfileDetailsPage() {
                       />
                     </div>
 
-                    {/* Verify button — appears only when credentials are filled */}
+                    {/* Verify button — constrained to match username/password width */}
+                    <div className="max-w-[280px]">
                     {canVerify && (
                       <div>
                         {verifyStatus === "ok" ? (
@@ -638,6 +641,7 @@ export function ProfileDetailsPage() {
                         )}
                       </div>
                     )}
+                    </div>
                   </div>
 
                   <button
@@ -845,7 +849,7 @@ export function ProfileDetailsPage() {
 
                 <div className="flex gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Min (s)</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Min (ms)</Label>
                     <Input 
                       type="number"
                       className="h-8 text-sm w-28"
@@ -854,7 +858,7 @@ export function ProfileDetailsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Max (s)</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Max (ms)</Label>
                     <Input 
                       type="number"
                       className="h-8 text-sm w-28"
@@ -866,7 +870,7 @@ export function ProfileDetailsPage() {
 
                 <div className="pt-4 border-t border-border">
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Allow x-y amount of api calls every x-y seconds globally for this account.
+                    Allow x-y amount of api calls every x-y milliseconds globally for this account.
                   </p>
                 </div>
               </CardContent>
@@ -1041,73 +1045,55 @@ export function ProfileDetailsPage() {
                   </p>
                 )}
 
-                {/* Enable sync */}
-                <div className="flex items-center justify-between pt-2 border-t border-border">
-                  <div>
-                    <Label className="text-sm font-semibold">Enable Auto Sync</Label>
-                    <p className="text-[11px] text-muted-foreground">Periodically update follower, following and post counts.</p>
+                {/* Controls — all on one line */}
+                <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={!!formData?.syncEnabled}
+                      onCheckedChange={v => updateField({ syncEnabled: v })}
+                    />
+                    <Label className="text-sm font-semibold whitespace-nowrap">Auto Sync</Label>
                   </div>
-                  <Switch
-                    checked={!!formData?.syncEnabled}
-                    onCheckedChange={v => updateField({ syncEnabled: v })}
-                  />
-                </div>
-
-                {/* Interval range */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Min Interval (min)</Label>
+                  <div className="flex items-center gap-1.5">
                     <Input
                       type="number"
                       min={1}
                       value={formData?.syncIntervalMin ?? 60}
                       onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
-                      className="h-8 text-sm"
+                      className="h-7 text-sm w-16"
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Max Interval (min)</Label>
+                    <span className="text-xs text-muted-foreground">–</span>
                     <Input
                       type="number"
                       min={1}
                       value={formData?.syncIntervalMax ?? 120}
                       onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
-                      className="h-8 text-sm"
+                      className="h-7 text-sm w-16"
                     />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">min</span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="syncUseHiker"
+                      checked={!!formData?.syncUseHiker}
+                      onCheckedChange={v => updateField({ syncUseHiker: !!v })}
+                    />
+                    <Label htmlFor="syncUseHiker" className="text-sm cursor-pointer whitespace-nowrap">HikerAPI</Label>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 ml-auto"
+                    disabled={syncNowStatus === "syncing"}
+                    onClick={handleSyncNow}
+                  >
+                    {syncNowStatus === "syncing" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {syncNowStatus === "done" && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
+                    {syncNowStatus === "fail" && <XCircle className="w-3.5 h-3.5 text-destructive" />}
+                    {syncNowStatus === "idle" && <RefreshCw className="w-3.5 h-3.5" />}
+                    {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Sync Failed" : "Sync Now"}
+                  </Button>
                 </div>
-
-                {/* Use HikerAPI checkbox */}
-                <div className="flex items-center gap-2.5">
-                  <Checkbox
-                    id="syncUseHiker"
-                    checked={!!formData?.syncUseHiker}
-                    onCheckedChange={v => updateField({ syncUseHiker: !!v })}
-                  />
-                  <Label htmlFor="syncUseHiker" className="text-sm cursor-pointer">
-                    Use HikerAPI for sync
-                  </Label>
-                </div>
-                {formData?.syncUseHiker && (
-                  <p className="text-[11px] text-blue-600">
-                    Requires HikerAPI enabled and token set in Global Settings.
-                  </p>
-                )}
-
-                {/* Sync Now button */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 w-full"
-                  disabled={syncNowStatus === "syncing"}
-                  onClick={handleSyncNow}
-                >
-                  {syncNowStatus === "syncing" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {syncNowStatus === "done" && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
-                  {syncNowStatus === "fail" && <XCircle className="w-3.5 h-3.5 text-destructive" />}
-                  {syncNowStatus === "idle" && <RefreshCw className="w-3.5 h-3.5" />}
-                  {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Sync Failed" : "Sync Now"}
-                </Button>
               </CardContent>
             </Card>
 
