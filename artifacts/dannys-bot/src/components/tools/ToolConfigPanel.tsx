@@ -665,7 +665,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
               </span>
               <button
                 onClick={() => setShowCopyModal(true)}
-                className="ml-1 text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer"
+                className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
               >
                 Copy Settings
               </button>
@@ -718,7 +718,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   </span>
                   <button
                     onClick={() => setShowCopyModal(true)}
-                    className="ml-1 text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer"
+                    className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
                   >
                     Copy Settings
                   </button>

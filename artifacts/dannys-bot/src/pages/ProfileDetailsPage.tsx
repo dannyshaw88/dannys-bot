@@ -379,16 +379,7 @@ export function ProfileDetailsPage() {
           <div className="flex-1">
             {/* Profile switcher */}
             <div className="flex items-center gap-1 mb-1">
-              <button
-                onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}`)}
-                disabled={!prevProfile}
-                title={prevProfile ? (prevProfile.accountLabel || prevProfile.username) : undefined}
-                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {/* Account status badge — left of name picker */}
+              {/* Account status badge — far left, outside nav arrows */}
               {(() => {
                 const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
                 const meta = STATUS_META[acctStatus] ?? STATUS_META.pending;
@@ -421,6 +412,15 @@ export function ProfileDetailsPage() {
                   </DropdownMenu>
                 );
               })()}
+
+              <button
+                onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}`)}
+                disabled={!prevProfile}
+                title={prevProfile ? (prevProfile.accountLabel || prevProfile.username) : undefined}
+                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
 
               <DropdownMenu onOpenChange={open => { if (!open) setProfileSearch(""); }}>
                 <DropdownMenuTrigger asChild>
@@ -476,8 +476,8 @@ export function ProfileDetailsPage() {
               </button>
 
               <span className="text-border mx-1 select-none">|</span>
-              <Link href="/profiles" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="w-3 h-3" /> Back to Accounts
+              <Link href="/profiles" className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
+                <ArrowLeft className="w-3 h-3 text-red-500" /> Back to Accounts
               </Link>
 
             </div>
@@ -525,7 +525,7 @@ export function ProfileDetailsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="flex items-center gap-2 h-8 text-xs"
+              className="flex items-center gap-2 h-8 text-xs text-blue-500 border-blue-500/40 hover:text-blue-600 hover:border-blue-600/60 hover:bg-blue-500/5"
               onClick={() => setCopyDialogOpen(true)}
               disabled={otherProfiles.length === 0}
             >
