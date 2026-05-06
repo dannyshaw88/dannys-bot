@@ -130,6 +130,10 @@ export function Dashboard() {
 
   // ── Unified feed: both API calls + session actions merged by timestamp ────────
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [clearedAt, setClearedAt] = useState<number>(() => {
+    const stored = localStorage.getItem("dashboard_cleared_at");
+    return stored ? Number(stored) : 0;
+  });
   const [initialLoading, setInitialLoading] = useState(true);
   const lastApiIdRef = useRef<number>(0);
   const lastSessionIdRef = useRef<number>(0);
@@ -243,6 +247,7 @@ export function Dashboard() {
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
 
   const filteredFeed = feedItems
+    .filter((item) => clearedAt === 0 || item.ts > clearedAt)
     .filter((item) => selectedProfileId == null || item.profileId === selectedProfileId)
     .filter((item) => {
       if (!apiLogSearch.trim()) return true;
@@ -318,6 +323,12 @@ export function Dashboard() {
           </button>
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
             <Sparkles className="w-4 h-4" /> What's New
+          </button>
+          <button
+            onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_cleared_at", String(t)); setClearedAt(t); }}
+            className="ml-auto text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
+          >
+            Clear feed
           </button>
         </div>
 
