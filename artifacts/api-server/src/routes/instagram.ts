@@ -84,17 +84,10 @@ export async function registerInstagramRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<void> {
-  // Persist server start time so restarts (e.g. code changes) don't reset it.
-  // If a start time already exists in the DB from today, keep it. Otherwise write the current time.
+  // Always record the exact moment this server process started.
   try {
-    const globalSettings = await storage.getGlobalSettings();
-    const stored = globalSettings["server_start_time"];
-    if (stored && new Date(stored).toDateString() === new Date().toDateString()) {
-      SERVER_START = stored;
-    } else {
-      SERVER_START = new Date().toISOString();
-      await storage.setGlobalSetting("server_start_time", SERVER_START);
-    }
+    SERVER_START = new Date().toISOString();
+    await storage.setGlobalSetting("server_start_time", SERVER_START);
   } catch {
     // If DB read fails, keep the in-memory start time
   }

@@ -349,7 +349,7 @@ export function ProfilesPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        toast({ title: "Verify All started", description: `Verifying ${data.total} account(s) in the background with ${delayMin}–${delayMax}s delays.` });
+        toast({ title: `Verifying ${ids.length} profile${ids.length !== 1 ? "s" : ""}`, description: `Running in the background with ${delayMin}–${delayMax}s delays between each.` });
       } else {
         toast({ title: "Error", description: data.error ?? "Failed to start verification.", variant: "destructive" });
       }
@@ -698,15 +698,15 @@ export function ProfilesPage() {
       {actionsOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-80 overflow-hidden">
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-96 overflow-hidden">
             <div className="px-5 pt-4 pb-3 border-b border-border">
               <p className="text-sm font-semibold">Actions</p>
             </div>
-            <div className="py-1">
-              <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+            <div className="py-1 grid grid-cols-2">
+              <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Upload className="w-4 h-4 shrink-0 text-muted-foreground" /> Import Profiles
               </button>
-              <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+              <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles
               </button>
               <button
@@ -726,34 +726,32 @@ export function ProfilesPage() {
                     URL.revokeObjectURL(objectUrl);
                   } catch { /* ignore */ }
                 }}
-                className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
               >
                 <Download className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <div className="mx-5 my-1 border-t border-border" />
-              <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Open Embedded Browsers
+              <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Open Browsers
               </button>
-              <div className="mx-5 my-1 border-t border-border" />
-              <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""} <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
+                Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""}
               </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                Fix Captcha <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+F</span>
+                Fix Captcha
               </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Remove Proxies <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+P</span>
+              <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Remove Proxies
               </button>
-              <div className="mx-5 my-1 border-t border-border" />
-              <button onClick={() => { setActionsOpen(false); handleBulkResetDeviceIds(); }} disabled={selectedProfileIds.length === 0} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={() => { setActionsOpen(false); handleBulkResetDeviceIds(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
               </button>
-              <div className="mx-5 my-1 border-t border-border" />
-              <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <Trash2 className="w-4 h-4 shrink-0" /> Delete Selected <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+D</span>
+              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <Trash2 className="w-4 h-4 shrink-0" /> Delete Selected
               </button>
             </div>
           </div>
