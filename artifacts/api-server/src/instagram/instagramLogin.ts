@@ -450,26 +450,15 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   console.error(`[instagramLogin] @${profile.username} proxy=${resolved.host}`);
 
   // ── Verification priority ─────────────────────────────────────────────────
-  // 1. Fresh password login — ALWAYS used when a password is stored.
-  //    This gives a definitive credential check using the preserved device
-  //    fingerprint (igDeviceState from the Jarvee import).  Instagram sees the
-  //    login as coming from the same device it already knows, so it is not
-  //    flagged as a "new device" login.
+  // 1. Fresh password login — used when a password is stored.
+  //    Definitive credential check: proves the username+password combination
+  //    is currently accepted by Instagram's API.
   //
-  //    CRITICAL: igDeviceState must be preserved from the Jarvee import (with
-  //    the v:2 marker so DEVICE ISOLATION does not wipe it on startup).  If
-  //    the device state is lost and fresh IDs are generated, a login from an
-  //    unknown device triggers Instagram's security systems.
-  //
-  // 2. Cookie session restore — ONLY used when no password is stored.
-  //    For accounts managed purely by session cookie (no password available).
-  //    Cookies can be stale and may give a misleadingly "valid" status —
-  //    this is why password login is strongly preferred when available.
+  // 2. Cookie session restore — used only when no password is stored.
+  //    For accounts managed purely by session cookie.
 
   if (profile.password) {
     // ── Path 1: Fresh password login (definitive credential check) ────────
-    // Uses the stored igDeviceState so Instagram sees a known device.
-    // Every outcome returns directly — no cookie fallback.
     console.error(`[instagramLogin] @${profile.username} — attempting fresh password login`);
     const { ig: igPw, captureDeviceState: capturePw } = buildIgClient(profile, proxyUrl);
     attachRequestLogger(igPw, profile.id, profile.username, "Verify", proxyIp);
@@ -485,12 +474,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       };
     }
 
-    try {
-      await igPw.simulate.preLoginFlow();
-      console.error(`[instagramLogin] preLoginFlow OK for @${profile.username}`);
-    } catch (e: any) {
-      console.error(`[instagramLogin] preLoginFlow partial failure (continuing): ${e?.message}`);
-    }
+    // NOTE: preLoginFlow() is intentionally NOT called here.
+    // preLoginFlow() hits contact_point_prefill and get_prefill_candidates —
+    // Instagram-internal calls that ask "what accounts belong to this device?".
+    // On a fresh or restored device these look like bot probing and trigger the
+    // "Forgotten password" security response even when the credentials are correct.
+    // The working automation path (instagramWebClient.ts follow/unfollow) never
+    // calls preLoginFlow — it goes straight to the API action.  We match that
+    // behaviour: fetch encryption keys, then login directly.
 
     // ── Device state snapshot before login (for debugging) ────────────────
     console.error(`[instagramLogin] LOGIN DEVICE SNAPSHOT @${profile.username}` +
@@ -578,8 +569,25 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         const buttons: any[] = body?.buttons ?? [];
         const errorType: string = body?.error_type ?? "";
         const invalidCreds: boolean = body?.invalid_credentials === true;
-        if (!invalidCreds && errorType !== "bad_password" && buttons.some((b: any) => b?.action === "send_one_click_login_email")) {
-          return { ok: false, message: `@${profile.username} — Instagram requires email verification. Check the account email and click the confirmation link. Raw: ${rawBody}`, accountStatus: "email_confirmation", igDeviceState: ds };
+        // Instagram sends two distinct "bad password" responses:
+        //
+        //   A) "Forgotten password" / device-trust flow
+        //      message: "We can send you an email to help you get back into your account."
+        //      buttons: [{action:"send_one_click_login_email"}, {action:"dismiss"}]
+        //      Cause:   Instagram doesn't trust this device (usually missing/stale igDeviceState).
+        //               The password is NOT necessarily wrong — treat as email_confirmation,
+        //               NOT bad_password. Marking as bad_password causes the UI to tell the
+        //               user their password is wrong when it isn't, and repeated re-verify
+        //               attempts from an unknown device will lock the account.
+        //      NOTE:    Instagram still sets invalid_credentials=true and error_type="bad_password"
+        //               on this response — so we MUST check the button action, not those flags.
+        //
+        //   B) Genuine wrong password
+        //      message: "The password you entered is incorrect. Please try again."
+        //      buttons: [{action:"dismiss"}]
+        if (buttons.some((b: any) => b?.action === "send_one_click_login_email")) {
+          console.error(`[instagramLogin] @${profile.username} — "Forgotten password" response (device-trust / email flow), NOT a bad password. Returning email_confirmation.`);
+          return { ok: false, message: `@${profile.username} — Instagram does not recognise this device and is asking for email verification. Check the account email inbox and click the confirmation link, then re-verify. (error_type="${errorType}", invalid_credentials=${invalidCreds})`, accountStatus: "email_confirmation", igDeviceState: ds };
         }
         return { ok: false, message: `@${profile.username} — incorrect password (error_type="${errorType}", invalid_credentials=${invalidCreds}). Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
       }
@@ -600,9 +608,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   }
 
   // ── Path 2: Cookie session restore ───────────────────────────────────────
-  // Only reached when NO password is stored (session-only / manual management mode).
-  // Password login is strongly preferred — cookies can be stale and give a
-  // misleadingly "valid" status for accounts that are no longer healthy.
+  // Primary verify path for any account that already has igApiCookies stored,
+  // whether or not a password is also saved.  Cookie restore is non-destructive:
+  // it re-uses the existing session and does NOT trigger Instagram's new-login
+  // security systems.  Password login (Path 1) is deliberately skipped for these
+  // accounts to avoid the "Forgotten password" lock-out that a second concurrent
+  // login from a different IP/device triggers.
   if (profile.igApiCookies) {
     // Mirrors the Jarvee cold-start sequence for a restored session:
     //   1. launcher/sync  (SendMobileConfig)  — establishes app config, no auth needed
