@@ -148,12 +148,17 @@ export function Dashboard() {
         sessionRes.ok ? sessionRes.json() : Promise.resolve([]),
       ]);
 
+      // Operations already covered by a clean session_action entry — no need to
+      // show the raw API log row as well (it would just be ugly duplicate noise).
+      const HIDDEN_OPS = new Set(["getNewFollowersHikerAPI", "getNewFollowers", "v1/user/by/username"]);
+
       const newApiRows: FeedItem[] = apiRows
         // "Account" source = timed() calls from InstagramWebClient — already
         // surfaced as session_actions, so skip to avoid duplicate entries.
         // "Browser"/"Verify" = EB and login calls — never useful in the feed.
         // "HikerAPI" = scrape metadata — shown since it adds unique context.
         .filter((c: any) => c.source !== "Browser" && c.source !== "Verify" && c.source !== "Account")
+        .filter((c: any) => !HIDDEN_OPS.has(c.operationName))
         .map((c: any) => ({
           key: `api-${c.id}`,
           ts: new Date(c.date).getTime(),
@@ -294,17 +299,16 @@ export function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="mb-6">
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-        <div className="flex items-center gap-3 mt-1 flex-wrap">
-          <p className="text-muted-foreground">Live view of completed tasks.</p>
-          {serverInfo?.startedAt && (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
-              <RefreshCw className="w-3 h-3" />
-              Server started {format(new Date(serverInfo.startedAt), "MMM d 'at' HH:mm:ss")}
-            </span>
-          )}
-        </div>
+        <span className="text-muted-foreground">—</span>
+        <p className="text-muted-foreground text-sm">Live view of tasks</p>
+        {serverInfo?.startedAt && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
+            <RefreshCw className="w-3 h-3" />
+            Server started {format(new Date(serverInfo.startedAt), "MMM d 'at' HH:mm:ss")}
+          </span>
+        )}
       </div>
 
       <Card className="desktop-card border-none shadow-sm">
@@ -318,101 +322,98 @@ export function Dashboard() {
         </div>
 
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
-          {activeTab === "api-log" ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-border bg-background min-w-[200px] flex-1 max-w-xs">
-                <Search className="w-3 h-3 text-muted-foreground shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Search operation, account, message..."
-                  value={apiLogSearch}
-                  onChange={e => setApiLogSearch(e.target.value)}
-                  className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
-                />
-                {apiLogSearch && (
-                  <button onClick={() => setApiLogSearch("")}>
-                    <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground flex-1 text-right hidden sm:block">
-                {feedItems.length > 0
-                  ? `${filteredFeed.length.toLocaleString()} of ${feedItems.filter(i => selectedProfileId == null || i.profileId === selectedProfileId).length.toLocaleString()} entries`
-                  : "Waiting for activity…"}
-              </p>
-              <div ref={pickerRef} className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => { setProfilePickerOpen(o => !o); setProfileSearch(""); }}
-                  className="h-7 pl-2.5 pr-2 text-xs rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center gap-1.5 min-w-[160px] max-w-[220px]"
-                >
-                  <User className="w-3 h-3 shrink-0" />
-                  <span className="flex-1 truncate text-left">
-                    {selectedProfile ? selectedProfile.username : "All accounts"}
-                  </span>
-                  {selectedProfile ? (
-                    <X
-                      className="w-3 h-3 shrink-0 hover:text-destructive"
-                      onClick={(e) => { e.stopPropagation(); setSelectedProfileId(null); setProfilePickerOpen(false); }}
-                    />
-                  ) : (
-                    <ChevronDown className="w-3 h-3 shrink-0" />
-                  )}
-                </button>
-                {profilePickerOpen && (
-                  <div className="absolute right-0 top-full mt-1 w-56 bg-background border border-border rounded shadow-lg z-50">
-                    <div className="p-2 border-b border-border">
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted/40">
-                        <Search className="w-3 h-3 text-muted-foreground shrink-0" />
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="Filter accounts..."
-                          value={profileSearch}
-                          onChange={e => setProfileSearch(e.target.value)}
-                          className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto py-1">
-                      <button
-                        type="button"
-                        onClick={() => { setSelectedProfileId(null); setProfilePickerOpen(false); setProfileSearch(""); }}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors ${selectedProfileId === null ? "text-primary font-semibold" : "text-foreground"}`}
-                      >
-                        <Activity className="w-3 h-3 shrink-0" /> All accounts
-                      </button>
-                      {filteredProfileOptions.map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors truncate ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
-                        >
-                          <User className="w-3.5 h-3.5 shrink-0 text-primary" />
-                          <span className="truncate">{p.username}</span>
-                        </button>
-                      ))}
-                      {filteredProfileOptions.length === 0 && (
-                        <p className="px-3 py-2 text-xs text-muted-foreground">No accounts match</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <div className={`flex items-center gap-3 flex-wrap ${activeTab !== "api-log" ? "hidden" : ""}`}>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-border bg-background min-w-[200px] flex-1 max-w-xs">
+              <Search className="w-3 h-3 text-muted-foreground shrink-0" />
               <input
                 type="text"
-                placeholder="Filter change log items..."
-                value={changelogFilter}
-                onChange={e => setChangelogFilter(e.target.value)}
-                className="text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground w-64"
+                placeholder="Search operation, account, message..."
+                value={apiLogSearch}
+                onChange={e => setApiLogSearch(e.target.value)}
+                className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
               />
+              {apiLogSearch && (
+                <button onClick={() => setApiLogSearch("")}>
+                  <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                </button>
+              )}
             </div>
-          )}
+            <p className="text-xs text-muted-foreground flex-1 text-right hidden sm:block">
+              {feedItems.length > 0
+                ? `${filteredFeed.length.toLocaleString()} of ${feedItems.filter(i => selectedProfileId == null || i.profileId === selectedProfileId).length.toLocaleString()} entries`
+                : "Waiting for activity…"}
+            </p>
+            <div ref={pickerRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => { setProfilePickerOpen(o => !o); setProfileSearch(""); }}
+                className="h-7 pl-2.5 pr-2 text-xs rounded border border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center gap-1.5 min-w-[160px] max-w-[220px]"
+              >
+                <User className="w-3 h-3 shrink-0" />
+                <span className="flex-1 truncate text-left">
+                  {selectedProfile ? selectedProfile.username : "All accounts"}
+                </span>
+                {selectedProfile ? (
+                  <X
+                    className="w-3 h-3 shrink-0 hover:text-destructive"
+                    onClick={(e) => { e.stopPropagation(); setSelectedProfileId(null); setProfilePickerOpen(false); }}
+                  />
+                ) : (
+                  <ChevronDown className="w-3 h-3 shrink-0" />
+                )}
+              </button>
+              {profilePickerOpen && (
+                <div className="absolute right-0 top-full mt-1 w-56 bg-background border border-border rounded shadow-lg z-50">
+                  <div className="p-2 border-b border-border">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted/40">
+                      <Search className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Filter accounts..."
+                        value={profileSearch}
+                        onChange={e => setProfileSearch(e.target.value)}
+                        className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto py-1">
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedProfileId(null); setProfilePickerOpen(false); setProfileSearch(""); }}
+                      className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors ${selectedProfileId === null ? "text-primary font-semibold" : "text-foreground"}`}
+                    >
+                      <Activity className="w-3 h-3 shrink-0" /> All accounts
+                    </button>
+                    {filteredProfileOptions.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors truncate ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
+                      >
+                        <User className="w-3.5 h-3.5 shrink-0 text-primary" />
+                        <span className="truncate">{p.username}</span>
+                      </button>
+                    ))}
+                    {filteredProfileOptions.length === 0 && (
+                      <p className="px-3 py-2 text-xs text-muted-foreground">No accounts match</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className={`flex items-center gap-2 ${activeTab !== "whats-new" ? "hidden" : ""}`}>
+            <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              placeholder="Filter change log items..."
+              value={changelogFilter}
+              onChange={e => setChangelogFilter(e.target.value)}
+              className="text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground w-64"
+            />
+          </div>
         </CardHeader>
 
         <CardContent className="p-0">
@@ -421,18 +422,18 @@ export function Dashboard() {
               <table className="w-full text-sm text-left table-fixed">
                 <colgroup>
                   <col className="w-44" />
-                  <col className="w-44" />
                   <col className="w-[162px]" />
                   <col className="w-36" />
                   <col />
+                  <col className="w-44" />
                 </colgroup>
-                <thead className="text-xs uppercase bg-muted/30 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10">
+                <thead className="text-xs uppercase bg-muted/80 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Timestamp</th>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Account</th>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Event</th>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Target</th>
-                    <th className="px-3 py-4 font-bold bg-muted/30">Detail</th>
+                    <th className="px-3 py-4 font-bold">Account</th>
+                    <th className="px-3 py-4 font-bold">Event</th>
+                    <th className="px-3 py-4 font-bold">Target</th>
+                    <th className="px-3 py-4 font-bold">Detail</th>
+                    <th className="px-3 py-4 font-bold">Timestamp</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -468,12 +469,6 @@ export function Dashboard() {
                       if (item.kind === "api") {
                         return (
                           <tr key={item.key} className="hover:bg-accent/5 transition-colors">
-                            <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
-                              <span className="flex items-center gap-1 min-w-0">
-                                <Clock className="w-3 h-3 shrink-0" />
-                                <span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span>
-                              </span>
-                            </td>
                             <td className="px-3 py-3 font-medium truncate">
                               <Link
                                 href={`/profiles/${item.profileId}?tab=follow`}
@@ -492,18 +487,18 @@ export function Dashboard() {
                             <td className="px-3 py-3 text-foreground truncate text-xs" title={item.message || undefined}>
                               {item.message || "—"}
                             </td>
+                            <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
+                              <span className="flex items-center gap-1 min-w-0">
+                                <Clock className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span>
+                              </span>
+                            </td>
                           </tr>
                         );
                       }
                       const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "bg-muted text-muted-foreground" };
                       return (
                         <tr key={item.key} className="hover:bg-accent/5 transition-colors">
-                          <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
-                            <span className="flex items-center gap-1 min-w-0">
-                              <Clock className="w-3 h-3 shrink-0" />
-                              <span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span>
-                            </span>
-                          </td>
                           <td className="px-3 py-3 font-medium truncate">
                             <Link
                               href={`/profiles/${item.profileId}?tab=follow`}
@@ -523,6 +518,12 @@ export function Dashboard() {
                           </td>
                           <td className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>
                             {item.detail || "—"}
+                          </td>
+                          <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
+                            <span className="flex items-center gap-1 min-w-0">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span>
+                            </span>
                           </td>
                         </tr>
                       );

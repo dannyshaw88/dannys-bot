@@ -847,12 +847,11 @@ class AutomationEngine {
         // ── New Followers → enqueue to pending ─────────────────────────────
         if (now >= nextFollowerCheckAt) {
           if (newFollowersEnabled) {
-            this.logAction(freshProfile.id, contactTool.id, "tool_start", "", "", "", "ok", "Contact Tool: new-follower check started");
             try {
-              await this.runContactNewFollowersSession(freshProfile, contactTool, state);
-              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "ok", "Contact Tool: new-follower check complete");
+              const { fetched, source: apiSource } = await this.runContactNewFollowersSession(freshProfile, contactTool, state);
+              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "ok", `Extracted ${fetched} new follower${fetched === 1 ? "" : "s"} via ${apiSource}`);
             } catch (err: any) {
-              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool new-follower error: ${err?.message ?? "unknown"}`);
+              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "error", `Check new followers error: ${err?.message ?? "unknown"}`);
               console.error(`[engine] @${freshProfile.username}: new-follower contact session error: ${err?.message}`);
             }
           }
@@ -916,7 +915,8 @@ class AutomationEngine {
   }
 
   // ── Contact New Followers: scrape followers → enqueue to pending ───────────
-  private async runContactNewFollowersSession(profile: Profile, tool: Tool, state: ProfileState, countOverride?: number): Promise<void> {
+  // Returns { fetched, source } so the caller can build a clean log message.
+  private async runContactNewFollowersSession(profile: Profile, tool: Tool, state: ProfileState, countOverride?: number): Promise<{ fetched: number; source: string }> {
     const s = tool.settings as any;
 
     const messageTemplate: string = (s.contactMessage ?? "").trim();
@@ -930,6 +930,7 @@ class AutomationEngine {
     const useHiker = s.contactApiSource === "hiker"
       && globalSettings.hikerApiEnabled === "true"
       && !!globalSettings.hikerApiToken;
+    const source = useHiker ? "HikerAPI" : "account";
 
     const hikerClient = useHiker ? new HikerApiClient(globalSettings.hikerApiToken!) : null;
 
@@ -965,17 +966,17 @@ class AutomationEngine {
       }
     } else {
       const client = await this.ensureClient(profile, state);
-      if (!client) return;
+      if (!client) return { fetched: 0, source };
       ownUserId = await client.getOwnUserId();
       if (!ownUserId) {
         console.warn(`[engine] @${profile.username}: could not resolve own user ID for contact session`);
-        return;
+        return { fetched: 0, source };
       }
     }
 
     // Ensure client is initialised (needed for non-HikerAPI DM send path later).
     const client = await this.ensureClient(profile, state);
-    if (!client) return;
+    if (!client) return { fetched: 0, source };
 
     let followers: { pk: string; username: string; fullName: string }[] = [];
     if (hikerClient) {
@@ -984,7 +985,7 @@ class AutomationEngine {
       storage.createInstagramApiCall({
         profileId: profile.id,
         username: profile.username,
-        operationName: "v2/user/followers",
+        operationName: "getNewFollowersHikerAPI",
         date: new Date().toISOString(),
         message: `Fetched ${followers.length} followers for pk=${ownUserId} (requested ${usersToCheck})`,
         source: "HikerAPI",
@@ -993,12 +994,24 @@ class AutomationEngine {
         durationMs: Date.now() - t1,
       });
     } else {
+      const t2 = Date.now();
       followers = await client.getFollowers(ownUserId!, usersToCheck);
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        username: profile.username,
+        operationName: "getNewFollowers",
+        date: new Date().toISOString(),
+        message: `Fetched ${followers.length} followers for pk=${ownUserId} (requested ${usersToCheck})`,
+        source: "account",
+        navChain: "",
+        ipAddress: "",
+        durationMs: Date.now() - t2,
+      });
     }
 
     if (!followers.length) {
       console.log(`[engine] @${profile.username}: no followers returned for contact session`);
-      return;
+      return { fetched: 0, source };
     }
 
     let candidates = followers;
@@ -1011,9 +1024,13 @@ class AutomationEngine {
     let queued = 0;
     for (const user of candidates) {
       if (state.stop.stopped) break;
-      // Skip if already queued or previously sent
+      // Skip if already pending (avoid duplicates in the queue)
       if (await storage.isContactAlreadyQueued(profile.id, user.username)) continue;
+      // Skip if a DM was already sent to this user (new_follower or any type)
       if (await storage.isContactDmAlreadySent(profile.id, user.username)) continue;
+      // Skip if this user already triggered an auto-reply (pending or sent) —
+      // we're already in conversation with them, no need to initiate contact.
+      if (await storage.isAutoReplyAlreadyQueued(profile.id, user.username)) continue;
       const text = this.applySpintax(messageTemplate);
       await storage.createContactPendingMessage({
         profileId: profile.id,
@@ -1030,6 +1047,7 @@ class AutomationEngine {
     if (queued > 0) {
       console.log(`[engine] @${profile.username}: queued ${queued} new-follower DMs to pending`);
     }
+    return { fetched: followers.length, source };
   }
 
   // ── Contact Users: send from pending queue ─────────────────────────────────
@@ -1139,49 +1157,85 @@ class AutomationEngine {
   }
 
   // ── Auto Reply: scan DM threads for trigger words and enqueue replies ────────
-  private async runAutoReplyCheck(profile: Profile, client: InstagramWebClient): Promise<void> {
+  // Runs automatically after every checkDm action using inbox threads already
+  // fetched by getDirectMessagesInternal — no second warm-up, no second fetch.
+  // Scans the FULL inbox list so triggers deeper than dmOpenCount are not missed.
+  // client is optional — only needed for the "like the triggering DM" feature.
+  // Returns the number of auto-replies queued so the caller can include it in the log.
+  private async runAutoReplyCheck(
+    profile: Profile,
+    threads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[],
+    client?: InstagramWebClient,
+  ): Promise<number> {
     const tools = await storage.getToolsByProfile(profile.id);
     const contactTool = tools.find(t => t.type === "contact");
-    if (!contactTool?.enabled) return;
+    if (!contactTool) {
+      console.log(`[autoReply] @${profile.username}: no contact tool found — skipping`);
+      return 0;
+    }
 
     const s = contactTool.settings as any;
-    if (!s.autoReplyEnabled) return;
+    if (!s.autoReplyEnabled) {
+      console.log(`[autoReply] @${profile.username}: autoReplyEnabled=false — skipping`);
+      return 0;
+    }
 
     const rules: { word: string; reply: string }[] = Array.isArray(s.autoReplies) ? s.autoReplies : [];
-    if (!rules.length) return;
+    if (!rules.length) {
+      console.log(`[autoReply] @${profile.username}: no trigger rules configured — skipping`);
+      return 0;
+    }
+    console.log(`[autoReply] @${profile.username}: scanning DMs — ${rules.length} trigger rule${rules.length === 1 ? "" : "s"}: [${rules.map(r => `"${r.word}"`).join(", ")}]`);
 
     // Build app-followed set if filter is enabled
     let appFollowedSet: Set<string> | null = null;
     if (s.autoReplyOnlyAppFollowed) {
       const followedUsers = await storage.getFollowedUsersByProfile(profile.id);
       appFollowedSet = new Set(followedUsers.map(u => u.instagramUsername.toLowerCase()));
+      console.log(`[autoReply] @${profile.username}: only-app-followed filter active — ${appFollowedSet.size} user(s) eligible`);
     }
 
-    const threads = await client.getDMThreadsWithContent(20);
-    if (!threads.length) return;
+    if (!threads.length) {
+      console.log(`[autoReply] @${profile.username}: no DM threads to scan`);
+      return 0;
+    }
+    console.log(`[autoReply] @${profile.username}: ${threads.length} thread(s) to scan (full inbox from checkDm fetch)`);
 
     let queued = 0;
     for (const thread of threads) {
       if (!thread.username || !thread.userId) continue;
 
       // Only app-followed users filter
-      if (appFollowedSet && !appFollowedSet.has(thread.username.toLowerCase())) continue;
+      if (appFollowedSet && !appFollowedSet.has(thread.username.toLowerCase())) {
+        console.log(`[autoReply] @${profile.username}: skipping @${thread.username} — not in app-followed list`);
+        continue;
+      }
 
-      // Only look at messages NOT sent by the account (fromMe === false)
+      // Only look at messages NOT sent by this account (fromMe === false)
       const incomingMessages = thread.items.filter(i => !i.fromMe);
-      if (!incomingMessages.length) continue;
+      if (!incomingMessages.length) {
+        console.log(`[autoReply] @${profile.username}: @${thread.username} — no incoming messages in thread`);
+        continue;
+      }
 
-      // Already queued an auto-reply to this user? Skip.
-      if (await storage.isAutoReplyAlreadyQueued(profile.id, thread.username)) continue;
+      // Already have a pending auto-reply queued for this user? Skip.
+      if (await storage.isAutoReplyAlreadyQueued(profile.id, thread.username)) {
+        console.log(`[autoReply] @${profile.username}: @${thread.username} — already has a pending auto-reply, skipping`);
+        continue;
+      }
 
       // Check each trigger word against all incoming message texts
+      console.log(`[autoReply] @${profile.username}: checking @${thread.username} — ${incomingMessages.length} incoming message(s)`);
       let matched = false;
       for (const rule of rules) {
         if (!rule.word.trim() || !rule.reply.trim()) continue;
         const triggerLower = rule.word.trim().toLowerCase();
         const triggeringMsg = incomingMessages.find(msg => msg.text.toLowerCase().includes(triggerLower));
         if (triggeringMsg) {
-          const text = this.applySpintax(rule.reply);
+          // Replace [FIRSTNAME] before spintax so it works inside spin groups too.
+          // firstName comes free from the inbox response — no extra API call needed.
+          const withTokens = rule.reply.replace(/\[FIRSTNAME\]/gi, thread.firstName || thread.username);
+          const text = this.applySpintax(withTokens);
           await storage.createContactPendingMessage({
             profileId: profile.id,
             instagramUsername: thread.username,
@@ -1191,29 +1245,34 @@ class AutomationEngine {
             status: "pending",
             queuedAt: new Date().toISOString(),
           });
-          console.log(`[engine] @${profile.username}: auto-reply queued for @${thread.username} (trigger: "${rule.word}")`);
+          console.log(`[autoReply] @${profile.username}: QUEUED reply to @${thread.username} (firstName="${thread.firstName}") — trigger="${rule.word}" matched in: "${triggeringMsg.text.slice(0, 60)}"`);
           queued++;
           matched = true;
 
-          // Like the triggering DM if enabled
-          if (s.autoReplyLikeDm && thread.threadId && triggeringMsg.itemId) {
+          // Like the triggering DM if enabled (requires client to be available)
+          if (s.autoReplyLikeDm && client && thread.threadId && triggeringMsg.itemId) {
             try {
               await client.likeDirectMessage(thread.threadId, triggeringMsg.itemId);
-              console.log(`[engine] @${profile.username}: ♥ liked DM from @${thread.username}`);
+              console.log(`[autoReply] @${profile.username}: liked DM from @${thread.username}`);
             } catch (e: any) {
-              console.warn(`[engine] @${profile.username}: like DM error: ${e?.message}`);
+              console.warn(`[autoReply] @${profile.username}: like DM error: ${e?.message}`);
             }
           }
 
           break; // one reply per thread per scan
+        } else {
+          console.log(`[autoReply] @${profile.username}: @${thread.username} — trigger "${rule.word}" not found in ${incomingMessages.length} message(s)`);
         }
       }
-      if (matched) continue; // move to next thread
+      if (matched) continue;
     }
 
     if (queued > 0) {
-      console.log(`[engine] @${profile.username}: queued ${queued} auto-replies to pending`);
+      console.log(`[autoReply] @${profile.username}: scan complete — queued ${queued} auto-repl${queued === 1 ? "y" : "ies"} to pending messages`);
+    } else {
+      console.log(`[autoReply] @${profile.username}: scan complete — no triggers matched`);
     }
+    return queued;
   }
 
   // ── Proxy URL resolver ────────────────────────────────────────────────────
@@ -2043,19 +2102,33 @@ class AutomationEngine {
       "checkDmNotUsedMin", "checkDmNotUsedMax",
       "checkDmOrderMin",   "checkDmOrderMax",
       async () => {
+        let inboxThreads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[] = [];
+        let dmOpenCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
+        let dmCount = 0;
+        let dmOk = false;
         try {
-          const { count: pendingCount } = await client.getDirectMessagesInternal();
-          console.log(`[engine] @${profile.username}: 💬 checked DMs (${pendingCount} pending request(s))`);
-          this.logAction(profile.id, tool.id, "check_dm", "", "", "", "ok", `Checked DM inbox — ${pendingCount} thread${pendingCount === 1 ? "" : "s"}`);
+          const result = await client.getDirectMessagesInternal(dmOpenCount);
+          inboxThreads = result.threads;
+          dmCount = result.count;
+          dmOk = result.ok;
+          console.log(`[engine] @${profile.username}: 💬 checked DMs — opened ${dmCount}/${dmOpenCount} thread${dmOpenCount === 1 ? "" : "s"}${dmOk ? "" : " (read failed)"}`);
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
         }
-        // Auto-reply scan always runs after DM check
+        // Auto-reply scan reuses the already-fetched inbox threads (no second warm-up).
+        // Strictly capped to the same dmOpenCount threads that were checked — no extras.
+        let autoReplied = 0;
         try {
-          await this.runAutoReplyCheck(profile, client);
+          autoReplied = await this.runAutoReplyCheck(profile, inboxThreads.slice(0, dmOpenCount), client);
         } catch (e: any) {
           console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
         }
+        // Log combined result — appends auto-reply count only when triggers were found.
+        const dmLabel = `Checked ${dmCount} direct message${dmCount === 1 ? "" : "s"}`;
+        const detail = autoReplied > 0
+          ? `${dmLabel}, ${autoReplied} scheduled for auto-reply`
+          : dmLabel;
+        this.logAction(profile.id, tool.id, "check_dm", "", "", "", dmOk ? "ok" : "error", detail);
       },
     );
 
@@ -2785,13 +2858,18 @@ class AutomationEngine {
 
     const before = (await storage.getContactPendingMessages(profileId, "pending")).length;
     try {
-      await this.runContactNewFollowersSession(profile, contactTool, state, countOverride);
+      const { fetched, source } = await this.runContactNewFollowersSession(profile, contactTool, state, countOverride);
+      const after = (await storage.getContactPendingMessages(profileId, "pending")).length;
+      const queued = Math.max(0, after - before);
+      this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "ok",
+        `Extracted ${fetched} new follower${fetched === 1 ? "" : "s"} via ${source}${queued > 0 ? `, ${queued} added to queue` : ""}`);
+      return { queued };
     } catch (e: any) {
       console.error(`[engine] triggerExtractNow @${profile.username}: ${e?.message}`);
+      this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "error",
+        `Extract now error: ${e?.message ?? "unknown"}`);
       return { queued: 0, error: e?.message ?? "Unknown error" };
     }
-    const after = (await storage.getContactPendingMessages(profileId, "pending")).length;
-    return { queued: Math.max(0, after - before) };
   }
 
   // ── Status API ────────────────────────────────────────────────────────────

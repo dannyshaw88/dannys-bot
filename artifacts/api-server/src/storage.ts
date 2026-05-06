@@ -95,6 +95,7 @@ export interface IStorage {
   updateContactPendingMessage(id: number, updates: Partial<Pick<ContactPendingMessage, 'status' | 'sentAt' | 'dmThreadId' | 'dmItemId' | 'unsendAt'>>): Promise<void>;
   deleteContactPendingMessage(id: number): Promise<void>;
   isContactAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
+  hasAnyMessageRecord(profileId: number, instagramUsername: string): Promise<boolean>;
   isAutoReplyAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
   getContactMessagesForUnsend(profileId: number): Promise<ContactPendingMessage[]>;
 
@@ -536,13 +537,31 @@ export class DatabaseStorage implements IStorage {
     return rows.length > 0;
   }
 
+  async hasAnyMessageRecord(profileId: number, instagramUsername: string): Promise<boolean> {
+    // Checks contactPendingMessages for any non-failed record (any messageType, pending or sent).
+    // Used as a broader dedup guard: catches users who were queued+sent even if their
+    // contactDmSent row was manually deleted from the UI.
+    const rows = await db.select({ id: contactPendingMessages.id })
+      .from(contactPendingMessages)
+      .where(and(
+        eq(contactPendingMessages.profileId, profileId),
+        sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`,
+        sql`${contactPendingMessages.status} != 'failed'`
+      ))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async isAutoReplyAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean> {
+    // Block on ANY auto-reply record (pending OR sent) — prevents re-triggering once a
+    // user has already received or is about to receive an auto-reply.
     const rows = await db.select({ id: contactPendingMessages.id })
       .from(contactPendingMessages)
       .where(and(
         eq(contactPendingMessages.profileId, profileId),
         eq(contactPendingMessages.messageType, "auto_reply"),
-        sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`
+        sql`LOWER(${contactPendingMessages.instagramUsername}) = LOWER(${instagramUsername})`,
+        sql`${contactPendingMessages.status} != 'failed'`
       ))
       .limit(1);
     return rows.length > 0;

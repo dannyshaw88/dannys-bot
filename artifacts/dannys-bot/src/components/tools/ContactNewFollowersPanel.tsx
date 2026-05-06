@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { MessageSquare, UserCheck, Clock, Users, Zap, Shuffle, Loader2, Download } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
-import { useToast } from "@/hooks/use-toast";
 
 interface Props {
   tool: Tool;
@@ -24,18 +23,16 @@ function applySpintax(text: string): string {
 export function ContactNewFollowersPanel({ tool, profile }: Props) {
   const updateToolMutation = useUpdateTool();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [previewText, setPreviewText] = useState("");
   const [extractResult, setExtractResult] = useState<{ queued: number } | null>(null);
 
-  const [extractCount, setExtractCount] = useState(20);
 
   const extractNowMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/profiles/${profile.id}/tools/contact/extract-now`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: extractCount }),
+        body: JSON.stringify({ count: settings.contactExtractCount ?? 20 }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -46,22 +43,9 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
     onSuccess: (data) => {
       setExtractResult({ queued: data.queued });
       queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] });
-      toast({
-        title: data.queued > 0
-          ? `${data.queued} new user${data.queued !== 1 ? "s" : ""} added to Pending Messages`
-          : "No new users found",
-        description: data.queued > 0
-          ? "Switch to the Contact Users tab to see them."
-          : "All recent followers were already queued or messaged.",
-      });
     },
     onError: (e: Error) => {
-      const isNoMsg = e.message.includes("No message configured");
-      toast({
-        title: isNoMsg ? "Message required" : "Extract failed",
-        description: e.message,
-        variant: "destructive",
-      });
+      setExtractResult({ queued: 0 });
     },
   });
 
@@ -81,15 +65,34 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
 
   const isMounted = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSettings = useRef<typeof settings | null>(null);
 
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return; }
+    pendingSettings.current = settings;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      pendingSettings.current = null;
       updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, settings });
     }, 600);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [settings]);
+
+  // Flush any unsaved changes immediately when the component unmounts (tab switch).
+  // Uses keepalive so the request completes even after the component is gone.
+  useEffect(() => {
+    return () => {
+      if (pendingSettings.current) {
+        fetch(`/api/tools/${tool.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profileId: tool.profileId, settings: pendingSettings.current }),
+          keepalive: true,
+        });
+        pendingSettings.current = null;
+      }
+    };
+  }, []);
 
   const numInput = (key: string, min: number, max: number, width = "w-20") => (
     <Input
@@ -271,8 +274,8 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
           min={1}
           max={10000}
           className="w-20 h-8 text-xs"
-          value={extractCount}
-          onChange={(e) => setExtractCount(Math.max(1, Number(e.target.value)))}
+          value={settings.contactExtractCount ?? 20}
+          onChange={(e) => setSettings({ ...settings, contactExtractCount: Math.max(1, Number(e.target.value)) })}
         />
         <div className="text-[11px] text-muted-foreground leading-snug">
           Fetches this many recent followers now and adds any new ones to the <strong>Pending Messages</strong> queue.
