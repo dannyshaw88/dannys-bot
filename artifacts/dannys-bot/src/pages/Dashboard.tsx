@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw,
+  Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw, Settings2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
@@ -34,7 +34,24 @@ const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
   no_sources:          { label: "No Sources",    cls: "bg-slate-100 text-slate-600" },
 };
 
+const DEFAULT_COL_WIDTHS = { account: 19, event: 18, target: 12, detail: 24, timestamp: 27 };
+
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.4.0",
+    date: "6 May 2026",
+    items: [
+      { category: "Dashboard", text: "Added Manage Columns button — set each Activity Log column width individually, saved across sessions." },
+      { category: "Dashboard", text: "Server Started timestamp now always reflects the actual current process start time, not a cached daily value." },
+      { category: "Profiles", text: "Actions window is 20% wider with a 2-column equal grid layout for all action buttons." },
+      { category: "Profiles", text: "Verify popup now shows the exact number of selected profiles being verified, not the server total." },
+      { category: "Follow Tool", text: "Toggle row now has a visible divider and spacing separating it from the settings below." },
+      { category: "Follow Tool", text: "Target Sources and Followed Users moved onto the same row as the Switch and Copy Settings controls." },
+      { category: "Profile Sync", text: "Stat icons (Followers, Following, Posts) sit on the left; Auto Sync controls stack on the right with a separator." },
+      { category: "All Tools", text: "Copy Settings dialog widened to 840 px and taller (81 vh) for easier side-by-side comparison." },
+      { category: "All Tools", text: "Copy Settings button text is now blue across all panels; Back to Accounts uses a red arrow." },
+    ],
+  },
   {
     version: "1.3.0",
     date: "5 May 2026 — 11:54",
@@ -131,7 +148,15 @@ export function Dashboard() {
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
+  const [manageColsOpen, setManageColsOpen] = useState(false);
+  const [colWidths, setColWidths] = useState<typeof DEFAULT_COL_WIDTHS>(() => {
+    try {
+      const s = localStorage.getItem("dashboard_col_widths");
+      return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS;
+    } catch { return DEFAULT_COL_WIDTHS; }
+  });
   const pickerRef = useRef<HTMLDivElement>(null);
+  const manageColsRef = useRef<HTMLDivElement>(null);
 
   // ── Unified feed: both API calls + session actions merged by timestamp ────────
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
@@ -292,6 +317,9 @@ export function Dashboard() {
         setProfilePickerOpen(false);
         setProfileSearch("");
       }
+      if (manageColsRef.current && !manageColsRef.current.contains(e.target as Node)) {
+        setManageColsOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -337,18 +365,60 @@ export function Dashboard() {
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
             <Sparkles className="w-4 h-4" /> What's New
           </button>
-          <button
-            onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_errors_cleared_at", String(t)); setErrorsCleared(t); }}
-            className="ml-auto text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
-          >
-            Clear errors
-          </button>
-          <button
-            onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_cleared_at", String(t)); setClearedAt(t); }}
-            className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
-          >
-            Clear feed
-          </button>
+          <div className="ml-auto flex items-center gap-1">
+            {activeTab === "api-log" && (
+              <div ref={manageColsRef} className="relative">
+                <button
+                  onClick={() => setManageColsOpen(o => !o)}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-2.5 px-2"
+                >
+                  <Settings2 className="w-3.5 h-3.5" /> Manage Columns
+                </button>
+                {manageColsOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-60">
+                    <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (%)</p>
+                    {([ ["account", "Account"], ["event", "Event"], ["target", "Target"], ["detail", "Detail"], ["timestamp", "Timestamp"] ] as [keyof typeof DEFAULT_COL_WIDTHS, string][]).map(([key, label]) => (
+                      <div key={key} className="flex items-center gap-2 mb-2">
+                        <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
+                        <input
+                          type="number"
+                          min={5}
+                          max={60}
+                          value={colWidths[key]}
+                          onChange={e => {
+                            const v = Math.max(5, Math.min(60, Number(e.target.value)));
+                            const next = { ...colWidths, [key]: v };
+                            setColWidths(next);
+                            localStorage.setItem("dashboard_col_widths", JSON.stringify(next));
+                          }}
+                          className="h-6 w-14 text-xs border border-border rounded px-2 bg-background"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("dashboard_col_widths"); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+                    >
+                      Reset to defaults
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_errors_cleared_at", String(t)); setErrorsCleared(t); }}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
+            >
+              Clear errors
+            </button>
+            <button
+              onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_cleared_at", String(t)); setClearedAt(t); }}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"
+            >
+              Clear feed
+            </button>
+          </div>
         </div>
 
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
@@ -451,11 +521,11 @@ export function Dashboard() {
             <div className="overflow-y-auto overflow-x-hidden max-h-[70vh]">
               <table className="w-full text-sm text-left table-fixed">
                 <colgroup>
-                  <col className="w-[19%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[24%]" />
-                  <col className="w-[27%]" />
+                  <col style={{ width: `${colWidths.account}%` }} />
+                  <col style={{ width: `${colWidths.event}%` }} />
+                  <col style={{ width: `${colWidths.target}%` }} />
+                  <col style={{ width: `${colWidths.detail}%` }} />
+                  <col style={{ width: `${colWidths.timestamp}%` }} />
                 </colgroup>
                 <thead className="text-xs uppercase bg-muted/80 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
