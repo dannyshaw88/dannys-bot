@@ -625,29 +625,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-      {/* Target Sources + Followed Users — compact tab strip */}
-      {tool.type === 'follow' && (
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setShowSources(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
-          >
-            <Users className="w-3.5 h-3.5 text-primary" />
-            Target Sources
-            <span className="ml-0.5 text-[10px] text-muted-foreground">
-              ({sourcesLoading ? '…' : sources?.length ?? 0})
-            </span>
-          </button>
-          <button
-            onClick={() => setShowFollowedUsers(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
-          >
-            <UserPlus className="w-3.5 h-3.5 text-primary" />
-            Followed Users
-          </button>
-        </div>
-      )}
-
       {/* Header & Master Switch — hidden for follow tools (title/desc shown inside the settings wrapper instead) */}
       {tool.type !== 'follow' && (
       <div className="desktop-card p-6">
@@ -705,53 +682,64 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         <div className={`${tool.type === 'follow' ? 'col-span-1' : 'lg:col-span-1'} space-y-6`}>
           <div className="desktop-card p-6 space-y-4">
             {tool.type === 'follow' && (
-              <div className="space-y-2 mb-2">
-                <h4 className="font-semibold text-sm">Follow Tool</h4>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Switch
-                    checked={tool.enabled}
-                    onCheckedChange={handleToggleEnable}
-                    disabled={toggleMutation.isPending}
-                  />
-                  <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
-                    {tool.enabled ? 'ACTIVE' : 'STOPPED'}
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <Switch
+                  checked={tool.enabled}
+                  onCheckedChange={handleToggleEnable}
+                  disabled={toggleMutation.isPending}
+                />
+                <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {tool.enabled ? 'ACTIVE' : 'STOPPED'}
+                </span>
+                <button
+                  onClick={() => setShowCopyModal(true)}
+                  className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
+                >
+                  Copy Settings
+                </button>
+                <button
+                  onClick={() => setShowSources(true)}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
+                >
+                  <Users className="w-3.5 h-3.5 text-primary" />
+                  Target Sources
+                  <span className="ml-0.5 text-[10px] text-muted-foreground">
+                    ({sourcesLoading ? '…' : sources?.length ?? 0})
                   </span>
-                  <button
-                    onClick={() => setShowCopyModal(true)}
-                    className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
-                  >
-                    Copy Settings
-                  </button>
-                  {nextRunStatus && (
-                    <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-                      <Clock className="w-3 h-3 shrink-0" />
-                      {nextRunStatus.executing
-                        ? <span className="font-medium">Executing</span>
-                        : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
-                      }
+                </button>
+                <button
+                  onClick={() => setShowFollowedUsers(true)}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-primary" />
+                  Followed Users
+                </button>
+                {nextRunStatus && (
+                  <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                    <Clock className="w-3 h-3 shrink-0" />
+                    {nextRunStatus.executing
+                      ? <span className="font-medium">Executing</span>
+                      : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+                    }
+                  </span>
+                )}
+                {tool.enabled && (() => {
+                  const s = (tool.settings as any) ?? {};
+                  const avgDelay      = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
+                  const avgProcess    = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
+                  const avgMaxPerDay  = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
+                  const perHour       = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+                  const perDayRaw     = perHour * 24;
+                  const perDay        = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
+                  return perHour > 0 ? (
+                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <TrendingUp className="w-3 h-3 shrink-0" />
+                      ~{perHour}/hr · ~{perDay}/day
                     </span>
-                  )}
-                  {tool.enabled && (() => {
-                    const s = (tool.settings as any) ?? {};
-                    const avgDelay      = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
-                    const avgProcess    = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
-                    const avgMaxPerDay  = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
-                    const perHour       = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
-                    const perDayRaw     = perHour * 24;
-                    const perDay        = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
-                    return perHour > 0 ? (
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <TrendingUp className="w-3 h-3 shrink-0" />
-                        ~{perHour}/hr · ~{perDay}/day
-                      </span>
-                    ) : null;
-                  })()}
-                </div>
+                  ) : null;
+                })()}
               </div>
             )}
-            <div className="border-b border-border pb-3 mb-4">
-              <h3 className="font-semibold text-lg">Follow Tool Settings</h3>
-            </div>
             <div className="space-y-6">
               <div className="space-y-5">
                 {/* Top row: Wait Until Next Session / Users Per Session / Delay After Follow */}

@@ -374,128 +374,6 @@ export function ProfileDetailsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-4">
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            {/* Profile switcher */}
-            <div className="flex items-center gap-1 mb-1">
-              {/* Account status badge — far left, outside nav arrows */}
-              {(() => {
-                const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
-                const meta = STATUS_META[acctStatus] ?? STATUS_META.pending;
-                const Icon = meta.icon;
-                return (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}`}>
-                        <Icon className="w-3 h-3" />
-                        {meta.label}
-                        <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-52 p-1">
-                      {ACCOUNT_STATUSES.map(s => {
-                        const m = STATUS_META[s] ?? STATUS_META.pending;
-                        const I = m.icon;
-                        return (
-                          <DropdownMenuItem
-                            key={s}
-                            onClick={() => updateAccountStatusMutation.mutate({ id: profileId, accountStatus: s })}
-                            className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md text-sm font-medium ${s === acctStatus ? "bg-accent" : ""}`}
-                          >
-                            <I className="w-3.5 h-3.5" />
-                            {m.label}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                );
-              })()}
-
-              <button
-                onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}`)}
-                disabled={!prevProfile}
-                title={prevProfile ? (prevProfile.accountLabel || prevProfile.username) : undefined}
-                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              <DropdownMenu onOpenChange={open => { if (!open) setProfileSearch(""); }}>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent transition-colors max-w-md">
-                    <Instagram className="w-4 h-4 text-primary shrink-0" />
-                    <span className="text-2xl font-bold tracking-tight text-foreground truncate">
-                      {profile.accountLabel || `@${profile.username}`}
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-80 p-0">
-                  <div className="flex items-center gap-2 px-3 py-2 border-b">
-                    <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <input
-                      value={profileSearch}
-                      onChange={e => setProfileSearch(e.target.value)}
-                      placeholder="Search profiles…"
-                      className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
-                      autoFocus
-                    />
-                    {profileSearch && (
-                      <button onClick={() => setProfileSearch("")} className="text-muted-foreground hover:text-foreground">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-72 overflow-y-auto py-1">
-                    {switcherProfiles.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-sm text-muted-foreground">No profiles found</div>
-                    ) : switcherProfiles.map(p => (
-                      <DropdownMenuItem
-                        key={p.id}
-                        onClick={() => navigate(`/profiles/${p.id}`)}
-                        className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 text-sm ${p.id === profileId ? "bg-accent font-semibold" : ""}`}
-                      >
-                        <Instagram className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="truncate">{p.accountLabel || `@${p.username}`}</span>
-                        {p.id === profileId && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
-                      </DropdownMenuItem>
-                    ))}
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <button
-                onClick={() => nextProfile && navigate(`/profiles/${nextProfile.id}`)}
-                disabled={!nextProfile}
-                title={nextProfile ? (nextProfile.accountLabel || nextProfile.username) : undefined}
-                className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-
-              <span className="text-border mx-1 select-none">|</span>
-              <Link href="/profiles" className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
-                <ArrowLeft className="w-3 h-3 text-red-500" /> Back to Accounts
-              </Link>
-
-            </div>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto flex items-center gap-2 shrink-0"
-            onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-            data-testid="button-open-browser"
-          >
-            <Monitor className="w-4 h-4" />
-            Open Browser
-          </Button>
-        </div>
-      </div>
-
       <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-8 items-start">
         <Tabs.List className="flex flex-col w-48 shrink-0 sticky top-4 self-start border-r border-border pr-0 py-1">
           <Tabs.Trigger value="settings" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
@@ -518,6 +396,117 @@ export function ProfileDetailsPage() {
           </Tabs.Trigger>
         </Tabs.List>
         <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-4 mb-3">
+            <div className="flex-1">
+              <div className="flex items-center gap-1 flex-wrap">
+                {(() => {
+                  const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
+                  const meta = STATUS_META[acctStatus] ?? STATUS_META.pending;
+                  const Icon = meta.icon;
+                  return (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}`}>
+                          <Icon className="w-3 h-3" />
+                          {meta.label}
+                          <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-52 p-1">
+                        {ACCOUNT_STATUSES.map(s => {
+                          const m = STATUS_META[s] ?? STATUS_META.pending;
+                          const I = m.icon;
+                          return (
+                            <DropdownMenuItem
+                              key={s}
+                              onClick={() => updateAccountStatusMutation.mutate({ id: profileId, accountStatus: s })}
+                              className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md text-sm font-medium ${s === acctStatus ? "bg-accent" : ""}`}
+                            >
+                              <I className="w-3.5 h-3.5" />
+                              {m.label}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  );
+                })()}
+                <button
+                  onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}`)}
+                  disabled={!prevProfile}
+                  title={prevProfile ? (prevProfile.accountLabel || prevProfile.username) : undefined}
+                  className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <DropdownMenu onOpenChange={open => { if (!open) setProfileSearch(""); }}>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent transition-colors max-w-md">
+                      <Instagram className="w-4 h-4 text-primary shrink-0" />
+                      <span className="text-2xl font-bold tracking-tight text-foreground truncate">
+                        {profile.accountLabel || `@${profile.username}`}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-80 p-0">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <input
+                        value={profileSearch}
+                        onChange={e => setProfileSearch(e.target.value)}
+                        placeholder="Search profiles…"
+                        className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                        autoFocus
+                      />
+                      {profileSearch && (
+                        <button onClick={() => setProfileSearch("")} className="text-muted-foreground hover:text-foreground">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-72 overflow-y-auto py-1">
+                      {switcherProfiles.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-sm text-muted-foreground">No profiles found</div>
+                      ) : switcherProfiles.map(p => (
+                        <DropdownMenuItem
+                          key={p.id}
+                          onClick={() => navigate(`/profiles/${p.id}`)}
+                          className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 text-sm ${p.id === profileId ? "bg-accent font-semibold" : ""}`}
+                        >
+                          <Instagram className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate">{p.accountLabel || `@${p.username}`}</span>
+                          {p.id === profileId && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  onClick={() => nextProfile && navigate(`/profiles/${nextProfile.id}`)}
+                  disabled={!nextProfile}
+                  title={nextProfile ? (nextProfile.accountLabel || nextProfile.username) : undefined}
+                  className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <span className="text-border mx-1 select-none">|</span>
+                <Link href="/profiles" className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
+                  <ArrowLeft className="w-3 h-3 text-red-500" /> Back to Accounts
+                </Link>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto flex items-center gap-2 shrink-0"
+              onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
+              data-testid="button-open-browser"
+            >
+              <Monitor className="w-4 h-4" />
+              Open Browser
+            </Button>
+          </div>
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
           {/* Auto-save status bar */}
