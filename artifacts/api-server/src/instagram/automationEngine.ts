@@ -467,8 +467,8 @@ class AutomationEngine {
           const { followed, dedupSkipped, filterSkipped, blocked, skipped } = sessionResult;
           const parts: string[] = [];
           if (followed > 0)      parts.push(`${followed} followed`);
-          if (dedupSkipped > 0)  parts.push(`${dedupSkipped} dedup skip`);
-          if (filterSkipped > 0) parts.push(`${filterSkipped} filter skip`);
+          if (dedupSkipped > 0)  parts.push(`${dedupSkipped} skipped`);
+          if (filterSkipped > 0) parts.push(`${filterSkipped} filtered`);
           if (blocked > 0)       parts.push(`${blocked} blocked`);
           if (skipped > 0)       parts.push(`${skipped} skipped`);
           const summary = parts.length ? parts.join(", ") : "nothing to do";

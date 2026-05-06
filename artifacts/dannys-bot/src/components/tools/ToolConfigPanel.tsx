@@ -319,6 +319,11 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         { key: "ft_dmMessages", label: "Message templates", settingKeys: ["dmMessages"] },
       ]},
     ]},
+    { label: "Session Action Variation", options: [
+      { key: "ft_sav", label: "Session Action Variation", description: "Extra actions performed during a follow session (likes, reels, stories, highlights)", subOptions: [
+        { key: "ft_sav_enabled", label: "Enabled", settingKeys: ["sessionActionVariationEnabled"] },
+      ]},
+    ]},
     { label: "Sources", options: [
       { key: "ft_sources", label: "Target Sources", description: "Copy all target sources (hashtags and accounts) to other profiles — adds to existing sources" },
     ]},
@@ -1093,18 +1098,23 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
               )}
 
               {tool.type === 'follow' && (
-                <div className="pt-4 border-t border-border space-y-2">
-                  <div className="flex items-center gap-2 mb-2">
-                    <input
-                      type="checkbox"
-                      id="sessionActionVariationEnabled"
-                      checked={!!(settings as any).sessionActionVariationEnabled}
-                      onChange={(e) => setSettings({ ...settings, sessionActionVariationEnabled: e.target.checked } as any)}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor="sessionActionVariationEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
-                      Session Action Variation
-                    </label>
+                <div className="mt-4 border border-border rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-primary" /> Session Action Variation
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="sessionActionVariationEnabled"
+                        checked={!!(settings as any).sessionActionVariationEnabled}
+                        onChange={(e) => setSettings({ ...settings, sessionActionVariationEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                      />
+                      <label htmlFor="sessionActionVariationEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+                        Enabled
+                      </label>
+                    </div>
                   </div>
                   {/* 16-column grid: [label] [min–max] [min–max] [min–max] [min–max] [min–max] */}
                   <div

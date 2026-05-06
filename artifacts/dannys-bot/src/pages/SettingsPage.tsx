@@ -268,9 +268,9 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* Follow Deduplication */}
+        {/* Follow Skip Settings */}
         <div className="desktop-card p-6">
-          <h3 className="text-base font-semibold mb-1">Follow Deduplication</h3>
+          <h3 className="text-base font-semibold mb-1">Follow Skip Settings</h3>
           <p className="text-sm text-muted-foreground mb-5">
             Control whether accounts can follow the same users as each other.
           </p>
@@ -326,13 +326,13 @@ export function SettingsPage() {
           </div>
         </div>
 
-        {/* Scraped User Deduplication */}
+        {/* Scraped User Skip Settings */}
         <div className="desktop-card p-6">
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
               <Database className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-semibold">Scraped User Deduplication</h3>
+            <h3 className="text-base font-semibold">Scraped User Skip Settings</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
             Track every user scraped from a hashtag globally across all accounts. When enabled, a user

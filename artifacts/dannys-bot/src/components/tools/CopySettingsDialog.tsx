@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Copy, CheckCircle2, Loader2, Search, ChevronRight } from "lucide-react";
+import { Copy, CheckCircle2, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -69,7 +69,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [targets, setTargets]   = useState<Set<number>>(new Set());
   const [search, setSearch]     = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
 
   // Reset profile selection and search every time the dialog opens so stale
@@ -94,12 +93,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const toggleTarget = (id: number) => setTargets(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-
-  const toggleExpanded = (key: string) => setExpanded(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
 
@@ -232,8 +225,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 </div>
                 <div className="divide-y divide-border/40">
                   {group.options.map(opt => {
-                    const hasSubs   = !!opt.subOptions?.length;
-                    const isExpanded = expanded.has(opt.key);
+                    const hasSubs = !!opt.subOptions?.length;
 
                     let checked       = false;
                     let indeterminate = false;
@@ -248,37 +240,24 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
                     return (
                       <div key={opt.key}>
-                        {/* Option header */}
-                        <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/20 transition-colors">
+                        {/* Option header (title row) */}
+                        <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/10">
                           <Checkbox
                             checked={indeterminate ? "indeterminate" : checked}
                             onCheckedChange={() => toggleOptionGroup(opt)}
                             className="shrink-0"
                           />
-                          <div
-                            className="flex-1 min-w-0"
-                            onClick={hasSubs ? () => toggleExpanded(opt.key) : undefined}
-                            style={hasSubs ? { cursor: "pointer" } : undefined}
-                          >
-                            <p className="text-sm font-medium leading-none">{opt.label}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold leading-none">{opt.label}</p>
                             {opt.description && (
                               <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
                             )}
                           </div>
-                          {hasSubs && (
-                            <button
-                              type="button"
-                              onClick={() => toggleExpanded(opt.key)}
-                              className="shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-muted transition-colors"
-                            >
-                              <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`} />
-                            </button>
-                          )}
                         </div>
 
-                        {/* Sub-options (expanded) */}
-                        {hasSubs && isExpanded && (
-                          <div className="border-t border-border/60 bg-muted/10 divide-y divide-border/30">
+                        {/* Sub-options — always visible */}
+                        {hasSubs && (
+                          <div className="border-t border-border/60 bg-muted/5 divide-y divide-border/30">
                             {opt.subOptions!.map(sub => (
                               <label
                                 key={sub.key}
