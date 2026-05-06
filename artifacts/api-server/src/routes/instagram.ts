@@ -28,6 +28,7 @@ import {
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
+import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 
 // The embedded browser always uses a desktop Chrome UA regardless of what
 // userAgentEmbedded/userAgentApi says — Instagram's mobile web UA triggers
@@ -486,6 +487,20 @@ export async function registerInstagramRoutes(
             const ig = new IgApiClient();
             ig.state.generateDevice(devString); // Chance(seed) → consistent IDs
             ig.state.deviceString = devString;  // keep the Jarvee UA, not a random pick
+
+            // Jarvee's export format omits the version code from the "api user agent"
+            // column (last segment is locale e.g. "en_US") but Jarvee appends it
+            // internally when building the full UA.  Append the current version code
+            // now so the saved igDeviceState already has a complete, standard UA
+            // and won't need patching at verify/login time.
+            {
+              const segs = ig.state.deviceString.split(";");
+              const last = segs[segs.length - 1].trim();
+              if (!/^\d+$/.test(last)) {
+                ig.state.deviceString = ig.state.deviceString.trimEnd() + `; ${MOBILE_VERSION_CODE}`;
+              }
+            }
+
             igDeviceState = JSON.stringify({
               deviceId: ig.state.deviceId,
               uuid: ig.state.uuid,

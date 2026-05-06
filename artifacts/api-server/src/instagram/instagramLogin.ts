@@ -367,20 +367,26 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
     ig.state.constants.APP_VERSION      = version;
     ig.state.constants.APP_VERSION_CODE = versionCode;
 
-    // CRITICAL: The deviceString ends with the version code (last semicolon-delimited
-    // segment).  When a saved deviceString has an old version code but APP_VERSION_CODE
-    // is set to a newer fallback, the resulting User-Agent has a mismatch:
-    //   "Instagram 378.x Android (33/13; ...; 558538758)"  ← old code in UA body
-    // while X-IG-App-Version = 378.x and APP_VERSION_CODE = 651869969
-    // Instagram detects this inconsistency as a fingerprint anomaly and rejects the login.
-    // Fix: always patch the trailing version code in deviceString to match versionCode.
+    // CRITICAL: Ensure deviceString ends with the correct version code.
+    // Two cases:
+    //   1. Old code present (e.g. 558538758) but APP_VERSION_CODE is newer (651869969):
+    //      UA body code ≠ X-IG-App-Version header → Instagram flags as fingerprint anomaly.
+    //   2. No code at end (Jarvee export format — last segment is locale e.g. "en_US"):
+    //      Jarvee's export omits the version code from the api user agent column but
+    //      appends it internally; without it our UA is non-standard.
+    // Fix: replace stale code OR append missing code to match versionCode.
     if (ig.state.deviceString) {
       const segs = ig.state.deviceString.split(";");
       const last = segs[segs.length - 1].trim();
-      if (/^\d+$/.test(last) && last !== versionCode) {
-        segs[segs.length - 1] = ` ${versionCode}`;
-        ig.state.deviceString = segs.join(";");
-        console.error(`[instagramLogin] Patched deviceString version code: ${last} → ${versionCode} for @${profile.username}`);
+      if (/^\d+$/.test(last)) {
+        if (last !== versionCode) {
+          segs[segs.length - 1] = ` ${versionCode}`;
+          ig.state.deviceString = segs.join(";");
+          console.error(`[instagramLogin] Patched deviceString version code: ${last} → ${versionCode} for @${profile.username}`);
+        }
+      } else {
+        ig.state.deviceString = ig.state.deviceString.trimEnd() + `; ${versionCode}`;
+        console.error(`[instagramLogin] Appended version code ${versionCode} to deviceString for @${profile.username} (was: "${last}")`);
       }
     }
 

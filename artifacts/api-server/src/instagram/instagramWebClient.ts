@@ -130,18 +130,31 @@ const APP_ID  = "936619743392459";
  * Instagram's UA format: "Instagram X.X Android (<android>; <dpi>; <res>; <brand>; <model>; <device>; <cpu>; <locale>; VERSION_CODE)"
  * The library assembles: "Instagram APP_VERSION Android (deviceString)"
  *
- * When a deviceString was saved with an old version code (e.g. 558538758) but we are
- * setting APP_VERSION_CODE to a newer value (e.g. 651869969), the resulting UA has a
- * mismatch between the parenthesised version code and the X-IG-App-Version header.
- * Instagram detects this inconsistency as a fingerprint anomaly and rejects the login.
+ * Two cases handled:
+ *
+ * 1. Old version code present (e.g. 558538758) but APP_VERSION_CODE is newer (651869969):
+ *    The UA body version code does not match X-IG-App-Version — Instagram flags this
+ *    as a fingerprint anomaly and rejects the login. Fix: replace the trailing code.
+ *
+ * 2. No version code at end (typical Jarvee export format — last segment is locale e.g. "en_US"):
+ *    Jarvee's export file omits the version code from the "api user agent" column but
+ *    Jarvee itself appends it internally when building the full UA. Without it, our
+ *    bot sends a non-standard UA that differs from what Instagram saw in Jarvee.
+ *    Fix: append the current version code so the UA matches a real Instagram app.
  */
 function patchDeviceStringVersionCode(ig: IgApiClient, targetVersionCode: string): void {
   if (!ig.state.deviceString) return;
   const segs = ig.state.deviceString.split(";");
   const last = segs[segs.length - 1].trim();
-  if (/^\d+$/.test(last) && last !== targetVersionCode) {
-    segs[segs.length - 1] = ` ${targetVersionCode}`;
-    ig.state.deviceString = segs.join(";");
+  if (/^\d+$/.test(last)) {
+    // Version code already present — update only if stale
+    if (last !== targetVersionCode) {
+      segs[segs.length - 1] = ` ${targetVersionCode}`;
+      ig.state.deviceString = segs.join(";");
+    }
+  } else {
+    // No version code at end (Jarvee export format) — append it
+    ig.state.deviceString = ig.state.deviceString.trimEnd() + `; ${targetVersionCode}`;
   }
 }
 
@@ -150,8 +163,8 @@ type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 // Keep this version current — Instagram rejects sessions from versions older
 // than ~18 months with a checkpoint_required → unsupported_version response.
 // Version 361 ≈ early 2025; update periodically as Instagram raises the floor.
-const MOBILE_VERSION      = "378.1.0.45.111";
-const MOBILE_VERSION_CODE = "651869969";
+const MOBILE_VERSION           = "378.1.0.45.111";
+export const MOBILE_VERSION_CODE = "651869969";
 // Date this version was last confirmed working. If it's been more than 12
 // months, Instagram may have started rejecting it — update MOBILE_VERSION.
 const MOBILE_VERSION_DATE = "2026-05-05";
