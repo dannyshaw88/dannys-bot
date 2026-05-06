@@ -185,10 +185,11 @@ class AutomationEngine {
 
   private async reconcile() {
     try {
-      // runImmediately = false on first reconcile (startup: already-enabled tools schedule
-      // their first run using the configured X-Y timers). true on all subsequent reconciles
-      // (user just toggled a tool on → start immediately).
-      const runImmediately = this.initialized;
+      // Always apply the configured X-Y minute initial delay when a tool first starts —
+      // whether triggered by server startup, a manual toggle, or a copy-settings operation.
+      // This staggers multiple profiles from starting simultaneously and respects the user's
+      // configured randomisation window.  Use "Run Now" to bypass the wait immediately.
+      const runImmediately = false;
 
       const profiles = await storage.getProfiles();
       const activeFollow        = new Set<number>();

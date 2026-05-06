@@ -432,11 +432,11 @@ export function Dashboard() {
             <div className="overflow-y-auto overflow-x-hidden max-h-[70vh]">
               <table className="w-full text-sm text-left table-fixed">
                 <colgroup>
-                  <col className="w-44" />
-                  <col className="w-[162px]" />
-                  <col className="w-36" />
-                  <col />
-                  <col className="w-44" />
+                  <col className="w-[19%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[24%]" />
+                  <col className="w-[27%]" />
                 </colgroup>
                 <thead className="text-xs uppercase bg-muted/80 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>

@@ -70,6 +70,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [loginLog, setLoginLog] = useState<LogEntry[]>([]);
   const [showLog, setShowLog] = useState(false);
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
   // F12 on the canvas toggles the log panel
   useEffect(() => {
@@ -291,6 +292,38 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     e.preventDefault();
     const text = e.clipboardData.getData("text/plain");
     if (text) send({ type: "type", text });
+  };
+
+  const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (status !== "connected") return;
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const ctxPaste = async () => {
+    setCtxMenu(null);
+    if (status !== "connected") return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) send({ type: "type", text });
+    } catch {
+      // Clipboard access denied — nothing to do
+    }
+  };
+
+  const ctxCopy = () => {
+    setCtxMenu(null);
+    send({ type: "keycombo", modifier: "Control", key: "c" });
+  };
+
+  const ctxCut = () => {
+    setCtxMenu(null);
+    send({ type: "keycombo", modifier: "Control", key: "x" });
+  };
+
+  const ctxSelectAll = () => {
+    setCtxMenu(null);
+    send({ type: "keycombo", modifier: "Control", key: "a" });
   };
 
   const onAddressSubmit = (e: React.FormEvent) => {
@@ -522,7 +555,25 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onMouseMove={onCanvasMouseMove}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
+          onContextMenu={onContextMenu}
         />
+
+        {/* Right-click context menu */}
+        {ctxMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
+            <div
+              className="fixed z-50 min-w-[120px] rounded-md border border-border bg-popover shadow-md py-1 text-sm"
+              style={{ left: ctxMenu.x, top: ctxMenu.y }}
+            >
+              <button onClick={ctxCut}       className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Cut</button>
+              <button onClick={ctxCopy}      className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Copy</button>
+              <button onClick={ctxPaste}     className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Paste</button>
+              <div className="my-1 border-t border-border" />
+              <button onClick={ctxSelectAll} className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Select All</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

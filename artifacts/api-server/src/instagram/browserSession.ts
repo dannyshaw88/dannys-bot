@@ -828,11 +828,19 @@ export async function browserAutoLogin(
     const onInstagram = currentUrl.includes("instagram.com") && !currentUrl.startsWith("chrome-error://");
     const onLoginPage = currentUrl.includes("accounts/login");
     if (onInstagram && !onLoginPage) {
-      await saveCookies(profileId, s.page);
-      sendStatus(profileId, "✓ Already logged in — browser shows your account.");
-      return { ok: true, message: "Already logged in" };
+      // Instagram's home URL (/) is identical whether logged in or not — when NOT logged in
+      // it shows a marketing page with an embedded login form at the same URL.
+      // Check for a username input to detect that case before declaring "already logged in".
+      const hasLoginForm = await s.page.$('input[name="username"], input[autocomplete="username"]').catch(() => null);
+      if (!hasLoginForm) {
+        await saveCookies(profileId, s.page);
+        sendStatus(profileId, "✓ Already logged in — browser shows your account.");
+        return { ok: true, message: "Already logged in" };
+      }
+      // Login form is visible at the home URL — treat as not logged in, fall through to fill it.
+      sendStatus(profileId, "Login form detected — filling credentials…");
     }
-    if (!onLoginPage) {
+    if (!onLoginPage && !onInstagram) {
       sendStatus(profileId, "Navigating to Instagram login…");
       await s.page.goto("https://www.instagram.com/accounts/login/", {
         waitUntil: "domcontentloaded",

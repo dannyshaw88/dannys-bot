@@ -628,9 +628,6 @@ export function ProfilesPage() {
                         data-testid={`button-verify-${profile.id}`}
                         className="text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors flex items-center gap-0.5"
                       >
-                        {verifyMutation.isPending && verifyMutation.variables === profile.id
-                          ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                          : null}
                         Verify
                       </button>
                     )
@@ -741,7 +738,7 @@ export function ProfilesPage() {
               <div className="mx-5 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                Verify Selected Accounts <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
+                Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""} <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+R</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}
