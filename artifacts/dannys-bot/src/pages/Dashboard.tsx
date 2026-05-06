@@ -34,7 +34,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
   no_sources:          { label: "No Sources",    cls: "bg-slate-100 text-slate-600" },
 };
 
-const DEFAULT_COL_WIDTHS = { account: 19, event: 18, target: 12, detail: 24, timestamp: 27 };
+const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
@@ -151,7 +151,7 @@ export function Dashboard() {
   const [manageColsOpen, setManageColsOpen] = useState(false);
   const [colWidths, setColWidths] = useState<typeof DEFAULT_COL_WIDTHS>(() => {
     try {
-      const s = localStorage.getItem("dashboard_col_widths");
+      const s = localStorage.getItem("dashboard_col_widths_px");
       return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS;
     } catch { return DEFAULT_COL_WIDTHS; }
   });
@@ -375,28 +375,28 @@ export function Dashboard() {
                 </button>
                 {manageColsOpen && (
                   <div className="absolute right-0 top-full mt-1 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-60">
-                    <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (%)</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
                     {([ ["account", "Account"], ["event", "Event"], ["target", "Target"], ["detail", "Detail"], ["timestamp", "Timestamp"] ] as [keyof typeof DEFAULT_COL_WIDTHS, string][]).map(([key, label]) => (
                       <div key={key} className="flex items-center gap-2 mb-2">
                         <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
                         <input
                           type="number"
-                          min={5}
-                          max={60}
+                          min={40}
+                          max={600}
                           value={colWidths[key]}
                           onChange={e => {
-                            const v = Math.max(5, Math.min(60, Number(e.target.value)));
+                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
                             const next = { ...colWidths, [key]: v };
                             setColWidths(next);
-                            localStorage.setItem("dashboard_col_widths", JSON.stringify(next));
+                            localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
                           }}
-                          className="h-6 w-14 text-xs border border-border rounded px-2 bg-background"
+                          className="h-6 w-16 text-xs border border-border rounded px-2 bg-background"
                         />
-                        <span className="text-xs text-muted-foreground">%</span>
+                        <span className="text-xs text-muted-foreground">px</span>
                       </div>
                     ))}
                     <button
-                      onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("dashboard_col_widths"); }}
+                      onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("dashboard_col_widths_px"); }}
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
                     >
                       Reset to defaults
@@ -520,11 +520,11 @@ export function Dashboard() {
             <div className="overflow-y-auto overflow-x-hidden max-h-[70vh]">
               <table className="w-full text-sm text-left table-fixed">
                 <colgroup>
-                  <col style={{ width: `${colWidths.account}%` }} />
-                  <col style={{ width: `${colWidths.event}%` }} />
-                  <col style={{ width: `${colWidths.target}%` }} />
-                  <col style={{ width: `${colWidths.detail}%` }} />
-                  <col style={{ width: `${colWidths.timestamp}%` }} />
+                  <col style={{ width: `${colWidths.account}px` }} />
+                  <col style={{ width: `${colWidths.event}px` }} />
+                  <col style={{ width: `${colWidths.target}px` }} />
+                  <col style={{ width: `${colWidths.detail}px` }} />
+                  <col style={{ width: `${colWidths.timestamp}px` }} />
                 </colgroup>
                 <thead className="text-xs uppercase bg-muted/80 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>

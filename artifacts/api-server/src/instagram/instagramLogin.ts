@@ -457,9 +457,15 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   // 2. Cookie session restore — used only when no password is stored.
   //    For accounts managed purely by session cookie.
 
-  if (profile.password) {
-    // ── Path 1: Fresh password login (definitive credential check) ────────
-    console.error(`[instagramLogin] @${profile.username} — attempting fresh password login`);
+  if (profile.password && !profile.igApiCookies) {
+    // ── Path 1: Fresh password login — ONLY for accounts with no stored session ──
+    // CRITICAL: Do NOT run a password login when igApiCookies exist. Instagram
+    // treats a fresh mobile API login as a NEW device login attempt. When the
+    // account already has an active mobile session (igApiCookies), this new
+    // attempt looks like an account takeover and triggers an immediate lock —
+    // regardless of preLoginFlow, proxy, or any other factor.
+    // Accounts with igApiCookies go directly to Path 2 (session validation).
+    console.error(`[instagramLogin] @${profile.username} — attempting fresh password login (no stored session)`);
     const { ig: igPw, captureDeviceState: capturePw } = buildIgClient(profile, proxyUrl);
     attachRequestLogger(igPw, profile.id, profile.username, "Verify", proxyIp);
 
@@ -474,14 +480,45 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       };
     }
 
-    // NOTE: preLoginFlow() is intentionally NOT called here.
-    // preLoginFlow() hits contact_point_prefill and get_prefill_candidates —
-    // Instagram-internal calls that ask "what accounts belong to this device?".
-    // On a fresh or restored device these look like bot probing and trigger the
-    // "Forgotten password" security response even when the credentials are correct.
-    // The working automation path (instagramWebClient.ts follow/unfollow) never
-    // calls preLoginFlow — it goes straight to the API action.  We match that
-    // behaviour: fetch encryption keys, then login directly.
+    // ── Safe partial preLoginFlow ──────────────────────────────────────────
+    // Full simulate.preLoginFlow() executes 7 requests (shuffled).  Two of them
+    // are dangerous for our use case:
+    //   • contactPointPrefill('prefill') — asks Instagram "what accounts are on
+    //     this device?".  On a fresh/restored device this triggers the
+    //     "Forgotten password" device-trust security response.
+    //   • getPrefillCandidates()         — asks for account login suggestions.
+    //     Same trigger.
+    // The remaining 5 are harmless device-registration calls that Instagram
+    // needs to see before it will accept a login from an unknown device.
+    // Without ANY of them, Instagram fakes an "Incorrect password" response
+    // even when the credentials are correct.
+    // We call only the safe 5 here, skipping the two dangerous ones.
+    const ig_ = igPw as any;
+    for (const [name, fn] of [
+      ["readMsisdnHeader",        () => igPw.account.readMsisdnHeader()],
+      ["msisdnHeaderBootstrap",   () => ig_.account.msisdnHeaderBootstrap?.("ig_select_app")],
+      ["zrTokenResult",           () => ig_.zr?.tokenResult?.()],
+      ["launcherPreLoginSync",    () => ig_.launcher?.preLoginSync?.()],
+      ["logAttribution",          () => ig_.attribution?.logAttribution?.()],
+    ] as [string, () => Promise<any>][]) {
+      try {
+        await fn();
+        console.error(`[instagramLogin] @${profile.username} safe-preLogin: ${name} OK`);
+      } catch (e: any) {
+        console.error(`[instagramLogin] @${profile.username} safe-preLogin: ${name} failed (non-fatal): ${e?.message}`);
+      }
+    }
+
+    // ── Pre-login account metadata (for debugging) ─────────────────────────
+    const pwLen = profile.password?.length ?? 0;
+    const pwHint = pwLen > 0 ? `${profile.password![0]}${"*".repeat(Math.min(pwLen - 2, 6))}${pwLen > 1 ? profile.password![pwLen - 1] : ""}` : "(empty)";
+    console.error(
+      `[instagramLogin] @${profile.username} pre-login metadata:` +
+      ` password_len=${pwLen} password_hint="${pwHint}"` +
+      ` has_igApiCookies=${!!profile.igApiCookies}` +
+      ` has_igDeviceState=${!!profile.igDeviceState}` +
+      ` has_userAgentApi=${!!profile.userAgentApi}`
+    );
 
     // ── Device state snapshot before login (for debugging) ────────────────
     console.error(`[instagramLogin] LOGIN DEVICE SNAPSHOT @${profile.username}` +
@@ -564,8 +601,8 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
       if (err instanceof IgLoginBadPasswordError) {
         const body = err?.response?.body ?? {};
-        const rawBody = JSON.stringify(body).slice(0, 1500);
-        console.error(`[instagramLogin] IgLoginBadPasswordError raw body for @${profile.username}: ${rawBody}`);
+        const rawBody = JSON.stringify(body);
+        console.error(`[instagramLogin] IgLoginBadPasswordError FULL body for @${profile.username}: ${rawBody}`);
         const buttons: any[] = body?.buttons ?? [];
         const errorType: string = body?.error_type ?? "";
         const invalidCreds: boolean = body?.invalid_credentials === true;
@@ -586,10 +623,11 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         //      message: "The password you entered is incorrect. Please try again."
         //      buttons: [{action:"dismiss"}]
         if (buttons.some((b: any) => b?.action === "send_one_click_login_email")) {
-          console.error(`[instagramLogin] @${profile.username} — "Forgotten password" response (device-trust / email flow), NOT a bad password. Returning email_confirmation.`);
+          console.error(`[instagramLogin] @${profile.username} — "Forgotten password" response (device-trust / email flow), NOT a bad password → accountStatus=email_confirmation`);
           return { ok: false, message: `@${profile.username} — Instagram does not recognise this device and is asking for email verification. Check the account email inbox and click the confirmation link, then re-verify. (error_type="${errorType}", invalid_credentials=${invalidCreds})`, accountStatus: "email_confirmation", igDeviceState: ds };
         }
-        return { ok: false, message: `@${profile.username} — incorrect password (error_type="${errorType}", invalid_credentials=${invalidCreds}). Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
+        console.error(`[instagramLogin] @${profile.username} — genuine wrong password (dismiss-only buttons) → accountStatus=bad_password`);
+        return { ok: false, message: `@${profile.username} — incorrect password (error_type="${errorType}", invalid_credentials=${invalidCreds}).`, accountStatus: "bad_password", igDeviceState: ds };
       }
 
       if (err instanceof IgLoginInvalidUserError) {
