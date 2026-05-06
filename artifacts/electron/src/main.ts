@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, nativeImage, dialog, ipcMain, screen } from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, ChildProcess, exec } from "child_process";
 import { promisify } from "util";
@@ -545,8 +545,20 @@ async function createWindow() {
     );
   }
 
-  win.once("ready-to-show", () => win?.show());
+  win.once("ready-to-show", () => { win?.show(); win?.maximize(); });
   win.on("closed", () => { win = null; });
+
+  // Native cut/copy/paste/select-all context menu for all text inputs
+  win.webContents.on("context-menu", (_event, params) => {
+    const menu = Menu.buildFromTemplate([
+      { role: "cut",       enabled: params.editFlags.canCut },
+      { role: "copy",      enabled: params.editFlags.canCopy },
+      { role: "paste",     enabled: params.editFlags.canPaste },
+      { type: "separator" },
+      { role: "selectAll", enabled: params.editFlags.canSelectAll },
+    ]);
+    menu.popup({ window: win! });
+  });
 
   createTray();
   setupBackupHandlers();

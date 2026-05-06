@@ -473,8 +473,11 @@ export async function registerInstagramRoutes(
           const hasExplicitDeviceIds = !!(devId || devUuid || devPhoneId || devAdid);
 
           if (hasExplicitDeviceIds) {
-            // Jarvee exported explicit device IDs — use them exactly
+            // Jarvee exported explicit device IDs — use them exactly.
+            // v: 2 marker is required so the DEVICE ISOLATION startup guard
+            // does not wipe this state as "legacy / unversioned" on next boot.
             igDeviceState = JSON.stringify({
+              v: 2,
               deviceId: devId || undefined,
               uuid: devUuid || undefined,
               phoneId: devPhoneId || undefined,
@@ -501,7 +504,10 @@ export async function registerInstagramRoutes(
               }
             }
 
+            // v: 2 marker is required so the DEVICE ISOLATION startup guard
+            // does not wipe this state as "legacy / unversioned" on next boot.
             igDeviceState = JSON.stringify({
+              v: 2,
               deviceId: ig.state.deviceId,
               uuid: ig.state.uuid,
               phoneId: ig.state.phoneId,

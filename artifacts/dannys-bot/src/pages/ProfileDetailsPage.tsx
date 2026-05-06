@@ -594,6 +594,15 @@ export function ProfileDetailsPage() {
                         data-testid="input-password"
                       />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><KeyRound className="w-3.5 h-3.5" /> 2FA Secret Key</Label>
+                      <Input
+                        placeholder="TOTP secret (e.g. M5ZM ZRDO…)"
+                        value={formData.twoFASecretKey}
+                        onChange={e => updateField({ twoFASecretKey: e.target.value })}
+                        data-testid="input-2fa-secret"
+                      />
+                    </div>
 
                     {/* Verify button — appears only when credentials are filled */}
                     {canVerify && (
@@ -930,16 +939,6 @@ export function ProfileDetailsPage() {
                     onChange={e => updateField({ phoneNumber: e.target.value })}
                     data-testid="input-phone-number"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">2FA Secret Key</Label>
-                  <Input
-                    placeholder="TOTP secret (e.g. M5ZM ZRDO…)"
-                    value={formData.twoFASecretKey}
-                    onChange={e => updateField({ twoFASecretKey: e.target.value })}
-                    data-testid="input-2fa-secret"
-                  />
-                  <p className="text-[11px] text-muted-foreground">Base32 TOTP secret for authenticator apps.</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Backup Codes</Label>

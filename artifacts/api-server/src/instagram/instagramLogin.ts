@@ -206,6 +206,24 @@ export function attachRequestLogger(ig: IgApiClient, profileId: number, username
     const rawUrl: string = userOptions?.url || userOptions?.uri || "";
     const opName = extractOperationName(rawUrl);
 
+    // ── Deep debug: log the outgoing request body for login endpoint ────────
+    const isLoginEndpoint = rawUrl.includes("/accounts/login/");
+    if (isLoginEndpoint) {
+      const form: Record<string, string> = userOptions?.form ?? {};
+      const debugForm: Record<string, string> = {};
+      for (const [k, v] of Object.entries(form)) {
+        // Mask the encrypted password — show format prefix only
+        if (k === "enc_password") {
+          const str = String(v);
+          const prefix = str.startsWith("#PWD_INSTAGRAM:") ? str.slice(0, str.lastIndexOf(":") + 8) + "…[MASKED]" : "[MASKED]";
+          debugForm[k] = prefix;
+        } else {
+          debugForm[k] = String(v);
+        }
+      }
+      console.error(`[instagramLogin] LOGIN REQUEST @${username} proxy=${proxyIp} form=${JSON.stringify(debugForm)}`);
+    }
+
     let response: any;
     let statusStr = "";
     try {
@@ -232,6 +250,17 @@ export function attachRequestLogger(ig: IgApiClient, profileId: number, username
       statusStr = code
         ? (igMsg ? `${code} — ${igMsg.slice(0, 100)}` : `${code} ${phrase}`)
         : (phrase);
+
+      // ── Deep debug: on login failure log full response headers + body ───
+      if (isLoginEndpoint) {
+        const resHeaders = err?.response?.headers ?? {};
+        const relevantHeaders: Record<string, string> = {};
+        for (const h of ["x-ig-response-type", "x-ig-set-password-encryption-key-id", "x-ig-set-password-encryption-pub-key", "www-authenticate", "x-ig-error-code", "content-type"]) {
+          if (resHeaders[h]) relevantHeaders[h] = resHeaders[h];
+        }
+        console.error(`[instagramLogin] LOGIN FAILURE @${username} proxy=${proxyIp} status=${code} headers=${JSON.stringify(relevantHeaders)} body=${JSON.stringify(body)}`);
+      }
+
       // Extract nav_chain from the original request body even on error
       const bodyStr: string = userOptions?.form
         ? new URLSearchParams(userOptions.form).toString()
@@ -421,17 +450,26 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   console.error(`[instagramLogin] @${profile.username} proxy=${resolved.host}`);
 
   // ── Verification priority ─────────────────────────────────────────────────
-  // 1. ALWAYS try a fresh password login when a password is stored.
-  //    Every outcome returns directly — no cookie fallback.  The stored session
-  //    cookie is kept alive by the automation engine independently.
-  // 2. Cookie session restore is ONLY used when no password is stored at all
-  //    (accounts managed by session-only / manual cookie injection).
+  // 1. Fresh password login — ALWAYS used when a password is stored.
+  //    This gives a definitive credential check using the preserved device
+  //    fingerprint (igDeviceState from the Jarvee import).  Instagram sees the
+  //    login as coming from the same device it already knows, so it is not
+  //    flagged as a "new device" login.
+  //
+  //    CRITICAL: igDeviceState must be preserved from the Jarvee import (with
+  //    the v:2 marker so DEVICE ISOLATION does not wipe it on startup).  If
+  //    the device state is lost and fresh IDs are generated, a login from an
+  //    unknown device triggers Instagram's security systems.
+  //
+  // 2. Cookie session restore — ONLY used when no password is stored.
+  //    For accounts managed purely by session cookie (no password available).
+  //    Cookies can be stale and may give a misleadingly "valid" status —
+  //    this is why password login is strongly preferred when available.
 
   if (profile.password) {
     // ── Path 1: Fresh password login (definitive credential check) ────────
-    // Every outcome returns directly — there is NO fallback to stored cookies
-    // when a password is present.  The stored session is kept alive for the
-    // automation engine independently of what verify reports here.
+    // Uses the stored igDeviceState so Instagram sees a known device.
+    // Every outcome returns directly — no cookie fallback.
     console.error(`[instagramLogin] @${profile.username} — attempting fresh password login`);
     const { ig: igPw, captureDeviceState: capturePw } = buildIgClient(profile, proxyUrl);
     attachRequestLogger(igPw, profile.id, profile.username, "Verify", proxyIp);
@@ -453,6 +491,18 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     } catch (e: any) {
       console.error(`[instagramLogin] preLoginFlow partial failure (continuing): ${e?.message}`);
     }
+
+    // ── Device state snapshot before login (for debugging) ────────────────
+    console.error(`[instagramLogin] LOGIN DEVICE SNAPSHOT @${profile.username}` +
+      ` proxy=${proxyIp}` +
+      ` ua="${igPw.state.deviceString}"` +
+      ` deviceId="${igPw.state.deviceId}"` +
+      ` uuid="${igPw.state.uuid}"` +
+      ` phoneId="${igPw.state.phoneId}"` +
+      ` adid="${igPw.state.adid}"` +
+      ` csrfToken="${igPw.state.cookieCsrfToken ?? "(none)"}"` +
+      ` encKeyId=${igPw.state.passwordEncryptionKeyId ?? "(none)"}`
+    );
 
     try {
       await igPw.account.login(profile.username, profile.password);
@@ -551,6 +601,8 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
   // ── Path 2: Cookie session restore ───────────────────────────────────────
   // Only reached when NO password is stored (session-only / manual management mode).
+  // Password login is strongly preferred — cookies can be stale and give a
+  // misleadingly "valid" status for accounts that are no longer healthy.
   if (profile.igApiCookies) {
     // Mirrors the Jarvee cold-start sequence for a restored session:
     //   1. launcher/sync  (SendMobileConfig)  — establishes app config, no auth needed
