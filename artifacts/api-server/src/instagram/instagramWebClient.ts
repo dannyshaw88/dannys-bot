@@ -924,6 +924,145 @@ export class InstagramWebClient {
     }
   }
 
+  // ── Shared IgApiClient helpers ────────────────────────────────────────────
+
+  // Deserialize a cookie string into an IgApiClient's tough-cookie jar.
+  // Mirrors restoreSessionCookies() in instagramLogin.ts exactly.
+  private async _deserializeIgCookies(ig: IgApiClient, cookieString: string): Promise<void> {
+    const pairs = cookieString.split(";").map(s => s.trim()).filter(Boolean);
+    const now = new Date().toISOString();
+    const cookies = pairs.flatMap(pair => {
+      const eqIdx = pair.indexOf("=");
+      if (eqIdx === -1) return [];
+      const key = pair.slice(0, eqIdx).trim();
+      let value = pair.slice(eqIdx + 1).trim();
+      try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+      return [
+        { key, value, domain: "i.instagram.com", path: "/", secure: true, httpOnly: true, hostOnly: true,  creation: now, lastAccessed: now },
+        { key, value, domain: ".instagram.com",  path: "/", secure: true, httpOnly: true, hostOnly: false, creation: now, lastAccessed: now },
+      ];
+    });
+    await ig.state.deserializeCookieJar(JSON.stringify({
+      version: "tough-cookie@4.1.3",
+      storeType: "MemoryCookieStore",
+      rejectPublicSuffixes: true,
+      cookies,
+    }));
+  }
+
+  // Build and warm up an IgApiClient for DM inbox access, following the exact
+  // Jarvee cold-start sequence that prevents the 4415001 "Prompt has contribution"
+  // gate on direct_v2/inbox/:
+  //
+  //   Phase 0 (NO cookies loaded):
+  //     tokens/keyed → launcher.preLoginSync → tokens/keyed
+  //   Phase 1:
+  //     Load session cookies (+ ds_user_id so the library can read cookieUserId)
+  //   Phase 2 (authenticated warm-up):
+  //     user.info → news.inbox → qe.syncLoginExperiments
+  //
+  // Only after this sequence does Instagram stop blocking direct_v2/inbox/.
+  private async _buildWarmedIgClient(): Promise<{ ig: IgApiClient; ownUserId: string } | null> {
+    if (!this.igApiCookies) return null;
+
+    // ── Device setup ──────────────────────────────────────────────────────────
+    const ig = new IgApiClient();
+    const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch { ig.state.generateDevice(deviceSeed); }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+    }
+    ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+    ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+
+    // ── Phase 0: unauthenticated probe calls (no cookies) ────────────────────
+    // Jarvee fires these BEFORE loading the session cookie. Instagram sees a
+    // clean device probe and stops treating the subsequent authenticated calls
+    // as a suspicious cold-start, which prevents the 4415001 prompt gate.
+    try {
+      await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
+      console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed OK");
+    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #1 (non-fatal): ${e?.message}`); }
+
+    try {
+      await ig.launcher.preLoginSync();
+      console.log("[webClient] _buildWarmedIgClient: Phase 0 — launcher/sync (preLoginSync) OK");
+    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: launcher/sync (non-fatal): ${e?.message}`); }
+
+    try {
+      await ig.request.send({ url: "/api/v1/accounts/tokens/keyed/", method: "GET", qs: { expires: "0" } });
+      console.log("[webClient] _buildWarmedIgClient: Phase 0 — tokens/keyed #2 OK");
+    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: tokens/keyed #2 (non-fatal): ${e?.message}`); }
+
+    // ── Phase 1: Load session cookies ────────────────────────────────────────
+    // Extract ownUserId from sessionid (format: "userId:hash:seq:token") and
+    // inject ds_user_id so the library can read cookieUserId.
+    const pairs = this.igApiCookies.split(";").map(s => s.trim()).filter(Boolean);
+    const sessionPair = pairs.find(p => p.toLowerCase().startsWith("sessionid="));
+    let ownUserId = pairs.find(p => p.toLowerCase().startsWith("ds_user_id="))
+      ?.split("=").slice(1).join("=").trim() ?? "";
+    if (!ownUserId && sessionPair) {
+      const rawVal = sessionPair.slice("sessionid=".length);
+      let decoded = rawVal;
+      try { decoded = decodeURIComponent(rawVal); } catch { /* keep raw */ }
+      ownUserId = decoded.split(":")[0] ?? "";
+    }
+    const cookiesWithUserId = ownUserId
+      ? `${this.igApiCookies};ds_user_id=${ownUserId}`
+      : this.igApiCookies;
+    await this._deserializeIgCookies(ig, cookiesWithUserId);
+    console.log(`[webClient] _buildWarmedIgClient: Phase 1 — cookies loaded (userId=${ownUserId || "unknown"})`);
+
+    // ── Phase 2: Authenticated warm-up ───────────────────────────────────────
+    if (ownUserId) {
+      try {
+        await ig.user.info(ownUserId);
+        console.log(`[webClient] _buildWarmedIgClient: Phase 2 — user.info OK (csrf=${ig.state.cookieCsrfToken?.slice(0, 8) ?? "none"})`);
+      } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: user.info (non-fatal): ${e?.message}`); }
+    }
+    try {
+      await ig.news.inbox();
+      console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
+    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: news/inbox (non-fatal): ${e?.message}`); }
+    try {
+      await ig.qe.syncLoginExperiments();
+      console.log("[webClient] _buildWarmedIgClient: Phase 2 — qe/sync (FetchConfig) OK");
+    } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: qe/sync (non-fatal): ${e?.message}`); }
+
+    return { ig, ownUserId };
+  }
+
+  // Read the DM inbox via a fully warmed IgApiClient (Jarvee cold-start sequence).
+  // The 4415001 "Prompt has contribution" gate on direct_v2/inbox/ is lifted only
+  // after Phase 0 (unauthenticated probe) + Phase 2 (warm-up) have run — which is
+  // exactly what Jarvee does before calling GetDirectMessagesInternal.
+  private async _getInboxViaIgClient(): Promise<{ count: number; ok: boolean }> {
+    const client = await this._buildWarmedIgClient();
+    if (!client) return { count: 0, ok: false };
+    const { ig } = client;
+
+    try {
+      const threads = await ig.feed.directInbox().items();
+      console.log(`[webClient] _getInboxViaIgClient: ${threads.length} thread(s)`);
+      return { count: threads.length, ok: true };
+    } catch (err: any) {
+      const body = err?.response?.body;
+      const code = body?.content?.error_code ?? body?.error_code;
+      console.warn(`[webClient] _getInboxViaIgClient: inbox failed code=${code} — ${err?.message}`, body ? JSON.stringify(body).slice(0, 200) : "");
+      return { count: 0, ok: false };
+    }
+  }
+
   // Like a media post using IgApiClient (properly signs the request body).
   // The hand-rolled mobileSessionPost sends an empty body which Instagram
   // rejects with "something went wrong" — IgApiClient includes all required
@@ -1354,66 +1493,178 @@ export class InstagramWebClient {
   }
 
   // ── Check direct messages inbox ──────────────────────────────────────────
-  // Fetches the DM inbox to simulate a user checking their messages.
-  // Returns true if the inbox was fetched successfully.
+  // Fetches the main DM inbox to simulate a user checking their messages.
   async getDirectMessages(count: number = 5): Promise<boolean> {
     return this.timed("GetDirectMessages", async () => {
-      // Use igApiCookies session — EB may not be logged in when this runs.
       const j = await this.mobileSessionGet(
         `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=${count}`
       );
       const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
       return { ok: !!(j?.inbox ?? j?.threads), count: threads.length };
-    }, (r) => `Checked ${r.count} direct message${r.count === 1 ? "" : "s"}`);
+    }, (r) => `Checked ${r.count} direct message${r.count === 1 ? "" : "s"}`,
+    (r) => r.ok);
   }
 
-  // ── Fetch DM inbox (regular + pending request threads) ────────────────────
-  // Simulates a user opening the DM inbox — fetches up to 20 threads including
-  // both accepted conversations and pending message requests.
-  async getDirectMessagesInternal(): Promise<{ count: number }> {
-    return this.timed("GetDirectMessagesInternal", async () => {
-      // Use igApiCookies session — EB may not be logged in when this runs.
-      const j = await this.mobileSessionGet(
-        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=1&cursor=&limit=20`
-      );
-      const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
-      console.log(`[webClient] getDirectMessagesInternal: ${threads.length} thread(s), status=${j?.status}`);
-      return { count: threads.length };
-    }, (r) => `Checked DM inbox — ${r.count} thread${r.count === 1 ? "" : "s"}`);
+  // ── Check DM inbox + open individual threads ─────────────────────────────
+  // Simulates a user opening the DM inbox, then tapping into `count` threads.
+  // Produces N+1 API call log entries: 1 × GetDirectMessages (inbox overview)
+  // + N × GetDirectMessageThread (one per thread opened).
+  // Uses _buildWarmedIgClient (Jarvee cold-start) so Instagram does not gate
+  // direct_v2/inbox/ with 4415001. The warmed client is reused for all calls
+  // so we only pay the probe-sequence cost once per checkDm run.
+  // Only logs calls that Instagram's server genuinely answered (ok=true).
+  // Returns the full mapped inbox thread list so auto-reply can reuse it
+  // without a second warm-up or second inbox fetch.
+  async getDirectMessagesInternal(count: number = 5): Promise<{
+    count: number;
+    ok: boolean;
+    threads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[];
+  }> {
+    // ── Step 1: build warmed client (Phase 0-2 probe sequence) ──────────────
+    const built = await this._buildWarmedIgClient();
+    if (!built) {
+      console.warn("[webClient] getDirectMessagesInternal: no igApiCookies — skipping DM check");
+      return { count: 0, ok: false, threads: [] };
+    }
+    const { ig } = built;
+
+    // Own user ID — used to distinguish our sent messages from incoming ones.
+    const myUserId = String(ig.state.cookieUserId ?? "");
+
+    // Helper: map a raw inbox thread to the format auto-reply expects.
+    const mapThread = (thread: any) => {
+      const otherUser = (thread.users ?? [])[0];
+      if (!thread.thread_id || !otherUser?.username) return null;
+      const items = (thread.items ?? [])
+        .filter((item: any) => item?.item_type === "text" && item?.text)
+        .map((item: any) => ({
+          itemId: String(item.item_id ?? ""),
+          text: String(item.text ?? ""),
+          fromMe: myUserId ? String(item.user_id) === myUserId : false,
+        }));
+      // Extract first name from full_name (first word), fall back to username.
+      // full_name comes free from the directInbox response — no extra API call.
+      const rawFullName = String(otherUser.full_name ?? "").trim();
+      const firstName = rawFullName.split(/\s+/)[0] || String(otherUser.username);
+      return {
+        threadId: String(thread.thread_id),
+        username: String(otherUser.username),
+        userId: String(otherUser.pk ?? ""),
+        firstName,
+        items,
+      };
+    };
+
+    // ── Step 2: fetch inbox overview (1 API call — GetDirectMessages) ───────
+    let inboxThreads: any[] = [];
+    try {
+      const inboxResult = await this.timed("GetDirectMessages", async () => {
+        const items = await ig.feed.directInbox().items();
+        return { items, ok: true as const };
+      }, (r) => `Inbox overview: ${r.items.length} thread${r.items.length === 1 ? "" : "s"}`,
+      (r) => r.ok);
+      inboxThreads = inboxResult.items;
+      console.log(`[webClient] getDirectMessagesInternal: inbox OK — ${inboxThreads.length} thread(s), will open ${Math.min(count, inboxThreads.length)}`);
+    } catch (e: any) {
+      const code = e?.response?.body?.content?.error_code ?? e?.response?.body?.error_code;
+      console.warn(`[webClient] getDirectMessagesInternal: inbox error code=${code} — ${e?.message}`);
+      return { count: 0, ok: false, threads: [] };
+    }
+
+    // Map ALL inbox threads now so auto-reply can scan the full list later
+    // without needing a second warm-up or second inbox fetch.
+    const mappedThreads = inboxThreads
+      .map(mapThread)
+      .filter((t): t is NonNullable<ReturnType<typeof mapThread>> => t !== null);
+
+    if (inboxThreads.length === 0) return { count: 0, ok: true, threads: [] };
+
+    // ── Step 3: open each of the first `count` threads ───────────────────
+    // Each open is its own timed API call so the log reflects real actions.
+    const toOpen = inboxThreads.slice(0, count);
+    let opened = 0;
+    for (const thread of toOpen) {
+      const threadId = String(thread.thread_id ?? "");
+      if (!threadId) continue;
+      try {
+        await this.timed("GetDirectMessageThread", async () => {
+          const msgs = await ig.feed.directThread({ thread_id: threadId, oldest_cursor: "" }).items();
+          return { ok: true as const, count: msgs.length };
+        }, (r) => `Opened DM thread: ${r.count} message${r.count === 1 ? "" : "s"}`,
+        (r) => r.ok);
+        opened++;
+      } catch (e: any) {
+        console.warn(`[webClient] getDirectMessagesInternal: thread ${threadId} open error — ${e?.message}`);
+      }
+      // Human-paced delay between thread opens (1.5–4 s)
+      if (opened < toOpen.length) {
+        const delayMs = 1500 + Math.floor(Math.random() * 2500);
+        await new Promise<void>(r => setTimeout(r, delayMs));
+      }
+    }
+
+    console.log(`[webClient] getDirectMessagesInternal: opened ${opened}/${toOpen.length} thread(s)`);
+    return { count: opened, ok: true, threads: mappedThreads };
   }
 
   // Like getDirectMessages but returns thread content for auto-reply scanning.
-  // Returns up to `count` threads, each with recent messages from the other user.
+  // Uses _buildWarmedIgClient (Jarvee cold-start) so Instagram doesn't gate
+  // direct_v2/inbox/ with 4415001 "Prompt has contribution".
   async getDMThreadsWithContent(count: number = 10): Promise<{
     threadId: string;
     username: string;
     userId: string;
     items: { itemId: string; text: string; fromMe: boolean }[];
   }[]> {
+    // Track whether Instagram actually responded to the inbox request.
+    // Only log to instagram_api_calls when the server genuinely returned data.
+    let inboxOk = false;
     return this.timed("GetDMThreadsContent", async () => {
-      // Use igApiCookies session — EB may not be logged in when this runs.
-      const j = await this.mobileSessionGet(
-        `/api/v1/direct_v2/inbox/?persistentBadging=true&visual_message_return_type=unseen&thread_message_limit=10&cursor=&limit=${count}`
-      );
-      const threads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
-      return threads.map((thread: any) => {
+      const client = await this._buildWarmedIgClient();
+      if (!client) {
+        console.warn("[webClient] getDMThreadsWithContent: no igApiCookies — cannot fetch DMs");
+        return [];
+      }
+      const { ig } = client;
+
+      // Use ig.state.cookieUserId to identify which messages are from us.
+      // thread.viewer_id is not always populated by the API, causing all messages
+      // to appear as incoming (fromMe=false) and triggering false auto-replies.
+      const myUserId = String(ig.state.cookieUserId ?? "");
+
+      // Helper: map IgApiClient thread object → our format
+      const mapThread = (thread: any): { threadId: string; username: string; userId: string; items: { itemId: string; text: string; fromMe: boolean }[] } | null => {
         const otherUser = (thread.users ?? [])[0];
-        const myUserId = String(thread.viewer_id ?? thread.viewerId ?? "");
+        if (!thread.thread_id || !otherUser?.username) return null;
         const items: { itemId: string; text: string; fromMe: boolean }[] = (thread.items ?? [])
           .filter((item: any) => item?.item_type === "text" && item?.text)
           .map((item: any) => ({
             itemId: String(item.item_id ?? ""),
             text: String(item.text ?? ""),
-            fromMe: String(item.user_id) === myUserId,
+            fromMe: myUserId ? String(item.user_id) === myUserId : false,
           }));
         return {
-          threadId: String(thread.thread_id ?? ""),
-          username: String(otherUser?.username ?? ""),
-          userId: String(otherUser?.pk ?? ""),
+          threadId: String(thread.thread_id),
+          username: String(otherUser.username),
+          userId: String(otherUser.pk ?? ""),
           items,
         };
-      }).filter(t => t.threadId && t.username);
-    }, `Check DMs with content (limit=${count})`);
+      };
+
+      const results: ReturnType<typeof mapThread>[] = [];
+
+      try {
+        const mainThreads = await ig.feed.directInbox().items();
+        inboxOk = true; // Instagram responded — record as a real API call
+        console.log(`[webClient] getDMThreadsWithContent: ${mainThreads.length} thread(s), myUserId=${myUserId || "unknown"}`);
+        for (const t of mainThreads.slice(0, count)) results.push(mapThread(t));
+      } catch (e: any) {
+        const code = e?.response?.body?.content?.error_code ?? e?.response?.body?.error_code;
+        console.warn(`[webClient] getDMThreadsWithContent: inbox error code=${code} — ${e?.message}`);
+      }
+
+      return results.filter((t): t is NonNullable<typeof t> => t !== null && !!t.threadId && !!t.username);
+    }, `Check DMs with content (limit=${count})`, () => inboxOk);
   }
 
   // ── Like posts from the home timeline feed ───────────────────────────────

@@ -16,6 +16,13 @@
 > Single-commit method: GET ref → GET commit (treeSha) → POST blobs → POST tree → POST commit → PATCH ref.
 > Token: `listConnections('github')[0].settings.access_token`. Repo: `dannyshaw88/dannys-bot`.
 > See `.local/github_push_instruction.md` for the full step-by-step.
+>
+> **EVERY push MUST include rebuilt dist files — not just source files.**
+> The Windows standalone installer runs the pre-built bundles directly. If only source is pushed, Windows stays on the old version.
+> Before every push:
+> 1. `pnpm --filter @workspace/api-server run build` → pushes `artifacts/api-server/dist/index.mjs` + pino worker files
+> 2. `cd artifacts/dannys-bot && BASE_PATH=/ PORT=3000 pnpm run build` → pushes `artifacts/dannys-bot/dist/public/index.html` + `dist/public/assets/*`
+> Include ALL of those output files in the same commit as the source changes.
 
 > ## ⚠️ AGENT STANDING RULES — READ BEFORE TOUCHING ANY INSTAGRAM CODE
 >
@@ -41,6 +48,8 @@
 > - `i.instagram.com` DM broadcast with web-origin cookies → error 4415001
 > - `i.instagram.com` create_group_thread with web cookies → login_required
 > - `fetch_headers` as a bootstrap step → returns zero cookies, useless
+> - `i.instagram.com/api/v1/direct_v2/inbox/` with web-origin cookies (`this.cookieJar`) → `status=fail` — web session cookies are rejected by the inbox endpoint; **do NOT suggest `mobileGet` as a fallback for inbox or any session-gated endpoint**
+> - Using `this.cookieJar` (EB web cookies) as a fallback when `mobileSessionGet` / `mobileCookieJar` fails — **the EB cookie jar is never a valid fallback for bot data retrieval**; if `igApiCookies` are missing (e.g. 2FA-only accounts), the correct action is to log a warning and skip, not to silently fall back to EB cookies
 >
 > **Correct method for EVERYTHING the bot does:**
 > - Actions → `mobilePost()` in `instagramWebClient.ts` → `i.instagram.com`

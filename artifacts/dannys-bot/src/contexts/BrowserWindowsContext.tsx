@@ -5,6 +5,7 @@ export interface BrowserWindowEntry {
   username: string;
   userAgent: string;
   minimized: boolean;
+  maximized: boolean;
   zIndex: number;
   x: number;
   y: number;
@@ -49,6 +50,7 @@ export function BrowserWindowsProvider({ children }: { children: ReactNode }) {
         username,
         userAgent,
         minimized: false,
+        maximized: true,
         zIndex: topZ(),
         x: 120 + offset,
         y: 60 + offset,
@@ -73,6 +75,7 @@ export function BrowserWindowsProvider({ children }: { children: ReactNode }) {
         username,
         userAgent,
         minimized: false,
+        maximized: true,
         zIndex: topZ(),
         x: 120 + offset,
         y: 60 + offset,

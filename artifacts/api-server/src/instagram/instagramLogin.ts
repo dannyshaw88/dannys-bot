@@ -396,8 +396,138 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   const proxyIp = resolved.host;
   console.error(`[instagramLogin] @${profile.username} proxy=${resolved.host}`);
 
-  cookiePath: if (profile.igApiCookies) {
-    // ── Cookie session handshake ───────────────────────────────────────────
+  // ── Verification priority ─────────────────────────────────────────────────
+  // 1. ALWAYS try a fresh password login when a password is stored.
+  //    Every outcome returns directly — no cookie fallback.  The stored session
+  //    cookie is kept alive by the automation engine independently.
+  // 2. Cookie session restore is ONLY used when no password is stored at all
+  //    (accounts managed by session-only / manual cookie injection).
+
+  if (profile.password) {
+    // ── Path 1: Fresh password login (definitive credential check) ────────
+    // Every outcome returns directly — there is NO fallback to stored cookies
+    // when a password is present.  The stored session is kept alive for the
+    // automation engine independently of what verify reports here.
+    console.error(`[instagramLogin] @${profile.username} — attempting fresh password login`);
+    const { ig: igPw, captureDeviceState: capturePw } = buildIgClient(profile, proxyUrl);
+    attachRequestLogger(igPw, profile.id, profile.username, "Verify", proxyIp);
+
+    await ensureEncryptionKeys(igPw);
+
+    if (!igPw.state.passwordEncryptionPubKey) {
+      console.error(`[instagramLogin] @${profile.username} — could not fetch encryption keys (proxy/network issue)`);
+      return {
+        ok: false,
+        message: `@${profile.username} — could not reach Instagram servers. Check your proxy or network connection.`,
+        accountStatus: "logged_out",
+      };
+    }
+
+    try {
+      await igPw.simulate.preLoginFlow();
+      console.error(`[instagramLogin] preLoginFlow OK for @${profile.username}`);
+    } catch (e: any) {
+      console.error(`[instagramLogin] preLoginFlow partial failure (continuing): ${e?.message}`);
+    }
+
+    try {
+      await igPw.account.login(profile.username, profile.password);
+      try {
+        await igPw.simulate.postLoginFlow();
+      } catch (plErr: any) {
+        if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
+          return { ok: false, message: `@${profile.username} — logged in but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: capturePw() };
+        }
+      }
+      console.error(`[instagramLogin] @${profile.username} — password login OK ✓`);
+      return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: capturePw() };
+
+    } catch (err: any) {
+      const errName: string = err?.constructor?.name ?? "";
+      const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 2000);
+      console.error(`[instagramLogin] login error for @${profile.username}: ${errName} — ${err?.message} — body: ${errBody}`);
+      const ds = capturePw();
+
+      if (err instanceof IgLoginTwoFactorRequiredError) {
+        const twoFactorInfo = err.response.body.two_factor_info;
+        const secret = profile.twoFASecretKey?.replace(/\s+/g, "") ?? "";
+        if (!secret) {
+          return { ok: false, message: `@${profile.username} — 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
+        }
+        let code: string;
+        try {
+          code = totpGenerate({ secret });
+        } catch (totpErr: any) {
+          console.error(`[instagramLogin] TOTP generation failed for @${profile.username}: ${totpErr?.message}`);
+          return { ok: false, message: `@${profile.username} — could not generate 2FA code: ${totpErr?.message ?? "invalid secret"}. Check the TOTP secret in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
+        }
+        try {
+          await igPw.account.twoFactorLogin({
+            username: profile.username,
+            verificationCode: code,
+            twoFactorIdentifier: twoFactorInfo.two_factor_identifier,
+            verificationMethod: "0",
+            trustThisDevice: "1",
+          });
+          try {
+            await igPw.simulate.postLoginFlow();
+          } catch (plErr: any) {
+            if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
+              return { ok: false, message: `@${profile.username} — passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: capturePw() };
+            }
+          }
+          return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: capturePw() };
+        } catch (e2: any) {
+          return { ok: false, message: `@${profile.username} — 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification", igDeviceState: ds };
+        }
+      }
+
+      if (err instanceof IgCheckpointError) {
+        const cpBody = err?.response?.body ?? {};
+        const cpStr = JSON.stringify(cpBody);
+        console.error(`[instagramLogin] @${profile.username} — password-login IgCheckpointError body: ${cpStr.slice(0, 600)}`);
+        const cpSignalsBadCreds =
+          cpBody.invalid_credentials === true ||
+          cpBody?.challenge?.lock === true ||
+          /\b(bad_password|invalid_credentials)\b/i.test(cpStr);
+        if (cpSignalsBadCreds) {
+          console.error(`[instagramLogin] @${profile.username} — checkpoint body signals bad credentials → bad_password`);
+          return { ok: false, message: `@${profile.username} — incorrect password (Instagram returned a challenge indicating invalid credentials).`, accountStatus: "bad_password", igDeviceState: ds };
+        }
+        return { ok: false, message: `@${profile.username} — security checkpoint triggered. Open the embedded browser to verify the account.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: ds };
+      }
+
+      if (err instanceof IgLoginBadPasswordError) {
+        const body = err?.response?.body ?? {};
+        const rawBody = JSON.stringify(body).slice(0, 1500);
+        console.error(`[instagramLogin] IgLoginBadPasswordError raw body for @${profile.username}: ${rawBody}`);
+        const buttons: any[] = body?.buttons ?? [];
+        const errorType: string = body?.error_type ?? "";
+        const invalidCreds: boolean = body?.invalid_credentials === true;
+        if (!invalidCreds && errorType !== "bad_password" && buttons.some((b: any) => b?.action === "send_one_click_login_email")) {
+          return { ok: false, message: `@${profile.username} — Instagram requires email verification. Check the account email and click the confirmation link. Raw: ${rawBody}`, accountStatus: "email_confirmation", igDeviceState: ds };
+        }
+        return { ok: false, message: `@${profile.username} — incorrect password (error_type="${errorType}", invalid_credentials=${invalidCreds}). Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
+      }
+
+      if (err instanceof IgLoginInvalidUserError) {
+        return { ok: false, message: `@${profile.username} — account does not exist on Instagram.`, accountStatus: "banned", igDeviceState: ds };
+      }
+
+      const msg: string = err?.message ?? "unknown error";
+      if (/banned|disabled|suspended/i.test(msg)) {
+        return { ok: false, message: `@${profile.username} — account banned or disabled.`, accountStatus: "banned", igDeviceState: ds };
+      }
+      if (/checkpoint/i.test(msg)) {
+        return { ok: false, message: `@${profile.username} — checkpoint required. Open the embedded browser to verify the account.`, accountStatus: "captcha", igDeviceState: ds };
+      }
+      return { ok: false, message: `@${profile.username} — login failed: ${msg}`, accountStatus: "logged_out", igDeviceState: ds };
+    }
+  }
+
+  // ── Path 2: Cookie session restore ───────────────────────────────────────
+  // Only reached when NO password is stored (session-only / manual management mode).
+  if (profile.igApiCookies) {
     // Mirrors the Jarvee cold-start sequence for a restored session:
     //   1. launcher/sync  (SendMobileConfig)  — establishes app config, no auth needed
     //   2. users/{id}/info                    — lightweight read that validates the live
@@ -555,6 +685,13 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           if (/bad_password/i.test(igMsg) || /bad_password/i.test(msg)) {
             return { ok: false, message: `@${profile.username} — incorrect password.`, accountStatus: "bad_password", igDeviceState: captureDeviceState() };
           }
+          // Instagram's human-readable "wrong password" message — returned in the body
+          // when a dead/revoked session cookie is used and IG recognises it as a
+          // credential failure rather than a plain 401.
+          if (/login information.*incorrect|incorrect.*login information|password.*incorrect|incorrect.*password/i.test(igMsg)) {
+            console.error(`[instagramLogin] @${profile.username} — ${source}: IG returned "login information incorrect" → bad_password`);
+            return { ok: false, message: `@${profile.username} — Instagram says the login information is incorrect. The stored session is no longer valid.`, accountStatus: "bad_password", igDeviceState: captureDeviceState() };
+          }
           // 404 or any other non-auth HTTP error = endpoint not available for this
           // account type, not a session failure — return null (treat as inconclusive)
           return null;
@@ -599,10 +736,18 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — get_account_family failed: HTTP ${statusCode ?? "n/a"} ${famErr?.message ?? ""}`);
             const classified = classifyAuthError(famErr, "get_account_family");
             if (classified) return classified;
-            // 404 = endpoint not available for this account — treat as inconclusive,
-            // session is likely fine (we already attempted users/info above)
-            console.error(`[instagramLogin] @${profile.username} — get_account_family inconclusive (likely 404, endpoint unavailable for this account type) — proceeding as valid`);
-            sessionConfirmed = true; // best-effort: both probes were non-auth errors, assume live
+            // Both users/info AND get_account_family returned inconclusive non-auth errors.
+            // We cannot confirm the session is alive. Return logged_out so the user is
+            // prompted to re-verify rather than silently marking a dead session as valid.
+            // (A live session virtually never gets non-auth failures on both probes —
+            //  that pattern indicates a dead/revoked session or a blocking proxy issue.)
+            console.error(`[instagramLogin] @${profile.username} — both session probes inconclusive → returning logged_out (cannot confirm session is alive)`);
+            return {
+              ok: false,
+              message: `@${profile.username} — could not confirm the session is alive (both validation probes returned non-auth errors). Please check the proxy or re-verify the account.`,
+              accountStatus: "logged_out",
+              igDeviceState: captureDeviceState(),
+            };
           }
         }
 
@@ -691,134 +836,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     }
   }
 
-  // ── Normal path: fresh password login (only when no cookies are stored) ──
-  const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
-  attachRequestLogger(ig, profile.id, profile.username, "Verify", proxyIp);
-
-  // Step 1: Fetch encryption keys (must happen before login)
-  await ensureEncryptionKeys(ig);
-
-  if (!ig.state.passwordEncryptionPubKey) {
-    return {
-      ok: false,
-      message: `@${profile.username} — could not reach Instagram servers. Check your proxy or network connection.`,
-      accountStatus: "logged_out",
-    };
-  }
-
-  // Step 2: Pre-login flow (fetch_headers, qe/sync, launcher/sync, prefill — like Jarvee)
-  try {
-    await ig.simulate.preLoginFlow();
-    console.error(`[instagramLogin] preLoginFlow OK for @${profile.username}`);
-  } catch (e: any) {
-    console.error(`[instagramLogin] preLoginFlow partial failure (continuing): ${e?.message}`);
-  }
-
-  // Step 3: Login
-  try {
-    await ig.account.login(profile.username, profile.password);
-    try {
-      await ig.simulate.postLoginFlow();
-    } catch (plErr: any) {
-      if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
-        return { ok: false, message: `@${profile.username} — logged in but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: captureDeviceState() };
-      }
-    }
-    return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
-
-  } catch (err: any) {
-    const errName: string = err?.constructor?.name ?? "";
-    const errBody = JSON.stringify(err?.response?.body ?? {}).slice(0, 2000);
-    console.error(`[instagramLogin] login error for @${profile.username}: ${errName} — ${err?.message} — body: ${errBody}`);
-    const ds = captureDeviceState();
-
-    if (err instanceof IgLoginTwoFactorRequiredError) {
-      const twoFactorInfo = err.response.body.two_factor_info;
-      const secret = profile.twoFASecretKey?.replace(/\s+/g, "") ?? "";
-      if (!secret) {
-        return { ok: false, message: `@${profile.username} — 2FA required but no TOTP secret is set. Add it in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
-      }
-      let code: string;
-      try {
-        // otplib v13: generateSync expects { secret } object, not a plain string
-        code = totpGenerate({ secret });
-      } catch (totpErr: any) {
-        console.error(`[instagramLogin] TOTP generation failed for @${profile.username}: ${totpErr?.message}`);
-        return { ok: false, message: `@${profile.username} — could not generate 2FA code: ${totpErr?.message ?? "invalid secret"}. Check the TOTP secret in Account Details.`, accountStatus: "2fa_verification", igDeviceState: ds };
-      }
-      try {
-        await ig.account.twoFactorLogin({
-          username: profile.username,
-          verificationCode: code,
-          twoFactorIdentifier: twoFactorInfo.two_factor_identifier,
-          verificationMethod: "0",
-          trustThisDevice: "1",
-        });
-        try {
-          await ig.simulate.postLoginFlow();
-        } catch (plErr: any) {
-          if (plErr instanceof IgCheckpointError || /checkpoint/i.test(plErr?.message ?? "")) {
-            return { ok: false, message: `@${profile.username} — passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: captureDeviceState() };
-          }
-        }
-        return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: captureDeviceState() };
-      } catch (e2: any) {
-        return { ok: false, message: `@${profile.username} — 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification", igDeviceState: ds };
-      }
-    }
-
-    if (err instanceof IgCheckpointError) {
-      // Inspect the body — Instagram sometimes embeds credential failure indicators
-      // inside a challenge_required response even during password login.
-      const cpBody = err?.response?.body ?? {};
-      const cpStr = JSON.stringify(cpBody);
-      console.error(`[instagramLogin] @${profile.username} — password-login IgCheckpointError body: ${cpStr.slice(0, 600)}`);
-      const cpSignalsBadCreds =
-        cpBody.invalid_credentials === true ||
-        cpBody?.challenge?.lock === true ||
-        /\b(bad_password|invalid_credentials)\b/i.test(cpStr);
-      if (cpSignalsBadCreds) {
-        console.error(`[instagramLogin] @${profile.username} — checkpoint body signals bad credentials → bad_password`);
-        return { ok: false, message: `@${profile.username} — incorrect password (Instagram returned a challenge indicating invalid credentials).`, accountStatus: "bad_password", igDeviceState: ds };
-      }
-      return { ok: false, message: `@${profile.username} — security checkpoint triggered. Open the browser and verify your account.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(err), igDeviceState: ds };
-    }
-
-    if (err instanceof IgLoginBadPasswordError) {
-      const body = err?.response?.body ?? {};
-      const rawBody = JSON.stringify(body).slice(0, 1500);
-      console.error(`[instagramLogin] IgLoginBadPasswordError raw body for @${profile.username}: ${rawBody}`);
-      const buttons: any[] = body?.buttons ?? [];
-      const errorTitle: string = body?.error_title ?? "";
-      const errorType: string = body?.error_type ?? "";
-      const invalidCreds: boolean = body?.invalid_credentials === true;
-      // Instagram returns "bad_password" + invalid_credentials:true when the password
-      // is actually wrong (or device version mismatch fakes it).  The email button it
-      // includes is a generic recovery offer — NOT a genuine email-confirmation challenge.
-      // Only treat as email_confirmation when Instagram does NOT say bad_password explicitly.
-      if (!invalidCreds && errorType !== "bad_password" && buttons.some((b: any) => b?.action === "send_one_click_login_email")) {
-        return {
-          ok: false,
-          message: `@${profile.username} — Instagram requires email verification. Check the account email and click the confirmation link. Raw: ${rawBody}`,
-          accountStatus: "email_confirmation",
-          igDeviceState: ds,
-        };
-      }
-      return { ok: false, message: `@${profile.username} — incorrect password (error_type="${errorType}", invalid_credentials=${invalidCreds}). Raw: ${rawBody}`, accountStatus: "bad_password", igDeviceState: ds };
-    }
-
-    if (err instanceof IgLoginInvalidUserError) {
-      return { ok: false, message: `@${profile.username} — account does not exist on Instagram.`, accountStatus: "banned", igDeviceState: ds };
-    }
-
-    const msg: string = err?.message ?? "unknown error";
-    if (/banned|disabled|suspended/i.test(msg)) {
-      return { ok: false, message: `@${profile.username} — account banned or disabled.`, accountStatus: "banned", igDeviceState: ds };
-    }
-    if (/checkpoint/i.test(msg)) {
-      return { ok: false, message: `@${profile.username} — checkpoint required.`, accountStatus: "captcha", igDeviceState: ds };
-    }
-
-    return { ok: false, message: `@${profile.username} — login failed: ${msg}`, accountStatus: "logged_out", igDeviceState: ds };
-  }
+  // Neither path produced a result — no password and no cookies stored.
+  return {
+    ok: false,
+    message: `@${profile.username} — no credentials or session available. Add a password and re-verify.`,
+    accountStatus: "logged_out",
+  };
 }

@@ -196,7 +196,8 @@ export function AutoReplyPanel({ tool, profile }: Props) {
               onChange={(e) => { setNewReply(e.target.value); setPreview(""); }}
             />
             <p className="text-[11px] text-muted-foreground">
-              Use <code className="bg-muted px-1 rounded">{"{Hi|Hello}"}</code> spintax to randomise the reply per send.
+              Use <code className="bg-muted px-1 rounded">{"{Hi|Hello}"}</code> spintax to randomise the reply.
+              Use <code className="bg-muted px-1 rounded">[FIRSTNAME]</code> to insert the recipient's first name (e.g. <span className="italic">Hey [FIRSTNAME]!</span>).
             </p>
             {preview && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800 mt-1">

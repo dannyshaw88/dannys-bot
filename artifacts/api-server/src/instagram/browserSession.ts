@@ -877,6 +877,9 @@ export async function browserAutoLogin(
     log(`[autoLogin:${profileId}] Found username input via: ${usernameSelector}`, 'browser');
 
     // ── Step 3: Fill credentials ─────────────────────────────────────────────
+    // Wrap entire fill+submit in a try/catch — Instagram's SPA can navigate
+    // mid-fill (e.g. trusted-device auto-login), destroying the execution context.
+    try {
     sendStatus(profileId, "Filling username…");
     await delay(500 + Math.random() * 300);
     await fillField(s.page, usernameSelector, username);
@@ -942,6 +945,24 @@ export async function browserAutoLogin(
       await s.page.keyboard.press('Tab');
       await delay(200);
       await s.page.keyboard.press('Enter');
+    }
+    } catch (fillErr: any) {
+      // Instagram's SPA sometimes navigates mid-fill (e.g. trusted-device push
+      // notification auto-logs in), destroying the JS execution context.
+      if (/Execution context was destroyed|Target closed|detached Frame/i.test(fillErr?.message ?? "")) {
+        log(`[autoLogin:${profileId}] Context destroyed during fill — checking if page navigated to login success`, 'browser');
+        await delay(2500);
+        const navUrl = s.page.url().catch?.(() => "") ?? s.page.url();
+        const onIG = typeof navUrl === "string" && navUrl.includes("instagram.com") && !navUrl.includes("accounts/login");
+        if (onIG) {
+          await saveCookies(profileId, s.page);
+          sendStatus(profileId, "✓ Logged in (page navigated automatically during form fill).");
+          return { ok: true, message: "Logged in automatically" };
+        }
+        sendStatus(profileId, "⚠ Page context was destroyed during login — Instagram may be showing a challenge. Check the browser.");
+        return { ok: false, message: "Login interrupted — check the browser window for any challenge." };
+      }
+      throw fillErr;
     }
 
     // ── Step 5: Wait for Instagram to respond ────────────────────────────────

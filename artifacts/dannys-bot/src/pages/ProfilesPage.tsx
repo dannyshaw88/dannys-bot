@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile } from "@/hooks/use-profiles";
+import { useProxies } from "@/hooks/use-proxies";
 import { userAgents } from "@/shared/userAgents";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -82,6 +83,7 @@ export function ProfilesPage() {
   const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
   const { openWindow } = useBrowserWindows();
+  const { data: proxies } = useProxies();
 
   const handleVerify = (id: number) => {
     updateAccountStatus.mutate({ id, accountStatus: "verifying" });
@@ -108,9 +110,9 @@ export function ProfilesPage() {
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
-  const [sortField, setSortField] = useState<"account" | "status" | null>(() => {
+  const [sortField, setSortField] = useState<"account" | "status" | "ip" | null>(() => {
     const v = sessionStorage.getItem("profiles:sortField");
-    return (v === "account" || v === "status") ? v : null;
+    return (v === "account" || v === "status" || v === "ip") ? v : null;
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (sessionStorage.getItem("profiles:sortDir") as "asc" | "desc") ?? "asc"
@@ -126,6 +128,15 @@ export function ProfilesPage() {
     statusFilter.split(/\|\|?/).map(t => t.trim().toLowerCase()).filter(Boolean),
     [statusFilter]
   );
+
+  const ipToNum = (host: string | null | undefined): number => {
+    if (!host) return Infinity;
+    const parts = host.split(".").map(Number);
+    if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+      return parts[0] * 16777216 + parts[1] * 65536 + parts[2] * 256 + parts[3];
+    }
+    return Infinity;
+  };
 
   const filteredProfiles = useMemo(() => {
     const base = filterTokens.length > 0
@@ -144,6 +155,15 @@ export function ProfilesPage() {
       : (profiles ?? []);
     return sortField
       ? [...base].sort((a, b) => {
+          if (sortField === "ip") {
+            const na = ipToNum(a.proxyHost);
+            const nb = ipToNum(b.proxyHost);
+            const diff = na - nb;
+            if (diff !== 0) return sortDir === "asc" ? diff : -diff;
+            const pa = a.proxyPort ?? 0;
+            const pb = b.proxyPort ?? 0;
+            return sortDir === "asc" ? pa - pb : pb - pa;
+          }
           let va = "", vb = "";
           if (sortField === "account") {
             va = (a.accountLabel || a.username || "").toLowerCase();
@@ -157,7 +177,7 @@ export function ProfilesPage() {
       : base;
   }, [profiles, filterTokens, sortField, sortDir]);
 
-  const cycleSort = (field: "account" | "status") => {
+  const cycleSort = (field: "account" | "status" | "ip") => {
     if (sortField !== field) {
       setSortField(field); setSortDir("asc");
       sessionStorage.setItem("profiles:sortField", field);
@@ -464,29 +484,8 @@ export function ProfilesPage() {
         )}
       </div>
 
-      {isLoading ? (
-        <div className="desktop-card divide-y divide-border/40">
-          {[1,2,3,4,5].map(i => <div key={i} className="h-8 animate-pulse bg-muted/30" />)}
-        </div>
-      ) : profiles?.length === 0 ? (
-        <div className="text-center py-20 desktop-card flex flex-col items-center">
-          <Instagram className="w-12 h-12 text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-medium">No Profiles Yet</h3>
-          <p className="text-muted-foreground text-sm mt-1 mb-4">Add your first Instagram account to start automating.</p>
-          <Button onClick={handleCreate} variant="outline" disabled={createProfileMutation.isPending}>Add Profile</Button>
-        </div>
-      ) : filteredProfiles?.length === 0 ? (
-        <div className="text-center py-16 desktop-card flex flex-col items-center">
-          <Filter className="w-10 h-10 text-muted-foreground/40 mb-3" />
-          <h3 className="text-base font-medium">No accounts match this filter</h3>
-          <p className="text-muted-foreground text-sm mt-1">
-            Try a different status or{" "}
-            <button onClick={() => setFilterPersisted("")} className="underline hover:text-foreground transition-colors">clear the filter</button>.
-          </p>
-        </div>
-      ) : (
-        <div className="desktop-card overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 210px)" }}>
-          {/* ── Top column-header bar ─────────────────────────────────────── */}
+      <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 178px)", marginBottom: "-32px", paddingBottom: "41px" }}>
+          {/* ── Top column-header bar — always visible ────────────────────── */}
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
             <div className="w-5 shrink-0" />
             <button
@@ -500,19 +499,50 @@ export function ProfilesPage() {
             </button>
             <button
               onClick={() => cycleSort("status")}
-              className="w-24 shrink-0 flex items-center justify-center gap-1 hover:text-foreground transition-colors"
+              className="w-24 shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors"
             >
               Status
               <span className="text-[9px]">
                 {sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
               </span>
             </button>
-            <div className="w-14 shrink-0 text-center">Active</div>
-            <div className="w-44 shrink-0 text-right">Actions</div>
+            <div className="w-14 shrink-0 text-left">Active</div>
+            <div className="w-44 shrink-0 text-left">Actions</div>
+            <button
+              onClick={() => cycleSort("ip")}
+              className="w-32 shrink-0 flex items-center justify-start gap-1 pl-2 hover:text-foreground transition-colors"
+            >
+              IP:PORT
+              <span className="text-[9px]">
+                {sortField === "ip" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+              </span>
+            </button>
           </div>
 
-          {/* ── Scrollable account rows ───────────────────────────────────── */}
+          {/* ── Scrollable body — conditional content ────────────────────── */}
           <div className="overflow-y-auto flex-1 min-h-0">
+          {isLoading ? (
+            <div className="divide-y divide-border/40">
+              {[1,2,3,4,5].map(i => <div key={i} className="h-8 animate-pulse bg-muted/30" />)}
+            </div>
+          ) : profiles?.length === 0 ? (
+            <div className="flex flex-col items-center py-20">
+              <Instagram className="w-12 h-12 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-medium">No Profiles Yet</h3>
+              <p className="text-muted-foreground text-sm mt-1 mb-4">Add your first Instagram account to start automating.</p>
+              <Button onClick={handleCreate} variant="outline" disabled={createProfileMutation.isPending}>Add Profile</Button>
+            </div>
+          ) : filteredProfiles?.length === 0 ? (
+            <div className="flex flex-col items-center py-16">
+              <Filter className="w-10 h-10 text-muted-foreground/40 mb-3" />
+              <h3 className="text-base font-medium">No accounts match this filter</h3>
+              <p className="text-muted-foreground text-sm mt-1">
+                Try a different status or{" "}
+                <button onClick={() => setFilterPersisted("")} className="underline hover:text-foreground transition-colors">clear the filter</button>.
+              </p>
+            </div>
+          ) : (
+            <>
           {filteredProfiles?.map((profile, idx) => {
             const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
             const isStopped  = acctStatus === "stopped";
@@ -575,7 +605,7 @@ export function ProfilesPage() {
                 </div>
 
                 {/* Text-only actions */}
-                <div className="w-44 shrink-0 flex items-center justify-end gap-3">
+                <div className="w-44 shrink-0 flex items-center justify-end gap-3 pr-0">
                   <button
                     onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
                     title="Open embedded browser"
@@ -616,35 +646,54 @@ export function ProfilesPage() {
                     Delete
                   </button>
                 </div>
+
+                {/* IP column */}
+                {(() => {
+                  let ip = "";
+                  if (profile.proxyId && proxies) {
+                    const px = proxies.find(p => p.id === profile.proxyId);
+                    if (px?.host && px?.port) ip = `${px.host}:${px.port}`;
+                  } else if (profile.proxyHost && profile.proxyPort) {
+                    ip = `${profile.proxyHost}:${profile.proxyPort}`;
+                  }
+                  return (
+                    <div className="w-32 shrink-0 text-left pl-2" title={ip || "No proxy"}>
+                      <span className="text-[10px] font-mono text-muted-foreground truncate block">
+                        {ip || "—"}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
-          </div>{/* end scrollable rows */}
+            </>
+          )}
+          </div>{/* end scrollable body */}
 
-          {/* ── Bottom bar ───────────────────────────────────────────────── */}
-          <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0">
-            <button
-              onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
-              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
-            >
-              Select All
-            </button>
-            <button
-              onClick={() => setSelectedProfileIds([])}
-              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
-            >
-              Select None
-            </button>
-            {/* Actions — opens centred popup */}
-            <button
-              onClick={() => setActionsOpen(true)}
-              className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
-            >
-              Actions <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
-      )}
+
+      {/* ── Bottom bar — fixed to absolute bottom of window ──────────────── */}
+      <div className="fixed bottom-0 left-64 right-0 flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none z-20">
+        <button
+          onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
+          className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+        >
+          Select All
+        </button>
+        <button
+          onClick={() => setSelectedProfileIds([])}
+          className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+        >
+          Select None
+        </button>
+        <button
+          onClick={() => setActionsOpen(true)}
+          className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+        >
+          Actions <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
 
@@ -728,6 +777,7 @@ export function ProfilesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              autoFocus
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => { if (deleteConfirm) { performDelete(deleteConfirm.ids); setDeleteConfirm(null); } }}
             >

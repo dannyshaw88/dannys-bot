@@ -39,7 +39,9 @@ const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKi
 // fingerprint look like a device leak to Instagram and cause blocks.
 const verifyInFlight = new Set<number>();
 
-const SERVER_START = new Date().toISOString();
+// Persisted across restarts within the same calendar day so the dashboard
+// always shows when the bot was FIRST started today, not the latest restart.
+let SERVER_START = new Date().toISOString();
 
 async function resolveProxyConfig(profile: {
   browserDirectConnection?: boolean | null;
@@ -81,6 +83,21 @@ export async function registerInstagramRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<void> {
+  // Persist server start time so restarts (e.g. code changes) don't reset it.
+  // If a start time already exists in the DB from today, keep it. Otherwise write the current time.
+  try {
+    const globalSettings = await storage.getGlobalSettings();
+    const stored = globalSettings["server_start_time"];
+    if (stored && new Date(stored).toDateString() === new Date().toDateString()) {
+      SERVER_START = stored;
+    } else {
+      SERVER_START = new Date().toISOString();
+      await storage.setGlobalSetting("server_start_time", SERVER_START);
+    }
+  } catch {
+    // If DB read fails, keep the in-memory start time
+  }
+
   automationEngine.start();
 
   // Proxies

@@ -295,6 +295,12 @@ export function ProfileDetailsPage() {
 
   const handleVerify = async (bypassProxy = false) => {
     setVerifyStatus("pending");
+    queryClient.setQueryData(["/api/profiles"], (old: any) =>
+      Array.isArray(old) ? old.map((p: any) => p.id === profileId ? { ...p, accountStatus: "verifying" } : p) : old
+    );
+    queryClient.setQueryData(["/api/profiles", profileId], (old: any) =>
+      old ? { ...old, accountStatus: "verifying" } : old
+    );
     const url = `/api/profiles/${profileId}/verify${bypassProxy ? "?bypassProxy=true" : ""}`;
     try {
       const res = await fetch(url, { method: "POST" });

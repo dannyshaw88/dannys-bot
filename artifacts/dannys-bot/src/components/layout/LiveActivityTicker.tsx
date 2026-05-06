@@ -108,7 +108,7 @@ export function LiveActivityTicker() {
   const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", latest.detail);
   const label = toolLabel
     ? `@${accountName} | ${toolLabel}: ${actionPart}`
-    : `@${accountName} — ${actionPart}`;
+    : `@${accountName} ${actionPart}`;
 
   return (
     <div className="border-b border-border/50 bg-muted/30 px-6 py-1.5 flex items-center gap-2 w-full overflow-hidden">

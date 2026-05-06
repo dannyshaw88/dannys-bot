@@ -18,7 +18,7 @@ export function BrowserWindow({ window: win }: Props) {
     fetch(`/api/browser/${win.profileId}/close`, { method: "POST" }).catch(() => {});
     closeWindow(win.profileId);
   }, [win.profileId, closeWindow]);
-  const [maximized, setMaximized] = useState(false);
+  const [maximized, setMaximized] = useState(win.maximized);
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const winRef = useRef<HTMLDivElement>(null);
