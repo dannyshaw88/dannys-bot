@@ -366,6 +366,24 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
     const versionCode = parsed?.versionCode ?? MOBILE_VERSION_CODE;
     ig.state.constants.APP_VERSION      = version;
     ig.state.constants.APP_VERSION_CODE = versionCode;
+
+    // CRITICAL: The deviceString ends with the version code (last semicolon-delimited
+    // segment).  When a saved deviceString has an old version code but APP_VERSION_CODE
+    // is set to a newer fallback, the resulting User-Agent has a mismatch:
+    //   "Instagram 378.x Android (33/13; ...; 558538758)"  ← old code in UA body
+    // while X-IG-App-Version = 378.x and APP_VERSION_CODE = 651869969
+    // Instagram detects this inconsistency as a fingerprint anomaly and rejects the login.
+    // Fix: always patch the trailing version code in deviceString to match versionCode.
+    if (ig.state.deviceString) {
+      const segs = ig.state.deviceString.split(";");
+      const last = segs[segs.length - 1].trim();
+      if (/^\d+$/.test(last) && last !== versionCode) {
+        segs[segs.length - 1] = ` ${versionCode}`;
+        ig.state.deviceString = segs.join(";");
+        console.error(`[instagramLogin] Patched deviceString version code: ${last} → ${versionCode} for @${profile.username}`);
+      }
+    }
+
     console.error(`[instagramLogin] APP_VERSION=${version} APP_VERSION_CODE=${versionCode} for @${profile.username} (${parsed ? "from UA" : "fallback"})`);
   }
 

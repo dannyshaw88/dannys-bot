@@ -220,6 +220,13 @@ if (!repostedPostsColNames.has("posted_shortcode")) {
   sqlite.exec(`ALTER TABLE reposted_posts ADD COLUMN posted_shortcode TEXT NOT NULL DEFAULT '';`);
 }
 
+// Add username to instagram_api_calls if missing (added to schema after initial table creation)
+const igApiCallsCols = sqlite.prepare("pragma table_info(instagram_api_calls)").all() as { name: string }[];
+const igApiCallsColNames = new Set(igApiCallsCols.map((c) => c.name));
+if (!igApiCallsColNames.has("username")) {
+  sqlite.exec(`ALTER TABLE instagram_api_calls ADD COLUMN username TEXT DEFAULT '';`);
+}
+
 // DEVICE ISOLATION GUARD
 // Two passes run on every startup:
 //

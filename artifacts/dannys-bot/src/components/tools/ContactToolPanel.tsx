@@ -19,33 +19,34 @@ type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
 const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
-    { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
     { key: "ct_randomiseTiming", label: "Randomise timing", description: "When activating across multiple accounts, stagger each account's start time so they don't all run simultaneously", subOptions: [
       { key: "ct_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
     ]},
   ]},
   { label: "Contact New Followers", options: [
     { key: "ct_newFollowers", label: "Contact New Followers", description: "Auto-messaging settings for new followers", subOptions: [
-      { key: "ct_onlyApp",       label: "Only app-followed users",                 settingKeys: ["contactOnlyAppFollowed"] },
-      { key: "ct_message",       label: "Message template",                        settingKeys: ["contactMessage"] },
-      { key: "ct_interval",      label: "Check interval (min / max mins)",         settingKeys: ["contactCheckIntervalMin","contactCheckIntervalMax"] },
-      { key: "ct_perCheck",      label: "Users per check (min / max)",             settingKeys: ["contactUsersPerCheckMin","contactUsersPerCheckMax"] },
-      { key: "ct_apiSource",     label: "API source",                              settingKeys: ["contactApiSource"] },
+      { key: "ct_newFollowersStartStop", label: "Start / Stop",                          settingKeys: ["contactNewFollowersEnabled"] },
+      { key: "ct_onlyApp",               label: "Only app-followed users",               settingKeys: ["contactOnlyAppFollowed"] },
+      { key: "ct_message",               label: "Message template",                      settingKeys: ["contactMessage"] },
+      { key: "ct_interval",              label: "Check interval (min / max mins)",       settingKeys: ["contactCheckIntervalMin","contactCheckIntervalMax"] },
+      { key: "ct_perCheck",              label: "Users per check (min / max)",           settingKeys: ["contactUsersPerCheckMin","contactUsersPerCheckMax"] },
+      { key: "ct_apiSource",             label: "API source",                            settingKeys: ["contactApiSource"] },
     ]},
   ]},
   { label: "Contact Users", options: [
     { key: "ct_users", label: "Contact Users", description: "Settings for the manual user contact list", subOptions: [
-      { key: "ct_usersWait",       label: "Wait between sessions (min / max mins)",     settingKeys: ["contactUsersWaitMin","contactUsersWaitMax"] },
-      { key: "ct_usersSendCount",  label: "Send count per session (min / max)",         settingKeys: ["contactUsersSendCountMin","contactUsersSendCountMax"] },
-      { key: "ct_usersDelay",      label: "Delay between messages (min / max secs)",    settingKeys: ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"] },
-      { key: "ct_usersPickRandom", label: "Pick users randomly",                        settingKeys: ["contactUsersPickRandom"] },
-      { key: "ct_usersUnsend",     label: "Unsend settings",                            settingKeys: ["contactUsersUnsendEnabled","contactUsersUnsendMin","contactUsersUnsendMax"] },
+      { key: "ct_usersStartStop",      label: "Start / Stop",                              settingKeys: ["contactUsersEnabled"] },
+      { key: "ct_usersWait",           label: "Wait between sessions (min / max mins)",    settingKeys: ["contactUsersWaitMin","contactUsersWaitMax"] },
+      { key: "ct_usersSendCount",      label: "Send count per session (min / max)",        settingKeys: ["contactUsersSendCountMin","contactUsersSendCountMax"] },
+      { key: "ct_usersDelay",          label: "Delay between messages (min / max secs)",   settingKeys: ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"] },
+      { key: "ct_usersPickRandom",     label: "Pick users randomly",                       settingKeys: ["contactUsersPickRandom"] },
+      { key: "ct_usersUnsend",         label: "Unsend settings",                           settingKeys: ["contactUsersUnsendEnabled","contactUsersUnsendMin","contactUsersUnsendMax"] },
     ]},
   ]},
   { label: "Auto Reply", options: [
     { key: "ct_autoReply", label: "Auto Reply", description: "Auto-respond to incoming messages", subOptions: [
-      { key: "ct_arEnabled", label: "Enabled",     settingKeys: ["autoReplyEnabled"] },
-      { key: "ct_arRules",   label: "Reply rules", settingKeys: ["autoReplies"] },
+      { key: "ct_arEnabled", label: "Start / Stop", settingKeys: ["autoReplyEnabled"] },
+      { key: "ct_arRules",   label: "Reply rules",  settingKeys: ["autoReplies"] },
     ]},
   ]},
 ];
@@ -59,18 +60,11 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
-    const copyEnabled = expandedKeys.includes("startStop");
-    // When copying start/stop, also carry the three sub-tool enabled flags
-    const subEnabledKeys = copyEnabled
-      ? ["contactNewFollowersEnabled", "autoReplyEnabled", "contactUsersEnabled"]
-      : [];
-    const keysToSend = [...expandedKeys.filter(k => k !== "startStop"), ...subEnabledKeys];
     await copyToolSettingsToProfiles(
       (tool.settings as Record<string, unknown>) ?? {},
       tool.type,
       targetIds,
-      keysToSend,
-      copyEnabled ? tool.enabled : undefined,
+      expandedKeys,
     );
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };

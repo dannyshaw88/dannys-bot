@@ -123,6 +123,28 @@ function extractCsrf(cookies: string[]): string {
 const WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const APP_ID  = "936619743392459";
 
+/**
+ * Patch the version code embedded at the end of an IgApiClient deviceString so it
+ * always matches the APP_VERSION_CODE constant we are about to set.
+ *
+ * Instagram's UA format: "Instagram X.X Android (<android>; <dpi>; <res>; <brand>; <model>; <device>; <cpu>; <locale>; VERSION_CODE)"
+ * The library assembles: "Instagram APP_VERSION Android (deviceString)"
+ *
+ * When a deviceString was saved with an old version code (e.g. 558538758) but we are
+ * setting APP_VERSION_CODE to a newer value (e.g. 651869969), the resulting UA has a
+ * mismatch between the parenthesised version code and the X-IG-App-Version header.
+ * Instagram detects this inconsistency as a fingerprint anomaly and rejects the login.
+ */
+function patchDeviceStringVersionCode(ig: IgApiClient, targetVersionCode: string): void {
+  if (!ig.state.deviceString) return;
+  const segs = ig.state.deviceString.split(";");
+  const last = segs[segs.length - 1].trim();
+  if (/^\d+$/.test(last) && last !== targetVersionCode) {
+    segs[segs.length - 1] = ` ${targetVersionCode}`;
+    ig.state.deviceString = segs.join(";");
+  }
+}
+
 type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 
 // Keep this version current — Instagram rejects sessions from versions older
@@ -558,6 +580,7 @@ export class InstagramWebClient {
       }
       ig.state.constants.APP_VERSION      = version;
       ig.state.constants.APP_VERSION_CODE = versionCode;
+      patchDeviceStringVersionCode(ig, versionCode);
       console.log(`[webClient] @${username}: APP_VERSION=${version} APP_VERSION_CODE=${versionCode} (${src})`);
     }
 
@@ -881,6 +904,7 @@ export class InstagramWebClient {
 
     ig.state.constants.APP_VERSION      = MOBILE_VERSION;
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
 
     // Pre-warm the cookie jar so Instagram sets a fresh csrftoken cookie
@@ -983,6 +1007,7 @@ export class InstagramWebClient {
     }
     ig.state.constants.APP_VERSION      = MOBILE_VERSION;
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
 
     // ── Phase 0: unauthenticated probe calls (no cookies) ────────────────────
@@ -1108,6 +1133,7 @@ export class InstagramWebClient {
 
     ig.state.constants.APP_VERSION      = MOBILE_VERSION;
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
 
     // Pre-warm: GET /media/info/ sets a fresh csrftoken cookie before the like POST.
@@ -1913,6 +1939,7 @@ export class InstagramWebClient {
     // with checkpoint_required → unsupported_version.
     ig.state.constants.APP_VERSION      = MOBILE_VERSION;
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+    patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
 
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
 
