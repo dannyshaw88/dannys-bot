@@ -682,7 +682,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         <div className={`${tool.type === 'follow' ? 'col-span-1' : 'lg:col-span-1'} space-y-6`}>
           <div className="desktop-card p-6 space-y-4">
             {tool.type === 'follow' && (
-              <div className="flex items-center gap-2 flex-wrap mb-2">
+              <div className="flex items-center gap-2 flex-wrap mb-4 pb-3 border-b border-border">
                 <Switch
                   checked={tool.enabled}
                   onCheckedChange={handleToggleEnable}
