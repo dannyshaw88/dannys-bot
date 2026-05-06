@@ -472,7 +472,7 @@ class AutomationEngine {
           if (blocked > 0)       parts.push(`${blocked} blocked`);
           if (skipped > 0)       parts.push(`${skipped} skipped`);
           const summary = parts.length ? parts.join(", ") : "nothing to do";
-          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete — ${summary}`);
+          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete ${summary}`);
         } catch (err: any) {
           this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
@@ -2347,7 +2347,7 @@ class AutomationEngine {
               // We found new posts but the upload itself failed — session/network issue, not exhausted.
               // Do NOT auto-disable; the next session will retry.
               console.warn(`[engine] @${profile.username}: 🔁 repost skipped — ${uploadAttempted} upload(s) failed for @${sourceUsername} (session issue, will retry)`);
-              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed for @${sourceUsername} — will retry next session`);
+              this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", `Upload failed for @${sourceUsername} will retry next session`);
             } else if (s.repostDisableWhenExhausted) {
               // uploadAttempted === 0: every item in the feed was already in our reposted DB — truly exhausted.
               // Disable only the repost sub-feature — never the entire human_sessions tool.
@@ -2425,7 +2425,7 @@ class AutomationEngine {
     const sources = await storage.getSourcesByTool(tool.id);
     if (!sources.length) {
       engineLog("WARN", `@${profile.username}: follow tool has no sources — add hashtags or accounts in Follow Tool settings`);
-      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No follow sources configured — add hashtag or account sources in Follow Tool settings");
+      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No follow sources configured  add hashtag or account sources in Follow Tool settings");
       await sleep(300_000);
       return zero;
     }
@@ -2551,7 +2551,7 @@ class AutomationEngine {
       if (this.isActionSuspended(state, "follow")) {
         const rem = this.suspensionRemaining(state, "follow");
         console.log(`[engine] @${profile.username}: follow suspended (${rem} remaining) — skipping session`);
-        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Follow suspended — ${rem} remaining`);
+        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Follow suspended ${rem} remaining`);
         blocked++;
         break;
       }
@@ -2573,7 +2573,7 @@ class AutomationEngine {
       if (result.status === "checkpoint_required") {
         const cpUrl = (result as any).checkpointUrl ?? "";
         console.warn(`[engine] @${profile.username}: checkpoint_required — setting status to captcha. Complete the challenge in the embedded browser.${cpUrl ? ` URL: ${cpUrl}` : ""}`);
-        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Captcha / security challenge required — complete in embedded browser`);
+        this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Captcha / security challenge required  complete in embedded browser`);
         // Mark account as captcha so the UI shows it and the runner pauses sessions
         await storage.updateProfile(profile.id, { accountStatus: "captcha" });
         break;

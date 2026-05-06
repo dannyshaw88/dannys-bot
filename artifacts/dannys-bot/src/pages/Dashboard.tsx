@@ -41,7 +41,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.4.0",
     date: "6 May 2026",
     items: [
-      { category: "Dashboard", text: "Added Manage Columns button — set each Activity Log column width individually, saved across sessions." },
+      { category: "Dashboard", text: "Added Manage Columns button  set each Activity Log column width individually, saved across sessions." },
       { category: "Dashboard", text: "Server Started timestamp now always reflects the actual current process start time, not a cached daily value." },
       { category: "Profiles", text: "Actions window is 20% wider with a 2-column equal grid layout for all action buttons." },
       { category: "Profiles", text: "Verify popup now shows the exact number of selected profiles being verified, not the server total." },
@@ -54,14 +54,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.3.0",
-    date: "5 May 2026 — 11:54",
+    date: "5 May 2026 11:54",
     items: [
-      { category: "Engine", text: "Removed all web login fallback from automation engine — only the mobile Instagram API is ever used for automation." },
+      { category: "Engine", text: "Removed all web login fallback from automation engine  only the mobile Instagram API is ever used for automation." },
       { category: "Engine", text: "Startup scheduling: tools already enabled when the app starts now schedule their first run within the configured X–Y timer window instead of firing immediately." },
       { category: "Engine", text: "Toggle-on behaviour: enabling any tool from the dashboard now starts it immediately, without any scatter or delay." },
       { category: "Dashboard", text: "Timestamp columns in both the API Log and Session Log now show full date including year (e.g. 5 May 2026, 11:54:00)." },
       { category: "Dashboard", text: "Dashboard API Log and profile name list now auto-refresh every 5 seconds so live activity is always visible." },
-      { category: "Dashboard", text: "Removed '(valid)' red annotation from the Live Activity Ticker — status is already communicated by the label." },
+      { category: "Dashboard", text: "Removed '(valid)' red annotation from the Live Activity Ticker  status is already communicated by the label." },
       { category: "Dashboard", text: "CSV export: Banyan 400 calls are now correctly treated as OK and excluded from the error count." },
     ],
   },
@@ -69,18 +69,18 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.2.0",
     date: "3 May 2026",
     items: [
-      { category: "Human Sessions", text: "Added local folder as a repost source — pick a folder on your PC's hard drive, images are automatically deleted after upload." },
-      { category: "Human Sessions", text: "Added Save Media percentage — controls what share of liked timeline posts get saved to your Instagram collection." },
+      { category: "Human Sessions", text: "Added local folder as a repost source  pick a folder on your PC's hard drive, images are automatically deleted after upload." },
+      { category: "Human Sessions", text: "Added Save Media percentage  controls what share of liked timeline posts get saved to your Instagram collection." },
       { category: "Profiles", text: "Added bulk Verify All Accounts action with configurable staggered delays between each account." },
       { category: "Profiles", text: "Added keyboard shortcuts: Ctrl+D Delete, Ctrl+P Remove Proxies, Ctrl+R Verify All, Ctrl+F Fix Captcha." },
-      { category: "Profiles", text: "Added Fix Captcha action — automatically resolves captcha challenges using 2captcha.com." },
-      { category: "Unfollow Tool", text: "Added custom target user list — enter usernames manually, import from a .txt/.csv file, or fetch followings via HikerAPI." },
+      { category: "Profiles", text: "Added Fix Captcha action  automatically resolves captcha challenges using 2captcha.com." },
+      { category: "Unfollow Tool", text: "Added custom target user list  enter usernames manually, import from a .txt/.csv file, or fetch followings via HikerAPI." },
       { category: "Auto Reply", text: "Added option to only reply to users the account already follows." },
       { category: "Auto Reply", text: "Added option to like the incoming DM before sending the auto-reply." },
       { category: "All Tools", text: "All active tools now display estimated items/hour and next scheduled execution time." },
       { category: "Dashboard", text: "Added What's New tab showing feature and fix history for each release." },
       { category: "Settings", text: "Added 2Captcha API key configuration for the Fix Captcha feature." },
-      { category: "Settings", text: "Added Verify All Accounts delay — configurable min/max seconds between each account verification." },
+      { category: "Settings", text: "Added Verify All Accounts delay  configurable min/max seconds between each account verification." },
     ],
   },
   {
@@ -91,7 +91,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Repost", text: "Added HikerAPI feed scraping option so repost doesn't consume account session requests." },
       { category: "Repost", text: "Auto-disable repost when post count reaches a configurable target, or when all source posts have already been reposted." },
       { category: "Human Sessions", text: "Added Post Caption spintax support with placeholders: {original_caption}, {source_username}, {own_username}." },
-      { category: "Unfollow Tool", text: "Added whitelist support — accounts on the whitelist are never unfollowed regardless of follow age." },
+      { category: "Unfollow Tool", text: "Added whitelist support  accounts on the whitelist are never unfollowed regardless of follow age." },
       { category: "Follow Tool", text: "Added source filtering by follower count, following count, and post count." },
       { category: "Contact Tool", text: "Added DM sending to new followers with configurable delay and message templates." },
       { category: "Proxy Manager", text: "Added proxy health-check with latency display and bulk import from CSV." },
@@ -347,7 +347,6 @@ export function Dashboard() {
     <AppLayout>
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
-        <span className="text-muted-foreground">—</span>
         <p className="text-muted-foreground text-sm">Live view of tasks</p>
         {serverInfo?.startedAt && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
@@ -644,7 +643,7 @@ export function Dashboard() {
                   <div key={ver.version}>
                     <div className="flex items-baseline gap-3 mb-3">
                       <span className="text-base font-bold text-foreground">Version {ver.version}</span>
-                      <span className="text-xs text-muted-foreground">— {ver.date}</span>
+                      <span className="text-xs text-muted-foreground">{ver.date}</span>
                     </div>
                     <ul className="space-y-2">
                       {ver.items.map((item, i) => (
@@ -654,7 +653,7 @@ export function Dashboard() {
                               {item.category}
                             </span>
                           </span>
-                          <span className="text-foreground leading-relaxed">— {item.text}</span>
+                          <span className="text-foreground leading-relaxed">{item.text}</span>
                         </li>
                       ))}
                     </ul>
