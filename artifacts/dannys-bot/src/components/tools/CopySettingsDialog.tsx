@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Copy, CheckCircle2, Loader2, Search, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -71,6 +71,17 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
+
+  // Reset profile selection and search every time the dialog opens so stale
+  // state from a previous session never bleeds into the next one.
+  useEffect(() => {
+    if (open) {
+      setTargets(new Set());
+      setSearch("");
+      setStatus("idle");
+      setSelected(buildInitialSelected(optionGroups));
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredProfiles = profiles.filter(p => {
     const q = search.toLowerCase();
