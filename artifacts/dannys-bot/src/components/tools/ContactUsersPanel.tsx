@@ -87,7 +87,7 @@ export function ContactUsersPanel({ tool, profile }: Props) {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
   }, [settings]);
 
-  const numInput = (key: string, min: number, max: number, width = "w-20") => (
+  const numInput = (key: string, min: number, max: number, width = "w-10") => (
     <Input
       type="number"
       min={min}

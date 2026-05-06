@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  Activity, Clock, User, Zap, Sparkles, Search, ChevronDown, X, RefreshCw, Settings2,
+  Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, X, RefreshCw, Settings2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
@@ -38,8 +38,20 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.5.0",
+    date: "6 May 2026, 22:10",
+    items: [
+      { category: "Dashboard", text: "What's New tab icon changed from star to bell." },
+      { category: "Dashboard", text: "Changelog is permanently stored in the app — entries are never lost even if GitHub releases are deleted." },
+      { category: "Dashboard", text: "Manage Columns now has ↑ ↓ step buttons (±10 px each click) alongside the pixel input." },
+      { category: "Profiles", text: "Added Manage Columns button in the bottom bar next to Actions — control column widths on the Accounts page, saved across sessions." },
+      { category: "Settings", text: "Added visual separator lines between each settings section for easier navigation." },
+      { category: "Verify", text: "Fixed account lockouts: accounts with an existing mobile session (igApiCookies) now use session validation only — a fresh password login is never attempted on top of an active session." },
+    ],
+  },
+  {
     version: "1.4.0",
-    date: "6 May 2026",
+    date: "6 May 2026, 18:05",
     items: [
       { category: "Dashboard", text: "Added Manage Columns button  set each Activity Log column width individually, saved across sessions." },
       { category: "Dashboard", text: "Server Started timestamp now always reflects the actual current process start time, not a cached daily value." },
@@ -54,7 +66,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.3.0",
-    date: "5 May 2026 11:54",
+    date: "5 May 2026, 11:54",
     items: [
       { category: "Engine", text: "Removed all web login fallback from automation engine  only the mobile Instagram API is ever used for automation." },
       { category: "Engine", text: "Startup scheduling: tools already enabled when the app starts now schedule their first run within the configured X–Y timer window instead of firing immediately." },
@@ -67,7 +79,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.2.0",
-    date: "3 May 2026",
+    date: "3 May 2026, 15:30",
     items: [
       { category: "Human Sessions", text: "Added local folder as a repost source  pick a folder on your PC's hard drive, images are automatically deleted after upload." },
       { category: "Human Sessions", text: "Added Save Media percentage  controls what share of liked timeline posts get saved to your Instagram collection." },
@@ -85,7 +97,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.1.0",
-    date: "14 April 2026",
+    date: "14 April 2026, 10:00",
     items: [
       { category: "Repost", text: "Added image alteration pipeline with small / medium / high presets and manual per-filter overrides (contrast, brightness, noise, sharpen, pixelate)." },
       { category: "Repost", text: "Added HikerAPI feed scraping option so repost doesn't consume account session requests." },
@@ -99,7 +111,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.0.0",
-    date: "2 March 2026",
+    date: "2 March 2026, 09:00",
     items: [
       { category: "Core", text: "Initial release of Danny's Bot automation dashboard." },
       { category: "Core", text: "Multi-account management with status tracking, proxy assignment, and 2FA support." },
@@ -362,7 +374,7 @@ export function Dashboard() {
             <Zap className="w-4 h-4" /> Activity Log
           </button>
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
-            <Sparkles className="w-4 h-4" /> What's New
+            <Bell className="w-4 h-4" /> What's New
           </button>
           <div className="ml-auto flex items-center gap-1">
             {activeTab === "api-log" && (
@@ -376,25 +388,44 @@ export function Dashboard() {
                 {manageColsOpen && (
                   <div className="absolute right-0 top-full mt-1 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-60">
                     <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
-                    {([ ["account", "Account"], ["event", "Event"], ["target", "Target"], ["detail", "Detail"], ["timestamp", "Timestamp"] ] as [keyof typeof DEFAULT_COL_WIDTHS, string][]).map(([key, label]) => (
-                      <div key={key} className="flex items-center gap-2 mb-2">
-                        <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
-                        <input
-                          type="number"
-                          min={40}
-                          max={600}
-                          value={colWidths[key]}
-                          onChange={e => {
-                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
-                            const next = { ...colWidths, [key]: v };
-                            setColWidths(next);
-                            localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
-                          }}
-                          className="h-6 w-16 text-xs border border-border rounded px-2 bg-background"
-                        />
-                        <span className="text-xs text-muted-foreground">px</span>
-                      </div>
-                    ))}
+                    {([ ["account", "Account"], ["event", "Event"], ["target", "Target"], ["detail", "Detail"], ["timestamp", "Timestamp"] ] as [keyof typeof DEFAULT_COL_WIDTHS, string][]).map(([key, label]) => {
+                      const updateCol = (delta: number) => {
+                        const v = Math.max(40, Math.min(600, colWidths[key] + delta));
+                        const next = { ...colWidths, [key]: v };
+                        setColWidths(next);
+                        localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
+                      };
+                      return (
+                        <div key={key} className="flex items-center gap-1.5 mb-2">
+                          <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
+                          <button
+                            onClick={() => updateCol(-10)}
+                            className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                          <input
+                            type="number"
+                            min={40}
+                            max={600}
+                            value={colWidths[key]}
+                            onChange={e => {
+                              const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                              const next = { ...colWidths, [key]: v };
+                              setColWidths(next);
+                              localStorage.setItem("dashboard_col_widths_px", JSON.stringify(next));
+                            }}
+                            className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                          />
+                          <button
+                            onClick={() => updateCol(10)}
+                            className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                          >
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                     <button
                       onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("dashboard_col_widths_px"); }}
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
@@ -643,7 +674,10 @@ export function Dashboard() {
                   <div key={ver.version}>
                     <div className="flex items-baseline gap-3 mb-3">
                       <span className="text-base font-bold text-foreground">Version {ver.version}</span>
-                      <span className="text-xs text-muted-foreground">{ver.date}</span>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        {ver.date}
+                      </span>
                     </div>
                     <ul className="space-y-2">
                       {ver.items.map((item, i) => (

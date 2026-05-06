@@ -194,7 +194,7 @@ export function SettingsPage() {
         <p className="text-muted-foreground mt-1">Configure application-wide preferences.</p>
       </div>
 
-      <div className="space-y-6 max-w-2xl">
+      <div className="space-y-4 max-w-2xl">
 
         {/* HikerAPI Scraper Protection */}
         <div className="desktop-card p-6">
@@ -268,6 +268,8 @@ export function SettingsPage() {
           </div>
         </div>
 
+        <div className="border-t border-border/60" />
+
         {/* Follow Skip Settings */}
         <div className="desktop-card p-6">
           <h3 className="text-base font-semibold mb-1">Follow Skip Settings</h3>
@@ -325,6 +327,8 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
+
+        <div className="border-t border-border/60" />
 
         {/* Scraped User Skip Settings */}
         <div className="desktop-card p-6">
@@ -386,6 +390,8 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
+
+        <div className="border-t border-border/60" />
 
         {/* 2Captcha Integration */}
         <div className="desktop-card p-6">
@@ -452,6 +458,8 @@ export function SettingsPage() {
           </div>
         </div>
 
+        <div className="border-t border-border/60" />
+
         {/* API Log Limit */}
         <div className="desktop-card p-6">
           <div className="flex items-center gap-3 mb-1">
@@ -484,6 +492,8 @@ export function SettingsPage() {
             </select>
           </div>
         </div>
+
+        <div className="border-t border-border/60" />
 
         {/* Verify All Delay */}
         <div className="desktop-card p-6">
@@ -532,6 +542,8 @@ export function SettingsPage() {
           </div>
         </div>
 
+        <div className="border-t border-border/60" />
+
         {/* CSV Export Timezone */}
         <div className="desktop-card p-6">
           <div className="flex items-center gap-3 mb-1">
@@ -563,6 +575,8 @@ export function SettingsPage() {
           </div>
         </div>
 
+        <div className="border-t border-border/60" />
+
         {/* Theme */}
         <div className="desktop-card p-6">
           <h3 className="text-base font-semibold mb-2">Application Theme</h3>
@@ -571,6 +585,8 @@ export function SettingsPage() {
             Dark mode is intentionally disabled to maintain this professional aesthetic.
           </p>
         </div>
+
+        <div className="border-t border-border/60" />
 
         {/* App Updates */}
         <div className="desktop-card p-6">
@@ -614,6 +630,8 @@ export function SettingsPage() {
             </Button>
           </div>
         </div>
+
+        <div className="border-t border-border/60" />
 
         {/* Jarvee Import */}
         <div className="desktop-card p-6">
@@ -769,6 +787,10 @@ export function SettingsPage() {
             <p className="text-sm text-muted-foreground">No account data found in the file.</p>
           )}
         </div>
+
+        {isElectron && (
+          <div className="border-t border-border/60" />
+        )}
 
         {/* Backup & Restore */}
         {isElectron && (
@@ -960,6 +982,8 @@ export function SettingsPage() {
             </div>
           </div>
         )}
+
+        <div className="border-t border-border/60" />
 
         {/* Data Management */}
         <div className="desktop-card p-6">

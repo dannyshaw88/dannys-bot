@@ -160,7 +160,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
           </div>
           <textarea
             rows={4}
-            className={`w-full text-sm border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono ${!(settings.contactMessage ?? "").trim() ? "border-amber-400 focus:ring-amber-400" : "border-border"}`}
+            className="w-full text-sm border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono"
             placeholder={`{Hi|Hello|Hey} {there|friend}! Thanks for following — check out our latest posts 🙌`}
             value={settings.contactMessage ?? ""}
             onChange={(e) => {
@@ -169,7 +169,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
             }}
           />
           {!(settings.contactMessage ?? "").trim() && (
-            <p className="text-[11px] text-amber-600 font-medium">
+            <p className="text-[11px] text-destructive font-medium">
               A message is required before Extract Now will find new followers.
             </p>
           )}
@@ -220,34 +220,36 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
         </div>
 
         {/* API Source */}
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Zap className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">GetFollowers API Source</span>
-          </div>
-          <div className="flex gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="contactApiSource"
-                value="account"
-                checked={settings.contactApiSource === "account"}
-                onChange={() => setSettings({ ...settings, contactApiSource: "account" })}
-                className="accent-primary"
-              />
-              <span className="text-sm">Account itself</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="contactApiSource"
-                value="hiker"
-                checked={settings.contactApiSource === "hiker"}
-                onChange={() => setSettings({ ...settings, contactApiSource: "hiker" })}
-                className="accent-primary"
-              />
-              <span className="text-sm">HikerAPI</span>
-            </label>
+        <div className="space-y-1">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2 shrink-0">
+              <Zap className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">GetFollowers API Source</span>
+            </div>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="contactApiSource"
+                  value="account"
+                  checked={settings.contactApiSource === "account"}
+                  onChange={() => setSettings({ ...settings, contactApiSource: "account" })}
+                  className="accent-primary"
+                />
+                <span className="text-sm">Account itself</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="contactApiSource"
+                  value="hiker"
+                  checked={settings.contactApiSource === "hiker"}
+                  onChange={() => setSettings({ ...settings, contactApiSource: "hiker" })}
+                  className="accent-primary"
+                />
+                <span className="text-sm">HikerAPI</span>
+              </label>
+            </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
             HikerAPI requires a valid token in the global Settings page.

@@ -10,9 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
-  Plus, Trash2, Instagram, Activity, ChevronDown, Upload, Download,
+  Plus, Trash2, Instagram, Activity, ChevronDown, ChevronUp, Upload, Download,
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
-  Smartphone, FileDown, Filter, X,
+  Smartphone, FileDown, Filter, X, Settings2,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, UserMinus, Camera, Eye
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -73,6 +73,8 @@ function AccountStatusBadge({ status }: { status: string }) {
   );
 }
 
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, actions: 176, ip: 128 };
+
 // ── Component ────────────────────────────────────────────────────────────────
 export function ProfilesPage() {
   const { data: profiles, isLoading } = useProfiles();
@@ -102,6 +104,15 @@ export function ProfilesPage() {
       },
     });
   };
+
+  const [profColWidths, setProfColWidths] = useState<typeof DEFAULT_PROFILES_COL_WIDTHS>(() => {
+    try {
+      const s = localStorage.getItem("profiles_col_widths_px");
+      return s ? { ...DEFAULT_PROFILES_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_PROFILES_COL_WIDTHS;
+    } catch { return DEFAULT_PROFILES_COL_WIDTHS; }
+  });
+  const [manageProfileColsOpen, setManageProfileColsOpen] = useState(false);
+  const manageProfileColsRef = useRef<HTMLDivElement>(null);
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
@@ -439,6 +450,17 @@ export function ProfilesPage() {
     return () => window.removeEventListener("keydown", handler);
   }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers]);
 
+  // Click-outside handler for the profiles manage-columns popup
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (manageProfileColsRef.current && !manageProfileColsRef.current.contains(e.target as Node)) {
+        setManageProfileColsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
   const setSlot = useSidebarSetSlot();
   // Sidebar slot is unused on this page — clear it on mount/unmount
   useEffect(() => { setSlot(null); return () => setSlot(null); }, [setSlot]);
@@ -490,7 +512,8 @@ export function ProfilesPage() {
             <div className="w-5 shrink-0" />
             <button
               onClick={() => cycleSort("account")}
-              className="flex-1 min-w-0 flex items-center gap-1 text-left hover:text-foreground transition-colors"
+              style={{ width: profColWidths.account }}
+              className="shrink-0 flex items-center gap-1 text-left hover:text-foreground transition-colors min-w-0"
             >
               Account
               <span className="text-[9px]">
@@ -499,18 +522,20 @@ export function ProfilesPage() {
             </button>
             <button
               onClick={() => cycleSort("status")}
-              className="w-24 shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors"
+              style={{ width: profColWidths.status }}
+              className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors"
             >
               Status
               <span className="text-[9px]">
                 {sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
               </span>
             </button>
-            <div className="w-14 shrink-0 text-left">Active</div>
-            <div className="w-44 shrink-0 text-left">Actions</div>
+            <div style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>
+            <div style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>
             <button
               onClick={() => cycleSort("ip")}
-              className="w-32 shrink-0 flex items-center justify-start gap-1 pl-2 hover:text-foreground transition-colors"
+              style={{ width: profColWidths.ip }}
+              className="shrink-0 flex items-center justify-start gap-1 pl-2 hover:text-foreground transition-colors"
             >
               IP:PORT
               <span className="text-[9px]">
@@ -572,7 +597,7 @@ export function ProfilesPage() {
                 </div>
 
                 {/* Username */}
-                <div className="flex-1 min-w-0">
+                <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
                   <Link href={`/profiles/${profile.id}`}>
                     <span
                       className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer block"
@@ -584,7 +609,7 @@ export function ProfilesPage() {
                 </div>
 
                 {/* IG Account Status badge */}
-                <div className="w-24 flex justify-center shrink-0">
+                <div style={{ width: profColWidths.status }} className="flex justify-center shrink-0">
                   {hasProxy
                     ? <AccountStatusBadge status={acctStatus} />
                     : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
@@ -595,7 +620,7 @@ export function ProfilesPage() {
                 </div>
 
                 {/* Active toggle */}
-                <div className="w-14 flex items-center justify-center shrink-0">
+                <div style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
                   <Switch
                     checked={!isStopped}
                     onCheckedChange={() => toggleStopped(profile.id, acctStatus, profile.credentialsDirty)}
@@ -605,7 +630,7 @@ export function ProfilesPage() {
                 </div>
 
                 {/* Text-only actions */}
-                <div className="w-44 shrink-0 flex items-center justify-end gap-3 pr-0">
+                <div style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-end gap-3 pr-0">
                   <button
                     onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
                     title="Open embedded browser"
@@ -654,7 +679,7 @@ export function ProfilesPage() {
                     ip = `${profile.proxyHost}:${profile.proxyPort}`;
                   }
                   return (
-                    <div className="w-32 shrink-0 text-left pl-2" title={ip || "No proxy"}>
+                    <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2" title={ip || "No proxy"}>
                       <span className="text-[10px] font-mono text-muted-foreground truncate block">
                         {ip || "—"}
                       </span>
@@ -690,6 +715,63 @@ export function ProfilesPage() {
         >
           Actions <ChevronDown className="w-3.5 h-3.5" />
         </button>
+        <div ref={manageProfileColsRef} className="relative">
+          <button
+            onClick={() => setManageProfileColsOpen(o => !o)}
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+          >
+            <Settings2 className="w-3.5 h-3.5" /> Columns
+          </button>
+          {manageProfileColsOpen && (
+            <div className="absolute right-0 bottom-full mb-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-64">
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
+              {([ ["account", "Account"], ["status", "Status"], ["active", "Active"], ["actions", "Actions"], ["ip", "IP:Port"] ] as [keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string][]).map(([key, label]) => {
+                const updateCol = (delta: number) => {
+                  const v = Math.max(40, Math.min(600, profColWidths[key] + delta));
+                  const next = { ...profColWidths, [key]: v };
+                  setProfColWidths(next);
+                  localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
+                };
+                return (
+                  <div key={key} className="flex items-center gap-1.5 mb-2">
+                    <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
+                    <button
+                      onClick={() => updateCol(-10)}
+                      className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    <input
+                      type="number"
+                      min={40}
+                      max={600}
+                      value={profColWidths[key]}
+                      onChange={e => {
+                        const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                        const next = { ...profColWidths, [key]: v };
+                        setProfColWidths(next);
+                        localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
+                      }}
+                      className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                    />
+                    <button
+                      onClick={() => updateCol(10)}
+                      className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                    >
+                      <ChevronUp className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+              >
+                Reset to defaults
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
