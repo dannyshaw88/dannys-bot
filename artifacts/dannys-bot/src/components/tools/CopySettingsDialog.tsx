@@ -149,14 +149,14 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) setStatus("idle"); onOpenChange(v); }}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden">
+      <DialogContent className="max-w-[840px] p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
             <Copy className="w-4 h-4 text-primary" /> {title}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex min-h-0" style={{ maxHeight: "calc(90vh - 140px)" }}>
+        <div className="flex min-h-0" style={{ maxHeight: "calc(81vh - 140px)" }}>
           {/* LEFT — profile list */}
           <div className="w-56 shrink-0 border-r border-border flex flex-col">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">

@@ -271,42 +271,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         { key: "ft_ctxDiscover", label: "Discover page % (min / max)",              settingKeys: ["discoverPagePercentageMin","discoverPagePercentageMax"] },
       ]},
     ]},
-    { label: "Like Settings", options: [
-      { key: "ft_like", label: "Like", description: "Like actions performed after following", subOptions: [
-        { key: "ft_likeChance",  label: "Chance % (min / max)",              settingKeys: ["likeChanceMin","likeChanceMax"] },
-        { key: "ft_likeCount",   label: "Posts to like (min / max)",         settingKeys: ["likeProcessMin","likeProcessMax"] },
-        { key: "ft_likeMaxDay",  label: "Max per day (min / max)",           settingKeys: ["likeMaxPerDayMin","likeMaxPerDayMax"] },
-        { key: "ft_likeMaxHour", label: "Max per hour (min / max)",          settingKeys: ["likeMaxPerHourMin","likeMaxPerHourMax"] },
-        { key: "ft_likeDelay",   label: "Delay between likes (min / max secs)", settingKeys: ["likeDelayMin","likeDelayMax"] },
-      ]},
-    ]},
-    { label: "View Reels", options: [
-      { key: "ft_reels", label: "View Reels", description: "Reel-watching performed after following", subOptions: [
-        { key: "ft_reelsChance",  label: "Chance % (min / max)",               settingKeys: ["viewReelsChanceMin","viewReelsChanceMax"] },
-        { key: "ft_reelsCount",   label: "Reels to watch (min / max)",         settingKeys: ["viewReelsProcessMin","viewReelsProcessMax"] },
-        { key: "ft_reelsMaxDay",  label: "Max per day (min / max)",            settingKeys: ["viewReelsMaxPerDayMin","viewReelsMaxPerDayMax"] },
-        { key: "ft_reelsMaxHour", label: "Max per hour (min / max)",           settingKeys: ["viewReelsMaxPerHourMin","viewReelsMaxPerHourMax"] },
-        { key: "ft_reelsDelay",   label: "Delay between reels (min / max secs)", settingKeys: ["viewReelsDelayMin","viewReelsDelayMax"] },
-      ]},
-    ]},
-    { label: "View Stories", options: [
-      { key: "ft_stories", label: "View Stories", description: "Story-watching performed after following", subOptions: [
-        { key: "ft_storiesChance",  label: "Chance % (min / max)",                 settingKeys: ["viewStoriesChanceMin","viewStoriesChanceMax"] },
-        { key: "ft_storiesCount",   label: "Stories to watch (min / max)",         settingKeys: ["viewStoriesProcessMin","viewStoriesProcessMax"] },
-        { key: "ft_storiesMaxDay",  label: "Max per day (min / max)",              settingKeys: ["viewStoriesMaxPerDayMin","viewStoriesMaxPerDayMax"] },
-        { key: "ft_storiesMaxHour", label: "Max per hour (min / max)",             settingKeys: ["viewStoriesMaxPerHourMin","viewStoriesMaxPerHourMax"] },
-        { key: "ft_storiesDelay",   label: "Delay between stories (min / max secs)", settingKeys: ["viewStoriesDelayMin","viewStoriesDelayMax"] },
-      ]},
-    ]},
-    { label: "View Highlights", options: [
-      { key: "ft_highlights", label: "View Highlights", description: "Highlights-watching performed after following", subOptions: [
-        { key: "ft_hlChance",  label: "Chance % (min / max)",                    settingKeys: ["viewHighlightsChanceMin","viewHighlightsChanceMax"] },
-        { key: "ft_hlCount",   label: "Highlights to watch (min / max)",         settingKeys: ["viewHighlightsProcessMin","viewHighlightsProcessMax"] },
-        { key: "ft_hlMaxDay",  label: "Max per day (min / max)",                 settingKeys: ["viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax"] },
-        { key: "ft_hlMaxHour", label: "Max per hour (min / max)",                settingKeys: ["viewHighlightsMaxPerHourMin","viewHighlightsMaxPerHourMax"] },
-        { key: "ft_hlDelay",   label: "Delay between highlights (min / max secs)", settingKeys: ["viewHighlightsDelayMin","viewHighlightsDelayMax"] },
-      ]},
-    ]},
     { label: "Auto Follow / Unfollow", options: [
       { key: "ft_autoFU", label: "Auto Follow / Unfollow", description: "Automatic switching between follow and unfollow tools", subOptions: [
         { key: "ft_autoEnabled",    label: "Enabled",                                      settingKeys: ["autoFollowUnfollowEnabled"] },
@@ -314,14 +278,29 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         { key: "ft_autoStartAfter", label: "Start unfollow after (min / max mins)",        settingKeys: ["autoStartUnfollowAfterMin","autoStartUnfollowAfterMax"] },
       ]},
     ]},
-    { label: "DM", options: [
-      { key: "ft_dm", label: "DM Messages", description: "Message templates sent after following", subOptions: [
-        { key: "ft_dmMessages", label: "Message templates", settingKeys: ["dmMessages"] },
-      ]},
-    ]},
     { label: "Session Action Variation", options: [
-      { key: "ft_sav", label: "Session Action Variation", description: "Extra actions performed during a follow session (likes, reels, stories, highlights)", subOptions: [
-        { key: "ft_sav_enabled", label: "Enabled", settingKeys: ["sessionActionVariationEnabled"] },
+      { key: "ft_sav", label: "Session Action Variation", description: "Extra actions performed during a follow session", subOptions: [
+        { key: "ft_sav_enabled",       label: "Enabled",                                          settingKeys: ["sessionActionVariationEnabled"] },
+        { key: "ft_likeChance",        label: "Like — Chance % (min / max)",                      settingKeys: ["likeChanceMin","likeChanceMax"] },
+        { key: "ft_likeCount",         label: "Like — Posts to like (min / max)",                 settingKeys: ["likeProcessMin","likeProcessMax"] },
+        { key: "ft_likeBefore",        label: "Like — Before follow % (min / max)",               settingKeys: ["likeBeforeMin","likeBeforeMax"] },
+        { key: "ft_likeMaxDay",        label: "Like — Max per day (min / max)",                   settingKeys: ["likeMaxPerDayMin","likeMaxPerDayMax"] },
+        { key: "ft_likeDelay",         label: "Like — Delay between likes (min / max secs)",      settingKeys: ["likeDelayMin","likeDelayMax"] },
+        { key: "ft_reelsChance",       label: "Reels — Chance % (min / max)",                     settingKeys: ["viewReelsChanceMin","viewReelsChanceMax"] },
+        { key: "ft_reelsCount",        label: "Reels — Count to watch (min / max)",               settingKeys: ["viewReelsProcessMin","viewReelsProcessMax"] },
+        { key: "ft_reelsBefore",       label: "Reels — Before follow % (min / max)",              settingKeys: ["viewReelsBeforeMin","viewReelsBeforeMax"] },
+        { key: "ft_reelsMaxDay",       label: "Reels — Max per day (min / max)",                  settingKeys: ["viewReelsMaxPerDayMin","viewReelsMaxPerDayMax"] },
+        { key: "ft_reelsDelay",        label: "Reels — Delay (min / max secs)",                   settingKeys: ["viewReelsDelayMin","viewReelsDelayMax"] },
+        { key: "ft_storiesChance",     label: "Stories — Chance % (min / max)",                   settingKeys: ["viewStoriesChanceMin","viewStoriesChanceMax"] },
+        { key: "ft_storiesCount",      label: "Stories — Count to watch (min / max)",             settingKeys: ["viewStoriesProcessMin","viewStoriesProcessMax"] },
+        { key: "ft_storiesBefore",     label: "Stories — Before follow % (min / max)",            settingKeys: ["viewStoriesBeforeMin","viewStoriesBeforeMax"] },
+        { key: "ft_storiesMaxDay",     label: "Stories — Max per day (min / max)",                settingKeys: ["viewStoriesMaxPerDayMin","viewStoriesMaxPerDayMax"] },
+        { key: "ft_storiesDelay",      label: "Stories — Delay (min / max secs)",                 settingKeys: ["viewStoriesDelayMin","viewStoriesDelayMax"] },
+        { key: "ft_hlChance",          label: "Highlights — Chance % (min / max)",                settingKeys: ["viewHighlightsChanceMin","viewHighlightsChanceMax"] },
+        { key: "ft_hlCount",           label: "Highlights — Count to watch (min / max)",          settingKeys: ["viewHighlightsProcessMin","viewHighlightsProcessMax"] },
+        { key: "ft_hlBefore",          label: "Highlights — Before follow % (min / max)",         settingKeys: ["viewHighlightsBeforeMin","viewHighlightsBeforeMax"] },
+        { key: "ft_hlMaxDay",          label: "Highlights — Max per day (min / max)",             settingKeys: ["viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax"] },
+        { key: "ft_hlDelay",           label: "Highlights — Delay (min / max secs)",              settingKeys: ["viewHighlightsDelayMin","viewHighlightsDelayMax"] },
       ]},
     ]},
     { label: "Sources", options: [
