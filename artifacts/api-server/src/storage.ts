@@ -326,7 +326,7 @@ export class DatabaseStorage implements IStorage {
   async getFollowedUsersByProfile(profileId: number, limit: number = 10000): Promise<FollowedUser[]> {
     return await db.select().from(followedUsers)
       .where(eq(followedUsers.profileId, profileId))
-      .orderBy(desc(followedUsers.id))
+      .orderBy(desc(followedUsers.followedAt))
       .limit(limit);
   }
 

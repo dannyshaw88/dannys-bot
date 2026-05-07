@@ -55,8 +55,10 @@ export function ContactUsersPanel({ tool, profile }: Props) {
     },
   });
 
-  const pending = allMessages?.filter(m => m.status === "pending") ?? [];
-  const sent    = allMessages?.filter(m => m.status !== "pending") ?? [];
+  const pending = [...(allMessages?.filter(m => m.status === "pending") ?? [])]
+    .sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
+  const sent = [...(allMessages?.filter(m => m.status !== "pending") ?? [])]
+    .sort((a, b) => new Date(b.sentAt ?? b.queuedAt).getTime() - new Date(a.sentAt ?? a.queuedAt).getTime());
 
   const [settings, setSettings] = useState(() => {
     const def: Record<string, any> = {

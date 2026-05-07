@@ -461,7 +461,7 @@ export function ProfilesPage() {
     const groupName = groupNameInput.trim();
     try {
       for (const id of selectedProfileIds) {
-        await updateProfileMutation.mutateAsync({ id, tags: groupName || undefined });
+        await updateProfileMutation.mutateAsync({ id, tags: groupName || "" });
       }
       toast({ title: "Group Updated", description: `${selectedProfileIds.length} account(s) ${groupName ? `assigned to "${groupName}"` : "removed from group"}.` });
       setSetGroupOpen(false);
@@ -470,6 +470,18 @@ export function ProfilesPage() {
       toast({ title: "Error", description: "Failed to update group.", variant: "destructive" });
     }
   }, [selectedProfileIds, groupNameInput, updateProfileMutation, toast]);
+
+  const handleUngroup = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    try {
+      for (const id of selectedProfileIds) {
+        await updateProfileMutation.mutateAsync({ id, tags: "" });
+      }
+      toast({ title: "Ungrouped", description: `${selectedProfileIds.length} account(s) removed from their group.` });
+    } catch {
+      toast({ title: "Error", description: "Failed to ungroup accounts.", variant: "destructive" });
+    }
+  }, [selectedProfileIds, updateProfileMutation, toast]);
 
   // ── Bulk: Open Embedded Browsers ─────────────────────────────────────────
   const handleBulkOpenBrowsers = useCallback(() => {
@@ -1024,6 +1036,14 @@ export function ProfilesPage() {
               >
                 <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Group Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <button
+                onClick={() => { setActionsOpen(false); handleUngroup(); }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
+                Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
