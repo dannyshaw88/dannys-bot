@@ -1381,10 +1381,8 @@ class AutomationEngine {
     const browserOk = client.loadBrowserCookies();
     if (browserOk) {
       console.log(`[engine] @${profile.username}: using EB browser session (cookies synced)`);
-      const current = await storage.getProfile(profile.id);
-      if (current?.accountStatus === "logged_out") {
-        await storage.updateProfile(profile.id, { accountStatus: "valid" });
-      }
+      // EB login never changes account status — only the mobile API login (Verify
+      // Credentials / mobileLogin) is authoritative for validity.
       if (!client.isMobileLoggedIn()) {
         console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
         const mobileOk = await client.mobileLogin(
@@ -1417,10 +1415,8 @@ class AutomationEngine {
     );
 
     if (mobileOk) {
-      const current = await storage.getProfile(profile.id);
-      if (current?.accountStatus === "logged_out") {
-        await storage.updateProfile(profile.id, { accountStatus: "valid" });
-      }
+      // Account status is NEVER changed by the engine — only the explicit
+      // Verify Credentials route is authoritative for setting "valid".
       console.log(`[engine] @${profile.username}: mobile API login OK`);
       return client;
     }
