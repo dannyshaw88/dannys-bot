@@ -118,6 +118,8 @@ export function StatsPage() {
   const [manageColsOpen, setManageColsOpen] = useState(false);
   const manageColsRef = useRef<HTMLDivElement>(null);
 
+  const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("stats:groupMode") === "true");
+
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<StatKey | "account" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -170,6 +172,18 @@ export function StatsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profiles, sortKey, sortDir, statsMap]);
 
+  // ── Grouped profiles (for group view) ──────────────────────────────────────
+  const groupedStats = useMemo(() => {
+    if (!groupMode) return null;
+    const map = new Map<string, typeof sortedProfiles>();
+    for (const p of sortedProfiles) {
+      const key = p.tags?.trim() || "__ungrouped__";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    }
+    return map;
+  }, [sortedProfiles, groupMode]);
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (manageColsRef.current && !manageColsRef.current.contains(e.target as Node)) {
@@ -217,6 +231,87 @@ export function StatsPage() {
         <CardHeader className="border-b border-border/50 bg-muted/5">
           <CardTitle className="text-lg flex items-center gap-2">
             <Activity className="w-5 h-5 text-primary" /> Tool Performance
+            <div className="flex items-center gap-4 ml-auto">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox
+                  checked={groupMode}
+                  onCheckedChange={checked => {
+                    const next = !!checked;
+                    setGroupMode(next);
+                    localStorage.setItem("stats:groupMode", String(next));
+                  }}
+                  className="w-3.5 h-3.5"
+                />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Group Accounts</span>
+              </label>
+              <div ref={manageColsRef} className="relative">
+                <button
+                  onClick={() => setManageColsOpen(o => !o)}
+                  className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+                >
+                  <Settings2 className="w-3.5 h-3.5" /> Columns
+                </button>
+                {manageColsOpen && (
+                  <div className="absolute right-0 top-full mt-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
+                    <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Show / Hide Columns</p>
+                    <div className="space-y-1.5 mb-3">
+                      {ALL_STAT_TYPES.map(({ key, label, icon, color }) => (
+                        <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                          <Checkbox
+                            checked={visibleCols[key]}
+                            onCheckedChange={(val) => toggleVisible(key, !!val)}
+                            className="h-3.5 w-3.5 shrink-0"
+                          />
+                          <span className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide ${color}`}>
+                            {icon} {label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="border-t border-border/50 my-3" />
+
+                    <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Column Widths (px)</p>
+                    {colGroups.map(([key, label]) => (
+                      <div key={key} className="flex items-center gap-1.5 mb-2">
+                        <label className="text-xs w-24 text-muted-foreground shrink-0">{label}</label>
+                        <button
+                          onClick={() => updateWidth(key as StatKey | "account", -10)}
+                          className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                        <input
+                          type="number"
+                          min={60}
+                          max={400}
+                          value={colWidths[key as StatKey | "account"]}
+                          onChange={e => {
+                            const v = Math.max(60, Math.min(400, Number(e.target.value)));
+                            const next = { ...colWidths, [key]: v };
+                            setColWidths(next);
+                            localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
+                          }}
+                          className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                        />
+                        <button
+                          onClick={() => updateWidth(key as StatKey | "account", 10)}
+                          className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("stats_col_widths_px"); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+                    >
+                      Reset to defaults
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0 flex flex-col">
@@ -263,6 +358,30 @@ export function StatsPage() {
                       No accounts found. Add an account to see stats.
                     </td>
                   </tr>
+                ) : groupMode && groupedStats ? (
+                  Array.from(groupedStats.entries()).map(([groupKey, groupProfiles]) => (
+                    <>
+                      <tr key={`group-${groupKey}`} className="bg-background border-b border-border">
+                        <td colSpan={colCount} className="px-4 py-1.5 select-none">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+                              {groupKey === "__ungrouped__" ? "Ungrouped" : groupKey}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">({groupProfiles.length})</span>
+                          </div>
+                        </td>
+                      </tr>
+                      {groupProfiles.map(profile => (
+                        <ProfileStatsRow
+                          key={profile.id}
+                          profile={profile}
+                          visibleCols={visibleCols}
+                          colWidths={colWidths}
+                          statsData={statsMap.get(profile.id) ?? []}
+                        />
+                      ))}
+                    </>
+                  ))
                 ) : (
                   sortedProfiles.map(profile => (
                     <ProfileStatsRow
@@ -278,78 +397,6 @@ export function StatsPage() {
             </table>
           </div>
 
-          {/* ── Bottom toolbar ─────────────────────────────────────────────── */}
-          <div className="border-t border-border/50 bg-muted/5 px-4 py-2 flex items-center shrink-0">
-            <div ref={manageColsRef} className="relative">
-              <button
-                onClick={() => setManageColsOpen(o => !o)}
-                className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
-              >
-                <Settings2 className="w-3.5 h-3.5" /> Columns
-              </button>
-              {manageColsOpen && (
-                <div className="absolute right-0 bottom-full mb-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
-                  {/* Show / hide columns */}
-                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Show / Hide Columns</p>
-                  <div className="space-y-1.5 mb-3">
-                    {ALL_STAT_TYPES.map(({ key, label, icon, color }) => (
-                      <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                        <Checkbox
-                          checked={visibleCols[key]}
-                          onCheckedChange={(val) => toggleVisible(key, !!val)}
-                          className="h-3.5 w-3.5 shrink-0"
-                        />
-                        <span className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide ${color}`}>
-                          {icon} {label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="border-t border-border/50 my-3" />
-
-                  {/* Column widths */}
-                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Column Widths (px)</p>
-                  {colGroups.map(([key, label]) => (
-                    <div key={key} className="flex items-center gap-1.5 mb-2">
-                      <label className="text-xs w-24 text-muted-foreground shrink-0">{label}</label>
-                      <button
-                        onClick={() => updateWidth(key as StatKey | "account", -10)}
-                        className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                      >
-                        <ChevronDown className="w-3 h-3" />
-                      </button>
-                      <input
-                        type="number"
-                        min={60}
-                        max={400}
-                        value={colWidths[key as StatKey | "account"]}
-                        onChange={e => {
-                          const v = Math.max(60, Math.min(400, Number(e.target.value)));
-                          const next = { ...colWidths, [key]: v };
-                          setColWidths(next);
-                          localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
-                        }}
-                        className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
-                      />
-                      <button
-                        onClick={() => updateWidth(key as StatKey | "account", 10)}
-                        className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                      >
-                        <ChevronUp className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("stats_col_widths_px"); }}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
-                  >
-                    Reset to defaults
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
         </CardContent>
       </Card>
     </AppLayout>

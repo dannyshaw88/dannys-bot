@@ -111,7 +111,7 @@ export function LiveActivityTicker() {
     : `@${accountName} ${actionPart}`;
 
   return (
-    <div className="border-b border-border/50 bg-muted/30 px-6 py-1.5 flex items-center gap-2 w-full overflow-hidden">
+    <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center gap-2 w-full overflow-hidden">
       <Activity className="w-3 h-3 text-primary shrink-0" />
       <span
         key={latest.id}

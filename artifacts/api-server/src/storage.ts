@@ -65,6 +65,7 @@ export interface IStorage {
   getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
   getRecentSessionActions(limit?: number): Promise<SessionAction[]>;
   createSessionAction(entry: InsertSessionAction): Promise<SessionAction>;
+  bulkInsertStats(rows: { profileId: number; toolType: string; count: number; date: string }[]): Promise<void>;
 
   // Global Settings
   getGlobalSettings(): Promise<Record<string, string>>;
@@ -400,6 +401,14 @@ export class DatabaseStorage implements IStorage {
   async createSessionAction(entry: InsertSessionAction): Promise<SessionAction> {
     const [created] = await db.insert(sessionActions).values(entry).returning();
     return created;
+  }
+
+  async bulkInsertStats(rows: { profileId: number; toolType: string; count: number; date: string }[]): Promise<void> {
+    if (!rows.length) return;
+    const BATCH = 200;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      await db.insert(stats).values(rows.slice(i, i + BATCH));
+    }
   }
 
   async getGlobalSettings(): Promise<Record<string, string>> {

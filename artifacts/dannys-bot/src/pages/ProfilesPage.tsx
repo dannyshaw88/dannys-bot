@@ -118,6 +118,8 @@ export function ProfilesPage() {
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [eqxImporting, setEqxImporting] = useState(false);
+  const eqxImportRef = useRef<HTMLInputElement>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
@@ -552,8 +554,7 @@ export function ProfilesPage() {
       <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 178px)" }}>
           {/* ── Top column-header bar — always visible ────────────────────── */}
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
-            <div className="w-5 shrink-0" />
-            <div style={{ width: profColWidths.account }} className="shrink-0 flex items-center gap-2 min-w-0">
+            <div style={{ width: profColWidths.account + 32 }} className="shrink-0 flex items-center gap-2 min-w-0">
               <button
                 onClick={() => cycleSort("account")}
                 className="flex items-center gap-1 text-left hover:text-foreground transition-colors"
@@ -846,6 +847,41 @@ export function ProfilesPage() {
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
 
+      {/* Hidden EQX import file input */}
+      <input
+        ref={eqxImportRef}
+        type="file"
+        accept=".eqx"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!eqxImportRef.current) return;
+          eqxImportRef.current.value = "";
+          if (!file) return;
+          setEqxImporting(true);
+          try {
+            const buffer = await file.arrayBuffer();
+            const eqxBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+            const res = await fetch("/api/profiles/import-eqx", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ eqxBase64 }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              toast({ title: "Import failed", description: data.error ?? "Unknown error", variant: "destructive" });
+            } else {
+              toast({ title: "EQX imported", description: `@${data.username} imported successfully (${data.followedImported} followed users).` });
+            }
+          } catch (err: any) {
+            toast({ title: "Import failed", description: err?.message ?? "Could not read file", variant: "destructive" });
+          } finally {
+            setEqxImporting(false);
+          }
+        }}
+      />
+
       {/* ── Actions popup — no dark overlay, transparent click-away ──────── */}
       {actionsOpen && (
         <>
@@ -860,6 +896,43 @@ export function ProfilesPage() {
               </button>
               <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles
+              </button>
+              <button
+                onClick={() => { setActionsOpen(false); eqxImportRef.current?.click(); }}
+                disabled={eqxImporting}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {eqxImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-primary" />}
+                Import EQX File
+              </button>
+              <button
+                onClick={async () => {
+                  setActionsOpen(false);
+                  if (selectedProfileIds.length === 0) {
+                    toast({ title: "No accounts selected", description: "Select at least one account to export as EQX.", variant: "destructive" });
+                    return;
+                  }
+                  for (const id of selectedProfileIds) {
+                    const profile = profiles?.find(p => p.id === id);
+                    const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                    try {
+                      const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
+                      const blob = await res.blob();
+                      const objectUrl = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = objectUrl;
+                      a.download = `${safeUsername}.eqx`;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                    } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
+                  }
+                }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <FileDown className="w-4 h-4 shrink-0 text-primary" />
+                Export EQX{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button
                 onClick={async () => {

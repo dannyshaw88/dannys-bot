@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
+import crypto from "node:crypto";
 import { storage } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
@@ -1372,6 +1373,166 @@ export async function registerInstagramRoutes(
   // Engine status
   app.get("/api/engine/status", (_req, res) => {
     res.json(automationEngine.getStatus());
+  });
+
+  // ── EQX Export/Import ─────────────────────────────────────────────────────
+  const EQX_MAGIC = Buffer.from([0x45, 0x51, 0x58, 0x01]); // "EQX\x01"
+  const EQX_KEY = crypto.createHash("sha256").update("EQUINOX_BOT_EQX_KEY_V1_PRIVATE_DO_NOT_SHARE").digest();
+
+  function eqxEncrypt(payload: Buffer): Buffer {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv("aes-256-cbc", EQX_KEY, iv);
+    return Buffer.concat([EQX_MAGIC, iv, cipher.update(payload), cipher.final()]);
+  }
+
+  function eqxDecrypt(data: Buffer): Buffer {
+    if (data.length < 20) throw new Error("Invalid EQX file");
+    const magic = data.subarray(0, 4);
+    if (!magic.equals(EQX_MAGIC)) throw new Error("Not a valid EQX file — wrong magic header");
+    const iv = data.subarray(4, 20);
+    const ciphertext = data.subarray(20);
+    const decipher = crypto.createDecipheriv("aes-256-cbc", EQX_KEY, iv);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  }
+
+  app.get("/api/profiles/:id/export-eqx", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const profile = await storage.getProfile(id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+      const allTools = await storage.getToolsByProfile(id);
+      const toolsWithSources = await Promise.all(
+        allTools.map(async t => ({
+          type: t.type,
+          enabled: t.enabled,
+          settings: t.settings,
+          sources: (await storage.getSourcesByTool(t.id)).map(s => ({
+            type: s.type,
+            value: s.value,
+            rank: s.rank,
+            nrPosts: s.nrPosts,
+          })),
+        }))
+      );
+      const followedUsers = await storage.getFollowedUsersByProfile(id, 100000);
+      const statsData = await storage.getStatsByProfile(id);
+
+      const { id: _id, ...profileData } = profile;
+
+      const payload = {
+        version: 1,
+        software: "EQUINOX_BOT",
+        exportedAt: new Date().toISOString(),
+        profile: profileData,
+        tools: toolsWithSources,
+        followedUsers: followedUsers.map(f => ({
+          instagramUsername: f.instagramUsername,
+          instagramUserId: f.instagramUserId,
+          sourceValue: f.sourceValue,
+          sourceType: f.sourceType,
+          followedAt: f.followedAt,
+        })),
+        stats: statsData.map(s => ({
+          toolType: s.toolType,
+          count: s.count,
+          date: s.date,
+        })),
+      };
+
+      const encrypted = eqxEncrypt(Buffer.from(JSON.stringify(payload), "utf8"));
+      const safeUsername = (profile.username || "account").replace(/[^a-zA-Z0-9_-]/g, "_");
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeUsername}.eqx"`);
+      res.send(encrypted);
+    } catch (e: any) {
+      req.log.error({ err: e }, "export-eqx failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  app.post("/api/profiles/import-eqx", async (req, res) => {
+    try {
+      const { eqxBase64 } = req.body as { eqxBase64?: string };
+      if (!eqxBase64) return res.status(400).json({ error: "eqxBase64 is required" });
+
+      let decrypted: Buffer;
+      try {
+        decrypted = eqxDecrypt(Buffer.from(eqxBase64, "base64"));
+      } catch {
+        return res.status(400).json({ error: "Invalid or corrupted EQX file" });
+      }
+
+      let payload: any;
+      try {
+        payload = JSON.parse(decrypted.toString("utf8"));
+      } catch {
+        return res.status(400).json({ error: "EQX file contains invalid data" });
+      }
+
+      if (payload?.software !== "EQUINOX_BOT") {
+        return res.status(400).json({ error: "This file was not created by Equinox Bot" });
+      }
+
+      const { profile: profileData, tools: toolsData, followedUsers: fuData, stats: statsData } = payload;
+
+      const { id: _id, ...cleanProfile } = profileData;
+
+      const created = await storage.createProfile(cleanProfile);
+
+      // Update auto-created tools with saved settings/enabled state, and insert sources
+      if (Array.isArray(toolsData)) {
+        const existingTools = await storage.getToolsByProfile(created.id);
+        for (const savedTool of toolsData) {
+          const match = existingTools.find(t => t.type === savedTool.type);
+          if (match) {
+            await storage.updateTool(match.id, { enabled: savedTool.enabled, settings: savedTool.settings });
+            if (Array.isArray(savedTool.sources) && savedTool.sources.length > 0) {
+              await storage.createSourcesBulk(
+                savedTool.sources.map((s: any) => ({
+                  toolId: match.id,
+                  type: s.type,
+                  value: s.value,
+                  rank: s.rank ?? null,
+                  nrPosts: s.nrPosts ?? null,
+                  targetUserId: "",
+                  hashtagCursor: "",
+                }))
+              );
+            }
+          }
+        }
+      }
+
+      // Import followed users
+      if (Array.isArray(fuData) && fuData.length > 0) {
+        await storage.bulkImportFollowedUsers(created.id, fuData.map((f: any) => ({
+          username: f.instagramUsername,
+          userId: f.instagramUserId,
+          followedAt: f.followedAt,
+        })));
+      }
+
+      // Import stats
+      if (Array.isArray(statsData) && statsData.length > 0) {
+        await storage.bulkInsertStats(statsData.map((s: any) => ({
+          profileId: created.id,
+          toolType: s.toolType,
+          count: s.count,
+          date: s.date,
+        })));
+      }
+
+      return res.status(201).json({
+        ok: true,
+        profileId: created.id,
+        username: created.username,
+        followedImported: fuData?.length ?? 0,
+      });
+    } catch (e: any) {
+      req.log.error({ err: e }, "import-eqx failed");
+      return res.status(500).json({ error: e?.message });
+    }
   });
 
   // Jarvee import: bulk import followed users for a single account

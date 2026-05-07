@@ -382,8 +382,7 @@ export function CreateAccountPage() {
 
       <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 208px)" }}>
         <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
-          <div className="w-5 shrink-0" />
-          <div style={{ width: colWidths.account }} className="shrink-0 flex items-center gap-2 min-w-0">
+          <div style={{ width: colWidths.account + 32 }} className="shrink-0 flex items-center gap-2 min-w-0">
             <button onClick={() => cycleSort("account")} className="flex items-center gap-1 text-left hover:text-foreground transition-colors">
               Account
               <span className="text-[9px]">{sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}</span>
