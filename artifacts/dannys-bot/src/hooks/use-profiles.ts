@@ -3,10 +3,22 @@ import { api, buildUrl, type InsertProfile } from "@shared/routes";
 
 export function useProfiles() {
   return useQuery({
-    queryKey: [api.profiles.list.path],
+    queryKey: [api.profiles.list.path, "automation"],
     queryFn: async () => {
-      const res = await fetch(api.profiles.list.path, { credentials: "include" });
+      const res = await fetch(api.profiles.list.path + "?creatorMode=0", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch profiles");
+      return api.profiles.list.responses[200].parse(await res.json());
+    },
+    refetchInterval: 5000,
+  });
+}
+
+export function useCreatorProfiles() {
+  return useQuery({
+    queryKey: [api.profiles.list.path, "creator"],
+    queryFn: async () => {
+      const res = await fetch(api.profiles.list.path + "?creatorMode=1", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch creator profiles");
       return api.profiles.list.responses[200].parse(await res.json());
     },
     refetchInterval: 5000,
@@ -114,6 +126,24 @@ export function useUpdateAccountStatus() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.profiles.get.path, id] });
+    },
+  });
+}
+
+export function useMoveToAccounts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/profiles/${id}/move-to-accounts`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to move profile to accounts");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.profiles.list.path, "automation"] });
+      queryClient.invalidateQueries({ queryKey: [api.profiles.list.path, "creator"] });
     },
   });
 }

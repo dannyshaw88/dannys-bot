@@ -92,6 +92,7 @@ export const profiles = sqliteTable("profiles", {
   lastSyncedAt: text("last_synced_at"),
   igDeviceState: text("ig_device_state"),
   igApiCookies: text("ig_api_cookies"),
+  creatorMode: integer("creator_mode", { mode: "boolean" }).default(false),
 });
 
 export const tools = sqliteTable("tools", {

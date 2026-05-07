@@ -191,7 +191,7 @@ class AutomationEngine {
       // configured randomisation window.  Use "Run Now" to bypass the wait immediately.
       const runImmediately = false;
 
-      const profiles = await storage.getProfiles();
+      const profiles = (await storage.getProfiles()).filter((p: any) => !p.creatorMode);
       const activeFollow        = new Set<number>();
       const activeUnfollow      = new Set<number>();
       const activeDM            = new Set<number>();
@@ -428,8 +428,8 @@ class AutomationEngine {
         }
 
         // ── Account status gate ──────────────────────────────────────────────
-        if (freshProfile.accountStatus === "banned") {
-          engineLog("WARN", `@${freshProfile.username}: account banned — stopping runner`);
+        if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") {
+          engineLog("WARN", `@${freshProfile.username}: account ${freshProfile.accountStatus} — stopping runner`);
           break;
         }
         if (freshProfile.accountStatus === "captcha") {
@@ -566,7 +566,7 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
-        if (freshProfile.accountStatus === "banned") break;
+        if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "captcha") {
           await sleepInterruptible(5 * 60_000, state.stop);
           continue;
@@ -643,7 +643,7 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
-        if (freshProfile.accountStatus === "banned") break;
+        if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "captcha") { await sleep(5 * 60_000); continue; }
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
@@ -739,7 +739,7 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
-        if (freshProfile.accountStatus === "banned") break;
+        if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "captcha") { await sleep(5 * 60_000); continue; }
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
@@ -815,7 +815,7 @@ class AutomationEngine {
       while (!state.stop.stopped) {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
-        if (freshProfile.accountStatus === "banned") break;
+        if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
         if (freshProfile.accountStatus === "captcha") { await sleep(5 * 60_000); continue; }
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
@@ -1121,9 +1121,17 @@ class AutomationEngine {
           break; // stop this batch but keep message pending
         }
       } catch (e: any) {
-        console.warn(`[engine] contact DM @${msg.instagramUsername} error: ${e?.message}`);
-        // Leave as pending for transient errors; only mark failed for known permanent issues
-        this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", e?.message ?? "");
+        const errMsg = e?.message ?? "";
+        const acctStatus = this.getAccountLevelStatus(errMsg);
+        if (acctStatus) {
+          console.warn(`[engine] @${profile.username}: contact DM threw account-level error (${acctStatus}) — ${errMsg}`);
+          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+          if (acctStatus === "logged_out") state.client = null;
+          this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "error", `[${acctStatus}] ${errMsg}`);
+          break;
+        }
+        console.warn(`[engine] contact DM @${msg.instagramUsername} error: ${errMsg}`);
+        this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", errMsg);
       }
     }
   }
@@ -1837,8 +1845,17 @@ class AutomationEngine {
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
-        console.warn(`[engine] unfollow @${fu.instagramUsername} error: ${e?.message}`);
-        this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "error", e?.message ?? "");
+        const msg = e?.message ?? "";
+        const acctStatus = this.getAccountLevelStatus(msg);
+        if (acctStatus) {
+          console.warn(`[engine] @${profile.username}: unfollow threw account-level error (${acctStatus}) — ${msg}`);
+          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+          if (acctStatus === "logged_out") state.client = null;
+          this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "error", `[${acctStatus}] ${msg}`);
+          break;
+        }
+        console.warn(`[engine] unfollow @${fu.instagramUsername} error: ${msg}`);
+        this.logAction(profile.id, tool.id, "unfollow", fu.instagramUsername, "", "", "error", msg);
       }
     }
 
@@ -1941,8 +1958,17 @@ class AutomationEngine {
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
-        console.warn(`[engine] DM @${user.username} error: ${e?.message}`);
-        this.logAction(profile.id, tool.id, "dm", user.username, source.value, source.type, "error", e?.message ?? "");
+        const msg = e?.message ?? "";
+        const acctStatus = this.getAccountLevelStatus(msg);
+        if (acctStatus) {
+          console.warn(`[engine] @${profile.username}: DM threw account-level error (${acctStatus}) — ${msg}`);
+          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+          if (acctStatus === "logged_out") state.client = null;
+          this.logAction(profile.id, tool.id, "dm_blocked", user.username, source.value, source.type, "error", `[${acctStatus}] ${msg}`);
+          break;
+        }
+        console.warn(`[engine] DM @${user.username} error: ${msg}`);
+        this.logAction(profile.id, tool.id, "dm", user.username, source.value, source.type, "error", msg);
       }
     }
 
@@ -1974,6 +2000,18 @@ class AutomationEngine {
   // Returns true when an action should be SKIPPED this session.
   // notUsedMin/Max (0–100) are the % chance the action is not used.
   // Default 0/0 = always run. E.g. min=30,max=50 → 30–50% skip chance.
+  private getAccountLevelStatus(errMsg: string): "captcha" | "logged_out" | "banned" | "suspended" | "compromised" | "phone_verification" | "email_confirmation" | null {
+    const m = errMsg ?? "";
+    if (/checkpoint_required|challenge_required|checkpoint required/i.test(m))               return "captcha";
+    if (/login_required|not authorized|session expired|logged out|not logged in/i.test(m))   return "logged_out";
+    if (/account.*disabled|disabled.*account|account_disabled|your account has been disabled/i.test(m)) return "banned";
+    if (/account.*suspended|suspended.*account|we.ve suspended/i.test(m))                    return "suspended";
+    if (/compromised/i.test(m))                                                              return "compromised";
+    if (/phone.*verif|verify.*phone|phone_required|confirm.*phone|enter.*phone/i.test(m))    return "phone_verification";
+    if (/email.*confirm|confirm.*email|email.*verif|verify.*email/i.test(m))                 return "email_confirmation";
+    return null;
+  }
+
   private shouldSkipDueToChance(s: any, minKey: string, maxKey: string): boolean {
     const min = Number(s[minKey] ?? 0);
     const max = Number(s[maxKey] ?? 0);
@@ -2482,7 +2520,7 @@ class AutomationEngine {
           } else {
             resolved = await client.searchUserByUsername(targetName);
           }
-          if (!resolved) { console.error(`[engine] @${profile.username}: target @${targetName} not found`); return { followed: 0 }; }
+          if (!resolved) { console.error(`[engine] @${profile.username}: target @${targetName} not found`); return { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 }; }
           targetPk = resolved.pk;
           await storage.updateSourceTargetUserId(source.id, targetPk);
         }
@@ -2565,8 +2603,17 @@ class AutomationEngine {
         const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;
         result = await client.followUser(user.pk, user.username, sourceLabel);
       } catch (err: any) {
-        console.error(`[engine] @${profile.username}: follow @${user.username} threw: ${err?.message}`);
-        this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "error", err?.message ?? "");
+        const msg = err?.message ?? "";
+        const acctStatus = this.getAccountLevelStatus(msg);
+        if (acctStatus) {
+          console.warn(`[engine] @${profile.username}: follow threw account-level error (${acctStatus}) — ${msg}`);
+          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+          if (acctStatus === "logged_out") state.client = null;
+          this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "error", `[${acctStatus}] ${msg}`);
+          break;
+        }
+        console.error(`[engine] @${profile.username}: follow @${user.username} threw: ${msg}`);
+        this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "error", msg);
         continue;
       }
 

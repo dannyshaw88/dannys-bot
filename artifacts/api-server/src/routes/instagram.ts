@@ -244,9 +244,18 @@ export async function registerInstagramRoutes(
   });
 
   // Profiles
-  app.get(api.profiles.list.path, async (_req, res) => {
-    const data = await storage.getProfiles();
-    res.json(data);
+  app.get(api.profiles.list.path, async (req, res) => {
+    const all = await storage.getProfiles();
+    const cm = req.query.creatorMode;
+    if (cm === "1") return res.json(all.filter((p: any) => p.creatorMode));
+    if (cm === "0") return res.json(all.filter((p: any) => !p.creatorMode));
+    res.json(all);
+  });
+
+  app.post("/api/profiles/:id/move-to-accounts", async (req, res) => {
+    const id = Number(req.params.id);
+    const updated = await storage.updateProfile(id, { creatorMode: false });
+    res.json(updated);
   });
 
   app.get(api.profiles.get.path, async (req, res) => {

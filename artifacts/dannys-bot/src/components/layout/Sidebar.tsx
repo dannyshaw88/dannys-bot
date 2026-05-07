@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Bot, LayoutDashboard, Users, ShieldAlert, Settings, Activity } from "lucide-react";
+import { Bot, LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 
@@ -9,7 +9,8 @@ export function Sidebar() {
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-    { name: "Profiles", path: "/profiles", icon: Users },
+    { name: "Accounts", path: "/profiles", icon: Users },
+    { name: "Create an Account", path: "/create-account", icon: UserPlus },
     { name: "Stats", path: "/stats", icon: Activity },
     { name: "Proxy Manager", path: "/proxies", icon: ShieldAlert },
     { name: "Settings", path: "/settings", icon: Settings },
@@ -26,7 +27,7 @@ export function Sidebar() {
 
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => {
-          const isActive = location.startsWith(item.path);
+          const isActive = location === item.path || (item.path !== "/dashboard" && location.startsWith(item.path));
           const Icon = item.icon;
           
           return (

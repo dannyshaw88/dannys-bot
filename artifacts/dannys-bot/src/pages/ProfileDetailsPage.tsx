@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { useProfile, useUpdateProfile, useUpdateAccountStatus, useProfiles } from "@/hooks/use-profiles";
+import { useProfile, useUpdateProfile, useUpdateAccountStatus, useProfiles, useCreatorProfiles, useMoveToAccounts } from "@/hooks/use-profiles";
 import { useTools } from "@/hooks/use-tools";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
@@ -80,11 +80,14 @@ export function ProfileDetailsPage() {
   const updateProfileMutation = useUpdateProfile();
   const updateAccountStatusMutation = useUpdateAccountStatus();
   const updateProxyMutation = useUpdateProxy();
+  const moveToAccountsMutation = useMoveToAccounts();
   const { toast } = useToast();
 
   const { openWindow } = useBrowserWindows();
 
-  const { data: allProfiles } = useProfiles();
+  const { data: automationProfiles } = useProfiles();
+  const { data: creatorProfilesList } = useCreatorProfiles();
+  const allProfiles = profile?.creatorMode ? creatorProfilesList : automationProfiles;
 
   const [formData, setFormData] = useState<any>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -379,6 +382,7 @@ export function ProfileDetailsPage() {
           <Tabs.Trigger value="settings" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <Settings className="w-4 h-4 shrink-0" /> Account Settings
           </Tabs.Trigger>
+          {!profile?.creatorMode && (<>
           <Tabs.Trigger value="follow" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <UserPlus className="w-4 h-4 shrink-0" /> Follow Tool
           </Tabs.Trigger>
@@ -391,9 +395,12 @@ export function ProfileDetailsPage() {
           <Tabs.Trigger value="human-session" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <User className="w-4 h-4 shrink-0" /> Human Session Tools
           </Tabs.Trigger>
+          </>)}
+          {!profile?.creatorMode && (
           <Tabs.Trigger value="session-log" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <Activity className="w-4 h-4 shrink-0" /> Session Log
           </Tabs.Trigger>
+          )}
         </Tabs.List>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-4 mb-3">
@@ -491,8 +498,8 @@ export function ProfileDetailsPage() {
                   <ChevronRight className="w-4 h-4" />
                 </button>
                 <span className="text-border mx-1 select-none">|</span>
-                <Link href="/profiles" className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
-                  <ArrowLeft className="w-3 h-3 text-red-500" /> Back to Accounts
+                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
+                  <ArrowLeft className="w-3 h-3 text-red-500" /> {profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}
                 </Link>
               </div>
             </div>
@@ -511,16 +518,35 @@ export function ProfileDetailsPage() {
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
           {/* Auto-save status bar */}
           <div className="flex items-center justify-between mb-4 h-8">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2 h-8 text-xs text-blue-500 border-blue-500/40 hover:text-blue-600 hover:border-blue-600/60 hover:bg-blue-500/5"
-              onClick={() => setCopyDialogOpen(true)}
-              disabled={otherProfiles.length === 0}
-            >
-              <Copy className="w-3.5 h-3.5" />
-              Copy Settings
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 h-8 text-xs text-blue-500 border-blue-500/40 hover:text-blue-600 hover:border-blue-600/60 hover:bg-blue-500/5"
+                onClick={() => setCopyDialogOpen(true)}
+                disabled={otherProfiles.length === 0}
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy Settings
+              </Button>
+              {profile?.creatorMode && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 h-8 text-xs text-sky-600 border-sky-400/50 hover:text-sky-700 hover:border-sky-500/70 hover:bg-sky-500/5"
+                  disabled={moveToAccountsMutation.isPending}
+                  onClick={() => moveToAccountsMutation.mutate(profileId, {
+                    onSuccess: () => {
+                      toast({ title: "Moved to Accounts", description: "This account is now ready for automation." });
+                      window.location.href = "/profiles";
+                    }
+                  })}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  {moveToAccountsMutation.isPending ? "Moving…" : "Move to Accounts"}
+                </Button>
+              )}
+            </div>
             <div className="flex items-center h-5">
               {saveStatus === "saving" && (
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -614,7 +640,7 @@ export function ProfileDetailsPage() {
                             className={`w-full h-9 gap-2 transition-all ${
                               verifyStatus === "fail"
                                 ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
-                                : ""
+                                : "bg-sky-400 hover:bg-sky-500 text-white border-0"
                             }`}
                             onClick={() => handleVerify(false)}
                             disabled={verifyStatus === "pending"}
@@ -1007,21 +1033,21 @@ export function ProfileDetailsPage() {
                   {/* Left — stat icons */}
                   <div className="flex flex-col gap-2 shrink-0">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-3 px-2 border border-border">
+                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
                         <Users className="w-4 h-4 text-blue-500 mb-1" />
                         <span className="text-base font-bold">
                           {profile?.followersCount != null ? profile.followersCount.toLocaleString() : "—"}
                         </span>
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Followers</span>
                       </div>
-                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-3 px-2 border border-border">
+                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
                         <UserPlus className="w-4 h-4 text-purple-500 mb-1" />
                         <span className="text-base font-bold">
                           {profile?.followingCount != null ? profile.followingCount.toLocaleString() : "—"}
                         </span>
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Following</span>
                       </div>
-                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-3 px-2 border border-border">
+                      <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
                         <BarChart2 className="w-4 h-4 text-green-500 mb-1" />
                         <span className="text-base font-bold">
                           {profile?.postsCount != null ? profile.postsCount.toLocaleString() : "—"}
@@ -1036,8 +1062,8 @@ export function ProfileDetailsPage() {
                     )}
                   </div>
 
-                  {/* Right — controls */}
-                  <div className="flex flex-col gap-3 flex-1 border-l border-border pl-4">
+                  {/* Right — controls (single row) */}
+                  <div className="flex items-center gap-3 flex-1 border-l border-border pl-4 flex-nowrap">
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={!!formData?.syncEnabled}
@@ -1074,7 +1100,7 @@ export function ProfileDetailsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="gap-1.5 self-start"
+                      className="gap-1.5"
                       disabled={syncNowStatus === "syncing"}
                       onClick={handleSyncNow}
                     >

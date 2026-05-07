@@ -516,7 +516,7 @@ export function ProfilesPage() {
             <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
           </div>
         </div>
-        <Button onClick={handleCreate} disabled={createProfileMutation.isPending}>
+        <Button onClick={handleCreate} disabled={createProfileMutation.isPending} className="bg-sky-400 hover:bg-sky-500 text-white border-0">
           <Plus className="w-4 h-4 mr-2" />
           {createProfileMutation.isPending ? "Creating..." : "Add Profile"}
         </Button>
@@ -553,16 +553,29 @@ export function ProfilesPage() {
           {/* ── Top column-header bar — always visible ────────────────────── */}
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
             <div className="w-5 shrink-0" />
-            <button
-              onClick={() => cycleSort("account")}
-              style={{ width: profColWidths.account }}
-              className="shrink-0 flex items-center gap-1 text-left hover:text-foreground transition-colors min-w-0"
-            >
-              Account
-              <span className="text-[9px]">
-                {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
-              </span>
-            </button>
+            <div style={{ width: profColWidths.account }} className="shrink-0 flex items-center gap-2 min-w-0">
+              <button
+                onClick={() => cycleSort("account")}
+                className="flex items-center gap-1 text-left hover:text-foreground transition-colors"
+              >
+                Account
+                <span className="text-[9px]">
+                  {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                </span>
+              </button>
+              <label className="flex items-center gap-1.5 cursor-pointer ml-2 shrink-0">
+                <Checkbox
+                  checked={groupMode}
+                  onCheckedChange={checked => {
+                    const next = !!checked;
+                    setGroupMode(next);
+                    localStorage.setItem("profiles:groupMode", String(next));
+                  }}
+                  className="w-3.5 h-3.5"
+                />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Group Accounts</span>
+              </label>
+            </div>
             <button
               onClick={() => cycleSort("status")}
               style={{ width: profColWidths.status }}
@@ -576,18 +589,6 @@ export function ProfilesPage() {
             <div style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>
             <div style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>
             <div className="flex-1" />
-            <label className="flex items-center gap-1.5 cursor-pointer ml-auto shrink-0 pr-1">
-              <Checkbox
-                checked={groupMode}
-                onCheckedChange={checked => {
-                  const next = !!checked;
-                  setGroupMode(next);
-                  localStorage.setItem("profiles:groupMode", String(next));
-                }}
-                className="w-3.5 h-3.5"
-              />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Group Accounts</span>
-            </label>
             <button
               onClick={() => cycleSort("ip")}
               style={{ width: profColWidths.ip }}
@@ -733,7 +734,7 @@ export function ProfilesPage() {
                 const allInGroupSelected = groupIds.every(id => selectedProfileIds.includes(id));
                 return (
                   <div key={groupKey}>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border-b border-primary/10 sticky top-0 z-10 select-none">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
                       <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                         {isCollapsed
                           ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -849,7 +850,7 @@ export function ProfilesPage() {
       {actionsOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-96 overflow-hidden">
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[500px] overflow-hidden">
             <div className="px-5 pt-4 pb-3 border-b border-border">
               <p className="text-sm font-semibold">Actions</p>
             </div>

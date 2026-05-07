@@ -86,6 +86,7 @@ export type Profile = {
   followingCount: number | null;
   postsCount: number | null;
   lastSyncedAt: string | null;
+  creatorMode: boolean | null;
 };
 
 export type InsertProfile = Omit<Profile, 'id' | 'status'>;
