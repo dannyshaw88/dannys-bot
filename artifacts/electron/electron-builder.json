@@ -34,9 +34,7 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Equinox",
-    "installerHeaderBitmap": null,
     "installerIcon": null,
-    "uninstallerIcon": null,
-    "installDir": "$LOCALAPPDATA\\Programs\\equinox"
+    "uninstallerIcon": null
   }
 }
