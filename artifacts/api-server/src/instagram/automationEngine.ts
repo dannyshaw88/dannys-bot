@@ -2926,7 +2926,7 @@ class AutomationEngine {
   }
 
   // ── Status API ────────────────────────────────────────────────────────────
-  getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
+  getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; dailyUnfollowCount: number; dailyDmCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
     // Collect every profileId that has at least one active runner
     const allIds = new Set<number>([
       ...this.states.keys(),
@@ -2939,17 +2939,20 @@ class AutomationEngine {
       const followState   = this.states.get(profileId);
       const humanState    = this.humanSessionStates.get(profileId);
       const contactState  = this.contactStates.get(profileId);
+      const dmState       = this.dmStates.get(profileId);
       const unfollowState = this.unfollowStates.get(profileId);
       const anyState      = followState ?? humanState ?? contactState ?? unfollowState;
       return {
         profileId,
-        loggedIn:           !!anyState?.client?.isLoggedIn(),
-        dailyCount:         followState ? this.daily(followState) : 0,
-        hourlyCount:        followState ? this.hourly(followState) : 0,
-        nextHumanSessionAt: humanState?.nextHumanSessionAt ?? 0,
-        nextFollowAt:       followState?.nextFollowAt ?? 0,
-        nextContactAt:      contactState?.nextContactAt ?? 0,
-        nextUnfollowAt:     unfollowState?.nextUnfollowAt ?? 0,
+        loggedIn:             !!anyState?.client?.isLoggedIn(),
+        dailyCount:           followState   ? this.daily(followState)   : 0,
+        hourlyCount:          followState   ? this.hourly(followState)  : 0,
+        dailyUnfollowCount:   unfollowState ? this.daily(unfollowState) : 0,
+        dailyDmCount:         (dmState      ? this.daily(dmState)       : 0) + (contactState ? this.daily(contactState) : 0),
+        nextHumanSessionAt:   humanState?.nextHumanSessionAt ?? 0,
+        nextFollowAt:         followState?.nextFollowAt ?? 0,
+        nextContactAt:        contactState?.nextContactAt ?? 0,
+        nextUnfollowAt:       unfollowState?.nextUnfollowAt ?? 0,
       };
     });
   }
