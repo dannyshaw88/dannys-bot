@@ -60,11 +60,24 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
+    const src = (tool.settings as Record<string, unknown>) ?? {};
+    const willRandomise = expandedKeys.includes("randomiseTiming") && !!src.randomiseTiming;
+    const copyEnabled   = expandedKeys.includes("startStop");
+    const willEnable    = copyEnabled && tool.enabled;
+    let staggerOffsets: number[] | undefined;
+    if (willRandomise && willEnable && targetIds.length > 1) {
+      const delayMax = (src as any).contactUsersDelayMax ?? (src as any).delayMax ?? 60;
+      staggerOffsets = targetIds.map((_, i) =>
+        Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
+      );
+    }
     await copyToolSettingsToProfiles(
-      (tool.settings as Record<string, unknown>) ?? {},
+      src,
       tool.type,
       targetIds,
       expandedKeys,
+      copyEnabled ? tool.enabled : undefined,
+      staggerOffsets,
     );
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };

@@ -960,20 +960,66 @@ export function ProfilesPage() {
                     toast({ title: "No accounts selected", description: "Select at least one account to export as EQX.", variant: "destructive" });
                     return;
                   }
+
+                  // Single account — simple browser download
+                  if (selectedProfileIds.length === 1) {
+                    const id = selectedProfileIds[0];
+                    const profile = profiles?.find(p => p.id === id);
+                    const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                    try {
+                      const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); return; }
+                      const blob = await res.blob();
+                      const objectUrl = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = objectUrl; a.download = `${safeUsername}.eqx`;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                    } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
+                    return;
+                  }
+
+                  // Multiple accounts — fetch all blobs first, then open one folder picker
+                  toast({ title: "Preparing export…", description: `Fetching ${selectedProfileIds.length} EQX files from server…` });
+                  const files: { name: string; blob: Blob }[] = [];
                   for (const id of selectedProfileIds) {
                     const profile = profiles?.find(p => p.id === id);
                     const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                     try {
                       const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
-                      const blob = await res.blob();
+                      if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
+                      files.push({ name: `${safeUsername}.eqx`, blob: await res.blob() });
+                    } catch { toast({ title: "Export skipped", description: `Error fetching ${safeUsername}`, variant: "destructive" }); }
+                  }
+                  if (!files.length) return;
+
+                  // File System Access API — one folder dialog, all files written silently (Electron/Chrome)
+                  if ("showDirectoryPicker" in window) {
+                    try {
+                      const dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
+                      for (const { name, blob } of files) {
+                        const fileHandle = await dirHandle.getFileHandle(name, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                      }
+                      toast({ title: "EQX Export Complete", description: `${files.length} file(s) saved to selected folder.` });
+                    } catch (e: any) {
+                      if (e?.name !== "AbortError") {
+                        toast({ title: "Export failed", description: e?.message ?? "Could not write files.", variant: "destructive" });
+                      }
+                    }
+                  } else {
+                    // Fallback for environments without directory picker
+                    for (const { name, blob } of files) {
                       const objectUrl = URL.createObjectURL(blob);
                       const a = document.createElement("a");
-                      a.href = objectUrl;
-                      a.download = `${safeUsername}.eqx`;
+                      a.href = objectUrl; a.download = name;
                       document.body.appendChild(a); a.click(); document.body.removeChild(a);
                       setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                    } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
+                      await new Promise(r => setTimeout(r, 300));
+                    }
+                    toast({ title: "EQX Export Complete", description: `${files.length} file(s) downloaded.` });
                   }
                 }}
                 disabled={selectedProfileIds.length === 0}

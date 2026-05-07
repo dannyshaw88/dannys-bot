@@ -407,9 +407,14 @@ class AutomationEngine {
       // On user toggle-on: runImmediately = true → skip this block and run right away.
       if (!runImmediately) {
         const si = (_tool.settings ?? {}) as any;
-        const waitMs = randInt((si.delayMin ?? 1) * 60_000, (si.delayMax ?? 5) * 60_000);
-        engineLog("INFO", `@${profile.username}: startup — first follow session in ${Math.round(waitMs / 60000)}min (Run Now will skip this wait)`);
+        const staggerMs = (si.staggerOffsetMins ?? 0) * 60_000;
+        const waitMs = randInt((si.delayMin ?? 1) * 60_000, (si.delayMax ?? 5) * 60_000) + staggerMs;
+        engineLog("INFO", `@${profile.username}: startup — first follow session in ${Math.round(waitMs / 60000)}min${staggerMs > 0 ? ` (+${Math.round(staggerMs / 60000)}min stagger)` : ""} (Run Now will skip this wait)`);
         state.nextFollowAt = Date.now() + waitMs;
+        // Clear one-shot stagger offset so it doesn't persist across restarts
+        if (si.staggerOffsetMins) {
+          storage.updateTool(_tool.id, { settings: { ...si, staggerOffsetMins: 0 } }).catch(() => {});
+        }
         // Use 1s-poll loop so "Run Now" can interrupt the startup wait immediately
         const startupEnd = Date.now() + waitMs;
         while (!state.stop.stopped && Date.now() < startupEnd && !this.followForceRun.has(profile.id)) {
@@ -632,9 +637,13 @@ class AutomationEngine {
       // On user toggle-on: runImmediately = true → skip and run right away.
       if (!runImmediately) {
         const si = (_tool.settings ?? {}) as any;
-        const waitMs = randInt((si.delayMin ?? 5) * 60_000, (si.delayMax ?? 15) * 60_000);
-        console.log(`[engine] @${profile.username}: startup — first unfollow session in ${Math.round(waitMs / 60000)}min`);
+        const staggerMs = (si.staggerOffsetMins ?? 0) * 60_000;
+        const waitMs = randInt((si.delayMin ?? 5) * 60_000, (si.delayMax ?? 15) * 60_000) + staggerMs;
+        console.log(`[engine] @${profile.username}: startup — first unfollow session in ${Math.round(waitMs / 60000)}min${staggerMs > 0 ? ` (+${Math.round(staggerMs / 60000)}min stagger)` : ""}`);
         state.nextUnfollowAt = Date.now() + waitMs;
+        if (si.staggerOffsetMins) {
+          storage.updateTool(_tool.id, { settings: { ...si, staggerOffsetMins: 0 } }).catch(() => {});
+        }
         await sleepInterruptible(waitMs, state.stop);
         state.nextUnfollowAt = 0;
         if (state.stop.stopped) return;
@@ -730,8 +739,12 @@ class AutomationEngine {
       // On user toggle-on: runImmediately = true → skip and run right away.
       if (!runImmediately) {
         const si = (_tool.settings ?? {}) as any;
-        const waitMs = randInt((si.delayMin ?? 10) * 60_000, (si.delayMax ?? 30) * 60_000);
-        console.log(`[engine] @${profile.username}: startup — first DM session in ${Math.round(waitMs / 60000)}min`);
+        const staggerMs = (si.staggerOffsetMins ?? 0) * 60_000;
+        const waitMs = randInt((si.delayMin ?? 10) * 60_000, (si.delayMax ?? 30) * 60_000) + staggerMs;
+        console.log(`[engine] @${profile.username}: startup — first DM session in ${Math.round(waitMs / 60000)}min${staggerMs > 0 ? ` (+${Math.round(staggerMs / 60000)}min stagger)` : ""}`);
+        if (si.staggerOffsetMins) {
+          storage.updateTool(_tool.id, { settings: { ...si, staggerOffsetMins: 0 } }).catch(() => {});
+        }
         await sleepInterruptible(waitMs, state.stop);
         if (state.stop.stopped) return;
       }
@@ -793,16 +806,20 @@ class AutomationEngine {
     // Each timer is tracked separately so they run on their own independent cadence.
     // On startup: schedule using configured X-Y timers. On user toggle-on: start immediately.
     const _cs = (_tool.settings ?? {}) as any;
+    const _staggerMs = runImmediately ? 0 : (_cs.staggerOffsetMins ?? 0) * 60_000;
+    if (_cs.staggerOffsetMins && !runImmediately) {
+      storage.updateTool(_tool.id, { settings: { ..._cs, staggerOffsetMins: 0 } }).catch(() => {});
+    }
     const _followerWaitMs = runImmediately ? 0 : randInt(
       (_cs.contactUsersDelayMin ?? _cs.delayMin ?? 30) * 60_000,
       (_cs.contactUsersDelayMax ?? _cs.delayMax ?? 60) * 60_000,
-    );
+    ) + _staggerMs;
     const _usersWaitMs = runImmediately ? 0 : randInt(
       (_cs.contactUsersDelayMin ?? _cs.delayMin ?? 30) * 60_000,
       (_cs.contactUsersDelayMax ?? _cs.delayMax ?? 60) * 60_000,
-    );
+    ) + _staggerMs;
     if (!runImmediately) {
-      console.log(`[engine] @${profile.username}: startup — first contact run in ${Math.round(_followerWaitMs / 60000)}min`);
+      console.log(`[engine] @${profile.username}: startup — first contact run in ${Math.round(_followerWaitMs / 60000)}min${_staggerMs > 0 ? ` (+${Math.round(_staggerMs / 60000)}min stagger)` : ""}`);
     }
     let nextFollowerCheckAt = Date.now() + _followerWaitMs;
     let nextUsersSessionAt  = Date.now() + _usersWaitMs;

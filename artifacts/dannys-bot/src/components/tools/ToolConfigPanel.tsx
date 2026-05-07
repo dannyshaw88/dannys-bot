@@ -313,12 +313,25 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     const copySources  = expandedKeys.includes("ft_sources");
     const keysToSend   = expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources");
 
+    // When "Randomise timing" is selected, the source tool has it on, and we're
+    // enabling accounts — spread start times evenly across the [0, delayMax] window.
+    const willRandomise = expandedKeys.includes("randomiseTiming") && !!(settings as any).randomiseTiming;
+    const willEnable    = copyEnabled && tool.enabled;
+    let staggerOffsets: number[] | undefined;
+    if (willRandomise && willEnable && targetIds.length > 1) {
+      const delayMax = (settings as any).delayMax ?? 5;
+      staggerOffsets = targetIds.map((_, i) =>
+        Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
+      );
+    }
+
     await copyToolSettingsToProfiles(
       settings as Record<string, unknown>,
       tool.type,
       targetIds,
       keysToSend,
       copyEnabled ? tool.enabled : undefined,
+      staggerOffsets,
     );
 
     if (copySources) {

@@ -90,12 +90,24 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   const handleCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const copyEnabled = expandedKeys.includes("startStop");
     const keysToSend  = expandedKeys.filter(k => k !== "startStop");
+
+    const willRandomise = expandedKeys.includes("randomiseTiming") && !!(settings as any).randomiseTiming;
+    const willEnable    = copyEnabled && tool.enabled;
+    let staggerOffsets: number[] | undefined;
+    if (willRandomise && willEnable && targetIds.length > 1) {
+      const delayMax = (settings as any).delayMax ?? 15;
+      staggerOffsets = targetIds.map((_, i) =>
+        Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
+      );
+    }
+
     await copyToolSettingsToProfiles(
       settings as Record<string, unknown>,
       "unfollow",
       targetIds,
       keysToSend,
       copyEnabled ? tool.enabled : undefined,
+      staggerOffsets,
     );
     toast({ title: `Settings copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}` });
   };

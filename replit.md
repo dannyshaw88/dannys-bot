@@ -17,12 +17,10 @@
 > Token: `listConnections('github')[0].settings.access_token`. Repo: `dannyshaw88/dannys-bot`.
 > See `.local/github_push_instruction.md` for the full step-by-step.
 >
-> **EVERY push MUST include rebuilt dist files — not just source files.**
-> The Windows standalone installer runs the pre-built bundles directly. If only source is pushed, Windows stays on the old version.
-> Before every push:
-> 1. `pnpm --filter @workspace/api-server run build` → pushes `artifacts/api-server/dist/index.mjs` + pino worker files
-> 2. `cd artifacts/dannys-bot && BASE_PATH=/ PORT=3000 pnpm run build` → pushes `artifacts/dannys-bot/dist/public/index.html` + `dist/public/assets/*`
-> Include ALL of those output files in the same commit as the source changes.
+> **Push SOURCE FILES ONLY — do NOT push dist files.**
+> GitHub Actions (`.github/workflows/build-electron.yml`) triggers automatically on every push to `main`.
+> It runs on `windows-latest`, rebuilds everything from source (frontend → API server → Electron), and publishes a new `.exe` to GitHub Releases.
+> Pushing dist files is wasteful bloat — CI ignores them and rebuilds from scratch.
 
 > ## ⚠️ AGENT STANDING RULES — READ BEFORE TOUCHING ANY INSTAGRAM CODE
 >
@@ -129,27 +127,39 @@ This is an **API-based Instagram bot**, not a web-scraping or session-cookie bot
 - `contact_dm_sent` — DMs sent to new followers
 - `contact_pending_messages` — DM send queue
 
-## Windows Standalone Deployment
+## Windows Deployment — Electron Installer (`DannysBot.exe`)
 
-The app can be run on a Windows PC with no extra tooling:
-
-1. Copy the entire project folder to the Windows PC
-2. Double-click `start.bat` (or run it from Command Prompt)
-   - `start.bat` runs: `npm install && node index.js`
-   - `npm install` installs `better-sqlite3` (SQLite driver) and `puppeteer` (browser)
-   - `node index.js` starts the server
-3. Open `http://localhost:3000` in a browser
+The Windows app is an **Electron NSIS installer** (`DannysBot.exe`), NOT a raw ZIP/folder deploy.
 
 ### How it works
-- `index.js` (root) sets `PORT=3000` and `DATABASE_PATH=<project-dir>/database.db`, then imports the pre-built server bundle
-- Pre-built bundle: `artifacts/api-server/dist/index.mjs` (esbuild, self-contained except native modules)
-- Pre-built frontend: `artifacts/dannys-bot/dist/public/` (Vite build with `BASE_PATH=/`)
-- SQLite database is auto-created on first run at `database.db` in the project root
-- No PostgreSQL, no environment variables needed
+- `artifacts/electron/` — Electron wrapper (main process, preload, tray, auto-updater, backup)
+- On launch, Electron spawns the API server bundle as a child Node process (`ELECTRON_RUN_AS_NODE=1`)
+- Electron's `BrowserWindow` loads `http://127.0.0.1:<random-port>` (the embedded Express server)
+- Database lives in `app.getPath("userData")` — persists across installs/updates
+- **Auto-updater**: `electron-updater` checks GitHub Releases on startup; downloads + installs silently
 
-### Rebuilding after code changes
-- API server: `pnpm --filter @workspace/api-server run build`
-- Frontend: `cd artifacts/dannys-bot && BASE_PATH=/ PORT=3000 pnpm run build`
+### Build pipeline (must run in this order)
+1. `pnpm --filter @workspace/api-server run build` — rebuilds `artifacts/api-server/dist/index.mjs`
+2. `cd artifacts/dannys-bot && BASE_PATH=/ PORT=3000 pnpm run build` — rebuilds `artifacts/dannys-bot/dist/public/`
+3. `pnpm --filter @workspace/electron run build` — copies the two dists into `artifacts/electron/dist/`, compiles Electron main/preload via esbuild
+4. **Must be run on Windows** (or a Windows CI runner): `pnpm --filter @workspace/electron run package` → `electron-builder --win --publish always` → publishes a new GitHub Release with the `.exe`
+
+### Releasing a new version to users (the real workflow)
+1. Make code changes on Replit
+2. User says **"push-to-git"** → push only changed source files (NO dist files) via GitHub Git Data API
+3. **GitHub Actions triggers automatically** on push to `main` (`.github/workflows/build-electron.yml`)
+4. CI runs on `windows-latest`: builds frontend → API server → Electron, then publishes new release to GitHub Releases
+5. User downloads the new `DannysBot.exe` from GitHub Releases and installs it
+
+**Key rules for pushes:**
+- Push **source files only** — CI rebuilds everything from scratch on Windows
+- Do NOT push dist files (`artifacts/*/dist/`) — CI ignores them and overwrites with fresh builds
+- The version in `artifacts/electron/package.json` is auto-set by CI from the GitHub Actions run number
+
+### GitHub Release publish config (`electron-builder.json`)
+- Provider: GitHub, owner: `dannyshaw88`, repo: `dannys-bot`, releaseType: `release`
+- Artifact name pattern: `dannys-bot-setup-${version}.exe`
+- CI uses `GITHUB_TOKEN` secret (automatically provided by Actions)
 
 ## Key Commands
 
