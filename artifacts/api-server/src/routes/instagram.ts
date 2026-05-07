@@ -630,8 +630,13 @@ export async function registerInstagramRoutes(
   app.put(api.tools.update.path, async (req, res) => {
     try {
       const input = api.tools.update.input.parse(req.body);
+      const stagger = (input.settings as any)?.staggerOffsetMins;
+      if (stagger != null && stagger > 0) {
+        req.log.info(`[copySettings] tool ${req.params.id} — staggerOffsetMins=${stagger} saved to DB`);
+      }
       const updated = await storage.updateTool(Number(req.params.id), input);
       if (input.enabled === true) {
+        req.log.info(`[copySettings] tool ${req.params.id} (${updated.type}) ENABLED — reconcile firing`);
         if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
         if (updated.type === "unfollow")       automationEngine.triggerUnfollow(updated.profileId);
         if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);

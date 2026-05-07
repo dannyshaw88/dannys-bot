@@ -1,6 +1,13 @@
 // Copies a subset of settings keys from a source tool's settings object
 // to the same tool type on each target profile.
-// Pass `enabled` to also copy the tool's start/stop state.
+//
+// TWO-PHASE WRITE to eliminate the race condition:
+//   Phase 1 — save settings (including staggerOffsetMins) for ALL profiles.
+//              No enable signal is sent, so no reconcile fires yet.
+//   Phase 2 — send enabled=true for ALL profiles (only if requested).
+//              By now every profile's staggerOffsetMins is already in the DB,
+//              so whichever reconcile runs first will read the correct value.
+//
 // Pass `staggerOffsetMins` (one entry per target profile) to spread start
 // times across the configured wait window when randomiseTiming is active.
 export async function copyToolSettingsToProfiles(
@@ -21,29 +28,53 @@ export async function copyToolSettingsToProfiles(
   const hasSettings = Object.keys(patch).length > 0 || hasStagger;
   if (!hasSettings && !hasEnabled) return;
 
-  await Promise.all(
-    targetProfileIds.map(async (profileId, i) => {
+  // ── Fetch all target tools up front ──────────────────────────────────────
+  const toolRecords = await Promise.all(
+    targetProfileIds.map(async profileId => {
       const res = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
       if (!res.ok) throw new Error(`Failed to fetch tools for profile ${profileId}`);
       const tools: { id: number; type: string; settings: Record<string, unknown> }[] = await res.json();
-      const tool = tools.find(t => t.type === toolType);
-      if (!tool) return;
-
-      const settingsPatch = { ...patch };
-      if (staggerOffsetMins && (staggerOffsetMins[i] ?? 0) > 0) {
-        settingsPatch.staggerOffsetMins = staggerOffsetMins[i];
-      }
-
-      const body: Record<string, unknown> = {};
-      if (Object.keys(settingsPatch).length > 0) body.settings = { ...(tool.settings ?? {}), ...settingsPatch };
-      if (hasEnabled) body.enabled = enabled;
-      const updateRes = await fetch(`/api/tools/${tool.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        credentials: "include",
-      });
-      if (!updateRes.ok) throw new Error(`Failed to update tool ${tool.id}`);
+      return { profileId, tool: tools.find(t => t.type === toolType) ?? null };
     })
   );
+
+  // ── PHASE 1: save settings + stagger for all profiles (no enable yet) ───
+  if (hasSettings) {
+    await Promise.all(
+      toolRecords.map(async ({ profileId, tool }, i) => {
+        if (!tool) return;
+        const settingsPatch = { ...patch };
+        if (staggerOffsetMins && (staggerOffsetMins[i] ?? 0) > 0) {
+          settingsPatch.staggerOffsetMins = staggerOffsetMins[i];
+          console.log(`[copySettings] profile ${profileId} — staggerOffsetMins=${staggerOffsetMins[i]}`);
+        }
+        if (Object.keys(settingsPatch).length === 0) return;
+        const body = { settings: { ...(tool.settings ?? {}), ...settingsPatch } };
+        const res = await fetch(`/api/tools/${tool.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(`Failed to save settings for tool ${tool.id} (profile ${profileId})`);
+      })
+    );
+  }
+
+  // ── PHASE 2: enable/disable all profiles (now that stagger is committed) ─
+  if (hasEnabled) {
+    await Promise.all(
+      toolRecords.map(async ({ profileId, tool }) => {
+        if (!tool) return;
+        const body = { enabled };
+        const res = await fetch(`/api/tools/${tool.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(`Failed to set enabled=${enabled} for tool ${tool.id} (profile ${profileId})`);
+      })
+    );
+  }
 }
