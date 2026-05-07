@@ -13,7 +13,7 @@ import {
   Plus, Trash2, Instagram, Activity, ChevronDown, ChevronUp, ChevronRight, Upload, Download,
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
   Smartphone, FileDown, Filter, X, Settings2,
-  AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, UserMinus, Camera, Eye,
+  AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, LockOpen, UserMinus, Camera, Eye,
   Tag, FolderOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -273,6 +273,14 @@ export function ProfilesPage() {
       setSelectedProfileIds(prev => [...new Set([...prev, ...filteredIds])]);
     }
   }, [filteredProfiles, selectedProfileIds]);
+
+  const handleBulkLock = useCallback(async (lock: boolean) => {
+    if (selectedProfileIds.length === 0) return;
+    for (const id of selectedProfileIds) {
+      await updateProfileMutation.mutateAsync({ id, locked: lock });
+    }
+    toast({ title: lock ? "Accounts Locked" : "Accounts Unlocked", description: `${selectedProfileIds.length} account(s) ${lock ? "locked" : "unlocked"}.` });
+  }, [selectedProfileIds, updateProfileMutation, toast]);
 
   const handleBulkDelete = useCallback(() => {
     if (selectedProfileIds.length === 0) return;
@@ -697,10 +705,11 @@ export function ProfilesPage() {
                   <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
                     <Link href={`/profiles/${profile.id}`}>
                       <span
-                        className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer block"
+                        className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer flex items-center gap-1"
                         data-testid={`text-username-${profile.id}`}
                       >
                         {profile.accountLabel || profile.username}
+                        {profile.locked && <Lock className="w-3 h-3 text-amber-500 shrink-0" title="Locked — excluded from copy targets" />}
                       </span>
                     </Link>
                   </div>
@@ -979,47 +988,61 @@ export function ProfilesPage() {
                     return;
                   }
 
-                  // Multiple accounts — fetch all blobs first, then open one folder picker
-                  toast({ title: "Preparing export…", description: `Fetching ${selectedProfileIds.length} EQX files from server…` });
-                  const files: { name: string; blob: Blob }[] = [];
-                  for (const id of selectedProfileIds) {
-                    const profile = profiles?.find(p => p.id === id);
-                    const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
-                    try {
-                      const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                      if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
-                      files.push({ name: `${safeUsername}.eqx`, blob: await res.blob() });
-                    } catch { toast({ title: "Export skipped", description: `Error fetching ${safeUsername}`, variant: "destructive" }); }
-                  }
-                  if (!files.length) return;
-
-                  // File System Access API — one folder dialog, all files written silently (Electron/Chrome)
+                  // Multiple accounts
                   if ("showDirectoryPicker" in window) {
+                    // File System Access API path:
+                    // MUST call showDirectoryPicker BEFORE any awaited fetch —
+                    // the browser only allows it within the original user gesture.
+                    let dirHandle: any;
                     try {
-                      const dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
-                      for (const { name, blob } of files) {
-                        const fileHandle = await dirHandle.getFileHandle(name, { create: true });
+                      dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
+                    } catch (e: any) {
+                      if (e?.name !== "AbortError") {
+                        toast({ title: "Export failed", description: e?.message ?? "Could not open folder picker.", variant: "destructive" });
+                      }
+                      return;
+                    }
+
+                    toast({ title: "Exporting…", description: `Writing ${selectedProfileIds.length} EQX files to folder…` });
+                    let written = 0;
+                    for (const id of selectedProfileIds) {
+                      const profile = profiles?.find(p => p.id === id);
+                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                      try {
+                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
+                        const blob = await res.blob();
+                        const fileHandle = await dirHandle.getFileHandle(`${safeUsername}.eqx`, { create: true });
                         const writable = await fileHandle.createWritable();
                         await writable.write(blob);
                         await writable.close();
-                      }
-                      toast({ title: "EQX Export Complete", description: `${files.length} file(s) saved to selected folder.` });
-                    } catch (e: any) {
-                      if (e?.name !== "AbortError") {
-                        toast({ title: "Export failed", description: e?.message ?? "Could not write files.", variant: "destructive" });
+                        written++;
+                      } catch (e: any) {
+                        toast({ title: "Export skipped", description: `Error writing ${safeUsername}: ${e?.message ?? "unknown"}`, variant: "destructive" });
                       }
                     }
+                    if (written > 0) toast({ title: "EQX Export Complete", description: `${written} of ${selectedProfileIds.length} file(s) saved to folder.` });
                   } else {
-                    // Fallback for environments without directory picker
-                    for (const { name, blob } of files) {
-                      const objectUrl = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = objectUrl; a.download = name;
-                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                      await new Promise(r => setTimeout(r, 300));
+                    // Fallback — trigger individual browser downloads
+                    toast({ title: "Preparing export…", description: `Downloading ${selectedProfileIds.length} EQX files…` });
+                    let downloaded = 0;
+                    for (const id of selectedProfileIds) {
+                      const profile = profiles?.find(p => p.id === id);
+                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                      try {
+                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
+                        const blob = await res.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = objectUrl; a.download = `${safeUsername}.eqx`;
+                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                        await new Promise(r => setTimeout(r, 300));
+                        downloaded++;
+                      } catch { toast({ title: "Export skipped", description: `Error downloading ${safeUsername}`, variant: "destructive" }); }
                     }
-                    toast({ title: "EQX Export Complete", description: `${files.length} file(s) downloaded.` });
+                    if (downloaded > 0) toast({ title: "EQX Export Complete", description: `${downloaded} of ${selectedProfileIds.length} file(s) downloaded.` });
                   }
                 }}
                 disabled={selectedProfileIds.length === 0}
@@ -1090,6 +1113,21 @@ export function ProfilesPage() {
               >
                 <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <button
+                onClick={() => { setActionsOpen(false); handleBulkLock(true); }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Lock className="w-4 h-4 shrink-0 text-amber-500" /> Lock Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <button
+                onClick={() => { setActionsOpen(false); handleBulkLock(false); }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <LockOpen className="w-4 h-4 shrink-0 text-muted-foreground" /> Unlock Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">

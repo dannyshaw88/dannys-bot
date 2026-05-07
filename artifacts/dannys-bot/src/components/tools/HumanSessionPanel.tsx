@@ -37,7 +37,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const [copyOpen, setCopyOpen] = useState(false);
   const [repostingNow, setRepostingNow] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
+  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
+  const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
@@ -277,7 +278,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             {tool.enabled ? 'ACTIVE' : 'STOPPED'}
           </span>
           <button
-            disabled={otherProfiles.length === 0}
+            disabled={!hasOtherProfiles}
             onClick={() => setCopyOpen(true)}
             className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useProfiles } from "@/hooks/use-profiles";
 import { Activity } from "lucide-react";
@@ -90,6 +91,16 @@ function formatActionPart(action: string, target: string, detail: string): strin
   }
 }
 
+function buildLabel(latest: RecentActivity, profiles: { id: number; accountLabel?: string | null; username: string }[] | undefined): string {
+  const profile = profiles?.find(p => p.id === latest.profileId);
+  const accountName = profile?.accountLabel || profile?.username || `#${latest.profileId}`;
+  const toolLabel = getToolLabel(latest.action, latest.detail);
+  const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", latest.detail);
+  return toolLabel
+    ? `@${accountName} | ${toolLabel}: ${actionPart}`
+    : `@${accountName} ${actionPart}`;
+}
+
 export function LiveActivityTicker() {
   const { data: profiles } = useProfiles();
 
@@ -100,24 +111,31 @@ export function LiveActivityTicker() {
 
   const latest = activities?.[0];
 
-  if (!latest) return null;
+  const lastLabelRef = useRef<string>("");
+  const lastIdRef = useRef<number>(-1);
 
-  const profile = profiles?.find(p => p.id === latest.profileId);
-  const accountName = profile?.accountLabel || profile?.username || `#${latest.profileId}`;
-  const toolLabel = getToolLabel(latest.action, latest.detail);
-  const actionPart = formatActionPart(latest.action, latest.targetUsername ? `@${latest.targetUsername}` : "", latest.detail);
-  const label = toolLabel
-    ? `@${accountName} | ${toolLabel}: ${actionPart}`
-    : `@${accountName} ${actionPart}`;
+  if (latest) {
+    const label = buildLabel(latest, profiles);
+    if (latest.id !== lastIdRef.current) {
+      lastIdRef.current = latest.id;
+      lastLabelRef.current = label;
+    }
+  }
+
+  const displayLabel = lastLabelRef.current;
+
+  if (!displayLabel) return null;
+
+  const isNew = latest?.id === lastIdRef.current && lastIdRef.current !== -1;
 
   return (
     <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center gap-2 w-full overflow-hidden">
       <Activity className="w-3 h-3 text-primary shrink-0" />
       <span
-        key={latest.id}
+        key={isNew ? lastIdRef.current : "static"}
         className="animate-in fade-in slide-in-from-left-2 duration-300 text-xs text-muted-foreground overflow-hidden min-w-0 flex-1 truncate"
       >
-        {label}
+        {displayLabel}
       </span>
     </div>
   );

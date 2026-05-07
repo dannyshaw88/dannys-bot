@@ -93,6 +93,7 @@ export const profiles = sqliteTable("profiles", {
   igDeviceState: text("ig_device_state"),
   igApiCookies: text("ig_api_cookies"),
   creatorMode: integer("creator_mode", { mode: "boolean" }).default(false),
+  locked: integer("locked", { mode: "boolean" }).default(false),
 });
 
 export const tools = sqliteTable("tools", {

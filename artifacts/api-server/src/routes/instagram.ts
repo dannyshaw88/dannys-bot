@@ -828,7 +828,7 @@ export async function registerInstagramRoutes(
         });
 
       const headers = [
-        "UniqueNameAccount", "Name", "Operation Name", "Date",
+        "UniqueNameAccount", "Date", "Name", "Operation Name",
         "Message", "Source", "NavChain", "IpAddress", "Duration(miliseconds)"
       ];
 
@@ -869,9 +869,9 @@ export async function registerInstagramRoutes(
 
         return [
           `Instagram_${call.profileId}`,
+          date,
           username,
           call.operationName,
-          date,
           call.message ?? "",
           call.source ?? "",
           call.navChain ?? "",

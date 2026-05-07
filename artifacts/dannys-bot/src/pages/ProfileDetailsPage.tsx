@@ -150,7 +150,8 @@ export function ProfileDetailsPage() {
     }
   };
 
-  const otherProfiles = allProfiles?.filter(p => p.id !== profileId) ?? [];
+  const otherProfiles = allProfiles?.filter(p => p.id !== profileId && !p.locked) ?? [];
+  const hasOtherProfiles = (allProfiles?.filter(p => p.id !== profileId) ?? []).length > 0;
 
   const handleAccountCopy = async (targetIds: number[], expandedKeys: string[]) => {
     if (!formData) return;
@@ -572,7 +573,7 @@ export function ProfileDetailsPage() {
               <button
                 className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
                 onClick={() => setCopyDialogOpen(true)}
-                disabled={otherProfiles.length === 0}
+                disabled={!hasOtherProfiles}
               >
                 <Copy className="w-3 h-3" /> Copy Settings
               </button>

@@ -200,6 +200,9 @@ if (!colNames.has("ig_api_cookies")) {
 if (!colNames.has("creator_mode")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN creator_mode INTEGER DEFAULT 0;`);
 }
+if (!colNames.has("locked")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN locked INTEGER DEFAULT 0;`);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

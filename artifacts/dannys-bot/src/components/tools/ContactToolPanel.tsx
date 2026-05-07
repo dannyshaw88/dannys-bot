@@ -57,7 +57,8 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
   const updateToolMutation = useUpdateTool();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId);
+  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
+  const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const src = (tool.settings as Record<string, unknown>) ?? {};
@@ -107,7 +108,7 @@ export function ContactToolPanel({ tool, profile }: Props) {
         </button>
         <button
           className="ml-auto pr-2 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          disabled={otherProfiles.length === 0}
+          disabled={!hasOtherProfiles}
           onClick={() => setCopyOpen(true)}
         >
           Copy Settings

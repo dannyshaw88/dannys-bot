@@ -52,7 +52,8 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   const [hikerFetchMin, setHikerFetchMin] = useState(50);
   const [hikerFetchMax, setHikerFetchMax] = useState(200);
   const engineStatus = useProfileEngineStatus(tool.profileId);
-  const otherProfiles = allProfiles.filter(p => p.id !== profile.id);
+  const otherProfiles = allProfiles.filter(p => p.id !== profile.id && !p.locked);
+  const hasOtherProfiles = allProfiles.some(p => p.id !== profile.id);
 
   const [settings, setSettings] = useState(() => {
     const def = {
@@ -183,7 +184,7 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
             {tool.enabled ? "ACTIVE" : "STOPPED"}
           </span>
           <button
-            disabled={otherProfiles.length === 0}
+            disabled={!hasOtherProfiles}
             onClick={() => setCopyOpen(true)}
             className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
