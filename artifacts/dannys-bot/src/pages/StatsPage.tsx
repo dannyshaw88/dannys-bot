@@ -1,5 +1,5 @@
-import { useRef, useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useRef, useState, useMemo, useEffect } from "react";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -40,18 +40,19 @@ function ProfileStatsRow({
   profile,
   visibleCols,
   colWidths,
+  statsData,
 }: {
   profile: Profile;
   visibleCols: Record<StatKey, boolean>;
   colWidths: Record<StatKey | "account", number>;
+  statsData: any[];
 }) {
   const { data: tools } = useQuery<Tool[]>({ queryKey: [`/api/profiles/${profile.id}/tools`] });
-  const { data: stats } = useQuery<any[]>({ queryKey: [`/api/profiles/${profile.id}/stats`] });
   const updateToolMutation = useUpdateTool();
 
   const today = new Date().toISOString().split("T")[0];
   const getStat = (type: string, date: string) =>
-    stats?.find((s: any) => s.toolType === type && s.date === date)?.count || 0;
+    statsData?.find((s: any) => s.toolType === type && s.date === date)?.count || 0;
 
   const handleToggle = (tool: Tool, enabled: boolean) => {
     updateToolMutation.mutate({ id: tool.id, profileId: profile.id, enabled }, {
@@ -117,6 +118,58 @@ export function StatsPage() {
   const [manageColsOpen, setManageColsOpen] = useState(false);
   const manageColsRef = useRef<HTMLDivElement>(null);
 
+  // ── Sort state ────────────────────────────────────────────────────────────
+  const [sortKey, setSortKey] = useState<StatKey | "account" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const cycleSort = (key: StatKey | "account") => {
+    if (sortKey !== key) { setSortKey(key); setSortDir("asc"); }
+    else if (sortDir === "asc") setSortDir("desc");
+    else { setSortKey(null); setSortDir("asc"); }
+  };
+
+  // ── Fetch all profile stats at page level (enables sort) ──────────────────
+  const statsQueries = useQueries({
+    queries: (profiles ?? []).map(p => ({
+      queryKey: [`/api/profiles/${p.id}/stats`],
+    })),
+  });
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const statsMap = useMemo(() => {
+    const m = new Map<number, any[]>();
+    (profiles ?? []).forEach((p, i) => {
+      m.set(p.id, (statsQueries[i]?.data as any[]) ?? []);
+    });
+    return m;
+  // statsQueries changes identity on every render — include its length + loaded count as proxy keys
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profiles, statsQueries.length, statsQueries.filter(q => q.isSuccess).length]);
+
+  const getStatById = (profileId: number, type: string, date: string) =>
+    statsMap.get(profileId)?.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
+
+  // ── Sorted profiles ────────────────────────────────────────────────────────
+  const sortedProfiles = useMemo(() => {
+    if (!profiles) return [];
+    if (!sortKey) return profiles;
+    return [...profiles].sort((a, b) => {
+      if (sortKey === "account") {
+        const sa = (a.username ?? "").toLowerCase();
+        const sb = (b.username ?? "").toLowerCase();
+        return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+      }
+      const va = getStatById(a.id, sortKey, today);
+      const vb = getStatById(b.id, sortKey, today);
+      if (va !== vb) return sortDir === "asc" ? va - vb : vb - va;
+      const la = getStatById(a.id, sortKey, "lifetime");
+      const lb = getStatById(b.id, sortKey, "lifetime");
+      return sortDir === "asc" ? la - lb : lb - la;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profiles, sortKey, sortDir, statsMap]);
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (manageColsRef.current && !manageColsRef.current.contains(e.target as Node)) {
@@ -148,6 +201,11 @@ export function StatsPage() {
     ...ALL_STAT_TYPES.map(({ key, label }) => [key, label] as [string, string]),
   ];
 
+  const sortIcon = (key: StatKey | "account") => {
+    if (sortKey !== key) return <span className="text-[9px] opacity-30 ml-0.5">⇅</span>;
+    return <span className="text-[9px] ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span>;
+  };
+
   return (
     <AppLayout>
       <div className="mb-8">
@@ -170,13 +228,24 @@ export function StatsPage() {
               </colgroup>
               <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
                 <tr>
-                  <th className="px-4 py-3 font-bold uppercase tracking-wide">Account</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wide">
+                    <button
+                      onClick={() => cycleSort("account")}
+                      className="flex items-center hover:text-foreground transition-colors"
+                    >
+                      Account{sortIcon("account")}
+                    </button>
+                  </th>
                   {visibleTypes.map(({ key, label, icon, color }) => (
                     <th key={key} className="px-4 py-3 font-bold">
-                      <div className={`flex items-center gap-1.5 ${color}`}>
+                      <button
+                        onClick={() => cycleSort(key)}
+                        className={`flex items-center gap-1 hover:opacity-90 transition-opacity ${color} ${sortKey === key ? "opacity-100" : "opacity-60"}`}
+                      >
                         {icon}
                         <span className="uppercase tracking-wide text-[10px]">{label}</span>
-                      </div>
+                        {sortIcon(key)}
+                      </button>
                     </th>
                   ))}
                 </tr>
@@ -195,12 +264,13 @@ export function StatsPage() {
                     </td>
                   </tr>
                 ) : (
-                  profiles?.map(profile => (
+                  sortedProfiles.map(profile => (
                     <ProfileStatsRow
                       key={profile.id}
                       profile={profile}
                       visibleCols={visibleCols}
                       colWidths={colWidths}
+                      statsData={statsMap.get(profile.id) ?? []}
                     />
                   ))
                 )}

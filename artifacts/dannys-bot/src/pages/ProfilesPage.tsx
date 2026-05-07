@@ -10,10 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
-  Plus, Trash2, Instagram, Activity, ChevronDown, ChevronUp, Upload, Download,
+  Plus, Trash2, Instagram, Activity, ChevronDown, ChevronUp, ChevronRight, Upload, Download,
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
   Smartphone, FileDown, Filter, X, Settings2,
-  AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, UserMinus, Camera, Eye
+  AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, UserMinus, Camera, Eye,
+  Tag, FolderOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -129,6 +130,12 @@ export function ProfilesPage() {
     (sessionStorage.getItem("profiles:sortDir") as "asc" | "desc") ?? "asc"
   );
 
+  // ── Group Profiles state ──────────────────────────────────────────────────
+  const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("profiles:groupMode") === "true");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [setGroupOpen, setSetGroupOpen] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState("");
+
   const setFilterPersisted = (v: string) => {
     sessionStorage.setItem("profiles:filter", v);
     setStatusFilter(v);
@@ -187,6 +194,26 @@ export function ProfilesPage() {
         })
       : base;
   }, [profiles, filterTokens, sortField, sortDir]);
+
+  // ── Grouped view (groupMode) ──────────────────────────────────────────────
+  const groupedProfiles = useMemo(() => {
+    if (!groupMode) return null;
+    const map = new Map<string, typeof filteredProfiles>();
+    for (const p of filteredProfiles) {
+      const key = (p.tags ?? "").trim() || "__ungrouped__";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    }
+    return map;
+  }, [groupMode, filteredProfiles]);
+
+  const toggleGroupCollapse = (groupKey: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey); else next.add(groupKey);
+      return next;
+    });
+  };
 
   const cycleSort = (field: "account" | "status" | "ip") => {
     if (sortField !== field) {
@@ -411,6 +438,22 @@ export function ProfilesPage() {
     }
   }, [selectedProfileIds, updateProfileMutation, toast]);
 
+  // ── Set Group ─────────────────────────────────────────────────────────────
+  const handleSetGroup = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    const groupName = groupNameInput.trim();
+    try {
+      for (const id of selectedProfileIds) {
+        await updateProfileMutation.mutateAsync({ id, tags: groupName || undefined });
+      }
+      toast({ title: "Group Updated", description: `${selectedProfileIds.length} account(s) ${groupName ? `assigned to "${groupName}"` : "removed from group"}.` });
+      setSetGroupOpen(false);
+      setGroupNameInput("");
+    } catch {
+      toast({ title: "Error", description: "Failed to update group.", variant: "destructive" });
+    }
+  }, [selectedProfileIds, groupNameInput, updateProfileMutation, toast]);
+
   // ── Bulk: Open Embedded Browsers ─────────────────────────────────────────
   const handleBulkOpenBrowsers = useCallback(() => {
     const ids = selectedProfileIds.length > 0 ? selectedProfileIds : filteredProfiles.map(p => p.id);
@@ -506,7 +549,7 @@ export function ProfilesPage() {
         )}
       </div>
 
-      <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 178px)", marginBottom: "-32px", paddingBottom: "41px" }}>
+      <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 178px)" }}>
           {/* ── Top column-header bar — always visible ────────────────────── */}
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
             <div className="w-5 shrink-0" />
@@ -532,6 +575,19 @@ export function ProfilesPage() {
             </button>
             <div style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>
             <div style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>
+            <div className="flex-1" />
+            <label className="flex items-center gap-1.5 cursor-pointer ml-auto shrink-0 pr-1">
+              <Checkbox
+                checked={groupMode}
+                onCheckedChange={checked => {
+                  const next = !!checked;
+                  setGroupMode(next);
+                  localStorage.setItem("profiles:groupMode", String(next));
+                }}
+                className="w-3.5 h-3.5"
+              />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Group Accounts</span>
+            </label>
             <button
               onClick={() => cycleSort("ip")}
               style={{ width: profColWidths.ip }}
@@ -568,211 +624,224 @@ export function ProfilesPage() {
             </div>
           ) : (
             <>
-          {filteredProfiles?.map((profile, idx) => {
-            const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
-            const isStopped  = acctStatus === "stopped";
-            const isEven     = idx % 2 === 1;
-            const hasProxy   = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
-
-            return (
-              <div
-                key={profile.id}
-                className={`flex items-center gap-3 px-3 py-1 border-b border-border/30 last:border-b-0 transition-colors ${
-                  selectedProfileIds.includes(profile.id)
-                    ? "bg-primary/8 border-primary/20"
-                    : isStopped
-                    ? "opacity-50 bg-slate-50/80"
-                    : isEven
-                    ? "bg-slate-50/70 hover:bg-slate-100/60"
-                    : "bg-white hover:bg-slate-50/60"
-                }`}
-              >
-                {/* Checkbox */}
-                <div className="w-5 shrink-0">
-                  <Checkbox
-                    checked={selectedProfileIds.includes(profile.id)}
-                    onCheckedChange={() => toggleSelection(profile.id)}
-                    data-testid={`checkbox-profile-${profile.id}`}
-                  />
-                </div>
-
-                {/* Username */}
-                <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
-                  <Link href={`/profiles/${profile.id}`}>
-                    <span
-                      className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer block"
-                      data-testid={`text-username-${profile.id}`}
+          {(() => {
+            const renderProfileRow = (profile: typeof filteredProfiles[0], idx: number) => {
+              const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
+              const isStopped  = acctStatus === "stopped";
+              const isEven     = idx % 2 === 1;
+              const hasProxy   = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+              return (
+                <div
+                  key={profile.id}
+                  className={`flex items-center gap-3 px-3 py-1 border-b border-border/30 last:border-b-0 transition-colors ${
+                    selectedProfileIds.includes(profile.id)
+                      ? "bg-primary/8 border-primary/20"
+                      : isStopped
+                      ? "opacity-50 bg-slate-50/80"
+                      : isEven
+                      ? "bg-slate-50/70 hover:bg-slate-100/60"
+                      : "bg-white hover:bg-slate-50/60"
+                  }`}
+                >
+                  <div className="w-5 shrink-0">
+                    <Checkbox
+                      checked={selectedProfileIds.includes(profile.id)}
+                      onCheckedChange={() => toggleSelection(profile.id)}
+                      data-testid={`checkbox-profile-${profile.id}`}
+                    />
+                  </div>
+                  <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
+                    <Link href={`/profiles/${profile.id}`}>
+                      <span
+                        className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer block"
+                        data-testid={`text-username-${profile.id}`}
+                      >
+                        {profile.accountLabel || profile.username}
+                      </span>
+                    </Link>
+                  </div>
+                  <div style={{ width: profColWidths.status }} className="flex justify-start shrink-0">
+                    {hasProxy
+                      ? <AccountStatusBadge status={acctStatus} />
+                      : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
+                          <Globe className="w-2.5 h-2.5" />No Proxy
+                        </span>
+                    }
+                  </div>
+                  <div style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
+                    <Switch
+                      checked={!isStopped}
+                      onCheckedChange={() => toggleStopped(profile.id, acctStatus, profile.credentialsDirty)}
+                      data-testid={`switch-active-${profile.id}`}
+                      className="data-[state=checked]:bg-green-500"
+                    />
+                  </div>
+                  <div style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden">
+                    <button
+                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
+                      title="Open embedded browser"
+                      data-testid={`btn-open-browser-${profile.id}`}
+                      className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
                     >
-                      {profile.accountLabel || profile.username}
-                    </span>
-                  </Link>
+                      Browser
+                    </button>
+                    {!hasProxy
+                      ? <span title="Assign a proxy to this account before verifying" className="text-[11px] text-red-400 cursor-not-allowed">No Proxy</span>
+                      : (acctStatus !== "valid" || profile.credentialsDirty) && (
+                        <button
+                          onClick={() => handleVerify(profile.id)}
+                          disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
+                          data-testid={`button-verify-${profile.id}`}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors flex items-center gap-0.5"
+                        >
+                          Verify
+                        </button>
+                      )
+                    }
+                    <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
+                    <button
+                      onClick={() => setDeleteConfirm({ ids: [profile.id] })}
+                      data-testid={`button-delete-${profile.id}`}
+                      className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  {(() => {
+                    let ip = "";
+                    if (profile.proxyId && proxies) {
+                      const px = proxies.find(p => p.id === profile.proxyId);
+                      if (px?.host && px?.port) ip = `${px.host}:${px.port}`;
+                    } else if (profile.proxyHost && profile.proxyPort) {
+                      ip = `${profile.proxyHost}:${profile.proxyPort}`;
+                    }
+                    return (
+                      <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2" title={ip || "No proxy"}>
+                        <span className="text-[10px] font-mono text-muted-foreground truncate block">{ip || "—"}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
+              );
+            };
 
-                {/* IG Account Status badge */}
-                <div style={{ width: profColWidths.status }} className="flex justify-center shrink-0">
-                  {hasProxy
-                    ? <AccountStatusBadge status={acctStatus} />
-                    : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
-                        <Globe className="w-2.5 h-2.5" />
-                        No Proxy
-                      </span>
-                  }
-                </div>
-
-                {/* Active toggle */}
-                <div style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
-                  <Switch
-                    checked={!isStopped}
-                    onCheckedChange={() => toggleStopped(profile.id, acctStatus, profile.credentialsDirty)}
-                    data-testid={`switch-active-${profile.id}`}
-                    className="data-[state=checked]:bg-green-500"
-                  />
-                </div>
-
-                {/* Text-only actions */}
-                <div style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-end gap-3 pr-0">
-                  <button
-                    onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
-                    title="Open embedded browser"
-                    data-testid={`btn-open-browser-${profile.id}`}
-                    className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    Browser
-                  </button>
-                  {!hasProxy
-                    ? <span
-                        title="Assign a proxy to this account before verifying"
-                        className="text-[11px] text-red-400 cursor-not-allowed"
-                      >
-                        No Proxy
-                      </span>
-                    : (acctStatus !== "valid" || profile.credentialsDirty) && (
-                      <button
-                        onClick={() => handleVerify(profile.id)}
-                        disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
-                        data-testid={`button-verify-${profile.id}`}
-                        className="text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors flex items-center gap-0.5"
-                      >
-                        Verify
+            if (groupMode && groupedProfiles) {
+              return Array.from(groupedProfiles.entries()).map(([groupKey, groupProfiles]) => {
+                const displayName = groupKey === "__ungrouped__" ? "Ungrouped" : groupKey;
+                const isCollapsed = collapsedGroups.has(groupKey);
+                const groupIds = groupProfiles.map(p => p.id);
+                const allInGroupSelected = groupIds.every(id => selectedProfileIds.includes(id));
+                return (
+                  <div key={groupKey}>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 border-b border-primary/10 sticky top-0 z-10 select-none">
+                      <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                        {isCollapsed
+                          ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                        <FolderOpen className="w-3.5 h-3.5 text-primary/50 shrink-0" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-foreground truncate">{displayName}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
                       </button>
-                    )
-                  }
-                  <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-                    Config
-                  </Link>
-                  <button
-                    onClick={() => setDeleteConfirm({ ids: [profile.id] })}
-                    data-testid={`button-delete-${profile.id}`}
-                    className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                {/* IP column */}
-                {(() => {
-                  let ip = "";
-                  if (profile.proxyId && proxies) {
-                    const px = proxies.find(p => p.id === profile.proxyId);
-                    if (px?.host && px?.port) ip = `${px.host}:${px.port}`;
-                  } else if (profile.proxyHost && profile.proxyPort) {
-                    ip = `${profile.proxyHost}:${profile.proxyPort}`;
-                  }
-                  return (
-                    <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2" title={ip || "No proxy"}>
-                      <span className="text-[10px] font-mono text-muted-foreground truncate block">
-                        {ip || "—"}
-                      </span>
+                      <button
+                        onClick={() => {
+                          if (allInGroupSelected) setSelectedProfileIds(prev => prev.filter(id => !groupIds.includes(id)));
+                          else setSelectedProfileIds(prev => [...new Set([...prev, ...groupIds])]);
+                        }}
+                        className="text-[10px] text-primary hover:underline shrink-0 font-medium"
+                      >
+                        {allInGroupSelected ? "None" : "All"}
+                      </button>
                     </div>
-                  );
-                })()}
-              </div>
-            );
-          })}
+                    {!isCollapsed && groupProfiles.map((p, i) => renderProfileRow(p, i))}
+                  </div>
+                );
+              });
+            }
+            return filteredProfiles?.map((profile, idx) => renderProfileRow(profile, idx));
+          })()}
             </>
           )}
           </div>{/* end scrollable body */}
 
-        </div>
-
-      {/* ── Bottom bar — fixed to absolute bottom of window ──────────────── */}
-      <div className="fixed bottom-0 left-64 right-0 flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none z-20">
-        <button
-          onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
-          className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
-        >
-          Select All
-        </button>
-        <button
-          onClick={() => setSelectedProfileIds([])}
-          className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
-        >
-          Select None
-        </button>
-        <button
-          onClick={() => setActionsOpen(true)}
-          className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
-        >
-          Actions <ChevronDown className="w-3.5 h-3.5" />
-        </button>
-        <div ref={manageProfileColsRef} className="relative">
-          <button
-            onClick={() => setManageProfileColsOpen(o => !o)}
-            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
-          >
-            <Settings2 className="w-3.5 h-3.5" /> Columns
-          </button>
-          {manageProfileColsOpen && (
-            <div className="absolute right-0 bottom-full mb-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-64">
-              <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
-              {([ ["account", "Account"], ["status", "Status"], ["active", "Active"], ["actions", "Actions"], ["ip", "IP:Port"] ] as [keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string][]).map(([key, label]) => {
-                const updateCol = (delta: number) => {
-                  const v = Math.max(40, Math.min(600, profColWidths[key] + delta));
-                  const next = { ...profColWidths, [key]: v };
-                  setProfColWidths(next);
-                  localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
-                };
-                return (
-                  <div key={key} className="flex items-center gap-1.5 mb-2">
-                    <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
-                    <button
-                      onClick={() => updateCol(-10)}
-                      className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                    >
-                      <ChevronDown className="w-3 h-3" />
-                    </button>
-                    <input
-                      type="number"
-                      min={40}
-                      max={600}
-                      value={profColWidths[key]}
-                      onChange={e => {
-                        const v = Math.max(40, Math.min(600, Number(e.target.value)));
-                        const next = { ...profColWidths, [key]: v };
-                        setProfColWidths(next);
-                        localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
-                      }}
-                      className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
-                    />
-                    <button
-                      onClick={() => updateCol(10)}
-                      className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                    >
-                      <ChevronUp className="w-3 h-3" />
-                    </button>
-                  </div>
-                );
-              })}
+          {/* ── Bottom toolbar — inside card, width matches card ─────────── */}
+          <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0">
+            <button
+              onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
+              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+            >
+              Select All
+            </button>
+            <button
+              onClick={() => setSelectedProfileIds([])}
+              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+            >
+              Select None
+            </button>
+            <button
+              onClick={() => setActionsOpen(true)}
+              className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+            >
+              Actions <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            <div ref={manageProfileColsRef} className="relative ml-auto">
               <button
-                onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); }}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+                onClick={() => setManageProfileColsOpen(o => !o)}
+                className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
               >
-                Reset to defaults
+                <Settings2 className="w-3.5 h-3.5" /> Columns
               </button>
+              {manageProfileColsOpen && (
+                <div className="absolute right-0 bottom-full mb-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-64">
+                  <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
+                  {([ ["account", "Account"], ["status", "Status"], ["active", "Active"], ["actions", "Actions"], ["ip", "IP:Port"] ] as [keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string][]).map(([key, label]) => {
+                    const updateCol = (delta: number) => {
+                      const v = Math.max(40, Math.min(600, profColWidths[key] + delta));
+                      const next = { ...profColWidths, [key]: v };
+                      setProfColWidths(next);
+                      localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
+                    };
+                    return (
+                      <div key={key} className="flex items-center gap-1.5 mb-2">
+                        <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
+                        <button
+                          onClick={() => updateCol(-10)}
+                          className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                        <input
+                          type="number"
+                          min={40}
+                          max={600}
+                          value={profColWidths[key]}
+                          onChange={e => {
+                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
+                            const next = { ...profColWidths, [key]: v };
+                            setProfColWidths(next);
+                            localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
+                          }}
+                          className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                        />
+                        <button
+                          onClick={() => updateCol(10)}
+                          className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button
+                    onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+                  >
+                    Reset to defaults
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
 
@@ -832,9 +901,58 @@ export function ProfilesPage() {
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <button
+                onClick={() => {
+                  setActionsOpen(false);
+                  const tags = selectedProfileIds.map(id => profiles?.find(p => p.id === id)?.tags ?? "");
+                  const common = tags.every(t => t === tags[0]) ? (tags[0] ?? "") : "";
+                  setGroupNameInput(common);
+                  setSetGroupOpen(true);
+                }}
+                disabled={selectedProfileIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
+                Group Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Trash2 className="w-4 h-4 shrink-0" /> Delete Selected
               </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Set Group dialog ──────────────────────────────────────────────── */}
+      {setGroupOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setSetGroupOpen(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-80 overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b border-border">
+              <p className="text-sm font-semibold">Set Group</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {selectedProfileIds.length} account{selectedProfileIds.length !== 1 ? "s" : ""} selected
+              </p>
+            </div>
+            <div className="p-5">
+              <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 block">Group Name</label>
+              <Input
+                value={groupNameInput}
+                onChange={e => setGroupNameInput(e.target.value)}
+                placeholder="e.g. Clients, Niche A…"
+                className="h-8 text-sm"
+                onKeyDown={e => {
+                  if (e.key === "Enter") handleSetGroup();
+                  if (e.key === "Escape") setSetGroupOpen(false);
+                }}
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground mt-1.5">Leave blank to remove from any group.</p>
+            </div>
+            <div className="px-5 pb-4 flex items-center justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setSetGroupOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleSetGroup}>Apply</Button>
             </div>
           </div>
         </>

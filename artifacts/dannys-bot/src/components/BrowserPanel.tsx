@@ -171,7 +171,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             if (msg.ok) {
               setLoginState("ok");
               appendLog(msg.message || "Done", "ok");
-              setTimeout(() => setLoginState("idle"), 8000);
+              // stays permanently green — no auto-reset
             } else {
               setLoginState("fail");
               appendLog(msg.message || "Login failed", "fail");
@@ -419,21 +419,27 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           variant="outline"
           size="sm"
           className={`h-8 px-3 text-xs gap-1.5 shrink-0 font-semibold transition-colors ${
-            loginState === "ok"      ? "border-green-300 text-green-700 bg-green-50" :
+            loginState === "ok"      ? "border-green-400 text-green-700 bg-green-50 cursor-default pointer-events-none" :
             loginState === "fail"    ? "border-red-300 text-red-700 bg-red-50" :
-            loginState === "running" ? "border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100" :
+            loginState === "running" ? "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" :
             "border-primary/40 text-primary hover:bg-primary/5"
           }`}
-          onClick={doLogin}
+          onClick={loginState === "ok" ? undefined : doLogin}
           disabled={!connected}
-          title={loginState === "running" ? "Click to cancel login" : "Auto-login with stored credentials"}
+          title={
+            loginState === "ok"      ? "Logged in" :
+            loginState === "running" ? "Logging in…" :
+            "Auto-fill credentials and login"
+          }
           data-testid="button-browser-login"
         >
           {loginState === "running" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> :
            loginState === "ok"      ? <CheckCircle2 className="w-3.5 h-3.5" /> :
            loginState === "fail"    ? <AlertCircle className="w-3.5 h-3.5" /> :
                                       <LogIn className="w-3.5 h-3.5" />}
-          {loginState === "running" ? "Cancel" : "Login"}
+          {loginState === "running" ? "Logging In" :
+           loginState === "ok"      ? "Logged In" :
+                                      "Fill Credentials"}
         </Button>
 
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"

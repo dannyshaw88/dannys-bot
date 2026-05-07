@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Copy, CheckCircle2, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -81,6 +81,17 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       setSelected(buildInitialSelected(optionGroups));
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const profileGroups = useMemo(() => {
+    const map = new Map<string, Profile[]>();
+    for (const p of profiles) {
+      const key = (p.tags ?? "").trim();
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    }
+    return map;
+  }, [profiles]);
 
   const filteredProfiles = profiles.filter(p => {
     const q = search.toLowerCase();
@@ -176,6 +187,34 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 </button>
               )}
             </div>
+            {profileGroups.size > 0 && (
+              <div className="px-3 py-2 border-b border-border bg-muted/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Select by Group</p>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from(profileGroups.entries()).map(([groupName, groupProfiles]) => {
+                    const allSel = groupProfiles.every(p => targets.has(p.id));
+                    return (
+                      <button
+                        key={groupName}
+                        onClick={() => setTargets(prev => {
+                          const next = new Set(prev);
+                          if (allSel) groupProfiles.forEach(p => next.delete(p.id));
+                          else groupProfiles.forEach(p => next.add(p.id));
+                          return next;
+                        })}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
+                          allSel
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/30 text-foreground border-border hover:bg-muted/60"
+                        }`}
+                      >
+                        {groupName} ({groupProfiles.length})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="px-3 py-2 border-b border-border">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
