@@ -924,12 +924,15 @@ export class InstagramWebClient {
     // Pre-warm the cookie jar so Instagram sets a fresh csrftoken cookie
     // before we make the friendship.create POST. Without this, cookieCsrfToken
     // returns "missing" and Instagram rejects the write with "We're sorry..."
+    let preWarmHadChallenge = false;
     try {
       await ig.user.info(userId);
       console.log(`[webClient] follow ${userId}: pre-warm GET /users/${userId}/info OK — csrftoken: ${ig.state.cookieCsrfToken?.slice(0,8) ?? "none"}`);
     } catch (preErr: any) {
+      const preMsg: string = preErr?.message ?? "";
+      if (/challenge_required/i.test(preMsg)) preWarmHadChallenge = true;
       // Non-fatal — if the info call fails, try the follow anyway
-      console.warn(`[webClient] follow ${userId}: pre-warm GET /users/info failed (${preErr?.message}) — continuing`);
+      console.warn(`[webClient] follow ${userId}: pre-warm GET /users/info failed (${preMsg}) — continuing`);
     }
 
     try {
@@ -954,6 +957,13 @@ export class InstagramWebClient {
       if (/checkpoint_required/i.test(msg)) {
         const url = body?.checkpoint_url ?? "";
         return { ok: false, status: "checkpoint_required", reason: "Instagram requires a security checkpoint", checkpointUrl: url };
+      }
+      // 404 after a challenge_required pre-warm = account session blocked by challenge, not a missing user
+      if (/404|Not Found/i.test(msg)) {
+        if (preWarmHadChallenge) {
+          return { ok: false, status: "checkpoint_required", reason: "Session has an unresolved Instagram security challenge — verify account in the embedded browser" };
+        }
+        return { ok: false, status: "follow_blocked", reason: `Instagram returned 404 on friendship.create — ${msg}` };
       }
       if (/spam/i.test(msg))                           return { ok: false, status: "follow_blocked", reason: "spam — Instagram flagged this follow attempt" };
       if (/feedback_required|ActionBlocked/i.test(msg)) return { ok: false, status: "follow_blocked", reason: msg };

@@ -581,7 +581,7 @@ export function SettingsPage() {
         <div className="desktop-card p-6">
           <h3 className="text-base font-semibold mb-2">Application Theme</h3>
           <p className="text-sm text-muted-foreground">
-            Danny's Bot is designed with a clean white desktop interface to maximise productivity during automation management.
+            Equinox is designed with a clean white desktop interface to maximise productivity during automation management.
             Dark mode is intentionally disabled to maintain this professional aesthetic.
           </p>
         </div>
@@ -597,7 +597,7 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">App Updates</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Danny's Bot checks for updates automatically on startup. Click below to check right now.
+            Equinox checks for updates automatically on startup. Click below to check right now.
           </p>
           <div className="flex gap-3 flex-wrap">
             <Button
@@ -640,7 +640,7 @@ export function SettingsPage() {
             Jarvee Import — Followed Users
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Import your Jarvee followed-users export so Danny's Bot won't re-follow those accounts.
+            Import your Jarvee followed-users export so Equinox won't re-follow those accounts.
             Select the <code className="text-xs bg-muted px-1 rounded">FOLLOWEDUSERS_*.txt</code> file from your Jarvee data folder.
           </p>
 

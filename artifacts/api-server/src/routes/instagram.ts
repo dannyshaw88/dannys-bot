@@ -625,7 +625,7 @@ export async function registerInstagramRoutes(
     try {
       const input = api.tools.update.input.parse(req.body);
       const updated = await storage.updateTool(Number(req.params.id), input);
-      if (updated.enabled) {
+      if (input.enabled === true) {
         if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
         if (updated.type === "unfollow")       automationEngine.triggerUnfollow(updated.profileId);
         if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);

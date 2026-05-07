@@ -21,18 +21,18 @@ export function Sidebar() {
       <div className="h-16 flex items-center px-6 border-b border-border/50">
         <Bot className="w-6 h-6 text-primary mr-3" />
         <span className="font-bold text-lg tracking-tight text-foreground">
-          Dannys <span className="text-primary">Bot</span>
+          Equi<span className="text-primary">nox</span>
         </span>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 px-3 py-1 space-y-0">
         {navItems.map((item) => {
           const isActive = location === item.path || (item.path !== "/dashboard" && location.startsWith(item.path));
           const Icon = item.icon;
           
           return (
             <Link key={item.path} href={item.path} className={cn(
-              "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group",
+              "flex items-center px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group",
               isActive 
                 ? "bg-primary/10 text-primary" 
                 : "text-muted-foreground hover:bg-accent hover:text-foreground"

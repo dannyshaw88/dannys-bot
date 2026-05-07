@@ -2626,9 +2626,18 @@ class AutomationEngine {
         break;
       }
 
+      if (result.status === "user_not_found") {
+        const reason = result.reason ?? `user ${user.username} not found (404)`;
+        console.warn(`[engine] @${profile.username}: follow skipped @${user.username} — deleted/non-existent user (404)`);
+        this.logAction(profile.id, tool.id, "follow_skipped", user.username, source.value, source.type, "skipped", `Stale user ID — account deleted or not found: ${reason}`);
+        skipped++;
+        if (followed + skipped + blocked >= processCount) break;
+        continue;
+      }
+
       if (result.status === "follow_blocked") {
         const reason = result.reason ?? "Instagram declined";
-        console.warn(`[engine] @${profile.username}: follow skipped @${user.username} — ${reason}`);
+        console.warn(`[engine] @${profile.username}: follow blocked @${user.username} — ${reason}`);
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", reason);
         blocked++;
 

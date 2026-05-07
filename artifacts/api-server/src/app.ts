@@ -9,6 +9,19 @@ const app: Express = express();
 app.use(
   pinoHttp({
     logger,
+    customSuccessMessage(req, res, responseTime) {
+      const method = req.method ?? "?";
+      const url = (req.url ?? "").split("?")[0];
+      const status = res.statusCode;
+      const ms = typeof responseTime === "number" ? ` ${Math.round(responseTime)}ms` : "";
+      return `${method} ${url} ${status}${ms}`;
+    },
+    customErrorMessage(req, res, err) {
+      const method = req.method ?? "?";
+      const url = (req.url ?? "").split("?")[0];
+      const status = res.statusCode;
+      return `${method} ${url} ${status} — ${err?.message ?? "error"}`;
+    },
     serializers: {
       req(req) {
         return {

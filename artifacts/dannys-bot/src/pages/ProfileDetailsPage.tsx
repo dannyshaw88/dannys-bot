@@ -377,7 +377,7 @@ export function ProfileDetailsPage() {
 
   return (
     <AppLayout>
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-8 items-start">
+      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-1 items-start">
         <Tabs.List className="flex flex-col w-48 shrink-0 sticky top-4 self-start border-r border-border pr-0 py-1">
           <Tabs.Trigger value="settings" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <Settings className="w-4 h-4 shrink-0" /> Account Settings
@@ -637,7 +637,7 @@ export function ProfileDetailsPage() {
                           <Button
                             type="button"
                             variant={verifyStatus === "fail" ? "outline" : "default"}
-                            className={`w-full h-9 gap-2 transition-all ${
+                            className={`w-[85%] h-9 gap-2 transition-all ${
                               verifyStatus === "fail"
                                 ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
                                 : "bg-sky-400 hover:bg-sky-500 text-white border-0"
@@ -651,7 +651,7 @@ export function ProfileDetailsPage() {
                             {verifyStatus === "idle" && <ShieldCheck className="w-4 h-4" />}
                             {verifyStatus === "pending" ? "Verifying…"
                               : verifyStatus === "fail" ? "Retry Verification"
-                              : "Verify Credentials"}
+                              : "Verify Account"}
                           </Button>
                         )}
                       </div>
@@ -838,56 +838,50 @@ export function ProfileDetailsPage() {
 
             <Card className="border-none shadow-none !bg-transparent">
               <CardHeader className="px-0 pt-0">
-                <CardTitle className="flex items-center gap-2"><Zap className="w-5 h-5 text-primary" /> API Limits & Control</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500" /> API Limits & Control</CardTitle>
               </CardHeader>
-              <CardContent className="px-0 space-y-6">
-                <div className="flex gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Allow Min Calls</Label>
+              <CardContent className="px-0 space-y-3">
+                <div className="flex gap-2 items-end">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
                     <Input 
                       type="number"
-                      className="h-8 text-sm w-28"
+                      className="h-7 text-xs w-14"
                       value={formData.apiLimits.requestsMin}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Allow Max Calls</Label>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
                     <Input 
                       type="number"
-                      className="h-8 text-sm w-28"
+                      className="h-7 text-xs w-14"
                       value={formData.apiLimits.requestsMax}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })}
                     />
                   </div>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Min (ms)</Label>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
                     <Input 
                       type="number"
-                      className="h-8 text-sm w-28"
+                      className="h-7 text-xs w-14"
                       value={formData.apiLimits.everySecondsMin}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Every Max (ms)</Label>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
                     <Input 
                       type="number"
-                      className="h-8 text-sm w-28"
+                      className="h-7 text-xs w-14"
                       value={formData.apiLimits.everySecondsMax}
                       onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })}
                     />
                   </div>
                 </div>
-
-                <div className="pt-4 border-t border-border">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Allow x-y amount of api calls every x-y milliseconds globally for this account.
-                  </p>
-                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Allow x-y calls every x-y ms globally for this account.
+                </p>
               </CardContent>
             </Card>
           </div>

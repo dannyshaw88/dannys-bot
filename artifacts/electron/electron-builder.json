@@ -1,8 +1,8 @@
 {
-  "appId": "com.dannysbot.app",
-  "productName": "Danny's Bot",
+  "appId": "com.equinox.app",
+  "productName": "Equinox",
   "copyright": "Copyright © 2025",
-  "artifactName": "dannys-bot-setup-${version}.${ext}",
+  "artifactName": "equinox-setup-${version}.${ext}",
   "directories": {
     "output": "release"
   },
@@ -33,6 +33,10 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Danny's Bot"
+    "shortcutName": "Equinox",
+    "installerHeaderBitmap": null,
+    "installerIcon": null,
+    "uninstallerIcon": null,
+    "installDir": "$LOCALAPPDATA\\Programs\\equinox"
   }
 }

@@ -113,7 +113,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.0",
     date: "2 March 2026, 09:00",
     items: [
-      { category: "Core", text: "Initial release of Danny's Bot automation dashboard." },
+      { category: "Core", text: "Initial release of Equinox automation dashboard." },
       { category: "Core", text: "Multi-account management with status tracking, proxy assignment, and 2FA support." },
       { category: "Follow Tool", text: "Follow users from a source account's followers/followings list with configurable daily limits and delays." },
       { category: "Unfollow Tool", text: "Unfollow non-followers and ghost followers with configurable schedules." },
