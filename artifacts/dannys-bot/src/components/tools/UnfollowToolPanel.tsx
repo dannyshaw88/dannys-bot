@@ -21,7 +21,7 @@ interface UnfollowToolPanelProps {
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
     { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-    { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's first session across the Wait Between Sessions window so they don't all fire simultaneously" },
+    { key: "randomiseTiming", label: "Randomise timing", description: "Spread each account's session start times across the Wait Between Sessions window so they don't all fire simultaneously" },
   ]},
   { label: "Settings", options: [
     { key: "uf_settings", label: "Unfollow Settings", description: "Timing, limits and age filters for unfollow actions", subOptions: [

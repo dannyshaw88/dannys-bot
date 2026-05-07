@@ -630,17 +630,25 @@ export async function registerInstagramRoutes(
   app.put(api.tools.update.path, async (req, res) => {
     try {
       const input = api.tools.update.input.parse(req.body);
+      // `cold` is a copy-settings flag — not part of the tool schema, parsed separately
+      const cold = req.body.cold === true;
       const stagger = (input.settings as any)?.staggerOffsetMins;
       if (stagger != null && stagger > 0) {
         req.log.info(`[copySettings] tool ${req.params.id} — staggerOffsetMins=${stagger} saved to DB`);
       }
       const updated = await storage.updateTool(Number(req.params.id), input);
       if (input.enabled === true) {
-        req.log.info(`[copySettings] tool ${req.params.id} (${updated.type}) ENABLED — reconcile firing`);
-        if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
-        if (updated.type === "unfollow")       automationEngine.triggerUnfollow(updated.profileId);
-        if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);
-        if (updated.type === "contact")        automationEngine.triggerReconcile();
+        if (cold) {
+          // Copy-settings path: stop the existing runner and relaunch with startup wait + stagger
+          req.log.info(`[copySettings] tool ${req.params.id} (${updated.type}) cold restart — stagger will apply`);
+          automationEngine.restartColdWithWait(updated.profileId, updated.type);
+        } else {
+          // Manual toggle path: wake existing runner immediately (or launch fresh)
+          if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
+          if (updated.type === "unfollow")       automationEngine.triggerUnfollow(updated.profileId);
+          if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);
+          if (updated.type === "contact")        automationEngine.triggerReconcile();
+        }
       }
       res.json(updated);
     } catch (err) {

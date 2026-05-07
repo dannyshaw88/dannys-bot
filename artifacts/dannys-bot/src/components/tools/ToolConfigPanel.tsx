@@ -241,7 +241,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   const FOLLOW_TOOL_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
       { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-      { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's first session across the Wait Until Next Session window so they don't all fire simultaneously" },
+      { key: "randomiseTiming", label: "Randomise timing", description: "Spread each account's session start times across the Wait Until Next Session window so they don't all fire simultaneously" },
     ]},
     { label: "Timing", options: [
       { key: "ft_timing", label: "Timing", description: "Delays and wait times between actions", subOptions: [

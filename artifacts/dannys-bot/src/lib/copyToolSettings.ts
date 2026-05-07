@@ -62,11 +62,13 @@ export async function copyToolSettingsToProfiles(
   }
 
   // ── PHASE 2: enable/disable all profiles (now that stagger is committed) ─
+  // `cold: true` tells the server to stop any running runner and relaunch it
+  // with a full startup wait, so the staggerOffsetMins saved in Phase 1 applies.
   if (hasEnabled) {
     await Promise.all(
       toolRecords.map(async ({ profileId, tool }) => {
         if (!tool) return;
-        const body = { enabled };
+        const body = enabled === true ? { enabled, cold: true } : { enabled };
         const res = await fetch(`/api/tools/${tool.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },

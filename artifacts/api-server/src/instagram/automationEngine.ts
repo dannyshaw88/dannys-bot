@@ -2875,6 +2875,26 @@ class AutomationEngine {
     }
   }
 
+  // Called by copy-settings when enabling a tool with a stagger offset.
+  // Stops the existing runner (if any) so the next reconcile re-launches it
+  // from scratch, respecting the startup wait + staggerOffsetMins from DB.
+  restartColdWithWait(profileId: number, toolType: string) {
+    if (toolType === "follow") {
+      const state = this.states.get(profileId);
+      if (state) { state.stop.stopped = true; this.states.delete(profileId); }
+    } else if (toolType === "unfollow") {
+      const state = this.unfollowStates.get(profileId);
+      if (state) { state.stop.stopped = true; this.unfollowStates.delete(profileId); }
+    } else if (toolType === "human_sessions") {
+      const state = this.humanSessionStates.get(profileId);
+      if (state) { state.stop.stopped = true; this.humanSessionStates.delete(profileId); }
+    } else if (toolType === "contact") {
+      const state = this.contactStates.get(profileId);
+      if (state) { state.stop.stopped = true; this.contactStates.delete(profileId); }
+    }
+    this.reconcile().catch(() => {});
+  }
+
   // Force an immediate follow session, bypassing the inter-session wait timer.
   // If the runner is already sleeping between sessions, it wakes within 1 second.
   // If the runner is not active, starts it immediately via reconcile.

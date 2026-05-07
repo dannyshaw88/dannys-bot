@@ -43,7 +43,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
       { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-      { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's first session across the session delay window so they don't all fire simultaneously" },
+      { key: "randomiseTiming", label: "Randomise timing", description: "Spread each account's session start times across the session delay window so they don't all fire simultaneously" },
     ]},
     { label: "Timing", options: [
       { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs", subOptions: [
