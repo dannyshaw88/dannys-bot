@@ -891,7 +891,13 @@ export function ProfilesPage() {
           setEqxImporting(true);
           try {
             const buffer = await file.arrayBuffer();
-            const eqxBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+            const bytes = new Uint8Array(buffer);
+            let binary = "";
+            const CHUNK = 8192;
+            for (let i = 0; i < bytes.length; i += CHUNK) {
+              binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+            }
+            const eqxBase64 = btoa(binary);
             const res = await fetch("/api/profiles/import-eqx", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
