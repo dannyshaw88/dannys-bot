@@ -94,6 +94,7 @@ export function ProfileDetailsPage() {
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "pending" | "ok" | "fail">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);
+  const preStoppedStatusRef = useRef<string>("pending");
 
   const [linkedHostPort, setLinkedHostPort] = useState("");
   const [linkedUsername, setLinkedUsername] = useState("");
@@ -377,8 +378,8 @@ export function ProfileDetailsPage() {
 
   return (
     <AppLayout>
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-1 items-start">
-        <Tabs.List className="flex flex-col w-48 shrink-0 sticky top-4 self-start border-r border-border pr-0 py-1">
+      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-4 items-start">
+        <Tabs.List className="flex flex-col w-48 shrink-0 sticky top-4 self-start border-r border-border pr-2 py-1">
           <Tabs.Trigger value="settings" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <Settings className="w-4 h-4 shrink-0" /> Account Settings
           </Tabs.Trigger>
@@ -498,8 +499,9 @@ export function ProfileDetailsPage() {
                   <ChevronRight className="w-4 h-4" />
                 </button>
                 <span className="text-border mx-1 select-none">|</span>
-                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 transition-colors">
-                  <ArrowLeft className="w-3 h-3 text-red-500" /> {profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}
+                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium transition-colors">
+                  <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
+                  <span className="text-blue-500 hover:text-blue-600">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
                 </Link>
               </div>
             </div>
@@ -517,18 +519,8 @@ export function ProfileDetailsPage() {
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
           {/* Auto-save status bar */}
-          <div className="flex items-center justify-between mb-4 h-8">
+          {(profile?.creatorMode || saveStatus !== "idle") && <div className="flex items-center justify-between mb-4 h-8">
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 h-8 text-xs text-blue-500 border-blue-500/40 hover:text-blue-600 hover:border-blue-600/60 hover:bg-blue-500/5"
-                onClick={() => setCopyDialogOpen(true)}
-                disabled={otherProfiles.length === 0}
-              >
-                <Copy className="w-3.5 h-3.5" />
-                Copy Settings
-              </Button>
               {profile?.creatorMode && (
                 <Button
                   variant="outline"
@@ -559,7 +551,7 @@ export function ProfileDetailsPage() {
                 </span>
               )}
             </div>
-          </div>
+          </div>}
 
           <CopySettingsDialog
             key={copyDialogOpen ? "open" : "closed"}
@@ -573,18 +565,46 @@ export function ProfileDetailsPage() {
 
           {/* Account Label */}
           <div className="space-y-2 pb-2">
-            <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              <Tag className="w-3.5 h-3.5" /> Account Name
-            </Label>
-            <Input
-              placeholder="e.g. @Account1 | Monster Trustscore"
-              value={formData.accountLabel}
-              onChange={e => updateField({ accountLabel: e.target.value })}
-            />
+            <div className="flex items-center gap-3">
+              <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <Tag className="w-3.5 h-3.5" /> Account Name
+              </Label>
+              <button
+                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => setCopyDialogOpen(true)}
+                disabled={otherProfiles.length === 0}
+              >
+                <Copy className="w-3 h-3" /> Copy Settings
+              </button>
+              <div className="flex items-center gap-1.5 ml-1">
+                <Switch
+                  checked={profile?.accountStatus !== "stopped"}
+                  disabled={updateAccountStatusMutation.isPending}
+                  onCheckedChange={checked => {
+                    if (!checked) {
+                      preStoppedStatusRef.current = profile?.accountStatus ?? "pending";
+                      updateAccountStatusMutation.mutate({ id: profileId, accountStatus: "stopped" });
+                    } else {
+                      updateAccountStatusMutation.mutate({ id: profileId, accountStatus: preStoppedStatusRef.current });
+                    }
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground select-none">
+                  {profile?.accountStatus === "stopped" ? "Stopped" : "Active"}
+                </span>
+              </div>
+            </div>
+            <div className="max-w-[40%]">
+              <Input
+                placeholder="e.g. @Account1"
+                value={formData.accountLabel}
+                onChange={e => updateField({ accountLabel: e.target.value })}
+              />
+            </div>
             <p className="text-[11px] text-muted-foreground">A display label for quick identification — use any format you like.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
             <Card className="border-none shadow-none !bg-transparent">
               <CardHeader className="px-0 pt-0">
                 <CardTitle className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Instagram Login Information</CardTitle>
@@ -667,6 +687,29 @@ export function ProfileDetailsPage() {
                   >
                     Reset Device IDs
                   </button>
+
+                  <div className="space-y-3 pt-4 border-t border-border mt-4">
+                    <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
+                    <div className="flex gap-2 items-end">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
+                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
+                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
+                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
+                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
+                  </div>
 
                   <div className="space-y-3 pt-4 border-t border-border mt-4">
                     <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
@@ -836,54 +879,6 @@ export function ProfileDetailsPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0">
-                <CardTitle className="flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500" /> API Limits & Control</CardTitle>
-              </CardHeader>
-              <CardContent className="px-0 space-y-3">
-                <div className="flex gap-2 items-end">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
-                    <Input 
-                      type="number"
-                      className="h-7 text-xs w-14"
-                      value={formData.apiLimits.requestsMin}
-                      onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                    <Input 
-                      type="number"
-                      className="h-7 text-xs w-14"
-                      value={formData.apiLimits.requestsMax}
-                      onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
-                    <Input 
-                      type="number"
-                      className="h-7 text-xs w-14"
-                      value={formData.apiLimits.everySecondsMin}
-                      onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
-                    <Input 
-                      type="number"
-                      className="h-7 text-xs w-14"
-                      value={formData.apiLimits.everySecondsMax}
-                      onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })}
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Allow x-y calls every x-y ms globally for this account.
-                </p>
-              </CardContent>
-            </Card>
           </div>
 
           {/* ── Second row: Account Details + Security + Email Validation ── */}

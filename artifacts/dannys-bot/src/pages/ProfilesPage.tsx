@@ -116,6 +116,8 @@ export function ProfilesPage() {
   const manageProfileColsRef = useRef<HTMLDivElement>(null);
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
+  const isDragSelecting = useRef(false);
+  const dragAddMode = useRef(true);
   const [importOpen, setImportOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [eqxImporting, setEqxImporting] = useState(false);
@@ -252,6 +254,12 @@ export function ProfilesPage() {
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
+
+  useEffect(() => {
+    const onMouseUp = () => { isDragSelecting.current = false; };
+    window.addEventListener("mouseup", onMouseUp);
+    return () => window.removeEventListener("mouseup", onMouseUp);
+  }, []);
 
   const toggleAll = useCallback(() => {
     const filteredIds = filteredProfiles.map(p => p.id);
@@ -635,7 +643,7 @@ export function ProfilesPage() {
               return (
                 <div
                   key={profile.id}
-                  className={`flex items-center gap-3 px-3 py-1 border-b border-border/30 last:border-b-0 transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-1 border-b border-border/30 last:border-b-0 transition-colors select-none ${
                     selectedProfileIds.includes(profile.id)
                       ? "bg-primary/8 border-primary/20"
                       : isStopped
@@ -644,6 +652,19 @@ export function ProfilesPage() {
                       ? "bg-slate-50/70 hover:bg-slate-100/60"
                       : "bg-white hover:bg-slate-50/60"
                   }`}
+                  onMouseDown={e => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    const isSelected = selectedProfileIds.includes(profile.id);
+                    dragAddMode.current = !isSelected;
+                    isDragSelecting.current = true;
+                    toggleSelection(profile.id);
+                  }}
+                  onMouseEnter={() => {
+                    if (!isDragSelecting.current) return;
+                    const isSelected = selectedProfileIds.includes(profile.id);
+                    if (dragAddMode.current !== isSelected) toggleSelection(profile.id);
+                  }}
                 >
                   <div className="w-5 shrink-0">
                     <Checkbox
