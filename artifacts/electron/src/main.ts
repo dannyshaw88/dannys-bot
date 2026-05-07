@@ -487,6 +487,25 @@ function setupBackupHandlers() {
   ipcMain.on("backup-schedule-update", (_e, { enabled, intervalDays }) => {
     scheduleAutoBackup(enabled, intervalDays);
   });
+
+  ipcMain.handle("open-browser-window", (_event, { profileId, username }: { profileId: number; username: string; userAgent: string }) => {
+    const ebWin = new BrowserWindow({
+      width: 1100,
+      height: 820,
+      minWidth: 800,
+      minHeight: 600,
+      title: `Browser — @${username}`,
+      icon: getIconPath(),
+      autoHideMenuBar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, "preload.js"),
+      },
+    });
+    ebWin.loadURL(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
+    ebWin.once("ready-to-show", () => ebWin.show());
+  });
 }
 
 async function createWindow() {

@@ -35,6 +35,13 @@ export function BrowserWindowsProvider({ children }: { children: ReactNode }) {
   const topZ = useCallback(() => ++baseZ, []);
 
   const openWindow = useCallback((profileId: number, username: string, userAgent: string) => {
+    // In Electron on Windows, open as a separate OS window (keeps EB user agent intact)
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI?.openBrowserWindow) {
+      electronAPI.openBrowserWindow(profileId, username, userAgent);
+      return;
+    }
+    // Replit / web: use the in-app overlay
     setWindows(prev => {
       if (prev.find(w => w.profileId === profileId)) {
         baseZ++;

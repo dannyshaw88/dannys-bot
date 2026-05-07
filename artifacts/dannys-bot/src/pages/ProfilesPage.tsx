@@ -118,6 +118,7 @@ export function ProfilesPage() {
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const isDragSelecting = useRef(false);
   const dragAddMode = useRef(true);
+  const preStoppedStatus = useRef<Map<number, string>>(new Map());
   const [importOpen, setImportOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [eqxImporting, setEqxImporting] = useState(false);
@@ -364,11 +365,17 @@ export function ProfilesPage() {
     toast({ title: "Exported", description: `${toExport.length} profile(s) saved as Jarvee-compatible file.` });
   }, [profiles, selectedProfileIds, toast]);
 
-  const toggleStopped = (id: number, currentStatus: string, credentialsDirty?: boolean | null) => {
-    const next = currentStatus === "stopped"
-      ? (credentialsDirty ? "pending" : "valid")
-      : "stopped";
-    updateAccountStatus.mutate({ id, accountStatus: next });
+  const toggleStopped = (id: number, currentStatus: string) => {
+    if (currentStatus === "stopped") {
+      // Restore to the exact status the account had before being stopped
+      const restore = preStoppedStatus.current.get(id) ?? "pending";
+      preStoppedStatus.current.delete(id);
+      updateAccountStatus.mutate({ id, accountStatus: restore });
+    } else {
+      // Record the current status so we can restore it exactly on un-stop
+      preStoppedStatus.current.set(id, currentStatus);
+      updateAccountStatus.mutate({ id, accountStatus: "stopped" });
+    }
   };
 
   // ── Bulk: Verify All ─────────────────────────────────────────────────────
@@ -654,6 +661,8 @@ export function ProfilesPage() {
                   }`}
                   onMouseDown={e => {
                     if (e.button !== 0) return;
+                    // Let the Checkbox handle its own click — don't double-toggle
+                    if ((e.target as HTMLElement).closest('[role="checkbox"]')) return;
                     e.preventDefault();
                     const isSelected = selectedProfileIds.includes(profile.id);
                     dragAddMode.current = !isSelected;
@@ -694,7 +703,7 @@ export function ProfilesPage() {
                   <div style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
                     <Switch
                       checked={!isStopped}
-                      onCheckedChange={() => toggleStopped(profile.id, acctStatus, profile.credentialsDirty)}
+                      onCheckedChange={() => toggleStopped(profile.id, acctStatus)}
                       data-testid={`switch-active-${profile.id}`}
                       className="data-[state=checked]:bg-green-500"
                     />
