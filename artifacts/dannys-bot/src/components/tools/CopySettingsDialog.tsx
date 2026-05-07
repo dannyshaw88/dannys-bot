@@ -160,7 +160,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) setStatus("idle"); onOpenChange(v); }}>
-      <DialogContent className="max-w-[840px] p-0 overflow-hidden">
+      <DialogContent className="max-w-[1008px] p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
             <Copy className="w-4 h-4 text-primary" /> {title}
@@ -169,7 +169,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
         <div className="flex min-h-0" style={{ maxHeight: "calc(81vh - 140px)" }}>
           {/* LEFT — profile list */}
-          <div className="w-56 shrink-0 border-r border-border flex flex-col">
+          <div className="w-72 shrink-0 border-r border-border flex flex-col">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
               {filteredProfiles.length > 1 && (
@@ -189,30 +189,27 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
             </div>
             {profileGroups.size > 0 && (
               <div className="px-3 py-2 border-b border-border bg-muted/10">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Select by Group</p>
-                <div className="flex flex-wrap gap-1">
-                  {Array.from(profileGroups.entries()).map(([groupName, groupProfiles]) => {
-                    const allSel = groupProfiles.every(p => targets.has(p.id));
-                    return (
-                      <button
-                        key={groupName}
-                        onClick={() => setTargets(prev => {
-                          const next = new Set(prev);
-                          if (allSel) groupProfiles.forEach(p => next.delete(p.id));
-                          else groupProfiles.forEach(p => next.add(p.id));
-                          return next;
-                        })}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
-                          allSel
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-muted/30 text-foreground border-border hover:bg-muted/60"
-                        }`}
-                      >
-                        {groupName} ({groupProfiles.length})
-                      </button>
-                    );
-                  })}
-                </div>
+                <select
+                  className="w-full text-xs rounded-md border border-input bg-background text-foreground px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                  value=""
+                  onChange={e => {
+                    const groupName = e.target.value;
+                    if (!groupName) return;
+                    const groupProfiles = profileGroups.get(groupName) ?? [];
+                    setTargets(prev => {
+                      const next = new Set(prev);
+                      groupProfiles.forEach(p => next.add(p.id));
+                      return next;
+                    });
+                  }}
+                >
+                  <option value="">Select by group…</option>
+                  {Array.from(profileGroups.entries()).map(([groupName, groupProfiles]) => (
+                    <option key={groupName} value={groupName}>
+                      {groupName} ({groupProfiles.length})
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
             <div className="px-3 py-2 border-b border-border">
@@ -237,7 +234,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
                 >
                   <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} />
-                  <span className="text-sm font-mono truncate">@{p.username}</span>
+                  <span className="text-sm font-medium tracking-tight truncate">@{p.username}</span>
                 </label>
               ))}
             </div>

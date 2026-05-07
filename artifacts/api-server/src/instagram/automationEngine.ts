@@ -588,6 +588,7 @@ class AutomationEngine {
           this.logAction(freshProfile.id, hsTool.id, "tool_start", "", "", "", "ok", "Human Session started");
           try {
             await this.runHumanSessionTools(freshProfile, hsTool, state);
+            await storage.incrementStat(freshProfile.id, "human_session");
             this.logAction(freshProfile.id, hsTool.id, "tool_complete", "", "", "", "ok", "Human Session complete");
           } catch (err: any) {
             this.logAction(freshProfile.id, hsTool.id, "tool_complete", "", "", "", "error", `Human Session error: ${err?.message ?? "unknown"}`);
@@ -1616,6 +1617,7 @@ class AutomationEngine {
               break;
             } else if (liked) {
               this.bumpAction(state, "like");
+              await storage.incrementStat(profile.id, "like");
               console.log(`[engine] @${profile.username}: ♥ liked post of @${uname} (${i + 1}/${likeCount})`);
               this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "ok", `Liked post (${i + 1}/${likeCount})`);
               await sleep(randInt((s.likeDelayMin ?? 2) * 1000, (s.likeDelayMax ?? 6) * 1000));
@@ -1647,6 +1649,7 @@ class AutomationEngine {
           const ok = await client.viewStories(uid, uname);
           if (ok) {
             this.bumpAction(state, "viewStories");
+            await storage.incrementStat(profile.id, "story");
             console.log(`[engine] @${profile.username}: 📖 viewed stories of @${uname} (${i + 1}/${storyCount})`);
             this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "ok", `Stories viewed (${i + 1}/${storyCount})`);
             await sleep(randInt((s.viewStoriesDelayMin ?? 2) * 1000, (s.viewStoriesDelayMax ?? 6) * 1000));
@@ -2198,6 +2201,7 @@ class AutomationEngine {
           const summary = watched > 0
             ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)`
             : `Liked ${liked} post(s) from timeline`;
+          for (let _i = 0; _i < liked; _i++) await storage.incrementStat(profile.id, "like");
           console.log(`[engine] @${profile.username}: ❤️ ${summary}`);
           if (likedPosts.length > 0) {
             for (const post of likedPosts) {

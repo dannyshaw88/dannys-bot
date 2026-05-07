@@ -21,9 +21,7 @@ interface UnfollowToolPanelProps {
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
     { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-    { key: "uf_randomiseTiming", label: "Randomise timing", description: "When activating across multiple accounts, stagger each account's start time so they don't all run simultaneously", subOptions: [
-      { key: "uf_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
-    ]},
+    { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's first session across the Wait Between Sessions window so they don't all fire simultaneously" },
   ]},
   { label: "Settings", options: [
     { key: "uf_settings", label: "Unfollow Settings", description: "Timing, limits and age filters for unfollow actions", subOptions: [
@@ -92,10 +90,10 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
     const copyEnabled = expandedKeys.includes("startStop");
     const keysToSend  = expandedKeys.filter(k => k !== "startStop");
 
-    const willRandomise = expandedKeys.includes("randomiseTiming") && !!(settings as any).randomiseTiming;
     const willEnable    = copyEnabled && tool.enabled;
+    const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
     let staggerOffsets: number[] | undefined;
-    if (willRandomise && willEnable && targetIds.length > 1) {
+    if (willRandomise && targetIds.length > 1) {
       const delayMax = (settings as any).delayMax ?? 15;
       staggerOffsets = targetIds.map((_, i) =>
         Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))

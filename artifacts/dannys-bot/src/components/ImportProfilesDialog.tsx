@@ -282,6 +282,9 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
       const fail = data.results.filter((r: ImportResult) => !r.success).length;
       const created = data.results.filter((r: ImportResult) => r.success && r.action === "created").length;
       const updated = data.results.filter((r: ImportResult) => r.success && r.action === "updated").length;
+      localStorage.setItem("equinox_last_import", JSON.stringify({
+        ts: Date.now(), fileName, created, updated, failed: fail, total: ok + fail,
+      }));
       const parts = [];
       if (created) parts.push(`${created} created`);
       if (updated) parts.push(`${updated} updated`);

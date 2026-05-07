@@ -5,9 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2 } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect } from "react";
+import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
 
 type BackupEntry = { id: string; date: string; size: number };
 const eAPI = () => (window as any).electronAPI;
@@ -62,6 +63,58 @@ function parseJarveeFile(buffer: ArrayBuffer): JarveeGroup[] {
     accountUsername,
     entries,
   }));
+}
+
+function ThemePicker() {
+  const { themeColor, themeMode, setThemeColor, setThemeMode } = useTheme();
+  return (
+    <div className="space-y-5">
+      {/* Light / Dark toggle */}
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Mode</p>
+        <div className="flex gap-2">
+          {(["light", "dark"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setThemeMode(m)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                themeMode === m
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:bg-accent/30"
+              }`}
+            >
+              {m === "light" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              {m === "light" ? "Light" : "Dark"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Colour swatches */}
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Accent Colour</p>
+        <div className="flex flex-wrap gap-2.5">
+          {THEME_COLORS.map(({ key, label, primary }) => (
+            <button
+              key={key}
+              title={label}
+              onClick={() => setThemeColor(key)}
+              className={`relative w-8 h-8 rounded-md border-2 transition-transform hover:scale-110 ${
+                themeColor === key ? "border-foreground scale-110" : "border-transparent"
+              }`}
+              style={{ background: primary }}
+            >
+              {themeColor === key && (
+                <span className="absolute inset-0 flex items-center justify-center text-white text-[10px] font-bold">✓</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          {THEME_COLORS.find(t => t.key === themeColor)?.label ?? ""}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 async function fetchSettings(): Promise<GlobalSettings> {
@@ -579,11 +632,16 @@ export function SettingsPage() {
 
         {/* Theme */}
         <div className="desktop-card p-6">
-          <h3 className="text-base font-semibold mb-2">Application Theme</h3>
-          <p className="text-sm text-muted-foreground">
-            Equinox is designed with a clean white desktop interface to maximise productivity during automation management.
-            Dark mode is intentionally disabled to maintain this professional aesthetic.
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <Palette className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Application Theme</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Choose a colour accent and light or dark mode. Your selection is saved locally and applied immediately.
           </p>
+          <ThemePicker />
         </div>
 
         <div className="border-t border-border/60" />

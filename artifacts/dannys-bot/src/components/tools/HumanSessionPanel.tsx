@@ -43,9 +43,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
       { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-      { key: "hs_randomiseTiming", label: "Randomise timing", description: "When activating across multiple accounts, stagger each account's start time so they don't all run simultaneously", subOptions: [
-        { key: "hs_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
-      ]},
+      { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's first session across the session delay window so they don't all fire simultaneously" },
     ]},
     { label: "Timing", options: [
       { key: "humanToolsDelay", label: "Human Tools Delay", description: "Interval between human session runs", subOptions: [
@@ -106,7 +104,16 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const handleHumanCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const copyEnabled = expandedKeys.includes("startStop");
     const keysToSend  = expandedKeys.filter(k => k !== "startStop");
-    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined);
+    const willEnable    = copyEnabled && tool.enabled;
+    const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
+    let staggerOffsets: number[] | undefined;
+    if (willRandomise && targetIds.length > 1) {
+      const delayMax = (settings as any).delayMax ?? 60;
+      staggerOffsets = targetIds.map((_, i) =>
+        Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
+      );
+    }
+    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined, staggerOffsets);
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 

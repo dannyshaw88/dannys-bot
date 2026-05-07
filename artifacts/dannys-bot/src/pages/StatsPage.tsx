@@ -7,13 +7,13 @@ import { useUpdateTool } from "@/hooks/use-tools";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Activity, User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail,
+  User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
   Settings2, ChevronDown, ChevronUp, Bot,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 
-type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "human_session" | "tools_ran";
+type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "human_session";
 
 const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; color: string; isTool: boolean }[] = [
   { key: "follow",        label: "Follow",        icon: <UserPlus className="w-3.5 h-3.5" />,     color: "text-blue-500",    isTool: true  },
@@ -22,18 +22,17 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "like",          label: "Likes",         icon: <Heart className="w-3.5 h-3.5" />,         color: "text-rose-500",    isTool: false },
   { key: "comment",       label: "Comments",      icon: <MessageCircle className="w-3.5 h-3.5" />, color: "text-indigo-500",  isTool: false },
   { key: "story",         label: "Story Views",   icon: <Eye className="w-3.5 h-3.5" />,           color: "text-emerald-500", isTool: false },
-  { key: "human_session", label: "Human Session", icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: false },
-  { key: "tools_ran",     label: "Tools Ran",     icon: <Activity className="w-3.5 h-3.5" />,      color: "text-amber-500",   isTool: false },
+  { key: "human_session", label: "Human Sessions",icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: false },
 ];
 
 const DEFAULT_COL_WIDTHS: Record<StatKey | "account", number> = {
   account: 160, follow: 110, unfollow: 110, dm: 110,
-  like: 100, comment: 110, story: 120, human_session: 130, tools_ran: 110,
+  like: 100, comment: 110, story: 120, human_session: 140,
 };
 
 const DEFAULT_VISIBLE: Record<StatKey, boolean> = {
   follow: true, unfollow: true, dm: true, like: true,
-  comment: true, story: true, human_session: true, tools_ran: true,
+  comment: true, story: true, human_session: true,
 };
 
 function ProfileStatsRow({
@@ -202,7 +201,7 @@ export function StatsPage() {
   };
 
   const updateWidth = (key: StatKey | "account", delta: number) => {
-    const v = Math.max(60, Math.min(400, colWidths[key] + delta));
+    const v = Math.max(40, colWidths[key] + delta);
     const next = { ...colWidths, [key]: v };
     setColWidths(next);
     localStorage.setItem("stats_col_widths_px", JSON.stringify(next));
@@ -284,11 +283,9 @@ export function StatsPage() {
                         </button>
                         <input
                           type="number"
-                          min={60}
-                          max={400}
                           value={colWidths[key as StatKey | "account"]}
                           onChange={e => {
-                            const v = Math.max(60, Math.min(400, Number(e.target.value)));
+                            const v = Math.max(40, Number(e.target.value) || 40);
                             const next = { ...colWidths, [key]: v };
                             setColWidths(next);
                             localStorage.setItem("stats_col_widths_px", JSON.stringify(next));

@@ -215,6 +215,40 @@
 
 }
 
+/* ── Colour Themes ── placed AFTER :root and .dark so they win the cascade ── */
+/* Light: :root.theme-X = specificity 0,2,0 > :root 0,1,0                    */
+/* Dark:  .dark.theme-X = specificity 0,2,0 > .dark 0,1,0                    */
+
+:root.theme-purple { --primary: 262 60% 50%; --primary-foreground: 0 0% 100%; --ring: 262 60% 50%; --sidebar-primary: 262 60% 50%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 262 60% 50%; --chart-1: 262 60% 50%; }
+.dark.theme-purple  { --primary: 262 60% 65%; --primary-foreground: 222 47% 11%; --ring: 262 60% 65%; --sidebar-primary: 262 60% 65%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 262 60% 65%; --chart-1: 262 60% 65%; }
+
+:root.theme-emerald { --primary: 142 71% 38%; --primary-foreground: 0 0% 100%; --ring: 142 71% 38%; --sidebar-primary: 142 71% 38%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 142 71% 38%; --chart-1: 142 71% 38%; }
+.dark.theme-emerald  { --primary: 142 71% 55%; --primary-foreground: 222 47% 11%; --ring: 142 71% 55%; --sidebar-primary: 142 71% 55%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 142 71% 55%; --chart-1: 142 71% 55%; }
+
+:root.theme-orange { --primary: 25 95% 48%; --primary-foreground: 0 0% 100%; --ring: 25 95% 48%; --sidebar-primary: 25 95% 48%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 25 95% 48%; --chart-1: 25 95% 48%; }
+.dark.theme-orange  { --primary: 25 95% 60%; --primary-foreground: 222 47% 11%; --ring: 25 95% 60%; --sidebar-primary: 25 95% 60%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 25 95% 60%; --chart-1: 25 95% 60%; }
+
+:root.theme-rose { --primary: 350 89% 53%; --primary-foreground: 0 0% 100%; --ring: 350 89% 53%; --sidebar-primary: 350 89% 53%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 350 89% 53%; --chart-1: 350 89% 53%; }
+.dark.theme-rose  { --primary: 350 89% 68%; --primary-foreground: 222 47% 11%; --ring: 350 89% 68%; --sidebar-primary: 350 89% 68%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 350 89% 68%; --chart-1: 350 89% 68%; }
+
+:root.theme-teal { --primary: 180 62% 36%; --primary-foreground: 0 0% 100%; --ring: 180 62% 36%; --sidebar-primary: 180 62% 36%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 180 62% 36%; --chart-1: 180 62% 36%; }
+.dark.theme-teal  { --primary: 180 62% 52%; --primary-foreground: 222 47% 11%; --ring: 180 62% 52%; --sidebar-primary: 180 62% 52%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 180 62% 52%; --chart-1: 180 62% 52%; }
+
+:root.theme-red { --primary: 0 72% 46%; --primary-foreground: 0 0% 100%; --ring: 0 72% 46%; --sidebar-primary: 0 72% 46%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 0 72% 46%; --chart-1: 0 72% 46%; }
+.dark.theme-red  { --primary: 0 72% 62%; --primary-foreground: 222 47% 11%; --ring: 0 72% 62%; --sidebar-primary: 0 72% 62%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 0 72% 62%; --chart-1: 0 72% 62%; }
+
+:root.theme-violet { --primary: 250 83% 55%; --primary-foreground: 0 0% 100%; --ring: 250 83% 55%; --sidebar-primary: 250 83% 55%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 250 83% 55%; --chart-1: 250 83% 55%; }
+.dark.theme-violet  { --primary: 250 83% 68%; --primary-foreground: 222 47% 11%; --ring: 250 83% 68%; --sidebar-primary: 250 83% 68%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 250 83% 68%; --chart-1: 250 83% 68%; }
+
+:root.theme-gold { --primary: 43 96% 40%; --primary-foreground: 0 0% 100%; --ring: 43 96% 40%; --sidebar-primary: 43 96% 40%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 43 96% 40%; --chart-1: 43 96% 40%; }
+.dark.theme-gold  { --primary: 43 96% 56%; --primary-foreground: 222 47% 11%; --ring: 43 96% 56%; --sidebar-primary: 43 96% 56%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 43 96% 56%; --chart-1: 43 96% 56%; }
+
+:root.theme-pink { --primary: 328 73% 52%; --primary-foreground: 0 0% 100%; --ring: 328 73% 52%; --sidebar-primary: 328 73% 52%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 328 73% 52%; --chart-1: 328 73% 52%; }
+.dark.theme-pink  { --primary: 328 73% 68%; --primary-foreground: 222 47% 11%; --ring: 328 73% 68%; --sidebar-primary: 328 73% 68%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 328 73% 68%; --chart-1: 328 73% 68%; }
+
+:root.theme-slate { --primary: 215 25% 48%; --primary-foreground: 0 0% 100%; --ring: 215 25% 48%; --sidebar-primary: 215 25% 48%; --sidebar-primary-foreground: 0 0% 100%; --sidebar-ring: 215 25% 48%; --chart-1: 215 25% 48%; }
+.dark.theme-slate  { --primary: 215 25% 62%; --primary-foreground: 222 47% 11%; --ring: 215 25% 62%; --sidebar-primary: 215 25% 62%; --sidebar-primary-foreground: 222 47% 11%; --sidebar-ring: 215 25% 62%; --chart-1: 215 25% 62%; }
+
 @layer base {
   * {
     @apply border-border;

@@ -12,6 +12,7 @@ import { ProfileDetailsPage } from "@/pages/ProfileDetailsPage";
 import { ProxiesPage } from "@/pages/ProxiesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { StandaloneBrowserPage } from "@/pages/StandaloneBrowserPage";
+import { ReadmePage } from "@/pages/ReadmePage";
 
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/proxies" component={ProxiesPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/browser/:id" component={StandaloneBrowserPage} />
+      <Route path="/readme" component={ReadmePage} />
       <Route component={NotFound} />
     </Switch>
   );

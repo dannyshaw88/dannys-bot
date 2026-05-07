@@ -3,6 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <script>
+      (function() {
+        var c = localStorage.getItem("equinox-theme-color") || "blue";
+        var m = localStorage.getItem("equinox-theme-mode") || "dark";
+        var h = document.documentElement;
+        if (m === "dark") h.classList.add("dark");
+        if (c !== "blue") h.classList.add("theme-" + c);
+      })();
+    </script>
     <title>Equinox</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />

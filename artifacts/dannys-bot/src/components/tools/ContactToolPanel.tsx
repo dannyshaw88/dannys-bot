@@ -19,9 +19,7 @@ type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
 const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
-    { key: "ct_randomiseTiming", label: "Randomise timing", description: "When activating across multiple accounts, stagger each account's start time so they don't all run simultaneously", subOptions: [
-      { key: "ct_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
-    ]},
+    { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's first session across the wait window so they don't all fire simultaneously" },
   ]},
   { label: "Contact New Followers", options: [
     { key: "ct_newFollowers", label: "Contact New Followers", description: "Auto-messaging settings for new followers", subOptions: [
@@ -62,11 +60,11 @@ export function ContactToolPanel({ tool, profile }: Props) {
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const src = (tool.settings as Record<string, unknown>) ?? {};
-    const willRandomise = expandedKeys.includes("randomiseTiming") && !!src.randomiseTiming;
     const copyEnabled   = expandedKeys.includes("startStop");
     const willEnable    = copyEnabled && tool.enabled;
+    const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
     let staggerOffsets: number[] | undefined;
-    if (willRandomise && willEnable && targetIds.length > 1) {
+    if (willRandomise && targetIds.length > 1) {
       const delayMax = (src as any).contactUsersDelayMax ?? (src as any).delayMax ?? 60;
       staggerOffsets = targetIds.map((_, i) =>
         Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))

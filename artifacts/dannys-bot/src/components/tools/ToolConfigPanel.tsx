@@ -241,9 +241,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   const FOLLOW_TOOL_COPY_GROUPS: CopyOptionGroup[] = [
     { label: "General", options: [
       { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-      { key: "ft_randomiseTiming", label: "Randomise timing", description: "When activating across multiple accounts, stagger each account's start time so they don't all run simultaneously", subOptions: [
-        { key: "ft_randomiseTimingVal", label: "Randomise timing", settingKeys: ["randomiseTiming"] },
-      ]},
+      { key: "randomiseTiming", label: "Randomise timing", description: "Stagger each account's first session across the Wait Until Next Session window so they don't all fire simultaneously" },
     ]},
     { label: "Timing", options: [
       { key: "ft_timing", label: "Timing", description: "Delays and wait times between actions", subOptions: [
@@ -314,12 +312,14 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     const copySources  = expandedKeys.includes("ft_sources");
     const keysToSend   = expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources");
 
-    // When "Randomise timing" is selected, the source tool has it on, and we're
-    // enabling accounts — spread start times evenly across the [0, delayMax] window.
-    const willRandomise = expandedKeys.includes("randomiseTiming") && !!(settings as any).randomiseTiming;
+    // When "Randomise timing" is selected and accounts are being enabled,
+    // spread start times evenly across the [0, delayMax] window so accounts
+    // don't all fire at the same time. No need to check source tool value —
+    // the user explicitly chose to stagger via the copy dialog.
     const willEnable    = copyEnabled && tool.enabled;
+    const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
     let staggerOffsets: number[] | undefined;
-    if (willRandomise && willEnable && targetIds.length > 1) {
+    if (willRandomise && targetIds.length > 1) {
       const delayMax = (settings as any).delayMax ?? 5;
       staggerOffsets = targetIds.map((_, i) =>
         Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
