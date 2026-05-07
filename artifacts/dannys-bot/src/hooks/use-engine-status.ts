@@ -5,6 +5,8 @@ interface EngineStatusEntry {
   loggedIn: boolean;
   dailyCount: number;
   hourlyCount: number;
+  dailyUnfollowCount: number;
+  dailyDmCount: number;
   nextHumanSessionAt: number;
   nextFollowAt: number;
   nextContactAt: number;

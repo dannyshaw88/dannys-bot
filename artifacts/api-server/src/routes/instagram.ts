@@ -285,6 +285,12 @@ export async function registerInstagramRoutes(
     try {
       const id = Number(req.params.id);
       const body = req.body;
+      // The general PATCH route must NEVER be able to set accountStatus to "valid".
+      // Only the explicit /verify route is authoritative for that status.
+      if ("accountStatus" in body && body.accountStatus === "valid") {
+        console.warn(`[status-guard] BLOCKED attempt to set profile ${id} → "valid" via PATCH route`);
+        delete body.accountStatus;
+      }
       if ("username" in body || "password" in body) {
         const current = await storage.getProfile(id);
         const usernameChanged = current && "username" in body && body.username !== current.username;
@@ -930,12 +936,9 @@ export async function registerInstagramRoutes(
         // result.ok is also true for 2FA/challenge screens ("2FA code submitted",
         // "2FA screen shown", etc.) — those must NOT set the account to valid
         // because we don't yet know whether the 2FA step passed.
-        const trulyLoggedIn =
-          result.ok &&
-          (result.message === "Login successful" || result.message === "Already logged in");
-        if (trulyLoggedIn) {
-          await storage.updateProfile(profileId, { accountStatus: "valid", credentialsDirty: false });
-        }
+        // EB login never sets account status — only the mobile API login
+        // (Verify Credentials) is authoritative. A banned account that happens
+        // to reach the EB login screen must not be silently marked valid.
       })
       .catch(err  => sendLoginDone(profileId, false, String(err)));
   });
@@ -1198,7 +1201,8 @@ export async function registerInstagramRoutes(
         profile.twoFASecretKey ?? twoCaptchaKey,
       );
       if (result.ok) {
-        await storage.updateProfile(profileId, { accountStatus: "valid", credentialsDirty: false });
+        // EB captcha resolution does NOT change account status — only the mobile
+        // API login (Verify Credentials) determines if an account is valid.
         return res.json({ ok: true, message: result.message ?? "Captcha resolved successfully" });
       } else {
         return res.json({ ok: false, error: result.message ?? "Captcha resolution failed" });

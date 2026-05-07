@@ -134,6 +134,7 @@ export function StatsPage() {
   const statsQueries = useQueries({
     queries: (profiles ?? []).map(p => ({
       queryKey: [`/api/profiles/${p.id}/stats`],
+      refetchInterval: 10000,
     })),
   });
 

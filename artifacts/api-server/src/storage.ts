@@ -155,6 +155,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateProfile(id: number, updates: any): Promise<Profile> {
+    if ("accountStatus" in updates) {
+      const caller = new Error().stack?.split("\n").slice(2, 5).join(" | ") ?? "unknown";
+      console.log(`[status-audit] profile=${id} accountStatus="${updates.accountStatus}" caller=${caller}`);
+    }
     const [updated] = await db.update(profiles).set(updates).where(eq(profiles.id, id)).returning();
     return updated;
   }

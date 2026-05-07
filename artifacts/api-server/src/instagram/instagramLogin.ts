@@ -437,6 +437,8 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
 }
 
 export async function verifyInstagramCredentials(profile: Profile): Promise<VerifyResult> {
+  const caller = new Error().stack?.split("\n").slice(2, 4).join(" | ") ?? "unknown";
+  console.log(`[verify-audit] verifyInstagramCredentials called for @${profile.username} (status="${profile.accountStatus}") caller=${caller}`);
   const resolved = await buildProxyUrl(profile);
   if (!resolved) {
     return {
