@@ -1263,7 +1263,8 @@ export async function browserAutoLogin(
           await dismissCookieBanner(s.page);
           await dismissInstagramPopups(s.page);
 
-          const afterUrl = s.page.url();
+          let afterUrl = "";
+          try { afterUrl = s.page.url(); } catch { /* page context may have been destroyed during navigation */ }
           const afterText = await s.page.evaluate(
             () => (document.body?.innerText || "").slice(0, 300).trim()
           ).catch(() => "");

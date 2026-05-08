@@ -85,7 +85,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [activeTab, setActiveTab] = useState(0);
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileChooserPending, setFileChooserPending] = useState(false);
 
   // F12 on the canvas toggles the log panel
@@ -162,13 +161,21 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         switch (msg.type) {
           case "frame":
             drawFrame(msg.data);
-            if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) setAddressBar(msg.url);
+            if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) {
+              setAddressBar(msg.url);
+              if (msg.url.includes("instagram.com/accounts/login") || msg.url.includes("instagram.com/login")) {
+                setLoginState(prev => prev === "ok" ? "idle" : prev);
+              }
+            }
             break;
           case "loading":
             setIsLoading(msg.loading);
             break;
           case "urlChange":
             if (!addressFocusedRef.current) setAddressBar(msg.url);
+            if (msg.url && (msg.url.includes("instagram.com/accounts/login") || msg.url.includes("instagram.com/login"))) {
+              setLoginState(prev => prev === "ok" ? "idle" : prev);
+            }
             break;
           case "error":
             setErrorMsg(msg.message ?? "Unknown error");
@@ -196,7 +203,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             break;
           case "fileChooserNeeded":
             setFileChooserPending(true);
-            setTimeout(() => fileInputRef.current?.click(), 50);
             break;
           case "consoleLog": {
             const entry: ConsoleEntry = { ts: nowTs(), level: msg.level ?? "log", text: msg.text ?? "" };
@@ -365,6 +371,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const clearSession = async () => {
     try {
       await fetch(`/api/browser/${profileId}/session`, { method: "DELETE" });
+      setLoginState("idle");
       toast({ title: "Session Cleared", description: "Cookies wiped — reconnecting with fresh browser." });
       setTimeout(connect, 800);
     } catch {
@@ -662,32 +669,51 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         )}
       </div>
 
-      {/* Hidden native file input — shown when the EB page opens a file chooser dialog */}
+      {/* File chooser overlay — requires a real user click so the browser allows the file picker */}
       {fileChooserPending && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*,*/*"
-          style={{ display: "none" }}
-          onChange={async e => {
-            setFileChooserPending(false);
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async ev => {
-              const base64 = (ev.target?.result as string)?.split(",")[1];
-              if (!base64) return;
-              await fetch(`/api/browser/${profileId}/files`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fileName: file.name, data: base64 }),
-              }).catch(() => {});
-            };
-            reader.readAsDataURL(file);
-            // Reset so the same file can be re-picked next time
-            if (fileInputRef.current) fileInputRef.current.value = "";
-          }}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-background rounded-xl border border-border shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <MonitorPlay className="w-5 h-5 text-primary shrink-0" />
+              <h3 className="text-base font-semibold">File Upload Requested</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              The page is asking you to choose a file. Click the button below to open your file browser.
+            </p>
+            <label className="cursor-pointer w-full">
+              <div className="w-full flex items-center justify-center gap-2 h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">
+                Browse Files…
+              </div>
+              <input
+                type="file"
+                accept="image/*,video/*,*/*"
+                className="sr-only"
+                onChange={async e => {
+                  setFileChooserPending(false);
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = async ev => {
+                    const base64 = (ev.target?.result as string)?.split(",")[1];
+                    if (!base64) return;
+                    await fetch(`/api/browser/${profileId}/files`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ fileName: file.name, data: base64 }),
+                    }).catch(() => {});
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setFileChooserPending(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

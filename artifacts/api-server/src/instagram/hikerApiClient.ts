@@ -34,6 +34,13 @@ function hikerGet(path: string, token: string): Promise<any> {
   });
 }
 
+// ── Module-level username → pk cache (shared across all HikerApiClient instances) ──
+// Prevents repeated v1/user/by/username calls for the same username within the same
+// server process. TTL of 24 h — profile PKs never change so a long TTL is safe.
+const USERNAME_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+interface UsernameCacheEntry { data: { pk: string; username: string }; expiresAt: number; }
+const usernameCache = new Map<string, UsernameCacheEntry>();
+
 export class HikerApiClient {
   constructor(private readonly token: string) {}
 
@@ -47,10 +54,17 @@ export class HikerApiClient {
   }
 
   async getUserByUsername(username: string): Promise<{ pk: string; username: string } | null> {
+    const cacheKey = username.toLowerCase();
+    const cached = usernameCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
     try {
       const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
       if (!j?.pk) return null;
-      return { pk: String(j.pk), username: String(j.username) };
+      const data = { pk: String(j.pk), username: String(j.username) };
+      usernameCache.set(cacheKey, { data, expiresAt: Date.now() + USERNAME_CACHE_TTL_MS });
+      return data;
     } catch (e: any) {
       console.error(`[hikerApi] getUserByUsername @${username} error: ${e?.message}`);
       return null;

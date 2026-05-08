@@ -1012,7 +1012,7 @@ class AutomationEngine {
           username: profile.username,
           operationName: "v1/user/by/username",
           date: new Date().toISOString(),
-          message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username} (cached for future runs)` : `Could not resolve @${profile.username}`,
+          message: ownUserId ? `Resolved pk=${ownUserId} for @${profile.username}` : `Could not resolve @${profile.username}`,
           source: "HikerAPI",
           navChain: "",
           ipAddress: "",

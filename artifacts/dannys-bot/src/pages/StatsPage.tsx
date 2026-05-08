@@ -1,5 +1,6 @@
 import { useRef, useState, useMemo, useEffect } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -8,10 +9,11 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
-  Settings2, ChevronDown, ChevronUp, Bot,
+  Settings2, ChevronDown, ChevronUp, Bot, Monitor,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
+import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "human_session";
 
@@ -30,6 +32,8 @@ const DEFAULT_COL_WIDTHS: Record<StatKey | "account", number> = {
   like: 100, comment: 110, story: 120, human_session: 140,
 };
 
+const EB_COL_WIDTH = 148;
+
 const DEFAULT_VISIBLE: Record<StatKey, boolean> = {
   follow: true, unfollow: true, dm: true, like: true,
   comment: true, story: true, human_session: true,
@@ -40,11 +44,15 @@ function ProfileStatsRow({
   visibleCols,
   colWidths,
   statsData,
+  onOpenBrowser,
+  onNavigateToProfile,
 }: {
   profile: Profile;
   visibleCols: Record<StatKey, boolean>;
   colWidths: Record<StatKey | "account", number>;
   statsData: any[];
+  onOpenBrowser: () => void;
+  onNavigateToProfile: () => void;
 }) {
   const { data: tools } = useQuery<Tool[]>({ queryKey: [`/api/profiles/${profile.id}/tools`] });
   const updateToolMutation = useUpdateTool();
@@ -60,17 +68,37 @@ function ProfileStatsRow({
   };
 
   const visibleTypes = ALL_STAT_TYPES.filter(({ key }) => visibleCols[key]);
+  const displayName = profile.accountLabel || profile.username;
 
   return (
     <tr className="hover:bg-accent/5 transition-colors border-b border-border/50">
+      {/* Account column — label, clickable → profile details */}
       <td style={{ width: colWidths.account }} className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+        <button
+          className="flex items-center gap-2 hover:text-primary transition-colors text-left w-full group"
+          onClick={onNavigateToProfile}
+          title={`Go to profile: ${displayName}`}
+        >
+          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
             <User className="w-3.5 h-3.5 text-primary" />
           </div>
-          <span className="truncate">{profile.username}</span>
-        </div>
+          <span className="truncate">{displayName}</span>
+        </button>
       </td>
+
+      {/* Browser Embedded column */}
+      <td style={{ width: EB_COL_WIDTH }} className="px-4 py-3">
+        <button
+          className="flex items-center gap-1.5 text-xs text-cyan-500 hover:text-cyan-400 transition-colors font-medium whitespace-nowrap"
+          onClick={onOpenBrowser}
+          title="Open Embedded Browser for this account"
+        >
+          <Monitor className="w-3.5 h-3.5 shrink-0" />
+          <span>Browser Embedded</span>
+        </button>
+      </td>
+
+      {/* Stat columns */}
       {visibleTypes.map(({ key, isTool }) => {
         const tool = isTool ? tools?.find((t: Tool) => t.type === key) : undefined;
         const todayCount = getStat(key, today);
@@ -99,6 +127,8 @@ function ProfileStatsRow({
 
 export function StatsPage() {
   const { data: profiles, isLoading } = useProfiles();
+  const [, setLocation] = useLocation();
+  const { openWindow } = useBrowserWindows();
 
   const [colWidths, setColWidths] = useState<Record<StatKey | "account", number>>(() => {
     try {
@@ -158,8 +188,8 @@ export function StatsPage() {
     if (!sortKey) return profiles;
     return [...profiles].sort((a, b) => {
       if (sortKey === "account") {
-        const sa = (a.username ?? "").toLowerCase();
-        const sb = (b.username ?? "").toLowerCase();
+        const sa = (a.accountLabel || a.username || "").toLowerCase();
+        const sb = (b.accountLabel || b.username || "").toLowerCase();
         return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
       }
       const va = getStatById(a.id, sortKey, today);
@@ -208,7 +238,8 @@ export function StatsPage() {
   };
 
   const visibleTypes = ALL_STAT_TYPES.filter(({ key }) => visibleCols[key]);
-  const colCount = 1 + visibleTypes.length;
+  // Account + Browser Embedded + stat columns
+  const colCount = 2 + visibleTypes.length;
 
   const colGroups: [string, string][] = [
     ["account", "Account"],
@@ -219,6 +250,11 @@ export function StatsPage() {
     if (sortKey !== key) return <span className="text-[9px] opacity-30 ml-0.5">⇅</span>;
     return <span className="text-[9px] ml-0.5">{sortDir === "asc" ? "▲" : "▼"}</span>;
   };
+
+  const makeRowProps = (profile: Profile) => ({
+    onOpenBrowser: () => openWindow(profile.id, profile.username ?? "", profile.userAgentEmbedded ?? ""),
+    onNavigateToProfile: () => setLocation(`/profiles/${profile.id}`),
+  });
 
   return (
     <AppLayout>
@@ -317,6 +353,7 @@ export function StatsPage() {
             <table className="text-sm text-left" style={{ tableLayout: "fixed", width: "100%" }}>
               <colgroup>
                 <col style={{ width: colWidths.account }} />
+                <col style={{ width: EB_COL_WIDTH }} />
                 {visibleTypes.map(({ key }) => <col key={key} style={{ width: colWidths[key] }} />)}
               </colgroup>
               <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
@@ -328,6 +365,12 @@ export function StatsPage() {
                     >
                       Account{sortIcon("account")}
                     </button>
+                  </th>
+                  <th style={{ width: EB_COL_WIDTH }} className="px-4 py-3 font-bold uppercase tracking-wide">
+                    <span className="flex items-center gap-1 text-cyan-500/70">
+                      <Monitor className="w-3 h-3" />
+                      <span className="text-[10px]">Browser EB</span>
+                    </span>
                   </th>
                   {visibleTypes.map(({ key, label, icon, color }) => (
                     <th key={key} className="px-4 py-3 font-bold">
@@ -376,6 +419,7 @@ export function StatsPage() {
                           visibleCols={visibleCols}
                           colWidths={colWidths}
                           statsData={statsMap.get(profile.id) ?? []}
+                          {...makeRowProps(profile)}
                         />
                       ))}
                     </>
@@ -388,6 +432,7 @@ export function StatsPage() {
                       visibleCols={visibleCols}
                       colWidths={colWidths}
                       statsData={statsMap.get(profile.id) ?? []}
+                      {...makeRowProps(profile)}
                     />
                   ))
                 )}

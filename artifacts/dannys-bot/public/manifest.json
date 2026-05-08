@@ -1,9 +1,9 @@
 {
-  "name": "Danny's Bot",
-  "short_name": "DannysBot",
+  "name": "Equinox",
+  "short_name": "Equinox",
   "description": "Instagram automation dashboard",
   "start_url": "/",
-  "id": "dannysbot",
+  "id": "equinox",
   "scope": "/",
   "display": "standalone",
   "background_color": "#38BDF8",

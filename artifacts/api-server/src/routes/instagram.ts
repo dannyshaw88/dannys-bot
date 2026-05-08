@@ -1112,6 +1112,12 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // Get cookie baker activity log for a profile
+  app.get("/api/profiles/:id/cookie-baker/activity", (req, res) => {
+    const id = Number(req.params.id);
+    res.json(automationEngine.getCookieBakerActivity(id));
+  });
+
   // Trigger an immediate cookie baker session
   app.post("/api/profiles/:id/cookie-baker/run-now", async (req, res) => {
     const id = Number(req.params.id);
