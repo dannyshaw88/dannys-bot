@@ -1,7 +1,41 @@
 import { Link, useLocation } from "wouter";
-import { Bot, LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, BookOpen } from "lucide-react";
+import { LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
+
+function EquinoxLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 28"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      {/* Center antenna — straight up */}
+      <line x1="12" y1="5.5" x2="12" y2="1.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="12" cy="1" r="0.9" fill="currentColor" />
+
+      {/* Left antenna — angled upper-left */}
+      <line x1="10.2" y1="6.2" x2="6.5" y2="2.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="5.9" cy="2.2" r="0.9" fill="currentColor" />
+
+      {/* Shield body — grey fill */}
+      <path
+        d="M12 5.5L21.5 9V16C21.5 21.2 17 25 12 27C7 25 2.5 21.2 2.5 16V9L12 5.5Z"
+        fill="currentColor"
+      />
+
+      {/* Bot left eye — white */}
+      <rect x="7" y="12" width="3.2" height="3.2" rx="0.8" fill="white" />
+
+      {/* Bot right eye — white */}
+      <rect x="13.8" y="12" width="3.2" height="3.2" rx="0.8" fill="white" />
+
+      {/* Bot mouth — white */}
+      <rect x="8" y="18.2" width="8" height="2" rx="1" fill="white" />
+    </svg>
+  );
+}
 
 export function Sidebar() {
   const [location] = useLocation();
@@ -19,9 +53,9 @@ export function Sidebar() {
   return (
     <div className="w-64 bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
       <div className="h-16 flex items-center px-6 border-b border-border/50">
-        <Bot className="w-6 h-6 text-primary mr-3" />
+        <EquinoxLogo className="w-7 h-7 text-slate-400 mr-3 shrink-0" />
         <span className="font-bold text-lg tracking-tight text-foreground">
-          Equi<span className="text-primary">nox</span>
+          Equi<span className="text-slate-400">nox</span>
         </span>
       </div>
 

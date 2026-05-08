@@ -128,6 +128,7 @@ export function CreateAccountPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [setGroupOpen, setSetGroupOpen] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
+  const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
 
   const setFilterPersisted = (v: string) => {
     sessionStorage.setItem("creator:filter", v);
@@ -621,7 +622,7 @@ export function CreateAccountPage() {
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Open Browsers
               </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkResetDeviceIds(); }} disabled={selectedIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={() => { setActionsOpen(false); setResetDeviceConfirmOpen(true); }} disabled={selectedIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
@@ -699,6 +700,22 @@ export function CreateAccountPage() {
             >
               Delete
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resetDeviceConfirmOpen} onOpenChange={setResetDeviceConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Device IDs?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will assign new random device fingerprints (User Agent, Device ID, UUID) to{" "}
+              {selectedIds.length} selected account{selectedIds.length !== 1 ? "s" : ""} and set their status to Pending. Instagram may require fresh verification after this change.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkResetDeviceIds}>Reset</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

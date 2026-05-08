@@ -252,6 +252,7 @@ export type GlobalSettings = {
   hikerApiToken: string;
   skipScrapedUsers: boolean;
   scrapedUserIgnoreDays: number;
+  scrapeAllIfSkipped: boolean;
   useLocalTime: boolean;
   twoCaptchaApiKey: string;
   verifyAllDelayMin: number;

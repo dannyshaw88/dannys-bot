@@ -27,6 +27,22 @@ function findFreePort(): Promise<number> {
   });
 }
 
+// Try a fixed preferred port first so that localStorage persists across restarts
+// (Electron loads from http://127.0.0.1:<port> and localStorage is origin-scoped).
+// Falls back to a random free port if the preferred one is already taken.
+const PREFERRED_PORT = 32987;
+function getServerPort(): Promise<number> {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.listen(PREFERRED_PORT, "127.0.0.1", () => {
+      probe.close(() => resolve(PREFERRED_PORT));
+    });
+    probe.on("error", () => {
+      findFreePort().then(resolve).catch(() => resolve(19876));
+    });
+  });
+}
+
 function getUserDataPath(): string {
   const p = app.getPath("userData");
   fs.mkdirSync(p, { recursive: true });
@@ -172,11 +188,11 @@ body{
 .sep{height:1px;background:#e0e0e0;margin:3px 0}
 </style></head>
 <body>
-<div class="item" onclick="window.trayMenuAPI.openApp()">Open Danny&#39;s Bot</div>
+<div class="item" onclick="window.trayMenuAPI.openApp()">Open Equinox</div>
 <div class="sep"></div>
-<div class="item" onclick="window.trayMenuAPI.restartApp()">Restart Danny&#39;s Bot</div>
+<div class="item" onclick="window.trayMenuAPI.restartApp()">Restart Equinox</div>
 <div class="sep"></div>
-<div class="item" onclick="window.trayMenuAPI.closeApp()">Close Danny&#39;s Bot</div>
+<div class="item" onclick="window.trayMenuAPI.closeApp()">Close Equinox</div>
 </body></html>`;
 
 // Dimensions must match the HTML content exactly
@@ -539,11 +555,7 @@ async function createWindow() {
   // folder regardless of whether the user customised the install location.
   const logPath = path.join(path.dirname(app.getPath("exe")), "logs.log");
 
-  try {
-    serverPort = await findFreePort();
-  } catch {
-    serverPort = 19876;
-  }
+  serverPort = await getServerPort();
 
   startServer(serverPort, logPath);
 
@@ -620,8 +632,21 @@ async function createWindow() {
 
 app.whenReady().then(createWindow);
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   isQuitting = true;
+  if (!serverProc) return;
+  // Give the server process a moment to flush and close the SQLite database
+  // cleanly before Electron exits. better-sqlite3 is synchronous so the
+  // database is always in a consistent state, but sending SIGTERM first gives
+  // Node.js a chance to run its 'exit' handlers and release file locks.
+  event.preventDefault();
+  const proc = serverProc;
+  serverProc = null;
+  proc.kill("SIGTERM");
+  setTimeout(() => {
+    try { proc.kill("SIGKILL"); } catch {}
+    app.quit();
+  }, 2500);
 });
 
 app.on("window-all-closed", () => {

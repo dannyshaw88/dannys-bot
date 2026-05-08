@@ -1,16 +1,14 @@
 import { useState, useCallback, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateProfile, useProfiles } from "@/hooks/use-profiles";
 import { queryClient } from "@/lib/queryClient";
 import { CopySettingsDialog } from "@/components/tools/CopySettingsDialog";
-import { Play, Loader2, CheckCircle2, XCircle, Globe, Link2, Clock, Shuffle } from "lucide-react";
+import { Loader2, CheckCircle2, Globe, Link2, Clock, Shuffle } from "lucide-react";
 import type { Profile } from "@shared/schema";
 
 interface CookieBakerSettings {
@@ -75,10 +73,9 @@ interface Props {
 export function CreateCookiePanel({ profile }: Props) {
   const [local, setLocal] = useState<CookieBakerSettings>(() => ({
     ...DEFAULTS,
-    ...((profile.cookieBakerSettings as any) ?? {}),
+    ...(((profile as any).cookieBakerSettings as Partial<CookieBakerSettings>) ?? {}),
   }));
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [runStatus, setRunStatus] = useState<"idle" | "running" | "done" | "fail">("idle");
   const [copyOpen, setCopyOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const updateProfileMutation = useUpdateProfile();
@@ -115,22 +112,10 @@ export function CreateCookiePanel({ profile }: Props) {
     save(next);
   };
 
-  const handleRunNow = async () => {
-    setRunStatus("running");
-    try {
-      const res = await fetch(`/api/profiles/${profile.id}/cookie-baker/run-now`, { method: "POST" });
-      if (res.ok) {
-        setRunStatus("done");
-        toast({ title: "Cookie Baker Triggered", description: "A browsing session will start immediately." });
-      } else {
-        setRunStatus("fail");
-        toast({ title: "Error", description: "Could not trigger session.", variant: "destructive" });
-      }
-    } catch {
-      setRunStatus("fail");
-      toast({ title: "Error", description: "Network error.", variant: "destructive" });
-    } finally {
-      setTimeout(() => setRunStatus("idle"), 3000);
+  const handleToggleEnabled = (v: boolean) => {
+    update({ enabled: v });
+    if (v) {
+      fetch(`/api/profiles/${profile.id}/cookie-baker/run-now`, { method: "POST" }).catch(() => {});
     }
   };
 
@@ -176,149 +161,127 @@ export function CreateCookiePanel({ profile }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center gap-3 pb-3 border-b border-border">
-        <Switch checked={local.enabled} onCheckedChange={(v) => update({ enabled: v })} />
+        <Switch checked={local.enabled} onCheckedChange={handleToggleEnabled} />
         <Label className="text-sm font-semibold">Enable Cookie Baker</Label>
-        <div className="ml-auto flex items-center gap-3">
+        <button
+          className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!hasOtherProfiles}
+          onClick={() => setCopyOpen(true)}
+        >
+          Copy Settings
+        </button>
+        <div className="ml-auto flex items-center gap-2">
           {saveStatus === "saving" && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
           {saveStatus === "saved"  && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
-          <Button size="sm" variant="outline" onClick={handleRunNow} disabled={runStatus === "running"} className="gap-1.5">
-            {runStatus === "running" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {runStatus === "done"    && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
-            {runStatus === "fail"    && <XCircle className="w-3.5 h-3.5 text-destructive" />}
-            {runStatus === "idle"    && <Play className="w-3.5 h-3.5" />}
-            Run Now
-          </Button>
-          <button
-            className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            disabled={!hasOtherProfiles}
-            onClick={() => setCopyOpen(true)}
-          >
-            Copy Settings
-          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="border-none shadow-none !bg-transparent">
-          <CardHeader className="px-0 pt-0 pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Clock className="w-3.5 h-3.5 text-primary" /> Execute Every
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="flex items-center gap-2">
-              {numInput(local.execIntervalMin, (v) => update({ execIntervalMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.execIntervalMax, (v) => update({ execIntervalMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">minutes</span>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Settings — stacked vertically */}
+      <div className="space-y-5">
 
-        <Card className="border-none shadow-none !bg-transparent">
-          <CardHeader className="px-0 pt-0 pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Globe className="w-3.5 h-3.5 text-primary" /> Process Websites
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="flex items-center gap-2">
-              {numInput(local.sitesMin, (v) => update({ sitesMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.sitesMax, (v) => update({ sitesMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">per session</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Execute Every */}
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Clock className="w-3.5 h-3.5 text-primary" /> Execute Every
+          </p>
+          <div className="flex items-center gap-2">
+            {numInput(local.execIntervalMin, (v) => update({ execIntervalMin: v }), 1)}
+            <span className="text-xs text-muted-foreground">–</span>
+            {numInput(local.execIntervalMax, (v) => update({ execIntervalMax: v }), 1)}
+            <span className="text-xs text-muted-foreground">minutes</span>
+          </div>
+        </div>
 
-        <Card className="border-none shadow-none !bg-transparent">
-          <CardHeader className="px-0 pt-0 pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Clock className="w-3.5 h-3.5 text-violet-500" /> Scrolling Time
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="flex items-center gap-2">
-              {numInput(local.scrollDelayMin, (v) => update({ scrollDelayMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.scrollDelayMax, (v) => update({ scrollDelayMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">secs per site</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Process Websites */}
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Globe className="w-3.5 h-3.5 text-primary" /> Process Websites
+          </p>
+          <div className="flex items-center gap-2">
+            {numInput(local.sitesMin, (v) => update({ sitesMin: v }), 1)}
+            <span className="text-xs text-muted-foreground">–</span>
+            {numInput(local.sitesMax, (v) => update({ sitesMax: v }), 1)}
+            <span className="text-xs text-muted-foreground">per session</span>
+          </div>
+        </div>
 
-        <Card className="border-none shadow-none !bg-transparent">
-          <CardHeader className="px-0 pt-0 pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Link2 className="w-3.5 h-3.5 text-blue-500" /> Visit Internal Links
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="flex items-center gap-2">
-              {numInput(local.internalLinksMin, (v) => update({ internalLinksMin: v }), 0)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.internalLinksMax, (v) => update({ internalLinksMax: v }), 0)}
-              <span className="text-xs text-muted-foreground">per site</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Scrolling Time */}
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Clock className="w-3.5 h-3.5 text-violet-500" /> Scrolling Time
+          </p>
+          <div className="flex items-center gap-2">
+            {numInput(local.scrollDelayMin, (v) => update({ scrollDelayMin: v }), 1)}
+            <span className="text-xs text-muted-foreground">–</span>
+            {numInput(local.scrollDelayMax, (v) => update({ scrollDelayMax: v }), 1)}
+            <span className="text-xs text-muted-foreground">secs per site</span>
+          </div>
+        </div>
 
-        <Card className="border-none shadow-none !bg-transparent">
-          <CardHeader className="px-0 pt-0 pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Clock className="w-3.5 h-3.5 text-emerald-500" /> Scrolling Time (internal)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="flex items-center gap-2">
-              {numInput(local.internalScrollDelayMin, (v) => update({ internalScrollDelayMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.internalScrollDelayMax, (v) => update({ internalScrollDelayMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">secs per link</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Visit Internal Links */}
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Link2 className="w-3.5 h-3.5 text-blue-500" /> Visit Internal Links
+          </p>
+          <div className="flex items-center gap-2">
+            {numInput(local.internalLinksMin, (v) => update({ internalLinksMin: v }), 0)}
+            <span className="text-xs text-muted-foreground">–</span>
+            {numInput(local.internalLinksMax, (v) => update({ internalLinksMax: v }), 0)}
+            <span className="text-xs text-muted-foreground">per site</span>
+          </div>
+        </div>
 
-        <Card className="border-none shadow-none !bg-transparent">
-          <CardHeader className="px-0 pt-0 pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Shuffle className="w-3.5 h-3.5 text-orange-500" /> Order
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <Checkbox
-                checked={local.visitRandom}
-                onCheckedChange={(v) => update({ visitRandom: !!v })}
-              />
-              <span className="text-sm">Visit websites at random</span>
-            </label>
-          </CardContent>
-        </Card>
+        {/* Scrolling Time (internal) */}
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Clock className="w-3.5 h-3.5 text-emerald-500" /> Scrolling Time (internal)
+          </p>
+          <div className="flex items-center gap-2">
+            {numInput(local.internalScrollDelayMin, (v) => update({ internalScrollDelayMin: v }), 1)}
+            <span className="text-xs text-muted-foreground">–</span>
+            {numInput(local.internalScrollDelayMax, (v) => update({ internalScrollDelayMax: v }), 1)}
+            <span className="text-xs text-muted-foreground">secs per link</span>
+          </div>
+        </div>
+
+        {/* Order */}
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Shuffle className="w-3.5 h-3.5 text-orange-500" /> Order
+          </p>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <Checkbox
+              checked={local.visitRandom}
+              onCheckedChange={(v) => update({ visitRandom: !!v })}
+            />
+            <span className="text-sm">Visit websites at random</span>
+          </label>
+        </div>
+
+        {/* Websites */}
+        <div>
+          <p className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Globe className="w-3.5 h-3.5 text-primary" /> Websites
+          </p>
+          <div className="space-y-2">
+            <Textarea
+              placeholder={"www.example.com\nwww.bbc.co.uk\nhttps://news.ycombinator.com"}
+              value={local.sites}
+              onChange={(e) => update({ sites: e.target.value })}
+              className="font-mono text-xs min-h-[140px] resize-y"
+            />
+            <p className="text-xs text-muted-foreground">
+              One website per line — www.example.com format. Include https:// if needed, otherwise https is assumed.
+            </p>
+          </div>
+        </div>
+
       </div>
 
-      <Card className="border-none shadow-none !bg-transparent">
-        <CardHeader className="px-0 pt-0 pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Globe className="w-3.5 h-3.5 text-primary" /> Websites
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-0 space-y-2">
-          <Textarea
-            placeholder={"www.example.com\nwww.bbc.co.uk\nhttps://news.ycombinator.com"}
-            value={local.sites}
-            onChange={(e) => update({ sites: e.target.value })}
-            className="font-mono text-xs min-h-[140px] resize-y"
-          />
-          <p className="text-xs text-muted-foreground">
-            One website per line — www.example.com format. Include https:// if needed, otherwise https is assumed.
-          </p>
-        </CardContent>
-      </Card>
-
       <div className="rounded-lg bg-muted/40 border border-border/50 p-3 text-xs text-muted-foreground leading-relaxed">
-        <strong className="text-foreground">How it works:</strong> When enabled, a hidden background browser visits these websites using this account's proxy and user agent, building up real browsing cookies. This can improve Instagram account creation success rates. No browser window is opened.
+        <strong className="text-foreground">How it works:</strong> When enabled, a hidden background browser visits these websites using this account's proxy and user agent, building up real browsing cookies. Open the Embedded Browser while it's running to see it in action. If the EB isn't open, it runs silently in the background.
       </div>
 
       <CopySettingsDialog

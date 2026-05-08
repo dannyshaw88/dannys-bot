@@ -164,12 +164,12 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S916B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 393dpi; 1080x2316; Samsung; SM-A735F; a73xq; Snapdragon778G; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A735F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
+    api: "33/13; 393dpi; 1080x2316; Samsung; SM-A736B; a73xq; Snapdragon778G; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A736B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 400dpi; 1080x2400; Xiaomi; 23116PN5BC; aurora; Snapdragon8Gen3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 23116PN5BC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 521dpi; 1440x3200; Xiaomi; 2401PN0DDHU; aurora; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; 2401PN0DDHU) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "33/13; 440dpi; 1080x2400; Xiaomi; 22021211RG; ingres; Dimensity9000; en_US",
@@ -332,27 +332,27 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; RMX3710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2400; Google; Pixel 9 Pro; husky2; gs204; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 420dpi; 1080x2340; Samsung; SM-S921U; r12s; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S921U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1344x2992; Google; Pixel 9 XL; tokayxl; gs204; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+    api: "35/15; 450dpi; 1080x2376; OnePlus; CPH2665; ice; Snapdragon8Elite; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; CPH2665) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 429dpi; 1080x2424; Google; Pixel 9a; mantaray; gs204; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 394dpi; 1080x2392; realme; RMX3851; rock; Snapdragon8sGen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3851) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 489dpi; 1344x2992; Google; Pixel 8 Pro; husky; gs103; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 429dpi; 1080x2400; Google; Pixel 8a; akita2; gs103; en_US",
+    api: "34/14; 429dpi; 1080x2400; Google; Pixel 8a; akita; gs103; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 8a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 429dpi; 1080x2400; Google; Pixel 7a; lynx2; gs201; en_US",
+    api: "34/14; 429dpi; 1080x2400; Google; Pixel 7a; lynx; gs201; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -364,11 +364,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; Pixel 6 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 411dpi; 1080x2400; Google; Pixel 6; oriole2; gs101; en_US",
+    api: "33/13; 411dpi; 1080x2400; Google; Pixel 6; oriole; gs101; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 429dpi; 1080x2400; Google; Pixel 6a; bluejay2; gs101; en_US",
+    api: "33/13; 429dpi; 1080x2400; Google; Pixel 6a; bluejay; gs101; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -840,7 +840,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-F741U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1440x3168; OnePlus; CPH2573; op5502l1; Snapdragon 8 Gen 3; en_US",
+    api: "34/14; 450dpi; 1440x3168; OnePlus; CPH2573; op5502; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2573) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -872,11 +872,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2413) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2677; dengist2; Snapdragon 7+ Gen 3; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2677; dengist; Snapdragon 7+ Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2677) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2679; dengist3; Snapdragon 7+ Gen 3; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2679; dengist; Snapdragon 7+ Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2679) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -888,11 +888,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2493) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 394dpi; 1080x2412; OnePlus; CPH2469; pickle2; Dimensity 1080; en_US",
+    api: "33/13; 394dpi; 1080x2412; OnePlus; CPH2469; pickle; Dimensity 1080; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; CPH2469) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 394dpi; 1080x2412; OnePlus; CPH2471; pickle2; Dimensity 1080; en_US",
+    api: "33/13; 394dpi; 1080x2412; OnePlus; CPH2471; pickle; Dimensity 1080; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; CPH2471) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -912,8 +912,8 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; 24031PN0DG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 453dpi; 1220x2712; Xiaomi; 24116PN5BG; aurora2; Snapdragon 8 Elite; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; 24116PN5BG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "35/15; 460dpi; 1260x2800; Xiaomi; 24117PN0DG; dada; Snapdragon8Elite; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; 24117PN0DG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 440dpi; 1200x2670; Xiaomi; 23116PN5BC; ishtar; Snapdragon 8 Gen 2; en_US",
@@ -968,15 +968,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; 21091116UG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FPN8EG; beryllium2; Snapdragon 8s Gen 3; en_US",
+    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FPN8EG; beryllium; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2407FPN8EG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FPN8EC; beryllium2; Snapdragon 8s Gen 3; en_US",
+    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FPN8EC; beryllium; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2407FPN8EC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 393dpi; 1080x2400; Xiaomi; 23078PND5G; marble2; Snapdragon 8 Gen 2; en_US",
+    api: "33/13; 393dpi; 1080x2400; Xiaomi; 23078PND5G; marble; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23078PND5G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1028,7 +1028,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 30 pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 402dpi; 1080x2400; motorola; motorola edge 30 ultra; eqs2; Snapdragon 8+ Gen 1; en_US",
+    api: "33/13; 402dpi; 1080x2400; motorola; motorola edge 30 ultra; eqs; Snapdragon 8+ Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 30 ultra) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1036,7 +1036,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 30 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 402dpi; 1080x2400; motorola; motorola edge 30; eqe2; Snapdragon 778G+; en_US",
+    api: "33/13; 402dpi; 1080x2400; motorola; motorola edge 30; eqe; Snapdragon 778G+; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 30) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1124,8 +1124,8 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; XQ-AT52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 394dpi; 1080x2520; Sony; XQCC54; pdx234c2; Snapdragon 6 Gen 1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; XQCC54) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 394dpi; 1080x2520; Sony; XQ-CS54; pdx237; Snapdragon 6 Gen 1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; XQ-CS54) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 394dpi; 1080x2520; Sony; XQ-DC54; pdx235; Snapdragon 6 Gen 1; en_US",
@@ -1504,7 +1504,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; 23078PND5G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 441dpi; 1440x3200; Xiaomi; 22081212UG; zeus2; Dimensity 9000 Plus; en_US",
+    api: "33/13; 441dpi; 1440x3200; Xiaomi; 22081212UG; zeus; Dimensity 9000 Plus; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 22081212UG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1512,19 +1512,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; 22071212AG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 440dpi; 2160x1916; Xiaomi; 23116PN5BG2; shennong; Snapdragon 8 Gen 2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 23116PN5BG2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+    api: "33/13; 394dpi; 1080x2412; Nothing; A065; Pacman; Snapdragon8PlusGen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; A065) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 440dpi; 2160x1916; Xiaomi; 24072PX98G; aurora3; Snapdragon 8 Gen 3; en_US",
+    api: "34/14; 440dpi; 2160x1916; Xiaomi; 24072PX98G; shennong; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24072PX98G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23060RA87TI; gold2; Dimensity 7200 Ultra; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; 23060RA87TI) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+    api: "33/13; 390dpi; 1080x2400; Samsung; SM-A536U; a53x; Snapdragon778G; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A536U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 23013PC75C; garnet3; Dimensity 6080; en_US",
+    api: "34/14; 395dpi; 1080x2400; Xiaomi; 23013PC75C; garnet; Dimensity 6080; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 23013PC75C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1536,7 +1536,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; 2309BRN4CG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23076PC4BI; sky2; Dimensity 8100 Ultra; en_US",
+    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23076PC4BI; sky; Dimensity 8100 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23076PC4BI) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1556,19 +1556,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola edge 60 ultra) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 400dpi; 1080x2400; motorola; motorola g85 5g; bangkk2; Snapdragon 6s Gen 3; en_US",
+    api: "34/14; 400dpi; 1080x2400; motorola; motorola g85 5g; bangkk; Snapdragon 6s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g85 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 400dpi; 1080x2400; motorola; motorola g75 5g; fogos2; Snapdragon 6 Gen 3; en_US",
+    api: "34/14; 400dpi; 1080x2400; motorola; motorola g75 5g; fogos; Snapdragon 6 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g75 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 400dpi; 1080x2400; motorola; motorola g64 5g; toros2; Dimensity 7025; en_US",
+    api: "34/14; 400dpi; 1080x2400; motorola; motorola g64 5g; toros; Dimensity 7025; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g64 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 400dpi; 1080x2400; motorola; motorola g55 5g; cancunf2; Dimensity 7025+; en_US",
+    api: "34/14; 400dpi; 1080x2400; motorola; motorola g55 5g; cancunf; Dimensity 7025+; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g55 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1576,7 +1576,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g45 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; motorola; motorola g35 5g; victoria2; Unisoc T760; en_US",
+    api: "34/14; 282dpi; 720x1600; motorola; motorola g35 5g; victoria; Unisoc T760; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g35 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1644,7 +1644,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; RMX3624) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; Xiaomi; 24117RA68G; sapphire2; Helio G91 Ultra; en_US",
+    api: "34/14; 282dpi; 720x1600; Xiaomi; 24117RA68G; sapphire; Helio G91 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24117RA68G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1656,7 +1656,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; 22101RK11G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 274dpi; 1600x2560; Xiaomi; 23049RAD8C; zeus3; Snapdragon 870; en_US",
+    api: "33/13; 274dpi; 1600x2560; Xiaomi; 23049RAD8C; zeus; Snapdragon 870; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23049RAD8C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1716,15 +1716,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-N981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 402dpi; 1080x2400; motorola; XT2341-3; tesla2; Snapdragon 8 Gen 2; en_US",
+    api: "34/14; 402dpi; 1080x2400; motorola; XT2341-3; tesla; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2341-3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 402dpi; 1080x2400; motorola; XT2321-5; frontier2; Snapdragon 8+ Gen 1; en_US",
+    api: "33/13; 402dpi; 1080x2400; motorola; XT2321-5; frontier; Snapdragon 8+ Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; XT2321-5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 402dpi; 1080x2400; motorola; XT2201-1; hiphi2; Snapdragon 8 Gen 1; en_US",
+    api: "33/13; 402dpi; 1080x2400; motorola; XT2201-1; frontier; Snapdragon 8 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; XT2201-1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1848,23 +1848,23 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g24) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; motorola; motorola g04; toros3; Unisoc T606; en_US",
+    api: "34/14; 282dpi; 720x1600; motorola; motorola g04; toros; Unisoc T606; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g04) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; motorola; motorola g04s; toros4; Unisoc T606; en_US",
+    api: "34/14; 282dpi; 720x1600; motorola; motorola g04s; toros; Unisoc T606; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g04s) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; motorola; motorola g44; fog2; Dimensity 7025; en_US",
+    api: "34/14; 393dpi; 1080x2400; motorola; motorola g44; fog; Dimensity 7025; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g44) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; motorola; motorola g power 5g 2024; cancunf3; Dimensity 6020; en_US",
+    api: "34/14; 393dpi; 1080x2400; motorola; motorola g power 5g 2024; cancunf; Dimensity 6020; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g power 5g 2024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; motorola; motorola g stylus 5g 2024; oasis2; Snapdragon 6 Gen 1; en_US",
+    api: "34/14; 393dpi; 1080x2400; motorola; motorola g stylus 5g 2024; oasis; Snapdragon 6 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola g stylus 5g 2024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1976,7 +1976,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; 2203129G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 393dpi; 1080x2400; Xiaomi; 2109119DI; lisa2; Snapdragon 780G; en_US",
+    api: "33/13; 393dpi; 1080x2400; Xiaomi; 2109119DI; lisa; Snapdragon 780G; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 2109119DI) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -1992,7 +1992,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-S937U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 500dpi; 1440x3120; Samsung; SM-S938U2; p6q2; Snapdragon 8 Elite; en_US",
+    api: "35/15; 500dpi; 1440x3120; Samsung; SM-S938U2; p6q; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-S938U2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2048,7 +2048,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A556M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2316; Samsung; SM-A546M; a54xq2; Exynos 1380; en_US",
+    api: "34/14; 393dpi; 1080x2316; Samsung; SM-A546M; a54x; Exynos 1380; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A546M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2060,7 +2060,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A256M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 400dpi; 1080x2340; Samsung; SM-A256U; a25xq2; Exynos 1280; en_US",
+    api: "34/14; 400dpi; 1080x2340; Samsung; SM-A256U; a25x; Exynos 1280; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A256U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2072,7 +2072,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A135M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; Samsung; SM-A135U; a13xq2; Dimensity 700; en_US",
+    api: "33/13; 282dpi; 720x1600; Samsung; SM-A135U; a13xq; Dimensity 700; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A135U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2116,19 +2116,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-F731V) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2605; dengist4; Snapdragon 8s Gen 3; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2605; dengist; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2605) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2607; dengist5; Snapdragon 8s Gen 3; en_US",
+    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2607; dengist; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2607) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1440x3168; OnePlus; CPH2625; salami3; Snapdragon 8 Gen 3; en_US",
+    api: "34/14; 450dpi; 1440x3168; OnePlus; CPH2625; salami; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2625) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 525dpi; 1440x3216; OnePlus; LE2117A; lemonadep2; Snapdragon 888 Pro; en_US",
+    api: "34/14; 525dpi; 1440x3216; OnePlus; LE2117A; lemonadep; Snapdragon 888 Pro; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; LE2117A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2136,51 +2136,51 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; CPH2357) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2359; oneplus10t2; Snapdragon 8+ Gen 1; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2359; oneplus10t; Snapdragon 8+ Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2359) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 373dpi; 2268x2440; OnePlus; CPH2551B; aston2; Snapdragon 8 Gen 2; en_US",
+    api: "34/14; 373dpi; 2268x2440; OnePlus; CPH2551B; aston; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2551B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 373dpi; 2268x2440; OnePlus; CPH2553B; aston3; Snapdragon 8 Gen 2; en_US",
+    api: "34/14; 373dpi; 2268x2440; OnePlus; CPH2553B; aston; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2553B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 453dpi; 1220x2712; Xiaomi; 24117PX69G; aurora4; Snapdragon 8 Elite; en_US",
+    api: "35/15; 453dpi; 1220x2712; Xiaomi; 24117PX69G; aurora; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 24117PX69G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 453dpi; 1220x2712; Xiaomi; 2501129G; satsuma2; Snapdragon 8 Elite; en_US",
+    api: "35/15; 453dpi; 1220x2712; Xiaomi; 2501129G; satsuma; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 2501129G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 453dpi; 1220x2712; Xiaomi; 24115PN0DC; bole2; Snapdragon 8 Gen 3; en_US",
+    api: "34/14; 453dpi; 1220x2712; Xiaomi; 24115PN0DC; bole; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24115PN0DC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2408FPN8EG; beryllium4; Snapdragon 8s Gen 3; en_US",
+    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2408FPN8EG; beryllium; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2408FPN8EG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FRN8EI; beryllium5; Snapdragon 8s Gen 3; en_US",
+    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FRN8EI; beryllium; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2407FRN8EI) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24116RA68G; gold3; Snapdragon 7s Gen 3; en_US",
+    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24116RA68G; gold; Snapdragon 7s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24116RA68G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23116RN86G; tapas2; Snapdragon 7s Gen 2; en_US",
+    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23116RN86G; tapas; Snapdragon 7s Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23116RN86G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24061RA74IG; garnet4; Snapdragon 6s Gen 3; en_US",
+    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24061RA74IG; garnet; Snapdragon 6s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24061RA74IG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23094RA98G; spinel2; Dimensity 7200 Ultra; en_US",
+    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23094RA98G; spinel; Dimensity 7200 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23094RA98G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2208,27 +2208,27 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; 24026RA08G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 402dpi; 1080x2400; motorola; XT2401-4; vicky2; Snapdragon 7s Gen 2; en_US",
+    api: "34/14; 402dpi; 1080x2400; motorola; XT2401-4; vicky; Snapdragon 7s Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2401-4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1080x2400; motorola; XT2343-4; tesla3; Snapdragon 8 Gen 3; en_US",
+    api: "34/14; 450dpi; 1080x2400; motorola; XT2343-4; tesla; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2343-4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1080x2400; motorola; XT2343-5; tesla4; Snapdragon 8 Gen 3; en_US",
+    api: "35/15; 450dpi; 1080x2400; motorola; XT2343-5; tesla; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2343-5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1080x2400; motorola; XT2451-3; tesla5; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1080x2400; motorola; XT2451-3; tesla; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2451-3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2400; motorola; motorola g power 5g 2025; cancunf4; Dimensity 7025+; en_US",
+    api: "35/15; 393dpi; 1080x2400; motorola; motorola g power 5g 2025; cancunf; Dimensity 7025+; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola g power 5g 2025) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2400; motorola; motorola g stylus 5g 2025; oasis3; Snapdragon 6 Gen 3; en_US",
+    api: "35/15; 393dpi; 1080x2400; motorola; motorola g stylus 5g 2025; oasis; Snapdragon 6 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola g stylus 5g 2025) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2236,15 +2236,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge plus 2024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 402dpi; 1080x2400; motorola; motorola edge plus 2023; eqs3; Snapdragon 8 Gen 2; en_US",
+    api: "34/14; 402dpi; 1080x2400; motorola; motorola edge plus 2023; eqs; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge plus 2023) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 402dpi; 1080x2400; motorola; motorola edge 2024; mortimer2; Snapdragon 7s Gen 2; en_US",
+    api: "34/14; 402dpi; 1080x2400; motorola; motorola edge 2024; mortimer; Snapdragon 7s Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 2024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 402dpi; 1080x2400; motorola; motorola edge 2023; eqe3; Dimensity 7030; en_US",
+    api: "33/13; 402dpi; 1080x2400; motorola; motorola edge 2023; eqe; Dimensity 7030; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 2023) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2428,7 +2428,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; CK9n) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; TECNO; CL8n; CL8n; Helio G99; en_US",
+    api: "34/14; 393dpi; 1080x2400; TECNO; CL8n; CL; Helio G99; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CL8n) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2472,7 +2472,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; V2238B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 373dpi; 2152x2700; Google; Pixel 9 Pro Fold; comet2; Tensor G4; en_US",
+    api: "35/15; 373dpi; 2152x2700; Google; Pixel 9 Pro Fold; comet; Tensor G4; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2492,7 +2492,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2411-2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 400dpi; 1080x2400; motorola; XT2411-4; davinci2; Dimensity 7025+; en_US",
+    api: "35/15; 400dpi; 1080x2400; motorola; XT2411-4; davinci; Dimensity 7025+; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2411-4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2508,7 +2508,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; 25013PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 24117RK75G2; buffy2; Snapdragon 8s Gen 3; en_US",
+    api: "34/14; 393dpi; 1080x2400; Xiaomi; 24117RK75G2; buffy; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24117RK75G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2580,11 +2580,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; V2158C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2210129SG2; zircon2; Snapdragon 7 Gen 1; en_US",
+    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2210129SG2; zircon; Snapdragon 7 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2210129SG2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 441dpi; 1440x3200; Xiaomi; 2112123AC; zeus3; Snapdragon 8 Gen 1; en_US",
+    api: "33/13; 441dpi; 1440x3200; Xiaomi; 2112123AC; zeus; Snapdragon 8 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 2112123AC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2672,83 +2672,83 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-S921N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2573A; op5502l2; Snapdragon 8 Gen 3; en_US",
+    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2573A; op5502; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2573A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 525dpi; 1440x3216; OnePlus; CPH2447A; salami2; Snapdragon 8 Gen 2; en_US",
+    api: "35/15; 525dpi; 1440x3216; OnePlus; CPH2447A; salami; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2447A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 525dpi; 1440x3216; OnePlus; LE2123A; lemonade2; Snapdragon 888; en_US",
+    api: "34/14; 525dpi; 1440x3216; OnePlus; LE2123A; lemonade; Snapdragon 888; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; LE2123A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2357A; oneplus10t3; Snapdragon 8+ Gen 1; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2357A; oneplus10t; Snapdragon 8+ Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2357A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 394dpi; 1080x2412; OnePlus; CPH2471A; pickle3; Dimensity 1080; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2471A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 394dpi; 1080x2412; OnePlus; CPH2471; pickle; Dimensity1080; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2471) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 394dpi; 1080x2412; OnePlus; CPH2399A; sal2; Snapdragon 695; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2399A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    api: "33/13; 395dpi; 1080x2400; Xiaomi; 23108RA98Y; sapphire; Snapdragon685; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; 23108RA98Y) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 453dpi; 1220x2712; Xiaomi; 24031PN0DC2; satsuma3; Snapdragon 8 Gen 3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; 24031PN0DC2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 450dpi; 1080x2400; OnePlus; CPH2573; waffle; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2573) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 440dpi; 1200x2670; Xiaomi; 23116PN5BC2; ishtar2; Snapdragon 8 Gen 2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; 23116PN5BC2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 394dpi; 1080x2412; Nothing; A142; Pacman2; Dimensity7200Pro; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; A142) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 441dpi; 1440x3200; Xiaomi; 2311DRK48G2; yunluo2; Snapdragon 8 Gen 2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; 2311DRK48G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 393dpi; 1080x2340; Samsung; SM-A356B; a35x; Exynos1380; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A356B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 441dpi; 1440x3200; Xiaomi; 22127RK46G2; zeus2b; Snapdragon 8+ Gen 1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 22127RK46G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 500dpi; 1440x3088; Samsung; SM-S908B; b0q; Exynos2200; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 441dpi; 1440x3200; Xiaomi; 2201122G2; cupid2; Snapdragon 8 Gen 1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 2201122G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 500dpi; 1440x3088; Samsung; SM-S908U; b0q; Snapdragon8Gen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S908U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 23078PND5G2; marble3; Snapdragon 8 Gen 2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 23078PND5G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 400dpi; 1080x2400; Xiaomi; 23078PND5G; plato; Dimensity8200Ultra; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; 23078PND5G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 420dpi; 1080x2408; Xiaomi; 23013RK75C2; marble4; Snapdragon 7s Gen 2; en_US",
+    api: "35/15; 420dpi; 1080x2408; Xiaomi; 23013RK75C2; marble; Snapdragon 7s Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 23013RK75C2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 394dpi; 1080x2400; Xiaomi; 21061119DG2; alioth2; Snapdragon 870; en_US",
+    api: "34/14; 394dpi; 1080x2400; Xiaomi; 21061119DG2; alioth; Snapdragon 870; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 21061119DG2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 441dpi; 1080x2400; Xiaomi; 2209129SC2; pissarro2; Dimensity 8100; en_US",
+    api: "34/14; 441dpi; 1080x2400; Xiaomi; 2209129SC2; pissarro; Dimensity 8100; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2209129SC2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 50 ultra; hiphi3; Snapdragon 8s Gen 3; en_US",
+    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 50 ultra; hiphi; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola edge 50 ultra) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 50 pro; eqe4; Snapdragon 7 Gen 3; en_US",
+    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 50 pro; eqe; Snapdragon 7 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola edge 50 pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 40 pro; rtwo2; Snapdragon 8 Gen 2; en_US",
+    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 40 pro; rtwo; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola edge 40 pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 402dpi; 1080x2400; motorola; motorola edge 30 ultra; eqs2b; Snapdragon 8+ Gen 1; en_US",
+    api: "34/14; 402dpi; 1080x2400; motorola; motorola edge 30 ultra; eqs; Snapdragon 8+ Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 30 ultra) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 402dpi; 1080x2400; motorola; XT2341-3B; tesla2b; Snapdragon 8 Gen 2; en_US",
+    api: "35/15; 402dpi; 1080x2400; motorola; XT2341-3B; tesla; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2341-3B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2796,35 +2796,35 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; V2401A2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 452dpi; 1260x2800; vivo; V2305A2; PD2305F_EX2; Dimensity 9300; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; V2305A2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 452dpi; 1260x2800; vivo; V2305A; PD2305F; Dimensity9300; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; V2305A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 460dpi; 1260x2800; vivo; V2324A2; PD2324F_EX2; Snapdragon 8 Gen 3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; V2324A2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 460dpi; 1260x2800; vivo; V2324A; PD2324F; Dimensity9300; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; V2324A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 489dpi; 1344x2992; Google; Pixel 8 Pro; husky2; Tensor G3; en_US",
+    api: "35/15; 489dpi; 1344x2992; Google; Pixel 8 Pro; husky; Tensor G3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 512dpi; 1440x3120; Google; Pixel 7 Pro; cheetah2; Tensor G2; en_US",
+    api: "35/15; 512dpi; 1440x3120; Google; Pixel 7 Pro; cheetah; Tensor G2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 429dpi; 1080x2400; Google; Pixel 7a; lynx2; Tensor G2; en_US",
+    api: "35/15; 429dpi; 1080x2400; Google; Pixel 7a; lynx; Tensor G2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 512dpi; 1440x3120; Google; Pixel 6 Pro; raven2; Tensor G1; en_US",
+    api: "34/14; 512dpi; 1440x3120; Google; Pixel 6 Pro; raven; Tensor G1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 429dpi; 1080x2400; Google; Pixel 6a; bluejay2; Tensor G1; en_US",
+    api: "34/14; 429dpi; 1080x2400; Google; Pixel 6a; bluejay; Tensor G1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 442dpi; 1080x2340; Google; Pixel 5; redfin2; Snapdragon 765G; en_US",
+    api: "33/13; 442dpi; 1080x2340; Google; Pixel 5; redfin; Snapdragon 765G; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2844,15 +2844,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; LFX101) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 453dpi; 1220x2712; Xiaomi; 23113PC75G; corot2; Snapdragon 8 Gen 2; en_US",
+    api: "34/14; 453dpi; 1220x2712; Xiaomi; 23113PC75G; corot; Snapdragon 8 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 23113PC75G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 394dpi; 1080x2400; Xiaomi; 23049PCD8G; marble5; Snapdragon 7+ Gen 2; en_US",
+    api: "33/13; 394dpi; 1080x2400; Xiaomi; 23049PCD8G; marble; Snapdragon 7+ Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FRN8EG; beryllium6; Snapdragon 8 Gen 3; en_US",
+    api: "34/14; 393dpi; 1080x2400; Xiaomi; 2407FRN8EG; beryllium; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2407FRN8EG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2884,7 +2884,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2455-1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1080x2400; motorola; XT2455-3; titan2; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1080x2400; motorola; XT2455-3; titan; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2455-3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2904,7 +2904,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-F347G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; Samsung; SM-F346G; f14x2; Exynos 1330; en_US",
+    api: "34/14; 282dpi; 720x1600; Samsung; SM-F346G; f14x; Exynos 1330; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-F346G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -2920,15 +2920,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-G736B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 282dpi; 720x1600; Xiaomi; 24117RA68G2; sapphire3; Helio G91 Ultra; en_US",
+    api: "35/15; 282dpi; 720x1600; Xiaomi; 24117RA68G2; sapphire; Helio G91 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 24117RA68G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; Xiaomi; 23117RK92G; fog2b; Helio G85; en_US",
+    api: "33/13; 282dpi; 720x1600; Xiaomi; 23117RK92G; fog; Helio G85; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23117RK92G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; Xiaomi; 24061PN74LG; wind2; Dimensity 7025+; en_US",
+    api: "34/14; 282dpi; 720x1600; Xiaomi; 24061PN74LG; wind; Dimensity 7025+; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24061PN74LG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3028,47 +3028,47 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; Nokia X30) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24076PA4BI; sky3; Dimensity 8300 Ultra; en_US",
+    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24076PA4BI; sky; Dimensity 8300 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24076PA4BI) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; Xiaomi; 23051QH52G; fog3; Dimensity 6080; en_US",
+    api: "33/13; 282dpi; 720x1600; Xiaomi; 23051QH52G; fog; Dimensity 6080; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23051QH52G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; Xiaomi; 23101QNG2G; pine2; Snapdragon 4 Gen 2; en_US",
+    api: "33/13; 282dpi; 720x1600; Xiaomi; 23101QNG2G; pine; Snapdragon 4 Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; 23101QNG2G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24053QRA8G; topaz2; Helio G99 Ultra; en_US",
+    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24053QRA8G; topaz; Helio G99 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24053QRA8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2609B; dengist6; Snapdragon 8s Gen 3; en_US",
+    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2609B; dengist; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2609B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2495; dengist7; Snapdragon 7 Gen 3; en_US",
+    api: "33/13; 394dpi; 1080x2412; OnePlus; CPH2495; dengist; Snapdragon 782G; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2495) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2497; dengist8; Snapdragon 7 Gen 3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2497) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 394dpi; 1080x2412; OnePlus; CPH2597; dengist; Snapdragon7Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2597) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 422dpi; 1080x2424; Google; Pixel 9; tokay2; Tensor G4; en_US",
+    api: "35/15; 422dpi; 1080x2424; Google; Pixel 9; tokay; Tensor G4; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2424; Google; Pixel 9 Pro; husky2b; Tensor G4; en_US",
+    api: "35/15; 480dpi; 1080x2424; Google; Pixel 9 Pro; husky; Tensor G4; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 486dpi; 1344x2992; Google; Pixel 9 Pro XL; komodo2; Tensor G4; en_US",
+    api: "35/15; 486dpi; 1344x2992; Google; Pixel 9 Pro XL; komodo; Tensor G4; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; motorola; motorola defy 2; sofia2; Snapdragon 480+; en_US",
+    api: "33/13; 282dpi; 720x1600; motorola; motorola defy 2; sofia; Snapdragon 480+; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola defy 2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3096,7 +3096,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; TCL 40 NxtPaper) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 393dpi; 1080x2400; motorola; XT2313-2; hawao2; Snapdragon 6 Gen 1; en_US",
+    api: "33/13; 393dpi; 1080x2400; motorola; XT2313-2; hawao; Snapdragon 6 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; XT2313-2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3104,7 +3104,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; XT2211-1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; motorola; XT2215-4; cancun2; Helio G88; en_US",
+    api: "33/13; 282dpi; 720x1600; motorola; XT2215-4; cancun; Helio G88; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; XT2215-4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3136,11 +3136,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A057F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; Samsung; SM-A057G; a05s2; Snapdragon 680; en_US",
+    api: "34/14; 282dpi; 720x1600; Samsung; SM-A057G; a05s; Snapdragon 680; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A057G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; Samsung; SM-A137F; a13x2; Helio G80; en_US",
+    api: "33/13; 282dpi; 720x1600; Samsung; SM-A137F; a13x; Helio G80; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A137F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3168,7 +3168,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; 24093PN74PG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; Xiaomi; 24117RA68G3; fire2; Helio G91 Ultra; en_US",
+    api: "34/14; 282dpi; 720x1600; Xiaomi; 24117RA68G3; fire; Helio G91 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24117RA68G3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3176,19 +3176,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola moto e14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; motorola; motorola moto e13; eos2; Unisoc SC9863A; en_US",
+    api: "33/13; 282dpi; 720x1600; motorola; motorola moto e13; eos; Unisoc SC9863A; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola moto e13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S936N; b6q2; Exynos 2500; en_US",
+    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S936N; b6q; Exynos 2500; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-S936N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S936W; b6q3; Snapdragon 8 Elite; en_US",
+    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S936W; b6q; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-S936W) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 416dpi; 1080x2340; Samsung; SM-S921E; r12s2; Exynos 2400; en_US",
+    api: "34/14; 416dpi; 1080x2340; Samsung; SM-S921E; r12s; Exynos 2400; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S921E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3196,8 +3196,8 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; CPH2477) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 394dpi; 1080x2400; realme; RMX3630A; RM6877x2; Dimensity 8100 Max; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3630A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 394dpi; 1080x2400; realme; RMX3861; RMX3861; Snapdragon 7+ Gen 3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3861) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "33/13; 282dpi; 720x1600; Samsung; SM-A045F; a04x; Exynos 850; en_US",
@@ -3212,7 +3212,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A037F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 282dpi; 720x1600; Samsung; SM-A037U; a03sx2; Snapdragon 450; en_US",
+    api: "33/13; 282dpi; 720x1600; Samsung; SM-A037U; a03sx; Snapdragon 450; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-A037U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3232,23 +3232,23 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; SM-M127F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2609C; corot3; Snapdragon 8 Gen 1; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2609C; corot; Snapdragon 8 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2609C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2609D; corot4; Snapdragon 8 Gen 1; en_US",
+    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2609D; corot; Snapdragon 8 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2609D) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2609E; corot5; Dimensity 9000; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2609E; corot; Dimensity 9000; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2609E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2581A; op5502b; Snapdragon 8 Gen 3; en_US",
+    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2581A; op5502; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2581A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2400; Xiaomi; 2304FPBS2G2; zanite2; Snapdragon 8s Gen 2; en_US",
+    api: "35/15; 393dpi; 1080x2400; Xiaomi; 2304FPBS2G2; zanite; Snapdragon 8s Gen 2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 2304FPBS2G2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3256,23 +3256,23 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; 24053PC74G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2400; Xiaomi; 2407FPN8EG2; beryllium7; Snapdragon 8s Gen 3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; 2407FPN8EG2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "33/13; 403dpi; 1080x2340; Samsung; SM-A346B; a34x; Dimensity1080; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A346B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 453dpi; 1220x2712; Xiaomi; 24116PN5BG2; aurora5; Snapdragon 8 Elite; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; 24116PN5BG2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "35/15; 521dpi; 1440x3200; Xiaomi; 25020PN0DG; venus; Snapdragon8Elite; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; 25020PN0DG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 23076PC4BI2; sky4; Dimensity 8100 Ultra; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 23076PC4BI2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 403dpi; 1080x2340; Samsung; SM-A256U; a25x; Exynos1280; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A256U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 441dpi; 1440x3200; Xiaomi; 2210133C; diting; Snapdragon 8+ Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2210133C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1220x2712; Xiaomi; 2308CPXD0G; pearl2; Dimensity 9200 Plus; en_US",
+    api: "34/14; 393dpi; 1220x2712; Xiaomi; 2308CPXD0G; pearl; Dimensity 9200 Plus; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 2308CPXD0G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3280,19 +3280,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; 23124PN74G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; motorola; motorola moto g power 2024; fog3; Snapdragon 680; en_US",
+    api: "34/14; 282dpi; 720x1600; motorola; motorola moto g power 2024; fog; Snapdragon 680; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola moto g power 2024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; motorola; motorola moto g 5g 2024; fog4; Snapdragon 4 Gen 1; en_US",
+    api: "34/14; 282dpi; 720x1600; motorola; motorola moto g 5g 2024; fog; Snapdragon 4 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola moto g 5g 2024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; motorola; motorola moto g play 2024; eos3; Helio G85; en_US",
+    api: "34/14; 282dpi; 720x1600; motorola; motorola moto g play 2024; eos; Helio G85; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; motorola moto g play 2024) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 393dpi; 1080x2400; motorola; motorola g power 5g 2023; cancunf5; Dimensity 930; en_US",
+    api: "33/13; 393dpi; 1080x2400; motorola; motorola g power 5g 2023; cancunf; Dimensity 930; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; motorola g power 5g 2023) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3300,7 +3300,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2255-1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; motorola; XT2255-3; kyoto2; Dimensity 7050; en_US",
+    api: "34/14; 393dpi; 1080x2400; motorola; XT2255-3; kyoto; Dimensity 7050; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2255-3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3416,11 +3416,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; BG6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 393dpi; 1080x2400; TECNO; CK7n; CK7n; Helio G99; en_US",
+    api: "33/13; 393dpi; 1080x2400; TECNO; CK7n; CK; Helio G99; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; CK7n) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 393dpi; 1080x2400; TECNO; CL7n; CL7n; Dimensity 7020; en_US",
+    api: "33/13; 393dpi; 1080x2400; TECNO; CL7n; CL8n; Dimensity 7020; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; CL7n) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3444,7 +3444,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; X6815) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 274dpi; 1600x2560; Xiaomi; 23043RP34G; zeus4; Snapdragon 870; en_US",
+    api: "34/14; 274dpi; 1600x2560; Xiaomi; 23043RP34G; zeus; Snapdragon 870; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 23043RP34G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3456,15 +3456,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-M256B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 282dpi; 720x1600; Samsung; SM-M156U; m15xq2; Helio G85; en_US",
+    api: "34/14; 282dpi; 720x1600; Samsung; SM-M156U; m15xq; Helio G85; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-M156U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2316; Samsung; SM-M356U; m35xq2; Exynos 1380; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; SM-M356U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 393dpi; 1080x2316; Samsung; SM-M356B; m35xq; Exynos1380; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-M356B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 429dpi; 1080x2400; Google; Pixel 8a; akita2; Tensor G3; en_US",
+    api: "35/15; 429dpi; 1080x2400; Google; Pixel 8a; akita; Tensor G3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 8a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3484,19 +3484,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2501; corot6; Dimensity 9000; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2501; corot; Dimensity 9000; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2501) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2503; corot7; Dimensity 9000; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2503; corot; Dimensity 9000; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2503) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 525dpi; 1440x3216; OnePlus; CPH2385; oneplus9pro2; Snapdragon 888 Pro; en_US",
+    api: "34/14; 525dpi; 1440x3216; OnePlus; CPH2385; oneplus9pro; Snapdragon 888 Pro; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2385) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2400; motorola; XT2413-1; milan2; Snapdragon 6 Gen 1; en_US",
+    api: "34/14; 393dpi; 1080x2400; motorola; XT2413-1; milan; Snapdragon 6 Gen 1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2413-1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3548,7 +3548,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; 25013PC45G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 460dpi; 1260x2800; Xiaomi; 25013PC45C; taro2; Snapdragon 8 Elite; en_US",
+    api: "35/15; 460dpi; 1260x2800; Xiaomi; 25013PC45C; taro; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 25013PC45C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3572,7 +3572,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A065M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 282dpi; 720x1600; Samsung; SM-A066F; a06q2; Dimensity 6300; en_US",
+    api: "35/15; 282dpi; 720x1600; Samsung; SM-A066F; a06q; Dimensity 6300; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A066F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3584,19 +3584,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-E246B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2400; Xiaomi; 25012PN96G; sky5; Dimensity 8400 Ultra; en_US",
+    api: "35/15; 393dpi; 1080x2400; Xiaomi; 25012PN96G; sky; Dimensity 8400 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 25012PN96G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 395dpi; 1080x2400; Xiaomi; 24116RA68G4; gold4; Snapdragon 7s Gen 3; en_US",
+    api: "35/15; 395dpi; 1080x2400; Xiaomi; 24116RA68G4; gold; Snapdragon 7s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 24116RA68G4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2400; Xiaomi; 2407FRN8EC; beryllium8; Snapdragon 8s Gen 3; en_US",
+    api: "35/15; 393dpi; 1080x2400; Xiaomi; 2407FRN8EC; beryllium; Snapdragon 8s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 2407FRN8EC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 23078PCAHZG; garnet5; Dimensity 7200 Ultra; en_US",
+    api: "34/14; 395dpi; 1080x2400; Xiaomi; 23078PCAHZG; garnet; Dimensity 7200 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 23078PCAHZG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3608,23 +3608,23 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; 25030PN56G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 395dpi; 1080x2400; Xiaomi; 25030RN46G; pine3; Helio G99 Ultra; en_US",
+    api: "35/15; 395dpi; 1080x2400; Xiaomi; 25030RN46G; pine; Helio G99 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 25030RN46G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24070RA29G; topaz3; Helio G99 Ultra; en_US",
+    api: "34/14; 395dpi; 1080x2400; Xiaomi; 24070RA29G; topaz; Helio G99 Ultra; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 24070RA29G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1080x2400; motorola; XT2451-4; tesla6; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1080x2400; motorola; XT2451-4; tesla; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2451-4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 60 fusion; chelsea2; Dimensity 7400; en_US",
+    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 60 fusion; chelsea; Dimensity 7400; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola edge 60 fusion) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1080x2400; motorola; XT2343-6; tesla7; Snapdragon 8 Gen 3; en_US",
+    api: "35/15; 450dpi; 1080x2400; motorola; XT2343-6; tesla; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2343-6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3632,19 +3632,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; XT2253-6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1440x3168; OnePlus; CPH2661; op5502c; Snapdragon 8 Gen 3; en_US",
+    api: "34/14; 450dpi; 1440x3168; OnePlus; CPH2661; op5502; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2661) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2663; op5502d; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2663; op5502; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2663) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2709; dengist9; Snapdragon 7 Gen 3; en_US",
+    api: "34/14; 411dpi; 1080x2412; OnePlus; CPH2709; dengist; Snapdragon 7 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2709) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2711; dengist10; Snapdragon 7 Gen 3; en_US",
+    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2711; dengist; Snapdragon 7 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2711) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3660,7 +3660,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A366B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 400dpi; 1080x2340; Samsung; SM-A256B2; a25x2; Exynos 1280; en_US",
+    api: "35/15; 400dpi; 1080x2340; Samsung; SM-A256B2; a25x; Exynos 1280; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A256B2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3712,8 +3712,8 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; RMX3993D) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 394dpi; 1080x2400; realme; RMX3630B; RM6877x3; Dimensity 8100 Max; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; RMX3630B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 394dpi; 1080x2400; realme; RMX3920; RMX3920; Snapdragon 7s Gen 2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3920) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "35/15; 426dpi; 1080x2400; HONOR; ALI-NX1; ALI-NX1; Kirin 9010 4G; en_US",
@@ -3780,11 +3780,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; 22) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 373dpi; 2208x1840; Google; Pixel Fold; felix2; Tensor G2; en_US",
+    api: "34/14; 373dpi; 2208x1840; Google; Pixel Fold; felix; Tensor G2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 373dpi; 2208x1840; Google; Pixel Fold; felix3; Tensor G2; en_US",
+    api: "35/15; 373dpi; 2208x1840; Google; Pixel Fold; felix; Tensor G2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3832,15 +3832,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A366M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2340; Samsung; SM-A166M; a16xq2; Exynos 1330; en_US",
+    api: "35/15; 393dpi; 1080x2340; Samsung; SM-A166M; a16xq; Exynos 1330; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A166M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2316; Samsung; SM-A546V; a54xq3; Exynos 1380; en_US",
+    api: "35/15; 393dpi; 1080x2316; Samsung; SM-A546V; a54xq; Exynos 1380; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A546V) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 393dpi; 1080x2340; Samsung; SM-A556V; a55xq2; Exynos 1480; en_US",
+    api: "35/15; 393dpi; 1080x2340; Samsung; SM-A556V; a55xq; Exynos 1480; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-A556V) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3848,11 +3848,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; 25013PC82G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 440dpi; 1200x2670; Xiaomi; 25021PN95C; dada2; Snapdragon 8 Elite; en_US",
+    api: "35/15; 440dpi; 1200x2670; Xiaomi; 25021PN95C; dada; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 25021PN95C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 395dpi; 1080x2400; Xiaomi; 24117RA68G5; gold5; Snapdragon 7s Gen 3; en_US",
+    api: "35/15; 395dpi; 1080x2400; Xiaomi; 24117RA68G5; gold; Snapdragon 7s Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; 24117RA68G5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3864,27 +3864,27 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; 25030PN36G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2715; op5502e; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2715; op5502; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2715) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2717; op5502f; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1440x3168; OnePlus; CPH2717; op5502; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; CPH2717) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 411dpi; 1080x2412; OnePlus; CPH2719; dengist11; Snapdragon 8s Gen 4; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; CPH2719) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+    api: "35/15; 460dpi; 1264x2780; OPPO; PHX110; PHX110; Dimensity 9400; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; PHX110) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1080x2400; motorola; XT2503-1; tesla8; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1080x2400; motorola; XT2503-1; tesla; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2503-1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 450dpi; 1080x2400; motorola; XT2503-3; tesla9; Snapdragon 8 Elite; en_US",
+    api: "35/15; 450dpi; 1080x2400; motorola; XT2503-3; tesla; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; XT2503-3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 70 pro; mortimer3; Dimensity 9300+; en_US",
+    api: "35/15; 402dpi; 1080x2400; motorola; motorola edge 70 pro; mortimer; Dimensity 9300+; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; motorola edge 70 pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3952,7 +3952,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SHARK MNS-H0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 394dpi; 1080x2400; Xiaomi; SHARK KPR-H0; Kona2; Snapdragon 8 Elite; en_US",
+    api: "35/15; 394dpi; 1080x2400; Xiaomi; SHARK KPR-H0; Kona; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SHARK KPR-H0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -3972,19 +3972,19 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; SH-55F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S937V; e5q2; Snapdragon 8 Elite; en_US",
+    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S937V; e5q; Snapdragon 8 Elite; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-S937V) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S921E2; r12s3; Exynos 2400; en_US",
+    api: "35/15; 416dpi; 1080x2340; Samsung; SM-S921E2; r12s; Exynos 2400; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-S921E2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 373dpi; 2176x1812; Samsung; SM-F956V; q6q2; Snapdragon 8 Gen 3; en_US",
+    api: "35/15; 373dpi; 2176x1812; Samsung; SM-F956V; q6q; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-F956V) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 425dpi; 1080x2640; Samsung; SM-F741N; b6q2; Snapdragon 8 Gen 3; en_US",
+    api: "35/15; 425dpi; 1080x2640; Samsung; SM-F741N; b6q; Snapdragon 8 Gen 3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; SM-F741N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {

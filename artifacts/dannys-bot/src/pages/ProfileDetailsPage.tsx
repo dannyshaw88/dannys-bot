@@ -21,6 +21,7 @@ import {
   AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useProxies, useUpdateProxy } from "@/hooks/use-proxies";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,6 +94,7 @@ export function ProfileDetailsPage() {
   const [formData, setFormData] = useState<any>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "pending" | "ok" | "fail">("idle");
+  const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);
   const preStoppedStatusRef = useRef<string>("pending");
@@ -686,13 +688,28 @@ export function ProfileDetailsPage() {
 
                   <button
                     type="button"
-                    onClick={handleResetDeviceIds}
+                    onClick={() => setResetDeviceConfirmOpen(true)}
                     disabled={updateProfileMutation.isPending}
                     className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50 text-left w-fit"
                   >
                     <Smartphone className="w-3.5 h-3.5 shrink-0" />
                     Reset Device IDs
                   </button>
+
+                  <AlertDialog open={resetDeviceConfirmOpen} onOpenChange={setResetDeviceConfirmOpen}>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reset Device IDs?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will assign a new random device fingerprint (User Agent, Device ID, UUID) to this account and set its status to Pending. Instagram may require a fresh verification after this change.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleResetDeviceIds}>Reset</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
 
                   <div className="space-y-3 pt-4 border-t border-border mt-4">
                     <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>

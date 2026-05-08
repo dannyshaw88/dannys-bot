@@ -417,6 +417,25 @@ export function SettingsPage() {
               />
             </div>
 
+            <div className="border-t border-border/50 pt-4 flex items-start justify-between gap-4">
+              <div>
+                <Label className="text-sm font-medium cursor-pointer" htmlFor="scrape-all-if-skipped">
+                  Scrape all users if some are skipped?
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  If the follow tool skips users because they've already been followed by another profile,
+                  HikerAPI will keep scraping additional pages until the target follow count is met.
+                </p>
+              </div>
+              <Switch
+                id="scrape-all-if-skipped"
+                checked={settings?.scrapeAllIfSkipped ?? false}
+                onCheckedChange={(v) => toggle("scrapeAllIfSkipped", v)}
+                disabled={isLoading || mutation.isPending}
+                className="data-[state=checked]:bg-purple-500 shrink-0 mt-0.5"
+              />
+            </div>
+
             <div className="border-t border-border/50 pt-4 space-y-2">
               <Label className="text-sm font-medium" htmlFor="ignore-days">
                 Ignore scraped users for (days)

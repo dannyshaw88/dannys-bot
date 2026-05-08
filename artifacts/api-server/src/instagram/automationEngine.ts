@@ -25,6 +25,7 @@ import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
+import { hasBrowserSession, borrowEbPageForCookieBaker, releaseEbCookieBakerPage } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -2482,6 +2483,7 @@ class AutomationEngine {
     else engineLog("WARN", `@${profile.username}: HikerAPI disabled/no token — no scraping fallback, session will abort`);
 
     const zero = { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
+    const scrapeAllIfSkipped = globalSettings.scrapeAllIfSkipped === "true";
 
     // Daily limit (0 = no limit)
     if (maxPerDay > 0 && this.daily(state) >= maxPerDay) {
@@ -2584,12 +2586,13 @@ class AutomationEngine {
     engineLog("INFO", `@${profile.username}: scraped ${candidates.length} candidates (target: ${processCount})`);
 
     let followed = 0, dedupSkipped = 0, filterSkipped = 0, blocked = 0, skipped = 0;
+    let hitHardLimit = false; // true when a real cap/block/stop occurred (not just ran out of candidates)
 
     for (const user of candidates) {
       if (followed >= processCount) break;
-      if (state.stop.stopped) break;
-      if (maxPerDay > 0 && this.daily(state) >= maxPerDay) { console.log(`[engine] @${profile.username}: daily cap hit mid-session`); break; }
-      if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) { console.log(`[engine] @${profile.username}: hourly cap hit mid-session`); await sleep(3_600_000); break; }
+      if (state.stop.stopped) { hitHardLimit = true; break; }
+      if (maxPerDay > 0 && this.daily(state) >= maxPerDay) { console.log(`[engine] @${profile.username}: daily cap hit mid-session`); hitHardLimit = true; break; }
+      if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) { console.log(`[engine] @${profile.username}: hourly cap hit mid-session`); hitHardLimit = true; await sleep(3_600_000); break; }
 
       // Dedup check (per-profile)
       if (await this.alreadyFollowed(profile.id, user.username)) {
@@ -2634,7 +2637,7 @@ class AutomationEngine {
         console.log(`[engine] @${profile.username}: follow suspended (${rem} remaining) — skipping session`);
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Follow suspended ${rem} remaining`);
         blocked++;
-        break;
+        hitHardLimit = true; break;
       }
 
       // Pre-follow action variations (like, stories, reels, highlights)
@@ -2666,7 +2669,7 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Captcha / security challenge required  complete in embedded browser`);
         // Mark account as captcha so the UI shows it and the runner pauses sessions
         await storage.updateProfile(profile.id, { accountStatus: "captcha" });
-        break;
+        hitHardLimit = true; break;
       }
 
       if (result.status === "user_not_found") {
@@ -2689,14 +2692,14 @@ class AutomationEngine {
           console.warn(`[engine] @${profile.username}: session expired (login_required) — marking logged_out, aborting session`);
           await storage.updateProfile(profile.id, { accountStatus: "logged_out" });
           state.client = null;
-          break;
+          hitHardLimit = true; break;
         }
 
         // Only apply suspension for explicit Instagram account-level blocks
         const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required");
         if (isLegitBlock) {
           this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
-          break; // Abort session immediately when legitimately blocked
+          hitHardLimit = true; break; // Abort session immediately when legitimately blocked
         }
 
         // Blocked attempts count against the session limit (users per session = real API calls)
@@ -2736,6 +2739,100 @@ class AutomationEngine {
 
       // Inter-follow delay after every successful follow
       await sleep(randInt(followMin, followMax));
+    }
+
+    // Re-scrape additional pages to fill the quota when users were skipped by other profiles
+    if (scrapeAllIfSkipped && !hitHardLimit && followed < processCount && !state.stop.stopped) {
+      let extraRound = 0;
+      while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 10) {
+        extraRound++;
+        const needMore = processCount - followed;
+        let moreCandidates: { pk: string; username: string; fullName: string }[] = [];
+        try {
+          if (source.type === "hashtag" && hikerClient) {
+            const t0 = Date.now();
+            const globalCursor = await storage.getHashtagCursor(source.value);
+            const result = await hikerClient.getHashtagUsers(source.value, needMore + 5, globalCursor);
+            moreCandidates = result.users;
+            if (result.nextCursor) {
+              await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
+            } else if (globalCursor) {
+              await storage.setHashtagCursor(source.value, "").catch(() => {});
+            }
+            if (globalSettings.skipScrapedUsers === "true" && moreCandidates.length > 0) {
+              const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+              const alreadyScraped = await storage.getScrapedUserIds(moreCandidates.map(c => c.pk), ignoreDays);
+              const fresh = moreCandidates.filter(c => !alreadyScraped.has(c.pk));
+              await storage.addScrapedUsers(fresh).catch(() => {});
+              moreCandidates = fresh;
+            }
+            logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${source.value} via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
+          } else if (source.type === "target_followers" && hikerClient && source.targetUserId) {
+            const t0 = Date.now();
+            moreCandidates = await hikerClient.getFollowers(source.targetUserId, needMore + 5);
+            logHiker("FollowersScrape", `Re-scrape round ${extraRound} followers via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
+          }
+        } catch { break; }
+        if (!moreCandidates.length) break;
+        engineLog("INFO", `@${profile.username}: re-scrape round ${extraRound} — ${moreCandidates.length} new candidates (need ${needMore} more)`);
+        for (const user of moreCandidates) {
+          if (followed >= processCount || state.stop.stopped || hitHardLimit) break;
+          if (maxPerDay > 0 && this.daily(state) >= maxPerDay) { hitHardLimit = true; break; }
+          if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) { hitHardLimit = true; break; }
+          if (await this.alreadyFollowed(profile.id, user.username)) { dedupSkipped++; continue; }
+          if (globalSkipFollowed && await storage.isGloballyFollowed(user.username)) { dedupSkipped++; continue; }
+          if (globalSkipSkipped && await storage.isGloballySkipped(user.username)) { filterSkipped++; continue; }
+          if (toolSkipIndian && this.hasIndianScript(user.fullName ?? "")) {
+            await storage.addSkippedUser(user.username, "Indian script in name");
+            filterSkipped++; continue;
+          }
+          if (this.isActionSuspended(state, "follow")) { hitHardLimit = true; break; }
+          await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient);
+          let result: { ok: boolean; status?: string; reason?: string };
+          try {
+            const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;
+            result = await client.followUser(user.pk, user.username, sourceLabel);
+          } catch (err: any) {
+            const msg = err?.message ?? "";
+            const acctStatus = this.getAccountLevelStatus(msg);
+            if (acctStatus) {
+              await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+              if (acctStatus === "logged_out") state.client = null;
+              hitHardLimit = true;
+            }
+            this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "error", msg);
+            if (hitHardLimit) break; continue;
+          }
+          if (result.status === "checkpoint_required") {
+            await storage.updateProfile(profile.id, { accountStatus: "captcha" });
+            hitHardLimit = true; break;
+          }
+          if (result.status === "follow_blocked") {
+            blocked++;
+            const reason = result.reason ?? "Instagram declined";
+            if (reason.includes("login_required") || reason.includes("logged out") || reason.includes("logout")) {
+              await storage.updateProfile(profile.id, { accountStatus: "logged_out" });
+              state.client = null; hitHardLimit = true; break;
+            }
+            if (reason.includes("Please wait") || reason.includes("feedback_required")) {
+              this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
+              hitHardLimit = true; break;
+            }
+            if (followed + blocked >= processCount) break;
+            await sleep(randInt(followMin, followMax)); continue;
+          }
+          if (!result.ok) { skipped++; continue; }
+          try {
+            await storage.createFollowedUser({ profileId: profile.id, instagramUsername: user.username, instagramUserId: String(user.pk ?? ""), sourceValue: source.value, sourceType: source.type, followedAt: new Date().toISOString() });
+          } catch {}
+          this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}]`);
+          await storage.incrementStat(profile.id, "follow");
+          this.bump(state);
+          followed++;
+          console.log(`[engine] @${profile.username}: ✓ @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
+          await sleep(randInt(followMin, followMax));
+        }
+      }
     }
 
     console.log(`[engine] @${profile.username}: session done — followed ${followed}/${processCount}`);
@@ -3064,59 +3161,74 @@ class AutomationEngine {
       ? [...sites].sort(() => Math.random() - 0.5).slice(0, count)
       : sites.slice(0, count);
 
-    console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s)`);
+    // Use the Embedded Browser if it's already open for this profile so the user
+    // can see the cookie baking in action. Otherwise launch a silent headless browser.
+    const useEb = hasBrowserSession(profile.id);
+    let ebPage: any | null = null;
+    let headlessBrowser: any | null = null;
 
-    let puppeteerLib: any;
-    try {
-      puppeteerLib = (await import("puppeteer-core")).default;
-    } catch {
-      puppeteerLib = (await import("puppeteer")).default;
+    console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [${useEb ? "EB" : "headless"}]`);
+
+    if (useEb) {
+      ebPage = await borrowEbPageForCookieBaker(profile.id);
     }
 
-    const CHROMIUM_PATH =
-      process.env.CHROMIUM_PATH ||
-      "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
-
-    // Resolve proxy from profile inline (proxyId takes precedence over inline fields)
-    let proxyArg: string[] = [];
-    let proxyAuth: { username: string; password: string } | undefined;
-    if (profile.proxyId) {
+    if (!ebPage) {
+      // Fall back to (or default to) a dedicated headless browser
+      let puppeteerLib: any;
       try {
-        const proxies = await storage.getProxies();
-        const linked = proxies.find((p) => p.id === profile.proxyId);
-        if (linked?.host && linked?.port) {
-          proxyArg = [`--proxy-server=${linked.host}:${linked.port}`];
-          if (linked.username) proxyAuth = { username: linked.username, password: linked.password ?? "" };
-        }
-      } catch {}
-    } else if (profile.proxyHost && profile.proxyPort) {
-      proxyArg = [`--proxy-server=${profile.proxyHost}:${profile.proxyPort}`];
-      if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
-    }
+        puppeteerLib = (await import("puppeteer-core")).default;
+      } catch {
+        puppeteerLib = (await import("puppeteer")).default;
+      }
 
-    const browser = await puppeteerLib.launch({
-      headless: true,
-      executablePath: CHROMIUM_PATH,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--mute-audio",
-        ...proxyArg,
-      ],
-      ignoreHTTPSErrors: true,
-    });
+      const CHROMIUM_PATH =
+        process.env.CHROMIUM_PATH ||
+        "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 
-    try {
-      const page = await browser.newPage();
-      if (proxyAuth) await page.authenticate(proxyAuth);
+      let proxyArg: string[] = [];
+      let proxyAuth: { username: string; password: string } | undefined;
+      if (profile.proxyId) {
+        try {
+          const proxies = await storage.getProxies();
+          const linked = proxies.find((p) => p.id === profile.proxyId);
+          if (linked?.host && linked?.port) {
+            proxyArg = [`--proxy-server=${linked.host}:${linked.port}`];
+            if (linked.username) proxyAuth = { username: linked.username, password: linked.password ?? "" };
+          }
+        } catch {}
+      } else if (profile.proxyHost && profile.proxyPort) {
+        proxyArg = [`--proxy-server=${profile.proxyHost}:${profile.proxyPort}`];
+        if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
+      }
+
+      headlessBrowser = await puppeteerLib.launch({
+        headless: true,
+        executablePath: CHROMIUM_PATH,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--no-first-run",
+          "--no-zygote",
+          "--mute-audio",
+          ...proxyArg,
+        ],
+        ignoreHTTPSErrors: true,
+      });
+
+      const headlessPage = await headlessBrowser.newPage();
+      if (proxyAuth) await headlessPage.authenticate(proxyAuth);
       const ua =
         profile.userAgentEmbedded ??
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-      await page.setUserAgent(ua);
+      await headlessPage.setUserAgent(ua);
+      ebPage = headlessPage; // reuse the same browsing code below
+    }
+
+    try {
+      const page = ebPage;
 
       for (const site of sitesToVisit) {
         if (state.stop.stopped) break;
@@ -3170,7 +3282,11 @@ class AutomationEngine {
         }
       }
     } finally {
-      await browser.close().catch(() => {});
+      if (useEb && hasBrowserSession(profile.id)) {
+        await releaseEbCookieBakerPage(profile.id);
+      } else if (headlessBrowser) {
+        await headlessBrowser.close().catch(() => {});
+      }
     }
     console.log(`[cookie-baker] @${profile.username}: session complete`);
   }

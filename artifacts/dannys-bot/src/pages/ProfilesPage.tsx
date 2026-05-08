@@ -17,8 +17,8 @@ import {
   Tag, FolderOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { ImportProfilesDialog } from "@/components/ImportProfilesDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
@@ -124,6 +124,7 @@ export function ProfilesPage() {
   const [eqxImporting, setEqxImporting] = useState(false);
   const eqxImportRef = useRef<HTMLInputElement>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
+  const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
@@ -296,6 +297,14 @@ export function ProfilesPage() {
       toast({ title: "Error", description: "Failed to delete some profiles.", variant: "destructive" });
     }
   }, [deleteProfileMutation, toast]);
+
+  const handleBulkLoginEB = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    toast({ title: "Login Started", description: `Auto-filling credentials for ${selectedProfileIds.length} account(s) in the background.` });
+    for (const id of selectedProfileIds) {
+      fetch(`/api/browser/${id}/login`, { method: "POST" }).catch(() => {});
+    }
+  }, [selectedProfileIds, toast]);
 
   const handleBulkResetDeviceIds = useCallback(async () => {
     if (selectedProfileIds.length === 0) return;
@@ -1088,8 +1097,11 @@ export function ProfilesPage() {
               <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Remove Proxies
               </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkResetDeviceIds(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={() => { setActionsOpen(false); setResetDeviceConfirmOpen(true); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
+              </button>
+              <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /> Log Embedded Browsers
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button
@@ -1192,6 +1204,22 @@ export function ProfilesPage() {
             >
               Delete
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resetDeviceConfirmOpen} onOpenChange={setResetDeviceConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Device IDs?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will assign new random device fingerprints (User Agent, Device ID, UUID) to{" "}
+              {selectedProfileIds.length} selected account{selectedProfileIds.length !== 1 ? "s" : ""} and set their status to Pending. Instagram may require fresh verification after this change.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkResetDeviceIds}>Reset</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

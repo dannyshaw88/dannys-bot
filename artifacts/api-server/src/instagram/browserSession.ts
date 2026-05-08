@@ -1606,3 +1606,41 @@ export async function uploadPhotoViaFetch(
     return null;
   }
 }
+
+// ── Cookie baker EB helpers ──────────────────────────────────────────────────
+
+export function hasBrowserSession(profileId: number): boolean {
+  return sessions.has(profileId);
+}
+
+export async function borrowEbPageForCookieBaker(profileId: number): Promise<any | null> {
+  const s = sessions.get(profileId);
+  if (!s) return null;
+  try {
+    const page = await s.browser.newPage();
+    await page.setViewport({ width: 1280, height: 760 });
+    s.pages.push(page);
+    s.activePage = s.pages.length - 1;
+    s.page = page;
+    s.lastUrl = "";
+    sendTabsUpdate(profileId);
+    kickFrame(profileId).catch(() => {});
+    return page;
+  } catch (e: any) {
+    log(`borrowEbPageForCookieBaker [${profileId}]: ${e?.message}`, "browser");
+    return null;
+  }
+}
+
+export async function releaseEbCookieBakerPage(profileId: number): Promise<void> {
+  const s = sessions.get(profileId);
+  if (!s || s.pages.length <= 1) return;
+  const lastIdx = s.pages.length - 1;
+  try { await s.pages[lastIdx].close(); } catch {}
+  s.pages.splice(lastIdx, 1);
+  s.activePage = s.pages.length - 1;
+  s.page = s.pages[s.activePage];
+  s.lastUrl = "";
+  sendTabsUpdate(profileId);
+  kickFrame(profileId).catch(() => {});
+}

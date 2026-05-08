@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Plus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -37,6 +37,16 @@ interface LogEntry {
   kind: "step" | "ok" | "fail" | "error";
 }
 
+interface ConsoleEntry {
+  ts: string;
+  level: string;
+  text: string;
+}
+
+interface TabInfo {
+  url: string;
+}
+
 const BROWSER_W = 1280;
 const BROWSER_H = 760;
 
@@ -68,9 +78,15 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   const [loginState, setLoginState] = useState<LoginState>("idle");
   const [loginLog, setLoginLog] = useState<LogEntry[]>([]);
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleEntry[]>([]);
   const [showLog, setShowLog] = useState(false);
+  const [logTab, setLogTab] = useState<"login" | "console">("login");
+  const [tabs, setTabs] = useState<TabInfo[]>([]);
+  const [activeTab, setActiveTab] = useState(0);
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileChooserPending, setFileChooserPending] = useState(false);
 
   // F12 on the canvas toggles the log panel
   useEffect(() => {
@@ -171,13 +187,25 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             if (msg.ok) {
               setLoginState("ok");
               appendLog(msg.message || "Done", "ok");
-              // stays permanently green — no auto-reset
             } else {
               setLoginState("fail");
               appendLog(msg.message || "Login failed", "fail");
               toast({ title: cleanLoginError(msg.message), variant: "destructive" });
               setTimeout(() => setLoginState("idle"), 12000);
             }
+            break;
+          case "fileChooserNeeded":
+            setFileChooserPending(true);
+            setTimeout(() => fileInputRef.current?.click(), 50);
+            break;
+          case "consoleLog": {
+            const entry: ConsoleEntry = { ts: nowTs(), level: msg.level ?? "log", text: msg.text ?? "" };
+            setConsoleLogs(prev => [...prev.slice(-199), entry]);
+            break;
+          }
+          case "tabsUpdate":
+            setTabs(msg.tabs ?? []);
+            setActiveTab(msg.active ?? 0);
             break;
         }
       } catch {}
@@ -446,63 +474,115 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onClick={clearSession} disabled={!connected} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
         </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => send({ type: "newTab" })}
+          disabled={!connected} title="New tab">
+          <Plus className="w-4 h-4" />
+        </Button>
       </div>
 
-      {/* Login step log — shown during/after login, collapsible */}
-      {showLog && loginLog.length > 0 && (
+      {/* Tab strip — visible when 2+ tabs are open */}
+      {tabs.length > 1 && (
+        <div className="flex items-center gap-0.5 px-2 pt-1 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
+          {tabs.map((tab, i) => (
+            <div
+              key={i}
+              className={`group flex items-center gap-1 px-2 py-1 rounded-t text-xs max-w-[160px] cursor-pointer select-none transition-colors ${
+                i === activeTab
+                  ? "bg-background border border-b-background border-border font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60"
+              }`}
+              onClick={() => send({ type: "switchTab", index: i })}
+            >
+              <span className="truncate flex-1">
+                {tab.url ? new URL(tab.url).hostname.replace("www.", "") || `Tab ${i + 1}` : `Tab ${i + 1}`}
+              </span>
+              {tabs.length > 1 && (
+                <button
+                  onClick={e => { e.stopPropagation(); send({ type: "closeTab", index: i }); }}
+                  className="opacity-0 group-hover:opacity-100 hover:text-destructive shrink-0 ml-0.5"
+                  title="Close tab"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Debug panel (F12) — shows login log + browser console */}
+      {showLog && (
         <div className="shrink-0 border-b border-border bg-slate-950 text-xs">
-          {/* Log header */}
-          <div className="flex items-center justify-between px-3 py-1 border-b border-slate-800">
-            <span className="text-slate-400 font-mono font-semibold tracking-wide uppercase text-[10px]">Login log</span>
-            <div className="flex items-center gap-2">
+          {/* Panel header with tabs */}
+          <div className="flex items-center border-b border-slate-800">
+            <button
+              onClick={() => setLogTab("login")}
+              className={`px-3 py-1 font-mono font-semibold tracking-wide uppercase text-[10px] transition-colors ${logTab === "login" ? "text-slate-200 border-b-2 border-primary" : "text-slate-500 hover:text-slate-300"}`}
+            >
+              Login {loginLog.length > 0 ? `(${loginLog.length})` : ""}
+            </button>
+            <button
+              onClick={() => setLogTab("console")}
+              className={`px-3 py-1 font-mono font-semibold tracking-wide uppercase text-[10px] transition-colors ${logTab === "console" ? "text-slate-200 border-b-2 border-primary" : "text-slate-500 hover:text-slate-300"}`}
+            >
+              Console {consoleLogs.length > 0 ? `(${consoleLogs.length})` : ""}
+            </button>
+            <div className="ml-auto flex items-center gap-2 pr-2">
               {loginState === "running" && <Loader2 className="w-3 h-3 animate-spin text-amber-400" />}
               {loginState === "ok"      && <CheckCircle2 className="w-3 h-3 text-green-400" />}
               {loginState === "fail"    && <AlertCircle className="w-3 h-3 text-red-400" />}
-              <button
-                onClick={() => setShowLog(false)}
-                className="text-slate-500 hover:text-slate-300 ml-1"
-                title="Hide log"
-              >
+              <button onClick={() => setShowLog(false)} className="text-slate-500 hover:text-slate-300" title="Hide (F12)">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
-          {/* Scrollable entries */}
-          <div className="max-h-32 overflow-y-auto px-3 py-1.5 space-y-0.5 font-mono">
-            {loginLog.map((e, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="text-slate-600 shrink-0 select-none">{e.ts}</span>
-                <span className={
-                  e.kind === "ok"    ? "text-green-400" :
-                  e.kind === "fail"  ? "text-red-400" :
-                  e.kind === "error" ? "text-amber-400" :
-                  "text-slate-300"
-                }>
-                  {e.kind === "ok"   ? "✓ " :
-                   e.kind === "fail" ? "✗ " :
-                   e.kind === "error"? "⚠ " : "· "}
-                  {e.text}
-                </span>
+
+          {/* Login tab */}
+          {logTab === "login" && (
+            <>
+              <div className="max-h-36 overflow-y-auto px-3 py-1.5 space-y-0.5 font-mono">
+                {loginLog.length === 0 ? (
+                  <div className="text-slate-600 italic py-1">No login activity yet — click "Fill Credentials" to start.</div>
+                ) : loginLog.map((e, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-slate-600 shrink-0 select-none">{e.ts}</span>
+                    <span className={e.kind === "ok" ? "text-green-400" : e.kind === "fail" ? "text-red-400" : e.kind === "error" ? "text-amber-400" : "text-slate-300"}>
+                      {e.kind === "ok" ? "✓ " : e.kind === "fail" ? "✗ " : e.kind === "error" ? "⚠ " : "· "}{e.text}
+                    </span>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
               </div>
-            ))}
-            <div ref={logEndRef} />
-          </div>
-          {/* Latest status pinned at bottom if running */}
-          {loginState === "running" && lastEntry && (
-            <div className="px-3 py-1 border-t border-slate-800 text-amber-300 truncate">
-              {lastEntry.text}
+              {loginState === "running" && lastEntry && (
+                <div className="px-3 py-1 border-t border-slate-800 text-amber-300 truncate">{lastEntry.text}</div>
+              )}
+            </>
+          )}
+
+          {/* Console tab */}
+          {logTab === "console" && (
+            <div className="max-h-36 overflow-y-auto px-3 py-1.5 space-y-0.5 font-mono">
+              {consoleLogs.length === 0 ? (
+                <div className="text-slate-600 italic py-1">No browser console output yet.</div>
+              ) : consoleLogs.map((e, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-slate-600 shrink-0 select-none">{e.ts}</span>
+                  <span className={`shrink-0 text-[9px] uppercase font-bold ${e.level === "error" ? "text-red-400" : e.level === "warn" ? "text-amber-400" : e.level === "info" ? "text-blue-400" : "text-slate-500"}`}>{e.level}</span>
+                  <span className={`break-all ${e.level === "error" ? "text-red-300" : e.level === "warn" ? "text-amber-300" : "text-slate-300"}`}>{e.text}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Collapsed log toggle — always show hint when there are log entries */}
-      {!showLog && loginLog.length > 0 && (
+      {/* Collapsed log toggle */}
+      {!showLog && (loginLog.length > 0 || consoleLogs.length > 0) && (
         <button
           onClick={() => setShowLog(true)}
           className="shrink-0 px-4 py-1 text-[11px] text-slate-500 bg-slate-950 border-b border-slate-800 hover:text-slate-300 text-left"
         >
-          Login log ({loginLog.length} steps) — press F12 to open
+          Debug panel ({loginLog.length} login steps · {consoleLogs.length} console) — F12
         </button>
       )}
 
@@ -581,6 +661,34 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           </>
         )}
       </div>
+
+      {/* Hidden native file input — shown when the EB page opens a file chooser dialog */}
+      {fileChooserPending && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,*/*"
+          style={{ display: "none" }}
+          onChange={async e => {
+            setFileChooserPending(false);
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async ev => {
+              const base64 = (ev.target?.result as string)?.split(",")[1];
+              if (!base64) return;
+              await fetch(`/api/browser/${profileId}/files`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fileName: file.name, data: base64 }),
+              }).catch(() => {});
+            };
+            reader.readAsDataURL(file);
+            // Reset so the same file can be re-picked next time
+            if (fileInputRef.current) fileInputRef.current.value = "";
+          }}
+        />
+      )}
     </div>
   );
 }

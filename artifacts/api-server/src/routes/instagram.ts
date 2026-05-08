@@ -1296,6 +1296,7 @@ export async function registerInstagramRoutes(
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
+      scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
@@ -1309,7 +1310,7 @@ export async function registerInstagramRoutes(
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -1324,6 +1325,9 @@ export async function registerInstagramRoutes(
     }
     if (typeof skipScrapedUsers === "boolean") {
       await storage.setGlobalSetting("skipScrapedUsers", String(skipScrapedUsers));
+    }
+    if (typeof scrapeAllIfSkipped === "boolean") {
+      await storage.setGlobalSetting("scrapeAllIfSkipped", String(scrapeAllIfSkipped));
     }
     if (typeof scrapedUserIgnoreDays === "number" && scrapedUserIgnoreDays > 0) {
       await storage.setGlobalSetting("scrapedUserIgnoreDays", String(Math.round(scrapedUserIgnoreDays)));
@@ -1363,6 +1367,7 @@ export async function registerInstagramRoutes(
       hikerApiToken: settings.hikerApiToken ?? "",
       skipScrapedUsers: settings.skipScrapedUsers === "true",
       scrapedUserIgnoreDays: parseInt(settings.scrapedUserIgnoreDays ?? "365", 10),
+      scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
