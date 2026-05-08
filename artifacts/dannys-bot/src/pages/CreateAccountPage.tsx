@@ -103,6 +103,9 @@ export function CreateAccountPage() {
     });
   };
 
+  const [eqxImporting, setEqxImporting] = useState(false);
+  const eqxImportRef = useRef<HTMLInputElement>(null);
+
   const [colWidths, setColWidths] = useState<typeof DEFAULT_COL_WIDTHS>(() => {
     try {
       const s = localStorage.getItem("creator_col_widths_px");
@@ -605,6 +608,39 @@ export function CreateAccountPage() {
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
 
+      {/* Hidden EQX import file input */}
+      <input
+        ref={eqxImportRef}
+        type="file"
+        accept=".eqx"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!eqxImportRef.current) return;
+          eqxImportRef.current.value = "";
+          if (!file) return;
+          setEqxImporting(true);
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const binary = String.fromCharCode(...new Uint8Array(arrayBuffer));
+            const eqxBase64 = btoa(binary);
+            const res = await fetch("/api/profiles/import-eqx", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ eqxBase64 }),
+            });
+            if (!res.ok) { toast({ title: "Import failed", description: await res.text(), variant: "destructive" }); return; }
+            const data = await res.json();
+            toast({ title: "EQX imported", description: `@${data.username} imported successfully (${data.followedImported} followed users).` });
+          } catch (err: any) {
+            toast({ title: "Import error", description: err?.message ?? "Unknown error", variant: "destructive" });
+          } finally {
+            setEqxImporting(false);
+          }
+        }}
+      />
+
       {actionsOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
@@ -618,6 +654,91 @@ export function CreateAccountPage() {
               </button>
               <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles
+              </button>
+              <button
+                onClick={() => { setActionsOpen(false); eqxImportRef.current?.click(); }}
+                disabled={eqxImporting}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {eqxImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-primary" />}
+                Import EQX File
+              </button>
+              <button
+                onClick={async () => {
+                  setActionsOpen(false);
+                  if (selectedIds.length === 0) {
+                    toast({ title: "No accounts selected", description: "Select at least one account to export as EQX.", variant: "destructive" });
+                    return;
+                  }
+                  if (selectedIds.length === 1) {
+                    const id = selectedIds[0];
+                    const profile = profiles?.find(p => p.id === id);
+                    const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                    try {
+                      const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); return; }
+                      const blob = await res.blob();
+                      const objectUrl = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = objectUrl; a.download = `${safeUsername}.eqx`;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                    } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
+                    return;
+                  }
+                  if ("showDirectoryPicker" in window) {
+                    let dirHandle: any;
+                    try {
+                      dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
+                    } catch (e: any) {
+                      if (e?.name !== "AbortError") toast({ title: "Export failed", description: e?.message ?? "Could not open folder picker.", variant: "destructive" });
+                      return;
+                    }
+                    toast({ title: "Exporting…", description: `Writing ${selectedIds.length} EQX files to folder…` });
+                    let written = 0;
+                    for (const id of selectedIds) {
+                      const profile = profiles?.find(p => p.id === id);
+                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                      try {
+                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
+                        const blob = await res.blob();
+                        const fileHandle = await dirHandle.getFileHandle(`${safeUsername}.eqx`, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob); await writable.close();
+                        written++;
+                      } catch (e: any) {
+                        toast({ title: "Export skipped", description: `Error writing ${safeUsername}: ${e?.message ?? "unknown"}`, variant: "destructive" });
+                      }
+                    }
+                    if (written > 0) toast({ title: "EQX Export Complete", description: `${written} of ${selectedIds.length} file(s) saved to folder.` });
+                  } else {
+                    toast({ title: "Preparing export…", description: `Downloading ${selectedIds.length} EQX files…` });
+                    let downloaded = 0;
+                    for (const id of selectedIds) {
+                      const profile = profiles?.find(p => p.id === id);
+                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                      try {
+                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
+                        const blob = await res.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = objectUrl; a.download = `${safeUsername}.eqx`;
+                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                        await new Promise(r => setTimeout(r, 300));
+                        downloaded++;
+                      } catch { toast({ title: "Export skipped", description: `Error downloading ${safeUsername}`, variant: "destructive" }); }
+                    }
+                    if (downloaded > 0) toast({ title: "EQX Export Complete", description: `${downloaded} of ${selectedIds.length} file(s) downloaded.` });
+                  }
+                }}
+                disabled={selectedIds.length === 0}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <FileDown className="w-4 h-4 shrink-0 text-primary" />
+                Export EQX{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Open Browsers
