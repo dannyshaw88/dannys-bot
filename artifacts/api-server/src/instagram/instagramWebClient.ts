@@ -1738,7 +1738,7 @@ export class InstagramWebClient {
     }, `Like DM thread=${threadId} item=${itemId}`);
   }
 
-  async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> }> {
+  async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }>; sessionExpired?: boolean }> {
     return this.timed("LikeTimelinePosts", async () => {
       // As of 2024 the timeline endpoint requires POST (GET returns 405).
       // Must use the igApiCookies mobile session — EB web cookies return empty feed_items.
@@ -1747,7 +1747,12 @@ export class InstagramWebClient {
         console.warn(`[webClient] likeTimelinePosts: mobileSessionPost returned null — no mobile session`);
         return { liked: 0, watched: 0, likedPosts: [] };
       }
-      if (j?.status === "fail" || j?.message === "login_required") {
+      if (j?.message === "login_required" || j?.require_login || (j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? ""))) {
+        console.warn(`[webClient] likeTimelinePosts: session expired — status="${j?.status}" message="${j?.message}" logout_reason=${j?.logout_reason ?? "n/a"}`);
+        this.mobileSessionReady = false;
+        return { liked: 0, watched: 0, likedPosts: [], sessionExpired: true };
+      }
+      if (j?.status === "fail") {
         console.warn(`[webClient] likeTimelinePosts: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
         return { liked: 0, watched: 0, likedPosts: [] };
       }

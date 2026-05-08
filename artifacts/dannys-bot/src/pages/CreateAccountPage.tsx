@@ -350,15 +350,15 @@ export function CreateAccountPage() {
 
   return (
     <AppLayout>
-      <div className="flex justify-between items-start mb-8">
-        <div className="min-w-0 flex-1 mr-4">
+      <div className="mb-3">
+        <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Account Creator</h1>
-          <p className="text-sm text-muted-foreground mt-1">Use the EB to create accounts here. Move them to Accounts when ready for automation.</p>
+          <Button onClick={handleCreate} disabled={createProfileMutation.isPending} size="sm" className="bg-sky-400 hover:bg-sky-500 text-white border-0 shrink-0">
+            <Plus className="w-4 h-4 mr-1" />
+            {createProfileMutation.isPending ? "Creating..." : "Add Account"}
+          </Button>
         </div>
-        <Button onClick={handleCreate} disabled={createProfileMutation.isPending} className="bg-sky-400 hover:bg-sky-500 text-white border-0">
-          <Plus className="w-4 h-4 mr-2" />
-          {createProfileMutation.isPending ? "Creating..." : "Add Account"}
-        </Button>
+        <p className="text-sm text-muted-foreground mt-1">Use the EB to create accounts here. Move them to Accounts when ready for automation.</p>
       </div>
 
       <div className="flex items-center gap-2 mb-3">

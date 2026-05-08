@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen } from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, ipcMain, screen, shell } from "electron";
 import { autoUpdater } from "electron-updater";
 import { spawn, ChildProcess, exec } from "child_process";
 import { promisify } from "util";
@@ -520,23 +520,12 @@ function setupBackupHandlers() {
     scheduleAutoBackup(enabled, intervalDays);
   });
 
-  ipcMain.handle("open-browser-window", (_event, { profileId, username }: { profileId: number; username: string; userAgent: string }) => {
-    const ebWin = new BrowserWindow({
-      width: 1100,
-      height: 820,
-      minWidth: 800,
-      minHeight: 600,
-      title: `Browser — @${username}`,
-      icon: getIconPath(),
-      autoHideMenuBar: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: path.join(__dirname, "preload.js"),
-      },
-    });
-    ebWin.loadURL(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
-    ebWin.once("ready-to-show", () => ebWin.show());
+  ipcMain.handle("open-browser-window", (_event, { profileId }: { profileId: number; username: string; userAgent: string }) => {
+    // Open as a tab in the user's default browser (Chrome/Edge) so each profile
+    // gets its own browser tab rather than a secondary Electron window.
+    // The Puppeteer session (user agent, cookies, proxy) is managed server-side
+    // and is unaffected by which client renders the browser panel UI.
+    shell.openExternal(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
   });
 }
 

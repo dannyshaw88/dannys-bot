@@ -556,16 +556,15 @@ export function ProfilesPage() {
 
   return (
     <AppLayout>
-      <div className="flex justify-between items-start mb-8">
-        <div className="min-w-0 flex-1 mr-4">
-          <div className="flex items-baseline gap-3 min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
-          </div>
+      <div className="mb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
+          <Button onClick={handleCreate} disabled={createProfileMutation.isPending} size="sm" className="bg-sky-400 hover:bg-sky-500 text-white border-0 shrink-0">
+            <Plus className="w-4 h-4 mr-1" />
+            {createProfileMutation.isPending ? "Creating..." : "Add Profile"}
+          </Button>
         </div>
-        <Button onClick={handleCreate} disabled={createProfileMutation.isPending} className="bg-sky-400 hover:bg-sky-500 text-white border-0">
-          <Plus className="w-4 h-4 mr-2" />
-          {createProfileMutation.isPending ? "Creating..." : "Add Profile"}
-        </Button>
+        <p className="text-sm text-muted-foreground mt-1">Manage your Instagram accounts, proxies, and automation settings.</p>
       </div>
 
       {/* Status filter bar */}
@@ -1085,6 +1084,9 @@ export function ProfilesPage() {
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Open Browsers
               </button>
+              <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /> Login Embedded Browsers
+              </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
@@ -1099,9 +1101,6 @@ export function ProfilesPage() {
               </button>
               <button onClick={() => { setActionsOpen(false); setResetDeviceConfirmOpen(true); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
-              </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /> Log Embedded Browsers
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button
