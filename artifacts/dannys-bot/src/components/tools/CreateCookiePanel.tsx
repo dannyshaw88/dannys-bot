@@ -214,7 +214,7 @@ export function CreateCookiePanel({ profile }: Props) {
       <div className="flex items-center gap-3 pb-3 border-b border-border">
         <Switch checked={local.enabled} onCheckedChange={handleToggleEnabled} />
         <Label className="text-sm font-semibold">Enable Cookie Baker</Label>
-        {!showActivity && (
+        {!showActivity ? (
           <>
             <button
               className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
@@ -230,6 +230,13 @@ export function CreateCookiePanel({ profile }: Props) {
               Activity
             </button>
           </>
+        ) : (
+          <button
+            className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
+            onClick={() => setShowActivity(false)}
+          >
+            Back to Settings
+          </button>
         )}
         <div className="ml-auto flex items-center gap-2">
           {!showActivity && saveStatus === "saving" && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
@@ -240,13 +247,7 @@ export function CreateCookiePanel({ profile }: Props) {
       {/* ── Activity View ────────────────────────────────────────────────── */}
       {showActivity && (
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <button
-              className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
-              onClick={() => setShowActivity(false)}
-            >
-              ← Settings
-            </button>
+          <div className="flex items-center justify-end mb-3">
             <button
               onClick={fetchActivity}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
