@@ -7,19 +7,6 @@
     "type": "git",
     "url": "https://github.com/dannyshaw88/dannys-bot.git"
   },
-  "build": {
-    "appId": "com.equinox.bot",
-    "productName": "Equinox",
-    "win": {
-      "icon": "assets/icon.ico",
-      "target": "nsis"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "dannyshaw88",
-      "repo": "dannys-bot"
-    }
-  },
   "scripts": {
     "build": "node build.mjs",
     "package": "electron-builder --win --publish always"
