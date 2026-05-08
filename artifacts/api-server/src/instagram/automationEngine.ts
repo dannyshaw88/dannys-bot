@@ -25,7 +25,7 @@ import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
-import { hasBrowserSession, borrowEbPageForCookieBaker, releaseEbCookieBakerPage, applyStealthScripts } from "./browserSession";
+import { applyStealthScripts } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -3178,21 +3178,13 @@ class AutomationEngine {
       ? [...sites].sort(() => Math.random() - 0.5).slice(0, count)
       : sites.slice(0, count);
 
-    // Use the Embedded Browser if it's already open for this profile so the user
-    // can see the cookie baking in action. Otherwise launch a silent headless browser.
-    const useEb = hasBrowserSession(profile.id);
+    // Always run in a dedicated headless browser — never borrow the EB session.
     let ebPage: any | null = null;
     let headlessBrowser: any | null = null;
 
-    console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [${useEb ? "EB" : "headless"}]`);
+    console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [headless]`);
 
-    if (useEb) {
-      ebPage = await borrowEbPageForCookieBaker(profile.id);
-      if (ebPage) await applyStealthScripts(ebPage).catch(() => {});
-    }
-
-    if (!ebPage) {
-      // Fall back to (or default to) a dedicated headless browser
+    {
       let puppeteerLib: any;
       try {
         puppeteerLib = (await import("puppeteer-core")).default;
@@ -3342,9 +3334,7 @@ class AutomationEngine {
         ]);
       }
     } finally {
-      if (useEb && hasBrowserSession(profile.id)) {
-        await releaseEbCookieBakerPage(profile.id);
-      } else if (headlessBrowser) {
+      if (headlessBrowser) {
         await headlessBrowser.close().catch(() => {});
       }
     }

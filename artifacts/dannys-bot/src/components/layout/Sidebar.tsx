@@ -20,7 +20,7 @@ export function Sidebar() {
   return (
     <div className="w-64 bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
       <div className="h-16 flex items-center px-6 border-b border-border/50">
-        <img src="/bot-logo.png" alt="Equinox" className="w-[41px] h-[41px] mr-3 shrink-0 object-contain" />
+        <img src="/bot-logo.png" alt="Equinox" className="w-[45px] h-[45px] mr-3 shrink-0 object-contain" />
         <span className="font-bold text-lg tracking-tight text-foreground">
           Equi<span style={{ color: "#1AD2F2" }}>nox</span>
         </span>
