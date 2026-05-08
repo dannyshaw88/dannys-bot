@@ -1019,7 +1019,7 @@ class AutomationEngine {
           navChain: "",
           ipAddress: "",
           durationMs: Date.now() - t0,
-        });
+        }).catch(() => {});
         if (!ownUserId) {
           throw new Error(`HikerAPI could not resolve user ID for @${profile.username}`);
         }
@@ -1054,7 +1054,7 @@ class AutomationEngine {
         navChain: "",
         ipAddress: "",
         durationMs: Date.now() - t1,
-      });
+      }).catch(() => {});
     } else {
       const t2 = Date.now();
       followers = await client.getFollowers(ownUserId!, usersToCheck);
@@ -1068,7 +1068,7 @@ class AutomationEngine {
         navChain: "",
         ipAddress: "",
         durationMs: Date.now() - t2,
-      });
+      }).catch(() => {});
     }
 
     if (!followers.length) {

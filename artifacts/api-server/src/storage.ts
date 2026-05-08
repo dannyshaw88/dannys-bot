@@ -277,30 +277,45 @@ export class DatabaseStorage implements IStorage {
   private _apiCallInsertCount = 0;
 
   async createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any> {
-    const [created] = await db.insert(instagramApiCalls).values({
-      profileId: call.profileId,
-      username: call.username ?? "",
-      operationName: call.operationName,
-      date: call.date,
-      message: call.message ?? "",
-      source: call.source ?? "",
-      navChain: call.navChain ?? "",
-      ipAddress: call.ipAddress ?? "",
-      durationMs: call.durationMs ?? 0,
-    }).returning();
-    // Prune to keep the 1,000 most recent rows PER profile — checked every 50 inserts
-    if (++this._apiCallInsertCount % 50 === 0) {
-      db.run(sql`
-        DELETE FROM instagram_api_calls
-        WHERE id NOT IN (
-          SELECT id FROM (
-            SELECT id, ROW_NUMBER() OVER (PARTITION BY "profileId" ORDER BY id DESC) AS rn
-            FROM instagram_api_calls
-          ) ranked WHERE rn <= 1000
-        )
-      `);
+    // All callers are fire-and-forget (no await). Any unhandled rejection from this
+    // function terminates the Node.js process on v15+. Wrap everything so it never rejects.
+    try {
+      const [created] = await db.insert(instagramApiCalls).values({
+        profileId: call.profileId,
+        username: call.username ?? "",
+        operationName: call.operationName,
+        date: call.date,
+        message: call.message ?? "",
+        source: call.source ?? "",
+        navChain: call.navChain ?? "",
+        ipAddress: call.ipAddress ?? "",
+        durationMs: call.durationMs ?? 0,
+      }).returning();
+
+      // Prune to keep the 1,000 most recent rows PER profile — checked every 50 inserts.
+      // Uses ROW_NUMBER() OVER (PARTITION BY) — requires SQLite 3.25+.
+      // Non-critical: a failure here must never bubble up.
+      if (++this._apiCallInsertCount % 50 === 0) {
+        try {
+          db.run(sql`
+            DELETE FROM instagram_api_calls
+            WHERE id NOT IN (
+              SELECT id FROM (
+                SELECT id, ROW_NUMBER() OVER (PARTITION BY "profileId" ORDER BY id DESC) AS rn
+                FROM instagram_api_calls
+              ) ranked WHERE rn <= 1000
+            )
+          `);
+        } catch (pruneErr) {
+          console.warn("[storage] instagram_api_calls prune failed (non-fatal):", pruneErr);
+        }
+      }
+
+      return created;
+    } catch (insertErr) {
+      console.warn("[storage] createInstagramApiCall insert failed (non-fatal):", insertErr);
+      return undefined;
     }
-    return created;
   }
 
   async incrementStat(profileId: number, toolType: string): Promise<void> {
