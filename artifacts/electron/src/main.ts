@@ -71,6 +71,18 @@ function getIconPath(): string {
   return path.join(__dirname, "..", "assets", "icon.png");
 }
 
+function getTrayIconPath(): string {
+  // On Windows use the solid-background ICO — transparent PNGs render as black
+  // blobs or are invisible in the system tray against light/dark taskbars.
+  if (process.platform === "win32") {
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, "app", "dist", "assets", "icon-tray.ico");
+    }
+    return path.join(__dirname, "..", "assets", "icon-tray.ico");
+  }
+  return getIconPath();
+}
+
 function waitForServer(port: number, timeoutMs = 30000): Promise<void> {
   const start = Date.now();
   return new Promise<void>((resolve, reject) => {
@@ -202,11 +214,15 @@ const POPUP_H = 3 * 33 + 2 * 7; // 3 items + 2 separators (with margins)
 let trayPopup: BrowserWindow | null = null;
 
 function createTray(): void {
-  const iconPath = getIconPath();
+  const trayIconPath = getTrayIconPath();
   let icon: Electron.NativeImage;
 
   try {
-    icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+    icon = nativeImage.createFromPath(trayIconPath);
+    // Only resize PNG paths — ICO files already embed multiple sizes
+    if (!trayIconPath.endsWith(".ico")) {
+      icon = icon.resize({ width: 16, height: 16 });
+    }
   } catch {
     icon = nativeImage.createEmpty();
   }

@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUpdateProfile, useProfiles } from "@/hooks/use-profiles";
 import { queryClient } from "@/lib/queryClient";
 import { CopySettingsDialog } from "@/components/tools/CopySettingsDialog";
-import { Loader2, CheckCircle2, Globe, Link2, Clock, Shuffle, BarChart2, ExternalLink, RefreshCw, ChevronLeft } from "lucide-react";
+import { Loader2, CheckCircle2, Globe, Link2, Clock, Shuffle, BarChart2, ExternalLink, RefreshCw, AlertTriangle } from "lucide-react";
 import type { Profile } from "@shared/schema";
 
 interface CookieBakerSettings {
@@ -410,6 +410,13 @@ export function CreateCookiePanel({ profile }: Props) {
               </p>
             </div>
           </div>
+
+          {local.enabled && !local.sites.trim() && (
+            <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>Cookie baker is enabled but the website list is empty — add at least one URL above so sessions can run.</span>
+            </div>
+          )}
 
           <div className="rounded-lg bg-muted/40 border border-border/50 p-3 text-xs text-muted-foreground leading-relaxed">
             <strong className="text-foreground">How it works:</strong> When enabled, a hidden background browser visits these websites using this account's proxy and user agent, building up real browsing cookies. Open the Embedded Browser while it's running to see it in action. If the EB isn't open, it runs silently in the background.
