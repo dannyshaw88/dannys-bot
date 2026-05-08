@@ -22,7 +22,7 @@ export function Sidebar() {
       <div className="h-16 flex items-center px-6 border-b border-border/50">
         <img src="/equinox-logo.png" alt="Equinox" className="w-7 h-7 mr-3 shrink-0 object-contain" />
         <span className="font-bold text-lg tracking-tight text-foreground">
-          Equi<span style={{ color: "#00C8FF" }}>NOX</span>
+          Equi<span style={{ color: "#04DBFA" }}>nox</span>
         </span>
       </div>
 
