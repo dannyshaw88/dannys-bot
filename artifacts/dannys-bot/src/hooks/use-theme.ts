@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 export type ThemeColor =
   | "blue" | "purple" | "emerald" | "orange" | "rose"
@@ -30,6 +30,14 @@ export function applyTheme(color: ThemeColor, mode: ThemeMode): void {
   if (color !== "blue") html.classList.add(`theme-${color}`);
 }
 
+function saveToBackend(color: ThemeColor, mode: ThemeMode): void {
+  fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ themeColor: color, themeMode: mode }),
+  }).catch(() => {});
+}
+
 export function useTheme() {
   const [themeColor, setThemeColorState] = useState<ThemeColor>(
     () => (localStorage.getItem("equinox-theme-color") as ThemeColor) ?? "blue"
@@ -38,11 +46,34 @@ export function useTheme() {
     () => (localStorage.getItem("equinox-theme-mode") as ThemeMode) ?? "dark"
   );
 
+  // On mount: fetch from backend — it is the single source of truth because
+  // Electron uses a random port each launch, so localStorage lives on a new
+  // origin every time and cannot be relied on across restarts/updates.
+  useEffect(() => {
+    fetch("/api/settings")
+      .then(r => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        const color = (data.themeColor as ThemeColor) ?? "blue";
+        const mode  = (data.themeMode  as ThemeMode)  ?? "dark";
+        // Always apply + sync — don't skip even if localStorage looks the same.
+        // The localStorage at a fresh port is empty, so defaults would mask
+        // the real saved value.
+        localStorage.setItem("equinox-theme-color", color);
+        localStorage.setItem("equinox-theme-mode", mode);
+        setThemeColorState(color);
+        setThemeModeState(mode);
+        applyTheme(color, mode);
+      })
+      .catch(() => {});
+  }, []);
+
   const setThemeColor = useCallback((color: ThemeColor) => {
     localStorage.setItem("equinox-theme-color", color);
     setThemeColorState(color);
     const mode = (localStorage.getItem("equinox-theme-mode") as ThemeMode) ?? "dark";
     applyTheme(color, mode);
+    saveToBackend(color, mode);
   }, []);
 
   const setThemeMode = useCallback((mode: ThemeMode) => {
@@ -50,6 +81,7 @@ export function useTheme() {
     setThemeModeState(mode);
     const color = (localStorage.getItem("equinox-theme-color") as ThemeColor) ?? "blue";
     applyTheme(color, mode);
+    saveToBackend(color, mode);
   }, []);
 
   return { themeColor, themeMode, setThemeColor, setThemeMode };

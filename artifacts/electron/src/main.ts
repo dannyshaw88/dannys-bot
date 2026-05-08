@@ -196,7 +196,7 @@ function createTray(): void {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip("Danny's Bot");
+  tray.setToolTip("Equinox");
 
   // Create the custom square popup window (hidden until right-click)
   trayPopup = new BrowserWindow({
@@ -286,7 +286,7 @@ function setupAutoUpdater(): void {
     dialog.showMessageBox(win, {
       type: "info",
       title: "Update Ready",
-      message: "Danny's Bot has been updated. Restart now to apply?",
+      message: "Equinox has been updated. Restart now to apply?",
       buttons: ["Restart Now", "Later"],
       defaultId: 0,
     }).then(({ response }) => {
@@ -299,7 +299,7 @@ function setupAutoUpdater(): void {
     dialog.showMessageBox(win, {
       type: "info",
       title: "Up to Date",
-      message: "You are up to date — Danny's Bot is running the latest version.",
+      message: "You are up to date — Equinox is running the latest version.",
       buttons: ["OK"],
     });
   });
@@ -514,7 +514,7 @@ async function createWindow() {
     height: 900,
     minWidth: 960,
     minHeight: 600,
-    title: "Danny's Bot",
+    title: "Equinox",
     icon: getIconPath(),
     autoHideMenuBar: true,
     show: false,
