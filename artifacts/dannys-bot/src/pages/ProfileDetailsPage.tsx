@@ -8,6 +8,7 @@ import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
 import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
 import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
+import { CreateCookiePanel } from "@/components/tools/CreateCookiePanel";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -17,7 +18,7 @@ import {
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown, ChevronLeft, ChevronRight,
   Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
   UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
-  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye
+  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
@@ -403,6 +404,9 @@ export function ProfileDetailsPage() {
             <Activity className="w-4 h-4 shrink-0" /> Session Log
           </Tabs.Trigger>
           )}
+          <Tabs.Trigger value="create-cookie" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <Cookie className="w-4 h-4 shrink-0" /> Create a Cookie
+          </Tabs.Trigger>
         </Tabs.List>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-4 mb-3">
@@ -632,7 +636,7 @@ export function ProfileDetailsPage() {
                         />
                       </div>
                     </div>
-                    <div className="space-y-1.5 max-w-[336px]">
+                    <div className="space-y-1.5 max-w-[370px]">
                       <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><KeyRound className="w-3.5 h-3.5" /> 2FA Secret Key</Label>
                       <Input
                         placeholder="TOTP secret (e.g. M5ZM ZRDO…)"
@@ -684,8 +688,9 @@ export function ProfileDetailsPage() {
                     type="button"
                     onClick={handleResetDeviceIds}
                     disabled={updateProfileMutation.isPending}
-                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50 text-left w-fit"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50 text-left w-fit"
                   >
+                    <Smartphone className="w-3.5 h-3.5 shrink-0" />
                     Reset Device IDs
                   </button>
 
@@ -1141,6 +1146,10 @@ export function ProfileDetailsPage() {
             ? <SessionLogPanel tool={getTool('follow')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
           }
+        </Tabs.Content>
+
+        <Tabs.Content value="create-cookie" className="outline-none animate-in fade-in duration-300">
+          <CreateCookiePanel profile={profile} />
         </Tabs.Content>
 
         </div>

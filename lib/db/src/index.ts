@@ -203,6 +203,9 @@ if (!colNames.has("creator_mode")) {
 if (!colNames.has("locked")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN locked INTEGER DEFAULT 0;`);
 }
+if (!colNames.has("cookie_baker_settings")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN cookie_baker_settings TEXT;`);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

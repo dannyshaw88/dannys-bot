@@ -21,6 +21,10 @@ import {
   browserBack,
   browserForward,
   browserReload,
+  browserSetFiles,
+  browserNewTab,
+  browserSwitchTab,
+  browserCloseTab,
   clearSession,
   closeSession,
   browserAutoLogin,
@@ -1015,7 +1019,23 @@ export async function registerInstagramRoutes(
         case "back":       await browserBack(profileId); break;
         case "forward":    await browserForward(profileId); break;
         case "reload":     await browserReload(profileId); break;
+        case "newTab":     await browserNewTab(profileId); break;
+        case "switchTab":  await browserSwitchTab(profileId, msg.index); break;
+        case "closeTab":   await browserCloseTab(profileId, msg.index); break;
       }
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Accept a user-picked file and upload it to the pending Puppeteer file chooser
+  app.post("/api/browser/:profileId/files", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    const { fileName, data } = req.body as { fileName: string; data: string };
+    if (!fileName || !data) return res.status(400).json({ error: "fileName and data required" });
+    try {
+      await browserSetFiles(profileId, fileName, data);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
@@ -1089,6 +1109,13 @@ export async function registerInstagramRoutes(
   app.delete("/api/contact-pending-messages/:id", async (req, res) => {
     const id = Number(req.params.id);
     await storage.deleteContactPendingMessage(id);
+    res.json({ ok: true });
+  });
+
+  // Trigger an immediate cookie baker session
+  app.post("/api/profiles/:id/cookie-baker/run-now", async (req, res) => {
+    const id = Number(req.params.id);
+    automationEngine.triggerCookieBakerNow(id);
     res.json({ ok: true });
   });
 
@@ -1276,11 +1303,13 @@ export async function registerInstagramRoutes(
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
       backupEnabled: settings.backupEnabled === "true",
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
+      themeColor: settings.themeColor ?? "blue",
+      themeMode: settings.themeMode ?? "dark",
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -1320,6 +1349,12 @@ export async function registerInstagramRoutes(
     if (typeof backupIntervalDays === "number" && backupIntervalDays > 0) {
       await storage.setGlobalSetting("backupIntervalDays", String(Math.round(backupIntervalDays)));
     }
+    if (typeof themeColor === "string" && themeColor.length > 0) {
+      await storage.setGlobalSetting("themeColor", themeColor);
+    }
+    if (typeof themeMode === "string" && (themeMode === "light" || themeMode === "dark")) {
+      await storage.setGlobalSetting("themeMode", themeMode);
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -1335,6 +1370,8 @@ export async function registerInstagramRoutes(
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
       backupEnabled: settings.backupEnabled === "true",
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
+      themeColor: settings.themeColor ?? "blue",
+      themeMode: settings.themeMode ?? "dark",
     });
   });
 

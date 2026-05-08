@@ -94,6 +94,7 @@ export const profiles = sqliteTable("profiles", {
   igApiCookies: text("ig_api_cookies"),
   creatorMode: integer("creator_mode", { mode: "boolean" }).default(false),
   locked: integer("locked", { mode: "boolean" }).default(false),
+  cookieBakerSettings: text("cookie_baker_settings", { mode: "json" }).default(null),
 });
 
 export const tools = sqliteTable("tools", {

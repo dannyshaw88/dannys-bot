@@ -129,6 +129,12 @@ function minutesUntilWindowOpen(start: string): number {
   return s > cur ? s - cur : 1440 - cur + s;
 }
 
+// ── Cookie baker state ────────────────────────────────────────────────────────
+interface CookieBakerState {
+  stop: { stopped: boolean };
+  nextRunAt: number;
+}
+
 // ── Action suspension record ──────────────────────────────────────────────────
 interface ActionSuspension {
   until: number;       // epoch ms — action is suspended until this time
@@ -168,6 +174,8 @@ class AutomationEngine {
   private dmStates             = new Map<number, ProfileState>(); // dm runners
   private contactStates        = new Map<number, ProfileState>(); // contact tool runners
   private humanSessionStates   = new Map<number, ProfileState>(); // independent human session runners
+  private cookieBakerStates    = new Map<number, CookieBakerState>(); // cookie baker runners
+  private cookieBakerForceRun  = new Set<number>();               // trigger immediate run
   private syncTimers           = new Map<number, number>();       // profileId → nextSyncAt (ms)
   private ownUserIdCache       = new Map<number, string>();       // profileId → Instagram pk (HikerAPI, resolved once)
   private contactForceRun      = new Set<number>();               // profileIds to run contact send immediately
@@ -280,6 +288,24 @@ class AutomationEngine {
           state.stop.stopped = true;
           this.humanSessionStates.delete(id);
           console.log(`[engine] Stopped human session runner for profile ${id}`);
+        }
+      }
+
+      // ── Cookie baker (background web browsing, works for all profiles) ──────
+      const allProfilesForBaker = await storage.getProfiles();
+      const activeCookieBaker = new Set<number>();
+      for (const bp of allProfilesForBaker) {
+        const cbs = (bp.cookieBakerSettings as any) ?? {};
+        if (cbs.enabled) {
+          activeCookieBaker.add(bp.id);
+          if (!this.cookieBakerStates.has(bp.id)) this.launchCookieBaker(bp);
+        }
+      }
+      for (const [id, state] of this.cookieBakerStates) {
+        if (!activeCookieBaker.has(id)) {
+          state.stop.stopped = true;
+          this.cookieBakerStates.delete(id);
+          console.log(`[cookie-baker] Stopped baker for profile ${id}`);
         }
       }
 
@@ -2966,6 +2992,189 @@ class AutomationEngine {
     }
   }
 
+  // ── Cookie baker: trigger immediate run ──────────────────────────────────
+  triggerCookieBakerNow(profileId: number) {
+    this.cookieBakerForceRun.add(profileId);
+    this.triggerReconcile();
+  }
+
+  // ── Cookie baker: launch background loop ─────────────────────────────────
+  private launchCookieBaker(profile: Profile) {
+    const state: CookieBakerState = { stop: { stopped: false }, nextRunAt: 0 };
+    this.cookieBakerStates.set(profile.id, state);
+    console.log(`[cookie-baker] Launching baker for @${profile.username}`);
+
+    const loop = async () => {
+      while (!state.stop.stopped) {
+        if (this.cookieBakerForceRun.has(profile.id)) {
+          this.cookieBakerForceRun.delete(profile.id);
+          state.nextRunAt = 0;
+        }
+
+        if (Date.now() >= state.nextRunAt) {
+          const freshProfile = await storage.getProfile(profile.id);
+          if (!freshProfile) break;
+          const cbs = (freshProfile.cookieBakerSettings as any) ?? {};
+          if (!cbs.enabled) break;
+
+          try {
+            await this.runCookieBakerSession(freshProfile, cbs, state);
+          } catch (err: any) {
+            console.error(`[cookie-baker] @${freshProfile.username}: session error: ${err?.message}`);
+          }
+
+          const waitMs = randInt(
+            (cbs.execIntervalMin ?? 60) * 60_000,
+            (cbs.execIntervalMax ?? 120) * 60_000,
+          );
+          state.nextRunAt = Date.now() + waitMs;
+          console.log(`[cookie-baker] @${freshProfile.username}: next session in ${Math.round(waitMs / 60000)}min`);
+        }
+
+        await sleepInterruptible(5_000, state.stop);
+      }
+      this.cookieBakerStates.delete(profile.id);
+      console.log(`[cookie-baker] Baker runner exited for @${profile.username}`);
+    };
+
+    loop().catch((err) => {
+      this.cookieBakerStates.delete(profile.id);
+      console.error(`[cookie-baker] Fatal error for @${profile.username}:`, err?.message);
+    });
+  }
+
+  // ── Cookie baker: run one browsing session ────────────────────────────────
+  private async runCookieBakerSession(
+    profile: Profile,
+    settings: any,
+    state: { stop: { stopped: boolean } },
+  ): Promise<void> {
+    const sites: string[] = (settings.sites ?? "")
+      .split("\n")
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+
+    if (!sites.length) {
+      console.log(`[cookie-baker] @${profile.username}: no sites configured, skipping`);
+      return;
+    }
+
+    const count = randInt(settings.sitesMin ?? 3, settings.sitesMax ?? 5);
+    const sitesToVisit = settings.visitRandom
+      ? [...sites].sort(() => Math.random() - 0.5).slice(0, count)
+      : sites.slice(0, count);
+
+    console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s)`);
+
+    let puppeteerLib: any;
+    try {
+      puppeteerLib = (await import("puppeteer-core")).default;
+    } catch {
+      puppeteerLib = (await import("puppeteer")).default;
+    }
+
+    const CHROMIUM_PATH =
+      process.env.CHROMIUM_PATH ||
+      "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+
+    // Resolve proxy from profile inline (proxyId takes precedence over inline fields)
+    let proxyArg: string[] = [];
+    let proxyAuth: { username: string; password: string } | undefined;
+    if (profile.proxyId) {
+      try {
+        const proxies = await storage.getProxies();
+        const linked = proxies.find((p) => p.id === profile.proxyId);
+        if (linked?.host && linked?.port) {
+          proxyArg = [`--proxy-server=${linked.host}:${linked.port}`];
+          if (linked.username) proxyAuth = { username: linked.username, password: linked.password ?? "" };
+        }
+      } catch {}
+    } else if (profile.proxyHost && profile.proxyPort) {
+      proxyArg = [`--proxy-server=${profile.proxyHost}:${profile.proxyPort}`];
+      if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
+    }
+
+    const browser = await puppeteerLib.launch({
+      headless: true,
+      executablePath: CHROMIUM_PATH,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--mute-audio",
+        ...proxyArg,
+      ],
+      ignoreHTTPSErrors: true,
+    });
+
+    try {
+      const page = await browser.newPage();
+      if (proxyAuth) await page.authenticate(proxyAuth);
+      const ua =
+        profile.userAgentEmbedded ??
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+      await page.setUserAgent(ua);
+
+      for (const site of sitesToVisit) {
+        if (state.stop.stopped) break;
+        const url = site.startsWith("http") ? site : `https://${site}`;
+        try {
+          console.log(`[cookie-baker] @${profile.username}: → ${url}`);
+          await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+
+          // Scroll the main page
+          const scrollMs = randInt(
+            (settings.scrollDelayMin ?? 5) * 1_000,
+            (settings.scrollDelayMax ?? 15) * 1_000,
+          );
+          await cookieBakerScroll(page, scrollMs, state);
+          if (state.stop.stopped) break;
+
+          // Collect + visit internal links
+          const linksCount = randInt(settings.internalLinksMin ?? 1, settings.internalLinksMax ?? 3);
+          if (linksCount > 0) {
+            let hostname = "";
+            try { hostname = new URL(url).hostname; } catch {}
+            const internalLinks: string[] = hostname
+              ? await page.evaluate((h: string) =>
+                  Array.from(document.querySelectorAll("a[href]"))
+                    .map((a) => (a as HTMLAnchorElement).href)
+                    .filter((href) => {
+                      try { return new URL(href).hostname === h && href !== window.location.href; }
+                      catch { return false; }
+                    })
+                    .slice(0, 20),
+                  hostname,
+                )
+              : [];
+
+            const chosen = internalLinks.sort(() => Math.random() - 0.5).slice(0, linksCount);
+            for (const link of chosen) {
+              if (state.stop.stopped) break;
+              try {
+                console.log(`[cookie-baker] @${profile.username}:   ↳ ${link}`);
+                await page.goto(link, { waitUntil: "domcontentloaded", timeout: 20_000 });
+                const innerMs = randInt(
+                  (settings.internalScrollDelayMin ?? 3) * 1_000,
+                  (settings.internalScrollDelayMax ?? 10) * 1_000,
+                );
+                await cookieBakerScroll(page, innerMs, state);
+              } catch {}
+            }
+          }
+        } catch (err: any) {
+          console.error(`[cookie-baker] @${profile.username}: failed to visit ${url}: ${err?.message}`);
+        }
+      }
+    } finally {
+      await browser.close().catch(() => {});
+    }
+    console.log(`[cookie-baker] @${profile.username}: session complete`);
+  }
+
   // ── Status API ────────────────────────────────────────────────────────────
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; dailyUnfollowCount: number; dailyDmCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
     // Collect every profileId that has at least one active runner
@@ -2996,6 +3205,20 @@ class AutomationEngine {
         nextUnfollowAt:       unfollowState?.nextUnfollowAt ?? 0,
       };
     });
+  }
+}
+
+// ── Cookie baker scroll helper ────────────────────────────────────────────────
+async function cookieBakerScroll(
+  page: any,
+  durationMs: number,
+  state: { stop: { stopped: boolean } },
+): Promise<void> {
+  const end = Date.now() + durationMs;
+  while (Date.now() < end && !state.stop.stopped) {
+    const amount = 100 + Math.floor(Math.random() * 300);
+    await page.evaluate((n: number) => window.scrollBy(0, n), amount).catch(() => {});
+    await new Promise((r) => setTimeout(r, 400 + Math.floor(Math.random() * 600)));
   }
 }
 
