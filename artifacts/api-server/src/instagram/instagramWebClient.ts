@@ -152,6 +152,20 @@ function extractCsrf(cookies: string[]): string {
   return "";
 }
 
+// ── IgApiClient factory ───────────────────────────────────────────────────────
+// instagram-private-api uses request-promise internally, which has NO default
+// timeout.  When a proxy stops responding, every IgApiClient call hangs
+// indefinitely, accumulating open file descriptors.  With 30+ accounts all
+// hitting degraded proxies, the OS FD limit (~1024 on Linux) is exhausted in
+// ~1 hour, after which the Express server stops accepting new connections and
+// the dashboard/proxies go blank.  Setting a 30-second timeout on every client
+// ensures hung calls fail fast instead of holding sockets open forever.
+function newIgClient(): IgApiClient {
+  const ig = new IgApiClient();
+  ig.request.defaults = { timeout: 30000 };
+  return ig;
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 const WEB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const APP_ID  = "936619743392459";
@@ -593,7 +607,7 @@ export class InstagramWebClient {
     // Slow path: fresh login via IgApiClient (RSA-encrypted passwords).
     // instagram-private-api handles #PWD_INSTAGRAM:4: — Instagram deprecated
     // the plaintext :0: format and returns "Forgotten password" for it.
-    const ig = new IgApiClient();
+    const ig = newIgClient();
     // Include username in seed so accounts sharing the same userAgentApi get distinct device fingerprints.
     const deviceSeed = (this.userAgentApi ?? username) + "|" + username;
 
@@ -912,7 +926,7 @@ export class InstagramWebClient {
   private async _followViaIgClient(userId: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
     if (!this.igApiCookies) return { ok: false, status: "follow_blocked", reason: "no igApiCookies — cannot use IgApiClient" };
 
-    const ig = new IgApiClient();
+    const ig = newIgClient();
 
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
@@ -1047,7 +1061,7 @@ export class InstagramWebClient {
     if (!this.igApiCookies) return null;
 
     // ── Device setup ──────────────────────────────────────────────────────────
-    const ig = new IgApiClient();
+    const ig = newIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
@@ -1152,7 +1166,7 @@ export class InstagramWebClient {
   private async _likeViaIgClient(mediaId: string): Promise<{ ok: boolean; reason?: string }> {
     if (!this.igApiCookies) return { ok: false, reason: "no igApiCookies" };
 
-    const ig = new IgApiClient();
+    const ig = newIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
@@ -1955,7 +1969,7 @@ export class InstagramWebClient {
   private async _sendDmViaIgClient(userId: string, text: string): Promise<{ threadId: string; itemId: string } | "blocked" | "session_expired" | false> {
     if (!this.igApiCookies) return false;
 
-    const ig = new IgApiClient();
+    const ig = newIgClient();
 
     // Restore device fingerprint — use username-scoped seed for uniqueness
     const dmDeviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");

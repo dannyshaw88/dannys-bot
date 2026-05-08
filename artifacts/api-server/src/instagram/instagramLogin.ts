@@ -358,6 +358,9 @@ async function restoreSessionCookies(ig: IgApiClient, cookieString: string): Pro
 
 function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiClient; captureDeviceState: () => string } {
   const ig = new IgApiClient();
+  // request-promise has no default timeout — hang indefinitely on dead proxies
+  // without this, leading to FD exhaustion and server unresponsiveness after ~1h.
+  ig.request.defaults = { timeout: 30000 };
   // ALWAYS include username in the seed so that accounts sharing the same userAgentApi
   // (same device model) still generate distinct uuid/deviceId/phoneId fingerprints.
   // Without the username, two accounts with the same UA string would get identical
