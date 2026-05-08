@@ -3308,13 +3308,13 @@ class AutomationEngine {
         }
       }
 
-      // Store activity (keep last 10 sessions)
+      // Store activity (all sessions, newest first)
       if (sessionVisits.length > 0) {
         const prev = this.cookieBakerActivity.get(profile.id) ?? [];
         this.cookieBakerActivity.set(profile.id, [
           { sessionAt: Date.now(), sites: sessionVisits },
           ...prev,
-        ].slice(0, 10));
+        ]);
       }
     } finally {
       if (useEb && hasBrowserSession(profile.id)) {

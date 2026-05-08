@@ -1,14 +1,15 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateProfile, useProfiles } from "@/hooks/use-profiles";
 import { queryClient } from "@/lib/queryClient";
 import { CopySettingsDialog } from "@/components/tools/CopySettingsDialog";
-import { Loader2, CheckCircle2, Globe, Link2, Clock, Shuffle } from "lucide-react";
+import { Loader2, CheckCircle2, Globe, Link2, Clock, Shuffle, BarChart2, ExternalLink, RefreshCw } from "lucide-react";
 import type { Profile } from "@shared/schema";
 
 interface CookieBakerSettings {
@@ -25,6 +26,17 @@ interface CookieBakerSettings {
   internalScrollDelayMax: number;
   visitRandom: boolean;
   sites: string;
+}
+
+interface CookieBakerVisit {
+  url: string;
+  scrollTimeSec: number;
+  linksVisited: string[];
+}
+
+interface CookieBakerSessionActivity {
+  sessionAt: number;
+  sites: CookieBakerVisit[];
 }
 
 const DEFAULTS: CookieBakerSettings = {
@@ -70,6 +82,30 @@ interface Props {
   profile: Profile;
 }
 
+function formatSessionTime(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function formatSessionDate(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function shortUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace("www.", "") + (u.pathname !== "/" ? u.pathname.slice(0, 30) + (u.pathname.length > 30 ? "…" : "") : "");
+  } catch {
+    return url.slice(0, 40);
+  }
+}
+
 export function CreateCookiePanel({ profile }: Props) {
   const [local, setLocal] = useState<CookieBakerSettings>(() => ({
     ...DEFAULTS,
@@ -77,6 +113,9 @@ export function CreateCookiePanel({ profile }: Props) {
   }));
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [copyOpen, setCopyOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activity, setActivity] = useState<CookieBakerSessionActivity[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const updateProfileMutation = useUpdateProfile();
   const { data: allProfiles = [] } = useProfiles();
@@ -84,6 +123,19 @@ export function CreateCookiePanel({ profile }: Props) {
 
   const otherProfiles = allProfiles.filter((p: Profile) => p.id !== profile.id && !p.locked);
   const hasOtherProfiles = allProfiles.some((p: Profile) => p.id !== profile.id);
+
+  const fetchActivity = useCallback(async () => {
+    setActivityLoading(true);
+    try {
+      const res = await fetch(`/api/profiles/${profile.id}/cookie-baker/activity`);
+      if (res.ok) setActivity(await res.json());
+    } catch {}
+    setActivityLoading(false);
+  }, [profile.id]);
+
+  useEffect(() => {
+    if (activityOpen) fetchActivity();
+  }, [activityOpen, fetchActivity]);
 
   const save = useCallback(
     (next: CookieBakerSettings) => {
@@ -172,117 +224,221 @@ export function CreateCookiePanel({ profile }: Props) {
         >
           Copy Settings
         </button>
+        <button
+          className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
+          onClick={() => setActivityOpen(true)}
+        >
+          Activity
+        </button>
         <div className="ml-auto flex items-center gap-2">
           {saveStatus === "saving" && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
           {saveStatus === "saved"  && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
         </div>
       </div>
 
-      {/* Settings — stacked vertically */}
-      <div className="space-y-5">
-
-        {/* Execute Every */}
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Clock className="w-3.5 h-3.5 text-primary" /> Execute Every
-          </p>
-          <div className="flex items-center gap-2">
-            {numInput(local.execIntervalMin, (v) => update({ execIntervalMin: v }), 1)}
-            <span className="text-xs text-muted-foreground">–</span>
-            {numInput(local.execIntervalMax, (v) => update({ execIntervalMax: v }), 1)}
-            <span className="text-xs text-muted-foreground">minutes</span>
-          </div>
+      {/* Execute Every */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium mb-2">
+          <Clock className="w-3.5 h-3.5 text-primary" /> Execute Every
+        </p>
+        <div className="flex items-center gap-2">
+          {numInput(local.execIntervalMin, (v) => update({ execIntervalMin: v }), 1)}
+          <span className="text-xs text-muted-foreground">–</span>
+          {numInput(local.execIntervalMax, (v) => update({ execIntervalMax: v }), 1)}
+          <span className="text-xs text-muted-foreground">minutes</span>
         </div>
+      </div>
 
-        {/* Process Websites */}
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Globe className="w-3.5 h-3.5 text-primary" /> Process Websites
-          </p>
-          <div className="flex items-center gap-2">
-            {numInput(local.sitesMin, (v) => update({ sitesMin: v }), 1)}
-            <span className="text-xs text-muted-foreground">–</span>
-            {numInput(local.sitesMax, (v) => update({ sitesMax: v }), 1)}
-            <span className="text-xs text-muted-foreground">per session</span>
-          </div>
+      {/* Process Websites */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium mb-2">
+          <Globe className="w-3.5 h-3.5 text-primary" /> Process Websites
+        </p>
+        <div className="flex items-center gap-2">
+          {numInput(local.sitesMin, (v) => update({ sitesMin: v }), 1)}
+          <span className="text-xs text-muted-foreground">–</span>
+          {numInput(local.sitesMax, (v) => update({ sitesMax: v }), 1)}
+          <span className="text-xs text-muted-foreground">per session</span>
         </div>
+      </div>
 
-        {/* Scrolling Time */}
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Clock className="w-3.5 h-3.5 text-violet-500" /> Scrolling Time
-          </p>
-          <div className="flex items-center gap-2">
-            {numInput(local.scrollDelayMin, (v) => update({ scrollDelayMin: v }), 1)}
-            <span className="text-xs text-muted-foreground">–</span>
-            {numInput(local.scrollDelayMax, (v) => update({ scrollDelayMax: v }), 1)}
-            <span className="text-xs text-muted-foreground">secs per site</span>
-          </div>
+      {/* Scrolling Time */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium mb-2">
+          <Clock className="w-3.5 h-3.5 text-violet-500" /> Scrolling Time
+        </p>
+        <div className="flex items-center gap-2">
+          {numInput(local.scrollDelayMin, (v) => update({ scrollDelayMin: v }), 1)}
+          <span className="text-xs text-muted-foreground">–</span>
+          {numInput(local.scrollDelayMax, (v) => update({ scrollDelayMax: v }), 1)}
+          <span className="text-xs text-muted-foreground">secs per site</span>
         </div>
+      </div>
 
-        {/* Visit Internal Links */}
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Link2 className="w-3.5 h-3.5 text-blue-500" /> Visit Internal Links
-          </p>
-          <div className="flex items-center gap-2">
-            {numInput(local.internalLinksMin, (v) => update({ internalLinksMin: v }), 0)}
-            <span className="text-xs text-muted-foreground">–</span>
-            {numInput(local.internalLinksMax, (v) => update({ internalLinksMax: v }), 0)}
-            <span className="text-xs text-muted-foreground">per site</span>
-          </div>
+      {/* Visit Internal Links */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium mb-2">
+          <Link2 className="w-3.5 h-3.5 text-blue-500" /> Visit Internal Links
+        </p>
+        <div className="flex items-center gap-2">
+          {numInput(local.internalLinksMin, (v) => update({ internalLinksMin: v }), 0)}
+          <span className="text-xs text-muted-foreground">–</span>
+          {numInput(local.internalLinksMax, (v) => update({ internalLinksMax: v }), 0)}
+          <span className="text-xs text-muted-foreground">per site</span>
         </div>
+      </div>
 
-        {/* Scrolling Time (internal) */}
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Clock className="w-3.5 h-3.5 text-emerald-500" /> Scrolling Time (internal)
-          </p>
-          <div className="flex items-center gap-2">
-            {numInput(local.internalScrollDelayMin, (v) => update({ internalScrollDelayMin: v }), 1)}
-            <span className="text-xs text-muted-foreground">–</span>
-            {numInput(local.internalScrollDelayMax, (v) => update({ internalScrollDelayMax: v }), 1)}
-            <span className="text-xs text-muted-foreground">secs per link</span>
-          </div>
+      {/* Scrolling Time (internal) */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium mb-2">
+          <Clock className="w-3.5 h-3.5 text-emerald-500" /> Scrolling Time (internal)
+        </p>
+        <div className="flex items-center gap-2">
+          {numInput(local.internalScrollDelayMin, (v) => update({ internalScrollDelayMin: v }), 1)}
+          <span className="text-xs text-muted-foreground">–</span>
+          {numInput(local.internalScrollDelayMax, (v) => update({ internalScrollDelayMax: v }), 1)}
+          <span className="text-xs text-muted-foreground">secs per link</span>
         </div>
+      </div>
 
-        {/* Order */}
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Shuffle className="w-3.5 h-3.5 text-orange-500" /> Order
+      {/* Order */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium mb-2">
+          <Shuffle className="w-3.5 h-3.5 text-orange-500" /> Order
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <Checkbox
+            checked={local.visitRandom}
+            onCheckedChange={(v) => update({ visitRandom: !!v })}
+          />
+          <span className="text-sm">Visit websites at random</span>
+        </label>
+      </div>
+
+      {/* Websites */}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium mb-2">
+          <Globe className="w-3.5 h-3.5 text-primary" /> Websites
+        </p>
+        <div className="space-y-2">
+          <Textarea
+            placeholder={"www.example.com\nwww.bbc.co.uk\nhttps://news.ycombinator.com"}
+            value={local.sites}
+            onChange={(e) => update({ sites: e.target.value })}
+            className="font-mono text-xs min-h-[140px] resize-y"
+          />
+          <p className="text-xs text-muted-foreground">
+            One website per line — www.example.com format. Include https:// if needed, otherwise https is assumed.
           </p>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <Checkbox
-              checked={local.visitRandom}
-              onCheckedChange={(v) => update({ visitRandom: !!v })}
-            />
-            <span className="text-sm">Visit websites at random</span>
-          </label>
         </div>
-
-        {/* Websites */}
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium mb-2">
-            <Globe className="w-3.5 h-3.5 text-primary" /> Websites
-          </p>
-          <div className="space-y-2">
-            <Textarea
-              placeholder={"www.example.com\nwww.bbc.co.uk\nhttps://news.ycombinator.com"}
-              value={local.sites}
-              onChange={(e) => update({ sites: e.target.value })}
-              className="font-mono text-xs min-h-[140px] resize-y"
-            />
-            <p className="text-xs text-muted-foreground">
-              One website per line — www.example.com format. Include https:// if needed, otherwise https is assumed.
-            </p>
-          </div>
-        </div>
-
       </div>
 
       <div className="rounded-lg bg-muted/40 border border-border/50 p-3 text-xs text-muted-foreground leading-relaxed">
         <strong className="text-foreground">How it works:</strong> When enabled, a hidden background browser visits these websites using this account's proxy and user agent, building up real browsing cookies. Open the Embedded Browser while it's running to see it in action. If the EB isn't open, it runs silently in the background.
       </div>
+
+      {/* ── Activity Dialog ───────────────────────────────────────────────── */}
+      <Dialog open={activityOpen} onOpenChange={setActivityOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <BarChart2 className="w-4 h-4" /> Cookie Baker Activity — @{profile.username}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-muted-foreground">All sessions — most recent first</p>
+            <button
+              onClick={fetchActivity}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-3 h-3 ${activityLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 pr-1">
+            {activityLoading && activity.length === 0 ? (
+              <div className="flex items-center justify-center py-10 text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading…
+              </div>
+            ) : activity.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
+                <BarChart2 className="w-8 h-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No activity yet</p>
+                <p className="text-xs text-muted-foreground/70">Sessions will appear here after the cookie baker runs.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {activity.map((session, si) => (
+                  <div key={si} className="rounded-lg border border-border bg-muted/20 overflow-hidden">
+                    {/* Session header */}
+                    <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border/60">
+                      <Clock className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-foreground">
+                        {formatSessionDate(session.sessionAt)} — {formatSessionTime(session.sessionAt)}
+                      </span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {session.sites.length} site{session.sites.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+
+                    {/* Sites */}
+                    <div className="divide-y divide-border/40">
+                      {session.sites.map((site, i) => (
+                        <div key={i} className="px-3 py-2">
+                          <div className="flex items-start gap-2">
+                            <Globe className="w-3 h-3 text-primary mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-medium text-foreground truncate" title={site.url}>
+                                  {shortUrl(site.url)}
+                                </span>
+                                <a
+                                  href={site.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-muted-foreground hover:text-primary transition-colors shrink-0"
+                                  title={site.url}
+                                >
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5" /> {site.scrollTimeSec}s scroll
+                                </span>
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <Link2 className="w-2.5 h-2.5" /> {site.linksVisited.length} internal link{site.linksVisited.length !== 1 ? "s" : ""}
+                                </span>
+                              </div>
+
+                              {/* Internal links */}
+                              {site.linksVisited.length > 0 && (
+                                <div className="mt-1.5 space-y-0.5 pl-2 border-l border-border/60">
+                                  {site.linksVisited.map((link, li) => (
+                                    <div key={li} className="flex items-center gap-1.5">
+                                      <Link2 className="w-2.5 h-2.5 text-blue-400 shrink-0" />
+                                      <span className="text-[10px] text-muted-foreground truncate" title={link}>
+                                        {shortUrl(link)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <CopySettingsDialog
         key={copyOpen ? "open" : "closed"}
