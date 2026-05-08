@@ -222,25 +222,34 @@ export async function registerInstagramRoutes(
     const proxy = (await storage.getProxies()).find(p => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
 
-    const { HttpsProxyAgent } = await import("https-proxy-agent");
-    const https = await import("https");
+    const http = await import("http");
 
     const auth = proxy.username && proxy.password
-      ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@`
+      ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}`
       : "";
-    const proxyUrl = `http://${auth}${proxy.host}:${proxy.port}`;
-    const agent = new HttpsProxyAgent(proxyUrl);
 
     const start = Date.now();
     try {
+      // Test via plain HTTP CONNECT to detect basic proxy reachability.
+      // HTTPS (CONNECT tunnel) fails on many residential/datacenter proxies that
+      // only forward HTTP traffic — using HTTP gives a reliable alive/dead signal.
       await new Promise<void>((resolve, reject) => {
-        const req2 = https.get(
-          "https://i.instagram.com/api/v1/si/fetch_headers/?challenge_type=signup&guid=",
-          { agent, timeout: 10000 },
-          (r) => { r.resume(); resolve(); }
-        );
+        const options: import("http").RequestOptions = {
+          host: proxy.host,
+          port: proxy.port,
+          path: "http://httpbin.org/ip",
+          method: "GET",
+          timeout: 10000,
+          headers: {
+            "Host": "httpbin.org",
+            "User-Agent": "Mozilla/5.0",
+            ...(auth ? { "Proxy-Authorization": "Basic " + Buffer.from(auth).toString("base64") } : {}),
+          },
+        };
+        const req2 = http.request(options, (r) => { r.resume(); resolve(); });
         req2.on("error", reject);
         req2.on("timeout", () => { req2.destroy(); reject(new Error("timeout")); });
+        req2.end();
       });
       res.json({ alive: true, latencyMs: Date.now() - start });
     } catch (err: any) {
