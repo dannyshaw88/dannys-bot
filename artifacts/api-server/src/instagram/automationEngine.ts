@@ -169,6 +169,17 @@ interface ProfileState {
   nextUnfollowAt: number;
 }
 
+interface CookieBakerVisit {
+  url: string;
+  scrollTimeSec: number;
+  linksVisited: string[];
+}
+
+interface CookieBakerSessionActivity {
+  sessionAt: number;
+  sites: CookieBakerVisit[];
+}
+
 class AutomationEngine {
   private states          = new Map<number, ProfileState>(); // follow runners
   private unfollowStates  = new Map<number, ProfileState>(); // unfollow runners
@@ -177,6 +188,7 @@ class AutomationEngine {
   private humanSessionStates   = new Map<number, ProfileState>(); // independent human session runners
   private cookieBakerStates    = new Map<number, CookieBakerState>(); // cookie baker runners
   private cookieBakerForceRun  = new Set<number>();               // trigger immediate run
+  private cookieBakerActivity  = new Map<number, CookieBakerSessionActivity[]>(); // last sessions per profile
   private syncTimers           = new Map<number, number>();       // profileId → nextSyncAt (ms)
   private ownUserIdCache       = new Map<number, string>();       // profileId → Instagram pk (HikerAPI, resolved once)
   private contactForceRun      = new Set<number>();               // profileIds to run contact send immediately
@@ -915,10 +927,12 @@ class AutomationEngine {
         // ── Contact Users → send from pending queue ─────────────────────────
         if (now >= nextUsersSessionAt) {
           if (usersEnabled) {
-            this.logAction(freshProfile.id, contactTool.id, "tool_start", "", "", "", "ok", "Contact Tool: DM send session started");
             try {
-              await this.runContactUsersSession(freshProfile, contactTool, state);
-              this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "ok", "Contact Tool: DM send session complete");
+              const sentCount = await this.runContactUsersSession(freshProfile, contactTool, state);
+              if (sentCount > 0) {
+                this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "ok", `Contact Tool: sent ${sentCount} DM${sentCount !== 1 ? "s" : ""}`);
+              }
+              // If sentCount === 0 (no pending messages), nothing is logged — nothing was done
             } catch (err: any) {
               this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool DM send error: ${err?.message ?? "unknown"}`);
               console.error(`[engine] @${freshProfile.username}: contact-users send session error: ${err?.message}`);
@@ -1097,13 +1111,13 @@ class AutomationEngine {
   }
 
   // ── Contact Users: send from pending queue ─────────────────────────────────
-  private async runContactUsersSession(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
+  private async runContactUsersSession(profile: Profile, tool: Tool, state: ProfileState): Promise<number> {
     const s = tool.settings as any;
 
     const pending = await storage.getContactPendingMessages(profile.id, "pending");
     if (!pending.length) {
       console.log(`[engine] @${profile.username}: no pending contact messages to send`);
-      return;
+      return 0;
     }
 
     const sendCount = randInt(s.contactUsersSendCountMin ?? 1, s.contactUsersSendCountMax ?? 5);
@@ -1179,6 +1193,7 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", errMsg);
       }
     }
+    return sent;
   }
 
   // ── Contact Unsends: call unsendDirectMessage on due messages ──────────────
@@ -3227,6 +3242,8 @@ class AutomationEngine {
       ebPage = headlessPage; // reuse the same browsing code below
     }
 
+    const sessionVisits: CookieBakerVisit[] = [];
+
     try {
       const page = ebPage;
 
@@ -3244,6 +3261,12 @@ class AutomationEngine {
           );
           await cookieBakerScroll(page, scrollMs, state);
           if (state.stop.stopped) break;
+
+          const visitRecord: CookieBakerVisit = {
+            url,
+            scrollTimeSec: Math.round(scrollMs / 1000),
+            linksVisited: [],
+          };
 
           // Collect + visit internal links
           const linksCount = randInt(settings.internalLinksMin ?? 1, settings.internalLinksMax ?? 3);
@@ -3274,12 +3297,24 @@ class AutomationEngine {
                   (settings.internalScrollDelayMax ?? 10) * 1_000,
                 );
                 await cookieBakerScroll(page, innerMs, state);
+                visitRecord.linksVisited.push(link);
               } catch {}
             }
           }
+
+          sessionVisits.push(visitRecord);
         } catch (err: any) {
           console.error(`[cookie-baker] @${profile.username}: failed to visit ${url}: ${err?.message}`);
         }
+      }
+
+      // Store activity (keep last 10 sessions)
+      if (sessionVisits.length > 0) {
+        const prev = this.cookieBakerActivity.get(profile.id) ?? [];
+        this.cookieBakerActivity.set(profile.id, [
+          { sessionAt: Date.now(), sites: sessionVisits },
+          ...prev,
+        ].slice(0, 10));
       }
     } finally {
       if (useEb && hasBrowserSession(profile.id)) {
@@ -3292,6 +3327,10 @@ class AutomationEngine {
   }
 
   // ── Status API ────────────────────────────────────────────────────────────
+  getCookieBakerActivity(profileId: number): CookieBakerSessionActivity[] {
+    return this.cookieBakerActivity.get(profileId) ?? [];
+  }
+
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; dailyUnfollowCount: number; dailyDmCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
     // Collect every profileId that has at least one active runner
     const allIds = new Set<number>([
