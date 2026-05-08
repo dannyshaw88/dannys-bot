@@ -29,6 +29,7 @@ interface CookieBakerSettings {
 
 interface CookieBakerVisit {
   url: string;
+  visitedAt?: number;
   scrollTimeSec: number;
   linksVisited: string[];
 }
@@ -36,6 +37,7 @@ interface CookieBakerVisit {
 interface CookieBakerSessionActivity {
   sessionAt: number;
   sites: CookieBakerVisit[];
+  error?: string;
 }
 
 const DEFAULTS: CookieBakerSettings = {
@@ -267,9 +269,14 @@ export function CreateCookiePanel({ profile }: Props) {
                       {formatSessionDate(session.sessionAt)} — {formatSessionTime(session.sessionAt)}
                     </span>
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {session.sites.length} site{session.sites.length !== 1 ? "s" : ""}
+                      {session.error ? "error" : `${session.sites.length} site${session.sites.length !== 1 ? "s" : ""}`}
                     </span>
                   </div>
+                  {session.error && (
+                    <div className="px-3 py-2 text-xs text-destructive bg-destructive/10">
+                      {session.error}
+                    </div>
+                  )}
                   <div className="divide-y divide-border/40">
                     {session.sites.map((site, i) => (
                       <div key={i} className="px-3 py-2">
@@ -285,6 +292,12 @@ export function CreateCookiePanel({ profile }: Props) {
                                 title={site.url}>
                                 <ExternalLink className="w-2.5 h-2.5" />
                               </a>
+                              {site.visitedAt && (
+                                <span className="ml-auto text-[10px] text-muted-foreground/70 flex items-center gap-1 shrink-0">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  {formatSessionDate(site.visitedAt)} {formatSessionTime(site.visitedAt)}
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-3 mt-0.5">
                               <span className="text-[10px] text-muted-foreground flex items-center gap-1">

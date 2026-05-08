@@ -116,7 +116,7 @@ const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 
-async function applyStealthScripts(page: Page): Promise<void> {
+export async function applyStealthScripts(page: Page): Promise<void> {
   await page.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
     Object.defineProperty(navigator, "plugins", {

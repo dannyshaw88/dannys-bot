@@ -25,7 +25,7 @@ import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
-import { hasBrowserSession, borrowEbPageForCookieBaker, releaseEbCookieBakerPage } from "./browserSession";
+import { hasBrowserSession, borrowEbPageForCookieBaker, releaseEbCookieBakerPage, applyStealthScripts } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -171,6 +171,7 @@ interface ProfileState {
 
 interface CookieBakerVisit {
   url: string;
+  visitedAt: number;
   scrollTimeSec: number;
   linksVisited: string[];
 }
@@ -178,6 +179,7 @@ interface CookieBakerVisit {
 interface CookieBakerSessionActivity {
   sessionAt: number;
   sites: CookieBakerVisit[];
+  error?: string;
 }
 
 class AutomationEngine {
@@ -3186,6 +3188,7 @@ class AutomationEngine {
 
     if (useEb) {
       ebPage = await borrowEbPageForCookieBaker(profile.id);
+      if (ebPage) await applyStealthScripts(ebPage).catch(() => {});
     }
 
     if (!ebPage) {
@@ -3217,29 +3220,50 @@ class AutomationEngine {
         if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
       }
 
-      headlessBrowser = await puppeteerLib.launch({
-        headless: true,
-        executablePath: CHROMIUM_PATH,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--no-first-run",
-          "--no-zygote",
-          "--mute-audio",
-          ...proxyArg,
-        ],
-        ignoreHTTPSErrors: true,
-      });
+      try {
+        headlessBrowser = await puppeteerLib.launch({
+          headless: true,
+          executablePath: CHROMIUM_PATH,
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-first-run",
+            "--no-zygote",
+            "--disable-extensions",
+            "--disable-background-networking",
+            "--disable-sync",
+            "--metrics-recording-only",
+            "--disable-default-apps",
+            "--mute-audio",
+            "--hide-scrollbars",
+            "--window-size=1280,760",
+            ...proxyArg,
+          ],
+          ignoreHTTPSErrors: true,
+        });
 
-      const headlessPage = await headlessBrowser.newPage();
-      if (proxyAuth) await headlessPage.authenticate(proxyAuth);
-      const ua =
-        profile.userAgentEmbedded ??
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-      await headlessPage.setUserAgent(ua);
-      ebPage = headlessPage; // reuse the same browsing code below
+        const headlessPage = await headlessBrowser.newPage();
+        if (proxyAuth) await headlessPage.authenticate(proxyAuth);
+        const ua =
+          profile.userAgentEmbedded ??
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+        await headlessPage.setUserAgent(ua);
+        await headlessPage.setViewport({ width: 1280, height: 760 });
+        await applyStealthScripts(headlessPage);
+        ebPage = headlessPage;
+      } catch (launchErr: any) {
+        const errMsg = `Headless browser failed to launch: ${launchErr?.message ?? "unknown error"}`;
+        console.error(`[cookie-baker] @${profile.username}: ${errMsg}`);
+        const prev = this.cookieBakerActivity.get(profile.id) ?? [];
+        this.cookieBakerActivity.set(profile.id, [
+          { sessionAt: Date.now(), sites: [], error: errMsg },
+          ...prev,
+        ]);
+        if (headlessBrowser) await headlessBrowser.close().catch(() => {});
+        return;
+      }
     }
 
     const sessionVisits: CookieBakerVisit[] = [];
@@ -3264,6 +3288,7 @@ class AutomationEngine {
 
           const visitRecord: CookieBakerVisit = {
             url,
+            visitedAt: Date.now(),
             scrollTimeSec: Math.round(scrollMs / 1000),
             linksVisited: [],
           };
