@@ -69,7 +69,9 @@ export interface ProxyConfig {
 
 interface Session {
   browser: Browser;
-  page: Page;
+  page: Page;          // always === pages[activePage] — kept in sync on tab switch
+  pages: Page[];
+  activePage: number;
   res: ServerResponse | null; // SSE response — null when no client is connected
   frameLoop: ReturnType<typeof setInterval> | null;
   lastUrl: string;
@@ -90,6 +92,7 @@ function sseWrite(res: ServerResponse | null, data: object) {
 }
 
 const sessions = new Map<number, Session>();
+const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
 const LAUNCH_ARGS = [
   "--no-sandbox",
@@ -112,6 +115,43 @@ const LAUNCH_ARGS = [
 const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+
+async function applyStealthScripts(page: Page): Promise<void> {
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    Object.defineProperty(navigator, "plugins", {
+      get: () => {
+        const arr: any[] = [
+          { name: "Chrome PDF Plugin", filename: "internal-pdf-viewer", description: "Portable Document Format", length: 1 },
+          { name: "Chrome PDF Viewer", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai", description: "", length: 1 },
+          { name: "Native Client", filename: "internal-nacl-plugin", description: "", length: 2 },
+        ];
+        arr.item = (i: number) => arr[i];
+        arr.namedItem = (n: string) => arr.find((p: any) => p.name === n) ?? null;
+        Object.setPrototypeOf(arr, PluginArray.prototype);
+        return arr;
+      },
+    });
+    Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
+    (window as any).chrome = { app: { isInstalled: false }, runtime: {}, loadTimes: () => ({}), csi: () => ({}) };
+    const originalQuery = window.navigator.permissions?.query;
+    if (originalQuery) {
+      (window.navigator.permissions as any).query = (params: any) =>
+        params.name === "notifications"
+          ? Promise.resolve({ state: "prompt", onchange: null } as PermissionStatus)
+          : originalQuery.call(window.navigator.permissions, params);
+    }
+    Object.defineProperty(screen, "width",       { get: () => 1920 });
+    Object.defineProperty(screen, "height",      { get: () => 1080 });
+    Object.defineProperty(screen, "availWidth",  { get: () => 1920 });
+    Object.defineProperty(screen, "availHeight", { get: () => 1040 });
+    Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
+    Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
+    Object.defineProperty(navigator, "maxTouchPoints",       { get: () => 0 });
+    Object.defineProperty(navigator, "hardwareConcurrency",  { get: () => 8 });
+    Object.defineProperty(navigator, "deviceMemory",         { get: () => 8 });
+  });
+}
 
 export async function getOrCreateSession(
   profileId: number,
@@ -171,62 +211,7 @@ export async function getOrCreateSession(
   log(`Chrome launched for profile ${profileId}`, "browser");
 
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
-  await page.evaluateOnNewDocument(() => {
-    // 1. Hide webdriver flag
-    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-
-    // 2. Spoof plugins (headless has none)
-    Object.defineProperty(navigator, "plugins", {
-      get: () => {
-        const arr: any[] = [
-          { name: "Chrome PDF Plugin", filename: "internal-pdf-viewer", description: "Portable Document Format", length: 1 },
-          { name: "Chrome PDF Viewer", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai", description: "", length: 1 },
-          { name: "Native Client", filename: "internal-nacl-plugin", description: "", length: 2 },
-        ];
-        arr.item = (i: number) => arr[i];
-        arr.namedItem = (n: string) => arr.find((p: any) => p.name === n) ?? null;
-        Object.setPrototypeOf(arr, PluginArray.prototype);
-        return arr;
-      },
-    });
-
-    // 3. Spoof languages
-    Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
-
-    // 4. Fake window.chrome so Instagram sees it
-    (window as any).chrome = {
-      app: { isInstalled: false },
-      runtime: {},
-      loadTimes: () => ({}),
-      csi: () => ({}),
-    };
-
-    // 5. Override permissions query (headless returns "denied" for notifications)
-    const originalQuery = window.navigator.permissions?.query;
-    if (originalQuery) {
-      (window.navigator.permissions as any).query = (params: any) =>
-        params.name === "notifications"
-          ? Promise.resolve({ state: "prompt", onchange: null } as PermissionStatus)
-          : originalQuery.call(window.navigator.permissions, params);
-    }
-
-    // 6. Spoof screen resolution (headless often has 0x0 screen)
-    Object.defineProperty(screen, "width",       { get: () => 1920 });
-    Object.defineProperty(screen, "height",      { get: () => 1080 });
-    Object.defineProperty(screen, "availWidth",  { get: () => 1920 });
-    Object.defineProperty(screen, "availHeight", { get: () => 1040 });
-    Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
-    Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
-
-    // 7. Touch support (spoof as non-touch desktop)
-    Object.defineProperty(navigator, "maxTouchPoints", { get: () => 0 });
-
-    // 8. Hardware concurrency
-    Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
-
-    // 9. DeviceMemory
-    Object.defineProperty(navigator, "deviceMemory", { get: () => 8 });
-  });
+  await applyStealthScripts(page);
 
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
   page.on("framenavigated", async (frame) => {
@@ -312,9 +297,29 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey };
+  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
+
+  // ── File chooser interception ─────────────────────────────────────────────
+  // Puppeteer v24: 'filechooser' event fires whenever the page opens a file dialog.
+  // We store the chooser and relay a "fileChooserNeeded" SSE event to the frontend,
+  // which shows a native <input type="file"> so the user can pick from their machine.
+  (page as any).on("filechooser", (chooser: any) => {
+    pendingFileChoosers.set(profileId, chooser);
+    const s = sessions.get(profileId);
+    if (s) sseWrite(s.res, { type: "fileChooserNeeded" });
+  });
+
+  // ── Browser console log streaming ─────────────────────────────────────────
+  page.on("console", (msg: any) => {
+    const s = sessions.get(profileId);
+    if (!s) return;
+    const level: string = msg.type();
+    const text: string = msg.text();
+    if (!text || text.startsWith("[DOM]")) return; // skip noisy internal Chrome messages
+    sseWrite(s.res, { type: "consoleLog", level, text });
+  });
 
   // Restore saved cookies if available, then navigate to IG home (already logged in)
   // Otherwise go to the login page so the user can log in.
@@ -463,7 +468,7 @@ function startFrameLoop(profileId: number) {
     } finally {
       busy = false;
     }
-  }, 500); // 2 fps — balances responsiveness with CPU cost
+  }, 150); // ~6 fps — fast enough for responsive CAPTCHA solving
 }
 
 export async function browserNavigate(profileId: number, url: string) {
@@ -478,12 +483,34 @@ export async function browserNavigate(profileId: number, url: string) {
   }
 }
 
+async function kickFrame(profileId: number) {
+  const s = sessions.get(profileId);
+  if (!s || !s.res || s.res.writableEnded) return;
+  try {
+    const [screenshot, url] = await Promise.all([
+      s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
+      Promise.resolve(s.page.url()),
+    ]);
+    sseWrite(s.res, { type: "frame", data: screenshot, url });
+  } catch { /* page may be navigating */ }
+}
+
+function sendTabsUpdate(profileId: number) {
+  const s = sessions.get(profileId);
+  if (!s) return;
+  const tabs = s.pages.map(p => {
+    let url = "";
+    try { url = p.url(); } catch {}
+    return { url };
+  });
+  sseWrite(s.res, { type: "tabsUpdate", tabs, active: s.activePage });
+}
+
 export async function browserClick(profileId: number, x: number, y: number) {
   const s = sessions.get(profileId);
   if (!s) return;
-  // Move then click for reliability
-  await s.page.mouse.move(x, y);
   await s.page.mouse.click(x, y);
+  kickFrame(profileId).catch(() => {});
 }
 
 export async function browserMouseMove(profileId: number, x: number, y: number) {
@@ -553,6 +580,88 @@ export async function browserReload(profileId: number) {
   sseWrite(s.res, { type: "loading", loading: true });
   try { await s.page.reload({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
   sseWrite(s.res, { type: "loading", loading: false });
+}
+
+// ── File upload: accept files chosen by the user in the frontend ─────────────
+export async function browserSetFiles(profileId: number, fileName: string, base64Data: string) {
+  const tmpPath = path.join(COOKIES_DIR, `upload_${profileId}_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
+  try {
+    fs.mkdirSync(COOKIES_DIR, { recursive: true });
+    fs.writeFileSync(tmpPath, Buffer.from(base64Data, "base64"));
+
+    const chooser = pendingFileChoosers.get(profileId);
+    if (chooser) {
+      pendingFileChoosers.delete(profileId);
+      await chooser.accept([tmpPath]);
+    } else {
+      // Fallback: find the first visible file input on the page and upload directly
+      const s = sessions.get(profileId);
+      if (s) {
+        const handle = await s.page.$('input[type="file"]').catch(() => null);
+        if (handle) await (handle as any).uploadFile(tmpPath);
+      }
+    }
+    kickFrame(profileId).catch(() => {});
+  } finally {
+    setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch {} }, 15000);
+  }
+}
+
+// ── Tab management ────────────────────────────────────────────────────────────
+export async function browserNewTab(profileId: number) {
+  const s = sessions.get(profileId);
+  if (!s) return;
+  try {
+    const newPage = await s.browser.newPage();
+    await newPage.setUserAgent(s.page.url() ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" : "");
+    await newPage.setViewport({ width: 1280, height: 760 });
+    await applyStealthScripts(newPage);
+    // File chooser interception for new tab
+    (newPage as any).on("filechooser", (chooser: any) => {
+      pendingFileChoosers.set(profileId, chooser);
+      const sess = sessions.get(profileId);
+      if (sess) sseWrite(sess.res, { type: "fileChooserNeeded" });
+    });
+    newPage.on("console", (msg: any) => {
+      const sess = sessions.get(profileId);
+      if (!sess) return;
+      const text: string = msg.text();
+      if (!text || text.startsWith("[DOM]")) return;
+      sseWrite(sess.res, { type: "consoleLog", level: msg.type(), text });
+    });
+    s.pages.push(newPage);
+    s.activePage = s.pages.length - 1;
+    s.page = newPage;
+    s.lastUrl = "";
+    await newPage.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+    sendTabsUpdate(profileId);
+  } catch (e: any) {
+    log(`browserNewTab error: ${e?.message}`, "browser");
+  }
+}
+
+export async function browserSwitchTab(profileId: number, index: number) {
+  const s = sessions.get(profileId);
+  if (!s || index < 0 || index >= s.pages.length) return;
+  s.activePage = index;
+  s.page = s.pages[index];
+  s.lastUrl = "";
+  sendTabsUpdate(profileId);
+  kickFrame(profileId).catch(() => {});
+}
+
+export async function browserCloseTab(profileId: number, index: number) {
+  const s = sessions.get(profileId);
+  if (!s || s.pages.length <= 1) return; // never close the last tab
+  if (index < 0 || index >= s.pages.length) return;
+  try { await s.pages[index].close(); } catch {}
+  s.pages.splice(index, 1);
+  // Adjust active index
+  if (s.activePage >= s.pages.length) s.activePage = s.pages.length - 1;
+  s.page = s.pages[s.activePage];
+  s.lastUrl = "";
+  sendTabsUpdate(profileId);
+  kickFrame(profileId).catch(() => {});
 }
 
 // ── Send a DM through the live browser session ────────────────────────────────
