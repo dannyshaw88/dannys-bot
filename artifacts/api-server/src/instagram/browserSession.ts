@@ -60,6 +60,14 @@ export function deleteSavedCookies(profileId: number): void {
   } catch {}
 }
 
+// Returns the existing Puppeteer Browser for a profile if an EB session is
+// already running, or null if the EB has never been opened for this profile.
+// The cookie baker uses this to open a new background tab instead of spawning
+// a second Chrome process — avoids launch failures and resource waste.
+export function getExistingBrowser(profileId: number): any | null {
+  return sessions.get(profileId)?.browser ?? null;
+}
+
 export interface ProxyConfig {
   host: string;
   port: number;
@@ -556,6 +564,28 @@ export async function browserKeyCombo(profileId: number, modifier: string, key: 
     await s.page.keyboard.press(key as any);
     await s.page.keyboard.up(modifier as any);
   } catch {}
+}
+
+// Returns whatever text is currently selected in the remote browser page.
+// Handles both input/textarea elements (uses selectionStart/End on .value)
+// and regular page selections (window.getSelection).
+export async function browserGetSelectedText(profileId: number): Promise<string> {
+  const s = sessions.get(profileId);
+  if (!s) return "";
+  try {
+    const text = await s.page.evaluate(() => {
+      const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+        const start = active.selectionStart ?? 0;
+        const end   = active.selectionEnd   ?? 0;
+        return active.value.slice(start, end);
+      }
+      return window.getSelection()?.toString() ?? "";
+    });
+    return text ?? "";
+  } catch {
+    return "";
+  }
 }
 
 export async function browserBack(profileId: number) {

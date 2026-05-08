@@ -18,6 +18,7 @@ import {
   browserKeyUp,
   browserType,
   browserKeyCombo,
+  browserGetSelectedText,
   browserBack,
   browserForward,
   browserReload,
@@ -1011,6 +1012,19 @@ export async function registerInstagramRoutes(
     });
   });
 
+  // Get the currently-selected text in the remote browser page.
+  // Used by the EB panel to write the selection to the Windows clipboard after
+  // sending a Ctrl+C / Ctrl+X keycombo to the remote browser.
+  app.get("/api/browser/:profileId/selection", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    try {
+      const text = await browserGetSelectedText(profileId);
+      res.json({ text });
+    } catch (err: any) {
+      res.json({ text: "" });
+    }
+  });
+
   // HTTP POST for browser input events (replaces WS send)
   app.post("/api/browser/:profileId/input", async (req, res) => {
     const profileId = Number(req.params.profileId);
@@ -1122,9 +1136,9 @@ export async function registerInstagramRoutes(
   });
 
   // Get cookie baker activity log for a profile
-  app.get("/api/profiles/:id/cookie-baker/activity", (req, res) => {
+  app.get("/api/profiles/:id/cookie-baker/activity", async (req, res) => {
     const id = Number(req.params.id);
-    res.json(automationEngine.getCookieBakerActivity(id));
+    res.json(await automationEngine.getCookieBakerActivity(id));
   });
 
   // Trigger an immediate cookie baker session

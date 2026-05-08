@@ -292,6 +292,18 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     send({ type: "mousemove", x, y });
   };
 
+  // Fetches whatever text is selected in the remote browser, then writes it
+  // to the local Windows clipboard.  Called after sending a Ctrl+C or Ctrl+X
+  // keycombo to give the remote browser ~100 ms to process the selection.
+  const copySelectionToClipboard = useCallback(async () => {
+    await new Promise(r => setTimeout(r, 100));
+    try {
+      const res = await fetch(`/api/browser/${profileId}/selection`);
+      const { text } = await res.json() as { text: string };
+      if (text) await navigator.clipboard.writeText(text);
+    } catch {}
+  }, [profileId]);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (status !== "connected") return;
     e.preventDefault();
@@ -300,6 +312,11 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       navigator.clipboard.readText().then(text => {
         if (text) send({ type: "type", text });
       }).catch(() => {});
+      return;
+    }
+    if (ctrl && (e.key.toLowerCase() === "c" || e.key.toLowerCase() === "x")) {
+      send({ type: "keycombo", modifier: "Control", key: e.key.toLowerCase() });
+      copySelectionToClipboard();
       return;
     }
     if (ctrl) {
@@ -345,15 +362,17 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     }
   };
 
-  const ctxCopy = () => {
+  const ctxCopy = useCallback(async () => {
     setCtxMenu(null);
     send({ type: "keycombo", modifier: "Control", key: "c" });
-  };
+    await copySelectionToClipboard();
+  }, [send, copySelectionToClipboard]);
 
-  const ctxCut = () => {
+  const ctxCut = useCallback(async () => {
     setCtxMenu(null);
     send({ type: "keycombo", modifier: "Control", key: "x" });
-  };
+    await copySelectionToClipboard();
+  }, [send, copySelectionToClipboard]);
 
   const ctxSelectAll = () => {
     setCtxMenu(null);

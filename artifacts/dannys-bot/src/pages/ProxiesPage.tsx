@@ -114,7 +114,7 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
     <div className="desktop-card overflow-hidden">
       {/* Proxy fields row */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           <Input
             value={hostPort}
             onChange={e => setHostPort(e.target.value)}
@@ -150,11 +150,8 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
               {validCount}/{totalCount}
             </span>
           )}
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
           {pingResult && (
-            <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded ${
+            <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded shrink-0 ${
               pingResult.alive
                 ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600"
                   : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600"
@@ -169,7 +166,7 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
           )}
           <Button
             variant="ghost" size="icon"
-            className={`h-8 w-8 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+            className={`h-8 w-8 shrink-0 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
             onClick={() => onPing(proxy.id)}
             disabled={pinging}
             title="Ping through this proxy"
@@ -178,7 +175,7 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
           </Button>
           <Button
             variant="ghost" size="icon"
-            className="h-8 w-8 text-white bg-red-500 hover:bg-red-600"
+            className="h-8 w-8 shrink-0 text-white bg-red-500 hover:bg-red-600"
             onClick={() => {
               if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) {
                 deleteProxyMutation.mutate(proxy.id);

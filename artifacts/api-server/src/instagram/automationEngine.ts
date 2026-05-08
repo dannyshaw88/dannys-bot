@@ -25,7 +25,7 @@ import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
-import { applyStealthScripts } from "./browserSession";
+import { applyStealthScripts, getExistingBrowser } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -3178,13 +3178,55 @@ class AutomationEngine {
       ? [...sites].sort(() => Math.random() - 0.5).slice(0, count)
       : sites.slice(0, count);
 
-    // Always run in a dedicated headless browser — never borrow the EB session.
-    let ebPage: any | null = null;
+    // Resolve proxy config
+    let proxyArg: string[] = [];
+    let proxyAuth: { username: string; password: string } | undefined;
+    if (profile.proxyId) {
+      try {
+        const proxies = await storage.getProxies();
+        const linked = proxies.find((p) => p.id === profile.proxyId);
+        if (linked?.host && linked?.port) {
+          proxyArg = [`--proxy-server=${linked.host}:${linked.port}`];
+          if (linked.username) proxyAuth = { username: linked.username, password: linked.password ?? "" };
+        }
+      } catch {}
+    } else if (profile.proxyHost && profile.proxyPort) {
+      proxyArg = [`--proxy-server=${profile.proxyHost}:${profile.proxyPort}`];
+      if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
+    }
+
+    const ua =
+      profile.userAgentEmbedded ??
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+
+    let bakePage: any | null = null;
     let headlessBrowser: any | null = null;
+    let usingEbBrowser = false;
 
-    console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [headless]`);
+    // ── Strategy 1: reuse an already-open EB browser (new background tab) ──
+    // When the user has opened the EB panel, an EB browser process is already
+    // running for this profile.  Opening a new tab on it is instant and avoids
+    // the risk of a second Chrome process failing to launch on Windows.
+    const existingBrowser = getExistingBrowser(profile.id);
+    if (existingBrowser) {
+      try {
+        const tab = await existingBrowser.newPage();
+        if (proxyAuth) await tab.authenticate(proxyAuth);
+        await tab.setUserAgent(ua);
+        await tab.setViewport({ width: 1280, height: 760 });
+        await applyStealthScripts(tab);
+        bakePage = tab;
+        usingEbBrowser = true;
+        console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [EB tab]`);
+      } catch {
+        // EB browser closed between check and use — fall through to headless
+        usingEbBrowser = false;
+        bakePage = null;
+      }
+    }
 
-    {
+    // ── Strategy 2: launch a dedicated headless browser ──────────────────────
+    if (!bakePage) {
       let puppeteerLib: any;
       try {
         puppeteerLib = (await import("puppeteer-core")).default;
@@ -3196,21 +3238,7 @@ class AutomationEngine {
         process.env.CHROMIUM_PATH ||
         "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 
-      let proxyArg: string[] = [];
-      let proxyAuth: { username: string; password: string } | undefined;
-      if (profile.proxyId) {
-        try {
-          const proxies = await storage.getProxies();
-          const linked = proxies.find((p) => p.id === profile.proxyId);
-          if (linked?.host && linked?.port) {
-            proxyArg = [`--proxy-server=${linked.host}:${linked.port}`];
-            if (linked.username) proxyAuth = { username: linked.username, password: linked.password ?? "" };
-          }
-        } catch {}
-      } else if (profile.proxyHost && profile.proxyPort) {
-        proxyArg = [`--proxy-server=${profile.proxyHost}:${profile.proxyPort}`];
-        if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
-      }
+      console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [headless]`);
 
       try {
         headlessBrowser = await puppeteerLib.launch({
@@ -3224,9 +3252,7 @@ class AutomationEngine {
             "--no-first-run",
             "--no-zygote",
             "--disable-extensions",
-            "--disable-background-networking",
             "--disable-sync",
-            "--metrics-recording-only",
             "--disable-default-apps",
             "--mute-audio",
             "--hide-scrollbars",
@@ -3238,22 +3264,15 @@ class AutomationEngine {
 
         const headlessPage = await headlessBrowser.newPage();
         if (proxyAuth) await headlessPage.authenticate(proxyAuth);
-        const ua =
-          profile.userAgentEmbedded ??
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
         await headlessPage.setUserAgent(ua);
         await headlessPage.setViewport({ width: 1280, height: 760 });
         await applyStealthScripts(headlessPage);
-        ebPage = headlessPage;
+        bakePage = headlessPage;
       } catch (launchErr: any) {
-        const errMsg = `Headless browser failed to launch: ${launchErr?.message ?? "unknown error"}`;
+        const errMsg = `Browser failed to launch: ${launchErr?.message ?? "unknown error"}`;
         console.error(`[cookie-baker] @${profile.username}: ${errMsg}`);
-        const prev = this.cookieBakerActivity.get(profile.id) ?? [];
-        this.cookieBakerActivity.set(profile.id, [
-          { sessionAt: Date.now(), sites: [], error: errMsg },
-          ...prev,
-        ]);
         if (headlessBrowser) await headlessBrowser.close().catch(() => {});
+        await this._saveCookieBakerActivity(profile.id, { sessionAt: Date.now(), sites: [], error: errMsg });
         return;
       }
     }
@@ -3261,7 +3280,7 @@ class AutomationEngine {
     const sessionVisits: CookieBakerVisit[] = [];
 
     try {
-      const page = ebPage;
+      const page = bakePage;
 
       for (const site of sitesToVisit) {
         if (state.stop.stopped) break;
@@ -3270,7 +3289,6 @@ class AutomationEngine {
           console.log(`[cookie-baker] @${profile.username}: → ${url}`);
           await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
 
-          // Scroll the main page
           const scrollMs = randInt(
             (settings.scrollDelayMin ?? 5) * 1_000,
             (settings.scrollDelayMax ?? 15) * 1_000,
@@ -3325,25 +3343,54 @@ class AutomationEngine {
         }
       }
 
-      // Store activity (all sessions, newest first)
       if (sessionVisits.length > 0) {
-        const prev = this.cookieBakerActivity.get(profile.id) ?? [];
-        this.cookieBakerActivity.set(profile.id, [
-          { sessionAt: Date.now(), sites: sessionVisits },
-          ...prev,
-        ]);
+        await this._saveCookieBakerActivity(profile.id, { sessionAt: Date.now(), sites: sessionVisits });
       }
     } finally {
-      if (headlessBrowser) {
+      if (usingEbBrowser && bakePage) {
+        // Close just the tab we opened — never close the shared EB browser
+        await bakePage.close().catch(() => {});
+      } else if (headlessBrowser) {
         await headlessBrowser.close().catch(() => {});
       }
     }
     console.log(`[cookie-baker] @${profile.username}: session complete`);
   }
 
+  // ── Cookie baker: persist one session record to DB + in-memory cache ─────
+  private async _saveCookieBakerActivity(profileId: number, session: CookieBakerSessionActivity): Promise<void> {
+    try {
+      const key = `cb_activity_${profileId}`;
+      const allSettings = await storage.getGlobalSettings();
+      const prev: CookieBakerSessionActivity[] = allSettings[key] ? JSON.parse(allSettings[key]) : [];
+      const updated = [session, ...prev].slice(0, 30); // keep last 30 sessions
+      await storage.setGlobalSetting(key, JSON.stringify(updated));
+      this.cookieBakerActivity.set(profileId, updated);
+    } catch (e: any) {
+      console.error(`[cookie-baker] failed to persist activity for profile ${profileId}: ${e?.message}`);
+      // Still update in-memory so the current session is visible
+      const prev = this.cookieBakerActivity.get(profileId) ?? [];
+      this.cookieBakerActivity.set(profileId, [session, ...prev].slice(0, 30));
+    }
+  }
+
   // ── Status API ────────────────────────────────────────────────────────────
-  getCookieBakerActivity(profileId: number): CookieBakerSessionActivity[] {
-    return this.cookieBakerActivity.get(profileId) ?? [];
+  async getCookieBakerActivity(profileId: number): Promise<CookieBakerSessionActivity[]> {
+    // Return in-memory cache if populated (avoids a DB round-trip mid-session)
+    if (this.cookieBakerActivity.has(profileId)) {
+      return this.cookieBakerActivity.get(profileId)!;
+    }
+    // On first access after a restart, load from DB
+    try {
+      const key = `cb_activity_${profileId}`;
+      const allSettings = await storage.getGlobalSettings();
+      if (allSettings[key]) {
+        const data: CookieBakerSessionActivity[] = JSON.parse(allSettings[key]);
+        this.cookieBakerActivity.set(profileId, data);
+        return data;
+      }
+    } catch {}
+    return [];
   }
 
   getStatus(): { profileId: number; loggedIn: boolean; dailyCount: number; hourlyCount: number; dailyUnfollowCount: number; dailyDmCount: number; nextHumanSessionAt: number; nextFollowAt: number; nextContactAt: number; nextUnfollowAt: number }[] {
