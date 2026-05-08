@@ -39,14 +39,16 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
     version: "1.6.0",
-    date: "8 May 2026, 17:41",
+    date: "8 May 2026, 17:58",
     items: [
       { category: "Embedded Browser", text: "Ctrl+C and Ctrl+X now copy selected text to the Windows clipboard — works in both text inputs and regular page selections." },
       { category: "Embedded Browser", text: "Right-click Copy and Cut in the context menu also write the selected text to the Windows clipboard." },
       { category: "Proxy Manager", text: "Ping and Delete buttons moved to sit directly beside the profile count (5/5) badge on each proxy row." },
       { category: "Cookie Baker", text: "Activity log now persists to the database and survives app restarts and updates." },
       { category: "Cookie Baker", text: "When the Embedded Browser is already open for a profile, Cookie Baker reuses it (new background tab) instead of launching a second Chrome — eliminates silent launch failures on Windows." },
-      { category: "App", text: "Updated Equinox.exe icon on Windows to the new cyan robot logo." },
+      { category: "Cookie Baker", text: "All numeric settings (interval, sites, scroll times, internal links) compacted onto a single row for a cleaner layout." },
+      { category: "Cookie Baker", text: "Removed the toggle button from the Activity view header — navigate back via the '← Settings' link inside the activity panel." },
+      { category: "App", text: "Added electron-builder icon config so Equinox.exe and taskbar/window toolbar now show the new cyan robot logo on Windows." },
     ],
   },
   {

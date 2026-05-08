@@ -215,20 +215,22 @@ export function CreateCookiePanel({ profile }: Props) {
         <Switch checked={local.enabled} onCheckedChange={handleToggleEnabled} />
         <Label className="text-sm font-semibold">Enable Cookie Baker</Label>
         {!showActivity && (
-          <button
-            className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            disabled={!hasOtherProfiles}
-            onClick={() => setCopyOpen(true)}
-          >
-            Copy Settings
-          </button>
+          <>
+            <button
+              className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={!hasOtherProfiles}
+              onClick={() => setCopyOpen(true)}
+            >
+              Copy Settings
+            </button>
+            <button
+              className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
+              onClick={() => setShowActivity(true)}
+            >
+              Activity
+            </button>
+          </>
         )}
-        <button
-          className={`text-xs hover:underline underline-offset-2 cursor-pointer ${showActivity ? "text-primary font-semibold" : "text-blue-500 hover:text-blue-600"}`}
-          onClick={() => setShowActivity(!showActivity)}
-        >
-          {showActivity ? "← Settings" : "Activity"}
-        </button>
         <div className="ml-auto flex items-center gap-2">
           {!showActivity && saveStatus === "saving" && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
           {!showActivity && saveStatus === "saved"  && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
@@ -239,7 +241,12 @@ export function CreateCookiePanel({ profile }: Props) {
       {showActivity && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-muted-foreground">All sessions — most recent first</p>
+            <button
+              className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
+              onClick={() => setShowActivity(false)}
+            >
+              ← Settings
+            </button>
             <button
               onClick={fetchActivity}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -334,63 +341,65 @@ export function CreateCookiePanel({ profile }: Props) {
       {/* ── Settings View ────────────────────────────────────────────────── */}
       {!showActivity && (
         <div className="space-y-5">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-medium mb-2">
-              <Clock className="w-3.5 h-3.5 text-primary" /> Execute Every
-            </p>
-            <div className="flex items-center gap-2">
-              {numInput(local.execIntervalMin, (v) => update({ execIntervalMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.execIntervalMax, (v) => update({ execIntervalMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">minutes</span>
-            </div>
-          </div>
 
-          <div>
-            <p className="flex items-center gap-2 text-sm font-medium mb-2">
-              <Globe className="w-3.5 h-3.5 text-primary" /> Process Websites
-            </p>
-            <div className="flex items-center gap-2">
-              {numInput(local.sitesMin, (v) => update({ sitesMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.sitesMax, (v) => update({ sitesMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">per session</span>
+          {/* All numeric fields on one row */}
+          <div className="flex flex-wrap gap-5">
+            <div className="flex flex-col gap-1 min-w-0">
+              <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                <Clock className="w-3 h-3 text-primary shrink-0" /> Execute Every
+              </p>
+              <div className="flex items-center gap-1">
+                {numInput(local.execIntervalMin, (v) => update({ execIntervalMin: v }), 1)}
+                <span className="text-xs text-muted-foreground">–</span>
+                {numInput(local.execIntervalMax, (v) => update({ execIntervalMax: v }), 1)}
+                <span className="text-xs text-muted-foreground">min</span>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <p className="flex items-center gap-2 text-sm font-medium mb-2">
-              <Clock className="w-3.5 h-3.5 text-violet-500" /> Scrolling Time
-            </p>
-            <div className="flex items-center gap-2">
-              {numInput(local.scrollDelayMin, (v) => update({ scrollDelayMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.scrollDelayMax, (v) => update({ scrollDelayMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">secs per site</span>
+            <div className="flex flex-col gap-1 min-w-0">
+              <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                <Globe className="w-3 h-3 text-primary shrink-0" /> Websites / Session
+              </p>
+              <div className="flex items-center gap-1">
+                {numInput(local.sitesMin, (v) => update({ sitesMin: v }), 1)}
+                <span className="text-xs text-muted-foreground">–</span>
+                {numInput(local.sitesMax, (v) => update({ sitesMax: v }), 1)}
+              </div>
             </div>
-          </div>
 
-          <div>
-            <p className="flex items-center gap-2 text-sm font-medium mb-2">
-              <Link2 className="w-3.5 h-3.5 text-blue-500" /> Visit Internal Links
-            </p>
-            <div className="flex items-center gap-2">
-              {numInput(local.internalLinksMin, (v) => update({ internalLinksMin: v }), 0)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.internalLinksMax, (v) => update({ internalLinksMax: v }), 0)}
-              <span className="text-xs text-muted-foreground">per site</span>
+            <div className="flex flex-col gap-1 min-w-0">
+              <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                <Clock className="w-3 h-3 text-violet-500 shrink-0" /> Scroll Time
+              </p>
+              <div className="flex items-center gap-1">
+                {numInput(local.scrollDelayMin, (v) => update({ scrollDelayMin: v }), 1)}
+                <span className="text-xs text-muted-foreground">–</span>
+                {numInput(local.scrollDelayMax, (v) => update({ scrollDelayMax: v }), 1)}
+                <span className="text-xs text-muted-foreground">sec</span>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <p className="flex items-center gap-2 text-sm font-medium mb-2">
-              <Clock className="w-3.5 h-3.5 text-emerald-500" /> Scrolling Time (internal)
-            </p>
-            <div className="flex items-center gap-2">
-              {numInput(local.internalScrollDelayMin, (v) => update({ internalScrollDelayMin: v }), 1)}
-              <span className="text-xs text-muted-foreground">–</span>
-              {numInput(local.internalScrollDelayMax, (v) => update({ internalScrollDelayMax: v }), 1)}
-              <span className="text-xs text-muted-foreground">secs per link</span>
+            <div className="flex flex-col gap-1 min-w-0">
+              <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                <Link2 className="w-3 h-3 text-blue-500 shrink-0" /> Internal Links
+              </p>
+              <div className="flex items-center gap-1">
+                {numInput(local.internalLinksMin, (v) => update({ internalLinksMin: v }), 0)}
+                <span className="text-xs text-muted-foreground">–</span>
+                {numInput(local.internalLinksMax, (v) => update({ internalLinksMax: v }), 0)}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1 min-w-0">
+              <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                <Clock className="w-3 h-3 text-emerald-500 shrink-0" /> Internal Scroll
+              </p>
+              <div className="flex items-center gap-1">
+                {numInput(local.internalScrollDelayMin, (v) => update({ internalScrollDelayMin: v }), 1)}
+                <span className="text-xs text-muted-foreground">–</span>
+                {numInput(local.internalScrollDelayMax, (v) => update({ internalScrollDelayMax: v }), 1)}
+                <span className="text-xs text-muted-foreground">sec</span>
+              </div>
             </div>
           </div>
 
