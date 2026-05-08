@@ -61,9 +61,13 @@ function httpsRequest(
       res.on("end", () => {
         resolve({ status: res.statusCode ?? 0, headers: res.headers as any, body: data });
       });
+      // If the response stream itself errors (e.g. proxy drops mid-response)
+      // reject so the caller can handle it rather than leaving a dangling promise.
+      res.on("error", reject);
     });
     req.on("error", reject);
-    req.setTimeout(60000, () => { req.destroy(new Error("timeout")); });
+    // 25 s hard cap — dead proxies should fail fast, not pin a slot for 60 s.
+    req.setTimeout(25000, () => { req.destroy(new Error("request_timeout")); });
     if (body) req.write(body);
     req.end();
   });
@@ -89,13 +93,42 @@ async function igReq(opts: {
   let agent: any;
   if (proxyUrl) {
     const { HttpsProxyAgent } = await import("https-proxy-agent");
-    agent = new HttpsProxyAgent(proxyUrl);
+    // keepAlive: false — do not pool CONNECT-tunnel sockets across requests.
+    // With the default (keepAlive: true) each igReq() call leaves a dangling
+    // CONNECT tunnel open in the agent's socket pool.  After 30-60 min the proxy
+    // provider's own session timer closes the tunnel on its side; the agent still
+    // thinks it's open and hangs the next attempt until the 25 s request_timeout
+    // fires.  Disabling keepAlive forces a fresh TCP connection every time and
+    // eliminates the stale-socket accumulation bug.
+    agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
   }
 
-  const res = await httpsRequest(
-    { host, port: 443, path, method, headers: reqHeaders, ...(agent ? { agent } : {}) },
-    body,
-  );
+  const t0 = Date.now();
+  let res: Awaited<ReturnType<typeof httpsRequest>>;
+  try {
+    res = await httpsRequest(
+      { host, port: 443, path, method, headers: reqHeaders, ...(agent ? { agent } : {}) },
+      body,
+    );
+  } catch (err: any) {
+    // Log proxy failures with enough detail to diagnose the degradation cause
+    // (ECONNRESET = stale socket reused, ETIMEDOUT = proxy unreachable,
+    //  ECONNREFUSED = proxy port closed, request_timeout = proxy hung).
+    if (proxyUrl) {
+      const proxyHost = (() => { try { return new URL(proxyUrl).hostname; } catch { return proxyUrl; } })();
+      console.error(`[proxy:diag] ${method} ${host}${path} FAILED after ${Date.now() - t0}ms — proxy=${proxyHost} code=${err?.code ?? "?"} msg=${err?.message ?? err}`);
+    }
+    throw err;
+  } finally {
+    // Always destroy the agent so the CONNECT-tunnel socket is released
+    // immediately rather than lingering in the pool until GC.
+    if (agent) agent.destroy();
+  }
+
+  if (proxyUrl && Date.now() - t0 > 10000) {
+    const proxyHost = (() => { try { return new URL(proxyUrl).hostname; } catch { return proxyUrl; } })();
+    console.warn(`[proxy:diag] ${method} ${host}${path} SLOW ${Date.now() - t0}ms via proxy=${proxyHost} status=${res.status}`);
+  }
 
   const raw = res.headers["set-cookie"];
   const newCookies: string[] = (Array.isArray(raw) ? raw : raw ? [raw] : []).map(c => c.split(";")[0]);
@@ -2416,13 +2449,18 @@ export class InstagramWebClient {
     let agent: any;
     if (this.proxyUrl) {
       const { HttpsProxyAgent } = await import("https-proxy-agent");
-      agent = new HttpsProxyAgent(this.proxyUrl);
+      agent = new HttpsProxyAgent(this.proxyUrl, { keepAlive: false });
     }
 
-    const res = await httpsRequest(
-      { host: "i.instagram.com", port: 443, path, method: "POST", headers, ...(agent ? { agent } : {}) },
-      body,
-    );
+    let res: Awaited<ReturnType<typeof httpsRequest>>;
+    try {
+      res = await httpsRequest(
+        { host: "i.instagram.com", port: 443, path, method: "POST", headers, ...(agent ? { agent } : {}) },
+        body,
+      );
+    } finally {
+      if (agent) agent.destroy();
+    }
     let json: any = null;
     try { json = JSON.parse(res.body); } catch {}
     if (!json) console.log(`[webClient] mobilePostMultipart ${path} status=${res.status} body:`, res.body.slice(0, 400));
