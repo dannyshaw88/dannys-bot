@@ -835,11 +835,11 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                     <FolderOpen className="w-3.5 h-3.5" />
                     Browse…
                   </button>
-                  {/* Hidden folder picker — webkitdirectory: user picks a folder, browser returns all files inside it */}
+                  {/* Hidden folder picker webkitdirectory: user picks a folder, browser returns all files inside it */}
                   <input
                     ref={localFolderPickerRef}
                     type="file"
-                    // @ts-ignore — webkitdirectory is valid but missing from TS typedefs
+                    // @ts-ignore webkitdirectory is valid but missing from TS typedefs
                     webkitdirectory=""
                     multiple
                     className="hidden"
@@ -858,7 +858,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 {localFolderFileCount !== null && (
                   <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                     <FolderOpen className="w-3 h-3 shrink-0" />
-                    {localFolderFileCount} image{localFolderFileCount !== 1 ? "s" : ""} found in folder — verify the full path above is correct (e.g. C:\Users\You\Pictures\Repost).
+                    {localFolderFileCount} image{localFolderFileCount !== 1 ? "s" : ""} found in folder verify the full path above is correct (e.g. C:\Users\You\Pictures\Repost).
                   </p>
                 )}
               </div>
@@ -999,12 +999,12 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             <strong>Disable at post count</strong> reads the post count from this profile's Instagram bio to stop reposting once the goal is reached.
           </p>
 
-          {/* Warning: skip chance is 100 — repost will never run automatically */}
+          {/* Warning: skip chance is 100 repost will never run automatically */}
           {(Number((settings as any).repostNotUsedMin ?? 0) >= 100 || Number((settings as any).repostNotUsedMax ?? 0) >= 100) && (
             <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
               <span className="text-amber-500 text-sm shrink-0">⚠️</span>
               <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-                <strong>Skip chance is 100% — repost will never run automatically.</strong><br />
+                <strong>Skip chance is 100% repost will never run automatically.</strong><br />
                 Set <em>Skip chance %</em> min and max to <strong>0</strong> so repost always runs each session.
               </p>
             </div>
@@ -1040,7 +1040,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 <><Repeat2 className="w-3.5 h-3.5 shrink-0" />Run Repost Now</>
               )}
             </Button>
-            <span className="text-[10px] text-muted-foreground">Bypass skip chance &amp; timer — posts 1 now</span>
+            <span className="text-[10px] text-muted-foreground">Bypass skip chance &amp; timer posts 1 now</span>
           </div>
 
           <Button

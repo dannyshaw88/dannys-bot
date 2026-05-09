@@ -1062,6 +1062,16 @@ export class InstagramWebClient {
 
     // ── Device setup ──────────────────────────────────────────────────────────
     const ig = newIgClient();
+    // Patch ig.request.send so the per-profile rate limit is enforced on every
+    // single API call made through this IgApiClient instance — including the
+    // cold-start warm-up calls, not just the final inbox/DM call.
+    const _igReq = ig.request as any;
+    const _igOriginalSend = _igReq.send.bind(_igReq);
+    const _throttle = this.apiThrottle.bind(this);
+    _igReq.send = async function(opts: any, onlyCheckHttpStatus?: boolean) {
+      await _throttle();
+      return _igOriginalSend(opts, onlyCheckHttpStatus);
+    };
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {

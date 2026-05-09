@@ -168,7 +168,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         </DialogHeader>
 
         <div className="flex min-h-0" style={{ maxHeight: "calc(81vh - 140px)" }}>
-          {/* LEFT — profile list */}
+          {/* LEFT profile list */}
           <div className="w-72 shrink-0 border-r border-border flex flex-col">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
@@ -245,7 +245,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
             )}
           </div>
 
-          {/* RIGHT — settings */}
+          {/* RIGHT settings */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             <div className="flex items-center justify-between mb-1">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Settings to Copy</Label>
@@ -291,7 +291,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                           </div>
                         </div>
 
-                        {/* Sub-options — always visible */}
+                        {/* Sub-options always visible */}
                         {hasSubs && (
                           <div className="border-t border-border/60 bg-muted/5 divide-y divide-border/30">
                             {opt.subOptions!.map(sub => (

@@ -478,6 +478,16 @@ class AutomationEngine {
           engineLog("WARN", `@${freshProfile.username}: account ${freshProfile.accountStatus} — stopping runner`);
           break;
         }
+        if (freshProfile.accountStatus === "bad_password") {
+          engineLog("WARN", `@${freshProfile.username}: bad_password — cannot authenticate, pausing 10min (update the password to resume)`);
+          await sleep(10 * 60_000);
+          continue;
+        }
+        if (freshProfile.accountStatus === "logged_out") {
+          engineLog("WARN", `@${freshProfile.username}: logged_out — session invalid, pausing 5min (re-verify the account to resume)`);
+          await sleep(5 * 60_000);
+          continue;
+        }
         if (freshProfile.accountStatus === "captcha") {
           engineLog("WARN", `@${freshProfile.username}: captcha/checkpoint pending — pausing 5min`);
           await sleep(5 * 60_000);
@@ -1169,7 +1179,7 @@ class AutomationEngine {
             messagePreview: msg.messageText.slice(0, 100),
           });
           this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "ok",
-            `Contact DM sent (${msg.messageType}): "${msg.messageText.slice(0, 50)}"`);
+            `Contact DM sent (${msg.messageType}) to @${msg.instagramUsername}`);
           await storage.incrementStat(profile.id, "dm");
           console.log(`[engine] @${profile.username}: 📩 contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
           if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
@@ -2754,7 +2764,7 @@ class AutomationEngine {
       } catch (dbErr: any) {
         console.error(`[engine] @${profile.username}: failed to persist followed user @${user.username}: ${dbErr?.message}`);
       }
-      this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}]`);
+      this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
       await storage.incrementStat(profile.id, "follow");
       this.bump(state);
       followed++;
@@ -2849,7 +2859,7 @@ class AutomationEngine {
           try {
             await storage.createFollowedUser({ profileId: profile.id, instagramUsername: user.username, instagramUserId: String(user.pk ?? ""), sourceValue: source.value, sourceType: source.type, followedAt: new Date().toISOString() });
           } catch {}
-          this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}]`);
+          this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
           await storage.incrementStat(profile.id, "follow");
           this.bump(state);
           followed++;

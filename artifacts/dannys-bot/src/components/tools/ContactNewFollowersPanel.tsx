@@ -161,7 +161,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
           <textarea
             rows={4}
             className="w-full text-sm border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-            placeholder={`{Hi|Hello|Hey} {there|friend}! Thanks for following — check out our latest posts 🙌`}
+            placeholder={`{Hi|Hello|Hey} {there|friend}! Thanks for following check out our latest posts 🙌`}
             value={settings.contactMessage ?? ""}
             onChange={(e) => {
               setSettings({ ...settings, contactMessage: e.target.value });

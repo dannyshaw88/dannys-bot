@@ -102,7 +102,7 @@ export function BrowserWindow({ window: win }: Props) {
       >
         <Monitor className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         <span className="text-sm font-semibold text-foreground truncate flex-1">
-          @{win.username} — Embedded Browser
+          @{win.username} Embedded Browser
         </span>
 
         {/* Window controls */}

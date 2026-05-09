@@ -436,7 +436,7 @@ export async function registerInstagramRoutes(
       operationName: "VerifyAccount",
       date: new Date().toISOString(),
       message: result.ok
-        ? `✓ Verified — status: ${result.accountStatus ?? "valid"}`
+        ? `Initiating a verification via API`
         : `✗ Failed — ${result.accountStatus ?? "failed"}: ${result.message ?? ""}`,
       source: "System",
       durationMs: 0,

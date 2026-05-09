@@ -42,6 +42,25 @@ function extractCheckpointUrl(err: any): string | undefined {
   return undefined;
 }
 
+/** Enforce the per-profile API rate limit between individual cold-start calls.
+ *  Uses the exact same formula as InstagramWebClient.apiThrottle() so that
+ *  every API call — including the login/verify handshake — obeys the user's settings. */
+async function loginApiThrottle(
+  apiLimits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | null | undefined,
+): Promise<void> {
+  if (!apiLimits) return;
+  const reqMin = Math.max(1, apiLimits.requestsMin);
+  const reqMax = Math.max(reqMin, apiLimits.requestsMax);
+  const secMin = Math.max(0, apiLimits.everySecondsMin / 1000);
+  const secMax = Math.max(secMin, apiLimits.everySecondsMax / 1000);
+  const calls   = reqMin  + Math.random() * (reqMax  - reqMin);
+  const secs    = secMin  + Math.random() * (secMax  - secMin);
+  const delayMs = Math.floor((secs / Math.max(1, calls)) * 1000);
+  if (delayMs > 10) {
+    await new Promise<void>(r => setTimeout(r, delayMs));
+  }
+}
+
 async function logApiCall(
   profileId: number,
   username: string,
@@ -195,13 +214,22 @@ function extractFromBody(body: string | Buffer | undefined, key: string): string
  * the proxy IP. This works correctly where end$.subscribe does NOT — the library
  * calls end$.next() with zero arguments so subscribers always receive undefined.
  */
-export function attachRequestLogger(ig: IgApiClient, profileId: number, username: string, source: string, proxyIp: string) {
+export function attachRequestLogger(
+  ig: IgApiClient,
+  profileId: number,
+  username: string,
+  source: string,
+  proxyIp: string,
+  apiLimits?: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | null,
+) {
   const req = ig.request as any;
   if (req.__logged) return; // prevent double-patching
   req.__logged = true;
 
   const originalSend = req.send.bind(req);
   req.send = async function(userOptions: any, onlyCheckHttpStatus?: boolean) {
+    // Enforce the per-profile API rate limit on EVERY single Instagram API call.
+    await loginApiThrottle(apiLimits);
     const t0 = Date.now();
     const rawUrl: string = userOptions?.url || userOptions?.uri || "";
     const opName = extractOperationName(rawUrl);
@@ -472,7 +500,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     // Accounts with igApiCookies go directly to Path 2 (session validation).
     console.error(`[instagramLogin] @${profile.username} — attempting fresh password login (no stored session)`);
     const { ig: igPw, captureDeviceState: capturePw } = buildIgClient(profile, proxyUrl);
-    attachRequestLogger(igPw, profile.id, profile.username, "Verify", proxyIp);
+    attachRequestLogger(igPw, profile.id, profile.username, "Verify", proxyIp, profile.apiLimits as any);
 
     await ensureEncryptionKeys(igPw);
 
@@ -667,7 +695,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     // We intentionally avoid currentUser()?edit=true — Instagram treats that as a
     // profile-write attempt on a freshly restored session and raises checkpoint_required.
     const { ig, captureDeviceState } = buildIgClient(profile, proxyUrl);
-    attachRequestLogger(ig, profile.id, profile.username, "Verify", proxyIp);
+    attachRequestLogger(ig, profile.id, profile.username, "Verify", proxyIp, profile.apiLimits as any);
 
     // Parse userId from the sessionid token (format: "userId:hash:seq:token")
     // and inject ds_user_id into the cookie jar so the library can read cookieUserId.
@@ -958,7 +986,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         console.error(`[instagramLogin] @${profile.username} — cold-start handshake complete ✓`);
         return {
           ok: true,
-          message: `@${profile.username} — session active. Cold-start handshake complete (launcher/sync → qe/sync → get_account_family → timeline → reels_tray → inbox → qe/sync → banyan → discover).`,
+          message: `ACCOUNT VERIFIED VIA API ✓`,
           accountStatus: "valid",
           igDeviceState: captureDeviceState(),
         };

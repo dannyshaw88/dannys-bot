@@ -551,7 +551,7 @@ export function ProfilesPage() {
   }, []);
 
   const setSlot = useSidebarSetSlot();
-  // Sidebar slot is unused on this page — clear it on mount/unmount
+  // Sidebar slot is unused on this page clear it on mount/unmount
   useEffect(() => { setSlot(null); return () => setSlot(null); }, [setSlot]);
 
   return (
@@ -595,7 +595,7 @@ export function ProfilesPage() {
       </div>
 
       <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 178px)" }}>
-          {/* ── Top column-header bar — always visible ────────────────────── */}
+          {/* ── Top column-header bar always visible ────────────────────── */}
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
             <div style={{ width: profColWidths.account + 32 }} className="shrink-0 flex items-center gap-2 min-w-0">
               <button
@@ -645,7 +645,7 @@ export function ProfilesPage() {
             </button>
           </div>
 
-          {/* ── Scrollable body — conditional content ────────────────────── */}
+          {/* ── Scrollable body conditional content ────────────────────── */}
           <div className="overflow-y-auto flex-1 min-h-0">
           {isLoading ? (
             <div className="divide-y divide-border/40">
@@ -689,7 +689,7 @@ export function ProfilesPage() {
                   }`}
                   onMouseDown={e => {
                     if (e.button !== 0) return;
-                    // Let the Checkbox handle its own click — don't double-toggle
+                    // Let the Checkbox handle its own click don't double-toggle
                     if ((e.target as HTMLElement).closest('[role="checkbox"]')) return;
                     e.preventDefault();
                     const isSelected = selectedProfileIds.includes(profile.id);
@@ -717,7 +717,7 @@ export function ProfilesPage() {
                         data-testid={`text-username-${profile.id}`}
                       >
                         {profile.accountLabel || profile.username}
-                        {profile.locked && <Lock className="w-3 h-3 text-amber-500 shrink-0" title="Locked — excluded from copy targets" />}
+                        {profile.locked && <Lock className="w-3 h-3 text-amber-500 shrink-0" title="Locked excluded from copy targets" />}
                       </span>
                     </Link>
                   </div>
@@ -824,7 +824,7 @@ export function ProfilesPage() {
           )}
           </div>{/* end scrollable body */}
 
-          {/* ── Bottom toolbar — inside card, width matches card ─────────── */}
+          {/* ── Bottom toolbar inside card, width matches card ─────────── */}
           <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0">
             <button
               onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
@@ -947,7 +947,7 @@ export function ProfilesPage() {
         }}
       />
 
-      {/* ── Actions popup — no dark overlay, transparent click-away ──────── */}
+      {/* ── Actions popup no dark overlay, transparent click-away ──────── */}
       {actionsOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
@@ -978,7 +978,7 @@ export function ProfilesPage() {
                     return;
                   }
 
-                  // Single account — simple browser download
+                  // Single account simple browser download
                   if (selectedProfileIds.length === 1) {
                     const id = selectedProfileIds[0];
                     const profile = profiles?.find(p => p.id === id);
@@ -1031,7 +1031,7 @@ export function ProfilesPage() {
                     }
                     if (written > 0) toast({ title: "EQX Export Complete", description: `${written} of ${selectedProfileIds.length} file(s) saved to folder.` });
                   } else {
-                    // Fallback — trigger individual browser downloads
+                    // Fallback trigger individual browser downloads
                     toast({ title: "Preparing export…", description: `Downloading ${selectedProfileIds.length} EQX files…` });
                     let downloaded = 0;
                     for (const id of selectedProfileIds) {

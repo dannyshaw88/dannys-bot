@@ -13,7 +13,7 @@ function cleanLoginError(msg: string): string {
   if (m.includes("incorrect") || m.includes("wrong password") || m.includes("bad_password")) return "Incorrect password";
   if (m.includes("checkpoint") || m.includes("challenge_required")) return "Checkpoint required";
   if (m.includes("two_factor") || m.includes("2fa") || m.includes("otp") || m.includes("verification code")) return "2FA code required";
-  if (m.includes("rate") || m.includes("too many") || m.includes("flood")) return "Rate limited — try again later";
+  if (m.includes("rate") || m.includes("too many") || m.includes("flood")) return "Rate limited try again later";
   if (m.includes("disabled") || m.includes("banned") || m.includes("suspended")) return "Account disabled";
   if (m.includes("timeout") || m.includes("timed out")) return "Login timed out";
   if (m.includes("network") || m.includes("connect") || m.includes("unreachable")) return "Network error";
@@ -197,7 +197,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             } else {
               setLoginState("fail");
               appendLog(msg.message || "Login failed", "fail");
-              toast({ title: cleanLoginError(msg.message), variant: "destructive" });
               setTimeout(() => setLoginState("idle"), 12000);
             }
             break;
@@ -358,7 +357,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       const text = await navigator.clipboard.readText();
       if (text) send({ type: "type", text });
     } catch {
-      // Clipboard access denied — nothing to do
+      // Clipboard access denied nothing to do
     }
   };
 
@@ -391,7 +390,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     try {
       await fetch(`/api/browser/${profileId}/session`, { method: "DELETE" });
       setLoginState("idle");
-      toast({ title: "Session Cleared", description: "Cookies wiped — reconnecting with fresh browser." });
+      toast({ title: "Session Cleared", description: "Cookies wiped reconnecting with fresh browser." });
       setTimeout(connect, 800);
     } catch {
       toast({ title: "Error", description: "Could not clear session.", variant: "destructive" });
@@ -511,7 +510,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         </Button>
       </div>
 
-      {/* Tab strip — visible when 2+ tabs are open */}
+      {/* Tab strip visible when 2+ tabs are open */}
       {tabs.length > 1 && (
         <div className="flex items-center gap-0.5 px-2 pt-1 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
           {tabs.map((tab, i) => (
@@ -541,7 +540,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         </div>
       )}
 
-      {/* Debug panel (F12) — shows login log + browser console */}
+      {/* Debug panel (F12) shows login log + browser console */}
       {showLog && (
         <div className="shrink-0 border-b border-border bg-slate-950 text-xs">
           {/* Panel header with tabs */}
@@ -573,7 +572,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             <>
               <div className="max-h-36 overflow-y-auto px-3 py-1.5 space-y-0.5 font-mono">
                 {loginLog.length === 0 ? (
-                  <div className="text-slate-600 italic py-1">No login activity yet — click "Fill Credentials" to start.</div>
+                  <div className="text-slate-600 italic py-1">No login activity yet click "Fill Credentials" to start.</div>
                 ) : loginLog.map((e, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <span className="text-slate-600 shrink-0 select-none">{e.ts}</span>
@@ -613,7 +612,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onClick={() => setShowLog(true)}
           className="shrink-0 px-4 py-1 text-[11px] text-slate-500 bg-slate-950 border-b border-slate-800 hover:text-slate-300 text-left"
         >
-          Debug panel ({loginLog.length} login steps · {consoleLogs.length} console) — F12
+          Debug panel ({loginLog.length} login steps · {consoleLogs.length} console) F12
         </button>
       )}
 
@@ -711,7 +710,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         )}
       </div>
 
-      {/* File chooser overlay — requires a real user click so the browser allows the file picker */}
+      {/* File chooser overlay requires a real user click so the browser allows the file picker */}
       {fileChooserPending && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="bg-background rounded-xl border border-border shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-3">

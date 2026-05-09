@@ -49,7 +49,7 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "proxy password":              "proxyPassword",
   "tags":                        "tags",
   "date of birth(us format)":    "dateOfBirth",
-  // EB / API user agent — Jarvee uses these exact column names
+  // EB / API user agent Jarvee uses these exact column names
   "eb user agent":               "userAgentEmbedded",
   "embedded browser user agent": "userAgentEmbedded",
   "browser user agent":          "userAgentEmbedded",
@@ -68,7 +68,7 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "email validation pass":       "emailValidationPassword",
   "email validation pop3server": "emailValidationPop3Server",
   "email validation port":       "emailValidationPort",
-  // Device fingerprint — these MUST match Jarvee's exported column names exactly.
+  // Device fingerprint these MUST match Jarvee's exported column names exactly.
   // Without these, Instagram treats every login as a new unknown device and
   // requires email verification. Export them from Jarvee's Settings → Export.
   "device id":                   "deviceId",
@@ -85,7 +85,7 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "advertising id":              "adid",
   "google ad id":                "adid",
   "googleadid":                  "adid",
-  // Session cookies — if present, device ID mismatch doesn't matter at all
+  // Session cookies if present, device ID mismatch doesn't matter at all
   "apicookies":                  "apiCookies",
   "api cookies":                 "apiCookies",
   "cookies":                     "apiCookies",
@@ -95,7 +95,7 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
 /**
  * Parse a TSV/tab-delimited file with proper RFC-4180-style quoted cell support.
  * Jarvee wraps multi-line cells (e.g. description) in double-quotes with embedded
- * newlines — a naive line-split breaks those into hundreds of extra "lines".
+ * newlines a naive line-split breaks those into hundreds of extra "lines".
  */
 function parseTSVRows(text: string): string[][] {
   const rows: string[][] = [];
@@ -338,7 +338,7 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
               </div>
               <div className="text-center">
                 <p className="font-semibold text-foreground">Drop your Jarvee export here</p>
-                <p className="text-sm text-muted-foreground mt-1">or click to browse — .txt / .csv files</p>
+                <p className="text-sm text-muted-foreground mt-1">or click to browse .txt / .csv files</p>
               </div>
               <input
                 ref={fileInputRef}
@@ -425,7 +425,7 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
                 <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Some accounts have no API User Agent</strong> — device IDs cannot be derived without it.
+                    <strong>Some accounts have no API User Agent</strong> device IDs cannot be derived without it.
                     Instagram may require email verification on first login for those accounts.
                     Include the <em>API User Agent</em> column in your Jarvee export, or the <em>UUID / Device ID / Phone ID / ADID</em> columns directly.
                   </span>

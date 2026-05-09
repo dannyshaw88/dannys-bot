@@ -41,13 +41,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.6.0",
     date: "8 May 2026, 17:58",
     items: [
-      { category: "Embedded Browser", text: "Ctrl+C and Ctrl+X now copy selected text to the Windows clipboard — works in both text inputs and regular page selections." },
+      { category: "Embedded Browser", text: "Ctrl+C and Ctrl+X now copy selected text to the Windows clipboard works in both text inputs and regular page selections." },
       { category: "Embedded Browser", text: "Right-click Copy and Cut in the context menu also write the selected text to the Windows clipboard." },
       { category: "Proxy Manager", text: "Ping and Delete buttons moved to sit directly beside the profile count (5/5) badge on each proxy row." },
       { category: "Cookie Baker", text: "Activity log now persists to the database and survives app restarts and updates." },
-      { category: "Cookie Baker", text: "When the Embedded Browser is already open for a profile, Cookie Baker reuses it (new background tab) instead of launching a second Chrome — eliminates silent launch failures on Windows." },
+      { category: "Cookie Baker", text: "When the Embedded Browser is already open for a profile, Cookie Baker reuses it (new background tab) instead of launching a second Chrome eliminates silent launch failures on Windows." },
       { category: "Cookie Baker", text: "All numeric settings (interval, sites, scroll times, internal links) compacted onto a single row for a cleaner layout." },
-      { category: "Cookie Baker", text: "Removed the toggle button from the Activity view header — navigate back via the '← Settings' link inside the activity panel." },
+      { category: "Cookie Baker", text: "Removed the toggle button from the Activity view header navigate back via the '← Settings' link inside the activity panel." },
       { category: "App", text: "Added electron-builder icon config so Equinox.exe and taskbar/window toolbar now show the new cyan robot logo on Windows." },
     ],
   },
@@ -56,11 +56,11 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "6 May 2026, 22:10",
     items: [
       { category: "Dashboard", text: "What's New tab icon changed from star to bell." },
-      { category: "Dashboard", text: "Changelog is permanently stored in the app — entries are never lost even if GitHub releases are deleted." },
+      { category: "Dashboard", text: "Changelog is permanently stored in the app entries are never lost even if GitHub releases are deleted." },
       { category: "Dashboard", text: "Manage Columns now has ↑ ↓ step buttons (±10 px each click) alongside the pixel input." },
-      { category: "Profiles", text: "Added Manage Columns button in the bottom bar next to Actions — control column widths on the Accounts page, saved across sessions." },
+      { category: "Profiles", text: "Added Manage Columns button in the bottom bar next to Actions control column widths on the Accounts page, saved across sessions." },
       { category: "Settings", text: "Added visual separator lines between each settings section for easier navigation." },
-      { category: "Verify", text: "Fixed account lockouts: accounts with an existing mobile session (igApiCookies) now use session validation only — a fresh password login is never attempted on top of an active session." },
+      { category: "Verify", text: "Fixed account lockouts: accounts with an existing mobile session (igApiCookies) now use session validation only a fresh password login is never attempted on top of an active session." },
     ],
   },
   {
@@ -253,15 +253,15 @@ export function Dashboard() {
         sessionRes.ok ? sessionRes.json() : Promise.resolve([]),
       ]);
 
-      // Operations already covered by a clean session_action entry — no need to
+      // Operations already covered by a clean session_action entry no need to
       // show the raw API log row as well (it would just be ugly duplicate noise).
       const HIDDEN_OPS = new Set(["getNewFollowersHikerAPI", "getNewFollowers", "v1/user/by/username"]);
 
       const newApiRows: FeedItem[] = apiRows
-        // "Account" source = timed() calls from InstagramWebClient — already
+        // "Account" source = timed() calls from InstagramWebClient already
         // surfaced as session_actions, so skip to avoid duplicate entries.
-        // "Browser"/"Verify" = EB and login calls — never useful in the feed.
-        // "HikerAPI" = scrape metadata — shown since it adds unique context.
+        // "Browser"/"Verify" = EB and login calls never useful in the feed.
+        // "HikerAPI" = scrape metadata shown since it adds unique context.
         .filter((c: any) => c.source !== "Browser" && c.source !== "Verify" && c.source !== "Account")
         .filter((c: any) => !HIDDEN_OPS.has(c.operationName))
         .map((c: any) => ({

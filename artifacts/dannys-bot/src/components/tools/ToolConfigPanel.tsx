@@ -26,7 +26,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   const { toast } = useToast();
   const { navigateTo } = useBrowserWindows();
   const updateToolMutation = useUpdateTool();  // settings saves
-  const toggleMutation     = useUpdateTool();  // enable/disable — never blocked by settings save
+  const toggleMutation     = useUpdateTool();  // enable/disable never blocked by settings save
   const { data: sources, isLoading: sourcesLoading } = useSources(tool.id);
   const createSourceMutation = useCreateSource();
   const deleteSourceMutation = useDeleteSource();
@@ -280,30 +280,30 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     { label: "Session Action Variation", options: [
       { key: "ft_sav", label: "Session Action Variation", description: "Extra actions performed during a follow session", subOptions: [
         { key: "ft_sav_enabled",       label: "Enabled",                                          settingKeys: ["sessionActionVariationEnabled"] },
-        { key: "ft_likeChance",        label: "Like — Chance % (min / max)",                      settingKeys: ["likeChanceMin","likeChanceMax"] },
-        { key: "ft_likeCount",         label: "Like — Posts to like (min / max)",                 settingKeys: ["likeProcessMin","likeProcessMax"] },
-        { key: "ft_likeBefore",        label: "Like — Before follow % (min / max)",               settingKeys: ["likeBeforeMin","likeBeforeMax"] },
-        { key: "ft_likeMaxDay",        label: "Like — Max per day (min / max)",                   settingKeys: ["likeMaxPerDayMin","likeMaxPerDayMax"] },
-        { key: "ft_likeDelay",         label: "Like — Delay between likes (min / max secs)",      settingKeys: ["likeDelayMin","likeDelayMax"] },
-        { key: "ft_reelsChance",       label: "Reels — Chance % (min / max)",                     settingKeys: ["viewReelsChanceMin","viewReelsChanceMax"] },
-        { key: "ft_reelsCount",        label: "Reels — Count to watch (min / max)",               settingKeys: ["viewReelsProcessMin","viewReelsProcessMax"] },
-        { key: "ft_reelsBefore",       label: "Reels — Before follow % (min / max)",              settingKeys: ["viewReelsBeforeMin","viewReelsBeforeMax"] },
-        { key: "ft_reelsMaxDay",       label: "Reels — Max per day (min / max)",                  settingKeys: ["viewReelsMaxPerDayMin","viewReelsMaxPerDayMax"] },
-        { key: "ft_reelsDelay",        label: "Reels — Delay (min / max secs)",                   settingKeys: ["viewReelsDelayMin","viewReelsDelayMax"] },
-        { key: "ft_storiesChance",     label: "Stories — Chance % (min / max)",                   settingKeys: ["viewStoriesChanceMin","viewStoriesChanceMax"] },
-        { key: "ft_storiesCount",      label: "Stories — Count to watch (min / max)",             settingKeys: ["viewStoriesProcessMin","viewStoriesProcessMax"] },
-        { key: "ft_storiesBefore",     label: "Stories — Before follow % (min / max)",            settingKeys: ["viewStoriesBeforeMin","viewStoriesBeforeMax"] },
-        { key: "ft_storiesMaxDay",     label: "Stories — Max per day (min / max)",                settingKeys: ["viewStoriesMaxPerDayMin","viewStoriesMaxPerDayMax"] },
-        { key: "ft_storiesDelay",      label: "Stories — Delay (min / max secs)",                 settingKeys: ["viewStoriesDelayMin","viewStoriesDelayMax"] },
-        { key: "ft_hlChance",          label: "Highlights — Chance % (min / max)",                settingKeys: ["viewHighlightsChanceMin","viewHighlightsChanceMax"] },
-        { key: "ft_hlCount",           label: "Highlights — Count to watch (min / max)",          settingKeys: ["viewHighlightsProcessMin","viewHighlightsProcessMax"] },
-        { key: "ft_hlBefore",          label: "Highlights — Before follow % (min / max)",         settingKeys: ["viewHighlightsBeforeMin","viewHighlightsBeforeMax"] },
-        { key: "ft_hlMaxDay",          label: "Highlights — Max per day (min / max)",             settingKeys: ["viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax"] },
-        { key: "ft_hlDelay",           label: "Highlights — Delay (min / max secs)",              settingKeys: ["viewHighlightsDelayMin","viewHighlightsDelayMax"] },
+        { key: "ft_likeChance",        label: "Like Chance % (min / max)",                      settingKeys: ["likeChanceMin","likeChanceMax"] },
+        { key: "ft_likeCount",         label: "Like Posts to like (min / max)",                 settingKeys: ["likeProcessMin","likeProcessMax"] },
+        { key: "ft_likeBefore",        label: "Like Before follow % (min / max)",               settingKeys: ["likeBeforeMin","likeBeforeMax"] },
+        { key: "ft_likeMaxDay",        label: "Like Max per day (min / max)",                   settingKeys: ["likeMaxPerDayMin","likeMaxPerDayMax"] },
+        { key: "ft_likeDelay",         label: "Like Delay between likes (min / max secs)",      settingKeys: ["likeDelayMin","likeDelayMax"] },
+        { key: "ft_reelsChance",       label: "Reels Chance % (min / max)",                     settingKeys: ["viewReelsChanceMin","viewReelsChanceMax"] },
+        { key: "ft_reelsCount",        label: "Reels Count to watch (min / max)",               settingKeys: ["viewReelsProcessMin","viewReelsProcessMax"] },
+        { key: "ft_reelsBefore",       label: "Reels Before follow % (min / max)",              settingKeys: ["viewReelsBeforeMin","viewReelsBeforeMax"] },
+        { key: "ft_reelsMaxDay",       label: "Reels Max per day (min / max)",                  settingKeys: ["viewReelsMaxPerDayMin","viewReelsMaxPerDayMax"] },
+        { key: "ft_reelsDelay",        label: "Reels Delay (min / max secs)",                   settingKeys: ["viewReelsDelayMin","viewReelsDelayMax"] },
+        { key: "ft_storiesChance",     label: "Stories Chance % (min / max)",                   settingKeys: ["viewStoriesChanceMin","viewStoriesChanceMax"] },
+        { key: "ft_storiesCount",      label: "Stories Count to watch (min / max)",             settingKeys: ["viewStoriesProcessMin","viewStoriesProcessMax"] },
+        { key: "ft_storiesBefore",     label: "Stories Before follow % (min / max)",            settingKeys: ["viewStoriesBeforeMin","viewStoriesBeforeMax"] },
+        { key: "ft_storiesMaxDay",     label: "Stories Max per day (min / max)",                settingKeys: ["viewStoriesMaxPerDayMin","viewStoriesMaxPerDayMax"] },
+        { key: "ft_storiesDelay",      label: "Stories Delay (min / max secs)",                 settingKeys: ["viewStoriesDelayMin","viewStoriesDelayMax"] },
+        { key: "ft_hlChance",          label: "Highlights Chance % (min / max)",                settingKeys: ["viewHighlightsChanceMin","viewHighlightsChanceMax"] },
+        { key: "ft_hlCount",           label: "Highlights Count to watch (min / max)",          settingKeys: ["viewHighlightsProcessMin","viewHighlightsProcessMax"] },
+        { key: "ft_hlBefore",          label: "Highlights Before follow % (min / max)",         settingKeys: ["viewHighlightsBeforeMin","viewHighlightsBeforeMax"] },
+        { key: "ft_hlMaxDay",          label: "Highlights Max per day (min / max)",             settingKeys: ["viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax"] },
+        { key: "ft_hlDelay",           label: "Highlights Delay (min / max secs)",              settingKeys: ["viewHighlightsDelayMin","viewHighlightsDelayMax"] },
       ]},
     ]},
     { label: "Sources", options: [
-      { key: "ft_sources", label: "Target Sources", description: "Copy all target sources (hashtags and accounts) to other profiles — adds to existing sources" },
+      { key: "ft_sources", label: "Target Sources", description: "Copy all target sources (hashtags and accounts) to other profiles adds to existing sources" },
     ]},
   ];
 
@@ -639,7 +639,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-      {/* Header & Master Switch — hidden for follow tools (title/desc shown inside the settings wrapper instead) */}
+      {/* Header & Master Switch hidden for follow tools (title/desc shown inside the settings wrapper instead) */}
       {tool.type !== 'follow' && (
       <div className="desktop-card p-6">
         <h2 className="text-xl font-bold">Create a Human Session</h2>
@@ -1175,7 +1175,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
         </div>
 
-        {/* Sources Column — hidden for follow tool (sources are above the toggle) */}
+        {/* Sources Column hidden for follow tool (sources are above the toggle) */}
         {tool.type !== 'follow' && (
         <div className="lg:col-span-2 space-y-6">
           <div className="desktop-card p-6">

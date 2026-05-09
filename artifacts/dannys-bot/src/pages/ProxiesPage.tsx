@@ -224,7 +224,7 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
             <span className="text-xs text-muted-foreground italic px-2 py-1">All accounts assigned to proxies</span>
           )}
           {assigned.length === 0 && unassignedProfiles.length > 0 && (
-            <span className="text-xs text-muted-foreground italic px-2 py-1">No accounts assigned — use dropdown to add</span>
+            <span className="text-xs text-muted-foreground italic px-2 py-1">No accounts assigned use dropdown to add</span>
           )}
         </div>
       </div>
@@ -305,7 +305,7 @@ export function ProxiesPage() {
       const alive = results.filter(r => r?.alive).length;
       const dead = results.length - alive;
       toast({
-        title: `Ping complete — ${alive} alive, ${dead} dead`,
+        title: `Ping complete ${alive} alive, ${dead} dead`,
         description: dead > 0 ? "Dead proxies are highlighted in red." : "All proxies are responding.",
       });
     } finally {
@@ -397,7 +397,7 @@ export function ProxiesPage() {
       const skipped = unassignedProfiles.length - assignments.length;
       toast({
         title: `Assigned ${assignments.length} ${assignments.length === 1 ? "account" : "accounts"} across ${proxies.length} proxies`,
-        description: skipped > 0 ? `${skipped} accounts couldn't be assigned — all proxies at the ${maxPerProxy} account limit.` : undefined,
+        description: skipped > 0 ? `${skipped} accounts couldn't be assigned all proxies at the ${maxPerProxy} account limit.` : undefined,
       });
     } catch { toast({ title: "Split failed", variant: "destructive" }); }
     finally { setSplitting(false); }

@@ -42,7 +42,7 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
 
 export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
   const updateToolMutation = useUpdateTool();  // settings saves
-  const toggleMutation     = useUpdateTool();  // enable/disable toggle — separate so it's never blocked
+  const toggleMutation     = useUpdateTool();  // enable/disable toggle separate so it's never blocked
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
   const [copyOpen, setCopyOpen] = useState(false);

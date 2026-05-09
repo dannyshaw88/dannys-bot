@@ -314,8 +314,8 @@ export function ProfileDetailsPage() {
       const res = await fetch(url, { method: "POST" });
       const data = await res.json();
       if (res.status === 429) {
-        // Another verify is already running for this account — keep pending state and wait
-        toast({ title: "Verification In Progress", description: "Already verifying this account — please wait for it to finish." });
+        // Another verify is already running for this account keep pending state and wait
+        toast({ title: "Verification In Progress", description: "Already verifying this account please wait for it to finish." });
         return;
       }
       if (data.ok) {
@@ -323,7 +323,7 @@ export function ProfileDetailsPage() {
         toast({ title: "Credentials Verified", description: data.message });
       } else {
         setVerifyStatus("fail");
-        const suffix = bypassProxy ? " (tested without proxy — proxy may be the issue)" : "";
+        const suffix = bypassProxy ? " (tested without proxy proxy may be the issue)" : "";
         toast({ title: "Verification Failed", description: data.message + suffix, variant: "destructive" });
       }
     } catch {
@@ -608,7 +608,7 @@ export function ProfileDetailsPage() {
                 onChange={e => updateField({ accountLabel: e.target.value })}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground">A display label for quick identification — use any format you like.</p>
+            <p className="text-[11px] text-muted-foreground">A display label for quick identification use any format you like.</p>
           </div>
 
           <div>
@@ -648,7 +648,7 @@ export function ProfileDetailsPage() {
                       />
                     </div>
 
-                    {/* Verify button — constrained to match username/password width */}
+                    {/* Verify button constrained to match username/password width */}
                     <div className="max-w-[280px]">
                     {canVerify && (
                       <div>
@@ -777,7 +777,7 @@ export function ProfileDetailsPage() {
                                 <X className="w-3.5 h-3.5 mr-1" /> Unassign
                               </Button>
                             </div>
-                            <p className="text-xs text-muted-foreground">Managed by Proxy Manager — changes update the shared proxy.</p>
+                            <p className="text-xs text-muted-foreground">Managed by Proxy Manager changes update the shared proxy.</p>
                           </div>
                         );
                       }
@@ -1042,7 +1042,7 @@ export function ProfileDetailsPage() {
               </CardHeader>
               <CardContent className="px-0">
                 <div className="flex items-start gap-4">
-                  {/* Left — stat icons */}
+                  {/* Left stat icons */}
                   <div className="flex flex-col gap-2 shrink-0">
                     <div className="grid grid-cols-3 gap-2">
                       <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
@@ -1074,7 +1074,7 @@ export function ProfileDetailsPage() {
                     )}
                   </div>
 
-                  {/* Right — controls (single row) */}
+                  {/* Right controls (single row) */}
                   <div className="flex items-center gap-3 flex-1 border-l border-border pl-4 flex-nowrap">
                     <div className="flex items-center gap-2">
                       <Switch

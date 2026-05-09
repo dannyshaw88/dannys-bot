@@ -257,7 +257,7 @@ export function StatsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-8">
+      <div className="mb-3">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Automation Stats</h1>
         <p className="text-muted-foreground mt-1">Daily and lifetime performance metrics for all accounts.</p>
       </div>

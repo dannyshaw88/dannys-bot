@@ -393,7 +393,7 @@ export function SettingsPage() {
           </div>
           <p className="text-sm text-muted-foreground mb-5">
             Track every user scraped from a hashtag globally across all accounts. When enabled, a user
-            scraped by Account A won't be scraped again by Account B — saving HikerAPI credits.
+            scraped by Account A won't be scraped again by Account B saving HikerAPI credits.
             The hashtag cursor position is also shared globally so accounts continue where others left off.
           </p>
 
@@ -457,7 +457,7 @@ export function SettingsPage() {
                 disabled={isLoading || !(settings?.skipScrapedUsers)}
               />
               <p className="text-xs text-muted-foreground">
-                Default 365 days — effectively means never scrape the same user twice.
+                Default 365 days effectively means never scrape the same user twice.
               </p>
             </div>
           </div>
@@ -626,7 +626,7 @@ export function SettingsPage() {
           </div>
           <p className="text-sm text-muted-foreground mb-5">
             When enabled, exported timestamps are automatically converted to your PC's local time.
-            The timezone is detected from your browser — no manual offset needed.
+            The timezone is detected from your browser no manual offset needed.
           </p>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -714,7 +714,7 @@ export function SettingsPage() {
         <div className="desktop-card p-6">
           <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
             <Upload className="w-4 h-4" />
-            Jarvee Import — Followed Users
+            Jarvee Import Followed Users
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
             Import your Jarvee followed-users export so Equinox won't re-follow those accounts.
@@ -835,7 +835,7 @@ export function SettingsPage() {
                       setJarveeImporting(false);
                       setJarveeProgress(null);
                       const totalImported = results.reduce((s, r) => s + r.imported, 0);
-                      toast({ title: `Import complete — ${totalImported.toLocaleString()} new entries added` });
+                      toast({ title: `Import complete ${totalImported.toLocaleString()} new entries added` });
                     }}
                   >
                     {jarveeImporting ? (
@@ -880,7 +880,7 @@ export function SettingsPage() {
             </div>
             <p className="text-sm text-muted-foreground mb-5">
               Automatically zip your database and settings into dated backup folders.
-              Restore any backup to roll everything back to that point — the app will relaunch automatically.
+              Restore any backup to roll everything back to that point the app will relaunch automatically.
             </p>
 
             {/* Auto-backup toggle + interval */}
@@ -1054,7 +1054,7 @@ export function SettingsPage() {
               )}
 
               {backupList.length === 0 && !backupListLoading && (
-                <p className="text-xs text-muted-foreground pt-1">No backups yet — create one above.</p>
+                <p className="text-xs text-muted-foreground pt-1">No backups yet create one above.</p>
               )}
             </div>
           </div>
