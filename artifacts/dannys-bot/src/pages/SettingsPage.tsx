@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun } from "lucide-react";
+import { Link } from "wouter";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -249,6 +250,22 @@ export function SettingsPage() {
 
       <div className="space-y-4 max-w-2xl">
 
+        {/* README & FAQ shortcut */}
+        <Link href="/readme" className="block">
+          <div className="desktop-card p-4 flex items-center justify-between cursor-pointer hover:bg-accent/30 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">README &amp; FAQ</p>
+                <p className="text-xs text-muted-foreground">Getting started guide, tool docs, and common questions</p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          </div>
+        </Link>
+
         {/* HikerAPI Scraper Protection */}
         <div className="desktop-card p-6">
           <div className="flex items-center gap-3 mb-1">
@@ -423,8 +440,7 @@ export function SettingsPage() {
                   Scrape all users if some are skipped?
                 </Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  If the follow tool skips users because they've already been followed by another profile,
-                  HikerAPI will keep scraping additional pages until the target follow count is met.
+                  If the follow session ends short of its target (users skipped by any filter -- already followed, skip list, Indian names, etc.), HikerAPI will keep scraping additional pages until the target follow count is reached. Only works for hashtag sources (follower lists have no pagination cursor).
                 </p>
               </div>
               <Switch
@@ -790,7 +806,7 @@ export function SettingsPage() {
                                   </span>
                                 )
                               ) : (
-                                <span className="text-muted-foreground">—</span>
+                                <span className="text-muted-foreground"> </span>
                               )}
                             </td>
                           )}

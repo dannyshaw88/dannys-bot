@@ -1,36 +1,18 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
-import { useEffect, useRef, useState } from "react";
+import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
+import { useEffect } from "react";
 
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
   const slot = useSidebarSlot();
-
-  const historyStack = useRef<string[]>([location]);
-  const historyIndex = useRef<number>(0);
-  const isNavigating = useRef<boolean>(false);
-  const [canBack, setCanBack] = useState(false);
-  const [canForward, setCanForward] = useState(false);
+  const { canBack, canForward, pushLocation, back, forward } = useNavigationHistory();
 
   useEffect(() => {
-    if (isNavigating.current) {
-      isNavigating.current = false;
-      setCanBack(historyIndex.current > 0);
-      setCanForward(historyIndex.current < historyStack.current.length - 1);
-      return;
-    }
-    const stack = historyStack.current;
-    const idx = historyIndex.current;
-    if (stack[idx] === location) return;
-    const newStack = stack.slice(0, idx + 1);
-    newStack.push(location);
-    historyStack.current = newStack;
-    historyIndex.current = newStack.length - 1;
-    setCanBack(historyIndex.current > 0);
-    setCanForward(false);
+    pushLocation(location);
   }, [location]);
 
   const navItems = [
@@ -39,21 +21,16 @@ export function Sidebar() {
     { name: "Create an Account", path: "/create-account", icon: UserPlus },
     { name: "Stats", path: "/stats", icon: Activity },
     { name: "Proxy Manager", path: "/proxies", icon: ShieldAlert },
-    { name: "Settings", path: "/settings", icon: Settings },
   ];
 
   function goBack() {
-    if (historyIndex.current <= 0) return;
-    historyIndex.current -= 1;
-    isNavigating.current = true;
-    setLocation(historyStack.current[historyIndex.current]);
+    const path = back();
+    if (path) setLocation(path);
   }
 
   function goForward() {
-    if (historyIndex.current >= historyStack.current.length - 1) return;
-    historyIndex.current += 1;
-    isNavigating.current = true;
-    setLocation(historyStack.current[historyIndex.current]);
+    const path = forward();
+    if (path) setLocation(path);
   }
 
   return (
@@ -116,17 +93,17 @@ export function Sidebar() {
       )}
 
       <div className="px-3 pb-2">
-        <Link href="/readme" className={cn(
+        <Link href="/settings" className={cn(
           "flex items-center px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group w-full",
-          location === "/readme"
+          location === "/settings"
             ? "bg-primary/10 text-primary"
             : "text-muted-foreground hover:bg-accent hover:text-foreground"
         )}>
-          <BookOpen className={cn(
+          <Settings className={cn(
             "w-5 h-5 mr-3 transition-colors",
-            location === "/readme" ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+            location === "/settings" ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
           )} />
-          README &amp; FAQ
+          Settings
         </Link>
       </div>
 
