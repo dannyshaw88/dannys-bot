@@ -378,6 +378,11 @@ export async function registerInstagramRoutes(
       return fail(400, "Username and password are required before verifying.");
     }
 
+    // Mark as "verifying" in the DB immediately — this way the dashboard still
+    // shows the correct in-progress state if the user navigates away before the
+    // long-running verify call completes.
+    await storage.updateProfile(profile.id, { accountStatus: "verifying" });
+
     let effectiveProfile = { ...profile };
     if (profile.proxyId) {
       const proxies = await storage.getProxies();
@@ -398,6 +403,19 @@ export async function registerInstagramRoutes(
       return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
     }
 
+    // Log "Initiating" BEFORE the verify call so it gets a genuinely earlier
+    // timestamp/ID than the result entry — dashboard is newest-first so
+    // "Initiating" (older) must have a lower ID than "Verified" (newer).
+    await storage.createInstagramApiCall({
+      profileId: profile.id,
+      username: profile.username,
+      operationName: "VerifyAccount",
+      date: new Date().toISOString(),
+      message: `Initiating a verification via API`,
+      source: "System",
+      durationMs: 0,
+    }).catch(() => {});
+
     let result: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
     try {
       result = await verifyInstagramCredentials(effectiveProfile as typeof profile);
@@ -416,7 +434,7 @@ export async function registerInstagramRoutes(
       ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
     });
 
-    // Log verify completion as a session action so the LiveActivityTicker can surface it
+    // Log verify result as a session action so the LiveActivityTicker can surface it
     await storage.createSessionAction({
       profileId: profile.id,
       toolId: 0,
@@ -429,18 +447,18 @@ export async function registerInstagramRoutes(
       timestamp: new Date().toISOString(),
     });
 
-    // Also surface verify result in the Dashboard API Call Log
-    storage.createInstagramApiCall({
-      profileId: profile.id,
-      username: profile.username,
-      operationName: "VerifyAccount",
-      date: new Date().toISOString(),
-      message: result.ok
-        ? `Initiating a verification via API`
-        : `✗ Failed — ${result.accountStatus ?? "failed"}: ${result.message ?? ""}`,
-      source: "System",
-      durationMs: 0,
-    }).catch(() => {});
+    // Log failure in API call log too (success already surfaced via session action above)
+    if (!result.ok) {
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        username: profile.username,
+        operationName: "VerifyAccount",
+        date: new Date().toISOString(),
+        message: `✗ Failed — ${result.accountStatus ?? "failed"}: ${result.message ?? ""}`,
+        source: "System",
+        durationMs: 0,
+      }).catch(() => {});
+    }
 
     // If Instagram returned a checkpoint URL, cache it so the EB navigates there directly
     // on next open (bypassing the 429 rate-limit on the home page)
