@@ -535,10 +535,26 @@ function setupBackupHandlers() {
     scheduleAutoBackup(enabled, intervalDays);
   });
 
-  // open-browser-window is no longer used — EBs open as in-app overlays via
-  // the React BrowserWindow component (SSE canvas stream).  Handler kept as a
-  // no-op so older preload builds that still invoke it don't throw an IPC error.
-  ipcMain.handle("open-browser-window", () => {});
+  // open-browser-window: opens a standalone Electron window loading the
+  // /browser/:profileId route (StandaloneBrowserPage → BrowserPanel → SSE stream).
+  // Called by older builds whose frontend still uses window.electronAPI.openBrowserWindow().
+  // Also called by current builds as a fallback — whichever path fires first wins.
+  ipcMain.handle("open-browser-window", (_event, { profileId, username }: any) => {
+    if (!serverPort || !profileId) return;
+    const child = new BrowserWindow({
+      width: 1100,
+      height: 700,
+      title: username ? `@${username} — Equinox Browser` : "Equinox Browser",
+      icon: getIconPath(),
+      autoHideMenuBar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, "preload.js"),
+      },
+    });
+    child.loadURL(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
+  });
 }
 
 async function createWindow() {
