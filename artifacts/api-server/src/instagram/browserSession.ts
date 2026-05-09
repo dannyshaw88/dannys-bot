@@ -118,16 +118,14 @@ const LAUNCH_ARGS = [
   "--metrics-recording-only",
   "--disable-default-apps",
   "--mute-audio",
+  "--hide-scrollbars",
   "--window-size=1280,760",
 ];
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
 // findChromiumPath which locates Chrome/Edge/Brave) or Nix store (Linux dev).
-// The browser runs NON-headless (visible window) with an isolated --user-data-dir
+// The browser runs headless (completely invisible) with an isolated --user-data-dir
 // so it never touches the user's personal browser profile.
-// Non-headless is required so that native OS file dialogs (Instagram's photo
-// uploader, etc.) are attached to a real window and the user can interact with
-// them — exactly like Jarvee's embedded browser.
 const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
@@ -177,22 +175,11 @@ export async function getOrCreateSession(
   const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
   const existing = sessions.get(profileId);
 
+  // If session exists with a DIFFERENT proxy config, close and recreate it
   if (existing) {
-    // If the browser process has silently died (common with non-headless Chrome
-    // when the user closes the window manually), tear down the stale session so
-    // we create a fresh one instead of returning a dead object that would cause
-    // screenshot() to throw silently and leave the panel showing a blank screen.
-    if (!existing.browser.isConnected()) {
-      log(`Browser for profile ${profileId} is disconnected — tearing down stale session`, "browser");
-      await closeSession(profileId);
-    } else if (existing.proxyKey === newProxyKey) {
-      // Session is healthy and proxy hasn't changed — reuse it.
-      return existing;
-    } else {
-      // Proxy config changed — restart with new proxy.
-      log(`Proxy changed for profile ${profileId} (${existing.proxyKey} → ${newProxyKey}), restarting browser`, "browser");
-      await closeSession(profileId);
-    }
+    if (existing.proxyKey === newProxyKey) return existing;
+    log(`Proxy changed for profile ${profileId} (${existing.proxyKey} → ${newProxyKey}), restarting browser`, "browser");
+    await closeSession(profileId);
   }
 
   // --proxy-server accepts "host:port" only — Chromium rejects credentials in the URL
@@ -253,7 +240,7 @@ export async function getOrCreateSession(
   let browser: Browser;
   try {
     browser = await puppeteerLib.launch({
-      headless: false,
+      headless: true,
       executablePath: CHROMIUM_PATH,
       args: fullArgs,
       ignoreHTTPSErrors: true,
