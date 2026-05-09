@@ -85,6 +85,7 @@ interface Session {
   frameLoop: ReturnType<typeof setInterval> | null;
   lastUrl: string;
   proxyKey: string; // "direct" or "host:port" — used to detect proxy changes
+  userAgent: string; // profile's userAgentEmbedded — applied to every page/popup
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -350,9 +351,31 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey };
+  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
+
+  // ── Apply UA to every new page/popup that Chrome creates ──────────────────
+  // page.setUserAgent() is per-page only. Instagram and Chrome itself can open
+  // new targets (popups, service workers, etc.) that inherit Chrome's default
+  // "HeadlessChrome" UA. Intercept every target and override the UA immediately
+  // before any requests are made so Instagram never sees the headless fingerprint.
+  browser.on("targetcreated", async (target: any) => {
+    try {
+      if (target.type() !== "page") return;
+      const newPage = await target.page();
+      if (!newPage) return;
+      await newPage.setUserAgent(userAgent);
+      await newPage.setViewport({ width: 1280, height: 760 });
+      await applyStealthScripts(newPage);
+      // Also intercept file choosers on any popup page
+      (newPage as any).on("filechooser", (chooser: any) => {
+        pendingFileChoosers.set(profileId, chooser);
+        const s = sessions.get(profileId);
+        if (s) sseWrite(s.res, { type: "fileChooserNeeded" });
+      });
+    } catch { /* never crash on target creation */ }
+  });
 
   // ── File chooser interception ─────────────────────────────────────────────
   // Puppeteer v24: 'filechooser' event fires whenever the page opens a file dialog.
@@ -688,7 +711,9 @@ export async function browserNewTab(profileId: number) {
   if (!s) return;
   try {
     const newPage = await s.browser.newPage();
-    await newPage.setUserAgent(s.page.url() ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" : "");
+    // Use the profile's stored UA — same as the main page, so Instagram sees
+    // a consistent device across all tabs (not "HeadlessChrome" on new tabs).
+    await newPage.setUserAgent(s.userAgent);
     await newPage.setViewport({ width: 1280, height: 760 });
     await applyStealthScripts(newPage);
     // File chooser interception for new tab
