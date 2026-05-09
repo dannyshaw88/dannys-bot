@@ -314,7 +314,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
     // When "Randomise timing" is selected and accounts are being enabled,
     // spread start times evenly across the [0, delayMax] window so accounts
-    // don't all fire at the same time. No need to check source tool value —
+    // don't all fire at the same time. No need to check source tool value  
     // the user explicitly chose to stagger via the copy dialog.
     const willEnable    = copyEnabled && tool.enabled;
     const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
@@ -621,7 +621,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                             {fu.sourceValue}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
+                          <span className="text-muted-foreground text-xs"> </span>
                         )}
                       </td>
                     </tr>
@@ -697,6 +697,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
           <div className="desktop-card p-6 space-y-4">
             {tool.type === 'follow' && (
               <div className="flex items-center gap-2 flex-wrap mb-4 pb-3 border-b border-border">
+                <h2 className="text-xl font-bold w-full">Follow Tool</h2>
                 <Switch
                   checked={tool.enabled}
                   onCheckedChange={handleToggleEnable}
@@ -729,11 +730,11 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   Followed Users
                 </button>
                 {nextRunStatus && (
-                  <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                  <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
                     <Clock className="w-3 h-3 shrink-0" />
                     {nextRunStatus.executing
-                      ? <span className="font-medium">Executing</span>
-                      : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+                      ? <span>Executing</span>
+                      : <><span>Scheduled:</span>&nbsp;<span className="font-mono text-foreground">{nextRunStatus.label}</span></>
                     }
                   </span>
                 )}
@@ -746,8 +747,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   const perDayRaw     = perHour * 24;
                   const perDay        = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
                   return perHour > 0 ? (
-                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <TrendingUp className="w-3 h-3 shrink-0" />
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                       ~{perHour}/hr · ~{perDay}/day
                     </span>
                   ) : null;

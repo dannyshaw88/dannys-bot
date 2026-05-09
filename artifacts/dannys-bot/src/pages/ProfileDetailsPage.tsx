@@ -383,11 +383,14 @@ export function ProfileDetailsPage() {
   return (
     <AppLayout>
       <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-4 items-start">
-        <Tabs.List className="flex flex-col w-48 shrink-0 sticky top-4 self-start border-r border-border pr-2 py-1">
+        <Tabs.List className="flex flex-col w-52 shrink-0 sticky top-4 self-start border-r border-border pr-2 py-1">
           <Tabs.Trigger value="settings" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <Settings className="w-4 h-4 shrink-0" /> Account Settings
           </Tabs.Trigger>
           {!profile?.creatorMode && (<>
+          <Tabs.Trigger value="human-session" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
+            <User className="w-4 h-4 shrink-0" /> Human Session Tools
+          </Tabs.Trigger>
           <Tabs.Trigger value="follow" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <UserPlus className="w-4 h-4 shrink-0" /> Follow Tool
           </Tabs.Trigger>
@@ -396,9 +399,6 @@ export function ProfileDetailsPage() {
           </Tabs.Trigger>
           <Tabs.Trigger value="contact" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
             <MessageSquare className="w-4 h-4 shrink-0" /> Contact Tool
-          </Tabs.Trigger>
-          <Tabs.Trigger value="human-session" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <User className="w-4 h-4 shrink-0" /> Human Session Tools
           </Tabs.Trigger>
           </>)}
           {!profile?.creatorMode && (
@@ -1048,21 +1048,21 @@ export function ProfileDetailsPage() {
                       <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
                         <Users className="w-4 h-4 text-blue-500 mb-1" />
                         <span className="text-base font-bold">
-                          {profile?.followersCount != null ? profile.followersCount.toLocaleString() : "—"}
+                          {profile?.followersCount != null ? profile.followersCount.toLocaleString() : " "}
                         </span>
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Followers</span>
                       </div>
                       <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
                         <UserPlus className="w-4 h-4 text-purple-500 mb-1" />
                         <span className="text-base font-bold">
-                          {profile?.followingCount != null ? profile.followingCount.toLocaleString() : "—"}
+                          {profile?.followingCount != null ? profile.followingCount.toLocaleString() : " "}
                         </span>
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Following</span>
                       </div>
                       <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
                         <BarChart2 className="w-4 h-4 text-green-500 mb-1" />
                         <span className="text-base font-bold">
-                          {profile?.postsCount != null ? profile.postsCount.toLocaleString() : "—"}
+                          {profile?.postsCount != null ? profile.postsCount.toLocaleString() : " "}
                         </span>
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Posts</span>
                       </div>

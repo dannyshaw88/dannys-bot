@@ -19,18 +19,18 @@ const ERROR_ACTIONS = new Set([
 const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
   tool_start:          { label: "Started",      cls: "bg-blue-100 text-blue-700" },
   tool_complete:       { label: "Complete",     cls: "bg-emerald-100 text-emerald-700" },
-  verified:            { label: "Verified",     cls: "bg-emerald-100 text-emerald-700" },
+  verified:            { label: "Verified",     cls: "bg-green-100 text-green-700" },
   verification_failed: { label: "Verify Fail",  cls: "bg-red-100 text-red-700" },
   follow:              { label: "Follow",        cls: "bg-sky-100 text-sky-700" },
-  follow_blocked:      { label: "Blocked",       cls: "bg-red-100 text-red-700" },
+  follow_blocked:      { label: "Blocked",       cls: "bg-rose-100 text-rose-700" },
   follow_skipped:      { label: "Skipped",       cls: "bg-orange-100 text-orange-700" },
-  dedup_skip:          { label: "Skipped",        cls: "bg-yellow-100 text-yellow-700" },
-  filter_skip:         { label: "Skipped",        cls: "bg-yellow-100 text-yellow-700" },
-  unfollow:            { label: "Unfollow",      cls: "bg-orange-100 text-orange-700" },
-  unfollow_blocked:    { label: "UF Block",      cls: "bg-red-100 text-red-700" },
+  dedup_skip:          { label: "Dedup Skip",    cls: "bg-amber-100 text-amber-700" },
+  filter_skip:         { label: "Filter Skip",   cls: "bg-yellow-100 text-yellow-800" },
+  unfollow:            { label: "Unfollow",      cls: "bg-violet-100 text-violet-700" },
+  unfollow_blocked:    { label: "UF Block",      cls: "bg-pink-100 text-pink-700" },
   dm:                  { label: "DM",            cls: "bg-purple-100 text-purple-700" },
-  dm_blocked:          { label: "DM Block",      cls: "bg-red-100 text-red-700" },
-  contact_dm_blocked:  { label: "DM Block",      cls: "bg-red-100 text-red-700" },
+  dm_blocked:          { label: "DM Block",      cls: "bg-fuchsia-100 text-fuchsia-700" },
+  contact_dm_blocked:  { label: "Contact Block", cls: "bg-indigo-100 text-indigo-700" },
   no_sources:          { label: "No Sources",    cls: "bg-slate-100 text-slate-600" },
 };
 
@@ -670,9 +670,9 @@ export function Dashboard() {
                                 {(item.operationName ?? "").replace(/_/g, " ")}
                               </span>
                             </td>
-                            <td className="px-3 py-3 text-xs text-muted-foreground truncate">—</td>
+                            <td className="px-3 py-3 text-xs text-muted-foreground truncate"> </td>
                             <td className="px-3 py-3 text-foreground truncate text-xs" title={item.message || undefined}>
-                              {item.message || "—"}
+                              {item.message || " "}
                             </td>
                             <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
                               <span className="flex items-center gap-1 min-w-0">
@@ -701,10 +701,10 @@ export function Dashboard() {
                             </span>
                           </td>
                           <td className="px-3 py-3 text-xs text-foreground/80 truncate" title={item.targetUsername || undefined}>
-                            {item.targetUsername ? `@${item.targetUsername}` : "—"}
+                            {item.targetUsername ? `@${item.targetUsername}` : " "}
                           </td>
                           <td className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>
-                            {item.detail || "—"}
+                            {item.detail || " "}
                           </td>
                           <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
                             <span className="flex items-center gap-1 min-w-0">

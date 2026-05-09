@@ -15,6 +15,8 @@ let serverProc: ChildProcess | null = null;
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+let splashWin: BrowserWindow | null = null;
+let splashIconDataUrl = "";
 
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -81,6 +83,83 @@ function getTrayIconPath(): string {
     return path.join(__dirname, "..", "assets", "icon-tray.ico");
   }
   return getIconPath();
+}
+
+function buildSplashHtml(label: string, iconDataUrl: string): string {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:100%;height:100%;
+  background:#0d1117;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  font-family:'Segoe UI',system-ui,sans-serif;
+  overflow:hidden;user-select:none;
+}
+img{width:88px;height:88px;margin-bottom:28px;border-radius:16px;}
+.title{font-size:22px;font-weight:700;color:#ffffff;letter-spacing:0.02em;margin-bottom:6px;}
+.label{font-size:11px;color:rgba(255,255,255,0.38);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:28px;}
+.bar-track{width:220px;height:3px;background:rgba(255,255,255,0.12);border-radius:999px;overflow:hidden;}
+.bar-fill{
+  height:100%;width:45%;
+  background:linear-gradient(90deg,transparent,#ffffff,transparent);
+  border-radius:999px;
+  animation:sweep 1.6s ease-in-out infinite;
+}
+@keyframes sweep{
+  0%{transform:translateX(-200%);}
+  100%{transform:translateX(620%);}
+}
+</style></head>
+<body>
+  <img src="${iconDataUrl}" />
+  <div class="title">Equinox</div>
+  <div class="label">${label}</div>
+  <div class="bar-track"><div class="bar-fill"></div></div>
+</body></html>`;
+}
+
+function createSplash(label = "Loading…"): void {
+  if (splashWin && !splashWin.isDestroyed()) {
+    splashWin.close();
+    splashWin = null;
+  }
+  try {
+    if (!splashIconDataUrl) {
+      splashIconDataUrl = nativeImage.createFromPath(getIconPath()).toDataURL();
+    }
+  } catch {}
+
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const W = 420, H = 300;
+
+  splashWin = new BrowserWindow({
+    width: W,
+    height: H,
+    x: Math.round((width - W) / 2),
+    y: Math.round((height - H) / 2),
+    frame: false,
+    resizable: false,
+    movable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: "#0d1117",
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  });
+
+  splashWin.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(buildSplashHtml(label, splashIconDataUrl))}`
+  );
+  splashWin.once("ready-to-show", () => splashWin?.show());
+}
+
+function closeSplash(): void {
+  if (splashWin && !splashWin.isDestroyed()) {
+    splashWin.close();
+    splashWin = null;
+  }
 }
 
 function waitForServer(port: number, timeoutMs = 30000): Promise<void> {
@@ -617,7 +696,7 @@ async function createWindow() {
     ).catch(() => {});
   });
 
-  win.once("ready-to-show", () => { win?.show(); win?.maximize(); });
+  win.once("ready-to-show", () => { closeSplash(); win?.show(); win?.maximize(); });
   win.on("closed", () => { win = null; });
 
   // Native cut/copy/paste/select-all context menu for all text inputs
@@ -671,7 +750,10 @@ async function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createSplash("Starting…");
+  createWindow();
+});
 
 app.on("before-quit", (event) => {
   isQuitting = true;
@@ -681,6 +763,8 @@ app.on("before-quit", (event) => {
   // database is always in a consistent state, but sending SIGTERM first gives
   // Node.js a chance to run its 'exit' handlers and release file locks.
   event.preventDefault();
+  win?.hide();
+  createSplash("Closing…");
   const proc = serverProc;
   serverProc = null;
   proc.kill("SIGTERM");

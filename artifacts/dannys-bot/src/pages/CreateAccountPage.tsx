@@ -232,7 +232,7 @@ export function CreateAccountPage() {
       creatorMode: true,
     } as any, {
       onSuccess: (profile) => {
-        window.location.href = `/profiles/${profile.id}`;
+        window.location.href = `/profiles/${profile.id}?from=create-account`;
       }
     });
   };
@@ -382,6 +382,18 @@ export function CreateAccountPage() {
         {filterTokens.length > 0 && (
           <span className="text-xs text-muted-foreground">{filteredProfiles?.length ?? 0} of {profiles?.length ?? 0} accounts</span>
         )}
+        <label className="flex items-center gap-1.5 cursor-pointer ml-1 shrink-0">
+          <Checkbox
+            checked={groupMode}
+            onCheckedChange={checked => {
+              const next = !!checked;
+              setGroupMode(next);
+              localStorage.setItem("creator:groupMode", String(next));
+            }}
+            className="w-3.5 h-3.5"
+          />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Group Accounts</span>
+        </label>
       </div>
 
       <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 208px)" }}>
@@ -391,18 +403,6 @@ export function CreateAccountPage() {
               Account
               <span className="text-[9px]">{sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}</span>
             </button>
-            <label className="flex items-center gap-1.5 cursor-pointer ml-2 shrink-0">
-              <Checkbox
-                checked={groupMode}
-                onCheckedChange={checked => {
-                  const next = !!checked;
-                  setGroupMode(next);
-                  localStorage.setItem("creator:groupMode", String(next));
-                }}
-                className="w-3.5 h-3.5"
-              />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Group Accounts</span>
-            </label>
           </div>
           <button onClick={() => cycleSort("status")} style={{ width: colWidths.status }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
             Status
@@ -461,7 +461,7 @@ export function CreateAccountPage() {
                         <Checkbox checked={selectedIds.includes(profile.id)} onCheckedChange={() => toggleSelection(profile.id)} />
                       </div>
                       <div style={{ width: colWidths.account }} className="shrink-0 min-w-0">
-                        <Link href={`/profiles/${profile.id}`}>
+                        <Link href={`/profiles/${profile.id}?from=create-account`}>
                           <span className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer block">
                             {profile.accountLabel || profile.username}
                           </span>
@@ -499,7 +499,7 @@ export function CreateAccountPage() {
                             </button>
                           )
                         }
-                        <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
+                        <Link href={`/profiles/${profile.id}?from=create-account`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
                         <button
                           onClick={() => handleMoveToAccounts([profile.id])}
                           disabled={moveToAccountsMutation.isPending}
@@ -524,7 +524,7 @@ export function CreateAccountPage() {
                         }
                         return (
                           <div style={{ width: colWidths.ip }} className="shrink-0 text-left pl-2" title={ip || "No proxy"}>
-                            <span className="text-[10px] font-mono text-muted-foreground truncate block">{ip || "—"}</span>
+                            <span className="text-[10px] font-mono text-muted-foreground truncate block">{ip || " "}</span>
                           </div>
                         );
                       })()}
@@ -545,8 +545,8 @@ export function CreateAccountPage() {
                             {isCollapsed
                               ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                               : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                            <FolderOpen className="w-3.5 h-3.5 text-primary/50 shrink-0" />
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-foreground truncate">{displayName}</span>
+                            <Tag className="w-3.5 h-3.5 text-primary/50 shrink-0" />
+                            <span className="text-[13px] font-bold uppercase tracking-wider text-foreground truncate">{displayName}</span>
                             <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
                           </button>
                           <button

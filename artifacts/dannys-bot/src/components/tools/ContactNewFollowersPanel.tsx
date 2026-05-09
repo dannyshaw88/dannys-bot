@@ -186,7 +186,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
 
         {/* Check interval + users per check */}
         <div className="space-y-2">
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div className="flex items-center gap-2">
               <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check Every (min)</span>
@@ -199,8 +199,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
                 {numInput("contactCheckIntervalMax", 1, 10000)}
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 flex-wrap">
+            <div className="w-px self-stretch bg-border/50 hidden sm:block" />
             <div className="flex items-center gap-2">
               <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">New Followers to Check</span>

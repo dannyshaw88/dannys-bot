@@ -154,45 +154,45 @@ export function ContactUsersPanel({ tool, profile }: Props) {
           <h4 className="font-semibold text-sm">Send Settings</h4>
         </div>
 
-        {/* Wait between sessions */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Wait Between Batches (min)</span>
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground">Min</Label>
-            {numInput("contactUsersWaitMin", 1, 10000)}
+        {/* Wait between batches · Messages per batch · Delay between messages — all on one row */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Wait Between Batches (min)</span>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              {numInput("contactUsersWaitMin", 1, 10000)}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              {numInput("contactUsersWaitMax", 1, 10000)}
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground">Max</Label>
-            {numInput("contactUsersWaitMax", 1, 10000)}
+          <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+          <div className="flex items-center gap-2">
+            <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Per Batch</span>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              {numInput("contactUsersSendCountMin", 1, 500)}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              {numInput("contactUsersSendCountMax", 1, 500)}
+            </div>
           </div>
-        </div>
-
-        {/* Messages per batch */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Messages per Batch</span>
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground">Min</Label>
-            {numInput("contactUsersSendCountMin", 1, 500)}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground">Max</Label>
-            {numInput("contactUsersSendCountMax", 1, 500)}
-          </div>
-        </div>
-
-        {/* Delay between DMs */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Timer className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Delay Between Messages (s)</span>
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground">Min</Label>
-            {numInput("contactUsersDelayBetweenMin", 1, 3600)}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground">Max</Label>
-            {numInput("contactUsersDelayBetweenMax", 1, 3600)}
+          <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+          <div className="flex items-center gap-2">
+            <Timer className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Delay Between (s)</span>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              {numInput("contactUsersDelayBetweenMin", 1, 3600)}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              {numInput("contactUsersDelayBetweenMax", 1, 3600)}
+            </div>
           </div>
         </div>
 

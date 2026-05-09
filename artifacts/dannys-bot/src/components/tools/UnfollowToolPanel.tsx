@@ -189,17 +189,16 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
             Copy Settings
           </button>
           {nextUnfollowStatus && (
-            <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+            <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
               {nextUnfollowStatus.executing
-                ? <span className="font-medium">Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextUnfollowStatus.label}</span></>
+                ? <span>Executing</span>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono text-foreground">{nextUnfollowStatus.label}</span></>
               }
             </span>
           )}
           {tool.enabled && perHour > 0 && (
-            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <TrendingUp className="w-3 h-3 shrink-0" />
+            <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
               ~{perHour}/hr · ~{perDay}/day
             </span>
           )}
@@ -218,9 +217,51 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
         </div>
       </div>
 
-      {row(<Timer className="w-4 h-4" />, "Wait between executions", "minutes", "delayMin", "delayMax", 1)}
-      {row(<Users className="w-4 h-4" />, "Process users", "users", "processMin", "processMax", 1)}
-      {row(<Clock className="w-4 h-4" />, "Delay between each", "seconds", "delayAfterUnfollowMin", "delayAfterUnfollowMax", 1)}
+      <div className="border border-border rounded-xl p-4">
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Wait Between Executions (min)</h4>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs whitespace-nowrap text-muted-foreground">Min</Label>
+                {num("delayMin", 1)}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
+                {num("delayMax", 1)}
+              </div>
+            </div>
+          </div>
+          <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Process Users Per Session</h4>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs whitespace-nowrap text-muted-foreground">Min</Label>
+                {num("processMin", 1)}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
+                {num("processMax", 1)}
+              </div>
+            </div>
+          </div>
+          <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Delay Between Each (sec)</h4>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs whitespace-nowrap text-muted-foreground">Min</Label>
+                {num("delayAfterUnfollowMin", 1)}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
+                {num("delayAfterUnfollowMax", 1)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Custom Unfollow Target List */}
       <div className="border border-border rounded-xl p-4 space-y-3">

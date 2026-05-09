@@ -292,11 +292,11 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             Copy Settings
           </button>
           {nextRunStatus && (
-            <span className="flex items-center gap-1 text-[11px] ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+            <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
               {nextRunStatus.executing
-                ? <span className="font-medium">Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono font-medium text-foreground">{nextRunStatus.label}</span></>
+                ? <span>Executing</span>
+                : <><span>Scheduled:</span>&nbsp;<span className="font-mono text-foreground">{nextRunStatus.label}</span></>
               }
             </span>
           )}
@@ -1111,7 +1111,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                                 <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                               </button>
                             ) : (
-                              <span className="text-muted-foreground/40">—</span>
+                              <span className="text-muted-foreground/40"> </span>
                             )}
                           </td>
                           <td className="px-4 py-2.5 whitespace-nowrap text-xs text-muted-foreground font-mono">
@@ -1125,11 +1125,11 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                                 <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                               </button>
                             ) : (
-                              <span className="text-muted-foreground/40">—</span>
+                              <span className="text-muted-foreground/40"> </span>
                             )}
                           </td>
                           <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[240px]">
-                            <span className="line-clamp-2">{rp.caption || "—"}</span>
+                            <span className="line-clamp-2">{rp.caption || " "}</span>
                           </td>
                         </tr>
                       ))

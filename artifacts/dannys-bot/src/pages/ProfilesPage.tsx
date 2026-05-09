@@ -533,6 +533,10 @@ export function ProfilesPage() {
           e.preventDefault();
           handleBulkFixCaptcha();
           break;
+        case "o":
+          e.preventDefault();
+          handleBulkOpenBrowsers();
+          break;
       }
     };
     window.addEventListener("keydown", handler);
@@ -592,6 +596,18 @@ export function ProfilesPage() {
             {filteredProfiles?.length ?? 0} of {profiles?.length ?? 0} accounts
           </span>
         )}
+        <label className="flex items-center gap-1.5 cursor-pointer ml-1 shrink-0">
+          <Checkbox
+            checked={groupMode}
+            onCheckedChange={checked => {
+              const next = !!checked;
+              setGroupMode(next);
+              localStorage.setItem("profiles:groupMode", String(next));
+            }}
+            className="w-3.5 h-3.5"
+          />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Group Accounts</span>
+        </label>
       </div>
 
       <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 178px)" }}>
@@ -607,18 +623,6 @@ export function ProfilesPage() {
                   {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
                 </span>
               </button>
-              <label className="flex items-center gap-1.5 cursor-pointer ml-2 shrink-0">
-                <Checkbox
-                  checked={groupMode}
-                  onCheckedChange={checked => {
-                    const next = !!checked;
-                    setGroupMode(next);
-                    localStorage.setItem("profiles:groupMode", String(next));
-                  }}
-                  className="w-3.5 h-3.5"
-                />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Group Accounts</span>
-              </label>
             </div>
             <button
               onClick={() => cycleSort("status")}
@@ -778,7 +782,7 @@ export function ProfilesPage() {
                     }
                     return (
                       <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2" title={ip || "No proxy"}>
-                        <span className="text-[10px] font-mono text-muted-foreground truncate block">{ip || "—"}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground truncate block">{ip || " "}</span>
                       </div>
                     );
                   })()}
@@ -799,8 +803,8 @@ export function ProfilesPage() {
                         {isCollapsed
                           ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                        <FolderOpen className="w-3.5 h-3.5 text-primary/50 shrink-0" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-foreground truncate">{displayName}</span>
+                        <Tag className="w-3.5 h-3.5 text-primary/50 shrink-0" />
+                        <span className="text-[13px] font-bold uppercase tracking-wider text-foreground truncate">{displayName}</span>
                         <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
                       </button>
                       <button
@@ -999,7 +1003,7 @@ export function ProfilesPage() {
                   // Multiple accounts
                   if ("showDirectoryPicker" in window) {
                     // File System Access API path:
-                    // MUST call showDirectoryPicker BEFORE any awaited fetch —
+                    // MUST call showDirectoryPicker BEFORE any awaited fetch  
                     // the browser only allows it within the original user gesture.
                     let dirHandle: any;
                     try {

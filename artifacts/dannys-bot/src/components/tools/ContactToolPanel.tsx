@@ -105,7 +105,7 @@ export function ContactToolPanel({ tool, profile }: Props) {
           Contact Users
         </button>
         <button
-          className="ml-auto pr-2 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          className="ml-3 mb-0.5 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
           disabled={!hasOtherProfiles}
           onClick={() => setCopyOpen(true)}
         >
