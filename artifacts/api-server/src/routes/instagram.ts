@@ -1176,6 +1176,17 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  app.post("/api/profiles/:profileId/contact-pending-messages/clear", async (req, res) => {
+    const profileId = Number(req.params.profileId);
+    await storage.clearContactPendingMessages(profileId);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/contact-pending-messages/clear-all", async (req, res) => {
+    await storage.clearContactPendingMessages(null);
+    res.json({ ok: true });
+  });
+
   // Get cookie baker activity log for a profile
   app.get("/api/profiles/:id/cookie-baker/activity", async (req, res) => {
     const id = Number(req.params.id);
@@ -1610,46 +1621,59 @@ export async function registerInstagramRoutes(
       const created = await storage.createProfile(cleanProfile);
 
       // Update auto-created tools with saved settings/enabled state, and insert sources
-      if (Array.isArray(toolsData)) {
-        const existingTools = await storage.getToolsByProfile(created.id);
-        for (const savedTool of toolsData) {
-          const match = existingTools.find(t => t.type === savedTool.type);
-          if (match) {
-            await storage.updateTool(match.id, { enabled: savedTool.enabled, settings: savedTool.settings });
-            if (Array.isArray(savedTool.sources) && savedTool.sources.length > 0) {
-              await storage.createSourcesBulk(
-                savedTool.sources.map((s: any) => ({
-                  toolId: match.id,
-                  type: s.type,
-                  value: s.value,
-                  rank: s.rank ?? null,
-                  nrPosts: s.nrPosts ?? null,
-                  targetUserId: "",
-                  hashtagCursor: "",
-                }))
-              );
+      // Each step is best-effort — a failure here must not roll back the already-committed profile
+      try {
+        if (Array.isArray(toolsData)) {
+          const existingTools = await storage.getToolsByProfile(created.id);
+          for (const savedTool of toolsData) {
+            const match = existingTools.find(t => t.type === savedTool.type);
+            if (match) {
+              await storage.updateTool(match.id, { enabled: savedTool.enabled, settings: savedTool.settings });
+              if (Array.isArray(savedTool.sources) && savedTool.sources.length > 0) {
+                await storage.createSourcesBulk(
+                  savedTool.sources.map((s: any) => ({
+                    toolId: match.id,
+                    type: s.type,
+                    value: s.value,
+                    rank: s.rank ?? null,
+                    nrPosts: s.nrPosts ?? null,
+                    targetUserId: "",
+                    hashtagCursor: "",
+                  }))
+                );
+              }
             }
           }
         }
+      } catch (e) {
+        req.log.warn({ err: e }, "import-eqx: failed to restore tool settings (non-fatal)");
       }
 
       // Import followed users
-      if (Array.isArray(fuData) && fuData.length > 0) {
-        await storage.bulkImportFollowedUsers(created.id, fuData.map((f: any) => ({
-          username: f.instagramUsername,
-          userId: f.instagramUserId,
-          followedAt: f.followedAt,
-        })));
+      try {
+        if (Array.isArray(fuData) && fuData.length > 0) {
+          await storage.bulkImportFollowedUsers(created.id, fuData.map((f: any) => ({
+            username: f.instagramUsername,
+            userId: f.instagramUserId,
+            followedAt: f.followedAt,
+          })));
+        }
+      } catch (e) {
+        req.log.warn({ err: e }, "import-eqx: failed to import followed users (non-fatal)");
       }
 
       // Import stats
-      if (Array.isArray(statsData) && statsData.length > 0) {
-        await storage.bulkInsertStats(statsData.map((s: any) => ({
-          profileId: created.id,
-          toolType: s.toolType,
-          count: s.count,
-          date: s.date,
-        })));
+      try {
+        if (Array.isArray(statsData) && statsData.length > 0) {
+          await storage.bulkInsertStats(statsData.map((s: any) => ({
+            profileId: created.id,
+            toolType: s.toolType,
+            count: s.count,
+            date: s.date,
+          })));
+        }
+      } catch (e) {
+        req.log.warn({ err: e }, "import-eqx: failed to import stats (non-fatal)");
       }
 
       return res.status(201).json({

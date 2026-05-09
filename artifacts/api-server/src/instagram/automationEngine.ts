@@ -1254,6 +1254,11 @@ class AutomationEngine {
           await storage.updateContactPendingMessage(msg.id, { unsendAt: undefined });
         }
       } catch (e: any) {
+        const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+        if (acctStatus) {
+          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+          if (acctStatus === "logged_out") state.client = null;
+        }
         console.warn(`[engine] unsend @${msg.instagramUsername} error: ${e?.message}`);
         await storage.updateContactPendingMessage(msg.id, { unsendAt: undefined });
       }
@@ -1677,7 +1682,7 @@ class AutomationEngine {
     s: any,
     state: ProfileState,
     hikerClient: HikerApiClient | null = null,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const uname = user.username;
     const uid = user.pk;
 
@@ -1711,6 +1716,13 @@ class AutomationEngine {
             }
           }
         } catch (e: any) {
+          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          if (acctStatus) {
+            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+            if (acctStatus === "logged_out") state.client = null;
+            this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            return true;
+          }
           console.warn(`[engine] like @${uname} error: ${e?.message}`);
           this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", e?.message ?? "");
           break;
@@ -1742,6 +1754,13 @@ class AutomationEngine {
             await sleep(randInt((s.viewStoriesDelayMin ?? 2) * 1000, (s.viewStoriesDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
+          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          if (acctStatus) {
+            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+            if (acctStatus === "logged_out") state.client = null;
+            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            return true;
+          }
           console.warn(`[engine] stories @${uname} error: ${e?.message}`);
           this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", e?.message ?? "");
           break;
@@ -1770,6 +1789,13 @@ class AutomationEngine {
             await sleep(randInt((s.viewReelsDelayMin ?? 2) * 1000, (s.viewReelsDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
+          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          if (acctStatus) {
+            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+            if (acctStatus === "logged_out") state.client = null;
+            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            return true;
+          }
           console.warn(`[engine] reels @${uname} error: ${e?.message}`);
           this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", e?.message ?? "");
           break;
@@ -1798,12 +1824,20 @@ class AutomationEngine {
             await sleep(randInt((s.viewHighlightsDelayMin ?? 2) * 1000, (s.viewHighlightsDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
+          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          if (acctStatus) {
+            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+            if (acctStatus === "logged_out") state.client = null;
+            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            return true;
+          }
           console.warn(`[engine] highlights @${uname} error: ${e?.message}`);
           this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", e?.message ?? "");
           break;
         }
       }
     }
+    return false;
   }
 
   // ── Spintax resolver: {A|B|C} → picks one branch randomly ────────────────
@@ -2128,6 +2162,25 @@ class AutomationEngine {
     const client = await this.ensureClient(profile, state);
     if (!client) return;
 
+    // Shared account-level error detector for every action in this session.
+    // If Instagram returns login_required / checkpoint / banned / etc., we
+    // immediately update the DB status, null the client, log it, and signal
+    // the queue to stop. Returns true = halt session, false = transient error.
+    let sessionError: string | null = null;
+    const checkSessionErr = async (e: any, actionLabel: string): Promise<boolean> => {
+      const msg = e?.message ?? "";
+      const acctStatus = this.getAccountLevelStatus(msg);
+      if (acctStatus) {
+        console.warn(`[engine] @${profile.username}: ${actionLabel} — account-level error (${acctStatus}): ${msg}`);
+        await storage.updateProfile(profile.id, { accountStatus: acctStatus });
+        if (acctStatus === "logged_out") state.client = null;
+        this.logAction(profile.id, tool.id, "session_error", "", "", "", "error", `[${acctStatus}] ${msg}`);
+        sessionError = acctStatus;
+        return true;
+      }
+      return false;
+    };
+
     // Build the ordered action queue.
     // Each entry: { order: number (random from OrderMin/Max), run: async fn }
     // Actions are sorted ascending by order before executing, so lower numbers
@@ -2161,6 +2214,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 🔔 visited notifications`);
           this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
         } catch (e: any) {
+          if (await checkSessionErr(e, "visit_notifications")) return;
           console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
         }
         try {
@@ -2168,6 +2222,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 👤 visited own profile`);
           this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
         } catch (e: any) {
+          if (await checkSessionErr(e, "visit_own_profile")) return;
           console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
         }
         try {
@@ -2175,6 +2230,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 🔄 refreshed own profile`);
           this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
         } catch (e: any) {
+          if (await checkSessionErr(e, "refresh_own_profile")) return;
           console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
         }
         try {
@@ -2182,6 +2238,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: ⚙️ visited settings & activity`);
           this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
         } catch (e: any) {
+          if (await checkSessionErr(e, "visit_settings_activity")) return;
           console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
         }
       },
@@ -2199,6 +2256,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 📰 viewed ${viewed} timeline post(s)`);
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
         } catch (e: any) {
+          if (await checkSessionErr(e, "view_timeline_feed")) return;
           console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
         }
       },
@@ -2216,6 +2274,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 🎬 watched ${watched} timeline reels`);
           this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reels`);
         } catch (e: any) {
+          if (await checkSessionErr(e, "check_timeline_reels")) return;
           console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
         }
       },
@@ -2233,6 +2292,7 @@ class AutomationEngine {
           console.log(`[engine] @${profile.username}: 📖 watched ${watched} timeline stories`);
           this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
         } catch (e: any) {
+          if (await checkSessionErr(e, "check_timeline_stories")) return;
           console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
         }
       },
@@ -2255,6 +2315,7 @@ class AutomationEngine {
           dmOk = result.ok;
           console.log(`[engine] @${profile.username}: 💬 checked DMs — opened ${dmCount}/${dmOpenCount} thread${dmOpenCount === 1 ? "" : "s"}${dmOk ? "" : " (read failed)"}`);
         } catch (e: any) {
+          if (await checkSessionErr(e, "check_dm")) return;
           console.warn(`[engine] @${profile.username}: check DMs error: ${e?.message}`);
         }
         // Auto-reply scan reuses the already-fetched inbox threads (no second warm-up).
@@ -2263,6 +2324,7 @@ class AutomationEngine {
         try {
           autoReplied = await this.runAutoReplyCheck(profile, inboxThreads.slice(0, dmOpenCount), client);
         } catch (e: any) {
+          if (await checkSessionErr(e, "auto_reply")) return;
           console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
         }
         // Log combined result — appends auto-reply count only when triggers were found.
@@ -2289,7 +2351,7 @@ class AutomationEngine {
             console.warn(`[engine] @${profile.username}: likeTimelinePosts — session expired (login_required), marking logged_out`);
             await storage.updateProfile(profile.id, { accountStatus: "logged_out" });
             state.client = null;
-            hitHardLimit = true;
+            sessionError = "logged_out";
             return;
           }
           const summary = watched > 0
@@ -2322,6 +2384,7 @@ class AutomationEngine {
             }
           }
         } catch (e: any) {
+          if (await checkSessionErr(e, "like_timeline_posts")) return;
           console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
         }
       },
@@ -2397,6 +2460,7 @@ class AutomationEngine {
               }
             }
           } catch (e: any) {
+            if (await checkSessionErr(e, "repost_local_folder")) return;
             console.warn(`[engine] @${profile.username}: local folder repost error: ${e?.message}`);
             this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "fail", e?.message ?? "unknown error");
           }
@@ -2509,6 +2573,7 @@ class AutomationEngine {
             }
           }
         } catch (e: any) {
+          if (await checkSessionErr(e, "repost")) return;
           console.warn(`[engine] @${profile.username}: repost error: ${e?.message}`);
           this.logAction(profile.id, tool.id, "repost", sourceUsername, "", "", "fail", e?.message ?? "unknown error");
         }
@@ -2521,8 +2586,9 @@ class AutomationEngine {
     const orderSummary = queue.map(e => `${e.label}(${e.order})`).join(" → ");
     console.log(`[engine] @${profile.username}: session order: ${orderSummary || "(nothing to run)"}`);
 
-    // Execute in sorted order
+    // Execute in sorted order — stop immediately on any account-level error
     for (const entry of queue) {
+      if (sessionError) break;
       await entry.run();
     }
   }
@@ -2653,7 +2719,13 @@ class AutomationEngine {
       }
     } catch (err: any) {
       engineLog("ERROR", `@${profile.username}: scrape error: ${err?.message}`);
-      if (/login_required|Not authenticated|session/i.test(err?.message ?? "")) state.client = null;
+      const scrapeAcctStatus = this.getAccountLevelStatus(err?.message ?? "");
+      if (scrapeAcctStatus) {
+        await storage.updateProfile(profile.id, { accountStatus: scrapeAcctStatus });
+        if (scrapeAcctStatus === "logged_out") state.client = null;
+      } else if (/login_required|Not authenticated|session/i.test(err?.message ?? "")) {
+        state.client = null;
+      }
       return zero;
     }
 
@@ -2715,7 +2787,7 @@ class AutomationEngine {
       }
 
       // Pre-follow action variations (like, stories, reels, highlights)
-      await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient);
+      if (await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient)) { hitHardLimit = true; break; }
 
       // Follow
       let result: { ok: boolean; status?: string; reason?: string };
@@ -2877,7 +2949,7 @@ class AutomationEngine {
             filterSkipped++; continue;
           }
           if (this.isActionSuspended(state, "follow")) { hitHardLimit = true; break; }
-          await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient);
+          if (await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient)) { hitHardLimit = true; break; }
           let result: { ok: boolean; status?: string; reason?: string };
           try {
             const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;

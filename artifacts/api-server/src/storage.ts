@@ -95,6 +95,7 @@ export interface IStorage {
   createContactPendingMessage(entry: InsertContactPendingMessage): Promise<ContactPendingMessage>;
   updateContactPendingMessage(id: number, updates: Partial<Pick<ContactPendingMessage, 'status' | 'sentAt' | 'dmThreadId' | 'dmItemId' | 'unsendAt'>>): Promise<void>;
   deleteContactPendingMessage(id: number): Promise<void>;
+  clearContactPendingMessages(profileId: number | null): Promise<void>;
   isContactAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
   hasAnyMessageRecord(profileId: number, instagramUsername: string): Promise<boolean>;
   isAutoReplyAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean>;
@@ -551,6 +552,13 @@ export class DatabaseStorage implements IStorage {
 
   async deleteContactPendingMessage(id: number): Promise<void> {
     await db.delete(contactPendingMessages).where(eq(contactPendingMessages.id, id));
+  }
+
+  async clearContactPendingMessages(profileId: number | null): Promise<void> {
+    const condition = profileId !== null
+      ? and(eq(contactPendingMessages.profileId, profileId), eq(contactPendingMessages.status, "pending"))
+      : eq(contactPendingMessages.status, "pending");
+    await db.delete(contactPendingMessages).where(condition);
   }
 
   async isContactAlreadyQueued(profileId: number, instagramUsername: string): Promise<boolean> {

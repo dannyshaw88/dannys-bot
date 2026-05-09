@@ -55,6 +55,22 @@ export function ContactUsersPanel({ tool, profile }: Props) {
     },
   });
 
+  const clearPendingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/profiles/${profile.id}/contact-pending-messages/clear`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to clear pending messages");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }),
+  });
+
+  const clearAllPendingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/contact-pending-messages/clear-all`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to clear all pending messages");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] }),
+  });
+
   const pending = [...(allMessages?.filter(m => m.status === "pending") ?? [])]
     .sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
   const sent = [...(allMessages?.filter(m => m.status !== "pending") ?? [])]
@@ -232,6 +248,28 @@ export function ContactUsersPanel({ tool, profile }: Props) {
               <Zap className="w-3 h-3" />
               {sendNowMutation.isPending ? "Sending…" : "Send Now"}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+              disabled={clearPendingMutation.isPending || !pending.length}
+              onClick={() => clearPendingMutation.mutate()}
+              title="Clear all pending messages for this account"
+            >
+              <Trash2 className="w-3 h-3" />
+              {clearPendingMutation.isPending ? "Clearing…" : "Clear Pending"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2.5 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+              disabled={clearAllPendingMutation.isPending}
+              onClick={() => clearAllPendingMutation.mutate()}
+              title="Clear pending messages on ALL accounts"
+            >
+              <Users className="w-3 h-3" />
+              {clearAllPendingMutation.isPending ? "Clearing…" : "Clear All Accounts"}
+            </Button>
             <button
               onClick={() => queryClient.invalidateQueries({ queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`] })}
               className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground"
@@ -347,7 +385,7 @@ export function ContactUsersPanel({ tool, profile }: Props) {
                     </td>
                     <td className="px-4 py-2 text-muted-foreground text-xs max-w-xs truncate">{msg.messageText}</td>
                     <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
-                      {msg.sentAt ? format(new Date(msg.sentAt), "MMM d, HH:mm") : "—"}
+                      {msg.sentAt ? format(new Date(msg.sentAt), "MMM d, HH:mm") : " "}
                     </td>
                     <td className="px-4 py-2">
                       <Button
