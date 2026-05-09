@@ -1236,15 +1236,32 @@ export async function browserAutoLogin(
 
     // ── Step 6: Detect what's on screen by content, not URL ──────────────────
     // The 2FA hash-route URL still contains "/accounts/login" — can't use URL alone.
-    const pageText = await s.page.evaluate(() =>
-      (document.body?.innerText || "").slice(0, 600).trim()
-    ).catch(() => "");
+    // Also check dialogs/modals separately — Instagram renders "Incorrect password"
+    // as an overlay portal that may not appear in the first 600 chars of body text.
+    const [pageText, dialogText] = await Promise.all([
+      s.page.evaluate(() => (document.body?.innerText || "").slice(0, 600).trim()).catch(() => ""),
+      s.page.evaluate(() => {
+        const dialogs = Array.from(document.querySelectorAll<HTMLElement>(
+          '[role="dialog"], [role="alertdialog"], [aria-modal="true"]'
+        ));
+        return dialogs.map(d => (d.innerText || d.textContent || "").trim()).join(" ").slice(0, 300);
+      }).catch(() => ""),
+    ]);
+    const allText = `${pageText} ${dialogText}`;
     const pageUrl = s.page.url();
     sendStatus(profileId, `After submit → URL: ${pageUrl.slice(0, 80)}`);
     sendStatus(profileId, `Page text snippet: "${pageText.slice(0, 120)}"`);
+    if (dialogText) sendStatus(profileId, `Dialog text: "${dialogText.slice(0, 120)}"`);
     log(`[autoLogin:${profileId}] Page after submit: "${pageText.slice(0, 150)}"`, 'browser');
 
-    const is2FA = /authentication.app|6.digit|two.factor|verif|security.code|confirmation.code|backup.code|enter.the.code/i.test(pageText) ||
+    // Check for "Incorrect password" or "wrong password" in any dialog/overlay
+    const isWrongPassword = /incorrect.{0,20}password|wrong.{0,20}password|password.{0,20}incorrect|bad.?password/i.test(allText);
+    if (isWrongPassword) {
+      sendStatus(profileId, "⚠ Instagram says the password is incorrect. Update the password in Account Details and try again.");
+      return { ok: false, message: "Incorrect password — update it in Account Details." };
+    }
+
+    const is2FA = /authentication.app|6.digit|two.factor|verif|security.code|confirmation.code|backup.code|enter.the.code/i.test(allText) ||
                   pageUrl.includes("/two_factor") || pageUrl.includes("challenge");
 
     const isLoggedIn = !pageText.includes("Username, email or mobile number") &&
