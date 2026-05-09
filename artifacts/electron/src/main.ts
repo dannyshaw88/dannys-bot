@@ -105,24 +105,11 @@ function waitForServer(port: number, timeoutMs = 30000): Promise<void> {
 }
 
 function findChromiumPath(): string {
-  if (process.platform === "win32") {
-    const localAppData = process.env.LOCALAPPDATA || "";
-    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
-    const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
-    const candidates = [
-      path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
-      path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
-      path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
-      path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
-      path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
-      path.join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe"),
-      path.join(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
-    ];
-    for (const p of candidates) {
-      try { if (fs.existsSync(p)) return p; } catch {}
-    }
-    return "";
-  }
+  // On Windows: return empty — the EB uses puppeteer's own self-contained
+  // Chrome for Testing, stored in the app's user-data folder. This ensures the
+  // app NEVER touches the user's personal Chrome / Edge / Brave installation.
+  if (process.platform === "win32") return "";
+
   // Linux / macOS (dev environment — Nix-managed Chromium)
   return process.env.CHROMIUM_PATH
     || "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
@@ -163,6 +150,10 @@ function startServer(port: number, logPath: string): void {
       NODE_TLS_REJECT_UNAUTHORIZED: "0",
       ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
+      // Puppeteer stores its self-downloaded Chrome here, isolated from any
+      // user-installed browsers.  The folder lives inside the app's userData
+      // so it persists across updates without polluting the system.
+      PUPPETEER_CACHE_DIR: path.join(getUserDataPath(), "puppeteer-cache"),
     },
   });
 
@@ -520,13 +511,10 @@ function setupBackupHandlers() {
     scheduleAutoBackup(enabled, intervalDays);
   });
 
-  ipcMain.handle("open-browser-window", (_event, { profileId }: { profileId: number; username: string; userAgent: string }) => {
-    // Open as a tab in the user's default browser (Chrome/Edge) so each profile
-    // gets its own browser tab rather than a secondary Electron window.
-    // The Puppeteer session (user agent, cookies, proxy) is managed server-side
-    // and is unaffected by which client renders the browser panel UI.
-    shell.openExternal(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
-  });
+  // open-browser-window is no longer used — EBs open as in-app overlays via
+  // the React BrowserWindow component (SSE canvas stream).  Handler kept as a
+  // no-op so older preload builds that still invoke it don't throw an IPC error.
+  ipcMain.handle("open-browser-window", () => {});
 }
 
 async function createWindow() {

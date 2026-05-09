@@ -120,10 +120,66 @@ const LAUNCH_ARGS = [
   "--window-size=1280,760",
 ];
 
-// Chromium executable — resolved from env (set by Electron main on Windows) or Nix store (Linux dev)
+// On Linux/dev, CHROMIUM_PATH is set to the Nix-managed Chromium by Electron main.
+// On Windows (packaged app), CHROMIUM_PATH is intentionally NOT set — the app uses
+// puppeteer's own self-contained Chrome for Testing instead of the user's browser.
+const NIX_CHROMIUM = "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
-  "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+  (fs.existsSync(NIX_CHROMIUM) ? NIX_CHROMIUM : "");
+
+// Ensure puppeteer's own Chrome is installed in the app's cache dir.
+// On first EB use it will download Chrome for Testing (~180 MB) — a one-time
+// setup that runs silently in the background.  Subsequent launches are instant.
+async function ensureBrowserInstalled(puppeteerLib: any): Promise<string> {
+  const cacheDir =
+    process.env.PUPPETEER_CACHE_DIR ||
+    path.join(os.homedir(), ".cache", "puppeteer");
+
+  const exePath: string = puppeteerLib.executablePath?.() ?? "";
+  if (exePath && fs.existsSync(exePath)) return exePath;
+
+  log("Built-in browser not found — downloading Chrome for Testing (one-time ~180 MB)...");
+
+  try {
+    // @puppeteer/browsers is a direct dependency of the puppeteer package and
+    // is resolved via the same NODE_PATH in the packaged app.
+    const browsers = await import("@puppeteer/browsers");
+    const platform = browsers.detectBrowserPlatform();
+    if (!platform) throw new Error("Unsupported platform");
+
+    const buildId = await browsers.resolveBuildId(
+      "chrome" as any,
+      platform,
+      "stable",
+    );
+    log(`Downloading Chrome ${buildId} for ${platform}...`);
+
+    await browsers.install({
+      browser: "chrome" as any,
+      buildId,
+      cacheDir,
+      downloadProgressCallback: (downloaded: number, total: number) => {
+        if (total > 0) {
+          const pct = Math.round((downloaded / total) * 100);
+          if (pct % 20 === 0) log(`Browser download: ${pct}%`);
+        }
+      },
+    });
+
+    log("Built-in browser installed successfully.");
+    const newPath: string = puppeteerLib.executablePath?.() ?? "";
+    if (!newPath || !fs.existsSync(newPath)) {
+      throw new Error("Browser installed but executable not found at expected path.");
+    }
+    return newPath;
+  } catch (err: any) {
+    throw new Error(
+      `Failed to install built-in browser: ${err?.message ?? err}\n` +
+      "Please check your internet connection and restart Equinox.",
+    );
+  }
+}
 
 export async function applyStealthScripts(page: Page): Promise<void> {
   await page.evaluateOnNewDocument(() => {
@@ -186,34 +242,37 @@ export async function getOrCreateSession(
   }
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
 
-  // Each session gets its OWN isolated user-data-dir in the OS temp folder.
-  // Without this, Chrome reuses the user's already-running Chrome process (which
-  // has a visible window), causing the EB to hijack their personal browser
-  // instead of running as a completely hidden, isolated internal session.
+  // Each session gets its OWN isolated user-data-dir so Chrome never reuses or
+  // touches any existing browser session on the machine.
   const userDataDir = path.join(os.tmpdir(), `equinox-eb-${profileId}`);
   fs.mkdirSync(userDataDir, { recursive: true });
   const userDataArg = [`--user-data-dir=${userDataDir}`];
 
-  // Try puppeteer-core first (ships with Electron app, no bundled Chromium).
-  // Fall back to the full puppeteer package (used in Linux dev where it manages its own Chromium).
+  // Always use the full puppeteer package first — it manages its own self-contained
+  // Chrome for Testing and never touches the user's personal browser.
+  // Fall back to puppeteer-core only when the full package is unavailable.
   let puppeteerLib: any;
   try {
-    puppeteerLib = (await import("puppeteer-core")).default;
-  } catch {
     puppeteerLib = (await import("puppeteer")).default;
+  } catch {
+    puppeteerLib = (await import("puppeteer-core")).default;
   }
 
-  if (!CHROMIUM_PATH) {
-    throw new Error(
-      "No Chromium executable found. Please install Google Chrome or Microsoft Edge and restart the app.",
-    );
+  // Resolve the executable path:
+  //  • Linux/dev  → CHROMIUM_PATH (Nix-managed Chromium set by Electron main)
+  //  • Windows    → puppeteer's own Chrome for Testing (auto-downloaded on first use)
+  let executablePath: string;
+  if (CHROMIUM_PATH) {
+    // Linux dev: Nix-managed Chromium is already present
+    executablePath = CHROMIUM_PATH;
+  } else {
+    // Windows / packaged app: use (or download) puppeteer's own Chrome
+    executablePath = await ensureBrowserInstalled(puppeteerLib);
   }
 
   const browser = await puppeteerLib.launch({
-    // Chrome 112+ removed the old headless protocol — must use 'new' so Chrome
-    // launches headlessly instead of opening a visible browser window.
     headless: "new",
-    executablePath: CHROMIUM_PATH,
+    executablePath,
     args: [...LAUNCH_ARGS, ...userDataArg, ...proxyArg],
     ignoreHTTPSErrors: true,
   });
