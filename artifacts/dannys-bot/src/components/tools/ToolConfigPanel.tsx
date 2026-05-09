@@ -871,6 +871,64 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                       </div>
                     </div>
                   </div>
+
+                  <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        id="injectSearchEnabled"
+                        checked={!!(settings as any).injectSearchEnabled}
+                        onChange={(e) => setSettings({ ...settings, injectSearchEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                      />
+                      <label htmlFor="injectSearchEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+                        Inject SearchByUsername
+                      </label>
+                    </div>
+                    <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSearchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                        value={(settings as any).injectSearchMin ?? 30}
+                        onChange={(e) => setSettings({ ...settings, injectSearchMin: Number(e.target.value) } as any)}
+                      />
+                      <span className="text-[10px] text-muted-foreground">–</span>
+                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                        value={(settings as any).injectSearchMax ?? 50}
+                        onChange={(e) => setSettings({ ...settings, injectSearchMax: Number(e.target.value) } as any)}
+                      />
+                      <span className="text-[10px] text-muted-foreground">%</span>
+                    </div>
+                  </div>
+
+                  <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        id="injectSuggestedEnabled"
+                        checked={!!(settings as any).injectSuggestedEnabled}
+                        onChange={(e) => setSettings({ ...settings, injectSuggestedEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                      />
+                      <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+                        Inject GetSuggestedUsers
+                      </label>
+                    </div>
+                    <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                        value={(settings as any).injectSuggestedMin ?? 40}
+                        onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Number(e.target.value) } as any)}
+                      />
+                      <span className="text-[10px] text-muted-foreground">–</span>
+                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                        value={(settings as any).injectSuggestedMax ?? 60}
+                        onChange={(e) => setSettings({ ...settings, injectSuggestedMax: Number(e.target.value) } as any)}
+                      />
+                      <span className="text-[10px] text-muted-foreground">%</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 

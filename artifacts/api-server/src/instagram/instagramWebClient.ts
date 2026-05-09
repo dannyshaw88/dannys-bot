@@ -245,6 +245,9 @@ export class InstagramWebClient {
   private mobileCookieJar: string[] = [];
   private mobileCsrf = "";
   private mobileSessionReady = false;
+  // Set by _mobileLogin when the failure is definitively bad credentials so
+  // ensureClient can propagate the status to the DB without guessing.
+  lastMobileLoginFailureReason: "bad_password" | null = null;
 
   // Device state from the profile — used by IgApiClient to maintain consistent
   // device fingerprint across mobile login attempts (same uuid/deviceId/phoneId).
@@ -700,6 +703,8 @@ export class InstagramWebClient {
           console.error(`[webClient] @${username}: mobile login — Instagram says: "${errorTitle}" (email action present). error_type="${errorType}"`);
         } else {
           console.error(`[webClient] @${username}: mobile login — bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}"`);
+          // Signal to ensureClient that this is definitively wrong credentials, not a transient error.
+          this.lastMobileLoginFailureReason = "bad_password";
         }
         return false;
       } else {
@@ -2681,5 +2686,14 @@ export class InstagramWebClient {
       const match = users.find((u: any) => String(u.username).toLowerCase() === username.toLowerCase());
       return match ? { pk: String(match.pk), username: String(match.username) } : null;
     }, `Search @${username}`);
+  }
+
+  // ── Get suggested users (discover/ayml) ──────────────────────────────────
+  // Simulates a user visiting the "Suggested for you" / discover page.
+  // Called between follows to add natural API variety.
+  async getSuggestedUsers(): Promise<void> {
+    return this.timed("GetSuggestedUsers", async () => {
+      await this.mobileGet(`/api/v1/discover/ayml/`);
+    }, "Get suggested users");
   }
 }

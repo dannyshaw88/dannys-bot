@@ -2731,6 +2731,28 @@ class AutomationEngine {
 
     engineLog("INFO", `@${profile.username}: scraped ${candidates.length} candidates (target: ${processCount})`);
 
+    // Inject /api/v1/users/search/ before the very first follow of every session.
+    // Simulates the user searching in the search bar before following — adds natural API signal.
+    if (candidates.length > 0) {
+      const searchQuery = source.type === "target_followers"
+        ? source.value.replace(/^@/, "")
+        : (candidates[0]?.username ?? source.value);
+      if (searchQuery) {
+        try {
+          await client.searchUserByUsername(searchQuery);
+          engineLog("INFO", `@${profile.username}: injected user search for "${searchQuery}" before first follow`);
+        } catch { /* non-critical */ }
+      }
+    }
+
+    const injectSuggestedEnabled = !!(s.injectSuggestedEnabled);
+    const injectSuggestedMin     = Math.max(0, Math.min(100, s.injectSuggestedMin ?? 40));
+    const injectSuggestedMax     = Math.max(0, Math.min(100, s.injectSuggestedMax ?? 60));
+
+    const injectSearchEnabled = !!(s.injectSearchEnabled);
+    const injectSearchMin     = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
+    const injectSearchMax     = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
+
     let followed = 0, dedupSkipped = 0, filterSkipped = 0, blocked = 0, skipped = 0;
     let hitHardLimit = false; // true when a real cap/block/stop occurred (not just ran out of candidates)
 
@@ -2788,6 +2810,37 @@ class AutomationEngine {
 
       // Pre-follow action variations (like, stories, reels, highlights)
       if (await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient)) { hitHardLimit = true; break; }
+
+      // Inject GetSuggestedUsers and/or searchUserByUsername before some follows (follows 2+).
+      // RULE: searchUserByUsername must NEVER fire immediately before getSuggestedUsers —
+      // that is not a real app flow (you cannot reach suggested users from the search bar).
+      // So we roll for getSuggestedUsers first; if it fires we skip the search injection for
+      // this follow slot entirely.
+      if (followed > 0) {
+        let suggestedFired = false;
+
+        if (injectSuggestedEnabled) {
+          const threshold = randInt(injectSuggestedMin, injectSuggestedMax);
+          if (Math.random() * 100 < threshold) {
+            try {
+              await client.getSuggestedUsers();
+              engineLog("INFO", `@${profile.username}: injected getSuggestedUsers before follow #${followed + 1}`);
+              suggestedFired = true;
+            } catch { /* non-critical */ }
+          }
+        }
+
+        // Only inject search if getSuggestedUsers did NOT fire this slot
+        if (!suggestedFired && injectSearchEnabled) {
+          const threshold = randInt(injectSearchMin, injectSearchMax);
+          if (Math.random() * 100 < threshold) {
+            try {
+              await client.searchUserByUsername(user.username);
+              engineLog("INFO", `@${profile.username}: injected searchUserByUsername("${user.username}") before follow #${followed + 1}`);
+            } catch { /* non-critical */ }
+          }
+        }
+      }
 
       // Follow
       let result: { ok: boolean; status?: string; reason?: string };

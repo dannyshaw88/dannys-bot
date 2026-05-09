@@ -336,7 +336,22 @@ export async function registerInstagramRoutes(
   app.put("/api/profiles/:id", handleProfileUpdate);
 
   app.delete(api.profiles.delete.path, async (req, res) => {
-    await storage.deleteProfile(Number(req.params.id));
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    await storage.deleteProfile(profileId);
+    if (profile) {
+      storage.createSessionAction({
+        profileId,
+        toolId: 0,
+        action: "account_deleted",
+        targetUsername: profile.username ?? "",
+        sourceValue: "",
+        sourceType: "system",
+        result: "ok",
+        detail: `Account @${profile.username} deleted`,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
+    }
     res.status(204).end();
   });
 
@@ -1603,6 +1618,17 @@ export async function registerInstagramRoutes(
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Disposition", `attachment; filename="${safeUsername}.eqx"`);
       res.send(encrypted);
+      storage.createSessionAction({
+        profileId: id,
+        toolId: 0,
+        action: "account_exported",
+        targetUsername: profile.username ?? "",
+        sourceValue: "",
+        sourceType: "system",
+        result: "ok",
+        detail: `Account @${profile.username} exported as ${safeUsername}.eqx`,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
     } catch (e: any) {
       req.log.error({ err: e }, "export-eqx failed");
       return res.status(500).json({ error: e?.message });

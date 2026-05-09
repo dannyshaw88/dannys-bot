@@ -5,7 +5,6 @@ import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
   Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Plus, Upload
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 function cleanLoginError(msg: string): string {
@@ -56,7 +55,6 @@ function nowTs() {
 }
 
 export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelProps) {
-  const { toast } = useToast();
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const esRef = useRef<EventSource | null>(null);
@@ -390,10 +388,9 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     try {
       await fetch(`/api/browser/${profileId}/session`, { method: "DELETE" });
       setLoginState("idle");
-      toast({ title: "Session Cleared", description: "Cookies wiped reconnecting with fresh browser." });
       setTimeout(connect, 800);
     } catch {
-      toast({ title: "Error", description: "Could not clear session.", variant: "destructive" });
+      console.error("Could not clear session.");
     }
   };
 
