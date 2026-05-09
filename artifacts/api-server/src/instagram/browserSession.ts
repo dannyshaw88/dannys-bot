@@ -134,22 +134,58 @@ const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 
-export async function applyStealthScripts(page: Page): Promise<void> {
-  await page.evaluateOnNewDocument(() => {
+// Detect whether a UA string represents a mobile Chrome Android browser.
+// Used to decide which fingerprint values to spoof — mobile and desktop
+// have completely different screen, touch, and platform signals.
+function isMobileUA(ua: string): boolean {
+  return /Android/i.test(ua) && /Mobile Safari/i.test(ua);
+}
+
+// Return Puppeteer viewport options consistent with the UA.
+// Puppeteer's isMobile+hasTouch flags also wire up Chromium's internal touch
+// emulation so navigator.maxTouchPoints is already > 0 at the C++ layer —
+// but we override it in JS too for belt-and-braces.
+export function viewportForUA(ua: string): { width: number; height: number; deviceScaleFactor?: number; isMobile?: boolean; hasTouch?: boolean } {
+  if (isMobileUA(ua)) {
+    // 412×915 is the logical (CSS pixel) resolution of a modern Android flagship
+    // at ~2.625× device pixel ratio.  Matches most Samsung/Pixel profiles.
+    return { width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true };
+  }
+  return { width: 1280, height: 760 };
+}
+
+export async function applyStealthScripts(page: Page, userAgent: string): Promise<void> {
+  const mobile = isMobileUA(userAgent);
+  await page.evaluateOnNewDocument((mobile: boolean) => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-    Object.defineProperty(navigator, "plugins", {
-      get: () => {
-        const arr: any[] = [
-          { name: "Chrome PDF Plugin", filename: "internal-pdf-viewer", description: "Portable Document Format", length: 1 },
-          { name: "Chrome PDF Viewer", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai", description: "", length: 1 },
-          { name: "Native Client", filename: "internal-nacl-plugin", description: "", length: 2 },
-        ];
-        arr.item = (i: number) => arr[i];
-        arr.namedItem = (n: string) => arr.find((p: any) => p.name === n) ?? null;
-        Object.setPrototypeOf(arr, PluginArray.prototype);
-        return arr;
-      },
-    });
+
+    if (mobile) {
+      // Mobile Chrome has no exposed plugin list
+      Object.defineProperty(navigator, "plugins", {
+        get: () => {
+          const arr: any[] = [];
+          arr.item = () => null;
+          arr.namedItem = () => null;
+          try { Object.setPrototypeOf(arr, PluginArray.prototype); } catch {}
+          return arr;
+        },
+      });
+    } else {
+      Object.defineProperty(navigator, "plugins", {
+        get: () => {
+          const arr: any[] = [
+            { name: "Chrome PDF Plugin", filename: "internal-pdf-viewer", description: "Portable Document Format", length: 1 },
+            { name: "Chrome PDF Viewer", filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai", description: "", length: 1 },
+            { name: "Native Client", filename: "internal-nacl-plugin", description: "", length: 2 },
+          ];
+          arr.item = (i: number) => arr[i];
+          arr.namedItem = (n: string) => arr.find((p: any) => p.name === n) ?? null;
+          Object.setPrototypeOf(arr, PluginArray.prototype);
+          return arr;
+        },
+      });
+    }
+
     Object.defineProperty(navigator, "languages", { get: () => ["en-US", "en"] });
     (window as any).chrome = { app: { isInstalled: false }, runtime: {}, loadTimes: () => ({}), csi: () => ({}) };
     const originalQuery = window.navigator.permissions?.query;
@@ -159,16 +195,34 @@ export async function applyStealthScripts(page: Page): Promise<void> {
           ? Promise.resolve({ state: "prompt", onchange: null } as PermissionStatus)
           : originalQuery.call(window.navigator.permissions, params);
     }
-    Object.defineProperty(screen, "width",       { get: () => 1920 });
-    Object.defineProperty(screen, "height",      { get: () => 1080 });
-    Object.defineProperty(screen, "availWidth",  { get: () => 1920 });
-    Object.defineProperty(screen, "availHeight", { get: () => 1040 });
-    Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
-    Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
-    Object.defineProperty(navigator, "maxTouchPoints",       { get: () => 0 });
-    Object.defineProperty(navigator, "hardwareConcurrency",  { get: () => 8 });
-    Object.defineProperty(navigator, "deviceMemory",         { get: () => 8 });
-  });
+
+    if (mobile) {
+      // Mobile fingerprint — must match a real Android Chrome session.
+      // screen.width/height are CSS (logical) pixels, not physical pixels.
+      Object.defineProperty(screen, "width",       { get: () => 412 });
+      Object.defineProperty(screen, "height",      { get: () => 915 });
+      Object.defineProperty(screen, "availWidth",  { get: () => 412 });
+      Object.defineProperty(screen, "availHeight", { get: () => 892 });
+      Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
+      Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
+      // maxTouchPoints > 0 is required — 0 immediately exposes a non-touch device
+      Object.defineProperty(navigator, "maxTouchPoints",      { get: () => 10 });
+      // platform on Android Chrome is "Linux armv8l" — not "Linux x86_64"
+      Object.defineProperty(navigator, "platform",            { get: () => "Linux armv8l" });
+      Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
+      Object.defineProperty(navigator, "deviceMemory",        { get: () => 4 });
+    } else {
+      Object.defineProperty(screen, "width",       { get: () => 1920 });
+      Object.defineProperty(screen, "height",      { get: () => 1080 });
+      Object.defineProperty(screen, "availWidth",  { get: () => 1920 });
+      Object.defineProperty(screen, "availHeight", { get: () => 1040 });
+      Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
+      Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
+      Object.defineProperty(navigator, "maxTouchPoints",      { get: () => 0 });
+      Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
+      Object.defineProperty(navigator, "deviceMemory",        { get: () => 8 });
+    }
+  }, mobile);
 }
 
 export async function getOrCreateSession(
@@ -259,7 +313,7 @@ export async function getOrCreateSession(
 
   const [page] = await browser.pages();
   await page.setUserAgent(userAgent);
-  await page.setViewport({ width: 1280, height: 760 });
+  await page.setViewport(viewportForUA(userAgent));
 
   // Authenticate proxy if credentials supplied.
   // page.authenticate() handles the 407 Proxy Auth challenge Chromium receives on CONNECT.
@@ -269,7 +323,7 @@ export async function getOrCreateSession(
   log(`Chrome launched for profile ${profileId}`, "browser");
 
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
-  await applyStealthScripts(page);
+  await applyStealthScripts(page, userAgent);
 
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
   page.on("framenavigated", async (frame) => {
@@ -370,8 +424,8 @@ export async function getOrCreateSession(
       const newPage = await target.page();
       if (!newPage) return;
       await newPage.setUserAgent(userAgent);
-      await newPage.setViewport({ width: 1280, height: 760 });
-      await applyStealthScripts(newPage);
+      await newPage.setViewport(viewportForUA(userAgent));
+      await applyStealthScripts(newPage, userAgent);
       // Also intercept file choosers on any popup page
       (newPage as any).on("filechooser", (chooser: any) => {
         pendingFileChoosers.set(profileId, chooser);
@@ -745,8 +799,8 @@ export async function browserNewTab(profileId: number) {
     // Use the profile's stored UA — same as the main page, so Instagram sees
     // a consistent device across all tabs (not "HeadlessChrome" on new tabs).
     await newPage.setUserAgent(s.userAgent);
-    await newPage.setViewport({ width: 1280, height: 760 });
-    await applyStealthScripts(newPage);
+    await newPage.setViewport(viewportForUA(s.userAgent));
+    await applyStealthScripts(newPage, s.userAgent);
     // File chooser interception for new tab
     (newPage as any).on("filechooser", (chooser: any) => {
       pendingFileChoosers.set(profileId, chooser);
@@ -1816,7 +1870,7 @@ export async function borrowEbPageForCookieBaker(profileId: number): Promise<any
   if (!s) return null;
   try {
     const page = await s.browser.newPage();
-    await page.setViewport({ width: 1280, height: 760 });
+    await page.setViewport(viewportForUA(s.userAgent));
     s.pages.push(page);
     s.activePage = s.pages.length - 1;
     s.page = page;

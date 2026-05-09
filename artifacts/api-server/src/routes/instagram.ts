@@ -1720,6 +1720,18 @@ export async function registerInstagramRoutes(
         req.log.warn({ err: e }, "import-eqx: failed to import stats (non-fatal)");
       }
 
+      storage.createSessionAction({
+        profileId: created.id,
+        toolId: 0,
+        action: "account_imported",
+        targetUsername: created.username ?? "",
+        sourceValue: "",
+        sourceType: "system",
+        result: "ok",
+        detail: `Account @${created.username} imported from .eqx file (${fuData?.length ?? 0} followed users restored)`,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
+
       return res.status(201).json({
         ok: true,
         profileId: created.id,

@@ -25,7 +25,7 @@ import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
-import { applyStealthScripts, getExistingBrowser } from "./browserSession";
+import { applyStealthScripts, getExistingBrowser, viewportForUA } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -3411,8 +3411,8 @@ class AutomationEngine {
         const tab = await existingBrowser.newPage();
         if (proxyAuth) await tab.authenticate(proxyAuth);
         await tab.setUserAgent(ua);
-        await tab.setViewport({ width: 1280, height: 760 });
-        await applyStealthScripts(tab);
+        await tab.setViewport(viewportForUA(ua));
+        await applyStealthScripts(tab, ua);
         bakePage = tab;
         usingEbBrowser = true;
         console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [EB tab]`);
@@ -3463,8 +3463,8 @@ class AutomationEngine {
         const headlessPage = await headlessBrowser.newPage();
         if (proxyAuth) await headlessPage.authenticate(proxyAuth);
         await headlessPage.setUserAgent(ua);
-        await headlessPage.setViewport({ width: 1280, height: 760 });
-        await applyStealthScripts(headlessPage);
+        await headlessPage.setViewport(viewportForUA(ua));
+        await applyStealthScripts(headlessPage, ua);
         bakePage = headlessPage;
       } catch (launchErr: any) {
         const errMsg = `Browser failed to launch: ${launchErr?.message ?? "unknown error"}`;
