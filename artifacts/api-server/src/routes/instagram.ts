@@ -999,7 +999,7 @@ export async function registerInstagramRoutes(
     res.flushHeaders();
 
     // Send SSE keepalive comments every 20 s while the browser is starting up.
-    // Prevents proxy/browser timeouts during the one-time ~150 MB Chrome download.
+    // Prevents proxy/connection timeouts during Chrome launch.
     const keepalive = setInterval(() => {
       if (!res.writableEnded) res.write(": keepalive\n\n");
     }, 20_000);

@@ -16,15 +16,18 @@ This is an **API-based Instagram automation bot** that emulates mobile sessions 
 - All Instagram actions go through the Mobile Private API or HikerAPI
 
 ## EB Browser Engine
-- **Windows (packaged)**: Uses puppeteer's own **Chrome for Testing** — completely self-contained, never touches the user's personal Chrome/Edge/Brave
-  - `PUPPETEER_CACHE_DIR` = `{userData}/puppeteer-cache` (set by Electron main.ts)
-  - On first EB launch: auto-downloads Chrome for Testing (~180 MB) via `puppeteer/install.mjs`
-  - Subsequent launches: instant (Chrome already cached)
-- **Linux/dev (Replit)**: Uses Nix-managed Chromium at `/nix/store/...`
-- Each session gets an isolated `--user-data-dir` in `os.tmpdir()/equinox-eb-<profileId>`
+- **Windows (packaged)**: `findChromiumPath()` in `electron/src/main.ts` finds the user's
+  installed Chrome, Edge, or Brave at known Windows paths and passes it as `CHROMIUM_PATH` env var
+  to the API server child process. Chrome launches **headless** (`headless:"new"`) with an
+  **isolated `--user-data-dir`** in `os.tmpdir()` so it is completely invisible and never touches
+  the user's personal browser profile or data.
+- **Linux/dev (Replit)**: Falls back to Nix-managed Chromium at the hardcoded Nix store path
+- Each session gets an isolated `--user-data-dir` at `os.tmpdir()/equinox-eb-<profileId>`
+- **NO downloading** of Chrome — uses whatever browser is installed on the machine
+- If no browser is found: shows error "Please install Google Chrome or Microsoft Edge, then restart Equinox"
 
 ## Key Files
-- `artifacts/electron/src/main.ts` — Electron main process, server spawn, `PUPPETEER_CACHE_DIR` env
+- `artifacts/electron/src/main.ts` — Electron main process, `findChromiumPath()`, server spawn
 - `artifacts/api-server/src/instagram/browserSession.ts` — EB session management, Puppeteer launch
 - `artifacts/api-server/src/instagram/hikerApiClient.ts` — HikerAPI v2/v1 follower fallback
 - `artifacts/api-server/src/routes/instagram.ts` — all Instagram API routes
