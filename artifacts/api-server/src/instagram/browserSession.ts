@@ -4,6 +4,8 @@ import { generateSync as totpGenerate } from "otplib";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { fileURLToPath } from "url";
+import { spawn } from "child_process";
 
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
@@ -128,9 +130,10 @@ const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   (fs.existsSync(NIX_CHROMIUM) ? NIX_CHROMIUM : "");
 
-// Ensure puppeteer's own Chrome is installed in the app's cache dir.
-// On first EB use it will download Chrome for Testing (~180 MB) — a one-time
-// setup that runs silently in the background.  Subsequent launches are instant.
+// Ensure puppeteer's own Chrome for Testing is installed in the app's cache dir.
+// On first EB use it spawns puppeteer's own install.mjs (the same script that
+// runs on `npm install puppeteer`), which has the correct module-resolution
+// context to find @puppeteer/browsers without any import-path gymnastics.
 async function ensureBrowserInstalled(puppeteerLib: any): Promise<string> {
   const cacheDir =
     process.env.PUPPETEER_CACHE_DIR ||
@@ -141,44 +144,53 @@ async function ensureBrowserInstalled(puppeteerLib: any): Promise<string> {
 
   log("Built-in browser not found — downloading Chrome for Testing (one-time ~180 MB)...");
 
+  // Locate puppeteer's install.mjs — it handles the platform-specific Chrome
+  // download and resolves @puppeteer/browsers from its own package context.
+  let puppeteerDir: string;
   try {
-    // @puppeteer/browsers is a direct dependency of the puppeteer package and
-    // is resolved via the same NODE_PATH in the packaged app.
-    const browsers = await import("@puppeteer/browsers");
-    const platform = browsers.detectBrowserPlatform();
-    if (!platform) throw new Error("Unsupported platform");
-
-    const buildId = await browsers.resolveBuildId(
-      "chrome" as any,
-      platform,
-      "stable",
-    );
-    log(`Downloading Chrome ${buildId} for ${platform}...`);
-
-    await browsers.install({
-      browser: "chrome" as any,
-      buildId,
-      cacheDir,
-      downloadProgressCallback: (downloaded: number, total: number) => {
-        if (total > 0) {
-          const pct = Math.round((downloaded / total) * 100);
-          if (pct % 20 === 0) log(`Browser download: ${pct}%`);
-        }
-      },
-    });
-
-    log("Built-in browser installed successfully.");
-    const newPath: string = puppeteerLib.executablePath?.() ?? "";
-    if (!newPath || !fs.existsSync(newPath)) {
-      throw new Error("Browser installed but executable not found at expected path.");
-    }
-    return newPath;
-  } catch (err: any) {
+    const resolved = import.meta.resolve("puppeteer/package.json");
+    puppeteerDir = path.dirname(fileURLToPath(resolved));
+  } catch {
     throw new Error(
-      `Failed to install built-in browser: ${err?.message ?? err}\n` +
-      "Please check your internet connection and restart Equinox.",
+      "Built-in browser engine not found in this installation. Please reinstall Equinox.",
     );
   }
+
+  const installScript = path.join(puppeteerDir, "install.mjs");
+  if (!fs.existsSync(installScript)) {
+    throw new Error(
+      `Browser installer not found at ${installScript}. Please reinstall Equinox.`,
+    );
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, [installScript], {
+      cwd: puppeteerDir,
+      env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
+      stdio: "pipe",
+    });
+    child.stdout?.on("data", (d: Buffer) =>
+      log(`[browser-install] ${d.toString().trim()}`),
+    );
+    child.stderr?.on("data", (d: Buffer) =>
+      log(`[browser-install] ${d.toString().trim()}`),
+    );
+    child.on("exit", (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`Browser download failed (exit code ${code})`)),
+    );
+    child.on("error", reject);
+  });
+
+  log("Built-in browser installed successfully.");
+  const newPath: string = puppeteerLib.executablePath?.() ?? "";
+  if (!newPath || !fs.existsSync(newPath)) {
+    throw new Error(
+      "Browser was downloaded but executable not found at expected path.",
+    );
+  }
+  return newPath;
 }
 
 export async function applyStealthScripts(page: Page): Promise<void> {
