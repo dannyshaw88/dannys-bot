@@ -986,7 +986,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         console.error(`[instagramLogin] @${profile.username} — cold-start handshake complete ✓`);
         return {
           ok: true,
-          message: `ACCOUNT VERIFIED VIA API ✓`,
+          message: `Session cookies valid ✓ — verified via stored session (password not tested)`,
           accountStatus: "valid",
           igDeviceState: captureDeviceState(),
         };
