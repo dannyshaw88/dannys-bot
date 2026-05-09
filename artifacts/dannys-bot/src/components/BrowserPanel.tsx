@@ -172,7 +172,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             setIsLoading(msg.loading);
             break;
           case "urlChange":
-            if (!addressFocusedRef.current) setAddressBar(msg.url);
+            if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) setAddressBar(msg.url);
             if (msg.url && (msg.url.includes("instagram.com/accounts/login") || msg.url.includes("instagram.com/login"))) {
               setLoginState(prev => prev === "ok" ? "idle" : prev);
             }

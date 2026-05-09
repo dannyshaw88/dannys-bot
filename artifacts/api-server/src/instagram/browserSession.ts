@@ -86,6 +86,10 @@ interface Session {
   lastUrl: string;
   proxyKey: string; // "direct" or "host:port" — used to detect proxy changes
   userAgent: string; // profile's userAgentEmbedded — applied to every page/popup
+  pendingInitUrl?: string; // set by getOrCreateSession, consumed by attachSSE on first connect
+  // Timestamp (ms) until which the frame-loop error-page auto-retry is suppressed.
+  // Set whenever an intentional goto() is fired so the loop doesn't race against it.
+  navProtectedUntil?: number;
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -397,21 +401,23 @@ export async function getOrCreateSession(
     sseWrite(s.res, { type: "consoleLog", level, text });
   });
 
-  // Restore saved cookies if available, then navigate to IG home (already logged in)
-  // Otherwise go to the login page so the user can log in.
-  // If a checkpoint URL is cached (set by the verify route after IgCheckpointError), navigate
-  // there directly — challenge pages bypass the 429 rate-limit that the home page hits.
+  // Determine the initial URL for this session.
+  // We do NOT fire page.goto() here — that would race with attachSSE which is
+  // called immediately after in the stream route, causing two concurrent gotos
+  // on the same page (first gets cancelled by the second, leaving the page on
+  // about:blank in some cases). Instead we store the target in session.pendingInitUrl
+  // so attachSSE is the single source of truth for the initial navigation.
   const cookiesLoaded = await loadCookies(profileId, page);
   const cachedCheckpointUrl = checkpointUrlCache.get(profileId);
   if (cachedCheckpointUrl) {
     checkpointUrlCache.delete(profileId);
-    log(`[cookies:${profileId}] Navigating directly to checkpoint URL: ${cachedCheckpointUrl}`, "browser");
-    page.goto(cachedCheckpointUrl, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+    log(`[cookies:${profileId}] Checkpoint URL cached — will navigate on SSE attach`, "browser");
+    session.pendingInitUrl = cachedCheckpointUrl;
   } else if (cookiesLoaded) {
-    log(`[cookies:${profileId}] Cookies restored — navigating to Instagram home`, "browser");
-    page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+    log(`[cookies:${profileId}] Cookies restored — will navigate to Instagram home on SSE attach`, "browser");
+    session.pendingInitUrl = "https://www.instagram.com/";
   } else {
-    page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+    session.pendingInitUrl = "https://www.instagram.com/accounts/login/";
   }
 
   return session;
@@ -434,21 +440,38 @@ export function attachSSE(profileId: number, res: ServerResponse) {
   }
   session.res = res;
 
-  // ── Recover from error/blank pages on reconnect ────────────────────────────
-  // Only navigate to Instagram if the page is stuck on an error page or blank —
-  // NOT if the user has intentionally navigated to another site.
+  // ── Initial / recovery navigation ─────────────────────────────────────────
+  // This is the ONLY place that fires page.goto() after a session is created or
+  // reconnected. getOrCreateSession stores the intended first URL in
+  // session.pendingInitUrl instead of navigating itself, so we never have two
+  // concurrent gotos racing on the same page.
   (async () => {
     try {
       const currentUrl = session.page.url();
-      const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
-      if (!isErrorPage) return; // user may be browsing freely — leave them alone
-      const cookies = await session.page.cookies().catch(() => [] as any[]);
-      const hasCookies = cookies.some((c: any) => c.name === "sessionid");
-      const target = hasCookies
-        ? "https://www.instagram.com/"
-        : "https://www.instagram.com/accounts/login/";
-      log(`[attachSSE:${profileId}] page is "${currentUrl}" — navigating to ${target}`, "browser");
-      session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+      const isBlankOrError = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
+
+      if (session.pendingInitUrl) {
+        // New session — navigate to the URL determined by getOrCreateSession.
+        // Protect for 35s so the frame loop doesn't fire a competing goto() while
+        // Chrome is still loading (Chrome briefly shows about:blank at the start
+        // of every navigation, which would otherwise trigger the error-page retry).
+        const target = session.pendingInitUrl;
+        session.pendingInitUrl = undefined;
+        session.navProtectedUntil = Date.now() + 35000;
+        log(`[attachSSE:${profileId}] initial navigation → ${target}`, "browser");
+        session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+      } else if (isBlankOrError) {
+        // Reconnect after crash/error — recover by checking cookies
+        const cookies = await session.page.cookies().catch(() => [] as any[]);
+        const hasCookies = cookies.some((c: any) => c.name === "sessionid");
+        const target = hasCookies
+          ? "https://www.instagram.com/"
+          : "https://www.instagram.com/accounts/login/";
+        session.navProtectedUntil = Date.now() + 35000;
+        log(`[attachSSE:${profileId}] page is "${currentUrl}" (error/blank) — recovering → ${target}`, "browser");
+        session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+      }
+      // else: user is actively browsing — leave them alone
     } catch { /* page may be closing — ignore */ }
   })();
 
@@ -503,10 +526,15 @@ function startFrameLoop(profileId: number) {
       // Only retry when stuck on a genuine error/blank page:
       //   • chrome-error://  — HTTP 429 / net error
       //   • about:blank / about:newtab — goto() timed out silently
-      // Do NOT redirect when the user has intentionally browsed to another site.
-      // Retries indefinitely: fast (3 s) for first 3 attempts, then every 30 s.
+      // IMPORTANT: skip entirely during the navProtectedUntil window.
+      // Every intentional goto() (initial load, reconnect recovery, frame-loop retry)
+      // sets navProtectedUntil = now + 35s, because Chrome shows about:blank
+      // momentarily at the START of every navigation before the new URL resolves.
+      // Without this guard the loop would fire a second competing goto() after just
+      // 3 seconds, cancelling the first one and trapping the page on about:blank.
       const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
-      if (isErrorPage) {
+      const navProtected = Date.now() < (s.navProtectedUntil ?? 0);
+      if (isErrorPage && !navProtected) {
         errorRetryTick++;
         // First 3 retries: every 3 s (15×200 ms). After that: every 30 s (150×200 ms).
         const retryThreshold = errorRetryCount < 3 ? 15 : 150;
@@ -518,9 +546,11 @@ function startFrameLoop(profileId: number) {
             ? "https://www.instagram.com/"
             : "https://www.instagram.com/accounts/login/";
           log(`[retry:${profileId}] "${currentUrl}" — retry #${errorRetryCount} → ${retryTarget}`, "browser");
+          // Protect against the next round of retries while this goto() is in flight
+          s.navProtectedUntil = Date.now() + 35000;
           s.page.goto(retryTarget, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
         }
-      } else {
+      } else if (!isErrorPage) {
         errorRetryTick = 0;
         errorRetryCount = 0; // reset so future failures also get fast retries
       }
@@ -552,6 +582,7 @@ export async function browserNavigate(profileId: number, url: string) {
   if (!s) return;
   try {
     sseWrite(s.res, { type: "loading", loading: true });
+    s.navProtectedUntil = Date.now() + 35000;
     await s.page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
     sseWrite(s.res, { type: "loading", loading: false });
   } catch {
@@ -1051,6 +1082,7 @@ export async function browserAutoLogin(
     }
     if (!onLoginPage && !onInstagram) {
       sendStatus(profileId, "Navigating to Instagram login…");
+      s.navProtectedUntil = Date.now() + 35000;
       await s.page.goto("https://www.instagram.com/accounts/login/", {
         waitUntil: "domcontentloaded",
         timeout: 30000,

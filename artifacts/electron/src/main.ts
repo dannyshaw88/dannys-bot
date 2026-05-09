@@ -563,7 +563,7 @@ async function createWindow() {
     height: 900,
     minWidth: 960,
     minHeight: 600,
-    title: "Equinox",
+    title: `Equinox v${app.getVersion()}`,
     icon: getIconPath(),
     autoHideMenuBar: true,
     show: false,
