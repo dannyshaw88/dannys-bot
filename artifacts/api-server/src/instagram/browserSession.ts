@@ -3,6 +3,7 @@ import type { ServerResponse } from "http";
 import { generateSync as totpGenerate } from "otplib";
 import fs from "fs";
 import path from "path";
+import os from "os";
 
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
@@ -185,6 +186,14 @@ export async function getOrCreateSession(
   }
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
 
+  // Each session gets its OWN isolated user-data-dir in the OS temp folder.
+  // Without this, Chrome reuses the user's already-running Chrome process (which
+  // has a visible window), causing the EB to hijack their personal browser
+  // instead of running as a completely hidden, isolated internal session.
+  const userDataDir = path.join(os.tmpdir(), `equinox-eb-${profileId}`);
+  fs.mkdirSync(userDataDir, { recursive: true });
+  const userDataArg = [`--user-data-dir=${userDataDir}`];
+
   // Try puppeteer-core first (ships with Electron app, no bundled Chromium).
   // Fall back to the full puppeteer package (used in Linux dev where it manages its own Chromium).
   let puppeteerLib: any;
@@ -205,7 +214,7 @@ export async function getOrCreateSession(
     // launches headlessly instead of opening a visible browser window.
     headless: "new",
     executablePath: CHROMIUM_PATH,
-    args: [...LAUNCH_ARGS, ...proxyArg],
+    args: [...LAUNCH_ARGS, ...userDataArg, ...proxyArg],
     ignoreHTTPSErrors: true,
   });
 
