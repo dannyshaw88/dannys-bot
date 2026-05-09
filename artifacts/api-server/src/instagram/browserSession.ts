@@ -201,7 +201,9 @@ export async function getOrCreateSession(
   }
 
   const browser = await puppeteerLib.launch({
-    headless: true,
+    // Chrome 112+ removed the old headless protocol — must use 'new' so Chrome
+    // launches headlessly instead of opening a visible browser window.
+    headless: "new",
     executablePath: CHROMIUM_PATH,
     args: [...LAUNCH_ARGS, ...proxyArg],
     ignoreHTTPSErrors: true,

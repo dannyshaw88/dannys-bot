@@ -423,7 +423,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     <div className="flex flex-col h-full bg-background rounded-xl border border-border overflow-hidden shadow-sm">
 
       {/* Isolation banner */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-primary/5 border-b border-border/60 text-xs shrink-0">
+      <div className="flex items-center gap-2 px-4 py-2 bg-background border-b border-border/60 text-xs shrink-0">
         <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
         <span className="text-muted-foreground truncate">
           Isolated session · <span className="font-semibold text-foreground">@{username}</span>
