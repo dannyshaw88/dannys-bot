@@ -626,7 +626,19 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
             <MonitorPlay className="w-10 h-10 text-slate-400" />
             <p className="text-sm font-medium text-foreground">Browser disconnected</p>
-            <p className="text-xs text-muted-foreground">Reconnecting in a moment…</p>
+            {errorMsg ? (
+              <div className="flex flex-col items-center gap-2 max-w-sm">
+                <p className="text-xs text-red-500 text-center font-medium">Last error: {errorMsg}</p>
+                <button
+                  onClick={() => navigator.clipboard?.writeText(errorMsg ?? "").catch(() => {})}
+                  className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                >
+                  Copy error
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Reconnecting in a moment…</p>
+            )}
             <Button onClick={connect} variant="outline" size="sm">Connect now</Button>
           </div>
         )}
@@ -634,7 +646,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         {status === "connecting" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Starting Chrome… (takes ~15 seconds first time)</p>
+            <p className="text-sm text-muted-foreground">Starting browser…</p>
           </div>
         )}
 
@@ -642,7 +654,13 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
             <WifiOff className="w-10 h-10 text-red-400" />
             <p className="text-sm font-medium text-foreground">Browser failed to start</p>
-            <p className="text-xs text-muted-foreground max-w-xs text-center">{errorMsg}</p>
+            <p className="text-xs text-red-500 max-w-xs text-center font-medium">{errorMsg}</p>
+            <button
+              onClick={() => navigator.clipboard?.writeText(errorMsg ?? "").catch(() => {})}
+              className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+            >
+              Copy error
+            </button>
             <Button onClick={connect} variant="outline" size="sm">Retry</Button>
           </div>
         )}

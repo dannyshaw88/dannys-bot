@@ -103,13 +103,14 @@ function sseWrite(res: ServerResponse | null, data: object) {
 const sessions = new Map<number, Session>();
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
+// --no-sandbox is required in all environments.
+// --no-zygote is intentionally EXCLUDED — it crashes Chrome silently on Windows
+//   when combined with --no-sandbox. It is only needed in sandboxed Linux containers.
 const LAUNCH_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
   "--disable-dev-shm-usage",
-  "--disable-gpu",
   "--no-first-run",
-  "--no-zygote",
   "--disable-extensions",
   "--disable-background-networking",
   "--disable-sync",
@@ -122,8 +123,8 @@ const LAUNCH_ARGS = [
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
 // findChromiumPath which locates Chrome/Edge/Brave) or Nix store (Linux dev).
-// The browser runs headless:"new" with an isolated --user-data-dir so it is
-// completely invisible and never touches the user's personal browser profile.
+// The browser runs headless (completely invisible) with an isolated --user-data-dir
+// so it never touches the user's personal browser profile.
 const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
@@ -205,17 +206,27 @@ export async function getOrCreateSession(
   }
 
   if (!CHROMIUM_PATH) {
-    throw new Error(
-      "No browser found. Please install Google Chrome or Microsoft Edge, then restart Equinox.",
-    );
+    const msg = "No browser found. Please install Google Chrome or Microsoft Edge, then restart Equinox.";
+    console.error(`[browserSession] ${msg}`);
+    throw new Error(msg);
   }
+  log(`CHROMIUM_PATH = ${CHROMIUM_PATH}`, "browser");
 
-  const browser = await puppeteerLib.launch({
-    headless: "new",
-    executablePath: CHROMIUM_PATH,
-    args: [...LAUNCH_ARGS, ...userDataArg, ...proxyArg],
-    ignoreHTTPSErrors: true,
-  });
+  log(`Launching with executablePath: ${CHROMIUM_PATH}`, "browser");
+  let browser: Browser;
+  try {
+    browser = await puppeteerLib.launch({
+      headless: true,
+      executablePath: CHROMIUM_PATH,
+      args: [...LAUNCH_ARGS, ...userDataArg, ...proxyArg],
+      ignoreHTTPSErrors: true,
+    });
+  } catch (err: any) {
+    const msg = `Chrome failed to launch: ${err?.message ?? err}`;
+    log(`ERROR: ${msg}`, "browser");
+    console.error(`[browserSession] ${msg}`);
+    throw new Error(msg);
+  }
 
   const [page] = await browser.pages();
   await page.setUserAgent(userAgent);
