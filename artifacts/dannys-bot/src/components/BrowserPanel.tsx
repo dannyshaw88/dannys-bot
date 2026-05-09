@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Plus, Upload
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Plus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -496,11 +496,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
                                       "Fill Credentials"}
         </Button>
 
-        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-          onClick={() => setFileChooserPending(true)} disabled={!connected}
-          title="Upload a file to the browser — use this when the page asks you to choose a file or photo">
-          <Upload className="w-3.5 h-3.5" /> Upload
-        </Button>
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
           onClick={clearSession} disabled={!connected} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
