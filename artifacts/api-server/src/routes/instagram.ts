@@ -36,9 +36,9 @@ import {
 import { automationEngine } from "../instagram/automationEngine";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 
-// The embedded browser always uses a desktop Chrome UA regardless of what
-// userAgentEmbedded/userAgentApi says — Instagram's mobile web UA triggers
-// the app-install interstitial (dark skeleton) instead of the full site.
+// Fallback desktop Chrome UA — used only when a profile has no userAgentEmbedded stored.
+// We always prefer the profile's own stored UA so Instagram sees a consistent fingerprint.
+// Mobile UAs are NOT used here — they trigger the app-install interstitial instead of the full site.
 const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 // Per-account verify lock — prevents concurrent logins for the same account.
@@ -932,7 +932,7 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
-    const ua = DESKTOP_BROWSER_UA;
+    const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
     try {
       await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile));
       res.json({ ok: true });
@@ -981,7 +981,8 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     const proxy = profile ? await resolveProxyConfig(profile) : undefined;
-    await clearSession(profileId, DESKTOP_BROWSER_UA, proxy);
+    const ua = profile ? ((profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA) : DESKTOP_BROWSER_UA;
+    await clearSession(profileId, ua, proxy);
     res.json({ ok: true });
   });
 
@@ -999,7 +1000,8 @@ export async function registerInstagramRoutes(
 
     try {
       const proxy = await resolveProxyConfig(profile);
-      await getOrCreateSession(profileId, DESKTOP_BROWSER_UA, proxy);
+      const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+      await getOrCreateSession(profileId, ua, proxy);
       attachSSE(profileId, res);
     } catch (err: any) {
       res.write(`data: ${JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" })}\n\n`);

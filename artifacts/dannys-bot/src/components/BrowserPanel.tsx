@@ -620,7 +620,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       )}
 
       {/* Viewport */}
-      <div className="flex-1 relative bg-slate-900 min-h-0 overflow-hidden flex items-center justify-center">
+      <div className="flex-1 relative bg-white min-h-0 overflow-hidden flex items-center justify-center">
 
         {status === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">

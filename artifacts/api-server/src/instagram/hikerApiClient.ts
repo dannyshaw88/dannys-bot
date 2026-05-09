@@ -114,28 +114,57 @@ export class HikerApiClient {
   }
 
   async getFollowers(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
+    const amount = Math.min(Math.max(max, 1), 200);
+
+    const extractUsers = (j: any): { pk: string; username: string; fullName: string }[] => {
+      const arr: any[] = Array.isArray(j) ? j
+        : Array.isArray(j?.users)           ? j.users
+        : Array.isArray(j?.items)           ? j.items
+        : Array.isArray(j?.data)            ? j.data
+        : Array.isArray(j?.response?.users) ? j.response.users
+        : [];
+      return arr
+        .filter((u: any) => u?.pk && u?.username)
+        .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }));
+    };
+
+    // Try /v2/ first (fresher cache).
     try {
-      const amount = Math.min(Math.max(max, 1), 200);
       const j = await hikerGet(`/v2/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
       if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
         const detail: string = j.detail ?? j.exc_type ?? JSON.stringify(j);
+        // "Entries not found" = transient cache miss → fall through to /v1/ fallback.
+        if (/entries not found|not found/i.test(detail)) {
+          console.log(`[hikerApi] getFollowers ${userId}: /v2/ cache miss ("${detail}"), trying /v1/…`);
+          throw new HikerCacheMissError(detail);
+        }
         const msg = `HikerAPI getFollowers error: ${detail}`;
         console.error(`[hikerApi] ${msg}`);
         throw new Error(msg);
       }
-      const users: any[] = Array.isArray(j) ? j
-        : Array.isArray(j?.users) ? j.users
-        : Array.isArray(j?.items) ? j.items
-        : Array.isArray(j?.data) ? j.data
-        : Array.isArray(j?.response?.users) ? j.response.users
-        : [];
-      console.error(`[hikerApi] getFollowers userId=${userId} → ${users.length} users (raw keys: ${JSON.stringify(Object.keys(j ?? {}))})`);
-      return users
-        .filter((u: any) => u?.pk && u?.username)
-        .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }))
-        .slice(0, max);
+      const users = extractUsers(j);
+      console.log(`[hikerApi] getFollowers userId=${userId} → ${users.length} users (v2, raw keys: ${JSON.stringify(Object.keys(j ?? {}))})`);
+      return users.slice(0, max);
     } catch (e: any) {
-      console.error(`[hikerApi] getFollowers ${userId} error: ${e?.message}`);
+      if (!(e instanceof HikerCacheMissError)) {
+        console.error(`[hikerApi] getFollowers ${userId} error: ${e?.message}`);
+        throw e;
+      }
+    }
+
+    // /v1/ fallback — different cache layer, may have data when /v2/ doesn't.
+    try {
+      const j = await hikerGet(`/v1/user/followers?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
+      if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
+        const detail: string = j.detail ?? j.exc_type ?? JSON.stringify(j);
+        console.log(`[hikerApi] getFollowers ${userId}: /v1/ also cache miss ("${detail}")`);
+        throw new HikerCacheMissError(`HikerAPI getFollowers error: ${detail}`);
+      }
+      const users = extractUsers(j);
+      console.log(`[hikerApi] getFollowers userId=${userId} → ${users.length} users (v1 fallback, raw keys: ${JSON.stringify(Object.keys(j ?? {}))})`);
+      return users.slice(0, max);
+    } catch (e: any) {
+      console.error(`[hikerApi] getFollowers ${userId} error (v1 fallback): ${e?.message}`);
       throw e;
     }
   }

@@ -716,19 +716,19 @@ export function ProfileDetailsPage() {
                     <div className="flex gap-2 items-end">
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-14" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} />
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
