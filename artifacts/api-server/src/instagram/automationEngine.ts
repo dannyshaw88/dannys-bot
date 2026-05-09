@@ -623,6 +623,20 @@ class AutomationEngine {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
+        if (freshProfile.accountStatus === "bad_password") {
+          engineLog("WARN", `@${freshProfile.username}: bad_password — cannot authenticate, pausing 10min (update the password to resume)`);
+          await sleepInterruptible(10 * 60_000, state.stop);
+          continue;
+        }
+        if (freshProfile.accountStatus === "logged_out") {
+          engineLog("WARN", `@${freshProfile.username}: logged_out — session invalid, pausing 5min (re-verify the account to resume)`);
+          await sleepInterruptible(5 * 60_000, state.stop);
+          continue;
+        }
+        if (freshProfile.accountStatus !== "valid") {
+          await sleepInterruptible(5 * 60_000, state.stop);
+          continue;
+        }
         if (freshProfile.accountStatus === "captcha") {
           await sleepInterruptible(5 * 60_000, state.stop);
           continue;
@@ -705,6 +719,9 @@ class AutomationEngine {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
+        if (freshProfile.accountStatus === "bad_password") { engineLog("WARN", `@${freshProfile.username}: bad_password — pausing 10min`); await sleep(10 * 60_000); continue; }
+        if (freshProfile.accountStatus === "logged_out")   { engineLog("WARN", `@${freshProfile.username}: logged_out — pausing 5min`);  await sleep(5  * 60_000); continue; }
+        if (freshProfile.accountStatus !== "valid") { await sleep(5 * 60_000); continue; }
         if (freshProfile.accountStatus === "captcha") { await sleep(5 * 60_000); continue; }
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
@@ -805,6 +822,9 @@ class AutomationEngine {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
+        if (freshProfile.accountStatus === "bad_password") { engineLog("WARN", `@${freshProfile.username}: bad_password — pausing 10min`); await sleep(10 * 60_000); continue; }
+        if (freshProfile.accountStatus === "logged_out")   { engineLog("WARN", `@${freshProfile.username}: logged_out — pausing 5min`);  await sleep(5  * 60_000); continue; }
+        if (freshProfile.accountStatus !== "valid") { await sleep(5 * 60_000); continue; }
         if (freshProfile.accountStatus === "captcha") { await sleep(5 * 60_000); continue; }
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
@@ -885,6 +905,9 @@ class AutomationEngine {
         const freshProfile = await storage.getProfile(profile.id);
         if (!freshProfile) break;
         if (freshProfile.accountStatus === "banned" || freshProfile.accountStatus === "suspended" || freshProfile.accountStatus === "compromised" || freshProfile.accountStatus === "account_disabled") break;
+        if (freshProfile.accountStatus === "bad_password") { engineLog("WARN", `@${freshProfile.username}: bad_password — pausing 10min`); await sleep(10 * 60_000); continue; }
+        if (freshProfile.accountStatus === "logged_out")   { engineLog("WARN", `@${freshProfile.username}: logged_out — pausing 5min`);  await sleep(5  * 60_000); continue; }
+        if (freshProfile.accountStatus !== "valid") { await sleep(5 * 60_000); continue; }
         if (freshProfile.accountStatus === "captcha") { await sleep(5 * 60_000); continue; }
 
         const tools = await storage.getToolsByProfile(freshProfile.id);
@@ -1457,13 +1480,19 @@ class AutomationEngine {
       // Credentials / mobileLogin) is authoritative for validity.
       if (!client.isMobileLoggedIn()) {
         console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
-        const mobileOk = await client.mobileLogin(
+        client.lastMobileLoginFailureReason = null;
+      const mobileOk = await client.mobileLogin(
           profile.username,
           profile.password,
           profile.twoFASecretKey ?? undefined,
         );
         if (!mobileOk) {
-          console.error(`[engine] @${profile.username}: mobile login FAILED — stored password may be wrong. Update it in Account Settings.`);
+          if (client.lastMobileLoginFailureReason === "bad_password") {
+            console.error(`[engine] @${profile.username}: mobile login FAILED — wrong password confirmed. Marking bad_password.`);
+            await storage.updateProfile(profile.id, { accountStatus: "bad_password" });
+            return null;
+          }
+          console.error(`[engine] @${profile.username}: mobile login FAILED — transient error, status unchanged.`);
         }
       }
       return client;
@@ -1493,9 +1522,13 @@ class AutomationEngine {
       return client;
     }
 
-    // Mobile login failed — transient network/proxy issue.
-    // Do NOT mark the account as logged_out; that flag is only set by an explicit
-    // Verify Credentials action with a definitive bad-password response.
+    // Mobile login failed.
+    if (client.lastMobileLoginFailureReason === "bad_password") {
+      console.error(`[engine] @${profile.username}: mobile login FAILED — wrong password confirmed. Marking bad_password.`);
+      await storage.updateProfile(profile.id, { accountStatus: "bad_password" });
+      return null;
+    }
+    // Transient network/proxy issue — do not mark bad_password.
     console.warn(`[engine] @${profile.username}: mobile login failed — skipping session, status unchanged`);
     return null;
   }
@@ -2606,6 +2639,13 @@ class AutomationEngine {
         if (hikerClient) {
           const t0 = Date.now();
           candidates = await hikerClient.getFollowers(targetPk, processCount + 5);
+          if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
+            const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+            const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);
+            const fresh = candidates.filter(c => !alreadyScraped.has(c.pk));
+            await storage.addScrapedUsers(fresh).catch(() => {});
+            candidates = fresh;
+          }
           logHiker("FollowersScrape", `Scraped followers of @${targetName} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
           candidates = await client.getFollowers(targetPk, processCount + 5);
@@ -2776,6 +2816,9 @@ class AutomationEngine {
     }
 
     // Re-scrape additional pages to fill the quota when users were skipped by other profiles
+    // seenFollowerPks tracks PKs already returned by getFollowers so we can request
+    // progressively deeper slices each round (HikerAPI has no pagination cursor).
+    const seenFollowerPks = new Set(candidates.map(c => c.pk));
     if (scrapeAllIfSkipped && !hitHardLimit && followed < processCount && !state.stop.stopped) {
       let extraRound = 0;
       while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 10) {
@@ -2802,9 +2845,22 @@ class AutomationEngine {
             }
             logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${source.value} via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
           } else if (source.type === "target_followers" && hikerClient && source.targetUserId) {
+            // HikerAPI getFollowers has no cursor, but requesting progressively
+            // more records each round lets us reach deeper into the follower list.
+            // Client-side we filter out PKs already seen in prior rounds.
             const t0 = Date.now();
-            moreCandidates = await hikerClient.getFollowers(source.targetUserId, needMore + 5);
-            logHiker("FollowersScrape", `Re-scrape round ${extraRound} followers via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
+            const requestMore = (extraRound + 1) * (processCount + 5) + needMore;
+            const allFollowers = await hikerClient.getFollowers(source.targetUserId, Math.min(requestMore, 200));
+            moreCandidates = allFollowers.filter(u => !seenFollowerPks.has(u.pk));
+            moreCandidates.forEach(u => seenFollowerPks.add(u.pk));
+            if (globalSettings.skipScrapedUsers === "true" && moreCandidates.length > 0) {
+              const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+              const alreadyScraped = await storage.getScrapedUserIds(moreCandidates.map(c => c.pk), ignoreDays);
+              const fresh = moreCandidates.filter(c => !alreadyScraped.has(c.pk));
+              await storage.addScrapedUsers(fresh).catch(() => {});
+              moreCandidates = fresh;
+            }
+            logHiker("FollowersScrape", `Re-scrape round ${extraRound} followers via HikerAPI (${allFollowers.length} total, ${moreCandidates.length} new)`, Date.now() - t0);
           }
         } catch { break; }
         if (!moreCandidates.length) break;
