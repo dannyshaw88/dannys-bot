@@ -609,6 +609,14 @@ async function createWindow() {
     );
   }
 
+  // Set document.title after load — index.html's static <title>Equinox</title>
+  // would otherwise override the BrowserWindow title property.
+  win.webContents.on("did-finish-load", () => {
+    win?.webContents.executeJavaScript(
+      `document.title = "Equinox v${app.getVersion()}";`
+    ).catch(() => {});
+  });
+
   win.once("ready-to-show", () => { win?.show(); win?.maximize(); });
   win.on("closed", () => { win = null; });
 
