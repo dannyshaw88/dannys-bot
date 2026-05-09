@@ -1244,14 +1244,19 @@ export async function browserAutoLogin(
         const frames = s.page.frames();
         sendStatus(profileId, `Frames: ${frames.length} — ${frames.map(f => f.url().slice(0, 50)).join(" | ")}`);
 
+        // Instagram has used many different attributes for the TOTP input over time.
+        // Cast a wide net — newer layouts use plain name="code" or just a visible numeric input.
         const NAMED_SELECTORS = [
           'input[name="verificationCode"]',
+          'input[name="verification_code"]',
           'input[name="security_code"]',
           'input[name="totp_code"]',
+          'input[name="code"]',
           'input[inputmode="numeric"]',
           'input[autocomplete="one-time-code"]',
           'input[type="tel"]',
           'input[type="number"]',
+          'input[maxlength="6"]',
         ];
 
         let codeInput: any = null;
@@ -1265,24 +1270,67 @@ export async function browserAutoLogin(
           }
         }
 
-        // 2. Position-based fallback in main frame — only type="text" inputs, skip login fields
+        // 2. Placeholder-text fallback — evaluate() inside all frames
+        //    Catches inputs whose placeholder contains "code" / "Code" regardless of other attrs
         if (!codeInput) {
-          const SKIP_NAMES = new Set(["username", "email", "pass", "password", "search", "q"]);
-          const handle = await s.page.evaluateHandle(() => {
-            const SKIP_NAMES_INNER = new Set(["username", "email", "pass", "password", "search", "q"]);
-            const candidates = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'))
-              .map(el => {
+          for (const frame of frames) {
+            const handle = await frame.evaluateHandle(() => {
+              const SKIP_NAMES = new Set(["username", "email", "pass", "password", "search", "q"]);
+              const SKIP_TYPES = new Set(["password", "submit", "button", "hidden", "checkbox", "radio", "file"]);
+              return Array.from(document.querySelectorAll("input")).find(el => {
+                const name = (el as HTMLInputElement).name?.toLowerCase() || "";
+                const type = (el as HTMLInputElement).type?.toLowerCase() || "text";
+                const ph   = ((el as HTMLInputElement).placeholder || "").toLowerCase();
+                if (SKIP_NAMES.has(name) || SKIP_TYPES.has(type)) return false;
                 const r = el.getBoundingClientRect();
-                return { el, name: (el as HTMLInputElement).name?.toLowerCase() || "", r };
-              })
-              .filter(({ r, name }) => r.width > 0 && r.height > 0 && !SKIP_NAMES_INNER.has(name));
-            if (!candidates.length) return null;
-            const mid = window.innerHeight / 2;
-            candidates.sort((a, b) => Math.abs(a.r.top - mid) - Math.abs(b.r.top - mid));
-            return candidates[0].el;
-          }).catch(() => null);
-          const el = handle && (handle as any).asElement ? (handle as any).asElement() : null;
-          if (el) { codeInput = el; codeSelector = "type=text nearest to viewport centre"; }
+                if (r.width === 0 || r.height === 0) return false;
+                return ph.includes("code") || ph.includes("digit") || ph.includes("otp");
+              }) ?? null;
+            }).catch(() => null);
+            const el = handle && (handle as any).asElement ? (handle as any).asElement() : null;
+            if (el) { codeInput = el; codeSelector = `placeholder~"code" [frame: ${frame.url().slice(0, 30)}]`; break; }
+          }
+        }
+
+        // 3. Type=text fallback in all frames — closest to viewport centre, skipping login fields
+        if (!codeInput) {
+          for (const frame of frames) {
+            const handle = await frame.evaluateHandle(() => {
+              const SKIP_NAMES = new Set(["username", "email", "pass", "password", "search", "q"]);
+              const candidates = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'))
+                .map(el => {
+                  const r = el.getBoundingClientRect();
+                  return { el, name: (el as HTMLInputElement).name?.toLowerCase() || "", r };
+                })
+                .filter(({ r, name }) => r.width > 0 && r.height > 0 && !SKIP_NAMES.has(name));
+              if (!candidates.length) return null;
+              const mid = window.innerHeight / 2;
+              candidates.sort((a, b) => Math.abs(a.r.top - mid) - Math.abs(b.r.top - mid));
+              return candidates[0].el;
+            }).catch(() => null);
+            const el = handle && (handle as any).asElement ? (handle as any).asElement() : null;
+            if (el) { codeInput = el; codeSelector = `type=text nearest centre [frame: ${frame.url().slice(0, 30)}]`; break; }
+          }
+        }
+
+        // 4. Final brute-force — ANY visible non-login input across all frames
+        //    Last resort so the code always has a chance to type into something
+        if (!codeInput) {
+          for (const frame of frames) {
+            const handle = await frame.evaluateHandle(() => {
+              const SKIP_NAMES  = new Set(["username", "email", "pass", "password", "search", "q"]);
+              const SKIP_TYPES  = new Set(["password", "submit", "button", "hidden", "checkbox", "radio", "file", "image"]);
+              return Array.from(document.querySelectorAll("input")).find(el => {
+                const name = (el as HTMLInputElement).name?.toLowerCase() || "";
+                const type = (el as HTMLInputElement).type?.toLowerCase() || "text";
+                if (SKIP_NAMES.has(name) || SKIP_TYPES.has(type)) return false;
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+              }) ?? null;
+            }).catch(() => null);
+            const el = handle && (handle as any).asElement ? (handle as any).asElement() : null;
+            if (el) { codeInput = el; codeSelector = `brute-force any-visible-input [frame: ${frame.url().slice(0, 30)}]`; break; }
+          }
         }
 
         sendStatus(profileId, `2FA input: ${codeSelector || "NONE FOUND"}`);
@@ -1362,8 +1410,8 @@ export async function browserAutoLogin(
           return { ok: true, message: "2FA screen shown" };
         }
       } else {
-        sendStatus(profileId, "2FA screen — no TOTP key stored. Enter the code in the browser window.");
-        return { ok: true, message: "2FA screen — manual entry needed" };
+        sendStatus(profileId, "⚠ 2FA screen — no TOTP secret stored for this account. Go to Account Details and paste the 16-character TOTP secret key from your authenticator app, then try Fill Credentials again. You can also type the code manually in the browser window.");
+        return { ok: true, message: "2FA screen — no TOTP key stored. Add the TOTP secret in Account Details and retry." };
       }
     }
 
