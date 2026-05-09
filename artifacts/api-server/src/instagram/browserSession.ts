@@ -4,7 +4,8 @@ import { generateSync as totpGenerate } from "otplib";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { fileURLToPath } from "url";
+import https from "https";
+import http from "http";
 import { spawn } from "child_process";
 
 import { db } from "@workspace/db";
@@ -130,67 +131,124 @@ const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
   (fs.existsSync(NIX_CHROMIUM) ? NIX_CHROMIUM : "");
 
-// Ensure puppeteer's own Chrome for Testing is installed in the app's cache dir.
-// On first EB use it spawns puppeteer's own install.mjs (the same script that
-// runs on `npm install puppeteer`), which has the correct module-resolution
-// context to find @puppeteer/browsers without any import-path gymnastics.
-async function ensureBrowserInstalled(puppeteerLib: any): Promise<string> {
+// ── Self-contained Chrome for Testing downloader ─────────────────────────────
+// Uses ONLY Node.js built-ins (https, fs, child_process) — no external packages.
+// On Windows: downloads win64 Chrome from Google's CDN, extracts with PowerShell.
+// No dependency on @puppeteer/browsers or puppeteer's install.mjs whatsoever.
+
+function httpsGetJson(url: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https://") ? https : http;
+    mod.get(url, { headers: { "User-Agent": "Equinox/1.0" } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return resolve(httpsGetJson(res.headers.location!));
+      }
+      let data = "";
+      res.on("data", (d: Buffer) => (data += d.toString()));
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+      });
+    }).on("error", reject);
+  });
+}
+
+function downloadFile(url: string, dest: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https://") ? https : http;
+    mod.get(url, { headers: { "User-Agent": "Equinox/1.0" } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return resolve(downloadFile(res.headers.location!, dest));
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP ${res.statusCode} downloading Chrome`));
+      }
+      const total = parseInt(res.headers["content-length"] ?? "0", 10);
+      let downloaded = 0;
+      let lastPct = -1;
+      const file = fs.createWriteStream(dest);
+      res.on("data", (chunk: Buffer) => {
+        downloaded += chunk.length;
+        if (total > 0) {
+          const pct = Math.floor((downloaded / total) * 100);
+          if (pct !== lastPct && pct % 10 === 0) {
+            log(`[browser-download] ${pct}% (${Math.round(downloaded / 1024 / 1024)}MB / ${Math.round(total / 1024 / 1024)}MB)`);
+            lastPct = pct;
+          }
+        }
+      });
+      res.pipe(file);
+      file.on("finish", () => file.close(() => resolve()));
+      file.on("error", (e) => { fs.unlink(dest, () => {}); reject(e); });
+    }).on("error", reject);
+  });
+}
+
+function findCachedChrome(cacheDir: string): string {
+  const chromeRoot = path.join(cacheDir, "chrome");
+  if (!fs.existsSync(chromeRoot)) return "";
+  for (const dir of fs.readdirSync(chromeRoot)) {
+    if (!dir.startsWith("win64-")) continue;
+    const exe = path.join(chromeRoot, dir, "chrome-win64", "chrome.exe");
+    if (fs.existsSync(exe)) return exe;
+  }
+  return "";
+}
+
+async function ensureBrowserInstalled(): Promise<string> {
+  if (process.platform !== "win32") {
+    throw new Error(
+      "No Chromium found. On Linux/Mac set CHROMIUM_PATH to your Chromium binary.",
+    );
+  }
+
   const cacheDir =
     process.env.PUPPETEER_CACHE_DIR ||
     path.join(os.homedir(), ".cache", "puppeteer");
 
-  const exePath: string = puppeteerLib.executablePath?.() ?? "";
-  if (exePath && fs.existsSync(exePath)) return exePath;
+  // Already downloaded?
+  const cached = findCachedChrome(cacheDir);
+  if (cached) { log(`Built-in browser found: ${cached}`); return cached; }
 
-  log("Built-in browser not found — downloading Chrome for Testing (one-time ~180 MB)...");
+  log("Built-in browser not found — downloading Chrome for Testing (one-time ~150 MB)...");
 
-  // Locate puppeteer's install.mjs — it handles the platform-specific Chrome
-  // download and resolves @puppeteer/browsers from its own package context.
-  let puppeteerDir: string;
-  try {
-    const resolved = import.meta.resolve("puppeteer/package.json");
-    puppeteerDir = path.dirname(fileURLToPath(resolved));
-  } catch {
-    throw new Error(
-      "Built-in browser engine not found in this installation. Please reinstall Equinox.",
-    );
-  }
+  // Get the latest stable Chrome for Testing build ID
+  const meta = await httpsGetJson(
+    "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json",
+  );
+  const buildId: string = meta?.channels?.Stable?.version;
+  if (!buildId) throw new Error("Could not resolve Chrome for Testing version from Google API.");
+  log(`Downloading Chrome for Testing ${buildId} (win64)...`);
 
-  const installScript = path.join(puppeteerDir, "install.mjs");
-  if (!fs.existsSync(installScript)) {
-    throw new Error(
-      `Browser installer not found at ${installScript}. Please reinstall Equinox.`,
-    );
-  }
+  const downloadUrl = `https://storage.googleapis.com/chrome-for-testing-public/${buildId}/win64/chrome-win64.zip`;
+  const zipPath = path.join(os.tmpdir(), `equinox-chrome-${buildId}.zip`);
 
+  await downloadFile(downloadUrl, zipPath);
+  log("Download complete. Extracting...");
+
+  const extractDir = path.join(cacheDir, "chrome", `win64-${buildId}`);
+  fs.mkdirSync(extractDir, { recursive: true });
+
+  // Use PowerShell Expand-Archive — always available on Windows 10+
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, [installScript], {
-      cwd: puppeteerDir,
-      env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
-      stdio: "pipe",
-    });
-    child.stdout?.on("data", (d: Buffer) =>
-      log(`[browser-install] ${d.toString().trim()}`),
+    const ps = spawn("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+      `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`,
+    ], { stdio: "pipe" });
+    ps.stderr?.on("data", (d: Buffer) => log(`[browser-extract] ${d.toString().trim()}`));
+    ps.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`Extraction failed (PowerShell exit ${code})`)),
     );
-    child.stderr?.on("data", (d: Buffer) =>
-      log(`[browser-install] ${d.toString().trim()}`),
-    );
-    child.on("exit", (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`Browser download failed (exit code ${code})`)),
-    );
-    child.on("error", reject);
+    ps.on("error", (e) => reject(new Error(`PowerShell spawn failed: ${e.message}`)));
   });
 
-  log("Built-in browser installed successfully.");
-  const newPath: string = puppeteerLib.executablePath?.() ?? "";
-  if (!newPath || !fs.existsSync(newPath)) {
-    throw new Error(
-      "Browser was downloaded but executable not found at expected path.",
-    );
+  try { fs.unlinkSync(zipPath); } catch {}
+
+  const exePath = path.join(extractDir, "chrome-win64", "chrome.exe");
+  if (!fs.existsSync(exePath)) {
+    throw new Error(`Chrome was extracted but chrome.exe not found at: ${exePath}\nCheck logs for extraction errors.`);
   }
-  return newPath;
+  log(`Built-in browser ready: ${exePath}`);
+  return exePath;
 }
 
 export async function applyStealthScripts(page: Page): Promise<void> {
@@ -260,26 +318,26 @@ export async function getOrCreateSession(
   fs.mkdirSync(userDataDir, { recursive: true });
   const userDataArg = [`--user-data-dir=${userDataDir}`];
 
-  // Always use the full puppeteer package first — it manages its own self-contained
-  // Chrome for Testing and never touches the user's personal browser.
-  // Fall back to puppeteer-core only when the full package is unavailable.
+  // Always use puppeteer-core to launch the browser — it accepts an explicit
+  // executablePath and has no bundled-Chrome download side-effects at all.
   let puppeteerLib: any;
   try {
-    puppeteerLib = (await import("puppeteer")).default;
-  } catch {
     puppeteerLib = (await import("puppeteer-core")).default;
+  } catch {
+    puppeteerLib = (await import("puppeteer")).default;
   }
 
   // Resolve the executable path:
   //  • Linux/dev  → CHROMIUM_PATH (Nix-managed Chromium set by Electron main)
-  //  • Windows    → puppeteer's own Chrome for Testing (auto-downloaded on first use)
+  //  • Windows    → self-downloaded Chrome for Testing (pure Node.js + PowerShell)
   let executablePath: string;
   if (CHROMIUM_PATH) {
-    // Linux dev: Nix-managed Chromium is already present
+    // Linux / dev: Nix-managed Chromium already present
     executablePath = CHROMIUM_PATH;
   } else {
-    // Windows / packaged app: use (or download) puppeteer's own Chrome
-    executablePath = await ensureBrowserInstalled(puppeteerLib);
+    // Windows / packaged app: download Chrome for Testing on first use
+    // Uses only Node.js built-ins — no @puppeteer/browsers dependency
+    executablePath = await ensureBrowserInstalled();
   }
 
   const browser = await puppeteerLib.launch({

@@ -998,12 +998,20 @@ export async function registerInstagramRoutes(
     res.setHeader("X-Accel-Buffering", "no"); // disable nginx/proxy response buffering
     res.flushHeaders();
 
+    // Send SSE keepalive comments every 20 s while the browser is starting up.
+    // Prevents proxy/browser timeouts during the one-time ~150 MB Chrome download.
+    const keepalive = setInterval(() => {
+      if (!res.writableEnded) res.write(": keepalive\n\n");
+    }, 20_000);
+
     try {
       const proxy = await resolveProxyConfig(profile);
       const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
       await getOrCreateSession(profileId, ua, proxy);
+      clearInterval(keepalive);
       attachSSE(profileId, res);
     } catch (err: any) {
+      clearInterval(keepalive);
       res.write(`data: ${JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" })}\n\n`);
       res.end();
       return;
