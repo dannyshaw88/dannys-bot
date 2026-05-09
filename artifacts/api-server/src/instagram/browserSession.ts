@@ -196,35 +196,59 @@ export async function getOrCreateSession(
   fs.mkdirSync(userDataDir, { recursive: true });
   const userDataArg = [`--user-data-dir=${userDataDir}`];
 
+  // ── EB-DEBUG: log the environment we received ────────────────────────────
+  console.log(`[EB-DEBUG][browserSession] profileId=${profileId}`);
+  console.log(`[EB-DEBUG][browserSession] CHROMIUM_PATH env = "${process.env.CHROMIUM_PATH ?? "(not set)"}"`);
+  console.log(`[EB-DEBUG][browserSession] CHROMIUM_PATH resolved = "${CHROMIUM_PATH}"`);
+  console.log(`[EB-DEBUG][browserSession] NODE_PATH = "${process.env.NODE_PATH ?? "(not set)"}"`);
+  console.log(`[EB-DEBUG][browserSession] platform = ${process.platform}`);
+  console.log(`[EB-DEBUG][browserSession] node version = ${process.version}`);
+  console.log(`[EB-DEBUG][browserSession] userDataDir = ${userDataDir}`);
+
   // Try puppeteer-core first (ships with Electron app, no bundled Chromium).
   // Fall back to the full puppeteer package (used in Linux dev where it manages its own Chromium).
   let puppeteerLib: any;
+  let puppeteerSource = "";
   try {
     puppeteerLib = (await import("puppeteer-core")).default;
-  } catch {
-    puppeteerLib = (await import("puppeteer")).default;
+    puppeteerSource = "puppeteer-core";
+    console.log(`[EB-DEBUG][browserSession] puppeteer loaded: puppeteer-core ✓`);
+  } catch (e: any) {
+    console.log(`[EB-DEBUG][browserSession] puppeteer-core import failed (${e?.message}) — trying puppeteer fallback`);
+    try {
+      puppeteerLib = (await import("puppeteer")).default;
+      puppeteerSource = "puppeteer";
+      console.log(`[EB-DEBUG][browserSession] puppeteer loaded: puppeteer (fallback) ✓`);
+    } catch (e2: any) {
+      const msg = `Cannot load puppeteer or puppeteer-core: ${e2?.message}`;
+      console.error(`[EB-DEBUG][browserSession] FATAL: ${msg}`);
+      throw new Error(msg);
+    }
   }
 
   if (!CHROMIUM_PATH) {
     const msg = "No browser found. Please install Google Chrome or Microsoft Edge, then restart Equinox.";
-    console.error(`[browserSession] ${msg}`);
+    console.error(`[EB-DEBUG][browserSession] FATAL: ${msg}`);
     throw new Error(msg);
   }
-  log(`CHROMIUM_PATH = ${CHROMIUM_PATH}`, "browser");
 
-  log(`Launching with executablePath: ${CHROMIUM_PATH}`, "browser");
+  const fullArgs = [...LAUNCH_ARGS, ...userDataArg, ...proxyArg];
+  console.log(`[EB-DEBUG][browserSession] launching via ${puppeteerSource}, executablePath="${CHROMIUM_PATH}"`);
+  console.log(`[EB-DEBUG][browserSession] launch args: ${fullArgs.join(" ")}`);
+
   let browser: Browser;
   try {
     browser = await puppeteerLib.launch({
       headless: true,
       executablePath: CHROMIUM_PATH,
-      args: [...LAUNCH_ARGS, ...userDataArg, ...proxyArg],
+      args: fullArgs,
       ignoreHTTPSErrors: true,
     });
+    console.log(`[EB-DEBUG][browserSession] browser launched successfully ✓`);
   } catch (err: any) {
     const msg = `Chrome failed to launch: ${err?.message ?? err}`;
-    log(`ERROR: ${msg}`, "browser");
-    console.error(`[browserSession] ${msg}`);
+    console.error(`[EB-DEBUG][browserSession] LAUNCH ERROR: ${msg}`);
+    if (err?.stack) console.error(`[EB-DEBUG][browserSession] stack: ${err.stack}`);
     throw new Error(msg);
   }
 

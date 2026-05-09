@@ -986,6 +986,37 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── EB diagnostic endpoint — hit this from the app to get a full debug report ──
+  // Returns JSON: CHROMIUM_PATH, whether it exists, Node.js version, platform, etc.
+  app.get("/api/browser/debug", async (_req, res) => {
+    const fs = await import("fs");
+    const chromiumPath = process.env.CHROMIUM_PATH || "";
+    let chromiumExists = false;
+    try { chromiumExists = chromiumPath ? fs.existsSync(chromiumPath) : false; } catch {}
+
+    let puppeteerCoreAvailable = false;
+    let puppeteerCoreError = "";
+    try { await import("puppeteer-core"); puppeteerCoreAvailable = true; } catch (e: any) { puppeteerCoreError = e?.message ?? String(e); }
+
+    let puppeteerAvailable = false;
+    let puppeteerError = "";
+    try { await import("puppeteer"); puppeteerAvailable = true; } catch (e: any) { puppeteerError = e?.message ?? String(e); }
+
+    const info = {
+      platform: process.platform,
+      nodeVersion: process.version,
+      CHROMIUM_PATH: chromiumPath || "(not set)",
+      CHROMIUM_PATH_EXISTS: chromiumExists,
+      NODE_PATH: process.env.NODE_PATH || "(not set)",
+      puppeteerCore: puppeteerCoreAvailable ? "available ✓" : `MISSING — ${puppeteerCoreError}`,
+      puppeteer: puppeteerAvailable ? "available ✓" : `missing — ${puppeteerError}`,
+      tmpdir: (await import("os")).tmpdir(),
+      cwd: process.cwd(),
+    };
+    console.log("[EB-DEBUG][/api/browser/debug]", JSON.stringify(info, null, 2));
+    res.json(info);
+  });
+
   // SSE stream for real-time browser frames (proxy-friendly, no upgrade required)
   app.get("/api/browser/:profileId/stream", async (req, res) => {
     const profileId = Number(req.params.profileId);

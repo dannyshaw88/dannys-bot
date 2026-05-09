@@ -105,10 +105,14 @@ function waitForServer(port: number, timeoutMs = 30000): Promise<void> {
 }
 
 function findChromiumPath(): string {
+  console.log("[EB-DEBUG][findChromiumPath] platform=" + process.platform);
   if (process.platform === "win32") {
     const localAppData = process.env.LOCALAPPDATA || "";
     const programFiles = process.env.ProgramFiles || "C:\\Program Files";
     const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+    console.log("[EB-DEBUG][findChromiumPath] LOCALAPPDATA=" + localAppData);
+    console.log("[EB-DEBUG][findChromiumPath] ProgramFiles=" + programFiles);
+    console.log("[EB-DEBUG][findChromiumPath] ProgramFiles(x86)=" + programFilesX86);
     const candidates = [
       path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
       path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
@@ -119,13 +123,22 @@ function findChromiumPath(): string {
       path.join(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
     ];
     for (const p of candidates) {
-      try { if (fs.existsSync(p)) return p; } catch {}
+      let exists = false;
+      try { exists = fs.existsSync(p); } catch {}
+      console.log(`[EB-DEBUG][findChromiumPath] CHECK: ${p} → ${exists ? "FOUND ✓" : "not found"}`);
+      if (exists) {
+        console.log("[EB-DEBUG][findChromiumPath] RESULT: " + p);
+        return p;
+      }
     }
+    console.log("[EB-DEBUG][findChromiumPath] RESULT: NOT FOUND — no browser detected on this machine");
     return "";
   }
   // Linux / macOS (dev environment — Nix-managed Chromium)
-  return process.env.CHROMIUM_PATH
+  const nixPath = process.env.CHROMIUM_PATH
     || "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+  console.log("[EB-DEBUG][findChromiumPath] RESULT (Linux/Mac): " + nixPath);
+  return nixPath;
 }
 
 function startServer(port: number, logPath: string): void {
@@ -133,6 +146,8 @@ function startServer(port: number, logPath: string): void {
   const dbPath = path.join(getUserDataPath(), "database.db");
   const frontendPath = getFrontendPath();
   const chromiumPath = findChromiumPath();
+  console.log("[EB-DEBUG][startServer] log file: " + logPath);
+  console.log("[EB-DEBUG][startServer] CHROMIUM_PATH being passed to server: " + (chromiumPath || "(empty — browser not found)"));
 
   // With asar:false all files live under resources/app/, so node_modules is a real directory
   // that plain Node.js (ELECTRON_RUN_AS_NODE=1) can resolve packages from.
