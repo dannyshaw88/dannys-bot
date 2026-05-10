@@ -914,15 +914,20 @@ export async function registerInstagramRoutes(
           timeZone: "UTC",
         });
 
-        // Build IP:Port from the api call's recorded IP + the profile's proxy port
-        const ip = call.ipAddress ?? "";
+        // Build IP:Port from the api call's recorded IP (or proxy host fallback) + proxy port.
+        // Most rows have ipAddress="" because the automation engine doesn't resolve the
+        // outbound IP at call time — fall back to the profile's proxy host so the column
+        // is never blank for proxied accounts.
+        let ip = call.ipAddress ?? "";
         let port = "";
         if (profile) {
           if (profile.proxyId) {
             const linked = proxyMap.get(profile.proxyId);
+            if (!ip) ip = linked?.host ?? "";
             port = linked?.port ? String(linked.port) : "";
-          } else if (profile.proxyPort) {
-            port = String(profile.proxyPort);
+          } else {
+            if (!ip) ip = (profile.proxyHost as string | null) ?? "";
+            if (profile.proxyPort) port = String(profile.proxyPort);
           }
         }
         const ipPort = ip && port ? `${ip}:${port}` : ip;

@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
@@ -8,6 +8,7 @@ import { useEffect } from "react";
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
+  const search = useSearch();
   const slot = useSidebarSlot();
   const { canBack, canForward, pushLocation, back, forward } = useNavigationHistory();
 
@@ -66,7 +67,7 @@ export function Sidebar() {
 
       <nav className="flex-1 px-3 py-1 space-y-0">
         {navItems.map((item) => {
-          const fromCreateAccount = location.startsWith("/profiles/") && window.location.search.includes("from=create-account");
+          const fromCreateAccount = location.startsWith("/profiles/") && search.includes("from=create-account");
           const isActive = (() => {
             if (item.path === "/dashboard") return location === "/dashboard";
             if (item.path === "/create-account") return location === "/create-account" || fromCreateAccount;

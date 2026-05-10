@@ -313,7 +313,11 @@ export async function getOrCreateSession(
 
   const [page] = await browser.pages();
   await page.setUserAgent(userAgent);
-  await page.setViewport(viewportForUA(userAgent));
+  // The EB canvas is always 1280×760.  Using viewportForUA() for mobile UAs would
+  // produce screenshots at ~1082×2402 (412×915 @ 2.625x scale) which, when drawn
+  // onto the 1280×760 canvas, cause severe stretching.  Force desktop dimensions so
+  // the Puppeteer screenshot always matches the canvas size exactly.
+  await page.setViewport({ width: 1280, height: 760 });
 
   // Authenticate proxy if credentials supplied.
   // page.authenticate() handles the 407 Proxy Auth challenge Chromium receives on CONNECT.

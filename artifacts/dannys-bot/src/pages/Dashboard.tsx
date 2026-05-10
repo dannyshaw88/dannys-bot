@@ -339,10 +339,9 @@ export function Dashboard() {
     refetchInterval: 5000,
   });
 
-  const getUsername = (profileId: number, label?: string) => {
-    if (label) return label;
+  const getUsername = (profileId: number, _label?: string) => {
     const p = profiles?.find(p => Number(p.id) === Number(profileId));
-    return p?.accountLabel || p?.username || `#${profileId}`;
+    return p?.accountLabel || p?.username || _label || `#${profileId}`;
   };
 
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
