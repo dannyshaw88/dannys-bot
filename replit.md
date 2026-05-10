@@ -64,3 +64,59 @@ An Instagram automation platform for managing multiple accounts with tools for f
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+
+## CI / GitHub Actions — Critical Knowledge
+
+### How the build pipeline works
+
+Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
+
+1. **`build-web`** (ubuntu-latest) — installs workspace deps, builds the API server and React frontend, uploads them as an intermediate Actions artifact called `web-builds` (4MB). This is NOT the installer.
+2. **`package-windows`** (windows-latest) — downloads `web-builds`, installs Electron deps, runs `build.mjs` to bundle the app, then runs `electron-builder` to produce the Windows installer. It publishes to GitHub Releases AND uploads the installer as an Actions artifact called `Equinox-Windows-Installer` (88MB).
+
+### How the user gets the installer
+
+The user downloads the installer from the **Actions tab** on GitHub:
+- Go to `github.com/dannyshaw88/dannys-bot/actions`
+- Click the latest successful run
+- Scroll to the Artifacts section at the bottom
+- Download **`Equinox-Windows-Installer`** (88MB) — this is the real installer
+
+**Do NOT tell the user to go to the Releases tab.** They have always used the Actions tab. The `web-builds` artifact (4MB) in the same run is just an intermediate build output — not the installer.
+
+### If the user says "the download is only 4MB"
+
+They are downloading `web-builds` instead of `Equinox-Windows-Installer`. Both appear in the Actions artifacts list. Point them to the correct one. Do NOT suggest the Releases page.
+
+### If the Equinox-Windows-Installer artifact is missing from the Actions tab
+
+The upload step at the end of `package-windows` in `build.yml` is missing or broken. It should look like:
+
+```yaml
+- name: Upload installer to Actions artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: Equinox-Windows-Installer
+    path: artifacts/electron/release/*.exe
+    if-no-files-found: error
+```
+
+### Auto-updater (for the installed app checking for updates)
+
+The installed app uses `electron-updater` with `setFeedURL` pointing to this private GitHub repo. It requires a GitHub token (`UPDATER_TOKEN` secret) baked in at build time via `DANNY_BOT_UPDATER_TOKEN` env var → `build.mjs` esbuild define → `__UPDATER_TOKEN__` in `main.ts`. Without this token the updater gets 404 on private repo release assets.
+
+The `package-windows` job also sets `GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}` so `electron-builder --publish always` can create/update GitHub Releases (which the auto-updater reads from).
+
+### Key secrets required
+
+- `UPDATER_TOKEN` — GitHub personal access token with `repo` scope. Used for: publishing releases (`GH_TOKEN`) and baking into the app for auto-update auth (`DANNY_BOT_UPDATER_TOKEN`).
+
+### pnpm install quirks in CI
+
+- Ubuntu CI must use `pnpm install --no-frozen-lockfile --ignore-scripts` (pnpm v11 requires `--ignore-scripts` to avoid build script failures in CI)
+- Windows CI uses plain `npm install` inside `artifacts/electron/` (not pnpm)
+- Vite frontend build requires `REPL_ID: ci` env var to output to `artifacts/dannys-bot/dist/public` (the path electron-builder expects)
+
+### Always push workflow changes as a single commit
+
+Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents API (or Git Trees API) to batch all file changes into one commit. The user explicitly cares about this.
