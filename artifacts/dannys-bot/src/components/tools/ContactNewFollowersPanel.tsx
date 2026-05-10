@@ -119,23 +119,25 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
         />
         <div>
           <p className="text-sm font-semibold">Contact New Followers</p>
-          <p className="text-[11px] text-muted-foreground">Automatically queue DMs for new followers of this account.</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[11px] text-muted-foreground">Automatically queue DMs for new followers of this account.</p>
+            {(() => {
+              if (!settings.contactNewFollowersEnabled) return null;
+              const nextAt = engineStatus?.nextContactAt ?? 0;
+              if (!nextAt) return null;
+              const executing = nextAt <= Date.now();
+              const label = executing ? null : format(new Date(nextAt), "HH:mm:ss");
+              return (
+                <span className="flex items-center gap-1 text-[11px] font-bold" style={{ color: executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                  <Clock className="w-3 h-3 shrink-0" />
+                  {executing
+                    ? <span>Executing</span>
+                    : <span>Scheduled for: <span className="text-foreground">{label}</span></span>}
+                </span>
+              );
+            })()}
+          </div>
         </div>
-        {(() => {
-          if (!settings.contactNewFollowersEnabled) return null;
-          const nextAt = engineStatus?.nextContactAt ?? 0;
-          if (!nextAt) return null;
-          const executing = nextAt <= Date.now();
-          const label = executing ? null : format(new Date(nextAt), "HH:mm:ss");
-          return (
-            <span className="flex items-center gap-1 text-[11px] font-bold" style={{ color: executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
-              <Clock className="w-3 h-3 shrink-0" />
-              {executing
-                ? <span>Executing</span>
-                : <span>Scheduled for: <span className="text-foreground">{label}</span></span>}
-            </span>
-          );
-        })()}
       </div>
 
       <div className="border border-border rounded-xl p-4 space-y-4">
