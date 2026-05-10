@@ -262,12 +262,10 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         { key: "ft_minFollowAge", label: "Min follow age (days)",                  settingKeys: ["minFollowAgeDays"] },
       ]},
     ]},
-    { label: "Contextual Actions", options: [
-      { key: "ft_contextual", label: "Contextual Actions", description: "Actions performed as part of following", subOptions: [
-        { key: "ft_ctxEnabled",  label: "Enabled",                                  settingKeys: ["contextualActionsEnabled"] },
-        { key: "ft_ctxCount",    label: "Action count (min / max)",                 settingKeys: ["contextualActionsMin","contextualActionsMax"] },
-        { key: "ft_ctxDelay",    label: "Delay between actions (min / max secs)",   settingKeys: ["contextualActionsDelayMin","contextualActionsDelayMax"] },
-        { key: "ft_ctxDiscover", label: "Discover page % (min / max)",              settingKeys: ["discoverPagePercentageMin","discoverPagePercentageMax"] },
+    { label: "Injection Settings", options: [
+      { key: "ft_injection", label: "Injection Settings", description: "API calls injected between follows to simulate natural behaviour", subOptions: [
+        { key: "ft_injectSearch",    label: "Inject SearchByUsername (enabled + %)",  settingKeys: ["injectSearchEnabled","injectSearchMin","injectSearchMax"] },
+        { key: "ft_injectSuggested", label: "Inject GetSuggestedUsers (enabled + %)", settingKeys: ["injectSuggestedEnabled","injectSuggestedMin","injectSuggestedMax"] },
       ]},
     ]},
     { label: "Auto Follow / Unfollow", options: [
@@ -872,130 +870,66 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                     </div>
                   </div>
 
-                  <div className="w-px self-stretch bg-border/50 hidden sm:block" />
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        id="injectSearchEnabled"
-                        checked={!!(settings as any).injectSearchEnabled}
-                        onChange={(e) => setSettings({ ...settings, injectSearchEnabled: e.target.checked } as any)}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                      />
-                      <label htmlFor="injectSearchEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
-                        Inject SearchByUsername
-                      </label>
-                    </div>
-                    <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSearchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                        value={(settings as any).injectSearchMin ?? 30}
-                        onChange={(e) => setSettings({ ...settings, injectSearchMin: Number(e.target.value) } as any)}
-                      />
-                      <span className="text-[10px] text-muted-foreground">–</span>
-                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                        value={(settings as any).injectSearchMax ?? 50}
-                        onChange={(e) => setSettings({ ...settings, injectSearchMax: Number(e.target.value) } as any)}
-                      />
-                      <span className="text-[10px] text-muted-foreground">%</span>
-                    </div>
-                  </div>
-
-                  <div className="w-px self-stretch bg-border/50 hidden sm:block" />
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        id="injectSuggestedEnabled"
-                        checked={!!(settings as any).injectSuggestedEnabled}
-                        onChange={(e) => setSettings({ ...settings, injectSuggestedEnabled: e.target.checked } as any)}
-                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                      />
-                      <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
-                        Inject GetSuggestedUsers
-                      </label>
-                    </div>
-                    <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                        value={(settings as any).injectSuggestedMin ?? 40}
-                        onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Number(e.target.value) } as any)}
-                      />
-                      <span className="text-[10px] text-muted-foreground">–</span>
-                      <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                        value={(settings as any).injectSuggestedMax ?? 60}
-                        onChange={(e) => setSettings({ ...settings, injectSuggestedMax: Number(e.target.value) } as any)}
-                      />
-                      <span className="text-[10px] text-muted-foreground">%</span>
-                    </div>
-                  </div>
                 </div>
               </div>
 
               {tool.type === 'follow' && (
                 <div className="pt-4 border-t border-border space-y-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="contextualActionsEnabled"
-                      checked={!!(settings as any).contextualActionsEnabled}
-                      onChange={(e) => setSettings({ ...settings, contextualActionsEnabled: e.target.checked } as any)}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor="contextualActionsEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
-                      Follow via Contextual Actions
-                    </label>
-                  </div>
-                  <div className={`space-y-3 transition-opacity ${!(settings as any).contextualActionsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-                      <div className="space-y-1.5">
-                        <h4 className="text-xs text-muted-foreground">Follow</h4>
-                        <div className="flex items-center gap-1.5">
-                          <Input type="number" min="0" className="w-14 h-7 text-xs"
-                            value={(settings as any).contextualActionsMin ?? 5}
-                            onChange={(e) => setSettings({ ...settings, contextualActionsMin: Number(e.target.value) } as any)}
-                          />
-                          <span className="text-[10px] text-muted-foreground">–</span>
-                          <Input type="number" min="0" className="w-14 h-7 text-xs"
-                            value={(settings as any).contextualActionsMax ?? 5}
-                            onChange={(e) => setSettings({ ...settings, contextualActionsMax: Number(e.target.value) } as any)}
-                          />
-                        </div>
-                      </div>
-                      <div className="w-px self-stretch bg-border/50 hidden sm:block" />
-                      <div className="space-y-1.5">
-                        <h4 className="text-xs text-muted-foreground">Delay between actions (sec)</h4>
-                        <div className="flex items-center gap-1.5">
-                          <Input type="number" min="0" className="w-14 h-7 text-xs"
-                            value={(settings as any).contextualActionsDelayMin ?? 0}
-                            onChange={(e) => setSettings({ ...settings, contextualActionsDelayMin: Number(e.target.value) } as any)}
-                          />
-                          <span className="text-[10px] text-muted-foreground">–</span>
-                          <Input type="number" min="0" className="w-14 h-7 text-xs"
-                            value={(settings as any).contextualActionsDelayMax ?? 1}
-                            onChange={(e) => setSettings({ ...settings, contextualActionsDelayMax: Number(e.target.value) } as any)}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <h4 className="text-xs text-muted-foreground">Follow from discover page <span className="text-muted-foreground/60">(own suggested users)</span> percentage</h4>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Injection Settings</h4>
+                  <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+                    <div className="space-y-2">
                       <div className="flex items-center gap-1.5">
-                        <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                          value={(settings as any).discoverPagePercentageMin ?? 100}
-                          onChange={(e) => setSettings({ ...settings, discoverPagePercentageMin: Number(e.target.value) } as any)}
+                        <input
+                          type="checkbox"
+                          id="injectSearchEnabled"
+                          checked={!!(settings as any).injectSearchEnabled}
+                          onChange={(e) => setSettings({ ...settings, injectSearchEnabled: e.target.checked } as any)}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                        />
+                        <label htmlFor="injectSearchEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+                          Inject SearchByUsername
+                        </label>
+                      </div>
+                      <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSearchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSearchMin ?? 30}
+                          onChange={(e) => setSettings({ ...settings, injectSearchMin: Number(e.target.value) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
-                          value={(settings as any).discoverPagePercentageMax ?? 100}
-                          onChange={(e) => setSettings({ ...settings, discoverPagePercentageMax: Number(e.target.value) } as any)}
+                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSearchMax ?? 50}
+                          onChange={(e) => setSettings({ ...settings, injectSearchMax: Number(e.target.value) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground">%</span>
                       </div>
                     </div>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      After every follow, also follow users from your discover page. The percentage controls how often this contextual follow is triggered.
-                    </p>
+                    <div className="w-px self-stretch bg-border/50 hidden sm:block" />
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          id="injectSuggestedEnabled"
+                          checked={!!(settings as any).injectSuggestedEnabled}
+                          onChange={(e) => setSettings({ ...settings, injectSuggestedEnabled: e.target.checked } as any)}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                        />
+                        <label htmlFor="injectSuggestedEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
+                          Inject GetSuggestedUsers
+                        </label>
+                      </div>
+                      <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSuggestedMin ?? 40}
+                          onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Number(e.target.value) } as any)}
+                        />
+                        <span className="text-[10px] text-muted-foreground">–</span>
+                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSuggestedMax ?? 60}
+                          onChange={(e) => setSettings({ ...settings, injectSuggestedMax: Number(e.target.value) } as any)}
+                        />
+                        <span className="text-[10px] text-muted-foreground">%</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

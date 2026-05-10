@@ -511,13 +511,16 @@ export function ProfileDetailsPage() {
                   <span className="text-blue-500 hover:text-blue-600">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
                 </Link>
                 {!profile?.creatorMode && (
-                  <Link
-                    href="/"
-                    onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                    className="text-xs font-medium text-blue-500 hover:text-blue-600 transition-colors"
-                  >
-                    Dash
-                  </Link>
+                  <>
+                    <span className="text-border mx-1 select-none">|</span>
+                    <Link
+                      href="/"
+                      onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
+                      className="text-xs font-medium text-blue-500 hover:text-blue-600 transition-colors"
+                    >
+                      Dash
+                    </Link>
+                  </>
                 )}
               </div>
             </div>

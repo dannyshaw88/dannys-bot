@@ -19,6 +19,7 @@ type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
 const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "General", options: [
+    { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
     { key: "randomiseTiming", label: "Randomise timing", description: "Spread each account's session start times across the wait window so they don't all fire simultaneously" },
   ]},
   { label: "Contact New Followers", options: [
