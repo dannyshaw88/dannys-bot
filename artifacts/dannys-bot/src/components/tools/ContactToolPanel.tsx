@@ -58,8 +58,14 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const { data: allProfiles = [] } = useProfiles();
   const engineStatus = useProfileEngineStatus(tool.profileId);
 
+  const contactSettings = (tool.settings as Record<string, any>) ?? {};
+  const anyContactEnabled =
+    !!contactSettings.contactNewFollowersEnabled ||
+    !!contactSettings.contactUsersEnabled ||
+    !!contactSettings.autoReplyEnabled;
+
   const nextContactStatus: { label: string; executing: boolean } | null = (() => {
-    if (!tool.enabled) return null;
+    if (!anyContactEnabled) return null;
     const nextAt = engineStatus?.nextContactAt ?? 0;
     if (!nextAt) return null;
     if (nextAt <= Date.now()) return { label: "Executing", executing: true };
