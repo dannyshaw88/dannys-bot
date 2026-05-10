@@ -19,6 +19,11 @@ await esbuild({
   external: ["electron", "electron-updater"],
   outfile: path.join(dist, "main.js"),
   format: "cjs",
+  define: {
+    // Baked in at build time from CI secret — lets electron-updater
+    // authenticate against the private GitHub repo without a config file.
+    __UPDATER_TOKEN__: JSON.stringify(process.env.DANNY_BOT_UPDATER_TOKEN || ""),
+  },
 });
 
 // 1b. Compile preload → dist/preload.js (CJS)
