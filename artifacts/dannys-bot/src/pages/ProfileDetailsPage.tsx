@@ -510,6 +510,15 @@ export function ProfileDetailsPage() {
                   <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
                   <span className="text-blue-500 hover:text-blue-600">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
                 </Link>
+                {!profile?.creatorMode && (
+                  <Link
+                    href="/"
+                    onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
+                    className="text-xs font-medium text-blue-500 hover:text-blue-600 transition-colors"
+                  >
+                    Dash
+                  </Link>
+                )}
               </div>
             </div>
             <Button
@@ -577,9 +586,8 @@ export function ProfileDetailsPage() {
                 <Tag className="w-3.5 h-3.5" /> Account Name
               </Label>
               <button
-                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
                 onClick={() => setCopyDialogOpen(true)}
-                disabled={!hasOtherProfiles}
               >
                 <Copy className="w-3 h-3" /> Copy Settings
               </button>

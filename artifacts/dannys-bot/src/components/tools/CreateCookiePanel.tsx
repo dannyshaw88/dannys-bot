@@ -217,8 +217,7 @@ export function CreateCookiePanel({ profile }: Props) {
         {!showActivity ? (
           <>
             <button
-              className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              disabled={!hasOtherProfiles}
+              className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
               onClick={() => setCopyOpen(true)}
             >
               Copy Settings

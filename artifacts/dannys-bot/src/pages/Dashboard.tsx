@@ -24,7 +24,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
   follow:              { label: "Follow",        cls: "bg-sky-100 text-sky-700" },
   follow_blocked:      { label: "Blocked",       cls: "bg-rose-100 text-rose-700" },
   follow_skipped:      { label: "Skipped",       cls: "bg-orange-100 text-orange-700" },
-  dedup_skip:          { label: "Dedup Skip",    cls: "bg-amber-100 text-amber-700" },
+  dedup_skip:          { label: "Skipped",        cls: "bg-amber-100 text-amber-700" },
   filter_skip:         { label: "Filter Skip",   cls: "bg-yellow-100 text-yellow-800" },
   unfollow:            { label: "Unfollow",      cls: "bg-violet-100 text-violet-700" },
   unfollow_blocked:    { label: "UF Block",      cls: "bg-pink-100 text-pink-700" },
@@ -209,10 +209,22 @@ function ImportStatusBanner() {
 }
 
 export function Dashboard() {
-  const [activeTab, setActiveTab] = useState<Tab>("api-log");
+  const [activeTab, setActiveTab] = useState<Tab>(() =>
+    (sessionStorage.getItem("dashboard:tab") as Tab) ?? "api-log"
+  );
   const [changelogFilter, setChangelogFilter] = useState("");
-  const [apiLogSearch, setApiLogSearch] = useState("");
-  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
+  const [apiLogSearch, setApiLogSearch] = useState(() =>
+    sessionStorage.getItem("dashboard:search") ?? ""
+  );
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(() => {
+    const dashProfile = sessionStorage.getItem("dashboard:profileId");
+    if (dashProfile) {
+      sessionStorage.removeItem("dashboard:profileId");
+      return Number(dashProfile);
+    }
+    const stored = sessionStorage.getItem("dashboard:selectedProfileId");
+    return stored ? Number(stored) : null;
+  });
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [manageColsOpen, setManageColsOpen] = useState(false);
@@ -224,6 +236,14 @@ export function Dashboard() {
   });
   const pickerRef = useRef<HTMLDivElement>(null);
   const manageColsRef = useRef<HTMLDivElement>(null);
+
+  // ── Persist dashboard state across navigation ─────────────────────────────────
+  useEffect(() => { sessionStorage.setItem("dashboard:tab", activeTab); }, [activeTab]);
+  useEffect(() => { sessionStorage.setItem("dashboard:search", apiLogSearch); }, [apiLogSearch]);
+  useEffect(() => {
+    if (selectedProfileId !== null) sessionStorage.setItem("dashboard:selectedProfileId", String(selectedProfileId));
+    else sessionStorage.removeItem("dashboard:selectedProfileId");
+  }, [selectedProfileId]);
 
   // ── Unified feed: both API calls + session actions merged by timestamp ────────
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
