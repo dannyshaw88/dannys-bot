@@ -1079,13 +1079,20 @@ export function ProfilesPage() {
                   const url = `/api/logs/export?tz=${tzOffset}${ids ? `&profileIds=${ids}` : ""}`;
                   try {
                     const res = await fetch(url, { credentials: "include" });
-                    const blob = await res.blob();
-                    const objectUrl = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = objectUrl;
-                    a.download = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                    URL.revokeObjectURL(objectUrl);
+                    const text = await res.text();
+                    const filename = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                    const eApi = (window as any).electronAPI;
+                    if (eApi?.openCsvTemp) {
+                      await eApi.openCsvTemp({ content: text, filename });
+                    } else {
+                      const blob = new Blob([text], { type: "text/csv" });
+                      const objectUrl = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = objectUrl;
+                      a.download = filename;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                      URL.revokeObjectURL(objectUrl);
+                    }
                   } catch { /* ignore */ }
                 }}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"

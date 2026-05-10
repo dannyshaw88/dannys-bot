@@ -739,6 +739,16 @@ async function createWindow() {
     }
   });
 
+  ipcMain.handle("open-csv-temp", async (_e, { content, filename }: { content: string; filename: string }) => {
+    const os = await import("os");
+    const fsSync = await import("fs");
+    const { shell } = await import("electron");
+    const tmpPath = path.join(os.tmpdir(), filename);
+    fsSync.writeFileSync(tmpPath, content, "utf8");
+    const err = await shell.openPath(tmpPath);
+    if (err) throw new Error(err);
+  });
+
   ipcMain.handle("check-for-updates", async () => {
     if (!app.isPackaged) {
       dialog.showMessageBox(win!, {

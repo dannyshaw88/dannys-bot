@@ -11,6 +11,7 @@ import type { Profile } from "@shared/schema";
 export interface CopySubOption {
   key: string;
   label: string;
+  description?: string;
   settingKeys: string[];
 }
 
@@ -71,8 +72,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
   const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
 
-  // Reset profile selection and search every time the dialog opens so stale
-  // state from a previous session never bleeds into the next one.
   useEffect(() => {
     if (open) {
       setTargets(new Set());
@@ -93,13 +92,17 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     return map;
   }, [profiles]);
 
-  const filteredProfiles = profiles.filter(p => {
-    const q = search.toLowerCase();
-    return (
-      p.username.toLowerCase().includes(q) ||
-      (p.accountLabel ?? "").toLowerCase().includes(q)
+  // Multi-term search: split on "||" and match any term against label or username
+  const filteredProfiles = useMemo(() => {
+    const terms = search.split("||").map(t => t.trim().toLowerCase()).filter(Boolean);
+    if (terms.length === 0) return profiles;
+    return profiles.filter(p =>
+      terms.some(q =>
+        p.username.toLowerCase().includes(q) ||
+        (p.accountLabel ?? "").toLowerCase().includes(q)
+      )
     );
-  });
+  }, [profiles, search]);
 
   const toggleTarget = (id: number) => setTargets(prev => {
     const next = new Set(prev);
@@ -144,6 +147,14 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   const allFilteredSelected = filteredProfiles.length > 0 && filteredProfiles.every(p => targets.has(p.id));
 
+  const handleToggleAllFiltered = () => {
+    if (allFilteredSelected) {
+      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.delete(p.id)); return n; });
+    } else {
+      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.add(p.id)); return n; });
+    }
+  };
+
   const handleCopy = async () => {
     if (!targets.size || !selected.size) return;
     setStatus("copying");
@@ -170,18 +181,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         <div className="flex min-h-0" style={{ maxHeight: "calc(81vh - 140px)" }}>
           {/* LEFT profile list */}
           <div className="w-72 shrink-0 border-r border-border flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
               {filteredProfiles.length > 1 && (
                 <button
                   className="text-[11px] text-primary hover:underline font-medium"
-                  onClick={() => {
-                    if (allFilteredSelected) {
-                      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.delete(p.id)); return n; });
-                    } else {
-                      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.add(p.id)); return n; });
-                    }
-                  }}
+                  onClick={handleToggleAllFiltered}
                 >
                   {allFilteredSelected ? "None" : "All"}
                 </button>
@@ -217,7 +222,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Filter profiles…"
+                  placeholder="Filter… or A||B for multiple"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -234,7 +239,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
                 >
                   <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} />
-                  <span className="text-sm font-medium tracking-tight truncate">@{p.username}</span>
+                  <span className="text-sm font-medium tracking-tight truncate">
+                    {p.accountLabel || p.username}
+                  </span>
                 </label>
               ))}
             </div>
@@ -276,7 +283,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
                     return (
                       <div key={opt.key}>
-                        {/* Option header (title row) */}
                         <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/10">
                           <Checkbox
                             checked={indeterminate ? "indeterminate" : checked}
@@ -291,7 +297,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                           </div>
                         </div>
 
-                        {/* Sub-options always visible */}
                         {hasSubs && (
                           <div className="border-t border-border/60 bg-muted/5 divide-y divide-border/30">
                             {opt.subOptions!.map(sub => (
@@ -304,7 +309,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                                   onCheckedChange={() => toggleSubOption(sub.key)}
                                   className="shrink-0"
                                 />
-                                <span className="text-xs text-foreground">{sub.label}</span>
+                                <div className="min-w-0">
+                                  <span className="text-xs text-foreground">{sub.label}</span>
+                                  {sub.description && (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{sub.description}</p>
+                                  )}
+                                </div>
                               </label>
                             ))}
                           </div>

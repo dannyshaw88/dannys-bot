@@ -8,7 +8,6 @@ import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/Cop
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useToast } from "@/hooks/use-toast";
-import { useUpdateTool } from "@/hooks/use-tools";
 
 interface Props {
   tool: Tool;
@@ -17,14 +16,13 @@ interface Props {
 
 type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
+const RANDOMISE_DESC = "Spread each account's session start times across the wait window so they don't all fire simultaneously";
+
 const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
-  { label: "General", options: [
-    { key: "startStop", label: "Start / Stop", description: "Copy the enabled/disabled state of this tool" },
-    { key: "randomiseTiming", label: "Randomise timing", description: "Spread each account's session start times across the wait window so they don't all fire simultaneously" },
-  ]},
   { label: "Contact New Followers", options: [
     { key: "ct_newFollowers", label: "Contact New Followers", description: "Auto-messaging settings for new followers", subOptions: [
       { key: "ct_newFollowersStartStop", label: "Start / Stop",                          settingKeys: ["contactNewFollowersEnabled"] },
+      { key: "ct_newFollowersRandomise", label: "Randomise timing",                      description: RANDOMISE_DESC, settingKeys: ["__randomiseTiming__"] },
       { key: "ct_onlyApp",               label: "Only app-followed users",               settingKeys: ["contactOnlyAppFollowed"] },
       { key: "ct_message",               label: "Message template",                      settingKeys: ["contactMessage"] },
       { key: "ct_interval",              label: "Check interval (min / max mins)",       settingKeys: ["contactCheckIntervalMin","contactCheckIntervalMax"] },
@@ -35,6 +33,7 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "Contact Users", options: [
     { key: "ct_users", label: "Contact Users", description: "Settings for the manual user contact list", subOptions: [
       { key: "ct_usersStartStop",      label: "Start / Stop",                              settingKeys: ["contactUsersEnabled"] },
+      { key: "ct_usersRandomise",      label: "Randomise timing",                          description: RANDOMISE_DESC, settingKeys: ["__randomiseTiming__"] },
       { key: "ct_usersWait",           label: "Wait between sessions (min / max mins)",    settingKeys: ["contactUsersWaitMin","contactUsersWaitMax"] },
       { key: "ct_usersSendCount",      label: "Send count per session (min / max)",        settingKeys: ["contactUsersSendCountMin","contactUsersSendCountMax"] },
       { key: "ct_usersDelay",          label: "Delay between messages (min / max secs)",   settingKeys: ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"] },
@@ -55,15 +54,14 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const [copyOpen, setCopyOpen] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
-  const updateToolMutation = useUpdateTool();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
   const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const src = (tool.settings as Record<string, unknown>) ?? {};
-    const copyEnabled   = expandedKeys.includes("startStop");
-    const willEnable    = copyEnabled && tool.enabled;
-    const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
+    // "__randomiseTiming__" is a sentinel — filter it out before passing real setting keys
+    const willRandomise = expandedKeys.includes("__randomiseTiming__");
+    const realKeys = expandedKeys.filter(k => k !== "__randomiseTiming__");
     let staggerOffsets: number[] | undefined;
     if (willRandomise && targetIds.length > 1) {
       const delayMax = (src as any).contactUsersDelayMax ?? (src as any).delayMax ?? 60;
@@ -71,16 +69,12 @@ export function ContactToolPanel({ tool, profile }: Props) {
         Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
       );
     }
-    // When copying Start/Stop, also carry all three sub-tool on/off toggles
-    const keysToPass = copyEnabled
-      ? [...new Set([...expandedKeys, "contactNewFollowersEnabled", "contactUsersEnabled", "autoReplyEnabled"])]
-      : expandedKeys;
     await copyToolSettingsToProfiles(
       src,
       tool.type,
       targetIds,
-      keysToPass,
-      copyEnabled ? tool.enabled : undefined,
+      realKeys,
+      undefined,
       staggerOffsets,
     );
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
