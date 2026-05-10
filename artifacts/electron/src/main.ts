@@ -403,9 +403,16 @@ function createTray(): void {
   });
 }
 
+declare const __UPDATER_TOKEN__: string;
+
 function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+
+  // Authenticate against private GitHub repo using the baked-in PAT
+  if (__UPDATER_TOKEN__) {
+    autoUpdater.requestHeaders = { Authorization: `token ${__UPDATER_TOKEN__}` };
+  }
 
   autoUpdater.on("update-downloaded", () => {
     if (!win) return;
