@@ -612,7 +612,7 @@ export function ProfilesPage() {
 
       <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 178px)" }}>
           {/* ── Top column-header bar always visible ────────────────────── */}
-          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none shrink-0">
+          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
             <div style={{ width: profColWidths.account + 32 }} className="shrink-0 flex items-center gap-2 min-w-0">
               <button
                 onClick={() => cycleSort("account")}
@@ -717,7 +717,7 @@ export function ProfilesPage() {
                   <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
                     <Link href={`/profiles/${profile.id}`}>
                       <span
-                        className="text-xs font-semibold text-foreground truncate hover:text-primary cursor-pointer flex items-center gap-1"
+                        className={`text-xs font-semibold truncate hover:text-primary cursor-pointer flex items-center gap-1 ${acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
                         data-testid={`text-username-${profile.id}`}
                       >
                         {profile.accountLabel || profile.username}
