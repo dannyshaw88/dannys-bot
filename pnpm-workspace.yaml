@@ -70,9 +70,12 @@ autoInstallPeers: false
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - better-sqlite3
+  - electron
   - esbuild
   - msw
   - puppeteer
+  - sharp
   - unrs-resolver
 
 overrides:
