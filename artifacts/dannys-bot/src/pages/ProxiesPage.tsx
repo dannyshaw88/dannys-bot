@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2, Upload, Download } from "lucide-react";
+import { Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2, Upload, Download, Trash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Proxy, Profile } from "@shared/schema";
@@ -354,6 +354,25 @@ export function ProxiesPage() {
     toast({ title: `Exported ${proxies.length} proxies` });
   };
 
+  const deleteProxyMutation = useDeleteProxy();
+  const [deletingAll, setDeletingAll] = useState(false);
+
+  const handleDeleteAll = async () => {
+    if (!proxies.length) return;
+    if (!confirm(`Delete all ${proxies.length} ${proxies.length === 1 ? "proxy" : "proxies"}? All account assignments will be cleared.`)) return;
+    setDeletingAll(true);
+    try {
+      await Promise.all(proxies.map(p => apiRequest("DELETE", `/api/proxies/${p.id}`)));
+      await queryClient.invalidateQueries({ queryKey: ["/api/proxies"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      toast({ title: `Deleted all ${proxies.length} proxies` });
+    } catch {
+      toast({ title: "Delete all failed", variant: "destructive" });
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = hostPort.trim();
@@ -469,6 +488,16 @@ export function ProxiesPage() {
 
           <Button variant="outline" onClick={handleExport} disabled={!proxies.length}>
             <Download className="w-4 h-4 mr-2" /> Export Proxies
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleDeleteAll}
+            disabled={deletingAll || !proxies.length}
+            className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+          >
+            {deletingAll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash className="w-4 h-4 mr-2" />}
+            {deletingAll ? "Deleting…" : "Delete All"}
           </Button>
 
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
