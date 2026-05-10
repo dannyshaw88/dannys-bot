@@ -192,13 +192,13 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
               <Clock className="w-3 h-3 shrink-0" />
               {nextUnfollowStatus.executing
                 ? <span>Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono text-foreground">{nextUnfollowStatus.label}</span></>
+                : <span>Scheduled for: <span className="text-foreground">{nextUnfollowStatus.label}</span></span>
               }
             </span>
           )}
           {tool.enabled && perHour > 0 && (
             <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
-              ~{perHour}/hr · ~{perDay}/day
+              {perHour}/hr · {perDay}/day
             </span>
           )}
         </div>

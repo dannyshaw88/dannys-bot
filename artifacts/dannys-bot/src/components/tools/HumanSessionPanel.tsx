@@ -295,7 +295,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               <Clock className="w-3 h-3 shrink-0" />
               {nextRunStatus.executing
                 ? <span>Executing</span>
-                : <><span>Scheduled:</span>&nbsp;<span className="font-mono text-foreground">{nextRunStatus.label}</span></>
+                : <span>Scheduled for: <span className="text-foreground">{nextRunStatus.label}</span></span>
               }
             </span>
           )}

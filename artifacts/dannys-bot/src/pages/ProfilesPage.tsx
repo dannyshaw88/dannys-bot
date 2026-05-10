@@ -781,7 +781,7 @@ export function ProfilesPage() {
                       ip = `${profile.proxyHost}:${profile.proxyPort}`;
                     }
                     return (
-                      <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2" title={ip || "No proxy"}>
+                      <div style={{ width: profColWidths.ip }} className="shrink-0 text-left pl-2 ml-auto" title={ip || "No proxy"}>
                         <span className="text-[10px] font-mono text-muted-foreground truncate block">{ip || " "}</span>
                       </div>
                     );
