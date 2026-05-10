@@ -1,0 +1,40 @@
+{
+  "appId": "com.equinox.app",
+  "productName": "Equinox",
+  "copyright": "Copyright © 2025",
+  "artifactName": "equinox-setup-${version}.${ext}",
+  "directories": {
+    "output": "release"
+  },
+  "asar": false,
+  "files": [
+    "dist/**",
+    "!dist/**/*.map",
+    "node_modules/**"
+  ],
+  "npmRebuild": true,
+  "publish": {
+    "provider": "github",
+    "owner": "dannyshaw88",
+    "repo": "dannys-bot",
+    "releaseType": "release"
+  },
+  "win": {
+    "icon": "assets/icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Equinox",
+    "installerIcon": null,
+    "uninstallerIcon": null
+  }
+}
