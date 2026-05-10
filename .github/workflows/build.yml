@@ -65,7 +65,7 @@ jobs:
       - name: Build Electron
         working-directory: artifacts/electron
         env:
-          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.DANNY_BOT_UPDATER_TOKEN }}
+          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
         run: node build.mjs
 
       - name: Package Windows installer
