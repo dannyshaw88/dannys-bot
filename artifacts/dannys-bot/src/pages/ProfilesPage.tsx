@@ -803,8 +803,7 @@ export function ProfilesPage() {
                         {isCollapsed
                           ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                        <Tag className="w-3.5 h-3.5 text-primary/50 shrink-0" />
-                        <span className="text-[13px] font-bold uppercase tracking-wider text-foreground truncate">{displayName}</span>
+                        <span className="text-sm font-bold text-foreground truncate">{displayName}</span>
                         <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
                       </button>
                       <button
