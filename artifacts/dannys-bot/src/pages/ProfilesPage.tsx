@@ -382,14 +382,26 @@ export function ProfilesPage() {
     toast({ title: "Exported", description: `${toExport.length} profile(s) saved as Jarvee-compatible file.` });
   }, [profiles, selectedProfileIds, toast]);
 
+  const PRESTOP_KEY = "profiles_prestop_status";
+  const getPreStopMap = (): Record<string, string> => {
+    try { return JSON.parse(localStorage.getItem(PRESTOP_KEY) ?? "{}"); } catch { return {}; }
+  };
+
   const toggleStopped = (id: number, currentStatus: string) => {
     if (currentStatus === "stopped") {
-      // Restore to the exact status the account had before being stopped
-      const restore = preStoppedStatus.current.get(id) ?? "pending";
+      // Restore to the exact status the account had before being stopped.
+      // Use localStorage so the mapping survives page reloads.
+      const map = getPreStopMap();
+      const restore = map[String(id)] ?? preStoppedStatus.current.get(id) ?? "valid";
+      delete map[String(id)];
+      localStorage.setItem(PRESTOP_KEY, JSON.stringify(map));
       preStoppedStatus.current.delete(id);
       updateAccountStatus.mutate({ id, accountStatus: restore });
     } else {
-      // Record the current status so we can restore it exactly on un-stop
+      // Persist the current status so we can restore it exactly on un-stop.
+      const map = getPreStopMap();
+      map[String(id)] = currentStatus;
+      localStorage.setItem(PRESTOP_KEY, JSON.stringify(map));
       preStoppedStatus.current.set(id, currentStatus);
       updateAccountStatus.mutate({ id, accountStatus: "stopped" });
     }
@@ -717,21 +729,31 @@ export function ProfilesPage() {
                   <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
                     <Link href={`/profiles/${profile.id}`}>
                       <span
-                        className={`text-xs font-semibold truncate hover:text-primary cursor-pointer flex items-center gap-1 ${acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
+                        className={`text-xs font-semibold truncate hover:text-primary cursor-pointer flex items-center gap-1 ${isStopped ? "text-muted-foreground" : acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
                         data-testid={`text-username-${profile.id}`}
                       >
                         {profile.accountLabel || profile.username}
-                        {profile.locked && <Lock className="w-3 h-3 text-amber-500 shrink-0" title="Locked excluded from copy targets" />}
+                        {profile.locked && <span title="Locked — excluded from copy targets"><Lock className="w-3 h-3 text-amber-500 shrink-0" /></span>}
                       </span>
                     </Link>
                   </div>
-                  <div style={{ width: profColWidths.status }} className="flex justify-start shrink-0">
+                  <div style={{ width: profColWidths.status }} className="flex items-center justify-start gap-1.5 shrink-0">
                     {hasProxy
                       ? <AccountStatusBadge status={acctStatus} />
                       : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
                           <Globe className="w-2.5 h-2.5" />No Proxy
                         </span>
                     }
+                    {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && (
+                      <button
+                        onClick={() => handleVerify(profile.id)}
+                        disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
+                        data-testid={`button-verify-${profile.id}`}
+                        className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors"
+                      >
+                        Verify
+                      </button>
+                    )}
                   </div>
                   <div style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
                     <Switch
@@ -750,19 +772,6 @@ export function ProfilesPage() {
                     >
                       Browser
                     </button>
-                    {!hasProxy
-                      ? <span title="Assign a proxy to this account before verifying" className="text-[11px] text-red-400 cursor-not-allowed">No Proxy</span>
-                      : (acctStatus !== "valid" || profile.credentialsDirty) && (
-                        <button
-                          onClick={() => handleVerify(profile.id)}
-                          disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
-                          data-testid={`button-verify-${profile.id}`}
-                          className="text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors flex items-center gap-0.5"
-                        >
-                          Verify
-                        </button>
-                      )
-                    }
                     <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
                     <button
                       onClick={() => setDeleteConfirm({ ids: [profile.id] })}
