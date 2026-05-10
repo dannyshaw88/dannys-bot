@@ -120,3 +120,13 @@ The `package-windows` job also sets `GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}` so 
 ### Always push workflow changes as a single commit
 
 Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents API (or Git Trees API) to batch all file changes into one commit. The user explicitly cares about this.
+
+### Version bumping — REQUIRED on every push
+
+Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
+
+- Current version: **v1.0.206** (the installed app reports the version it was built with; the user's current install is v1.0.205)
+- Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.205` → `1.0.206`
+- The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
+- Include `artifacts/electron/package.json` in every batch push alongside the other changed files
+- Do NOT skip the version bump even for small/doc-only changes
