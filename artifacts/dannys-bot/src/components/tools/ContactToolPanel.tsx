@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Users, UserPlus, MessageSquare, Clock } from "lucide-react";
-import { format } from "date-fns";
+import { Users, UserPlus, MessageSquare } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
 import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
@@ -10,7 +9,6 @@ import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateTool } from "@/hooks/use-tools";
-import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 
 interface Props {
   tool: Tool;
@@ -56,21 +54,6 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const [activeTab, setActiveTab] = useState<SubTab>("new-followers");
   const [copyOpen, setCopyOpen] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
-  const engineStatus = useProfileEngineStatus(tool.profileId);
-
-  const contactSettings = (tool.settings as Record<string, any>) ?? {};
-  const anyContactEnabled =
-    !!contactSettings.contactNewFollowersEnabled ||
-    !!contactSettings.contactUsersEnabled ||
-    !!contactSettings.autoReplyEnabled;
-
-  const nextContactStatus: { label: string; executing: boolean } | null = (() => {
-    if (!anyContactEnabled) return null;
-    const nextAt = engineStatus?.nextContactAt ?? 0;
-    if (!nextAt) return null;
-    if (nextAt <= Date.now()) return { label: "Executing", executing: true };
-    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
-  })();
   const { toast } = useToast();
   const updateToolMutation = useUpdateTool();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
@@ -133,16 +116,6 @@ export function ContactToolPanel({ tool, profile }: Props) {
           Copy Settings
         </button>
       </div>
-
-      {/* Next run timestamp */}
-      {nextContactStatus && (
-        <p className="text-[11px] flex items-center gap-1 text-muted-foreground -mt-2 px-1">
-          <Clock className="w-3 h-3 shrink-0" />
-          {nextContactStatus.executing
-            ? <span className="text-amber-500 font-medium">Executing</span>
-            : <span>Scheduled for: <span className="text-foreground">{nextContactStatus.label}</span></span>}
-        </p>
-      )}
 
       {/* Panel content */}
       {activeTab === "new-followers" && (

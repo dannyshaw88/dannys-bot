@@ -86,19 +86,22 @@ export function AutoReplyPanel({ tool, profile }: Props) {
         <div>
           <p className="text-sm font-semibold">Auto Reply</p>
           <p className="text-[11px] text-muted-foreground">Automatically reply to DMs containing specific trigger words.</p>
-          {settings.autoReplyEnabled && (() => {
-            const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
-            if (!nextAt) return null;
-            const label = nextAt <= Date.now() ? null : format(new Date(nextAt), "HH:mm:ss");
-            if (!label) return null;
-            return (
-              <p className="text-[11px] flex items-center gap-1 text-muted-foreground mt-0.5">
-                <Clock className="w-3 h-3 shrink-0" />
-                <span>Next DM check:</span>&nbsp;<span className="font-mono font-medium text-foreground">{label}</span>
-              </p>
-            );
-          })()}
         </div>
+        {(() => {
+          if (!settings.autoReplyEnabled) return null;
+          const nextAt = engineStatus?.nextContactAt ?? 0;
+          if (!nextAt) return null;
+          const executing = nextAt <= Date.now();
+          const label = executing ? null : format(new Date(nextAt), "HH:mm:ss");
+          return (
+            <span className="flex items-center gap-1 text-[11px] font-bold ml-auto" style={{ color: executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {executing
+                ? <span>Executing</span>
+                : <span>Scheduled for: <span className="text-foreground">{label}</span></span>}
+            </span>
+          );
+        })()}
       </div>
 
       {/* Info note */}

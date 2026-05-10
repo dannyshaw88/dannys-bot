@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { MessageSquare, UserCheck, Clock, Users, Zap, Shuffle, Loader2, Download } from "lucide-react";
+import { format } from "date-fns";
 import { type Tool, type Profile } from "@shared/schema";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 
 interface Props {
   tool: Tool;
@@ -23,6 +25,7 @@ function applySpintax(text: string): string {
 export function ContactNewFollowersPanel({ tool, profile }: Props) {
   const updateToolMutation = useUpdateTool();
   const queryClient = useQueryClient();
+  const engineStatus = useProfileEngineStatus(tool.profileId);
   const [previewText, setPreviewText] = useState("");
   const [extractResult, setExtractResult] = useState<{ queued: number } | null>(null);
 
@@ -118,6 +121,21 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
           <p className="text-sm font-semibold">Contact New Followers</p>
           <p className="text-[11px] text-muted-foreground">Automatically queue DMs for new followers of this account.</p>
         </div>
+        {(() => {
+          if (!settings.contactNewFollowersEnabled) return null;
+          const nextAt = engineStatus?.nextContactAt ?? 0;
+          if (!nextAt) return null;
+          const executing = nextAt <= Date.now();
+          const label = executing ? null : format(new Date(nextAt), "HH:mm:ss");
+          return (
+            <span className="flex items-center gap-1 text-[11px] font-bold ml-auto" style={{ color: executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {executing
+                ? <span>Executing</span>
+                : <span>Scheduled for: <span className="text-foreground">{label}</span></span>}
+            </span>
+          );
+        })()}
       </div>
 
       <div className="border border-border rounded-xl p-4 space-y-4">

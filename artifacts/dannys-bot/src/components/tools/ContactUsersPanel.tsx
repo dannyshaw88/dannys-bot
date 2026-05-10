@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
+import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
 export function ContactUsersPanel({ tool, profile }: Props) {
   const updateToolMutation = useUpdateTool();
   const queryClient = useQueryClient();
+  const engineStatus = useProfileEngineStatus(tool.profileId);
 
   const { data: allMessages, isLoading } = useQuery<ContactPendingMessage[]>({
     queryKey: [`/api/profiles/${profile.id}/contact-pending-messages`],
@@ -145,6 +147,21 @@ export function ContactUsersPanel({ tool, profile }: Props) {
           <p className="text-sm font-semibold">Contact Users Sending</p>
           <p className="text-[11px] text-muted-foreground">Automatically send DMs from the Pending Messages queue.</p>
         </div>
+        {(() => {
+          if (!settings.contactUsersEnabled) return null;
+          const nextAt = engineStatus?.nextContactAt ?? 0;
+          if (!nextAt) return null;
+          const executing = nextAt <= Date.now();
+          const label = executing ? null : format(new Date(nextAt), "HH:mm:ss");
+          return (
+            <span className="flex items-center gap-1 text-[11px] font-bold ml-auto" style={{ color: executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+              <Clock className="w-3 h-3 shrink-0" />
+              {executing
+                ? <span>Executing</span>
+                : <span>Scheduled for: <span className="text-foreground">{label}</span></span>}
+            </span>
+          );
+        })()}
       </div>
 
       {/* ── Send Settings ────────────────────────────────────── */}
