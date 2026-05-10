@@ -409,10 +409,15 @@ function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // Authenticate against private GitHub repo using the baked-in PAT
-  if (__UPDATER_TOKEN__) {
-    autoUpdater.requestHeaders = { Authorization: `token ${__UPDATER_TOKEN__}` };
-  }
+  // Authenticate against private GitHub repo — must use setFeedURL with token
+  // so electron-updater applies auth to both the feed check AND the asset download
+  // (requestHeaders alone is stripped on GitHub's redirect to the CDN).
+  autoUpdater.setFeedURL({
+    provider: "github",
+    owner: "dannyshaw88",
+    repo: "dannys-bot",
+    token: __UPDATER_TOKEN__ || undefined,
+  } as any);
 
   autoUpdater.on("update-downloaded", () => {
     if (!win) return;
