@@ -1590,6 +1590,7 @@ export async function registerInstagramRoutes(
             value: s.value,
             rank: s.rank,
             nrPosts: s.nrPosts,
+            targetUserId: s.targetUserId,
           })),
         }))
       );
@@ -1686,7 +1687,7 @@ export async function registerInstagramRoutes(
                     value: s.value,
                     rank: s.rank ?? null,
                     nrPosts: s.nrPosts ?? null,
-                    targetUserId: "",
+                    targetUserId: s.targetUserId ?? "",
                     hashtagCursor: "",
                   }))
                 );

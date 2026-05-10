@@ -71,11 +71,15 @@ export function ContactToolPanel({ tool, profile }: Props) {
         Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
       );
     }
+    // When copying Start/Stop, also carry all three sub-tool on/off toggles
+    const keysToPass = copyEnabled
+      ? [...new Set([...expandedKeys, "contactNewFollowersEnabled", "contactUsersEnabled", "autoReplyEnabled"])]
+      : expandedKeys;
     await copyToolSettingsToProfiles(
       src,
       tool.type,
       targetIds,
-      expandedKeys,
+      keysToPass,
       copyEnabled ? tool.enabled : undefined,
       staggerOffsets,
     );
