@@ -5,8 +5,8 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    runs-on: windows-latest
+  build-web:
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,31 @@ jobs:
       - name: Build frontend
         run: pnpm --filter @workspace/dannys-bot run build
 
-      - name: Install Electron native dependencies
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-builds
+          path: |
+            artifacts/api-server/dist
+            artifacts/dannys-bot/dist
+
+  package-windows:
+    needs: build-web
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-builds
+
+      - name: Install Electron dependencies
         working-directory: artifacts/electron
         run: npm install
 
