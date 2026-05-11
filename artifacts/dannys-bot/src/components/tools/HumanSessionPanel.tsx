@@ -413,7 +413,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
 
       {/* ── Human Session (Notifications / Own Profile / etc.) ─── */}
       <div className="border border-border rounded-xl p-4 space-y-3">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-2 pt-0.5">
             <div className="flex items-center gap-2">
               <input type="checkbox" id="humanSessionEnabled"
@@ -433,6 +433,16 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-gray-600 font-medium"><Settings className="w-3 h-3" />Settings & Activity</span>
             </div>
           </div>
+          <div className={`flex flex-col items-end gap-1.5 shrink-0 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("humanSessionOrderMin", "humanSessionOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance</span>
+              {pctInputs("humanSessionNotUsedMin", "humanSessionNotUsedMax")}
+            </div>
+          </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40' : ''}`}>
           Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity.
@@ -443,18 +453,18 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       <div className="border border-border rounded-xl p-4 space-y-2">
 
         {/* Check Reels from Timeline */}
-        <div className={`flex items-center gap-3 flex-wrap transition-opacity`}>
-          <input type="checkbox" id="checkTimelineReelsEnabled"
-            checked={!!settings.checkTimelineReelsEnabled}
-            onChange={(e) => setSettings({ ...settings, checkTimelineReelsEnabled: e.target.checked })}
-            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-          />
-          <label htmlFor="checkTimelineReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap w-[200px] shrink-0">
-            <PlaySquare className="w-4 h-4 text-rose-500 shrink-0" />
-            Check Reels from Timeline
-          </label>
-          <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-1.5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input type="checkbox" id="checkTimelineReelsEnabled"
+              checked={!!settings.checkTimelineReelsEnabled}
+              onChange={(e) => setSettings({ ...settings, checkTimelineReelsEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="checkTimelineReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+              <PlaySquare className="w-4 h-4 text-rose-500 shrink-0" />
+              Check Reels from Timeline
+            </label>
+            <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
               <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
@@ -467,25 +477,34 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 onChange={(e) => setSettings({ ...settings, checkTimelineReelsMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Scrolls Reels tab &amp; marks watched.</span>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 shrink-0 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("checkTimelineReelsOrderMin", "checkTimelineReelsOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance</span>
+              {pctInputs("checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax")}
+            </div>
           </div>
         </div>
 
         <div className="border-t border-border/50" />
 
         {/* Check Stories from Timeline */}
-        <div className={`flex items-center gap-3 flex-wrap transition-opacity`}>
-          <input type="checkbox" id="checkTimelineStoriesEnabled"
-            checked={!!settings.checkTimelineStoriesEnabled}
-            onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
-            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-          />
-          <label htmlFor="checkTimelineStoriesEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap w-[200px] shrink-0">
-            <BookOpen className="w-4 h-4 text-sky-500 shrink-0" />
-            Check Stories from Timeline
-          </label>
-          <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-1.5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input type="checkbox" id="checkTimelineStoriesEnabled"
+              checked={!!settings.checkTimelineStoriesEnabled}
+              onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="checkTimelineStoriesEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+              <BookOpen className="w-4 h-4 text-sky-500 shrink-0" />
+              Check Stories from Timeline
+            </label>
+            <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
               <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
@@ -498,25 +517,34 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Watches home feed story tray.</span>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 shrink-0 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("checkTimelineStoriesOrderMin", "checkTimelineStoriesOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance</span>
+              {pctInputs("checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")}
+            </div>
           </div>
         </div>
 
         <div className="border-t border-border/50" />
 
         {/* Check Direct Messages */}
-        <div className={`flex items-center gap-3 flex-wrap transition-opacity`}>
-          <input type="checkbox" id="checkDmEnabled"
-            checked={!!settings.checkDmEnabled}
-            onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
-            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-          />
-          <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap w-[200px] shrink-0">
-            <MessageSquare className="w-4 h-4 text-teal-500 shrink-0" />
-            Check Direct Messages
-          </label>
-          <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-1.5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input type="checkbox" id="checkDmEnabled"
+              checked={!!settings.checkDmEnabled}
+              onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+              <MessageSquare className="w-4 h-4 text-teal-500 shrink-0" />
+              Check Direct Messages
+            </label>
+            <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
               <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
@@ -529,7 +557,16 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 onChange={(e) => setSettings({ ...settings, checkDmMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Simulates checking the DM inbox.</span>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 shrink-0 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+              {pctInputs("checkDmOrderMin", "checkDmOrderMax")}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance</span>
+              {pctInputs("checkDmNotUsedMin", "checkDmNotUsedMax")}
+            </div>
           </div>
         </div>
 
