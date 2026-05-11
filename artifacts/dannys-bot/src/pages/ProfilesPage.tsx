@@ -207,7 +207,7 @@ export function ProfilesPage() {
           return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
         })
       : base;
-  }, [profiles, filterTokens, sortField, sortDir, showOnlyErrors]);
+  }, [profiles, filterTokens, sortField, sortDir]);
 
   // ── Grouped view (groupMode) ──────────────────────────────────────────────
   const groupedProfiles = useMemo(() => {
