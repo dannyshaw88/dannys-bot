@@ -141,7 +141,12 @@ export function ProfilesPage() {
 
   // ── Group Profiles state ──────────────────────────────────────────────────
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("profiles:groupMode") === "true");
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem("profiles:collapsedGroups");
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
   const [setGroupOpen, setSetGroupOpen] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
 
@@ -225,6 +230,7 @@ export function ProfilesPage() {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
       if (next.has(groupKey)) next.delete(groupKey); else next.add(groupKey);
+      try { sessionStorage.setItem("profiles:collapsedGroups", JSON.stringify([...next])); } catch {}
       return next;
     });
   };
@@ -345,25 +351,30 @@ export function ProfilesPage() {
       toast({ title: "No profiles to export", variant: "destructive" });
       return;
     }
+    const csvCell = (v: string) => {
+      const s = String(v ?? "");
+      return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const headers = [
-      "#Email/Username", "Password", "Proxy-url/Proxy-ip:port",
-      "Proxy Username", "Proxy Password", "Tags",
+      "Label", "Instagram Username", "Password",
+      "Email", "Proxy-url/Proxy-ip:port",
+      "Proxy Username", "Proxy Password",
       "Date of birth(US Format)", "EB User Agent", "API User Agent",
-      "Username", "Notes", "Phone number", "2FA Secret Key",
+      "Notes", "Phone number", "2FA Secret Key",
       "Backup Codes", "Email Validation Username", "Email Validation Pass",
       "Email Validation Pop3Server", "Email Validation Port",
     ];
     const rows = toExport.map(p => [
-      p.email ?? "",
+      p.tags ?? "",
+      p.username ?? "",
       p.password ?? "",
+      p.email ?? "",
       p.proxyHost ? `${p.proxyHost}${p.proxyPort ? `:${p.proxyPort}` : ""}` : "",
       p.proxyUsername ?? "",
       p.proxyPassword ?? "",
-      p.tags ?? "",
       p.dateOfBirth ?? "",
       p.userAgentEmbedded ?? "",
       p.userAgentApi ?? "",
-      p.username ?? "",
       p.notes ?? "",
       p.phoneNumber ?? "",
       p.twoFASecretKey ?? "",
@@ -372,25 +383,18 @@ export function ProfilesPage() {
       p.emailValidationPassword ?? "",
       p.emailValidationPop3Server ?? "",
       p.emailValidationPort ?? "",
-    ].map(v => String(v)));
-    const tsv = [headers, ...rows].map(r => r.join("\t")).join("\r\n");
-    const buf = new ArrayBuffer(2 + tsv.length * 2);
-    const view = new DataView(buf);
-    view.setUint8(0, 0xff);
-    view.setUint8(1, 0xfe);
-    for (let i = 0; i < tsv.length; i++) {
-      view.setUint16(2 + i * 2, tsv.charCodeAt(i), true);
-    }
-    const blob = new Blob([buf], { type: "text/plain;charset=utf-16le" });
+    ]);
+    const csv = "\uFEFF" + [headers, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `profiles_export_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `profiles_export_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast({ title: "Exported", description: `${toExport.length} profile(s) saved as Jarvee-compatible file.` });
+    toast({ title: "Exported", description: `${toExport.length} profile(s) exported as CSV.` });
   }, [profiles, selectedProfileIds, toast]);
 
   const PRESTOP_KEY = "profiles_prestop_status";
