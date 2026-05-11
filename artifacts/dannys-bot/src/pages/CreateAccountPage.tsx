@@ -489,7 +489,7 @@ export function CreateAccountPage() {
                         </button>
                         {!hasProxy
                           ? <span title="Assign a proxy before verifying" className="text-[11px] text-red-400 cursor-not-allowed">No Proxy</span>
-                          : (acctStatus !== "valid" || profile.credentialsDirty) && (
+                          : (acctStatus !== "valid" || profile.credentialsDirty) && acctStatus !== "verifying" && (
                             <button
                               onClick={() => handleVerify(profile.id)}
                               disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}

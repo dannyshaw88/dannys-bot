@@ -1135,7 +1135,11 @@ class AutomationEngine {
       // Skip if this user already triggered an auto-reply (pending or sent) —
       // we're already in conversation with them, no need to initiate contact.
       if (await storage.isAutoReplyAlreadyQueued(profile.id, user.username)) continue;
-      const text = this.applySpintax(messageTemplate);
+      // Replace [FIRSTNAME] before spintax so it works inside spin groups too.
+      // fullName comes free from the followers response — no extra API call needed.
+      const firstName = String(user.fullName ?? "").trim().split(/\s+/)[0] || user.username;
+      const withTokens = messageTemplate.replace(/\[FIRSTNAME\]/gi, firstName);
+      const text = this.applySpintax(withTokens);
       await storage.createContactPendingMessage({
         profileId: profile.id,
         instagramUsername: user.username,
@@ -1225,11 +1229,9 @@ class AutomationEngine {
         }
       } catch (e: any) {
         const errMsg = e?.message ?? "";
-        const acctStatus = this.getAccountLevelStatus(errMsg);
+        const acctStatus = await this.applyAccountLevelError(profile.id, errMsg, state);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: contact DM threw account-level error (${acctStatus}) — ${errMsg}`);
-          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-          if (acctStatus === "logged_out") state.client = null;
           this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "error", `[${acctStatus}] ${errMsg}`);
           break;
         }
@@ -1263,11 +1265,7 @@ class AutomationEngine {
           await storage.updateContactPendingMessage(msg.id, { unsendAt: undefined });
         }
       } catch (e: any) {
-        const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
-        if (acctStatus) {
-          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-          if (acctStatus === "logged_out") state.client = null;
-        }
+        await this.applyAccountLevelError(profile.id, e?.message ?? "", state);
         console.warn(`[engine] unsend @${msg.instagramUsername} error: ${e?.message}`);
         await storage.updateContactPendingMessage(msg.id, { unsendAt: undefined });
       }
@@ -1503,7 +1501,7 @@ class AutomationEngine {
         if (!mobileOk) {
           if (client.lastMobileLoginFailureReason === "bad_password") {
             console.error(`[engine] @${profile.username}: mobile login FAILED — wrong password confirmed. Marking bad_password.`);
-            await storage.updateProfile(profile.id, { accountStatus: "bad_password" });
+            await storage.updateProfile(profile.id, { accountStatus: "bad_password", statusMessage: "Wrong password — mobile login rejected" });
             return null;
           }
           console.error(`[engine] @${profile.username}: mobile login FAILED — transient error, status unchanged.`);
@@ -1539,7 +1537,7 @@ class AutomationEngine {
     // Mobile login failed.
     if (client.lastMobileLoginFailureReason === "bad_password") {
       console.error(`[engine] @${profile.username}: mobile login FAILED — wrong password confirmed. Marking bad_password.`);
-      await storage.updateProfile(profile.id, { accountStatus: "bad_password" });
+      await storage.updateProfile(profile.id, { accountStatus: "bad_password", statusMessage: "Wrong password — mobile login rejected" });
       return null;
     }
     // Transient network/proxy issue — do not mark bad_password.
@@ -1725,10 +1723,8 @@ class AutomationEngine {
             }
           }
         } catch (e: any) {
-          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state);
           if (acctStatus) {
-            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-            if (acctStatus === "logged_out") state.client = null;
             this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
             return true;
           }
@@ -1763,10 +1759,8 @@ class AutomationEngine {
             await sleep(randInt((s.viewStoriesDelayMin ?? 2) * 1000, (s.viewStoriesDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
-          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state);
           if (acctStatus) {
-            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-            if (acctStatus === "logged_out") state.client = null;
             this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
             return true;
           }
@@ -1798,10 +1792,8 @@ class AutomationEngine {
             await sleep(randInt((s.viewReelsDelayMin ?? 2) * 1000, (s.viewReelsDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
-          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state);
           if (acctStatus) {
-            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-            if (acctStatus === "logged_out") state.client = null;
             this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
             return true;
           }
@@ -1833,10 +1825,8 @@ class AutomationEngine {
             await sleep(randInt((s.viewHighlightsDelayMin ?? 2) * 1000, (s.viewHighlightsDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
-          const acctStatus = this.getAccountLevelStatus(e?.message ?? "");
+          const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state);
           if (acctStatus) {
-            await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-            if (acctStatus === "logged_out") state.client = null;
             this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
             return true;
           }
@@ -1992,11 +1982,9 @@ class AutomationEngine {
         }
       } catch (e: any) {
         const msg = e?.message ?? "";
-        const acctStatus = this.getAccountLevelStatus(msg);
+        const acctStatus = await this.applyAccountLevelError(profile.id, msg, state);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: unfollow threw account-level error (${acctStatus}) — ${msg}`);
-          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-          if (acctStatus === "logged_out") state.client = null;
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "error", `[${acctStatus}] ${msg}`);
           break;
         }
@@ -2089,7 +2077,11 @@ class AutomationEngine {
 
       try {
         const raw = templates[Math.floor(Math.random() * templates.length)];
-        const text = this.applySpintax(raw);
+        // Replace [FIRSTNAME] before spintax so it works inside spin groups too.
+        // fullName comes free from the followers/hashtag scrape — no extra API call.
+        const firstName = String(user.fullName ?? "").trim().split(/\s+/)[0] || user.username;
+        const withTokens = raw.replace(/\[FIRSTNAME\]/gi, firstName);
+        const text = this.applySpintax(withTokens);
         const result = await client.sendDirectMessage(user.pk, text, user.username);
         if (result === "blocked") {
           this.logAction(profile.id, tool.id, "dm_blocked", user.username, source.value, source.type, "skipped", "Instagram action-blocked DM");
@@ -2105,11 +2097,9 @@ class AutomationEngine {
         }
       } catch (e: any) {
         const msg = e?.message ?? "";
-        const acctStatus = this.getAccountLevelStatus(msg);
+        const acctStatus = await this.applyAccountLevelError(profile.id, msg, state);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: DM threw account-level error (${acctStatus}) — ${msg}`);
-          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-          if (acctStatus === "logged_out") state.client = null;
           this.logAction(profile.id, tool.id, "dm_blocked", user.username, source.value, source.type, "error", `[${acctStatus}] ${msg}`);
           break;
         }
@@ -2158,6 +2148,14 @@ class AutomationEngine {
     return null;
   }
 
+  private async applyAccountLevelError(profileId: number, rawError: string, state?: ProfileState): Promise<string | null> {
+    const status = this.getAccountLevelStatus(rawError);
+    if (!status) return null;
+    await storage.updateProfile(profileId, { accountStatus: status, statusMessage: rawError.slice(0, 500) });
+    if (state && status === "logged_out") state.client = null;
+    return status;
+  }
+
   private shouldSkipDueToChance(s: any, minKey: string, maxKey: string): boolean {
     const min = Number(s[minKey] ?? 0);
     const max = Number(s[maxKey] ?? 0);
@@ -2178,11 +2176,9 @@ class AutomationEngine {
     let sessionError: string | null = null;
     const checkSessionErr = async (e: any, actionLabel: string): Promise<boolean> => {
       const msg = e?.message ?? "";
-      const acctStatus = this.getAccountLevelStatus(msg);
+      const acctStatus = await this.applyAccountLevelError(profile.id, msg, state);
       if (acctStatus) {
         console.warn(`[engine] @${profile.username}: ${actionLabel} — account-level error (${acctStatus}): ${msg}`);
-        await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-        if (acctStatus === "logged_out") state.client = null;
         this.logAction(profile.id, tool.id, "session_error", "", "", "", "error", `[${acctStatus}] ${msg}`);
         sessionError = acctStatus;
         return true;
@@ -2358,7 +2354,7 @@ class AutomationEngine {
           const { liked, watched, likedPosts, sessionExpired } = await client.likeTimelinePosts(likeCount, likeDelayMin, likeDelayMax);
           if (sessionExpired) {
             console.warn(`[engine] @${profile.username}: likeTimelinePosts — session expired (login_required), marking logged_out`);
-            await storage.updateProfile(profile.id, { accountStatus: "logged_out" });
+            await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: "Session expired (login_required) — likeTimelinePosts" });
             state.client = null;
             sessionError = "logged_out";
             return;
@@ -2728,10 +2724,9 @@ class AutomationEngine {
       }
     } catch (err: any) {
       engineLog("ERROR", `@${profile.username}: scrape error: ${err?.message}`);
-      const scrapeAcctStatus = this.getAccountLevelStatus(err?.message ?? "");
+      const scrapeAcctStatus = await this.applyAccountLevelError(profile.id, err?.message ?? "", state);
       if (scrapeAcctStatus) {
-        await storage.updateProfile(profile.id, { accountStatus: scrapeAcctStatus });
-        if (scrapeAcctStatus === "logged_out") state.client = null;
+        // status + statusMessage already stored by applyAccountLevelError
       } else if (/login_required|Not authenticated|session/i.test(err?.message ?? "")) {
         state.client = null;
       }
@@ -2858,11 +2853,9 @@ class AutomationEngine {
         result = await client.followUser(user.pk, user.username, sourceLabel);
       } catch (err: any) {
         const msg = err?.message ?? "";
-        const acctStatus = this.getAccountLevelStatus(msg);
+        const acctStatus = await this.applyAccountLevelError(profile.id, msg, state);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: follow threw account-level error (${acctStatus}) — ${msg}`);
-          await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-          if (acctStatus === "logged_out") state.client = null;
           this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "error", `[${acctStatus}] ${msg}`);
           break;
         }
@@ -2876,7 +2869,7 @@ class AutomationEngine {
         console.warn(`[engine] @${profile.username}: checkpoint_required — setting status to captcha. Complete the challenge in the embedded browser.${cpUrl ? ` URL: ${cpUrl}` : ""}`);
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", `Captcha / security challenge required  complete in embedded browser`);
         // Mark account as captcha so the UI shows it and the runner pauses sessions
-        await storage.updateProfile(profile.id, { accountStatus: "captcha" });
+        await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / security challenge required — complete in embedded browser" });
         hitHardLimit = true; break;
       }
 
@@ -2898,7 +2891,7 @@ class AutomationEngine {
         // Session expired — mark logged_out and abort immediately
         if (reason.includes("login_required") || reason.includes("logged out") || reason.includes("logout")) {
           console.warn(`[engine] @${profile.username}: session expired (login_required) — marking logged_out, aborting session`);
-          await storage.updateProfile(profile.id, { accountStatus: "logged_out" });
+          await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: reason.slice(0, 500) });
           state.client = null;
           hitHardLimit = true; break;
         }
@@ -3018,24 +3011,20 @@ class AutomationEngine {
             result = await client.followUser(user.pk, user.username, sourceLabel);
           } catch (err: any) {
             const msg = err?.message ?? "";
-            const acctStatus = this.getAccountLevelStatus(msg);
-            if (acctStatus) {
-              await storage.updateProfile(profile.id, { accountStatus: acctStatus });
-              if (acctStatus === "logged_out") state.client = null;
-              hitHardLimit = true;
-            }
+            const acctStatus = await this.applyAccountLevelError(profile.id, msg, state);
+            if (acctStatus) hitHardLimit = true;
             this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "error", msg);
             if (hitHardLimit) break; continue;
           }
           if (result.status === "checkpoint_required") {
-            await storage.updateProfile(profile.id, { accountStatus: "captcha" });
+            await storage.updateProfile(profile.id, { accountStatus: "captcha", statusMessage: "Checkpoint / security challenge required — complete in embedded browser" });
             hitHardLimit = true; break;
           }
           if (result.status === "follow_blocked") {
             blocked++;
             const reason = result.reason ?? "Instagram declined";
             if (reason.includes("login_required") || reason.includes("logged out") || reason.includes("logout")) {
-              await storage.updateProfile(profile.id, { accountStatus: "logged_out" });
+              await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: reason.slice(0, 500) });
               state.client = null; hitHardLimit = true; break;
             }
             if (reason.includes("Please wait") || reason.includes("feedback_required")) {

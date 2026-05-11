@@ -45,8 +45,10 @@
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import * as https from "https";
 import * as fs from "fs";
-import { randomUUID } from "crypto";
+import * as zlib from "zlib";
+import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes, constants as cryptoConstants } from "crypto";
 import { generateSync as totpGenerate } from "otplib";
+import { userAgents as UA_POOL } from "../shared/userAgents";
 import { IgApiClient, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
 
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
@@ -56,10 +58,17 @@ function httpsRequest(
 ): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }> {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => { data += chunk; });
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => { chunks.push(chunk); });
       res.on("end", () => {
-        resolve({ status: res.statusCode ?? 0, headers: res.headers as any, body: data });
+        let raw = Buffer.concat(chunks);
+        const enc = res.headers["content-encoding"];
+        try {
+          if (enc === "gzip")    raw = zlib.gunzipSync(raw);
+          else if (enc === "deflate") raw = zlib.inflateSync(raw);
+          else if (enc === "br") raw = zlib.brotliDecompressSync(raw);
+        } catch { /* leave raw as-is if decompression fails */ }
+        resolve({ status: res.statusCode ?? 0, headers: res.headers as any, body: raw.toString("utf8") });
       });
       // If the response stream itself errors (e.g. proxy drops mid-response)
       // reject so the caller can handle it rather than leaving a dangling promise.
@@ -81,7 +90,7 @@ async function igReq(opts: {
   body?: string;
   cookieJar?: string[];
   proxyUrl?: string;
-}): Promise<{ status: number; cookies: string[]; json: any; rawBody: string }> {
+}): Promise<{ status: number; cookies: string[]; json: any; rawBody: string; responseHeaders: Record<string, string | string[] | undefined> }> {
   const { host = "www.instagram.com", path, method, headers, body, cookieJar = [], proxyUrl } = opts;
 
   const reqHeaders: Record<string, string> = {
@@ -136,7 +145,7 @@ async function igReq(opts: {
   let json: any = null;
   try { json = JSON.parse(res.body); } catch {}
 
-  return { status: res.status, cookies: newCookies, json, rawBody: res.body };
+  return { status: res.status, cookies: newCookies, json, rawBody: res.body, responseHeaders: res.headers };
 }
 
 function mergeCookies(base: string[], overrides: string[]): string[] {
@@ -150,6 +159,38 @@ function extractCsrf(cookies: string[]): string {
     if (c.startsWith("csrftoken=")) return c.split("=")[1];
   }
   return "";
+}
+
+// ── Instagram password encryption (enc_password) ─────────────────────────────
+// Required for API v~200+ (2023+). Instagram provides a public RSA key via
+// the qe/sync endpoint. We:
+//   1. Generate a random AES-256 key + 12-byte IV
+//   2. Encrypt the password with AES-256-GCM (AAD = unix timestamp string)
+//   3. RSA-OAEP encrypt the AES key with Instagram's public key
+//   4. Assemble: [0x01][keyId][iv 12B][rsaLen 2B LE][rsaEnc][gcmTag 16B][ciphertext]
+//   5. Base64 → prefix #PWD_INSTAGRAM:4:<timestamp>:<base64>
+function encryptPassword(plaintext: string, pubKeyBase64: string, keyId: number): string {
+  const time = Math.floor(Date.now() / 1000);
+  // Decode the base64-encoded PEM key Instagram sends in the qe/sync response header
+  const pubKeyPem = Buffer.from(pubKeyBase64, "base64").toString("utf8");
+  // AES-256-GCM: 32-byte key, 12-byte IV, timestamp string as AAD
+  const aesKey = randomBytes(32);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", aesKey, iv);
+  cipher.setAAD(Buffer.from(String(time)));
+  const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = (cipher as any).getAuthTag() as Buffer; // 16 bytes
+  // RSA PKCS#1 v1.5 — instagram-private-api uses RSA_PKCS1_PADDING, NOT OAEP.
+  // Using OAEP causes TInvalidDecryptionException on Instagram's server (fbcrypto).
+  const rsaEncrypted = publicEncrypt(
+    { key: pubKeyPem, padding: cryptoConstants.RSA_PKCS1_PADDING },
+    aesKey,
+  );
+  // Payload: [version=1][keyId][iv 12B][rsaLen 2B LE][rsaEncrypted][gcmTag 16B][ciphertext]
+  const rsaLenBuf = Buffer.alloc(2);
+  rsaLenBuf.writeUInt16LE(rsaEncrypted.length, 0);
+  const payload = Buffer.concat([Buffer.from([1, keyId & 0xff]), iv, rsaLenBuf, rsaEncrypted, tag, enc]);
+  return `#PWD_INSTAGRAM:4:${time}:${payload.toString("base64")}`;
 }
 
 // ── IgApiClient factory ───────────────────────────────────────────────────────
@@ -210,11 +251,11 @@ type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 // Keep this version current — Instagram rejects sessions from versions older
 // than ~18 months with a checkpoint_required → unsupported_version response.
 // Version 361 ≈ early 2025; update periodically as Instagram raises the floor.
-const MOBILE_VERSION           = "378.1.0.45.111";
-export const MOBILE_VERSION_CODE = "651869969";
+const MOBILE_VERSION           = "384.0.0.36.112";
+export const MOBILE_VERSION_CODE = "663869969";
 // Date this version was last confirmed working. If it's been more than 12
 // months, Instagram may have started rejecting it — update MOBILE_VERSION.
-const MOBILE_VERSION_DATE = "2026-05-05";
+const MOBILE_VERSION_DATE = "2026-05-08";
 (() => {
   const ageMs = Date.now() - new Date(MOBILE_VERSION_DATE).getTime();
   const ageDays = Math.floor(ageMs / 86_400_000);
@@ -227,6 +268,31 @@ const MOBILE_VERSION_DATE = "2026-05-05";
 })();
 const MOBILE_UA  = `Instagram ${MOBILE_VERSION} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
 const MOBILE_AID = "567067343352427";
+// HMAC-SHA256 signing key used by Instagram's mobile API.
+// Instagram stopped validating the HMAC value itself around 2022, but the
+// signed_body FORMAT (ig_sig_key_version=4&signed_body=HMAC.JSON) is still
+// required — plain URL-encoded form data returns HTTP 400.
+const IG_SIGNATURE_KEY = "9193488027538fd3450b83b7d05286d4ca9599a0f7eeed90d8c85925698a05dc";
+
+/** Wrap a params object in Instagram's signed_body format */
+function signBody(params: Record<string, unknown>): string {
+  const json = JSON.stringify(params);
+  const hmac = createHmac("sha256", IG_SIGNATURE_KEY).update(json).digest("hex");
+  return new URLSearchParams({
+    ig_sig_key_version: "4",
+    signed_body: `${hmac}.${json}`,
+  }).toString();
+}
+
+/**
+ * Generate a randomised Instagram mobile User-Agent by picking a random device
+ * from the shared UA pool (the same pool used by the Accounts page).
+ * Call once per account-creation attempt — never share the same string across accounts.
+ */
+export function randomMobileUA(): string {
+  const entry = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+  return `Instagram ${MOBILE_VERSION} Android (${entry.api}; ${MOBILE_VERSION_CODE})`;
+}
 
 // ── Public client class ───────────────────────────────────────────────────────
 export class InstagramWebClient {
@@ -1483,10 +1549,12 @@ export class InstagramWebClient {
   // /api/v1/feed/user/{userId}/ which requires the numeric user ID extracted
   // from the ds_user_id cookie (always present after login).
   async refreshOwnProfile(): Promise<boolean> {
+    // Check for the required cookie BEFORE entering timed() — if it's absent
+    // no real Instagram call is made and we should not produce a log entry.
+    const userIdCookie = this.cookieJar.find(c => c.startsWith("ds_user_id="));
+    const userId = userIdCookie ? userIdCookie.split("=")[1] : null;
+    if (!userId) return false;
     return this.timed("RefreshOwnProfile", async () => {
-      const userIdCookie = this.cookieJar.find(c => c.startsWith("ds_user_id="));
-      const userId = userIdCookie ? userIdCookie.split("=")[1] : null;
-      if (!userId) return false;
       const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=12`);
       return !!(j?.items || j?.profile_grid_items);
     }, "Refresh own profile");
@@ -1801,80 +1869,73 @@ export class InstagramWebClient {
   }
 
   async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }>; sessionExpired?: boolean }> {
-    return this.timed("LikeTimelinePosts", async () => {
-      // As of 2024 the timeline endpoint requires POST (GET returns 405).
-      // Must use the igApiCookies mobile session — EB web cookies return empty feed_items.
-      const j = await this.mobileSessionPost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
-      if (!j) {
-        console.warn(`[webClient] likeTimelinePosts: mobileSessionPost returned null — no mobile session`);
-        return { liked: 0, watched: 0, likedPosts: [] };
-      }
-      if (j?.message === "login_required" || j?.require_login || (j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? ""))) {
-        console.warn(`[webClient] likeTimelinePosts: session expired — status="${j?.status}" message="${j?.message}" logout_reason=${j?.logout_reason ?? "n/a"}`);
-        this.mobileSessionReady = false;
-        return { liked: 0, watched: 0, likedPosts: [], sessionExpired: true };
-      }
-      if (j?.status === "fail") {
-        console.warn(`[webClient] likeTimelinePosts: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
-        return { liked: 0, watched: 0, likedPosts: [] };
-      }
-      const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
-      console.log(`[webClient] likeTimelinePosts: timeline returned ${rawItems.length} raw items`);
-      if (!rawItems.length) return { liked: 0, watched: 0, likedPosts: [] };
+    // No timed() wrapper here — individual likeMedia() calls each produce their
+    // own LikeMedia log entry. A LikeTimelinePosts summary on top would cause
+    // two entries at the same timestamp and make rate-limit audits confusing.
+    const j = await this.mobileSessionPost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString());
+    if (!j) {
+      console.warn(`[webClient] likeTimelinePosts: mobileSessionPost returned null — no mobile session`);
+      return { liked: 0, watched: 0, likedPosts: [] };
+    }
+    if (j?.message === "login_required" || j?.require_login || (j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? ""))) {
+      console.warn(`[webClient] likeTimelinePosts: session expired — status="${j?.status}" message="${j?.message}" logout_reason=${j?.logout_reason ?? "n/a"}`);
+      this.mobileSessionReady = false;
+      return { liked: 0, watched: 0, likedPosts: [], sessionExpired: true };
+    }
+    if (j?.status === "fail") {
+      console.warn(`[webClient] likeTimelinePosts: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
+      return { liked: 0, watched: 0, likedPosts: [] };
+    }
+    const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
+    console.log(`[webClient] likeTimelinePosts: timeline returned ${rawItems.length} raw items`);
+    if (!rawItems.length) return { liked: 0, watched: 0, likedPosts: [] };
 
-      // Unwrap feed items — timeline wraps media under media_or_ad
-      const items = rawItems
-        .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
-        .filter((m: any) => m?.id || m?.pk);
+    const items = rawItems
+      .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
+      .filter((m: any) => m?.id || m?.pk);
 
-      const toProcess = items.slice(0, count);
-      let liked = 0;
-      let watched = 0;
-      const likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> = [];
+    const toProcess = items.slice(0, count);
+    let liked = 0;
+    let watched = 0;
+    const likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }> = [];
 
-      for (let i = 0; i < toProcess.length; i++) {
-        const media = toProcess[i];
-        const mediaId = String(media?.id ?? media?.pk ?? "");
-        if (!mediaId) continue;
+    for (let i = 0; i < toProcess.length; i++) {
+      const media = toProcess[i];
+      const mediaId = String(media?.id ?? media?.pk ?? "");
+      if (!mediaId) continue;
 
-        // Human-like delay between each like (skip delay before the first one)
-        if (i > 0 && delayMaxSec > 0) {
-          const delaySec = delayMinSec + Math.random() * Math.max(0, delayMaxSec - delayMinSec);
-          console.log(`[webClient] likeTimelinePosts: waiting ${delaySec.toFixed(1)}s before next like`);
-          await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
-        }
-
-        const isReel = media?.media_type === 2 || media?.product_type === "clips";
-
-        // Watch the reel before liking — simulates the natural viewing flow
-        if (isReel) {
-          try {
-            const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
-            const seenBody = new URLSearchParams({
-              reels: `${mediaId}_${takenAt}_${takenAt + 4}`,
-              live_vods_skipped: "",
-              nuxes_skipped: "",
-            }).toString();
-            await this.mobilePost(`/api/v1/media/seen/`, seenBody);
-            watched++;
-          } catch (_) { /* best-effort */ }
-        }
-
-        // Like the post
-        const result = await this.likeMedia(mediaId);
-        if (result === "blocked") break;
-        if (result) {
-          liked++;
-          const shortcode    = String(media?.code ?? "");
-          const ownerUsername = String(media?.user?.username ?? "");
-          likedPosts.push({ shortcode, ownerUsername, mediaId });
-        }
+      if (i > 0 && delayMaxSec > 0) {
+        const delaySec = delayMinSec + Math.random() * Math.max(0, delayMaxSec - delayMinSec);
+        console.log(`[webClient] likeTimelinePosts: waiting ${delaySec.toFixed(1)}s before next like`);
+        await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
       }
 
-      return { liked, watched, likedPosts };
-    }, (r) => r.watched > 0
-        ? `Liked ${r.liked} timeline post${r.liked === 1 ? "" : "s"} (watched ${r.watched} reel${r.watched === 1 ? "" : "s"})`
-        : `Liked ${r.liked} timeline post${r.liked === 1 ? "" : "s"}`);
+      const isReel = media?.media_type === 2 || media?.product_type === "clips";
+
+      if (isReel) {
+        try {
+          const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+          const seenBody = new URLSearchParams({
+            reels: `${mediaId}_${takenAt}_${takenAt + 4}`,
+            live_vods_skipped: "",
+            nuxes_skipped: "",
+          }).toString();
+          await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+          watched++;
+        } catch (_) { /* best-effort */ }
+      }
+
+      const result = await this.likeMedia(mediaId);
+      if (result === "blocked") break;
+      if (result) {
+        liked++;
+        const shortcode     = String(media?.code ?? "");
+        const ownerUsername = String(media?.user?.username ?? "");
+        likedPosts.push({ shortcode, ownerUsername, mediaId });
+      }
+    }
+
+    return { liked, watched, likedPosts };
   }
 
   // ── Unfollow a user ───────────────────────────────────────────────────────
@@ -2299,13 +2360,18 @@ export class InstagramWebClient {
       if (res.cookies.length) {
         this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
       }
-      const newCsrf = extractCsrf(res.cookies);
+      const csrfFromCookie = extractCsrf(res.cookies);
+      const csrfFromBody   = typeof res.json?.token === "string" ? res.json.token : null;
+      const newCsrf = csrfFromCookie || csrfFromBody;
       if (newCsrf) {
         this.mobileCsrf = newCsrf;
-        console.log(`[webClient] _bootstrapMobileCsrf: csrftoken from fetch_headers (${newCsrf.slice(0, 8)}...) status=${res.status}`);
+        if (!csrfFromCookie) {
+          this.mobileCookieJar = mergeCookies(this.mobileCookieJar, [`csrftoken=${newCsrf}`]);
+        }
+        console.log(`[webClient] _bootstrapMobileCsrf: csrftoken from fetch_headers ${csrfFromCookie ? "cookie" : "body"} (${newCsrf.slice(0, 8)}...) status=${res.status}`);
         return;
       }
-      console.warn(`[webClient] _bootstrapMobileCsrf: fetch_headers returned no csrftoken (status=${res.status}, cookies=${JSON.stringify(res.cookies.slice(0, 3))})`);
+      console.warn(`[webClient] _bootstrapMobileCsrf: fetch_headers returned no csrftoken (status=${res.status}, cookies=${JSON.stringify(res.cookies.slice(0, 3))}, body=${res.rawBody.slice(0,100)})`);
     } catch (err: any) {
       console.warn(`[webClient] _bootstrapMobileCsrf fetch_headers failed: ${err?.message}`);
     }
@@ -2695,5 +2761,632 @@ export class InstagramWebClient {
     return this.timed("GetSuggestedUsers", async () => {
       await this.mobileGet(`/api/v1/discover/ayml/`);
     }, "Get suggested users");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Standalone account creation via mobile API (no existing session required).
+// Uses the same mobile API path as a real Android Instagram app.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SignupResult = {
+  status: "success" | "email_verification" | "phone_verification" | "error";
+  steps: string[];
+  message?: string;
+  userId?: string;
+  username?: string;
+  sessionId?: string;
+  sessionCookies?: string[];
+  rawResponse?: unknown;
+};
+
+const _pendingSignupSessions = new Map<string, {
+  cookieJar: string[];
+  csrfToken: string;
+  baseHeaders: Record<string, string>;
+  guid: string;
+  android_id: string;
+  username: string;
+  proxyUrl?: string;
+}>();
+
+export async function createInstagramAccountViaApi(params: {
+  username: string;
+  password: string;
+  email: string;
+  firstName?: string;
+  day: number;
+  month: number;
+  year: number;
+  proxyUrl?: string;
+  bio?: string;
+  userAgent?: string;
+  apiLimits?: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number };
+}): Promise<SignupResult> {
+  const { username, password, email, firstName = "", day, month, year, proxyUrl, bio, userAgent, apiLimits } = params;
+
+  // Delay helper: respects the API limits by sleeping (everySecondsMin/reqMax … everySecondsMax/reqMin) seconds
+  const stepDelay = apiLimits
+    ? () => {
+        const minMs = Math.max(500, (apiLimits.everySecondsMin / apiLimits.requestsMax) * 1000);
+        const maxMs = Math.max(minMs, (apiLimits.everySecondsMax / apiLimits.requestsMin) * 1000);
+        const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+        return new Promise<void>(r => setTimeout(r, ms));
+      }
+    : () => Promise.resolve();
+  const rawUA = userAgent || randomMobileUA();
+  // Accept either a full "Instagram X.X.X Android (...)" string or a raw device descriptor
+  const effectiveUA = rawUA.startsWith("Instagram ")
+    ? rawUA
+    : `Instagram ${MOBILE_VERSION} Android (${rawUA}; ${MOBILE_VERSION_CODE})`;
+  const steps: string[] = [];
+  const step = (msg: string) => { steps.push(msg); console.log(`[accountCreator] ${msg}`); };
+
+  const ig_did     = randomUUID();
+  const phone_id   = randomUUID();
+  const waterfall_id = randomUUID();
+  const android_id = `android-${ig_did.replace(/-/g, "").slice(0, 16)}`;
+  const guid       = ig_did;
+  const mid        = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+  let cookieJar: string[] = [`ig_did=${ig_did}`, `mid=${mid}`];
+
+  // Headers restored to match the EXACT state of the one successful HTTP 200
+  // (commit 57e5f68 / 44b34a0 — before gzip fix, before X-FB-Client-IP was added).
+  // Do NOT add X-FB-Client-IP or X-FB-Server-Cluster — those were added AFTER
+  // the 200 as speculative improvements and are absent from the working config.
+  const BLOKS_VERSION_ID = "388ece79ebc0e70e87873505ed1b0ff335ae2868a978cc951b6721c41d46a30a";
+  const baseHeaders: Record<string, string> = {
+    "Host": "i.instagram.com",
+    "User-Agent": effectiveUA,
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate",
+    "X-IG-App-ID": MOBILE_AID,
+    "X-IG-Capabilities": "3brTv10=",
+    "X-IG-Connection-Type": "WIFI",
+    "X-IG-Bandwidth-Speed-KBPS": "-1.000",
+    "X-IG-Bandwidth-TotalBytes-B": "0",
+    "X-IG-Bandwidth-TotalTime-MS": "0",
+    "X-IG-Device-ID": ig_did,
+    "X-IG-Android-ID": android_id,
+    "X-MID": mid,
+    "X-Bloks-Version-Id": BLOKS_VERSION_ID,
+    "X-Bloks-Is-Layout-RTL": "false",
+    "X-FB-HTTP-Engine": "Liger",
+    "X-IG-WWW-Claim": "0",
+  };
+
+  // CSRF strategy: use "missing" throughout the entire signup flow.
+  //
+  // The one successful HTTP 200 from accounts/create/ was obtained when
+  // fetch_headers (the old Step 1) returned no cookie for our datacenter IP,
+  // leaving csrfToken = "missing" for ALL calls: launcher/sync, qe/sync, username
+  // check, and accounts/create/.  Bootstrapping a real token from www.instagram.com
+  // and then switching back to "missing" only for accounts/create/ creates an
+  // inconsistency that Instagram's backend appears to use as a rejection signal —
+  // every attempt with that mixed state produced the generic "There was an error" 400.
+  //
+  // instagram-private-api itself uses "missing" for all pre-login calls, confirming
+  // this is the correct/expected value for unauthenticated signup sessions.
+  let csrfToken = "missing";
+  cookieJar = mergeCookies(cookieJar, [`csrftoken=missing`]);
+  step(`CSRF set to "missing" (unauthenticated signup — consistent across all calls)`);
+
+  await stepDelay();
+
+  // Log proxy being used (or lack of one) so we can verify it in diagnostics
+  step(`Using proxy: ${proxyUrl ? proxyUrl.replace(/:[^@]*@/, ":***@") : "none (direct connection)"}`);
+
+  // Step 1b: launcher/sync — warm up device fingerprint on Instagram's servers.
+  // instagram-private-api always calls this as part of preLoginFlow() before any
+  // account operation. Without it the device is "cold" on Instagram's backend and
+  // accounts/create/ returns the generic "There was an error" 400.
+  step("Warming device via launcher/sync...");
+  try {
+    const launcherRes = await igReq({
+      host: "i.instagram.com",
+      path: "/api/v1/launcher/sync/",
+      method: "POST",
+      headers: {
+        ...baseHeaders,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-CSRFToken": csrfToken,
+      },
+      body: signBody({
+        id: guid,
+        server_config_retrieval: "1",
+        _csrftoken: csrfToken,
+        _uuid: guid,
+      }),
+      cookieJar,
+      proxyUrl,
+    });
+    cookieJar = mergeCookies(cookieJar, launcherRes.cookies);
+    step(`launcher/sync HTTP ${launcherRes.status} — cookies: [${launcherRes.cookies.map(c => c.split("=")[0]).join(", ") || "none"}]`);
+    console.log(`[accountCreator] launcher/sync HTTP=${launcherRes.status}:`, JSON.stringify(launcherRes.json ?? {}).slice(0, 200));
+  } catch (e: any) {
+    step(`launcher/sync error (non-fatal): ${e?.message}`);
+  }
+
+  await stepDelay();
+
+  // Step 1c: qe/sync — fetch Instagram's password encryption public key
+  // Instagram API v200+ requires enc_password (AES-256-GCM + RSA-OAEP) instead of plaintext.
+  let encPassword: string | null = null;
+  let rawPubKey: string | undefined;
+  let rawKeyId: string | number | undefined;
+  step("Fetching password encryption key via qe/sync...");
+  try {
+    // qe/sync must be signed (same as instagram-private-api's QeRepository.sync()) and
+    // must include the login experiments string so Instagram returns a real csrftoken cookie.
+    const LOGIN_EXPERIMENTS = "ig_android_fci_onboarding_friend_search,ig_android_device_detection_info_upload,ig_android_account_linking_upsell_universe,ig_android_direct_main_tab_universe_v2,ig_android_allow_account_switch_once_media_upload_finish_universe,ig_android_sign_in_help_only_one_account_family_universe,ig_android_sms_retriever_backtest_universe,ig_android_direct_add_direct_to_android_native_photo_share_sheet,ig_android_spatial_account_switch_universe,ig_growth_android_profile_pic_prefill_with_fb_pic_2,ig_account_identity_logged_out_signals_global_holdout_universe,ig_android_prefill_main_account_username_on_login_screen_universe,ig_android_login_identifier_fuzzy_match,ig_android_mas_remove_close_friends_entrypoint,ig_android_shared_email_reg_universe,ig_android_video_render_codec_low_memory_gc,ig_android_custom_transitions_universe,ig_android_push_fcm,multiple_account_recovery_universe,ig_android_show_login_info_reminder_universe,ig_android_email_fuzzy_matching_universe,ig_android_one_tap_aymh_redesign_universe,ig_android_direct_send_like_from_notification,ig_android_suma_landing_page,ig_android_prefetch_debug_dialog,ig_android_smartlock_hints_universe,ig_android_black_out,ig_activation_global_discretionary_sms_holdout,ig_android_video_ffmpegutil_pts_fix,ig_android_multi_tap_login_new,ig_save_smartlock_universe,ig_android_caption_typeahead_fix_on_o_universe,ig_android_enable_keyboardlistener_redesign,ig_android_sign_in_password_visibility_universe,ig_android_nux_add_email_device,ig_android_direct_remove_view_mode_stickiness_universe,ig_android_hide_contacts_list_in_nux,ig_android_new_users_one_tap_holdout_universe,ig_android_ingestion_video_support_hevc_decoding,ig_android_mas_notification_badging_universe,ig_android_secondary_account_in_main_reg_flow_universe,ig_android_secondary_account_creation_universe,ig_android_account_recovery_auto_login,ig_android_pwd_encrytpion,ig_android_bottom_sheet_keyboard_leaks,ig_android_sim_info_upload,ig_android_mobile_http_flow_device_universe,ig_android_hide_fb_button_when_not_installed_universe,ig_android_account_linking_on_concurrent_user_session_infra_universe,ig_android_targeted_one_tap_upsell_universe,ig_android_gmail_oauth_in_reg,ig_android_account_linking_flow_shorten_universe,ig_android_vc_interop_use_test_igid_universe,ig_android_notification_unpack_universe,ig_android_registration_confirmation_code_universe,ig_android_device_based_country_verification,ig_android_log_suggested_users_cache_on_error,ig_android_reg_modularization_universe,ig_android_device_verification_separate_endpoint,ig_android_universe_noticiation_channels,ig_android_account_linking_universe,ig_android_hsite_prefill_new_carrier,ig_android_one_login_toast_universe,ig_android_retry_create_account_universe,ig_android_family_apps_user_values_provider_universe,ig_android_reg_nux_headers_cleanup_universe,ig_android_mas_ui_polish_universe,ig_android_device_info_foreground_reporting,ig_android_shortcuts_2019,ig_android_device_verification_fb_signup,ig_android_onetaplogin_optimization,ig_android_passwordless_account_password_creation_universe,ig_android_black_out_toggle_universe,ig_video_debug_overlay,ig_android_ask_for_permissions_on_reg,ig_assisted_login_universe,ig_android_security_intent_switchoff,ig_android_device_info_job_based_reporting,ig_android_add_account_button_in_profile_mas_universe,ig_android_add_dialog_when_delinking_from_child_account_universe,ig_android_passwordless_auth,ig_radio_button_universe_2,ig_android_direct_main_tab_account_switch,ig_android_recovery_one_tap_holdout_universe,ig_android_modularized_dynamic_nux_universe,ig_android_fb_account_linking_sampling_freq_universe,ig_android_fix_sms_read_lollipop,ig_android_access_flow_prefil";
+    const syncRes = await igReq({
+      host: "i.instagram.com",
+      path: "/api/v1/qe/sync/",
+      method: "POST",
+      headers: {
+        ...baseHeaders,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-CSRFToken": csrfToken,
+        "X-DEVICE-ID": guid,
+      },
+      body: signBody({ id: guid, _uid: "0", server_config_retrieval: "1", _csrftoken: csrfToken, _uuid: guid, experiments: LOGIN_EXPERIMENTS }),
+      cookieJar,
+      proxyUrl,
+    });
+    cookieJar = mergeCookies(cookieJar, syncRes.cookies);
+    // CRITICAL: re-sync csrfToken from jar — qe/sync may have set a real csrftoken cookie.
+    // If the jar now has a real token but we keep "missing" in the body, Instagram's CSRF
+    // check will see a mismatch on accounts/create/ and return "There was an error".
+    const syncedCsrf = cookieJar.find(c => c.startsWith("csrftoken="))?.split("=").slice(1).join("=") ?? "";
+    console.log(`[accountCreator] qe/sync HTTP=${syncRes.status} cookies=[${syncRes.cookies.join("; ")}]`);
+    if (syncedCsrf && syncedCsrf !== "missing") {
+      csrfToken = syncedCsrf;
+      step(`csrfToken updated after qe/sync → ${csrfToken.slice(0, 8)}...`);
+    } else {
+      step(`qe/sync HTTP ${syncRes.status} — csrfToken stays "missing" (cookies returned: ${syncRes.cookies.length ? syncRes.cookies.map(c => c.split("=")[0]).join(",") : "none"})`);
+    }
+    const h = syncRes.responseHeaders;
+    rawKeyId  = Array.isArray(h["ig-set-password-encryption-key-id"])  ? h["ig-set-password-encryption-key-id"][0]  : h["ig-set-password-encryption-key-id"];
+    rawPubKey = Array.isArray(h["ig-set-password-encryption-pub-key"]) ? h["ig-set-password-encryption-pub-key"][0] : h["ig-set-password-encryption-pub-key"];
+    if (rawPubKey && rawKeyId) {
+      const keyId = parseInt(String(rawKeyId), 10);
+      const decodedKeyPreview = Buffer.from(String(rawPubKey), "base64").toString("utf8").slice(0, 40).replace(/\n/g, "\\n");
+      encPassword = encryptPassword(password, String(rawPubKey), keyId);
+      step(`Password encryption key obtained (keyId=${keyId}, keyStart="${decodedKeyPreview}...") — using enc_password (${encPassword.slice(0, 28)}...)`);
+    } else {
+      step(`qe/sync HTTP ${syncRes.status} — no key headers (keys=${Object.keys(h).filter(k=>k.startsWith("ig-")).join(",")||"none"}), will send plaintext password`);
+    }
+  } catch (e: any) {
+    step(`qe/sync error: ${e?.message} — will send plaintext password`);
+  }
+
+  await stepDelay();
+
+  // Step 2: check_username — verify the desired username is available
+  step(`Checking availability of @${username}...`);
+  try {
+    const res = await igReq({
+      host: "i.instagram.com",
+      path: `/api/v1/accounts/check_username/`,
+      method: "POST",
+      headers: {
+        ...baseHeaders,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-CSRFToken": csrfToken,
+      },
+      body: new URLSearchParams({ username, _uuid: guid, _csrftoken: csrfToken }).toString(),
+      cookieJar,
+      proxyUrl,
+    });
+    const j = res.json;
+    // Only merge cookies if we got a valid JSON API response — HTML 404 pages from some
+    // proxies/edge nodes can inject a real csrftoken cookie that would then mismatch our
+    // _csrftoken body value and break the subsequent accounts/create/ call.
+    const isJsonResponse = j !== null && typeof j === "object";
+    if (isJsonResponse) {
+      cookieJar = mergeCookies(cookieJar, res.cookies);
+    }
+    if (j?.available === false) {
+      step(`@${username} is already taken`);
+      return { status: "error", steps, message: `Username @${username} is already taken` };
+    }
+    if (j?.available === true) {
+      step(`@${username} is available`);
+    } else {
+      step(`Username check HTTP ${res.status} — ${isJsonResponse ? JSON.stringify(j) : "(HTML response — skipping cookie merge)"}`);
+    }
+  } catch (e: any) {
+    step(`Username check error: ${e?.message} (continuing)`);
+  }
+
+  await stepDelay();
+
+  // Step 3: accounts/create/ — the actual signup call
+  const birthday = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  step(`Submitting signup (${username} / ${email} / dob ${birthday})...`);
+  // accounts/create/ requires Instagram's signed_body format:
+  //   ig_sig_key_version=4&signed_body=HMAC_SHA256.JSON_PARAMS
+  // Use only the fields that instagram-private-api sends (the reference implementation).
+  // Extra fields (is_from_logged_out, seamless_login_enabled, tos_version, gdpr_s, etc.)
+  // cause Instagram's server-side validator to reject the request with the generic
+  // "There was an error with your request" 400 when not expected by the server version.
+  // IMPORTANT: _csrftoken in the CREATE body must be "missing".
+  // instagram-private-api always sends "missing" here because at signup time
+  // there is no active mobile session — the mobile backend explicitly expects
+  // this literal string for unauthenticated account creation.  Sending a real
+  // csrfToken from www.instagram.com causes a cross-domain mismatch that
+  // triggers the generic "There was an error" 400 on every attempt.
+  // (The real token is still sent in the X-CSRFToken header for the other calls.)
+  const createParams: Record<string, unknown> = {
+    username,
+    email,
+    first_name: firstName,
+    // Separate day/month/year fields — this is what the reference library sends
+    // and matches the one attempt that returned HTTP 200.
+    day: String(day),
+    month: String(month),
+    year: String(year),
+    guid,
+    device_id: android_id,
+    _csrftoken: "missing",
+    force_sign_up_code: "",
+    qs_stamp: "",
+    waterfall_id,
+    sn_nonce: "",
+    sn_result: "",
+  };
+  if (encPassword) {
+    createParams.enc_password = encPassword;
+    step(`Using enc_password for signup`);
+  } else {
+    createParams.password = password;
+    step(`enc_password unavailable — using plaintext password`);
+  }
+  step(`Sending signed body with fields: [${Object.keys(createParams).join(", ")}] — csrfToken="${csrfToken}"`);
+
+  // Instagram's signup backend is load-balanced across nodes with inconsistent
+  // behaviour: the same signed request can get 200 on one node and a generic 400
+  // ("There was an error with your request") on another.  Retrying up to 4 times
+  // with a short back-off hits different nodes and typically succeeds within 1-3
+  // attempts.  Only retry on the contentless generic 400 (no error_type); any
+  // other status (200, email_confirmation_link, phone_verification, etc.) exits
+  // immediately.
+  // Strip csrftoken from the cookie jar before the create call.
+  // qe/sync merges a real csrftoken cookie into the jar, but the create body
+  // and X-CSRFToken header both say "missing".  Instagram's server sees the
+  // Cookie header's csrftoken disagree with X-CSRFToken/body and returns the
+  // generic 400.  For the one successful 200 we ever got, qe/sync had not yet
+  // run so the jar had no csrftoken — full consistency across cookie/header/body.
+  // Remove the cookie here so all three are consistently absent/"missing".
+  const createCookieJar = cookieJar.filter(c => !c.startsWith("csrftoken="));
+  step(`Create cookie jar (csrf stripped): [${createCookieJar.map(c => c.split("=")[0]).join(", ")}]`);
+
+  let res!: Awaited<ReturnType<typeof igReq>>;
+  let j: any = null;
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    if (attempt > 1) {
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+      // Refresh enc_password timestamp on each retry so Instagram doesn't reject
+      // a repeated identical encrypted blob.
+      if (encPassword && rawPubKey && rawKeyId) {
+        encPassword = encryptPassword(password, rawPubKey, parseInt(String(rawKeyId), 10));
+        createParams.enc_password = encPassword;
+      }
+      step(`accounts/create/ attempt ${attempt} — retrying...`);
+    }
+    const currentBody = signBody(createParams);
+    // X-CSRFToken header MUST match the _csrftoken body field.
+    // We hard-code "missing" in the body (instagram-private-api default for
+    // unauthenticated signup) so the header must also be "missing". Sending
+    // the real www.instagram.com csrfToken in the header while the body says
+    // "missing" causes Instagram's mobile backend to reject with generic 400.
+    res = await igReq({
+      host: "i.instagram.com",
+      path: "/api/v1/accounts/create/",
+      method: "POST",
+      headers: {
+        ...baseHeaders,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-CSRFToken": "missing",
+      },
+      body: currentBody,
+      cookieJar: createCookieJar,
+      proxyUrl,
+    });
+    cookieJar = mergeCookies(cookieJar, res.cookies);
+    j = res.json;
+    const isGeneric400 = res.status === 400 && j?.status === "fail" && !j?.error_type;
+    const igDiagHeaders = Object.entries(res.responseHeaders ?? {})
+      .filter(([k]) => /^(x-ig-|x-fb-|www-auth|content-type)/i.test(k))
+      .map(([k, v]) => `${k}=${Array.isArray(v) ? v[0] : v}`)
+      .join(", ");
+    step(`accounts/create/ attempt ${attempt} HTTP ${res.status}${isGeneric400 && attempt < 8 ? " (generic — will retry)" : ""} — raw: ${JSON.stringify(j ?? res.rawBody?.slice(0, 300))}`);
+    console.log(`[accountCreator] accounts/create/ attempt=${attempt} HTTP=${res.status} headers=[${igDiagHeaders}]:`, JSON.stringify(j ?? res.rawBody?.slice(0, 400)));
+    if (!isGeneric400 || attempt === 8) break;
+  }
+
+  // ── Library fallback (ig.account.create via instagram-private-api) ────────────
+  // Our custom httpsRequest stack is consistently rejected by accounts/create/ with
+  // a generic 400 and no error_type.  Try the exact same endpoint through the
+  // instagram-private-api library's own HTTP client — different connection handling,
+  // different signing stack, different cookie management.  This is the reference
+  // implementation for this API and uses a plaintext password (the library predates
+  // enc_password for signup).  If this succeeds, or gets a *different* error than the
+  // generic 400, it tells us the block is our HTTP stack, not Instagram policy.
+  const allMobileFailed = (j?.status === "fail" && !j?.error_type) || j?.error_type === "needs_upgrade";
+  if (allMobileFailed) {
+    step("Custom HTTP stack blocked — trying instagram-private-api library path...");
+    try {
+      const igLib = newIgClient();
+      // Generate a fresh device fingerprint keyed to username+email so it's
+      // reproducible but unique per account (same pattern used for DM sending).
+      igLib.state.generateDevice(`${username}|${email}|${Date.now()}`);
+      if (proxyUrl) igLib.state.proxyUrl = proxyUrl;
+
+      // Run the standard pre-login warm-up (launcher.preLoginSync → qe.syncLoginExperiments).
+      // Non-fatal — continue even if it throws so we still attempt account.create().
+      step("Library: running preLoginFlow (launcher → qe)...");
+      try {
+        await igLib.launcher.preLoginSync();
+        step("Library: launcher/sync OK");
+      } catch (e: any) {
+        step(`Library: launcher/sync error (non-fatal): ${e?.message}`);
+      }
+      try {
+        await igLib.qe.syncLoginExperiments();
+        step("Library: qe/sync OK");
+      } catch (e: any) {
+        step(`Library: qe/sync error (non-fatal): ${e?.message}`);
+      }
+
+      const birthday = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      step(`Library: calling ig.account.create() for ${username} / ${email}...`);
+      let libResult: any = null;
+      try {
+        libResult = await igLib.account.create({
+          username,
+          password,
+          email,
+          first_name: firstName,
+          birthday,
+        });
+        step(`Library: ig.account.create() raw result: ${JSON.stringify(libResult).slice(0, 300)}`);
+        // Treat a library success the same as a mobile API success
+        if (libResult?.account_created || libResult?.created_user || (libResult?.status === "ok" && libResult?.user)) {
+          const userId = String(libResult.created_user?.pk ?? libResult.user?.pk ?? "");
+          step(`Library: account created! User ID: ${userId}`);
+          // Extract session cookies from the library's cookie jar
+          const libCookies: string[] = [];
+          try {
+            const jarObj = (igLib.state.cookieJar as any).toJSON?.() ?? {};
+            for (const c of jarObj.cookies ?? []) libCookies.push(`${c.key}=${c.value}`);
+          } catch {}
+          cookieJar = mergeCookies(cookieJar, libCookies);
+          j = libResult;
+        } else {
+          j = libResult;
+        }
+      } catch (libErr: any) {
+        // instagram-private-api throws IgResponseError — extract the response body
+        const raw = libErr?.response?.body;
+        const parsed = typeof raw === "string" ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : (raw ?? null);
+        step(`Library: ig.account.create() threw: ${libErr?.message} — body: ${JSON.stringify(parsed ?? raw ?? "").slice(0, 300)}`);
+        // If we got a meaningful error body from Instagram, use it as j so the
+        // error-handling block below can inspect error_type / message
+        if (parsed && typeof parsed === "object") j = parsed;
+      }
+    } catch (libSetupErr: any) {
+      step(`Library: setup error: ${libSetupErr?.message}`);
+    }
+  }
+
+  // ── Web registration fallback ───────────────────────────────────────────────
+  const stillFailed = (j?.status === "fail" && !j?.error_type) || j?.error_type === "needs_upgrade";
+  if (stillFailed) {
+    step("Library path also blocked — trying web registration endpoint...");
+    try {
+      // web_create_ajax/ is Instagram's classic web registration AJAX endpoint.
+      // It uses plain URL-encoded params (no signed_body), browser-like headers,
+      // and accepts plain password (predates enc_password).
+      const webBody = new URLSearchParams({
+        email,
+        password,       // plain password — enc_password key may not transfer cross-domain
+        username,
+        first_name: firstName,
+        month: String(month),
+        day: String(day),
+        year: String(year),
+      }).toString();
+
+      const webRes = await igReq({
+        host: "www.instagram.com",
+        path: "/accounts/web_create_ajax/",
+        method: "POST",
+        headers: {
+          "Host": "www.instagram.com",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-CSRFToken": csrfToken,
+          "X-Instagram-AJAX": "1",
+          "X-Requested-With": "XMLHttpRequest",
+          "Referer": "https://www.instagram.com/accounts/emailsignup/",
+          "Origin": "https://www.instagram.com",
+        },
+        body: webBody,
+        cookieJar,
+        proxyUrl,
+      });
+      cookieJar = mergeCookies(cookieJar, webRes.cookies);
+      const wj = webRes.json;
+      step(`web_create_ajax HTTP ${webRes.status} — raw: ${JSON.stringify(wj ?? webRes.rawBody?.slice(0, 300))}`);
+      console.log(`[accountCreator] web_create_ajax HTTP=${webRes.status}:`, JSON.stringify(wj ?? webRes.rawBody?.slice(0, 400)));
+      // Use the web result if it's not the same generic fail we already have
+      if (wj && !(webRes.status === 400 && wj.status === "fail" && !wj.error_type)) {
+        j = wj;
+        res = { ...res, status: webRes.status, cookies: webRes.cookies, json: wj, rawBody: webRes.rawBody, responseHeaders: webRes.responseHeaders };
+      }
+    } catch (e: any) {
+      step(`web_create_ajax error: ${e?.message}`);
+    }
+  }
+
+  try {
+
+    if (!j) {
+      const bodyPreview = res.rawBody?.slice(0, 300) ?? "(empty)";
+      step(`Instagram returned HTTP ${res.status} — body: ${bodyPreview}`);
+      return { status: "error", steps, message: `Instagram returned HTTP ${res.status}: ${bodyPreview}` };
+    }
+
+    // ── Success ────────────────────────────────────────────────────────────
+    if (j.account_created === true || j.created_user || (j.status === "ok" && j.user)) {
+      const userId = String(j.created_user?.pk ?? j.user?.pk ?? "");
+      step(`Account created! User ID: ${userId}`);
+      // Attempt to set bio immediately if provided and we have a session cookie
+      if (bio && cookieJar.some(c => c.startsWith("sessionid="))) {
+        step(`Setting bio...`);
+        try {
+          const bioRes = await igReq({
+            host: "i.instagram.com",
+            path: "/api/v1/accounts/set_biography/",
+            method: "POST",
+            headers: {
+              ...baseHeaders,
+              "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+              "X-CSRFToken": csrfToken,
+            },
+            body: new URLSearchParams({ raw_text: bio, _uuid: guid, _csrftoken: csrfToken }).toString(),
+            cookieJar,
+            proxyUrl,
+          });
+          cookieJar = mergeCookies(cookieJar, bioRes.cookies);
+          step(bioRes.json?.status === "ok" ? `Bio set successfully` : `Bio set attempt: ${JSON.stringify(bioRes.json ?? {}).slice(0, 80)}`);
+        } catch (e: any) {
+          step(`Bio set failed (non-fatal): ${e?.message}`);
+        }
+      }
+      return { status: "success", steps, userId, username, message: "Account created successfully", sessionCookies: cookieJar };
+    }
+
+    // ── Email verification ─────────────────────────────────────────────────
+    if (j.error_type === "email_confirmation_link" || j.email_verification_pending || j.verification_contact === "email") {
+      step(`Email verification required — code sent to ${email}`);
+      const sessionId = randomUUID();
+      _pendingSignupSessions.set(sessionId, { cookieJar, csrfToken, baseHeaders, guid, android_id, username, proxyUrl });
+      setTimeout(() => _pendingSignupSessions.delete(sessionId), 15 * 60 * 1000);
+      return { status: "email_verification", steps, message: j.message ?? `Check ${email} for a 6-digit code`, sessionId, rawResponse: j };
+    }
+
+    // ── Phone verification ─────────────────────────────────────────────────
+    if (j.error_type === "sms_registration_number" || j.phone_verification_settings || j.verification_contact === "phone") {
+      step(`Phone verification required`);
+      const sessionId = randomUUID();
+      _pendingSignupSessions.set(sessionId, { cookieJar, csrfToken, baseHeaders, guid, android_id, username, proxyUrl });
+      setTimeout(() => _pendingSignupSessions.delete(sessionId), 15 * 60 * 1000);
+      return { status: "phone_verification", steps, message: j.message ?? "Enter the SMS code sent to your phone", sessionId, rawResponse: j };
+    }
+
+    // ── Challenge ──────────────────────────────────────────────────────────
+    if (j.challenge) {
+      step(`Challenge required: ${j.challenge?.api_path ?? "unknown"}`);
+      return { status: "error", steps, message: "Instagram requires a challenge — try a different proxy or IP", rawResponse: j };
+    }
+
+    // ── Business-logic field errors (email_is_taken, username_is_taken, etc.) ─
+    // Instagram returns these as { account_created: false, errors: { field: ["msg"] }, error_type }
+    // Extract the first human-readable message from j.errors if available.
+    const fieldMsg = (() => {
+      if (!j.errors || typeof j.errors !== "object") return null;
+      const msgs: string[] = [];
+      for (const val of Object.values(j.errors)) {
+        if (Array.isArray(val)) msgs.push(...val.map(String));
+        else if (typeof val === "string") msgs.push(val);
+      }
+      return msgs.length ? msgs.join(" ") : null;
+    })();
+
+    if (j.error_type === "email_is_taken") {
+      step(`Email already registered: ${email}`);
+      return { status: "error", steps, message: fieldMsg ?? "That email address is already registered on Instagram. Use a different email.", rawResponse: j };
+    }
+    if (j.error_type === "username_is_taken") {
+      step(`Username already taken: @${username}`);
+      return { status: "error", steps, message: fieldMsg ?? `@${username} is already taken. Choose a different username.`, rawResponse: j };
+    }
+    if (j.error_type === "invalid_email") {
+      step(`Invalid email address: ${email}`);
+      return { status: "error", steps, message: fieldMsg ?? "That email address is not valid.", rawResponse: j };
+    }
+    if (j.error_type === "invalid_username") {
+      step(`Invalid username: @${username}`);
+      return { status: "error", steps, message: fieldMsg ?? "That username is not allowed. Try a different one.", rawResponse: j };
+    }
+
+    // ── Blocked ────────────────────────────────────────────────────────────
+    if (j.error_type === "signup_block" || j.spam) {
+      const detail = j.feedback_message ?? j.feedback_title ?? j.message ?? "Signup blocked";
+      step(`Signup blocked by Instagram (signup_block): ${detail}`);
+      return {
+        status: "error",
+        steps,
+        message: `Signup blocked — ${detail}. Try a different proxy or email address, and wait a few minutes before retrying.`,
+        rawResponse: j,
+      };
+    }
+
+    const msg = fieldMsg ?? j.message ?? j.error_type ?? JSON.stringify(j).slice(0, 200);
+    step(`Instagram returned: ${msg}`);
+    return { status: "error", steps, message: msg, rawResponse: j };
+  } catch (e: any) {
+    step(`Request exception: ${e?.message}`);
+    return { status: "error", steps, message: e?.message ?? "Unknown error" };
+  }
+}
+
+export async function submitSignupCode(sessionId: string, code: string): Promise<SignupResult> {
+  const session = _pendingSignupSessions.get(sessionId);
+  if (!session) return { status: "error", steps: [], message: "Session expired — please start over" };
+
+  const { cookieJar, csrfToken, baseHeaders, guid, android_id, username, proxyUrl } = session;
+  const steps: string[] = [];
+  const step = (msg: string) => { steps.push(msg); console.log(`[accountCreator] ${msg}`); };
+
+  step(`Submitting verification code ${code}...`);
+  try {
+    const res = await igReq({
+      host: "i.instagram.com",
+      path: "/api/v1/accounts/confirm_email/",
+      method: "POST",
+      headers: {
+        ...baseHeaders,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-CSRFToken": csrfToken,
+      },
+      body: new URLSearchParams({
+        _uuid: guid,
+        _csrftoken: csrfToken,
+        code,
+        device_id: android_id,
+      }).toString(),
+      cookieJar,
+      proxyUrl,
+    });
+    const updatedJar = mergeCookies(cookieJar, res.cookies);
+    const j = res.json;
+    console.log(`[accountCreator] confirm_email HTTP=${res.status}:`, JSON.stringify(j ?? {}).slice(0, 300));
+    step(`Response (HTTP ${res.status}): ${JSON.stringify(j ?? {}).slice(0, 150)}`);
+
+    if (j?.status === "ok" || j?.account_created) {
+      _pendingSignupSessions.delete(sessionId);
+      return { status: "success", steps, username, message: "Verification successful", sessionCookies: updatedJar };
+    }
+    return { status: "error", steps, message: j?.message ?? "Verification failed", rawResponse: j };
+  } catch (e: any) {
+    step(`Verify error: ${e?.message}`);
+    return { status: "error", steps, message: e?.message };
   }
 }

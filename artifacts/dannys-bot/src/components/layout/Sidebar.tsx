@@ -1,5 +1,5 @@
 import { Link, useLocation, useSearch } from "wouter";
-import { LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, ChevronLeft, ChevronRight, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
@@ -19,7 +19,8 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Accounts", path: "/profiles", icon: Users },
-    { name: "Create an Account", path: "/create-account", icon: UserPlus },
+    { name: "Create a Cookie", path: "/create-account", icon: UserPlus },
+    { name: "Create an Account", path: "/create-account-api", icon: Cpu },
     { name: "Stats", path: "/stats", icon: Activity },
     { name: "Proxy Manager", path: "/proxies", icon: ShieldAlert },
   ];
