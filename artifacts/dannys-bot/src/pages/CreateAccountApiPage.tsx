@@ -406,10 +406,34 @@ function CreatedAccountsTab() {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
-const SS_KEY_USERNAME  = "equinox_api_username_spin";
-const SS_KEY_BIO       = "equinox_api_bio_spin";
+const SS_KEY_USERNAME   = "equinox_api_username_spin";
+const SS_KEY_BIO        = "equinox_api_bio_spin";
+const SS_KEY_PASSWORD   = "equinox_api_password";
+const SS_KEY_FIRSTNAME  = "equinox_api_firstname";
+const SS_KEY_EMAIL      = "equinox_api_email";
+const SS_KEY_EMAIL_PASS = "equinox_api_email_pass";
+const SS_KEY_DOB        = "equinox_api_dob";
+const SS_KEY_PROXY_ID   = "equinox_api_proxy_id";
+const SS_KEY_UA_API     = "equinox_api_ua_api";
+const SS_KEY_TAB        = "equinox_api_tab";
+const SS_KEY_RESULT     = "equinox_api_result";
+const SS_KEY_VERIFY     = "equinox_api_verify_code";
 const LS_KEY_API_LIMITS = "equinox_api_limits_v1";
 const LS_KEY_IMAP       = "equinox_api_imap_v1";
+
+function ssGet(key: string): string { return sessionStorage.getItem(key) ?? ""; }
+function ssGetJson<T>(key: string, fallback: T): T {
+  try { const r = sessionStorage.getItem(key); if (r) return JSON.parse(r) as T; } catch {}
+  return fallback;
+}
+function ssSet(key: string, v: string) { sessionStorage.setItem(key, v); }
+function ssSetJson(key: string, v: unknown) { sessionStorage.setItem(key, JSON.stringify(v)); }
+const SS_ALL_KEYS = [
+  SS_KEY_USERNAME, SS_KEY_BIO, SS_KEY_PASSWORD, SS_KEY_FIRSTNAME, SS_KEY_EMAIL,
+  SS_KEY_EMAIL_PASS, SS_KEY_DOB, SS_KEY_PROXY_ID, SS_KEY_UA_API, SS_KEY_TAB,
+  SS_KEY_RESULT, SS_KEY_VERIFY,
+];
+function ssClearAll() { SS_ALL_KEYS.forEach(k => sessionStorage.removeItem(k)); }
 
 const DEFAULT_API_LIMITS = { requestsMin: 5, requestsMax: 10, everySecondsMin: 30, everySecondsMax: 60 };
 
@@ -435,20 +459,39 @@ export function CreateAccountApiPage() {
 
   const { data: proxies } = useProxies();
 
-  const [tab, setTab] = useState<"create" | "accounts">("create");
+  // All form + result state is persisted in sessionStorage so navigating away
+  // and back restores exactly where the user left off.
+  const [tab, setTabRaw] = useState<"create" | "accounts">(() =>
+    (ssGet(SS_KEY_TAB) as "create" | "accounts") || "create"
+  );
+  const setTab = (v: "create" | "accounts") => { setTabRaw(v); ssSet(SS_KEY_TAB, v); };
 
-  // Account fields — username/bio persisted in sessionStorage so switching tabs doesn't wipe them
-  const [usernameSpin, setUsernameSpinRaw] = useState(() => sessionStorage.getItem(SS_KEY_USERNAME) ?? "");
-  const [bioSpin, setBioSpinRaw]           = useState(() => sessionStorage.getItem(SS_KEY_BIO)      ?? "");
+  // Account fields
+  const [usernameSpin, setUsernameSpinRaw] = useState(() => ssGet(SS_KEY_USERNAME));
+  const [bioSpin, setBioSpinRaw]           = useState(() => ssGet(SS_KEY_BIO));
+  const setUsernameSpin = (v: string) => { setUsernameSpinRaw(v); ssSet(SS_KEY_USERNAME, v); };
+  const setBioSpin      = (v: string) => { setBioSpinRaw(v);      ssSet(SS_KEY_BIO, v);      };
 
-  const setUsernameSpin = (v: string) => { setUsernameSpinRaw(v); sessionStorage.setItem(SS_KEY_USERNAME, v); };
-  const setBioSpin      = (v: string) => { setBioSpinRaw(v);      sessionStorage.setItem(SS_KEY_BIO, v);      };
+  const [password, setPasswordRaw]   = useState(() => ssGet(SS_KEY_PASSWORD) || generatePassword());
+  const [firstName, setFirstNameRaw] = useState(() => ssGet(SS_KEY_FIRSTNAME));
+  const [email, setEmailRaw]         = useState(() => ssGet(SS_KEY_EMAIL));
+  const setPassword  = (v: string) => { setPasswordRaw(v);  ssSet(SS_KEY_PASSWORD,  v); };
+  const setFirstName = (v: string) => { setFirstNameRaw(v); ssSet(SS_KEY_FIRSTNAME, v); };
+  const setEmail     = (v: string) => { setEmailRaw(v);     ssSet(SS_KEY_EMAIL,     v); };
 
-  const [password, setPassword]         = useState(() => generatePassword());
-  const [firstName, setFirstName]       = useState("");
-  const [email, setEmail]               = useState("");
-  const [dob, setDob]                   = useState(() => randomDob());
-  const [selectedProxyId, setSelectedProxyId] = useState<number | "">("");
+  const [dob, setDobRaw] = useState(() =>
+    ssGetJson<{ day: number; month: number; year: number }>(SS_KEY_DOB, randomDob())
+  );
+  const setDob = (v: { day: number; month: number; year: number }) => { setDobRaw(v); ssSetJson(SS_KEY_DOB, v); };
+
+  const [selectedProxyId, setSelectedProxyIdRaw] = useState<number | "">(() => {
+    const s = ssGet(SS_KEY_PROXY_ID);
+    return s ? Number(s) : "";
+  });
+  const setSelectedProxyId = (v: number | "") => {
+    setSelectedProxyIdRaw(v);
+    ssSet(SS_KEY_PROXY_ID, v === "" ? "" : String(v));
+  };
 
   // API Controller — persisted to localStorage so settings survive page reloads
   const [apiLimits, setApiLimitsRaw] = useState(loadApiLimits);
@@ -456,22 +499,35 @@ export function CreateAccountApiPage() {
     setApiLimitsRaw(v);
     localStorage.setItem(LS_KEY_API_LIMITS, JSON.stringify(v));
   };
-  const [userAgentApi, setUserAgentApi] = useState(() => UA_POOL[0].api);
+  const [userAgentApi, setUserAgentApiRaw] = useState(() => ssGet(SS_KEY_UA_API) || UA_POOL[0].api);
+  const setUserAgentApi = (v: string) => { setUserAgentApiRaw(v); ssSet(SS_KEY_UA_API, v); };
 
   // Email / IMAP — server+port persisted to localStorage
-  const [emailPass, setEmailPass]   = useState("");
+  const [emailPass, setEmailPassRaw] = useState(() => ssGet(SS_KEY_EMAIL_PASS));
+  const setEmailPass = (v: string) => { setEmailPassRaw(v); ssSet(SS_KEY_EMAIL_PASS, v); };
   const _savedImap = loadImap();
   const [imapServer, setImapServerRaw] = useState(_savedImap.server);
   const [imapPort, setImapPortRaw]     = useState(_savedImap.port);
   const setImapServer = (v: string) => { setImapServerRaw(v); localStorage.setItem(LS_KEY_IMAP, JSON.stringify({ server: v, port: imapPort })); };
   const setImapPort   = (v: number) => { setImapPortRaw(v);   localStorage.setItem(LS_KEY_IMAP, JSON.stringify({ server: imapServer, port: v })); };
 
-  // Runtime state
-  const [loading, setLoading]       = useState(false);
-  const [result, setResult]         = useState<SignupResult | null>(null);
-  const [verifyCode, setVerifyCode] = useState("");
-  const [verifying, setVerifying]   = useState(false);
-  const [copied, setCopied]         = useState(false);
+  // Runtime state — result + verifyCode persisted so verification can continue after navigation
+  const [loading, setLoading]         = useState(false);
+  const [result, setResultRaw]        = useState<SignupResult | null>(() =>
+    ssGetJson<SignupResult | null>(SS_KEY_RESULT, null)
+  );
+  const setResult = (v: SignupResult | null | ((prev: SignupResult | null) => SignupResult | null)) => {
+    setResultRaw(prev => {
+      const next = typeof v === "function" ? v(prev) : v;
+      if (next === null) sessionStorage.removeItem(SS_KEY_RESULT);
+      else ssSetJson(SS_KEY_RESULT, next);
+      return next;
+    });
+  };
+  const [verifyCode, setVerifyCodeRaw] = useState(() => ssGet(SS_KEY_VERIFY));
+  const setVerifyCode = (v: string) => { setVerifyCodeRaw(v); ssSet(SS_KEY_VERIFY, v); };
+  const [verifying, setVerifying]      = useState(false);
+  const [copied, setCopied]            = useState(false);
 
   const years = Array.from({ length: 80 }, (_, i) => 2006 - i);
   const days  = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -550,11 +606,18 @@ export function CreateAccountApiPage() {
   };
 
   const handleReset = () => {
+    ssClearAll();
     setResult(null);
     setVerifyCode("");
     setPassword(generatePassword());
     setDob(randomDob());
     setUserAgentApi(randomUA());
+    setEmail("");
+    setFirstName("");
+    setEmailPass("");
+    setSelectedProxyId("");
+    setUsernameSpin("");
+    setBioSpin("");
   };
 
   const statusColors: Record<SignupResult["status"], string> = {
@@ -697,13 +760,13 @@ export function CreateAccountApiPage() {
                 <span className="ml-1 text-[10px] text-muted-foreground">(auto-randomised 18–45 yrs)</span>
               </Label>
               <div className="grid grid-cols-3 gap-2">
-                <select value={dob.day}   onChange={e => setDob(d => ({ ...d, day:   Number(e.target.value) }))} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.day}   onChange={e => setDob({ ...dob, day:   Number(e.target.value) })} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
                   {days.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                <select value={dob.month} onChange={e => setDob(d => ({ ...d, month: Number(e.target.value) }))} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.month} onChange={e => setDob({ ...dob, month: Number(e.target.value) })} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
                   {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>
-                <select value={dob.year}  onChange={e => setDob(d => ({ ...d, year:  Number(e.target.value) }))} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.year}  onChange={e => setDob({ ...dob, year:  Number(e.target.value) })} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
@@ -892,7 +955,7 @@ export function CreateAccountApiPage() {
                   </div>
                 )}
 
-                {result.rawResponse && (
+                {!!result.rawResponse && (
                   <div className="mt-3 pt-3 border-t border-current/10">
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-xs font-medium text-muted-foreground">Raw Response</p>
