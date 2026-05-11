@@ -457,20 +457,7 @@ function setupAutoUpdater(): void {
 
 // ── Backup helpers ────────────────────────────────────────────────────────────
 
-function copyDirSync(src: string, dst: string): void {
-  fs.mkdirSync(dst, { recursive: true });
-  for (const entry of fs.readdirSync(src)) {
-    const srcPath = path.join(src, entry);
-    const dstPath = path.join(dst, entry);
-    try {
-      if (fs.statSync(srcPath).isDirectory()) {
-        copyDirSync(srcPath, dstPath);
-      } else {
-        fs.copyFileSync(srcPath, dstPath);
-      }
-    } catch { /* skip unreadable entries */ }
-  }
-}
+const MAX_BACKUPS = 3;
 
 // ── Backup & Restore ──────────────────────────────────────────────────────────
 
@@ -502,56 +489,45 @@ async function createBackupNow(): Promise<{ ok: boolean; entry?: BackupEntry; er
   const backupsDir = getBackupsDir();
   const id = formatBackupId(new Date());
   const backupFolder = path.join(backupsDir, id);
-  const zipPath = path.join(backupFolder, "backup.zip");
+  const dbSrc = path.join(userData, "database.db");
+  const dbDst = path.join(backupFolder, "backup.db");
 
   try {
+    if (!fs.existsSync(dbSrc)) {
+      return { ok: false, error: "database.db not found" };
+    }
     fs.mkdirSync(backupFolder, { recursive: true });
 
-    if (process.platform === "win32") {
-      // PowerShell's Compress-Archive silently skips locked files (e.g. the
-      // open SQLite database).  Work around this by copying all userData
-      // contents to a temp directory using Node.js first — Node.js can read
-      // SQLite files even while the database server process has them open.
-      const tmpDir = path.join(os.tmpdir(), `equinox-bak-${Date.now()}`);
-      fs.mkdirSync(tmpDir, { recursive: true });
-      try {
-        const entries = fs.readdirSync(userData).filter(n => n !== "backups");
-        for (const name of entries) {
-          const srcPath = path.join(userData, name);
-          const dstPath = path.join(tmpDir, name);
-          try {
-            if (fs.statSync(srcPath).isDirectory()) {
-              copyDirSync(srcPath, dstPath);
-            } else {
-              fs.copyFileSync(srcPath, dstPath);
-            }
-          } catch { /* skip unreadable entries */ }
-        }
-        const tmpItems = fs.readdirSync(tmpDir).map(n => path.join(tmpDir, n));
-        if (tmpItems.length > 0) {
-          const pathList = tmpItems.map(p => `'${p.replace(/'/g, "''")}'`).join(",");
-          await runPsScript(
-            `Compress-Archive -Path @(${pathList}) -DestinationPath '${zipPath.replace(/'/g, "''")}' -Force`
-          );
-        }
-      } finally {
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    // Copy only the SQLite database file — no PowerShell, no zip, no browser cache.
+    // Node.js fs.copyFileSync works at the OS level and can read the file even
+    // while the database server has it open (SQLite WAL mode allows concurrent reads).
+    fs.copyFileSync(dbSrc, dbDst);
+
+    // Copy WAL/SHM if present for a more consistent point-in-time snapshot.
+    for (const ext of ["-wal", "-shm"]) {
+      const src = dbSrc + ext;
+      if (fs.existsSync(src)) {
+        try { fs.copyFileSync(src, dbDst + ext); } catch {}
       }
-    } else {
-      const items = fs.readdirSync(userData)
-        .filter((n) => n !== "backups")
-        .map((n) => `'${path.join(userData, n).replace(/'/g, "'\\''")}'`)
-        .join(" ");
-      if (items) await execAsync(`zip -r '${zipPath.replace(/'/g, "'\\''")}' ${items}`);
     }
 
-    const size = fs.existsSync(zipPath) ? fs.statSync(zipPath).size : 0;
+    const size = fs.statSync(dbDst).size;
     const meta = { date: new Date().toISOString(), size };
     fs.writeFileSync(path.join(backupFolder, "meta.json"), JSON.stringify(meta));
+
+    pruneOldBackups(MAX_BACKUPS);
+
     return { ok: true, entry: { id, date: meta.date, size } };
   } catch (err: any) {
     try { fs.rmSync(backupFolder, { recursive: true, force: true }); } catch {}
     return { ok: false, error: String(err?.message ?? err) };
+  }
+}
+
+function pruneOldBackups(keep: number): void {
+  const entries = listBackupsNow();
+  for (const e of entries.slice(keep)) {
+    try { fs.rmSync(path.join(getBackupsDir(), e.id), { recursive: true, force: true }); } catch {}
   }
 }
 
@@ -561,7 +537,8 @@ function listBackupsNow(): BackupEntry[] {
   return fs.readdirSync(dir)
     .filter((name) => {
       const d = path.join(dir, name);
-      return fs.statSync(d).isDirectory() && fs.existsSync(path.join(d, "backup.zip"));
+      if (!fs.statSync(d).isDirectory()) return false;
+      return fs.existsSync(path.join(d, "backup.db")) || fs.existsSync(path.join(d, "backup.zip"));
     })
     .sort((a, b) => b.localeCompare(a))
     .map((name) => {
@@ -573,7 +550,9 @@ function listBackupsNow(): BackupEntry[] {
         date = m.date;
         size = m.size;
       } catch {
-        try { size = fs.statSync(path.join(dir, name, "backup.zip")).size; } catch {}
+        const dbFile = path.join(dir, name, "backup.db");
+        const zipFile = path.join(dir, name, "backup.zip");
+        try { size = fs.statSync(fs.existsSync(dbFile) ? dbFile : zipFile).size; } catch {}
       }
       return { id: name, date, size };
     });
@@ -586,22 +565,38 @@ function getLastBackupDate(): Date | null {
 }
 
 async function restoreBackupNow(id: string): Promise<{ ok: boolean; error?: string }> {
-  const zipPath = path.join(getBackupsDir(), id, "backup.zip");
-  if (!fs.existsSync(zipPath)) return { ok: false, error: "Backup file not found" };
-
+  const backupFolder = path.join(getBackupsDir(), id);
+  const dbBackup = path.join(backupFolder, "backup.db");
+  const zipBackup = path.join(backupFolder, "backup.zip");
   const userData = getUserDataPath();
+  const dbDst = path.join(userData, "database.db");
+
+  const hasDb = fs.existsSync(dbBackup);
+  const hasZip = fs.existsSync(zipBackup);
+  if (!hasDb && !hasZip) return { ok: false, error: "Backup file not found" };
+
   try {
     if (serverProc) { serverProc.kill(); serverProc = null; }
     await new Promise((r) => setTimeout(r, 1200));
 
-    if (process.platform === "win32") {
-      await runPsScript([
-        `$zip = '${zipPath.replace(/'/g, "''")}'`,
-        `$dst = '${userData.replace(/'/g, "''")}'`,
-        `Expand-Archive -Path $zip -DestinationPath $dst -Force`,
-      ].join("\n"));
+    if (hasDb) {
+      // New format: copy database.db back directly — no PowerShell needed.
+      fs.copyFileSync(dbBackup, dbDst);
+      // Remove stale WAL/SHM so SQLite starts clean from the restored snapshot.
+      for (const ext of ["-wal", "-shm"]) {
+        try { fs.rmSync(dbDst + ext, { force: true }); } catch {}
+      }
     } else {
-      await execAsync(`unzip -o '${zipPath.replace(/'/g, "'\\''")}' -d '${userData.replace(/'/g, "'\\''")}'`);
+      // Legacy zip format fallback.
+      if (process.platform === "win32") {
+        await runPsScript([
+          `$zip = '${zipBackup.replace(/'/g, "''")}'`,
+          `$dst = '${userData.replace(/'/g, "''")}'`,
+          `Expand-Archive -Path $zip -DestinationPath $dst -Force`,
+        ].join("\n"));
+      } else {
+        await execAsync(`unzip -o '${zipBackup.replace(/'/g, "'\\''")}' -d '${userData.replace(/'/g, "'\\''")}'`);
+      }
     }
 
     app.relaunch();
