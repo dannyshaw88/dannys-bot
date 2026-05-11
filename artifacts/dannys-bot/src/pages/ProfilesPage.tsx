@@ -63,11 +63,14 @@ const STATUS_META: Record<AccountStatus, {
   review:               { label: "Review",               icon: Eye,         pill: "bg-slate-100 text-slate-600  border-slate-200"  },
 };
 
-function AccountStatusBadge({ status }: { status: string }) {
+function AccountStatusBadge({ status, statusMessage }: { status: string; statusMessage?: string | null }) {
   const meta = STATUS_META[status as AccountStatus] ?? STATUS_META.pending;
   const Icon = meta.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}`}>
+    <span
+      title={statusMessage || undefined}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${statusMessage ? " cursor-help underline decoration-dotted decoration-current underline-offset-2" : ""}`}
+    >
       <Icon className="w-2.5 h-2.5" />
       {meta.label}
     </span>
@@ -162,8 +165,13 @@ export function ProfilesPage() {
     return Infinity;
   };
 
+  const ERROR_STATUSES = new Set([
+    "logged_out", "bad_password", "captcha", "error", "banned",
+    "api_block", "compromised", "invalid_credentials", "password_reset",
+  ]);
+
   const filteredProfiles = useMemo(() => {
-    const base = filterTokens.length > 0
+    let base = filterTokens.length > 0
       ? (profiles ?? []).filter(p => {
           const status      = (p.accountStatus ?? "pending").toLowerCase();
           const statusLabel = (STATUS_META[p.accountStatus as AccountStatus]?.label ?? "").toLowerCase();
@@ -199,7 +207,7 @@ export function ProfilesPage() {
           return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
         })
       : base;
-  }, [profiles, filterTokens, sortField, sortDir]);
+  }, [profiles, filterTokens, sortField, sortDir, showOnlyErrors]);
 
   // ── Grouped view (groupMode) ──────────────────────────────────────────────
   const groupedProfiles = useMemo(() => {
@@ -739,7 +747,7 @@ export function ProfilesPage() {
                   </div>
                   <div style={{ width: profColWidths.status }} className="flex items-center justify-start gap-1.5 shrink-0">
                     {hasProxy
-                      ? <AccountStatusBadge status={acctStatus} />
+                      ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} />
                       : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
                           <Globe className="w-2.5 h-2.5" />No Proxy
                         </span>

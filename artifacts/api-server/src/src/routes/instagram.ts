@@ -5,6 +5,8 @@ import { storage } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
+import { createInstagramAccountViaApi, submitSignupCode } from "../instagram/instagramWebClient";
+import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { IgApiClient } from "instagram-private-api";
 import {
   getOrCreateSession,
@@ -299,14 +301,17 @@ export async function registerInstagramRoutes(
     try {
       const id = Number(req.params.id);
       const body = req.body;
-      // The general PATCH route must NEVER be able to set accountStatus to "valid".
-      // Only the explicit /verify route is authoritative for that status.
+      const current = await storage.getProfile(id);
+      // The general PATCH route must NEVER set accountStatus to "valid" except
+      // when restoring a previously-stopped account (toggle-on from Accounts page).
+      // Only the explicit /verify route is authoritative for validating a session.
       if ("accountStatus" in body && body.accountStatus === "valid") {
-        console.warn(`[status-guard] BLOCKED attempt to set profile ${id} → "valid" via PATCH route`);
-        delete body.accountStatus;
+        if (!current || current.accountStatus !== "stopped") {
+          console.warn(`[status-guard] BLOCKED attempt to set profile ${id} → "valid" via PATCH route (current: ${current?.accountStatus})`);
+          delete body.accountStatus;
+        }
       }
       if ("username" in body || "password" in body) {
-        const current = await storage.getProfile(id);
         const usernameChanged = current && "username" in body && body.username !== current.username;
         const passwordChanged = current && "password" in body && body.password !== current.password;
         if (usernameChanged || passwordChanged) {
@@ -914,15 +919,20 @@ export async function registerInstagramRoutes(
           timeZone: "UTC",
         });
 
-        // Build IP:Port from the api call's recorded IP + the profile's proxy port
-        const ip = call.ipAddress ?? "";
+        // Build IP:Port from the api call's recorded IP (or proxy host fallback) + proxy port.
+        // Most rows have ipAddress="" because the automation engine doesn't resolve the
+        // outbound IP at call time — fall back to the profile's proxy host so the column
+        // is never blank for proxied accounts.
+        let ip = call.ipAddress ?? "";
         let port = "";
         if (profile) {
           if (profile.proxyId) {
             const linked = proxyMap.get(profile.proxyId);
+            if (!ip) ip = linked?.host ?? "";
             port = linked?.port ? String(linked.port) : "";
-          } else if (profile.proxyPort) {
-            port = String(profile.proxyPort);
+          } else {
+            if (!ip) ip = (profile.proxyHost as string | null) ?? "";
+            if (profile.proxyPort) port = String(profile.proxyPort);
           }
         }
         const ipPort = ip && port ? `${ip}:${port}` : ip;
@@ -1585,6 +1595,7 @@ export async function registerInstagramRoutes(
             value: s.value,
             rank: s.rank,
             nrPosts: s.nrPosts,
+            targetUserId: s.targetUserId,
           })),
         }))
       );
@@ -1681,7 +1692,7 @@ export async function registerInstagramRoutes(
                     value: s.value,
                     rank: s.rank ?? null,
                     nrPosts: s.nrPosts ?? null,
-                    targetUserId: "",
+                    targetUserId: s.targetUserId ?? "",
                     hashtagCursor: "",
                   }))
                 );
@@ -1740,6 +1751,170 @@ export async function registerInstagramRoutes(
       });
     } catch (e: any) {
       req.log.error({ err: e }, "import-eqx failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  // ── API Account Creator ───────────────────────────────────────────────────
+
+  app.post("/api/signup/start", async (req, res) => {
+    try {
+      const {
+        username, password, email, firstName, day, month, year,
+        proxyHost, proxyPort, proxyUsername, proxyPassword, bio,
+        imapHost, imapPort, imapUser, imapPass,
+      } = req.body as {
+        username: string; password: string; email: string; firstName: string;
+        day: number; month: number; year: number;
+        proxyHost?: string; proxyPort?: number; proxyUsername?: string; proxyPassword?: string;
+        bio?: string;
+        imapHost?: string; imapPort?: number; imapUser?: string; imapPass?: string;
+      };
+      if (!username || !password || !email || !day || !month || !year) {
+        return res.status(400).json({ error: "username, password, email, day, month and year are required" });
+      }
+      let proxyUrl: string | undefined;
+      if (proxyHost) {
+        const auth = proxyUsername ? `${encodeURIComponent(proxyUsername)}:${encodeURIComponent(proxyPassword ?? "")}@` : "";
+        proxyUrl = `http://${auth}${proxyHost}${proxyPort ? `:${proxyPort}` : ""}`;
+      }
+      const dobStr = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+      const { userAgentApi, apiLimits } = req.body as { userAgentApi?: string; apiLimits?: object };
+
+      // Save attempt to DB
+      const dbRecord = await storage.saveApiCreatedAccount({
+        username, password, email,
+        proxyHost: proxyHost ?? null,
+        proxyPort: proxyPort ? Number(proxyPort) : null,
+        proxyUsername: proxyUsername ?? null,
+        proxyPassword: proxyPassword ?? null,
+        bio: bio ?? null,
+        imapServer: imapHost ?? null,
+        imapPort: imapPort ? Number(imapPort) : null,
+        imapPass: imapPass ?? null,
+        status: "pending",
+        instagramUserId: null,
+        sessionCookies: null,
+        errorMessage: null,
+        steps: null,
+        addedToAccounts: false,
+        profileId: null,
+        userAgentApi: userAgentApi ?? null,
+        apiLimits: apiLimits ? JSON.stringify(apiLimits) : null,
+        dateOfBirth: dobStr,
+        createdAt: new Date().toISOString(),
+      });
+
+      const parsedApiLimits = apiLimits as { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | undefined;
+      let result = await createInstagramAccountViaApi({ username, password, email, firstName, day: Number(day), month: Number(month), year: Number(year), proxyUrl, bio: bio || undefined, userAgent: userAgentApi || undefined, apiLimits: parsedApiLimits });
+
+      // Auto-fetch verification code via IMAP if credentials supplied
+      if (result.status === "email_verification" && imapHost && imapUser && imapPass && result.sessionId) {
+        req.log.info({ username }, "Email verification required — polling IMAP for code");
+        result.steps.push(`IMAP: connecting to ${imapHost}:${imapPort ?? 993} as ${imapUser}...`);
+        const code = await fetchInstagramCodeFromImap({
+          host: imapHost,
+          port: Number(imapPort) || 993,
+          user: imapUser,
+          pass: imapPass,
+        });
+        if (code) {
+          result.steps.push(`IMAP: found code ${code} — submitting`);
+          const verifyResult = await submitSignupCode(result.sessionId, code);
+          result = { ...verifyResult, steps: [...result.steps, ...verifyResult.steps] } as typeof result;
+        } else {
+          result.steps.push("IMAP: no code found within timeout — manual entry required");
+        }
+      }
+
+      // Update DB record with final result
+      await storage.updateApiCreatedAccount(dbRecord.id, {
+        status: result.status,
+        instagramUserId: result.userId ?? null,
+        sessionCookies: result.sessionCookies ? JSON.stringify(result.sessionCookies) : null,
+        errorMessage: result.status === "error" ? (result.message ?? null) : null,
+        steps: JSON.stringify(result.steps),
+      });
+
+      return res.json({ ...result, dbId: dbRecord.id });
+    } catch (e: any) {
+      req.log.error({ err: e }, "signup/start failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  app.post("/api/signup/verify", async (req, res) => {
+    try {
+      const { sessionId, code, dbId } = req.body as { sessionId: string; code: string; dbId?: number };
+      if (!sessionId || !code) return res.status(400).json({ error: "sessionId and code are required" });
+      const result = await submitSignupCode(sessionId, code);
+      if (dbId) {
+        await storage.updateApiCreatedAccount(dbId, {
+          status: result.status,
+          instagramUserId: result.userId ?? null,
+          sessionCookies: result.sessionCookies ? JSON.stringify(result.sessionCookies) : null,
+          errorMessage: result.status === "error" ? (result.message ?? null) : null,
+          steps: JSON.stringify(result.steps),
+        });
+      }
+      return res.json(result);
+    } catch (e: any) {
+      req.log.error({ err: e }, "signup/verify failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  app.get("/api/signup/created-accounts", async (req, res) => {
+    try {
+      const rows = await storage.listApiCreatedAccounts();
+      return res.json(rows);
+    } catch (e: any) {
+      req.log.error({ err: e }, "created-accounts list failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  app.delete("/api/signup/created-accounts/:id", async (req, res) => {
+    try {
+      await storage.deleteApiCreatedAccount(Number(req.params.id));
+      return res.json({ ok: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  app.post("/api/signup/created-accounts/:id/add-to-accounts", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const rows = await storage.listApiCreatedAccounts();
+      const row = rows.find(r => r.id === id);
+      if (!row) return res.status(404).json({ error: "Record not found" });
+      if (row.addedToAccounts) return res.status(409).json({ error: "Already added to accounts" });
+
+      const apiLimits = row.apiLimits ? JSON.parse(row.apiLimits) : { requestsMin: 5, requestsMax: 10, everySecondsMin: 30, everySecondsMax: 60 };
+      const created = await storage.createProfile({
+        username: row.username,
+        password: row.password,
+        email: row.email ?? undefined,
+        proxyHost: row.proxyHost ?? undefined,
+        proxyPort: row.proxyPort ?? undefined,
+        proxyUsername: row.proxyUsername ?? undefined,
+        proxyPassword: row.proxyPassword ?? undefined,
+        userAgentApi: row.userAgentApi ?? undefined,
+        apiLimits,
+        dateOfBirth: row.dateOfBirth ?? undefined,
+        emailValidationUsername: row.email ?? undefined,
+        emailValidationPassword: row.imapPass ?? undefined,
+        emailValidationPop3Server: row.imapServer ?? undefined,
+        emailValidationPort: row.imapPort ? String(row.imapPort) : undefined,
+        accountStatus: "verifying",
+        credentialsDirty: true,
+      });
+
+      await storage.updateApiCreatedAccount(id, { addedToAccounts: true, profileId: created.id });
+      return res.json({ ok: true, profileId: created.id });
+    } catch (e: any) {
+      req.log.error({ err: e }, "add-to-accounts failed");
       return res.status(500).json({ error: e?.message });
     }
   });

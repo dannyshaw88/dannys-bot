@@ -7,6 +7,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { StatsPage } from "@/pages/StatsPage";
 import { ProfilesPage } from "@/pages/ProfilesPage";
 import { CreateAccountPage } from "@/pages/CreateAccountPage";
+import { CreateAccountApiPage } from "@/pages/CreateAccountApiPage";
 import { ProfileDetailsPage } from "@/pages/ProfileDetailsPage";
 import { ProxiesPage } from "@/pages/ProxiesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/profiles" component={ProfilesPage} />
       <Route path="/create-account" component={CreateAccountPage} />
+      <Route path="/create-account-api" component={CreateAccountApiPage} />
       <Route path="/stats" component={StatsPage} />
       <Route path="/profiles/:id" component={ProfileDetailsPage} />
       <Route path="/proxies" component={ProxiesPage} />
