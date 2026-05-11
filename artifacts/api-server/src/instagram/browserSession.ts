@@ -1308,6 +1308,27 @@ export async function browserAutoLogin(
     await s.page.waitForFunction(() =>
       (document.body?.innerText || "").length > 80, { timeout: 6000 }
     ).catch(() => null);
+
+    // Give Instagram's SPA up to 5 s to either navigate away from the login page
+    // (logged in) OR mount the 2FA overlay (which renders asynchronously on top of
+    // the login form). Without this wait, is2FAByDom evaluates before the 2FA input
+    // appears in the DOM and returns false — causing step 7 to be skipped entirely.
+    await s.page.waitForFunction(() => {
+      const url = window.location.href;
+      // If we've navigated away from login entirely, we're done waiting
+      if (!url.includes("/accounts/login") && !url.includes("challenge")) return true;
+      // Still on login page — wait for a visible non-login input (the 2FA code field)
+      const SKIP_N = new Set(["username", "email", "pass", "password", "search", "q"]);
+      const SKIP_T = new Set(["password", "submit", "button", "hidden", "checkbox", "radio", "file"]);
+      return Array.from(document.querySelectorAll("input")).some((el: any) => {
+        const name = (el.name || "").toLowerCase();
+        const type = (el.type || "text").toLowerCase();
+        if (SKIP_N.has(name) || SKIP_T.has(type)) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+    }, { timeout: 5000 }).catch(() => null);
+
     await delay(300);
     await dismissCookieBanner(s.page);
 

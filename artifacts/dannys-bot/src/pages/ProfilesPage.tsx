@@ -88,7 +88,7 @@ export function ProfilesPage() {
   const verifyMutation        = useVerifyProfile();
   const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
-  const { openWindow } = useBrowserWindows();
+  const { openWindow, closeWindow } = useBrowserWindows();
   const { data: proxies } = useProxies();
 
   const handleVerify = (id: number) => {
@@ -298,13 +298,16 @@ export function ProfilesPage() {
 
   const performDelete = useCallback(async (ids: number[]) => {
     try {
-      for (const id of ids) await deleteProfileMutation.mutateAsync(id);
+      for (const id of ids) {
+        await deleteProfileMutation.mutateAsync(id);
+        closeWindow(id);
+      }
       setSelectedProfileIds(prev => prev.filter(id => !ids.includes(id)));
       toast({ title: "Profiles Deleted", description: `${ids.length} account${ids.length !== 1 ? "s" : ""} removed.` });
     } catch {
       toast({ title: "Error", description: "Failed to delete some profiles.", variant: "destructive" });
     }
-  }, [deleteProfileMutation, toast]);
+  }, [deleteProfileMutation, closeWindow, toast]);
 
   const handleBulkLoginEB = useCallback(async () => {
     if (selectedProfileIds.length === 0) return;
@@ -557,11 +560,15 @@ export function ProfilesPage() {
           e.preventDefault();
           handleBulkOpenBrowsers();
           break;
+        case "l":
+          e.preventDefault();
+          handleBulkLoginEB();
+          break;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers]);
+  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers, handleBulkLoginEB]);
 
   // Click-outside handler for the profiles manage-columns popup
   useEffect(() => {

@@ -133,7 +133,11 @@ export function ProfileDetailsPage() {
       const hmac = new Uint8Array(await crypto.subtle.sign("HMAC", key, buf));
       const offset = hmac[19] & 0xf;
       const code = ((hmac[offset] & 0x7f) << 24 | hmac[offset+1] << 16 | hmac[offset+2] << 8 | hmac[offset+3]) % 1_000_000;
-      setTotpCode(code.toString().padStart(6, "0"));
+      const codeStr = code.toString().padStart(6, "0");
+      setTotpCode(codeStr);
+      navigator.clipboard.writeText(codeStr).catch(() => {});
+      setTotpCopied(true);
+      setTimeout(() => setTotpCopied(false), 2000);
     } catch { setTotpError("Failed to generate"); }
   };
   const [location, navigate] = useLocation();
@@ -589,8 +593,8 @@ export function ProfileDetailsPage() {
           {/* Account Label */}
           <div className="space-y-2 pb-2">
             <div className="flex items-center gap-3">
-              <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                <Tag className="w-3.5 h-3.5" /> Account Name
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Account Name
               </Label>
               <button
                 className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
@@ -684,17 +688,7 @@ export function ProfileDetailsPage() {
                         {totpCode && (
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-base font-bold tracking-[0.25em] text-primary select-all">{totpCode}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(totpCode);
-                                setTotpCopied(true);
-                                setTimeout(() => setTotpCopied(false), 2000);
-                              }}
-                              className="px-2 py-1 rounded border border-border text-xs font-medium bg-muted hover:bg-accent transition-colors"
-                            >
-                              {totpCopied ? "Copied!" : "Copy"}
-                            </button>
+                            {totpCopied && <span className="text-xs text-green-600 font-medium">Copied!</span>}
                           </div>
                         )}
                         {totpError && <span className="text-xs text-destructive">{totpError}</span>}
@@ -724,13 +718,13 @@ export function ProfileDetailsPage() {
                                 : "bg-sky-400 hover:bg-sky-500 text-white border-0"
                             }`}
                             onClick={() => handleVerify(false)}
-                            disabled={verifyStatus === "pending"}
+                            disabled={verifyStatus === "pending" || profile.accountStatus === "verifying"}
                             data-testid="button-verify-credentials"
                           >
-                            {verifyStatus === "pending" && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {verifyStatus === "fail" && <XCircle className="w-4 h-4" />}
-                            {verifyStatus === "idle" && <ShieldCheck className="w-4 h-4" />}
-                            {verifyStatus === "pending" ? "Verifying…"
+                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {verifyStatus === "fail" && profile.accountStatus !== "verifying" && <XCircle className="w-4 h-4" />}
+                            {verifyStatus === "idle" && profile.accountStatus !== "verifying" && <ShieldCheck className="w-4 h-4" />}
+                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") ? "Verifying…"
                               : verifyStatus === "fail" ? "Retry Verification"
                               : "Verify Account"}
                           </Button>

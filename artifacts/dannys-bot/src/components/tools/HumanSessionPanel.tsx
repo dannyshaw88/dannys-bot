@@ -487,151 +487,124 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
         </p>
       </div>
 
-      {/* ── Check Reels from Timeline ──────────────────────────── */}
-      <div className="border border-border rounded-xl p-4 space-y-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 pt-0.5">
-            <input type="checkbox" id="checkTimelineReelsEnabled"
-              checked={!!settings.checkTimelineReelsEnabled}
-              onChange={(e) => setSettings({ ...settings, checkTimelineReelsEnabled: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="checkTimelineReelsEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
-              <PlaySquare className="w-4 h-4 text-rose-500" />
-              Check Reels from Timeline
-            </label>
-          </div>
-          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+      {/* ── Check Reels · Stories · DMs — one row each ─────────── */}
+      <div className="border border-border rounded-xl p-4 space-y-2">
+
+        {/* Check Reels from Timeline */}
+        <div className={`flex items-center gap-3 flex-wrap transition-opacity`}>
+          <input type="checkbox" id="checkTimelineReelsEnabled"
+            checked={!!settings.checkTimelineReelsEnabled}
+            onChange={(e) => setSettings({ ...settings, checkTimelineReelsEnabled: e.target.checked })}
+            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+          />
+          <label htmlFor="checkTimelineReelsEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap w-[200px] shrink-0">
+            <PlaySquare className="w-4 h-4 text-rose-500 shrink-0" />
+            Check Reels from Timeline
+          </label>
+          <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order</span>
               {pctInputs("checkTimelineReelsOrderMin", "checkTimelineReelsOrderMax")}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip%</span>
               {pctInputs("checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax")}
             </div>
-          </div>
-        </div>
-        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40' : ''}`}>
-          Scrolls through the Reels tab feed and marks reels as watched.
-        </p>
-        <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reels to Watch</span>
-          <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+              <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
                 value={settings.checkTimelineReelsMin ?? 3}
                 onChange={(e) => setSettings({ ...settings, checkTimelineReelsMin: Math.max(1, Number(e.target.value)) })}
               />
-            </div>
-            <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+              <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
                 value={settings.checkTimelineReelsMax ?? 8}
                 onChange={(e) => setSettings({ ...settings, checkTimelineReelsMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Scrolls Reels tab &amp; marks watched.</span>
           </div>
         </div>
-      </div>
 
-      {/* ── Check Stories from Timeline ────────────────────────── */}
-      <div className="border border-border rounded-xl p-4 space-y-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 pt-0.5">
-            <input type="checkbox" id="checkTimelineStoriesEnabled"
-              checked={!!settings.checkTimelineStoriesEnabled}
-              onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="checkTimelineStoriesEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
-              <BookOpen className="w-4 h-4 text-sky-500" />
-              Check Stories from Timeline
-            </label>
-          </div>
-          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+        <div className="border-t border-border/50" />
+
+        {/* Check Stories from Timeline */}
+        <div className={`flex items-center gap-3 flex-wrap transition-opacity`}>
+          <input type="checkbox" id="checkTimelineStoriesEnabled"
+            checked={!!settings.checkTimelineStoriesEnabled}
+            onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
+            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+          />
+          <label htmlFor="checkTimelineStoriesEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap w-[200px] shrink-0">
+            <BookOpen className="w-4 h-4 text-sky-500 shrink-0" />
+            Check Stories from Timeline
+          </label>
+          <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order</span>
               {pctInputs("checkTimelineStoriesOrderMin", "checkTimelineStoriesOrderMax")}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip%</span>
               {pctInputs("checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")}
             </div>
-          </div>
-        </div>
-        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40' : ''}`}>
-          Watches stories from the top of Instagram's home feed tray.
-        </p>
-        <div className={`flex items-center gap-4 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Stories to Watch</span>
-          <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+              <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
                 value={settings.checkTimelineStoriesMin ?? 3}
                 onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMin: Math.max(1, Number(e.target.value)) })}
               />
-            </div>
-            <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
+              <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
                 value={settings.checkTimelineStoriesMax ?? 8}
                 onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Watches home feed story tray.</span>
           </div>
         </div>
-      </div>
 
-      {/* ── Check Direct Messages ──────────────────────────────── */}
-      <div className="border border-border rounded-xl p-4 space-y-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 pt-0.5">
-            <input type="checkbox" id="checkDmEnabled"
-              checked={!!settings.checkDmEnabled}
-              onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
-              <MessageSquare className="w-4 h-4 text-teal-500" />
-              Check Direct Messages
-            </label>
-          </div>
-          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+        <div className="border-t border-border/50" />
+
+        {/* Check Direct Messages */}
+        <div className={`flex items-center gap-3 flex-wrap transition-opacity`}>
+          <input type="checkbox" id="checkDmEnabled"
+            checked={!!settings.checkDmEnabled}
+            onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
+            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+          />
+          <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap w-[200px] shrink-0">
+            <MessageSquare className="w-4 h-4 text-teal-500 shrink-0" />
+            Check Direct Messages
+          </label>
+          <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order</span>
               {pctInputs("checkDmOrderMin", "checkDmOrderMax")}
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip%</span>
               {pctInputs("checkDmNotUsedMin", "checkDmNotUsedMax")}
             </div>
-          </div>
-        </div>
-        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.checkDmEnabled ? 'opacity-40' : ''}`}>
-          Calls <code className="bg-muted px-1 rounded text-[10px]">getDirectMessagesInternal</code> to simulate checking the inbox.
-        </p>
-        <div className={`flex items-center gap-4 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">DMs to Check</span>
-          <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="100" className="w-16 h-7 text-xs"
+              <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
                 value={settings.checkDmMin ?? 5}
                 onChange={(e) => setSettings({ ...settings, checkDmMin: Math.max(1, Number(e.target.value)) })}
               />
-            </div>
-            <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="100" className="w-16 h-7 text-xs"
+              <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
                 value={settings.checkDmMax ?? 15}
                 onChange={(e) => setSettings({ ...settings, checkDmMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Simulates checking the DM inbox.</span>
           </div>
         </div>
+
       </div>
 
 

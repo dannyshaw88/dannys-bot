@@ -345,6 +345,7 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.id);
     const profile = await storage.getProfile(profileId).catch(() => null);
     await storage.deleteProfile(profileId);
+    closeSession(profileId).catch(() => {});
     if (profile) {
       storage.createSessionAction({
         profileId,

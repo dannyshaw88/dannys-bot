@@ -64,6 +64,8 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [status, setStatus] = useState<SSEStatus>("idle");
   const statusRef = useRef<SSEStatus>("idle");
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFrameTimeRef = useRef<number>(0);
+  const [isFrozen, setIsFrozen] = useState(false);
 
   const setStatusSafe = useCallback((s: SSEStatus) => {
     statusRef.current = s;
@@ -159,6 +161,8 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         switch (msg.type) {
           case "frame":
             drawFrame(msg.data);
+            lastFrameTimeRef.current = Date.now();
+            setIsFrozen(false);
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) {
               setAddressBar(msg.url);
               if (msg.url.includes("instagram.com/accounts/login") || msg.url.includes("instagram.com/login")) {
@@ -233,6 +237,18 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   }, []);
 
   useEffect(() => { connect(); }, [connect]);
+
+  // Stale-frame detector: if connected but no frame arrives for 12 s, flag frozen
+  useEffect(() => {
+    if (status !== "connected") { setIsFrozen(false); return; }
+    lastFrameTimeRef.current = Date.now();
+    const timer = setInterval(() => {
+      if (statusRef.current === "connected" && Date.now() - lastFrameTimeRef.current > 12000) {
+        setIsFrozen(true);
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [status]);
 
   useEffect(() => {
     const entry = windows.find(w => w.profileId === profileId);
@@ -688,6 +704,18 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onPaste={onPaste}
           onContextMenu={onContextMenu}
         />
+
+        {/* Frozen overlay — no frame received for 12 s while connected */}
+        {isFrozen && connected && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/80 z-20 backdrop-blur-sm">
+            <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
+            <p className="text-sm font-semibold text-white">Browser appears frozen</p>
+            <p className="text-xs text-slate-400 text-center max-w-xs">The page stopped sending frames. Click Clear to reset the session and reload.</p>
+            <Button size="sm" variant="destructive" onClick={clearSession} className="gap-1.5">
+              <Trash2 className="w-3.5 h-3.5" /> Clear &amp; Reset
+            </Button>
+          </div>
+        )}
 
         {/* Right-click context menu */}
         {ctxMenu && (

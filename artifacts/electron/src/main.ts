@@ -91,19 +91,19 @@ function buildSplashHtml(label: string, iconDataUrl: string): string {
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{
   width:100%;height:100%;
-  background:#0d1117;
+  background:#ffffff;
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
   font-family:'Segoe UI',system-ui,sans-serif;
   overflow:hidden;user-select:none;
 }
 img{width:88px;height:88px;margin-bottom:28px;border-radius:16px;}
-.title{font-size:22px;font-weight:700;color:#ffffff;letter-spacing:0.02em;margin-bottom:6px;}
-.label{font-size:11px;color:rgba(255,255,255,0.38);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:28px;}
-.bar-track{width:220px;height:3px;background:rgba(255,255,255,0.12);border-radius:999px;overflow:hidden;}
+.title{font-size:22px;font-weight:700;color:#0f172a;letter-spacing:0.02em;margin-bottom:6px;}
+.label{font-size:11px;color:rgba(0,0,0,0.38);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:28px;}
+.bar-track{width:220px;height:3px;background:rgba(0,0,0,0.10);border-radius:999px;overflow:hidden;}
 .bar-fill{
   height:100%;width:45%;
-  background:linear-gradient(90deg,transparent,#ffffff,transparent);
+  background:linear-gradient(90deg,transparent,#334155,transparent);
   border-radius:999px;
   animation:sweep 1.6s ease-in-out infinite;
 }
@@ -145,7 +145,7 @@ function createSplash(label = "Loading…"): void {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
-    backgroundColor: "#0d1117",
+    backgroundColor: "#ffffff",
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
 
@@ -496,7 +496,7 @@ async function createBackupNow(): Promise<{ ok: boolean; entry?: BackupEntry; er
         `$dst = '${zipPath.replace(/'/g, "''")}'`,
         `$items = Get-ChildItem -Path $src | Where-Object { $_.Name -ne 'backups' } | ForEach-Object { $_.FullName }`,
         `if ($items) { Compress-Archive -Path $items -DestinationPath $dst -Force }`,
-      ].join("`n"));
+      ].join("\n"));
     } else {
       const items = fs.readdirSync(userData)
         .filter((n) => n !== "backups")
@@ -559,7 +559,7 @@ async function restoreBackupNow(id: string): Promise<{ ok: boolean; error?: stri
         `$zip = '${zipPath.replace(/'/g, "''")}'`,
         `$dst = '${userData.replace(/'/g, "''")}'`,
         `Expand-Archive -Path $zip -DestinationPath $dst -Force`,
-      ].join("`n"));
+      ].join("\n"));
     } else {
       await execAsync(`unzip -o '${zipPath.replace(/'/g, "'\\''")}' -d '${userData.replace(/'/g, "'\\''")}'`);
     }

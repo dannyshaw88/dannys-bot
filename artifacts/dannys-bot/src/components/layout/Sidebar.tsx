@@ -39,9 +39,8 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard },
     { name: "Accounts",          path: "/profiles",            icon: Users },
-    { name: "Create a Cookie",   path: "/create-account",     icon: UserPlus },
     { name: "Create an Account", path: "/create-account-api", icon: Cpu },
-    { name: "Stats",             path: "/stats",              icon: Activity },
+    { name: "Statistic",         path: "/stats",              icon: Activity },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert },
   ];
 
@@ -131,7 +130,7 @@ export function Sidebar() {
                             : "text-muted-foreground hover:text-foreground"
                         )}
                       >
-                        <span className="text-muted-foreground mr-1.5">-</span>
+                        <ChevronRight className="w-3 h-3 text-muted-foreground mr-1 shrink-0" />
                         {label}
                       </button>
                     );
