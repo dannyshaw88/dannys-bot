@@ -433,16 +433,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-gray-600 font-medium"><Settings className="w-3 h-3" />Settings & Activity</span>
             </div>
           </div>
-          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
-              {pctInputs("humanSessionOrderMin", "humanSessionOrderMax")}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
-              {pctInputs("humanSessionNotUsedMin", "humanSessionNotUsedMax")}
-            </div>
-          </div>
         </div>
         <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40' : ''}`}>
           Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity.
@@ -464,14 +454,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             Check Reels from Timeline
           </label>
           <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkTimelineReelsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order</span>
-              {pctInputs("checkTimelineReelsOrderMin", "checkTimelineReelsOrderMax")}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip%</span>
-              {pctInputs("checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax")}
-            </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
@@ -504,14 +486,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           </label>
           <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order</span>
-              {pctInputs("checkTimelineStoriesOrderMin", "checkTimelineStoriesOrderMax")}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip%</span>
-              {pctInputs("checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")}
-            </div>
-            <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
               <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
@@ -542,14 +516,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             Check Direct Messages
           </label>
           <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order</span>
-              {pctInputs("checkDmOrderMin", "checkDmOrderMax")}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip%</span>
-              {pctInputs("checkDmNotUsedMin", "checkDmNotUsedMax")}
-            </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
