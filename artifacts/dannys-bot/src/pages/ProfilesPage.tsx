@@ -752,7 +752,7 @@ export function ProfilesPage() {
                           <Globe className="w-2.5 h-2.5" />No Proxy
                         </span>
                     }
-                    {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && (
+                    {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && acctStatus !== "verifying" && (
                       <button
                         onClick={() => handleVerify(profile.id)}
                         disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}

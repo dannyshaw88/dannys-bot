@@ -1315,7 +1315,9 @@ export async function browserAutoLogin(
     // The 2FA hash-route URL still contains "/accounts/login" — can't use URL alone.
     // Also check dialogs/modals separately — Instagram renders "Incorrect password"
     // as an overlay portal that may not appear in the first 600 chars of body text.
-    const [pageText, dialogText] = await Promise.all([
+    // Use full body text (not sliced) so the 2FA overlay text isn't cut off behind
+    // the background login form text.
+    const [pageText, dialogText, fullBodyText] = await Promise.all([
       s.page.evaluate(() => (document.body?.innerText || "").slice(0, 600).trim()).catch(() => ""),
       s.page.evaluate(() => {
         const dialogs = Array.from(document.querySelectorAll<HTMLElement>(
@@ -1323,8 +1325,9 @@ export async function browserAutoLogin(
         ));
         return dialogs.map(d => (d.innerText || d.textContent || "").trim()).join(" ").slice(0, 300);
       }).catch(() => ""),
+      s.page.evaluate(() => (document.body?.innerText || "").trim()).catch(() => ""),
     ]);
-    const allText = `${pageText} ${dialogText}`;
+    const allText = `${fullBodyText} ${dialogText}`;
     const pageUrl = s.page.url();
     sendStatus(profileId, `After submit → URL: ${pageUrl.slice(0, 80)}`);
     sendStatus(profileId, `Page text snippet: "${pageText.slice(0, 120)}"`);
@@ -1338,14 +1341,34 @@ export async function browserAutoLogin(
       return { ok: false, message: "Incorrect password — update it in Account Details." };
     }
 
-    const is2FA = /authentication.app|6.digit|two.factor|verif|security.code|confirmation.code|backup.code|enter.the.code/i.test(allText) ||
+    // DOM-based 2FA detection: Instagram's 2FA overlay renders on top of the login
+    // page in the SPA. The background login form text dominates the early DOM, so
+    // text-only detection misses it. A visible non-login input (the "Code" field) or
+    // the "Trust this device" / "Try another way" text reliably identifies the screen.
+    const is2FAByDom = await s.page.evaluate(() => {
+      const SKIP_NAMES = new Set(["username", "email", "pass", "password", "search", "q"]);
+      const SKIP_TYPES = new Set(["password", "submit", "button", "hidden", "checkbox", "radio", "file", "image"]);
+      const hasCodeInput = Array.from(document.querySelectorAll("input")).some(el => {
+        const name = (el as HTMLInputElement).name?.toLowerCase() || "";
+        const type = (el as HTMLInputElement).type?.toLowerCase() || "text";
+        if (SKIP_NAMES.has(name) || SKIP_TYPES.has(type)) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      const bodyText = document.body?.innerText || "";
+      const hasTrustDevice = /trust.this.device|try.another.way/i.test(bodyText);
+      return hasCodeInput || hasTrustDevice;
+    }).catch(() => false);
+
+    const is2FA = is2FAByDom ||
+                  /authentication.app|6.digit|two.factor|verif|security.code|confirmation.code|backup.code|enter.the.code/i.test(allText) ||
                   pageUrl.includes("/two_factor") || pageUrl.includes("challenge");
 
     const isLoggedIn = !pageText.includes("Username, email or mobile number") &&
                        !pageText.includes("Create new account") &&
                        !pageUrl.includes("/accounts/login");
 
-    sendStatus(profileId, `2FA detected: ${is2FA} | Logged in: ${isLoggedIn}`);
+    sendStatus(profileId, `2FA detected: ${is2FA} (dom=${is2FAByDom}) | Logged in: ${isLoggedIn}`);
 
     // ── Step 7: Auto-fill TOTP if 2FA screen detected ────────────────────────
     if (is2FA) {

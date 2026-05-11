@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useProfile, useUpdateProfile, useUpdateAccountStatus, useProfiles, useCreatorProfiles, useMoveToAccounts } from "@/hooks/use-profiles";
 import { useTools } from "@/hooks/use-tools";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -105,11 +105,40 @@ export function ProfileDetailsPage() {
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
+  const [totpCode, setTotpCode] = useState<string | null>(null);
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const [totpCopied, setTotpCopied] = useState(false);
+
+  const generateTotp = async (secret: string) => {
+    setTotpCode(null); setTotpError(null);
+    try {
+      const b32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+      const cleaned = secret.toUpperCase().replace(/\s+/g, "").replace(/=/g, "");
+      let bits = 0, val = 0;
+      const bytes: number[] = [];
+      for (const ch of cleaned) {
+        const idx = b32.indexOf(ch);
+        if (idx < 0) continue;
+        val = (val << 5) | idx; bits += 5;
+        if (bits >= 8) { bytes.push((val >>> (bits - 8)) & 0xff); bits -= 8; }
+      }
+      if (!bytes.length) { setTotpError("Invalid secret"); return; }
+      const key = await crypto.subtle.importKey(
+        "raw", new Uint8Array(bytes), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+      );
+      const counter = Math.floor(Date.now() / 1000 / 30);
+      const buf = new Uint8Array(8);
+      let c = counter;
+      for (let i = 7; i >= 0; i--) { buf[i] = c & 0xff; c = Math.floor(c / 256); }
+      const hmac = new Uint8Array(await crypto.subtle.sign("HMAC", key, buf));
+      const offset = hmac[19] & 0xf;
+      const code = ((hmac[offset] & 0x7f) << 24 | hmac[offset+1] << 16 | hmac[offset+2] << 8 | hmac[offset+3]) % 1_000_000;
+      setTotpCode(code.toString().padStart(6, "0"));
+    } catch { setTotpError("Failed to generate"); }
+  };
   const [location, navigate] = useLocation();
-  const initialTab = (() => {
-    try { return new URLSearchParams(window.location.search).get("tab") ?? "settings"; } catch { return "settings"; }
-  })();
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const search = useSearch();
+  const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
 
   const ACCOUNT_COPY_GROUPS: CopyOptionGroup[] = [
     {
@@ -303,9 +332,11 @@ export function ProfileDetailsPage() {
 
   const handleVerify = async (bypassProxy = false) => {
     setVerifyStatus("pending");
-    queryClient.setQueryData(["/api/profiles"], (old: any) =>
-      Array.isArray(old) ? old.map((p: any) => p.id === profileId ? { ...p, accountStatus: "verifying" } : p) : old
-    );
+    const patchList = (old: any) =>
+      Array.isArray(old) ? old.map((p: any) => p.id === profileId ? { ...p, accountStatus: "verifying" } : p) : old;
+    queryClient.setQueryData(["/api/profiles"], patchList);
+    queryClient.setQueryData(["/api/profiles", "automation"], patchList);
+    queryClient.setQueryData(["/api/profiles", "creator"], patchList);
     queryClient.setQueryData(["/api/profiles", profileId], (old: any) =>
       old ? { ...old, accountStatus: "verifying" } : old
     );
@@ -316,6 +347,7 @@ export function ProfileDetailsPage() {
       if (res.status === 429) {
         // Another verify is already running for this account keep pending state and wait
         toast({ title: "Verification In Progress", description: "Already verifying this account please wait for it to finish." });
+        queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
         return;
       }
       if (data.ok) {
@@ -329,6 +361,8 @@ export function ProfileDetailsPage() {
     } catch {
       setVerifyStatus("fail");
       toast({ title: "Error", description: "Could not reach server.", variant: "destructive" });
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
     }
   };
 
@@ -386,35 +420,8 @@ export function ProfileDetailsPage() {
 
   return (
     <AppLayout>
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="w-full flex gap-4 items-start">
-        <Tabs.List className="flex flex-col w-52 shrink-0 sticky top-4 self-start border-r border-border pr-2 py-1">
-          <Tabs.Trigger value="settings" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <Settings className="w-4 h-4 shrink-0" /> Account Settings
-          </Tabs.Trigger>
-          {!profile?.creatorMode && (<>
-          <Tabs.Trigger value="human-session" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <User className="w-4 h-4 shrink-0" /> Human Session Tools
-          </Tabs.Trigger>
-          <Tabs.Trigger value="follow" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <UserPlus className="w-4 h-4 shrink-0" /> Follow Tool
-          </Tabs.Trigger>
-          <Tabs.Trigger value="unfollow" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <UserMinus className="w-4 h-4 shrink-0" /> Unfollow Tool
-          </Tabs.Trigger>
-          <Tabs.Trigger value="contact" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <MessageSquare className="w-4 h-4 shrink-0" /> Contact Tool
-          </Tabs.Trigger>
-          </>)}
-          {!profile?.creatorMode && (
-          <Tabs.Trigger value="session-log" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <Activity className="w-4 h-4 shrink-0" /> Session Log
-          </Tabs.Trigger>
-          )}
-          <Tabs.Trigger value="create-cookie" className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-left w-full rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 data-[state=active]:text-primary data-[state=active]:bg-accent data-[state=active]:font-semibold transition-all whitespace-nowrap">
-            <Cookie className="w-4 h-4 shrink-0" /> Create a Cookie
-          </Tabs.Trigger>
-        </Tabs.List>
-        <div className="flex-1 min-w-0">
+      <Tabs.Root value={activeTab} onValueChange={(tab) => navigate(`/profiles/${profileId}?tab=${tab}`)} className="w-full">
+        <div className="w-full">
           <div className="flex items-center gap-4 mb-3">
             <div className="flex-1">
               <div className="flex items-center gap-1 flex-wrap">
@@ -531,16 +538,6 @@ export function ProfileDetailsPage() {
                 )}
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto flex items-center gap-2 shrink-0"
-              onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-              data-testid="button-open-browser"
-            >
-              <Monitor className="w-4 h-4" />
-              Open Browser
-            </Button>
           </div>
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
@@ -618,6 +615,16 @@ export function ProfileDetailsPage() {
                   {profile?.accountStatus === "stopped" ? "Stopped" : "Active"}
                 </span>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 shrink-0"
+                onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
+                data-testid="button-open-browser"
+              >
+                <Monitor className="w-4 h-4" />
+                Open Browser
+              </Button>
             </div>
             <div className="max-w-[40%]">
               <Input
@@ -656,14 +663,43 @@ export function ProfileDetailsPage() {
                         />
                       </div>
                     </div>
-                    <div className="space-y-1.5 max-w-[370px]">
+                    <div className="space-y-1.5">
                       <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><KeyRound className="w-3.5 h-3.5" /> 2FA Secret Key</Label>
-                      <Input
-                        placeholder="TOTP secret (e.g. M5ZM ZRDO…)"
-                        value={formData.twoFASecretKey}
-                        onChange={e => updateField({ twoFASecretKey: e.target.value })}
-                        data-testid="input-2fa-secret"
-                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Input
+                          className="max-w-[370px]"
+                          placeholder="TOTP secret (e.g. M5ZM ZRDO…)"
+                          value={formData.twoFASecretKey}
+                          onChange={e => { updateField({ twoFASecretKey: e.target.value }); setTotpCode(null); setTotpError(null); }}
+                          data-testid="input-2fa-secret"
+                        />
+                        <button
+                          type="button"
+                          disabled={!formData.twoFASecretKey?.trim()}
+                          onClick={() => generateTotp(formData.twoFASecretKey)}
+                          className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold bg-muted hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          Generate Code
+                        </button>
+                        {totpCode && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-base font-bold tracking-[0.25em] text-primary select-all">{totpCode}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(totpCode);
+                                setTotpCopied(true);
+                                setTimeout(() => setTotpCopied(false), 2000);
+                              }}
+                              className="px-2 py-1 rounded border border-border text-xs font-medium bg-muted hover:bg-accent transition-colors"
+                            >
+                              {totpCopied ? "Copied!" : "Copy"}
+                            </button>
+                          </div>
+                        )}
+                        {totpError && <span className="text-xs text-destructive">{totpError}</span>}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">Generate a live TOTP code to paste manually if the auto-fill fails.</p>
                     </div>
 
                     {/* Verify button constrained to match username/password width */}

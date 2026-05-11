@@ -162,6 +162,17 @@ export function ContactUsersPanel({ tool, profile }: Props) {
                 </span>
               );
             })()}
+            {settings.contactUsersEnabled && (() => {
+              const avgWait = ((settings.contactUsersWaitMin ?? 30) + (settings.contactUsersWaitMax ?? 60)) / 2;
+              const avgSend = ((settings.contactUsersSendCountMin ?? 1) + (settings.contactUsersSendCountMax ?? 5)) / 2;
+              const perHour = avgWait > 0 ? Math.round((avgSend / avgWait) * 60) : 0;
+              const perDay = perHour * 24;
+              return perHour > 0 ? (
+                <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
+                  {perHour}/hr · {perDay}/day
+                </span>
+              ) : null;
+            })()}
           </div>
         </div>
       </div>

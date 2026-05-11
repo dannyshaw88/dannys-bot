@@ -1,10 +1,25 @@
-import { Link, useLocation, useSearch } from "wouter";
-import { LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity, ChevronLeft, ChevronRight, Cpu } from "lucide-react";
+import { useLocation, useSearch } from "wouter";
+import {
+  LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity,
+  ChevronLeft, ChevronRight, Cpu, User, UserMinus, MessageSquare, Cookie,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
+import { useProfile } from "@/hooks/use-profiles";
 
+const PROFILE_TABS = (creatorMode: boolean) => [
+  { value: "settings",      label: "Account Settings",    icon: Settings },
+  ...(!creatorMode ? [
+    { value: "human-session", label: "Human Session Tools", icon: User },
+    { value: "follow",        label: "Follow Tool",         icon: UserPlus },
+    { value: "unfollow",      label: "Unfollow Tool",       icon: UserMinus },
+    { value: "contact",       label: "Contact Tool",        icon: MessageSquare },
+    { value: "session-log",   label: "Session Log",         icon: Activity },
+  ] : []),
+  { value: "create-cookie", label: "Create a Cookie",     icon: Cookie },
+];
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
@@ -16,13 +31,18 @@ export function Sidebar() {
     pushLocation(location);
   }, [location]);
 
+  const profileMatch = location.match(/^\/profiles\/(\d+)$/);
+  const profileId = profileMatch ? Number(profileMatch[1]) : 0;
+  const { data: profile } = useProfile(profileId);
+  const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
+
   const navItems = [
-    { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-    { name: "Accounts", path: "/profiles", icon: Users },
-    { name: "Create a Cookie", path: "/create-account", icon: UserPlus },
+    { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard },
+    { name: "Accounts",          path: "/profiles",            icon: Users },
+    { name: "Create a Cookie",   path: "/create-account",     icon: UserPlus },
     { name: "Create an Account", path: "/create-account-api", icon: Cpu },
-    { name: "Stats", path: "/stats", icon: Activity },
-    { name: "Proxy Manager", path: "/proxies", icon: ShieldAlert },
+    { name: "Stats",             path: "/stats",              icon: Activity },
+    { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert },
   ];
 
   function goBack() {
@@ -66,30 +86,59 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 px-3 py-1 space-y-0">
+      <nav className="flex-1 px-3 py-1 space-y-0 overflow-y-auto">
         {navItems.map((item) => {
           const fromCreateAccount = location.startsWith("/profiles/") && search.includes("from=create-account");
           const isActive = (() => {
             if (item.path === "/dashboard") return location === "/dashboard";
             if (item.path === "/create-account") return location === "/create-account" || fromCreateAccount;
-            if (item.path === "/profiles") return location === "/profiles" || (location.startsWith("/profiles/") && !fromCreateAccount);
+            if (item.path === "/profiles") return location === "/profiles" || location.startsWith("/profiles/");
             return location.startsWith(item.path);
           })();
           const Icon = item.icon;
-          
+
           return (
-            <Link key={item.path} href={item.path} className={cn(
-              "flex items-center px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group",
-              isActive 
-                ? "bg-primary/10 text-primary" 
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            )}>
-              <Icon className={cn(
-                "w-5 h-5 mr-3 transition-colors",
-                isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-              )} />
-              {item.name}
-            </Link>
+            <div key={item.path}>
+              <button
+                onClick={() => setLocation(item.path)}
+                className={cn(
+                  "flex items-center w-full px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group text-left",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <Icon className={cn(
+                  "w-5 h-5 mr-3 transition-colors",
+                  isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                )} />
+                {item.name}
+              </button>
+
+              {/* Sub-tabs — only shown when on a profile details page under Accounts */}
+              {item.path === "/profiles" && profileId > 0 && (
+                <div className="ml-2 mt-0.5 mb-0.5 space-y-0">
+                  {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label }) => {
+                    const isSubActive = activeTab === value;
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => setLocation(`/profiles/${profileId}?tab=${value}`)}
+                        className={cn(
+                          "flex items-center w-full px-4 py-1.5 text-xs font-medium transition-all duration-150 text-left rounded-md",
+                          isSubActive
+                            ? "text-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <span className="text-muted-foreground mr-1.5">-</span>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
@@ -101,18 +150,21 @@ export function Sidebar() {
       )}
 
       <div className="px-3 pb-2">
-        <Link href="/settings" className={cn(
-          "flex items-center px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group w-full",
-          location === "/settings"
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-accent hover:text-foreground"
-        )}>
+        <button
+          onClick={() => setLocation("/settings")}
+          className={cn(
+            "flex items-center w-full px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group text-left",
+            location === "/settings"
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+          )}
+        >
           <Settings className={cn(
             "w-5 h-5 mr-3 transition-colors",
             location === "/settings" ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
           )} />
           Settings
-        </Link>
+        </button>
       </div>
 
       <div className="p-4 border-t border-border/50">

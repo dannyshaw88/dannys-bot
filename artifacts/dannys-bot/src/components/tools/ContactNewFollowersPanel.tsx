@@ -136,6 +136,17 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
                 </span>
               );
             })()}
+            {settings.contactNewFollowersEnabled && (() => {
+              const avgInterval = ((settings.contactCheckIntervalMin ?? 30) + (settings.contactCheckIntervalMax ?? 60)) / 2;
+              const avgPerCheck = ((settings.contactUsersPerCheckMin ?? 1) + (settings.contactUsersPerCheckMax ?? 20)) / 2;
+              const perHour = avgInterval > 0 ? Math.round((avgPerCheck / avgInterval) * 60) : 0;
+              const perDay = perHour * 24;
+              return perHour > 0 ? (
+                <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
+                  ~{perHour}/hr · ~{perDay}/day
+                </span>
+              ) : null;
+            })()}
           </div>
         </div>
       </div>

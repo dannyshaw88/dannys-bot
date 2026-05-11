@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { insertProxySchema, insertProfileSchema, insertToolSchema, insertSourceSchema, type Proxy, type Profile, type Tool, type Source } from "./schema";
+import { insertProxySchema, insertProfileSchema, insertToolSchema, insertSourceSchema, type Proxy, type Profile, type Tool, type Source, type InsertProxy, type InsertProfile, type InsertTool, type InsertSource } from "./schema";
+
+export type { InsertProxy, InsertProfile, InsertTool, InsertSource };
 
 export const errorSchemas = {
   validation: z.object({
@@ -30,6 +32,15 @@ export const api = {
       responses: {
         201: z.custom<Proxy>(),
         400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: "PATCH" as const,
+      path: "/api/proxies/:id" as const,
+      input: insertProxySchema.partial(),
+      responses: {
+        200: z.custom<Proxy>(),
+        404: errorSchemas.notFound,
       },
     },
     delete: {

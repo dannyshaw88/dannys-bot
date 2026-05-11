@@ -576,7 +576,7 @@ export function CreateAccountApiPage() {
         body.proxyHost     = selectedProxy.host;
         body.proxyPort     = selectedProxy.port;
         body.proxyUsername = selectedProxy.username ?? undefined;
-        body.proxyPassword = (selectedProxy as any).password ?? undefined;
+        body.proxyPassword = selectedProxy.password ?? undefined;
       }
       const res = await fetch("/api/signup/start", {
         method: "POST",
@@ -602,7 +602,7 @@ export function CreateAccountApiPage() {
         body: JSON.stringify({ sessionId: result.sessionId, code: verifyCode.trim(), dbId: result.dbId }),
       });
       const data: SignupResult = await res.json();
-      setResult(prev => prev ? { ...data, steps: [...prev.steps, ...data.steps] } : data);
+      setResult(prev => prev ? { ...data, steps: [...(prev.steps ?? []), ...(data.steps ?? [])] } : data);
     } catch (e: any) {
       setResult(prev => prev ? { ...prev, message: e?.message ?? "Network error" } : null);
     } finally {
@@ -621,8 +621,6 @@ export function CreateAccountApiPage() {
     setFirstName("");
     setEmailPass("");
     setSelectedProxyId("");
-    setUsernameSpin("");
-    setBioSpin("");
   };
 
   const statusColors: Record<SignupResult["status"], string> = {
@@ -644,7 +642,7 @@ export function CreateAccountApiPage() {
     error:              "Creation Failed",
   };
 
-  const locked = loading || !!result;
+  const locked = loading;
 
   return (
     <AppLayout>
@@ -876,129 +874,158 @@ export function CreateAccountApiPage() {
             )}
           </div>
 
-          {/* ── RIGHT: Progress + Log + Result ── */}
-          <div className="space-y-4">
+          {/* ── RIGHT: Status + Log + Issues — always visible ── */}
+          <div className="space-y-3">
 
-            {/* Live progress tracker — shown while loading, before result arrives */}
-            <LiveProgressTracker loading={loading} />
-
-            {/* Step log — shown after result is back */}
-            {result && result.steps.length > 0 && (
-              <div className="desktop-card p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">API Call Log</p>
-                <StepLog steps={result.steps} />
+            {/* STATUS — always shown */}
+            <div className={`desktop-card p-4 border-2 transition-colors ${
+              loading
+                ? "border-sky-300 bg-sky-50/40"
+                : result
+                  ? statusColors[result.status]
+                  : "border-border"
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                {loading
+                  ? <Loader2 className="w-5 h-5 text-sky-500 animate-spin shrink-0" />
+                  : result
+                    ? statusIcons[result.status]
+                    : <Circle className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                }
+                <p className="font-semibold text-sm">
+                  {loading ? "Creating Account…" : result ? statusLabels[result.status] : "Status"}
+                </p>
+                {!loading && !result && (
+                  <span className="ml-auto text-[10px] text-muted-foreground/50 font-normal">Waiting for attempt</span>
+                )}
               </div>
-            )}
 
-            {result && (
-              <div className={`desktop-card p-4 border-2 ${statusColors[result.status]}`}>
-                <div className="flex items-center gap-2 mb-3">
-                  {statusIcons[result.status]}
-                  <p className="font-semibold text-sm">{statusLabels[result.status]}</p>
-                </div>
-                {result.message && <p className="text-sm text-foreground/80 mb-3">{result.message}</p>}
+              {loading && <LiveProgressTracker loading={loading} />}
 
-                {result.status === "success" && (
-                  <div className="space-y-2">
-                    {result.userId && (
-                      <div className="flex items-center gap-2 text-xs font-mono bg-white/60 rounded px-2 py-1.5">
-                        <ShieldCheck className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                        <span className="text-muted-foreground">User ID:</span>
-                        <span className="font-semibold">{result.userId}</span>
+              {!loading && !result && (
+                <p className="text-xs text-muted-foreground">Fill the form and click <strong>Create Account via API</strong> — the result will appear here.</p>
+              )}
+
+              {result && (
+                <>
+                  {result.message && <p className="text-sm text-foreground/80 mb-3">{result.message}</p>}
+
+                  {result.status === "success" && (
+                    <div className="space-y-2">
+                      {result.userId && (
+                        <div className="flex items-center gap-2 text-xs font-mono bg-white/60 rounded px-2 py-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                          <span className="text-muted-foreground">User ID:</span>
+                          <span className="font-semibold">{result.userId}</span>
+                        </div>
+                      )}
+                      {result.username && (
+                        <div className="flex items-center gap-2 text-xs font-mono bg-white/60 rounded px-2 py-1.5">
+                          <User className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                          <span className="text-muted-foreground">Username:</span>
+                          <span className="font-semibold">@{result.username}</span>
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm" className="bg-sky-500 hover:bg-sky-600 text-white border-0 text-xs h-7"
+                          onClick={() => { setTab("accounts"); }}
+                        >
+                          <List className="w-3 h-3 mr-1" />View in Created Accounts
+                        </Button>
                       </div>
-                    )}
-                    {result.username && (
-                      <div className="flex items-center gap-2 text-xs font-mono bg-white/60 rounded px-2 py-1.5">
-                        <User className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                        <span className="text-muted-foreground">Username:</span>
-                        <span className="font-semibold">@{result.username}</span>
+                      <p className="text-xs text-muted-foreground">
+                        Go to <strong>Created Accounts</strong> to add it to the automation accounts page.
+                      </p>
+                    </div>
+                  )}
+
+                  {(result.status === "email_verification" || result.status === "phone_verification") && result.sessionId && (
+                    <div className="mt-3 p-3 rounded-lg border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 space-y-2">
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        {result.status === "email_verification"
+                          ? "📧 Check your email for a 6-digit code from Instagram"
+                          : "📱 Check your phone for a 6-digit SMS code from Instagram"}
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        {result.status === "email_verification"
+                          ? "Instagram sent a verification code to your email. Enter it below — no IMAP needed."
+                          : "Instagram sent an SMS to your phone. Enter the code below."}
+                      </p>
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          value={verifyCode}
+                          onChange={e => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          placeholder="000000"
+                          maxLength={6}
+                          autoFocus
+                          className="h-10 text-center text-xl font-mono tracking-[0.4em] w-40 border-amber-400 focus:border-amber-500"
+                        />
+                        <Button
+                          onClick={handleVerify}
+                          disabled={verifying || verifyCode.length < 6}
+                          className="h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white border-0 font-semibold"
+                        >
+                          {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Code"}
+                        </Button>
                       </div>
-                    )}
-                    <div className="flex gap-2 pt-1">
-                      <Button
-                        size="sm" className="bg-sky-500 hover:bg-sky-600 text-white border-0 text-xs h-7"
-                        onClick={() => { setTab("accounts"); }}
-                      >
-                        <List className="w-3 h-3 mr-1" />View in Created Accounts
-                      </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Go to <strong>Created Accounts</strong> to add it to the automation accounts page.
-                    </p>
-                  </div>
-                )}
+                  )}
+                </>
+              )}
+            </div>
 
-                {(result.status === "email_verification" || result.status === "phone_verification") && result.sessionId && (
-                  <div className="mt-3 p-3 rounded-lg border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 space-y-2">
-                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                      {result.status === "email_verification"
-                        ? "📧 Check your email for a 6-digit code from Instagram"
-                        : "📱 Check your phone for a 6-digit SMS code from Instagram"}
-                    </p>
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      {result.status === "email_verification"
-                        ? "Instagram sent a verification code to your email. Enter it below — no IMAP needed."
-                        : "Instagram sent an SMS to your phone. Enter the code below."}
-                    </p>
-                    <div className="flex gap-2 items-center">
-                      <Input
-                        value={verifyCode}
-                        onChange={e => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        placeholder="000000"
-                        maxLength={6}
-                        autoFocus
-                        className="h-10 text-center text-xl font-mono tracking-[0.4em] w-40 border-amber-400 focus:border-amber-500"
-                      />
-                      <Button
-                        onClick={handleVerify}
-                        disabled={verifying || verifyCode.length < 6}
-                        className="h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white border-0 font-semibold"
-                      >
-                        {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Code"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {!!result.rawResponse && (
-                  <div className="mt-3 pt-3 border-t border-current/10">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs font-medium text-muted-foreground">Raw Response</p>
-                      <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={() => {
-                        navigator.clipboard.writeText(JSON.stringify(result.rawResponse, null, 2));
-                        setCopied(true); setTimeout(() => setCopied(false), 1500);
-                      }}>
-                        <Copy className="w-3 h-3 mr-1" />{copied ? "Copied" : "Copy"}
-                      </Button>
-                    </div>
-                    <pre className="text-[10px] font-mono bg-black/5 rounded p-2 overflow-auto max-h-32 whitespace-pre-wrap break-all">
-                      {JSON.stringify(result.rawResponse, null, 2)}
-                    </pre>
-                  </div>
+            {/* API CALL LOG — always shown */}
+            <div className="desktop-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">API Call Log</p>
+                {result && result.steps?.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{result.steps.length} steps</span>
                 )}
               </div>
-            )}
+              {result && result.steps?.length > 0
+                ? <StepLog steps={result.steps} />
+                : (
+                  <p className="text-xs text-muted-foreground/50 italic">
+                    {loading ? "Waiting for server…" : "No log yet — step-by-step API trace will appear here."}
+                  </p>
+                )
+              }
+            </div>
 
-            {!loading && !result && (
-              <div className="desktop-card p-4 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">How it works</p>
-                <div className="space-y-2">
-                  {[
-                    ["1", "Bootstraps a CSRF token via si/fetch_headers — the exact cold-start call a real Android app makes"],
-                    ["2", "Checks username availability via accounts/check_username"],
-                    ["3", "Calls accounts/create/ with a fresh device fingerprint — same as a real app install"],
-                    ["4", "If bio was provided, calls accounts/set_biography/ immediately after"],
-                    ["5", "If email verification is required and IMAP is configured, polls inbox and submits the code automatically"],
-                    ["6", "All attempts are saved to Created Accounts — click Add to Accounts to move a successful account into automation"],
-                  ].map(([n, t]) => (
-                    <div key={n} className="flex gap-2.5 text-xs text-muted-foreground">
-                      <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0 text-[10px]">{n}</span>
-                      <span>{t}</span>
+            {/* ISSUE LOG — always shown, populated on error */}
+            <div className="desktop-card p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Issue Log</p>
+              {result?.status === "error" && result.message ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-start gap-2 text-xs">
+                    <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-px" />
+                    <span className="text-red-700 dark:text-red-400 font-mono break-all">{result.message}</span>
+                  </div>
+                  {!!result.rawResponse && (
+                    <div className="mt-2 pt-2 border-t border-border">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] text-muted-foreground">Raw Response</p>
+                        <Button variant="ghost" size="sm" className="h-5 px-2 text-[10px]" onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(result.rawResponse, null, 2));
+                          setCopied(true); setTimeout(() => setCopied(false), 1500);
+                        }}>
+                          <Copy className="w-3 h-3 mr-1" />{copied ? "Copied" : "Copy"}
+                        </Button>
+                      </div>
+                      <pre className="text-[10px] font-mono bg-black/5 rounded p-2 overflow-auto max-h-28 whitespace-pre-wrap break-all">
+                        {JSON.stringify(result.rawResponse, null, 2)}
+                      </pre>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-xs text-muted-foreground/50 italic">
+                  {result && result.status !== "error" ? "No issues — attempt completed without errors." : "No issues logged."}
+                </p>
+              )}
+            </div>
+
           </div>
         </div>
       )}

@@ -31,6 +31,7 @@ sqlite.exec(`
     proxy_password TEXT,
     status TEXT NOT NULL DEFAULT 'idle',
     account_status TEXT NOT NULL DEFAULT 'pending',
+    status_message TEXT,
     user_agent_api TEXT,
     user_agent_embedded TEXT,
     api_limits TEXT DEFAULT '{"requestsMin":5,"requestsMax":10,"everySecondsMin":30,"everySecondsMax":60}',
@@ -186,6 +187,32 @@ sqlite.exec(`
     dm_item_id TEXT,
     unsend_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS api_created_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    email TEXT NOT NULL,
+    proxy_host TEXT,
+    proxy_port INTEGER,
+    proxy_username TEXT,
+    proxy_password TEXT,
+    bio TEXT,
+    imap_server TEXT,
+    imap_port INTEGER,
+    imap_pass TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    instagram_user_id TEXT,
+    session_cookies TEXT,
+    error_message TEXT,
+    steps TEXT,
+    added_to_accounts INTEGER DEFAULT 0,
+    profile_id INTEGER,
+    user_agent_api TEXT,
+    api_limits TEXT,
+    date_of_birth TEXT,
+    created_at TEXT NOT NULL
+  );
 `);
 
 // Add new columns if they don't exist yet (safe to run on existing DBs)
@@ -205,6 +232,9 @@ if (!colNames.has("locked")) {
 }
 if (!colNames.has("cookie_baker_settings")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN cookie_baker_settings TEXT;`);
+}
+if (!colNames.has("status_message")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN status_message TEXT;`);
 }
 
 // Add new columns to sources and followed_users if they don't exist

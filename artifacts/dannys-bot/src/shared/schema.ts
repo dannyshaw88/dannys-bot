@@ -64,6 +64,7 @@ export type Profile = {
   apiLimits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | null;
   browserDirectConnection: boolean | null;
   credentialsDirty: boolean | null;
+  statusMessage: string | null;
   accountLabel: string | null;
   tags: string | null;
   dateOfBirth: string | null;
@@ -88,9 +89,10 @@ export type Profile = {
   lastSyncedAt: string | null;
   creatorMode: boolean | null;
   locked: boolean | null;
+  cookieBakerSettings: Record<string, unknown> | null;
 };
 
-export type InsertProfile = Omit<Profile, 'id' | 'status'>;
+export type InsertProfile = Pick<Profile, 'username' | 'password'> & Partial<Omit<Profile, 'id' | 'status' | 'username' | 'password'>>;
 
 export type Tool = {
   id: number;
@@ -111,7 +113,7 @@ export type Source = {
   nrPosts: number | null;
 };
 
-export type InsertSource = Omit<Source, 'id'>;
+export type InsertSource = Omit<Source, 'id' | 'rank' | 'nrPosts'> & { rank?: number | null; nrPosts?: number | null };
 
 export type Log = {
   id: number;

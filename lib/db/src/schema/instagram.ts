@@ -58,6 +58,7 @@ export const profiles = sqliteTable("profiles", {
   proxyPassword: text("proxy_password"),
   status: text("status").notNull().default('idle'),
   accountStatus: text("account_status").notNull().default('pending'),
+  statusMessage: text("status_message"),
   userAgentApi: text("user_agent_api"),
   userAgentEmbedded: text("user_agent_embedded"),
   apiLimits: text("api_limits", { mode: "json" }).default({
@@ -325,6 +326,36 @@ export const contactPendingMessagesRelations = relations(contactPendingMessages,
 export const insertContactPendingMessageSchema = createInsertSchema(contactPendingMessages).omit({ id: true });
 export type ContactPendingMessage = typeof contactPendingMessages.$inferSelect;
 export type InsertContactPendingMessage = z.infer<typeof insertContactPendingMessageSchema>;
+
+export const apiCreatedAccounts = sqliteTable("api_created_accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull(),
+  password: text("password").notNull(),
+  email: text("email").notNull(),
+  proxyHost: text("proxy_host"),
+  proxyPort: integer("proxy_port"),
+  proxyUsername: text("proxy_username"),
+  proxyPassword: text("proxy_password"),
+  bio: text("bio"),
+  imapServer: text("imap_server"),
+  imapPort: integer("imap_port"),
+  imapPass: text("imap_pass"),
+  status: text("status").notNull().default("pending"),
+  instagramUserId: text("instagram_user_id"),
+  sessionCookies: text("session_cookies"),
+  errorMessage: text("error_message"),
+  steps: text("steps"),
+  addedToAccounts: integer("added_to_accounts", { mode: "boolean" }).default(false),
+  profileId: integer("profile_id"),
+  userAgentApi: text("user_agent_api"),
+  apiLimits: text("api_limits"),
+  dateOfBirth: text("date_of_birth"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertApiCreatedAccountSchema = createInsertSchema(apiCreatedAccounts).omit({ id: true });
+export type ApiCreatedAccount = typeof apiCreatedAccounts.$inferSelect;
+export type InsertApiCreatedAccount = z.infer<typeof insertApiCreatedAccountSchema>;
 
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),

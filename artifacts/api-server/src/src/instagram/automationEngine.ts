@@ -2256,13 +2256,66 @@ class AutomationEngine {
       "viewTimelineFeedOrderMin",   "viewTimelineFeedOrderMax",
       async () => {
         const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
+        let viewed = 0;
         try {
-          const viewed = await client.viewTimelineFeed(feedCount);
+          viewed = await client.viewTimelineFeed(feedCount);
           console.log(`[engine] @${profile.username}: 📰 viewed ${viewed} timeline post(s)`);
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
         } catch (e: any) {
           if (await checkSessionErr(e, "view_timeline_feed")) return;
           console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
+        }
+
+        // ── Like a % of viewed posts ─────────────────────────────────────────
+        const likePctMin = Number(s.likeTimelinePostsPercentMin ?? 0);
+        const likePctMax = Number(s.likeTimelinePostsPercentMax ?? 0);
+        if (viewed > 0 && likePctMax > 0) {
+          const pct = randInt(likePctMin, likePctMax);
+          const likeCount = Math.max(1, Math.round(viewed * pct / 100));
+          const likeDelayMin = Number(s.likeTimelinePostsDelayMin ?? 3);
+          const likeDelayMax = Number(s.likeTimelinePostsDelayMax ?? 8);
+          try {
+            const { liked, watched, likedPosts, sessionExpired } = await client.likeTimelinePosts(likeCount, likeDelayMin, likeDelayMax);
+            if (sessionExpired) {
+              console.warn(`[engine] @${profile.username}: likeTimelinePosts (from viewTimeline) — session expired, marking logged_out`);
+              await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: "Session expired (login_required) — likeTimelinePosts" });
+              state.client = null;
+              sessionError = "logged_out";
+              return;
+            }
+            const summary = watched > 0
+              ? `Liked ${liked} post(s) from timeline (watched ${watched} reel(s) before liking)`
+              : `Liked ${liked} post(s) from timeline`;
+            for (let _i = 0; _i < liked; _i++) await storage.incrementStat(profile.id, "like");
+            console.log(`[engine] @${profile.username}: ❤️ ${summary}`);
+            if (likedPosts.length > 0) {
+              for (const post of likedPosts) {
+                this.logAction(profile.id, tool.id, "like_timeline_post", post.ownerUsername, post.shortcode, "post", "ok", "Liked timeline post");
+              }
+            } else {
+              this.logAction(profile.id, tool.id, "like_timeline_post", "", "", "", "ok", summary);
+            }
+            // Save media from liked posts at the configured percentage
+            const saveEnabled = !!s.saveMediaEnabled;
+            const savePct = Number(s.saveMediaPercent ?? 0);
+            if (saveEnabled && savePct > 0 && likedPosts.length > 0) {
+              for (const post of likedPosts) {
+                if (!post.mediaId) continue;
+                if (Math.random() * 100 < savePct) {
+                  try {
+                    await client.saveMedia(post.mediaId);
+                    console.log(`[engine] @${profile.username}: 🔖 saved post ${post.shortcode} by @${post.ownerUsername}`);
+                    this.logAction(profile.id, tool.id, "save_media", post.ownerUsername, post.shortcode, "post", "ok", "Saved liked timeline post");
+                  } catch (se: any) {
+                    console.warn(`[engine] @${profile.username}: save media error: ${se?.message}`);
+                  }
+                }
+              }
+            }
+          } catch (e: any) {
+            if (await checkSessionErr(e, "like_timeline_posts")) return;
+            console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
+          }
         }
       },
     );

@@ -44,7 +44,7 @@ export function ToolConfig({ profileId, type }: ToolConfigProps) {
 
   const handleSaveSettings = () => {
     updateTool.mutate(
-      { id: tool.id, settings },
+      { id: tool.id, profileId, settings },
       { 
         onSuccess: () => toast({ title: "Settings saved successfully", variant: "default" }) 
       }
@@ -53,7 +53,7 @@ export function ToolConfig({ profileId, type }: ToolConfigProps) {
 
   const handleToggle = (enabled: boolean) => {
     updateTool.mutate(
-      { id: tool.id, enabled },
+      { id: tool.id, profileId, enabled },
       {
         onSuccess: () => toast({ 
           title: `Tool ${enabled ? 'enabled' : 'disabled'}`, 

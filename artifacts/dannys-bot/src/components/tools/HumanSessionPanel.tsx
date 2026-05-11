@@ -51,11 +51,14 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       ]},
     ]},
     { label: "Actions", options: [
-      { key: "viewTimelineFeed", label: "View Timeline Feed", description: "Scrolling through the main feed", subOptions: [
-        { key: "vtf_enabled", label: "Enabled",                          settingKeys: ["viewTimelineFeedEnabled"] },
-        { key: "vtf_count",   label: "Posts per session (min / max)",    settingKeys: ["viewTimelineFeedMin","viewTimelineFeedMax"] },
-        { key: "vtf_order",   label: "Execution order (min / max)",      settingKeys: ["viewTimelineFeedOrderMin","viewTimelineFeedOrderMax"] },
-        { key: "vtf_chance",  label: "Skip chance % (0=always run, 100=never)", settingKeys: ["viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"] },
+      { key: "viewTimelineFeed", label: "View Timeline Feed", description: "Scrolling through the main feed + inline liking", subOptions: [
+        { key: "vtf_enabled",    label: "Enabled",                                       settingKeys: ["viewTimelineFeedEnabled"] },
+        { key: "vtf_count",      label: "Posts per session (min / max)",                 settingKeys: ["viewTimelineFeedMin","viewTimelineFeedMax"] },
+        { key: "vtf_order",      label: "Execution order (min / max)",                   settingKeys: ["viewTimelineFeedOrderMin","viewTimelineFeedOrderMax"] },
+        { key: "vtf_chance",     label: "Skip chance % (0=always run, 100=never)",       settingKeys: ["viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"] },
+        { key: "vtf_like_pct",   label: "% posts to like (min / max)",                  settingKeys: ["likeTimelinePostsPercentMin","likeTimelinePostsPercentMax"] },
+        { key: "vtf_like_delay", label: "Delay between likes in sec (min / max)",        settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
+        { key: "vtf_save_media", label: "Save liked media (enabled + %)",                settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
       ]},
       { key: "humanSession", label: "Human Session (Visit Profile)", description: "Core session order and cool-down", subOptions: [
         { key: "hs_enabled", label: "Enabled",                            settingKeys: ["humanSessionEnabled"] },
@@ -79,13 +82,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
         { key: "dm_count",   label: "DMs per session (min / max)",        settingKeys: ["checkDmMin","checkDmMax"] },
         { key: "dm_order",   label: "Execution order (min / max)",        settingKeys: ["checkDmOrderMin","checkDmOrderMax"] },
         { key: "dm_chance",  label: "Skip chance % (0=always run, 100=never)", settingKeys: ["checkDmNotUsedMin","checkDmNotUsedMax"] },
-      ]},
-      { key: "likeTimelinePosts", label: "Like Timeline Posts", description: "Like posts from your feed", subOptions: [
-        { key: "ltp_enabled", label: "Enabled",                            settingKeys: ["likeTimelinePostsEnabled"] },
-        { key: "ltp_count",   label: "Likes per session (min / max)",      settingKeys: ["likeTimelinePostsMin","likeTimelinePostsMax"] },
-        { key: "ltp_delay",   label: "Delay between likes in sec (min / max)", settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
-        { key: "ltp_order",   label: "Execution order (min / max)",        settingKeys: ["likeTimelinePostsOrderMin","likeTimelinePostsOrderMax"] },
-        { key: "ltp_chance",  label: "Skip chance % (0=always run, 100=never)", settingKeys: ["likeTimelinePostsNotUsedMin","likeTimelinePostsNotUsedMax"] },
       ]},
       { key: "repost", label: "Repost", description: "Repost settings for source account, alteration, caption and stop conditions", subOptions: [
         { key: "rp_enabled",    label: "Enabled",                           settingKeys: ["repostEnabled"] },
@@ -171,6 +167,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       likeTimelinePostsNotUsedMax: 0,
       saveMediaEnabled: false,
       saveMediaPercent: 20,
+      likeTimelinePostsPercentMin: 0,
+      likeTimelinePostsPercentMax: 0,
       repostEnabled: false,
       repostUseHikerApi: false,
       repostSourceUsername: "",
@@ -350,8 +348,10 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             </div>
           </div>
         </div>
+
+        {/* Posts to View */}
         <div className={`flex items-center gap-4 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to View</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-40">Posts to View</span>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
               <Label className="text-xs text-muted-foreground">Min</Label>
@@ -367,6 +367,84 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
                 onChange={(e) => setSettings({ ...settings, viewTimelineFeedMax: Math.max(1, Number(e.target.value)) })}
               />
             </div>
+          </div>
+        </div>
+
+        {/* % Posts to Like */}
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-40 flex items-center gap-1.5"><Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />% Posts to Like</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <div className="relative">
+                <Input type="number" min="0" max="100" className="w-16 h-7 text-xs pr-5"
+                  value={settings.likeTimelinePostsPercentMin ?? 0}
+                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsPercentMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                />
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <div className="relative">
+                <Input type="number" min="0" max="100" className="w-16 h-7 text-xs pr-5"
+                  value={settings.likeTimelinePostsPercentMax ?? 0}
+                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsPercentMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                />
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Delay Between Likes — only visible when liking is configured */}
+        <div className={`flex items-center gap-4 transition-opacity ${!settings.viewTimelineFeedEnabled || !((settings.likeTimelinePostsPercentMax ?? 0) > 0) ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-40">Delay Between Likes</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <div className="relative">
+                <Input type="number" min="0" max="300" className="w-16 h-7 text-xs pr-4"
+                  value={settings.likeTimelinePostsDelayMin ?? 3}
+                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMin: Math.max(0, Number(e.target.value)) })}
+                />
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <div className="relative">
+                <Input type="number" min="0" max="300" className="w-16 h-7 text-xs pr-4"
+                  value={settings.likeTimelinePostsDelayMax ?? 8}
+                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMax: Math.max(0, Number(e.target.value)) })}
+                />
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Save Media from Liked Posts */}
+        <div className={`flex items-center gap-3 transition-opacity ${!settings.viewTimelineFeedEnabled || !((settings.likeTimelinePostsPercentMax ?? 0) > 0) ? 'opacity-40 pointer-events-none' : ''}`}>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-40">Save Liked Media</span>
+          <input
+            type="checkbox"
+            id="saveMediaEnabled"
+            checked={!!settings.saveMediaEnabled}
+            onChange={(e) => setSettings({ ...settings, saveMediaEnabled: e.target.checked })}
+            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+          />
+          <div className={`flex items-center gap-2 transition-opacity ${!settings.saveMediaEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="relative">
+              <Input
+                type="number" min={1} max={100}
+                className="w-16 h-7 text-xs pr-5"
+                value={settings.saveMediaPercent ?? 20}
+                onChange={(e) => setSettings({ ...settings, saveMediaPercent: Math.min(100, Math.max(1, Number(e.target.value))) })}
+              />
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+            </div>
+            <Label className="text-xs text-muted-foreground">of liked posts saved</Label>
           </div>
         </div>
       </div>
@@ -556,105 +634,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
         </div>
       </div>
 
-      {/* ── Like Posts from Timeline ──────────────────────────── */}
-      <div className="border border-border rounded-xl p-4 space-y-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2 pt-0.5">
-            <input type="checkbox" id="likeTimelinePostsEnabled"
-              checked={!!settings.likeTimelinePostsEnabled}
-              onChange={(e) => setSettings({ ...settings, likeTimelinePostsEnabled: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="likeTimelinePostsEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none">
-              <Heart className="w-4 h-4 text-pink-500" />
-              Like Posts from Timeline
-            </label>
-          </div>
-          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
-              {pctInputs("likeTimelinePostsOrderMin", "likeTimelinePostsOrderMax")}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Not Used</span>
-              {pctInputs("likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax")}
-            </div>
-          </div>
-        </div>
-        <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40' : ''}`}>
-          Likes posts from the home timeline feed. If a post is a reel, it is marked as watched before liking.
-        </p>
-        <div className={`flex items-center gap-4 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts to Like</span>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
-                value={settings.likeTimelinePostsMin ?? 2}
-                onChange={(e) => setSettings({ ...settings, likeTimelinePostsMin: Math.max(1, Number(e.target.value)) })}
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="50" className="w-16 h-7 text-xs"
-                value={settings.likeTimelinePostsMax ?? 5}
-                onChange={(e) => setSettings({ ...settings, likeTimelinePostsMax: Math.max(1, Number(e.target.value)) })}
-              />
-            </div>
-          </div>
-        </div>
-        <div className={`flex items-center gap-4 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Delay Between Likes</span>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              <div className="relative">
-                <Input type="number" min="0" max="300" className="w-16 h-7 text-xs pr-5"
-                  value={settings.likeTimelinePostsDelayMin ?? 3}
-                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMin: Math.max(0, Number(e.target.value)) })}
-                />
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              <div className="relative">
-                <Input type="number" min="0" max="300" className="w-16 h-7 text-xs pr-5"
-                  value={settings.likeTimelinePostsDelayMax ?? 8}
-                  onChange={(e) => setSettings({ ...settings, likeTimelinePostsDelayMax: Math.max(0, Number(e.target.value)) })}
-                />
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">s</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Save Media (% of liked posts) */}
-        <div className={`border-t border-border/40 pt-3 space-y-2 transition-opacity ${!settings.likeTimelinePostsEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="saveMediaEnabled"
-              checked={!!settings.saveMediaEnabled}
-              onChange={(e) => setSettings({ ...settings, saveMediaEnabled: e.target.checked })}
-              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-            />
-            <label htmlFor="saveMediaEnabled" className="text-sm font-medium cursor-pointer select-none">
-              Save Media from Liked Posts
-            </label>
-          </div>
-          <div className={`flex items-center gap-3 pl-1 transition-opacity ${!settings.saveMediaEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <span className="text-xs text-muted-foreground">Save</span>
-            <Input
-              type="number" min={1} max={100}
-              className="w-16 h-7 text-xs"
-              value={settings.saveMediaPercent ?? 20}
-              onChange={(e) => setSettings({ ...settings, saveMediaPercent: Math.min(100, Math.max(1, Number(e.target.value))) })}
-            />
-            <span className="text-xs text-muted-foreground">% of liked posts to your saved collection.</span>
-          </div>
-        </div>
-      </div>
 
       {/* ── Repost ────────────────────────────────────────────── */}
       <div className="border border-border rounded-xl p-4 space-y-3">

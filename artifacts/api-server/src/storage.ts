@@ -3,7 +3,7 @@ import { userAgents } from "./shared/userAgents";
 import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
-  hashtagCursors, scrapedUsersGlobal,
+  hashtagCursors, scrapedUsersGlobal, apiCreatedAccounts,
   type Proxy, type InsertProxy,
   type Profile, type InsertProfile,
   type Tool, type InsertTool,
@@ -14,6 +14,7 @@ import {
   type RepostedPost, type InsertRepostedPost,
   type ContactDmSent, type InsertContactDmSent,
   type ContactPendingMessage, type InsertContactPendingMessage,
+  type ApiCreatedAccount, type InsertApiCreatedAccount,
 } from "./shared/schema";
 import { eq, desc, and, sql, like, gt } from "drizzle-orm";
 
@@ -108,6 +109,13 @@ export interface IStorage {
   // Scraped Users (global deduplication across all profiles)
   getScrapedUserIds(userIds: string[], ignoreDays: number): Promise<Set<string>>;
   addScrapedUsers(users: { pk: string; username: string }[]): Promise<void>;
+
+  // API Created Accounts
+  saveApiCreatedAccount(data: InsertApiCreatedAccount): Promise<ApiCreatedAccount>;
+  updateApiCreatedAccount(id: number, updates: Partial<InsertApiCreatedAccount>): Promise<void>;
+  getApiCreatedAccounts(): Promise<ApiCreatedAccount[]>;
+  listApiCreatedAccounts(): Promise<ApiCreatedAccount[]>;
+  deleteApiCreatedAccount(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -611,6 +619,27 @@ export class DatabaseStorage implements IStorage {
         eq(contactPendingMessages.status, "sent"),
         sql`${contactPendingMessages.unsendAt} IS NOT NULL AND ${contactPendingMessages.unsendAt} <= ${now}`
       ));
+  }
+
+  async saveApiCreatedAccount(data: InsertApiCreatedAccount): Promise<ApiCreatedAccount> {
+    const [created] = await db.insert(apiCreatedAccounts).values(data).returning();
+    return created;
+  }
+
+  async updateApiCreatedAccount(id: number, updates: Partial<InsertApiCreatedAccount>): Promise<void> {
+    await db.update(apiCreatedAccounts).set(updates).where(eq(apiCreatedAccounts.id, id));
+  }
+
+  async getApiCreatedAccounts(): Promise<ApiCreatedAccount[]> {
+    return await db.select().from(apiCreatedAccounts).orderBy(desc(apiCreatedAccounts.id));
+  }
+
+  async listApiCreatedAccounts(): Promise<ApiCreatedAccount[]> {
+    return await db.select().from(apiCreatedAccounts).orderBy(desc(apiCreatedAccounts.id));
+  }
+
+  async deleteApiCreatedAccount(id: number): Promise<void> {
+    await db.delete(apiCreatedAccounts).where(eq(apiCreatedAccounts.id, id));
   }
 }
 
