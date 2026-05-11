@@ -568,8 +568,14 @@ function startFrameLoop(profileId: number) {
     busy = true;
 
     try {
+      const screenshotTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("screenshot timeout")), 8000)
+      );
       const [screenshot, currentUrl] = await Promise.all([
-        s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
+        Promise.race([
+          s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
+          screenshotTimeout,
+        ]),
         s.page.url(),
       ]);
 

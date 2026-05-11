@@ -238,12 +238,12 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   useEffect(() => { connect(); }, [connect]);
 
-  // Stale-frame detector: if connected but no frame arrives for 12 s, flag frozen
+  // Stale-frame detector: if connected but no frame arrives for 25 s, flag frozen
   useEffect(() => {
     if (status !== "connected") { setIsFrozen(false); return; }
     lastFrameTimeRef.current = Date.now();
     const timer = setInterval(() => {
-      if (statusRef.current === "connected" && Date.now() - lastFrameTimeRef.current > 12000) {
+      if (statusRef.current === "connected" && Date.now() - lastFrameTimeRef.current > 25000) {
         setIsFrozen(true);
       }
     }, 3000);
