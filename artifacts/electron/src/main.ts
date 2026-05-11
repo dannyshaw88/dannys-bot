@@ -633,11 +633,12 @@ function setupBackupHandlers() {
   ipcMain.handle("open-browser-window", (_event, { profileId, username }: any) => {
     if (!serverPort || !profileId) return;
     const child = new BrowserWindow({
-      width: 1100,
-      height: 700,
+      width: 1280,
+      height: 800,
       title: username ? `@${username} — Equinox Browser` : "Equinox Browser",
       icon: getIconPath(),
       autoHideMenuBar: true,
+      show: false,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -645,6 +646,11 @@ function setupBackupHandlers() {
       },
     });
     child.loadURL(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
+    child.once("ready-to-show", () => {
+      child.maximize();
+      child.show();
+      child.focus();
+    });
   });
 }
 
