@@ -313,7 +313,11 @@ export async function getOrCreateSession(
 
   const [page] = await browser.pages();
   await page.setUserAgent(userAgent);
-  await page.setViewport(viewportForUA(userAgent));
+  // The EB canvas is always 1280×760.  Using viewportForUA() for mobile UAs would
+  // produce screenshots at ~1082×2402 (412×915 @ 2.625x scale) which, when drawn
+  // onto the 1280×760 canvas, cause severe stretching.  Force desktop dimensions so
+  // the Puppeteer screenshot always matches the canvas size exactly.
+  await page.setViewport({ width: 1280, height: 760 });
 
   // Authenticate proxy if credentials supplied.
   // page.authenticate() handles the 407 Proxy Auth challenge Chromium receives on CONNECT.
@@ -940,6 +944,25 @@ export async function clearSession(profileId: number, userAgent: string, proxy?:
   await closeSession(profileId);
   await getOrCreateSession(profileId, userAgent, proxy);
   log(`Session cleared for profile ${profileId}`, "browser");
+}
+
+// Wipe everything — used by Reset Device IDs so the EB starts as a clean
+// new device with no stored cookies. Unlike clearSession, does NOT reopen
+// the browser, and also deletes the Puppeteer user-data-dir so Chrome's own
+// internal cookie database is erased (not just the app's saved JSON file).
+export async function wipeEbSession(profileId: number): Promise<void> {
+  deleteSavedCookies(profileId);
+  await closeSession(profileId);
+  const userDataDir = path.join(os.tmpdir(), `equinox-eb-${profileId}`);
+  try {
+    if (fs.existsSync(userDataDir)) {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      log(`Deleted userDataDir for profile ${profileId}: ${userDataDir}`, "browser");
+    }
+  } catch (e: any) {
+    console.warn(`[browserSession] Could not delete userDataDir for profile ${profileId}: ${e?.message}`);
+  }
+  log(`EB session wiped for profile ${profileId}`, "browser");
 }
 
 // ── Auto-login via Puppeteer ─────────────────────────────────────────────────

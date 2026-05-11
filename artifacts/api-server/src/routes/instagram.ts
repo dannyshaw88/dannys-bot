@@ -30,6 +30,7 @@ import {
   browserCloseTab,
   clearSession,
   closeSession,
+  wipeEbSession,
   browserAutoLogin,
   sendLoginDone,
   setCheckpointUrl,
@@ -1016,6 +1017,13 @@ export async function registerInstagramRoutes(
   // Close Chrome without wiping cookies — called when user dismisses the browser window
   app.post("/api/browser/:profileId/close", async (req, res) => {
     await closeSession(Number(req.params.profileId));
+    res.json({ ok: true });
+  });
+
+  // Wipe EB session entirely (no reopen) — called by Reset Device IDs so the
+  // browser starts fresh with no stored cookies on next open.
+  app.post("/api/browser/:profileId/wipe", async (req, res) => {
+    await wipeEbSession(Number(req.params.profileId));
     res.json({ ok: true });
   });
 

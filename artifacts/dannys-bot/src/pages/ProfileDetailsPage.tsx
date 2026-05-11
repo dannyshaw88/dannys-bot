@@ -344,10 +344,14 @@ export function ProfileDetailsPage() {
       { id: profileId, ...patch },
       {
         onSuccess: () => {
+          // Wipe the EB browser session (closes Chrome + deletes Puppeteer
+          // user-data-dir) so the next EB open starts as a clean new device
+          // with no stored Instagram login cookies.
+          fetch(`/api/browser/${profileId}/wipe`, { method: "POST" }).catch(() => {});
           setFormData((prev: any) => ({ ...prev, userAgentApi: randomUA.api, userAgentEmbedded: randomUA.embedded }));
           setVerifyStatus("idle");
           queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
-          toast({ title: "Device IDs Reset", description: "New device fingerprint assigned. Account set to Pending." });
+          toast({ title: "Device IDs Reset", description: "New device fingerprint assigned. EB session cleared." });
         },
         onError: () => toast({ title: "Error", description: "Failed to reset device IDs.", variant: "destructive" }),
       }
@@ -421,7 +425,10 @@ export function ProfileDetailsPage() {
                   return (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}`}>
+                        <button
+                          title={profile.statusMessage || undefined}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}${profile.statusMessage ? " underline decoration-dotted underline-offset-2" : ""}`}
+                        >
                           <Icon className="w-3 h-3" />
                           {meta.label}
                           <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
