@@ -406,8 +406,10 @@ function CreatedAccountsTab() {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
-const SS_KEY_USERNAME   = "equinox_api_username_spin";
-const SS_KEY_BIO        = "equinox_api_bio_spin";
+// These two are templates the user re-uses across many sessions — persist to
+// localStorage so they survive page refreshes and are never wiped by New Attempt.
+const LS_KEY_USERNAME_SPIN = "equinox_api_username_spin";
+const LS_KEY_BIO_SPIN      = "equinox_api_bio_spin";
 const SS_KEY_PASSWORD   = "equinox_api_password";
 const SS_KEY_FIRSTNAME  = "equinox_api_firstname";
 const SS_KEY_EMAIL      = "equinox_api_email";
@@ -421,6 +423,8 @@ const SS_KEY_VERIFY     = "equinox_api_verify_code";
 const LS_KEY_API_LIMITS = "equinox_api_limits_v1";
 const LS_KEY_IMAP       = "equinox_api_imap_v1";
 
+function lsGet(key: string): string { return localStorage.getItem(key) ?? ""; }
+function lsSet(key: string, v: string) { localStorage.setItem(key, v); }
 function ssGet(key: string): string { return sessionStorage.getItem(key) ?? ""; }
 function ssGetJson<T>(key: string, fallback: T): T {
   try { const r = sessionStorage.getItem(key); if (r) return JSON.parse(r) as T; } catch {}
@@ -428,8 +432,9 @@ function ssGetJson<T>(key: string, fallback: T): T {
 }
 function ssSet(key: string, v: string) { sessionStorage.setItem(key, v); }
 function ssSetJson(key: string, v: unknown) { sessionStorage.setItem(key, JSON.stringify(v)); }
+// Per-attempt fields only — username/bio spin are templates kept in localStorage
 const SS_ALL_KEYS = [
-  SS_KEY_USERNAME, SS_KEY_BIO, SS_KEY_PASSWORD, SS_KEY_FIRSTNAME, SS_KEY_EMAIL,
+  SS_KEY_PASSWORD, SS_KEY_FIRSTNAME, SS_KEY_EMAIL,
   SS_KEY_EMAIL_PASS, SS_KEY_DOB, SS_KEY_PROXY_ID, SS_KEY_UA_API, SS_KEY_TAB,
   SS_KEY_RESULT, SS_KEY_VERIFY,
 ];
@@ -466,11 +471,11 @@ export function CreateAccountApiPage() {
   );
   const setTab = (v: "create" | "accounts") => { setTabRaw(v); ssSet(SS_KEY_TAB, v); };
 
-  // Account fields
-  const [usernameSpin, setUsernameSpinRaw] = useState(() => ssGet(SS_KEY_USERNAME));
-  const [bioSpin, setBioSpinRaw]           = useState(() => ssGet(SS_KEY_BIO));
-  const setUsernameSpin = (v: string) => { setUsernameSpinRaw(v); ssSet(SS_KEY_USERNAME, v); };
-  const setBioSpin      = (v: string) => { setBioSpinRaw(v);      ssSet(SS_KEY_BIO, v);      };
+  // Account fields — spin templates live in localStorage so they outlive refreshes
+  const [usernameSpin, setUsernameSpinRaw] = useState(() => lsGet(LS_KEY_USERNAME_SPIN));
+  const [bioSpin, setBioSpinRaw]           = useState(() => lsGet(LS_KEY_BIO_SPIN));
+  const setUsernameSpin = (v: string) => { setUsernameSpinRaw(v); lsSet(LS_KEY_USERNAME_SPIN, v); };
+  const setBioSpin      = (v: string) => { setBioSpinRaw(v);      lsSet(LS_KEY_BIO_SPIN, v);      };
 
   const [password, setPasswordRaw]   = useState(() => ssGet(SS_KEY_PASSWORD) || generatePassword());
   const [firstName, setFirstNameRaw] = useState(() => ssGet(SS_KEY_FIRSTNAME));

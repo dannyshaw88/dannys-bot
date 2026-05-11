@@ -2842,6 +2842,7 @@ export async function createInstagramAccountViaApi(params: {
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate",
     "X-IG-App-ID": MOBILE_AID,
+    "X-IG-App-Version": MOBILE_VERSION,
     "X-IG-Capabilities": "3brTv10=",
     "X-IG-Connection-Type": "WIFI",
     "X-IG-Bandwidth-Speed-KBPS": "-1.000",
