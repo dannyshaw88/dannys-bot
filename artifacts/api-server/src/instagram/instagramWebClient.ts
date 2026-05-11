@@ -1577,7 +1577,7 @@ export class InstagramWebClient {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count: number = 5): Promise<number> {
+  async viewTimelineFeed(count: number = 5): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string }> {
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
     const j = await this.mobileSessionPost(
@@ -1586,20 +1586,25 @@ export class InstagramWebClient {
     );
     if (!j) {
       console.warn(`[webClient] viewTimelineFeed: mobileSessionPost returned null — no igApiCookies session`);
-      return 0;
+      return { viewed: 0 };
     }
     if (j?.message === "login_required" || j?.require_login || (j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? ""))) {
-      console.warn(`[webClient] viewTimelineFeed: session expired — status="${j?.status}" message="${j?.message}"`);
+      const reason = [
+        j?.message ? `message: ${j.message}` : null,
+        j?.logout_reason ? `logout_reason: ${j.logout_reason}` : null,
+        j?.error_title ? `error_title: ${j.error_title}` : null,
+      ].filter(Boolean).join(" | ") || "login_required";
+      console.warn(`[webClient] viewTimelineFeed: session expired — ${reason}`);
       this.mobileSessionReady = false;
-      return 0;
+      return { viewed: 0, sessionExpired: true, reason };
     }
     if (j?.status === "fail") {
       console.warn(`[webClient] viewTimelineFeed: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
-      return 0;
+      return { viewed: 0 };
     }
     const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
     console.log(`[webClient] viewTimelineFeed: timeline returned ${rawItems.length} raw items`);
-    if (!rawItems.length) return 0;
+    if (!rawItems.length) return { viewed: 0 };
 
     const items = rawItems
       .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
@@ -1623,7 +1628,7 @@ export class InstagramWebClient {
       }, (n) => `Marked ${n} post${n === 1 ? "" : "s"} as seen`);
     }
 
-    return viewed;
+    return { viewed };
   }
 
   // ── Watch reels from the home feed Reels tab ─────────────────────────────
@@ -1886,7 +1891,7 @@ export class InstagramWebClient {
     }, `Like DM thread=${threadId} item=${itemId}`);
   }
 
-  async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }>; sessionExpired?: boolean }> {
+  async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }>; sessionExpired?: boolean; sessionExpiredReason?: string }> {
     // No timed() wrapper here — individual likeMedia() calls each produce their
     // own LikeMedia log entry. A LikeTimelinePosts summary on top would cause
     // two entries at the same timestamp and make rate-limit audits confusing.
@@ -1896,9 +1901,14 @@ export class InstagramWebClient {
       return { liked: 0, watched: 0, likedPosts: [] };
     }
     if (j?.message === "login_required" || j?.require_login || (j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? ""))) {
-      console.warn(`[webClient] likeTimelinePosts: session expired — status="${j?.status}" message="${j?.message}" logout_reason=${j?.logout_reason ?? "n/a"}`);
+      const sessionExpiredReason = [
+        j?.message ? `message: ${j.message}` : null,
+        j?.logout_reason ? `logout_reason: ${j.logout_reason}` : null,
+        j?.error_title ? `error_title: ${j.error_title}` : null,
+      ].filter(Boolean).join(" | ") || "login_required";
+      console.warn(`[webClient] likeTimelinePosts: session expired — ${sessionExpiredReason}`);
       this.mobileSessionReady = false;
-      return { liked: 0, watched: 0, likedPosts: [], sessionExpired: true };
+      return { liked: 0, watched: 0, likedPosts: [], sessionExpired: true, sessionExpiredReason };
     }
     if (j?.status === "fail") {
       console.warn(`[webClient] likeTimelinePosts: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);

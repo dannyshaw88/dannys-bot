@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -627,6 +627,39 @@ export function SettingsPage() {
                 disabled={isLoading}
               />
             </div>
+          </div>
+        </div>
+
+        <div className="border-t border-border/60" />
+
+        {/* Pre-filled Phone Number */}
+        <div className="desktop-card p-6">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+              <Phone className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Pre-filled Phone Number</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Phone number typed into the browser when you click "Add Phone Number" in the Embedded Browser toolbar.
+            Accepts any digits and symbols — no country code required.
+          </p>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Phone number</Label>
+            <Input
+              type="text"
+              className="w-64"
+              placeholder="e.g. 07911 123456"
+              defaultValue={settings?.preFilledPhoneNumber ?? ""}
+              key={settings?.preFilledPhoneNumber}
+              onBlur={(e) => {
+                const v = e.target.value;
+                if (v !== (settings?.preFilledPhoneNumber ?? "")) {
+                  mutation.mutate({ preFilledPhoneNumber: v });
+                }
+              }}
+              disabled={isLoading}
+            />
           </div>
         </div>
 

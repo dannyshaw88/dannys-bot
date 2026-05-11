@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Plus, Upload
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Plus, Upload, Phone,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
@@ -508,6 +508,22 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
                                       "Fill Credentials"}
         </Button>
 
+        <Button
+          variant="ghost" size="sm"
+          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
+          disabled={!connected}
+          title="Type the pre-filled phone number from Settings"
+          onClick={async () => {
+            try {
+              const res = await fetch("/api/settings");
+              const s = await res.json();
+              const num = (s.preFilledPhoneNumber ?? "").trim();
+              if (num) send({ type: "type", text: num });
+            } catch {}
+          }}
+        >
+          <Phone className="w-3.5 h-3.5" /> Add Phone Number
+        </Button>
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
           onClick={() => setFileChooserPending(true)} disabled={!connected}
           title="Upload a file to the browser">
@@ -705,7 +721,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onContextMenu={onContextMenu}
         />
 
-        {/* Frozen overlay — no frame received for 12 s while connected */}
+        {/* Frozen overlay — no frame received for 25 s while connected */}
         {isFrozen && connected && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/80 z-20 backdrop-blur-sm">
             <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />

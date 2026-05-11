@@ -123,6 +123,9 @@ export function ProfilesPage() {
   const dragAddMode = useRef(true);
   const preStoppedStatus = useRef<Map<number, string>>(new Map());
   const [importOpen, setImportOpen] = useState(false);
+  const [addProfilePanelOpen, setAddProfilePanelOpen] = useState(false);
+  const [addProfileCount, setAddProfileCount] = useState("1");
+  const [addProfileCreating, setAddProfileCreating] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [eqxImporting, setEqxImporting] = useState(false);
   const eqxImportRef = useRef<HTMLInputElement>(null);
@@ -263,6 +266,29 @@ export function ProfilesPage() {
         window.location.href = `/profiles/${profile.id}`;
       }
     });
+  };
+
+  const handleCreateMultiple = async () => {
+    const count = Math.max(1, Math.min(500, parseInt(addProfileCount, 10) || 1));
+    setAddProfileCreating(true);
+    try {
+      for (let i = 0; i < count; i++) {
+        await createProfileMutation.mutateAsync({
+          username: "new_account_" + Math.floor(Math.random() * 1000000),
+          password: "password",
+          proxyHost: "",
+          proxyPort: null,
+          proxyUsername: "",
+          proxyPassword: "",
+        });
+      }
+      setAddProfilePanelOpen(false);
+      setAddProfileCount("1");
+    } catch {
+      // silent
+    } finally {
+      setAddProfileCreating(false);
+    }
   };
 
   const toggleSelection = (id: number) => {
@@ -594,10 +620,43 @@ export function ProfilesPage() {
       <div className="mb-3">
         <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
-          <Button onClick={handleCreate} disabled={createProfileMutation.isPending} size="sm" className="bg-sky-400 hover:bg-sky-500 text-white border-0 shrink-0">
+          <Button
+            onClick={() => setAddProfilePanelOpen(o => !o)}
+            size="sm"
+            className="bg-sky-400 hover:bg-sky-500 text-white border-0 shrink-0"
+          >
             <Plus className="w-4 h-4 mr-1" />
-            {createProfileMutation.isPending ? "Creating..." : "Add Profile"}
+            Add Profile
           </Button>
+          {addProfilePanelOpen && (
+            <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-2 duration-150">
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={addProfileCount}
+                onChange={e => setAddProfileCount(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleCreateMultiple(); if (e.key === "Escape") setAddProfilePanelOpen(false); }}
+                autoFocus
+                placeholder="Count"
+                className="w-20 h-8 text-sm border border-border rounded px-2 bg-background text-foreground text-center"
+              />
+              <Button
+                size="sm"
+                onClick={handleCreateMultiple}
+                disabled={addProfileCreating}
+                className="h-8 bg-sky-400 hover:bg-sky-500 text-white border-0"
+              >
+                {addProfileCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Create"}
+              </Button>
+              <button
+                onClick={() => setAddProfilePanelOpen(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
         <p className="text-sm text-muted-foreground mt-1">Manage your Instagram accounts, proxies, and automation settings.</p>
       </div>

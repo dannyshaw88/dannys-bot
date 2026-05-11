@@ -1438,11 +1438,12 @@ export async function registerInstagramRoutes(
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
       themeColor: settings.themeColor ?? "blue",
       themeMode: settings.themeMode ?? "dark",
+      preFilledPhoneNumber: settings.preFilledPhoneNumber ?? "",
     });
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -1491,6 +1492,9 @@ export async function registerInstagramRoutes(
     if (typeof themeMode === "string" && (themeMode === "light" || themeMode === "dark")) {
       await storage.setGlobalSetting("themeMode", themeMode);
     }
+    if (typeof preFilledPhoneNumber === "string") {
+      await storage.setGlobalSetting("preFilledPhoneNumber", preFilledPhoneNumber);
+    }
     const settings = await storage.getGlobalSettings();
     res.json({
       skipFollowedUsers: settings.skipFollowedUsers === "true",
@@ -1509,6 +1513,7 @@ export async function registerInstagramRoutes(
       backupIntervalDays: parseInt(settings.backupIntervalDays ?? "7", 10),
       themeColor: settings.themeColor ?? "blue",
       themeMode: settings.themeMode ?? "dark",
+      preFilledPhoneNumber: settings.preFilledPhoneNumber ?? "",
     });
   });
 

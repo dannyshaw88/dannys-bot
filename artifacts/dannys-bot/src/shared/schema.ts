@@ -262,4 +262,5 @@ export type GlobalSettings = {
   logMaxRows: number;
   backupEnabled: boolean;
   backupIntervalDays: number;
+  preFilledPhoneNumber: string;
 };

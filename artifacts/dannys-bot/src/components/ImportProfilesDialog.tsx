@@ -41,6 +41,7 @@ interface ParsedProfile {
 
 // Map Jarvee column headers (lowercased, # stripped) to our field names
 const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
+  // ── Jarvee column names ───────────────────────────────────────────────────
   "name":                        "accountLabel",
   "acc status":                  "accStatus",
   "email/username":              "email",
@@ -49,7 +50,6 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "proxy password":              "proxyPassword",
   "tags":                        "tags",
   "date of birth(us format)":    "dateOfBirth",
-  // EB / API user agent Jarvee uses these exact column names
   "eb user agent":               "userAgentEmbedded",
   "embedded browser user agent": "userAgentEmbedded",
   "browser user agent":          "userAgentEmbedded",
@@ -68,9 +68,6 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "email validation pass":       "emailValidationPassword",
   "email validation pop3server": "emailValidationPop3Server",
   "email validation port":       "emailValidationPort",
-  // Device fingerprint these MUST match Jarvee's exported column names exactly.
-  // Without these, Instagram treats every login as a new unknown device and
-  // requires email verification. Export them from Jarvee's Settings → Export.
   "device id":                   "deviceId",
   "android device id":           "deviceId",
   "android id":                  "deviceId",
@@ -85,31 +82,43 @@ const COLUMN_MAP: Record<string, keyof ParsedProfile> = {
   "advertising id":              "adid",
   "google ad id":                "adid",
   "googleadid":                  "adid",
-  // Session cookies if present, device ID mismatch doesn't matter at all
   "apicookies":                  "apiCookies",
   "api cookies":                 "apiCookies",
   "cookies":                     "apiCookies",
   "session cookies":             "apiCookies",
+  // ── Equinox CSV export column names ──────────────────────────────────────
+  "label":                       "accountLabel",
+  "instagram username":          "username",
+  "email":                       "email",
+  "eb user agent (equinox)":     "userAgentEmbedded",
 };
 
 /**
- * Parse a TSV/tab-delimited file with proper RFC-4180-style quoted cell support.
- * Jarvee wraps multi-line cells (e.g. description) in double-quotes with embedded
- * newlines a naive line-split breaks those into hundreds of extra "lines".
+ * Parse a delimited file (TSV or CSV) with full RFC-4180 quoted-cell support.
+ * Delimiter is auto-detected from the first line: if tabs appear it uses tab,
+ * otherwise commas. This handles both Jarvee TSV exports and Equinox CSV exports.
  */
-function parseTSVRows(text: string): string[][] {
+function parseDSVRows(text: string): string[][] {
+  // Strip BOM if present
+  const clean = text.startsWith("\ufeff") ? text.slice(1) : text;
+
+  // Detect delimiter from the first line
+  const firstNewline = clean.indexOf("\n");
+  const firstLine = firstNewline === -1 ? clean : clean.slice(0, firstNewline);
+  const delim = firstLine.includes("\t") ? "\t" : ",";
+
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let inQuote = false;
   let i = 0;
 
-  while (i < text.length) {
-    const ch = text[i];
+  while (i < clean.length) {
+    const ch = clean[i];
 
     if (inQuote) {
       if (ch === '"') {
-        if (text[i + 1] === '"') {
+        if (clean[i + 1] === '"') {
           cell += '"';
           i += 2;
         } else {
@@ -124,10 +133,10 @@ function parseTSVRows(text: string): string[][] {
     }
 
     if (ch === '"') { inQuote = true; i++; continue; }
-    if (ch === '\t') { row.push(cell); cell = ""; i++; continue; }
+    if (ch === delim) { row.push(cell); cell = ""; i++; continue; }
 
     if (ch === '\r' || ch === '\n') {
-      if (ch === '\r' && text[i + 1] === '\n') i++;
+      if (ch === '\r' && clean[i + 1] === '\n') i++;
       row.push(cell);
       cell = "";
       if (row.some(c => c.trim())) rows.push(row);
@@ -148,8 +157,7 @@ function parseTSVRows(text: string): string[][] {
 }
 
 function parseJarveeFile(text: string): ParsedProfile[] {
-  const clean = text.startsWith("\ufeff") ? text.slice(1) : text;
-  const rows = parseTSVRows(clean);
+  const rows = parseDSVRows(text);
   if (rows.length < 2) return [];
 
   const headers = rows[0].map(h => h.trim().toLowerCase().replace(/^#/, ""));

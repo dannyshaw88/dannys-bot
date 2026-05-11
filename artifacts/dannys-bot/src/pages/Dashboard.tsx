@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, X, RefreshCw, Settings2, Upload, CheckCircle2,
+  Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, X, RefreshCw, Settings2, Upload,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
@@ -13,7 +13,7 @@ type Tab = "api-log" | "whats-new";
 
 const ERROR_ACTIONS = new Set([
   "verification_failed", "follow_blocked", "unfollow_blocked",
-  "dm_blocked", "contact_dm_blocked",
+  "dm_blocked", "contact_dm_blocked", "logged_out",
 ]);
 
 const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
@@ -32,6 +32,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
   dm_blocked:          { label: "DM Block",      cls: "bg-fuchsia-100 text-fuchsia-700" },
   contact_dm_blocked:  { label: "Contact Block", cls: "bg-indigo-100 text-indigo-700" },
   no_sources:          { label: "No Sources",    cls: "bg-slate-100 text-slate-600" },
+  logged_out:          { label: "Logged Out",    cls: "bg-red-100 text-red-700" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220 };
@@ -169,46 +170,14 @@ type FeedItem = {
 
 type LastImport = { ts: number; fileName: string; created: number; updated: number; failed: number; total: number };
 
-function ImportStatusBanner() {
-  const [data, setData] = useState<LastImport | null>(() => {
+export function Dashboard() {
+  const [lastImport, setLastImport] = useState<LastImport | null>(() => {
     try { return JSON.parse(localStorage.getItem("equinox_last_import") ?? "null"); } catch { return null; }
   });
-  const [dismissed, setDismissed] = useState<number>(() => Number(localStorage.getItem("equinox_import_dismissed") ?? 0));
-
-  if (!data || data.ts <= dismissed) return null;
-
-  const ago = () => {
-    const s = Math.floor((Date.now() - data.ts) / 1000);
-    if (s < 60) return "just now";
-    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-    return format(new Date(data.ts), "d MMM");
-  };
-
-  const dismiss = () => {
-    localStorage.setItem("equinox_import_dismissed", String(data.ts));
-    setDismissed(data.ts);
-  };
-
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5 mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/8 text-sm">
-      <Upload className="w-4 h-4 text-emerald-500 shrink-0" />
-      <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-        <span className="font-medium text-foreground">Import complete</span>
-        <span className="text-muted-foreground truncate max-w-[200px]" title={data.fileName}>{data.fileName}</span>
-        <span className="text-xs text-muted-foreground">{ago()}</span>
-        {data.created > 0 && <span className="text-xs font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">{data.created} created</span>}
-        {data.updated > 0 && <span className="text-xs font-semibold text-blue-600 bg-blue-500/10 px-2 py-0.5 rounded-full">{data.updated} updated</span>}
-        {data.failed > 0 && <span className="text-xs font-semibold text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">{data.failed} failed</span>}
-      </div>
-      <button onClick={dismiss} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
-        <X className="w-3.5 h-3.5" />
-      </button>
-    </div>
+  const [importDismissed, setImportDismissed] = useState<number>(() =>
+    Number(localStorage.getItem("equinox_import_dismissed") ?? 0)
   );
-}
 
-export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>(() =>
     (sessionStorage.getItem("dashboard:tab") as Tab) ?? "api-log"
   );
@@ -442,8 +411,6 @@ export function Dashboard() {
         )}
       </div>
 
-      <ImportStatusBanner />
-
       <Card className="desktop-card border-none shadow-sm">
         <div className="flex items-center border-b border-border/50 px-4">
           <button className={tabClass("api-log")} onClick={() => setActiveTab("api-log")}>
@@ -526,6 +493,23 @@ export function Dashboard() {
             </button>
           </div>
         </div>
+
+        {lastImport && lastImport.ts > importDismissed && (
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/10 text-xs">
+            <Upload className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="font-medium text-foreground">Last import:</span>
+            <span className="text-muted-foreground truncate max-w-[180px]" title={lastImport.fileName}>{lastImport.fileName}</span>
+            {lastImport.created > 0 && <span className="font-semibold text-emerald-600">{lastImport.created} created</span>}
+            {lastImport.updated > 0 && <span className="font-semibold text-blue-600">{lastImport.updated} updated</span>}
+            {lastImport.failed > 0 && <span className="font-semibold text-destructive">{lastImport.failed} failed</span>}
+            <button
+              onClick={() => { localStorage.setItem("equinox_import_dismissed", String(lastImport.ts)); setImportDismissed(lastImport.ts); }}
+              className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
 
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
           <div className={`flex items-center gap-3 flex-wrap ${activeTab !== "api-log" ? "hidden" : ""}`}>
