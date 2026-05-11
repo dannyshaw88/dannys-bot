@@ -455,6 +455,23 @@ function setupAutoUpdater(): void {
   setTimeout(() => autoUpdater.checkForUpdates(), 5000);
 }
 
+// ── Backup helpers ────────────────────────────────────────────────────────────
+
+function copyDirSync(src: string, dst: string): void {
+  fs.mkdirSync(dst, { recursive: true });
+  for (const entry of fs.readdirSync(src)) {
+    const srcPath = path.join(src, entry);
+    const dstPath = path.join(dst, entry);
+    try {
+      if (fs.statSync(srcPath).isDirectory()) {
+        copyDirSync(srcPath, dstPath);
+      } else {
+        fs.copyFileSync(srcPath, dstPath);
+      }
+    } catch { /* skip unreadable entries */ }
+  }
+}
+
 // ── Backup & Restore ──────────────────────────────────────────────────────────
 
 type BackupEntry = { id: string; date: string; size: number };
@@ -491,12 +508,35 @@ async function createBackupNow(): Promise<{ ok: boolean; entry?: BackupEntry; er
     fs.mkdirSync(backupFolder, { recursive: true });
 
     if (process.platform === "win32") {
-      await runPsScript([
-        `$src = '${userData.replace(/'/g, "''")}'`,
-        `$dst = '${zipPath.replace(/'/g, "''")}'`,
-        `$items = Get-ChildItem -Path $src | Where-Object { $_.Name -ne 'backups' } | ForEach-Object { $_.FullName }`,
-        `if ($items) { Compress-Archive -Path $items -DestinationPath $dst -Force }`,
-      ].join("\n"));
+      // PowerShell's Compress-Archive silently skips locked files (e.g. the
+      // open SQLite database).  Work around this by copying all userData
+      // contents to a temp directory using Node.js first — Node.js can read
+      // SQLite files even while the database server process has them open.
+      const tmpDir = path.join(os.tmpdir(), `equinox-bak-${Date.now()}`);
+      fs.mkdirSync(tmpDir, { recursive: true });
+      try {
+        const entries = fs.readdirSync(userData).filter(n => n !== "backups");
+        for (const name of entries) {
+          const srcPath = path.join(userData, name);
+          const dstPath = path.join(tmpDir, name);
+          try {
+            if (fs.statSync(srcPath).isDirectory()) {
+              copyDirSync(srcPath, dstPath);
+            } else {
+              fs.copyFileSync(srcPath, dstPath);
+            }
+          } catch { /* skip unreadable entries */ }
+        }
+        const tmpItems = fs.readdirSync(tmpDir).map(n => path.join(tmpDir, n));
+        if (tmpItems.length > 0) {
+          const pathList = tmpItems.map(p => `'${p.replace(/'/g, "''")}'`).join(",");
+          await runPsScript(
+            `Compress-Archive -Path @(${pathList}) -DestinationPath '${zipPath.replace(/'/g, "''")}' -Force`
+          );
+        }
+      } finally {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+      }
     } else {
       const items = fs.readdirSync(userData)
         .filter((n) => n !== "backups")

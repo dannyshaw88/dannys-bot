@@ -104,14 +104,20 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                         </span>
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap font-medium text-foreground">
-                        <button
-                          onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/${sa.targetUsername}/`)}
-                          className="flex items-center gap-1.5 text-primary hover:text-primary/70 hover:underline transition-colors group"
-                          title={`Open @${sa.targetUsername} in browser`}
-                        >
-                          @{sa.targetUsername}
-                          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </button>
+                        {sa.targetUsername ? (
+                          <button
+                            onClick={() => navigateTo(profile.id, profile.username, profile.userAgentEmbedded || "", `https://www.instagram.com/${sa.targetUsername}/`)}
+                            className="flex items-center gap-1.5 text-primary hover:text-primary/70 hover:underline transition-colors group"
+                            title={`Open @${sa.targetUsername} in browser`}
+                          >
+                            @{sa.targetUsername}
+                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground italic">
+                            <User className="w-3 h-3 shrink-0" />@{profile.username}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap">
                         {sa.sourceType === "post" && sa.sourceValue ? (

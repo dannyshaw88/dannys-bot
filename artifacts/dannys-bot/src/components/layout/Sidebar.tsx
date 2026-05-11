@@ -40,7 +40,7 @@ export function Sidebar() {
     { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard },
     { name: "Accounts",          path: "/profiles",            icon: Users },
     { name: "Create an Account", path: "/create-account-api", icon: Cpu },
-    { name: "Statistic",         path: "/stats",              icon: Activity },
+    { name: "Statistics",         path: "/stats",              icon: Activity },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert },
   ];
 

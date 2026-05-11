@@ -111,7 +111,7 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
   };
 
   return (
-    <div className="desktop-card overflow-hidden">
+    <div className="overflow-hidden">
       {/* Proxy fields row */}
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
@@ -531,9 +531,9 @@ export function ProxiesPage() {
       </div>
 
       {proxiesLoading ? (
-        <div className="space-y-3">
+        <div className="desktop-card overflow-hidden divide-y divide-border">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="desktop-card p-5 animate-pulse h-24 bg-muted/10" />
+            <div key={i} className="p-5 animate-pulse h-24 bg-muted/10" />
           ))}
         </div>
       ) : proxies.length === 0 ? (
@@ -543,7 +543,7 @@ export function ProxiesPage() {
           <p className="text-sm mt-1">Import or add a proxy above to get started.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="desktop-card overflow-hidden divide-y divide-border">
           {proxies.map(proxy => (
             <ProxyCard
               key={proxy.id}

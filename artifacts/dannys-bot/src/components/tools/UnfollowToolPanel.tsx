@@ -201,18 +201,12 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
               {perHour}/hr · {perDay}/day
             </span>
           )}
-        </div>
-      </div>
-
-      {/* Unfollow after X days */}
-      <div className="border border-border rounded-xl p-4 flex items-center gap-4">
-        <div className="flex items-center gap-2 text-muted-foreground w-44 shrink-0">
-          <CalendarDays className="w-4 h-4" />
-          <span className="text-sm font-medium text-foreground">Unfollow after</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {num("minFollowAgeDays", 1)}
-          <span className="text-xs text-muted-foreground">days since follow</span>
+          <div className="flex items-center gap-2 ml-2 pl-2 border-l border-border">
+            <CalendarDays className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs text-muted-foreground">Unfollow after</span>
+            {num("minFollowAgeDays", 1)}
+            <span className="text-xs text-muted-foreground">days since follow</span>
+          </div>
         </div>
       </div>
 
