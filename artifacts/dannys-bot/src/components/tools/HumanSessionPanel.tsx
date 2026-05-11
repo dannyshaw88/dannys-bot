@@ -328,48 +328,52 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
 
       {/* ── View Timeline Feed ─────────────────────────────────── */}
       <div className="border border-border rounded-xl p-4 space-y-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          <input type="checkbox" id="viewTimelineFeedEnabled"
-            checked={!!settings.viewTimelineFeedEnabled}
-            onChange={(e) => setSettings({ ...settings, viewTimelineFeedEnabled: e.target.checked })}
-            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-          />
-          <label htmlFor="viewTimelineFeedEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap w-[200px] shrink-0">
-            <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />
-            View Timeline Feed
-          </label>
-          <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Order</span>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input type="checkbox" id="viewTimelineFeedEnabled"
+              checked={!!settings.viewTimelineFeedEnabled}
+              onChange={(e) => setSettings({ ...settings, viewTimelineFeedEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <label htmlFor="viewTimelineFeedEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+              <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />
+              View Timeline Feed
+            </label>
+            <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
+                <Label className="text-xs text-muted-foreground">Min</Label>
+                <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                  value={settings.viewTimelineFeedMin ?? 3}
+                  onChange={(e) => setSettings({ ...settings, viewTimelineFeedMin: Math.max(1, Number(e.target.value)) })}
+                />
+                <Label className="text-xs text-muted-foreground">Max</Label>
+                <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                  value={settings.viewTimelineFeedMax ?? 8}
+                  onChange={(e) => setSettings({ ...settings, viewTimelineFeedMax: Math.max(1, Number(e.target.value)) })}
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like%</span>
+                {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}
+              </div>
+            </div>
+          </div>
+          <div className={`flex flex-col items-end gap-1.5 shrink-0 transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
               {pctInputs("viewTimelineFeedOrderMin", "viewTimelineFeedOrderMax")}
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip%</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance</span>
               {pctInputs("viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax")}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
-                value={settings.viewTimelineFeedMin ?? 3}
-                onChange={(e) => setSettings({ ...settings, viewTimelineFeedMin: Math.max(1, Number(e.target.value)) })}
-              />
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
-                value={settings.viewTimelineFeedMax ?? 8}
-                onChange={(e) => setSettings({ ...settings, viewTimelineFeedMax: Math.max(1, Number(e.target.value)) })}
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like%</span>
-              {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}
             </div>
           </div>
         </div>
         {/* Like delay + save media — only shown when like % is configured */}
         {!!(settings.viewTimelineFeedEnabled && (settings.likeTimelinePostsPercentMax ?? 0) > 0) && (
-          <div className="flex items-center gap-4 pl-[220px] flex-wrap">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like Delay</span>
               <Label className="text-xs text-muted-foreground">Min</Label>
