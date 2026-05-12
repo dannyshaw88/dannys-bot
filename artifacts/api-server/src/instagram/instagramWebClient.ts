@@ -1662,8 +1662,14 @@ export class InstagramWebClient {
   async viewTimelineReels(count: number = 5): Promise<number> {
     // Returns: >=0 reels watched, -1 if no mobile session (igApiCookies missing).
     return this.timed("ViewTimelineReels", async () => {
-      const body = new URLSearchParams({ reason: "pull_to_refresh", max_id: "" }).toString();
-      const j = await this.mobileSessionPost(`/api/v1/clips/feed/`, body);
+      // /api/v1/clips/feed/ was deprecated by Instagram (returns 404 HTML).
+      // The replacement is /api/v1/clips/home/ which requires a session_id + tab_type.
+      const body = new URLSearchParams({
+        session_id: randomUUID(),
+        tab_type: "clips",
+        next_max_id: "",
+      }).toString();
+      const j = await this.mobileSessionPost(`/api/v1/clips/home/`, body);
 
       // mobileSessionPost returns null when mobileCookieJar has no sessionid.
       if (j === null) {
