@@ -39,6 +39,16 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.252",
+    date: "12 May 2026, 22:30",
+    items: [
+      { category: "EQX Export", text: "Fixed: exporting multiple EQX files no longer silently does nothing — removed reliance on the showDirectoryPicker API (which fails in Electron and proxied iframe environments) and replaced with reliable sequential browser downloads for all multi-account exports." },
+      { category: "EQX Import", text: "Fixed: Follow tool target sources are now correctly restored on import — sources are now inserted in a separate step from settings with their own error handling, and any null/invalid source rows are filtered out before the bulk insert to prevent silent failures." },
+      { category: "UI", text: "BACK TO ACCOUNTS and DASH navigation links are now displayed in uppercase for better visual distinction." },
+      { category: "UI", text: "Sidebar submenu items (Follow Tool, Unfollow Tool, etc.) are now displayed in bold." },
+    ],
+  },
+  {
     version: "1.0.251",
     date: "12 May 2026, 22:00",
     items: [
