@@ -600,7 +600,7 @@ export function ProfileDetailsPage() {
                 className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
                 onClick={() => setCopyDialogOpen(true)}
               >
-                <Copy className="w-3 h-3" /> Copy Settings
+                <Copy className="w-3 h-3" /> COPY SETTINGS
               </button>
               <div className="flex items-center gap-1.5 ml-1">
                 <Switch
