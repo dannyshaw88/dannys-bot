@@ -107,7 +107,7 @@ export function ContactToolPanel({ tool, profile }: Props) {
           className="ml-3 mb-0.5 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer whitespace-nowrap"
           onClick={() => setCopyOpen(true)}
         >
-          Copy Settings
+          COPY SETTINGS
         </button>
       </div>
 
