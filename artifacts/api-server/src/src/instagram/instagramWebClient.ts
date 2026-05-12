@@ -1651,12 +1651,25 @@ export class InstagramWebClient {
   // Fetches the reels explore/home feed and marks up to `count` reels as seen,
   // simulating a user scrolling through the Reels tab.
   async viewTimelineReels(count: number = 5): Promise<number> {
+    // Returns: >=0 reels watched, -1 if no mobile session (igApiCookies missing).
     return this.timed("ViewTimelineReels", async () => {
       const body = new URLSearchParams({ reason: "pull_to_refresh", max_id: "" }).toString();
       const j = await this.mobileSessionPost(`/api/v1/clips/feed/`, body);
-      // clips/feed can return items under "items" or "feed_items" depending on version.
+
+      // mobileSessionPost returns null when mobileCookieJar has no sessionid.
+      if (j === null) {
+        console.warn(`[webClient] viewTimelineReels: no mobile session — run Verify Credentials to establish igApiCookies`);
+        return -1;
+      }
+
+      // clips/feed can return items under "items" or "feed_items" depending on app version.
       const items: any[] = j?.items ?? j?.feed_items ?? [];
-      console.log(`[webClient] viewTimelineReels: status="${j?.status}" keys=[${Object.keys(j ?? {}).join(", ")}] items.length=${items.length}`);
+      console.log(`[webClient] viewTimelineReels: status="${j?.status}" keys=[${Object.keys(j).join(", ")}] items.length=${items.length}`);
+      if (items.length > 0) {
+        // Log first item structure once so we can confirm the shape if count=0 debugging is needed
+        const firstRaw = items[0];
+        console.log(`[webClient] viewTimelineReels: first item keys=[${Object.keys(firstRaw ?? {}).join(", ")}] media keys=[${Object.keys(firstRaw?.media ?? firstRaw ?? {}).join(", ")}]`);
+      }
       if (!items.length) return 0;
 
       const toView = items.slice(0, count);
@@ -1680,7 +1693,8 @@ export class InstagramWebClient {
       }
 
       return toView.length;
-    }, (n) => `Viewed ${n} timeline reel${n === 1 ? "" : "s"}`);
+    }, (n) => n > 0 ? `Viewed ${n} timeline reel${n === 1 ? "" : "s"}` : "",
+       (n) => n > 0);
   }
 
   // ── Watch stories from the timeline tray ─────────────────────────────────
