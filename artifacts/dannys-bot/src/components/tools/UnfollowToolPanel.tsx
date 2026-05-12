@@ -185,7 +185,7 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
             onClick={() => setCopyOpen(true)}
             className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
           >
-            Copy Settings
+            COPY SETTINGS
           </button>
           {nextUnfollowStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
