@@ -50,6 +50,15 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.258",
+    date: "13 May 2026, 01:30",
+    items: [
+      { category: "Dashboard", text: "Event icons now appear after the event name, not before — e.g. 'TIMELINE LIKE ♥' instead of '♥ TIMELINE LIKE'." },
+      { category: "Human Sessions", text: "Fixed: When an account has no stored igApiCookies (mobile API session), the engine now automatically attempts a fresh mobile login using the account's stored credentials. On success, the resulting session cookies are immediately saved back to the database as igApiCookies — so the account is permanently mobile-API-enabled and subsequent sessions restore instantly without re-logging in. Previously these cookies were only held in memory and lost on every restart, forcing a new login attempt each time." },
+      { category: "Human Sessions", text: "Fixed: Mobile login failures now produce a clear server log — 'Mobile-API tools (Watch Reels, Watch Stories) will be skipped this session' — instead of a silent transient error, so you know exactly which tools are affected when a session can't establish mobile API cookies." },
+    ],
+  },
+  {
     version: "1.0.257",
     date: "13 May 2026, 01:00",
     items: [
@@ -935,8 +944,8 @@ export function Dashboard() {
                           </td>
                           <td className="px-3 py-3 truncate">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}>
-                              <span className="shrink-0 leading-none">{style.icon}</span>
                               <span>{style.label}</span>
+                              <span className="shrink-0 leading-none">{style.icon}</span>
                             </span>
                           </td>
                           <td className="px-3 py-3 text-xs text-foreground/80 truncate" title={item.targetUsername || undefined}>
