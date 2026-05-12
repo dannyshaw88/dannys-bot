@@ -1674,7 +1674,12 @@ export class InstagramWebClient {
         return -1;
       }
       const tray: any[] = j?.tray ?? [];
-      if (!tray.length) return 0;
+      if (!tray.length) {
+        const topKeys = Object.keys(j ?? {}).join(", ") || "(none)";
+        const statusField = j?.status ?? "(no status field)";
+        console.log(`[webClient] viewTimelineStories: empty tray. status="${statusField}" top-level keys=[${topKeys}]`);
+        return -2;
+      }
 
       const toView = tray.slice(0, count);
       const seenBody = new URLSearchParams({ live_vods_skipped: "", nuxes_skipped: "" });

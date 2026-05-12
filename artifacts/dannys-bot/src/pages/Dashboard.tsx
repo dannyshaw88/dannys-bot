@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.245",
+    date: "12 May 2026, 18:45",
+    items: [
+      { category: "View Stories", text: "Empty story tray now shows a distinct 'warn' activity entry instead of a silent '0 stories watched', making it clear whether the feed had no stories versus a session problem." },
+    ],
+  },
+  {
     version: "1.0.244",
     date: "12 May 2026, 18:15",
     items: [
