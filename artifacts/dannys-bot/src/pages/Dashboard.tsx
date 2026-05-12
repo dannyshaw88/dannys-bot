@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.251",
+    date: "12 May 2026, 22:00",
+    items: [
+      { category: "Architecture", text: "Renamed internal helpers: mobilePost → ebPost, mobileGet → ebGet. These were misleadingly named — they hit i.instagram.com but use EB web cookies, not the mobile session. The new names make any misuse immediately obvious. Architecture header updated with a method-name lookup table." },
+    ],
+  },
+  {
     version: "1.0.250",
     date: "12 May 2026, 21:30",
     items: [
