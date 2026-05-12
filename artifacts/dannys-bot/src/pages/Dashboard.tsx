@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.244",
+    date: "12 May 2026, 18:15",
+    items: [
+      { category: "View Stories", text: "Fixed 'Watched 0 stories' when an account imported from EQX already has valid API cookies — expired or rejected sessions now correctly show the 'no mobile session' warning instead of silently returning 0." },
+    ],
+  },
+  {
     version: "1.0.243",
     date: "12 May 2026, 17:30",
     items: [

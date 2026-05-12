@@ -918,6 +918,10 @@ export class InstagramWebClient {
       const newCsrf = extractCsrf(res.cookies);
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
+    if (res.status >= 400) {
+      console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (session expired/invalid): ${res.rawBody.slice(0, 200)}`);
+      return null;
+    }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
   }
