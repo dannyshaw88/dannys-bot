@@ -1709,17 +1709,24 @@ export class InstagramWebClient {
         if (userId && items.length) reelsMap[userId] = items;
       }
 
+      // Log first tray entry structure so we can see what fields are available
+      console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries. First entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}] user.pk=${toView[0]?.user?.pk} id=${toView[0]?.id} items=${JSON.stringify(toView[0]?.items)?.slice(0,80)}`);
+
       // If no inline items, fetch via /api/v1/feed/reels_media/ (modern API behaviour)
       if (Object.keys(reelsMap).length === 0) {
         const userIds = toView
           .map((r: any) => String(r.user?.pk ?? r.id ?? ""))
           .filter(Boolean);
+        console.log(`[webClient] viewTimelineStories: fetching reels_media for userIds=[${userIds.join(",")}]`);
         if (userIds.length) {
-          const qs = userIds.map(id => `user_ids[]=${encodeURIComponent(id)}`).join("&");
-          const rm = await this.mobileSessionGet(`/api/v1/feed/reels_media/?${qs}`);
+          // reels_media requires POST with user_ids as a JSON array in the form body
+          const body = new URLSearchParams({ user_ids: JSON.stringify(userIds) }).toString();
+          const rm = await this.mobileSessionPost(`/api/v1/feed/reels_media/`, body);
+          console.log(`[webClient] reels_media response: null=${rm === null} keys=${Object.keys(rm ?? {}).join(",")} reels_keys=${Object.keys(rm?.reels ?? {}).join(",").slice(0,100)} reels_media_len=${Array.isArray(rm?.reels_media)?rm.reels_media.length:"N/A"}`);
           if (rm?.reels && typeof rm.reels === "object") {
             for (const [uid, reelData] of Object.entries(rm.reels as Record<string, any>)) {
               const items: any[] = Array.isArray(reelData?.items) ? reelData.items : [];
+              console.log(`[webClient] reels[${uid}] items.length=${items.length} keys=${Object.keys(reelData ?? {}).join(",")}`);
               if (items.length) reelsMap[uid] = items;
             }
           }
@@ -1745,7 +1752,7 @@ export class InstagramWebClient {
       }
 
       if (seenCount === 0) {
-        console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries, reels_media fetch returned 0 items. First tray entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}]`);
+        console.log(`[webClient] viewTimelineStories: still 0 after reels_media fetch`);
         return -3;
       }
 
