@@ -50,6 +50,15 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.256",
+    date: "13 May 2026, 00:30",
+    items: [
+      { category: "Security", text: "Fixed: Embedded browser is now blocked when an account has no proxy assigned. Attempting to open the EB without a proxy returns an error — 'No proxy assigned — assign a proxy to this account before using the embedded browser.' Both the browser start and stream routes are guarded." },
+      { category: "Human Sessions", text: "Fixed: Watch Reels returning 0 now logs a warning in the activity feed — '0 reels in clips feed — check server log for response details' — instead of a silent ok. The server console also prints the full response body (first 500 chars) so the exact Instagram response can be inspected." },
+      { category: "UI", text: "COPY SETTINGS button text is now uppercase across all tool panels: Human Sessions, Follow, Unfollow, Contact, Create Cookie, and the Copy Settings dialog confirm button." },
+    ],
+  },
+  {
     version: "1.0.255",
     date: "13 May 2026, 00:00",
     items: [
