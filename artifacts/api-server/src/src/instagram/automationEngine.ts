@@ -3013,26 +3013,38 @@ class AutomationEngine {
       await sleep(randInt(followMin, followMax));
     }
 
-    // Re-scrape additional pages to fill the quota when users were skipped by other profiles
-    // seenFollowerPks tracks PKs already returned by getFollowers so we can request
-    // progressively deeper slices each round (HikerAPI has no pagination cursor).
-    const seenFollowerPks = new Set(candidates.map(c => c.pk));
+    // Re-scrape additional pages to fill the quota when users were skipped by other profiles.
+    // Rotates through ALL sources of the same type instead of hammering the same source
+    // repeatedly. Each round picks the next available (non-exhausted) source.
+    // seenFollowerPksBySource tracks PKs per target-follower source so we can request
+    // progressively deeper slices without re-processing users we already saw.
+    const sameTypeSources = sources.filter(s => s.type === source.type);
+    const initialSourceIdx = sameTypeSources.findIndex(s => s.id === source.id);
+    const exhaustedSourceIds = new Set<string>();
+    const seenFollowerPksBySource = new Map<string, Set<string>>();
+    seenFollowerPksBySource.set(source.id, new Set(candidates.map(c => c.pk)));
+    const sourceRoundCount = new Map<string, number>();
     if (scrapeAllIfSkipped && !hitHardLimit && followed < processCount && !state.stop.stopped) {
       let extraRound = 0;
-      while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 10) {
+      while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 20) {
         extraRound++;
+        const availableSources = sameTypeSources.filter(s => !exhaustedSourceIds.has(s.id));
+        if (!availableSources.length) break;
+        // Rotate: start from the source AFTER the initial one so the first re-scrape
+        // round always tries a fresh source (wraps back when only one source exists).
+        const rescrapeSource = availableSources[(initialSourceIdx + extraRound) % availableSources.length];
         const needMore = processCount - followed;
         let moreCandidates: { pk: string; username: string; fullName: string }[] = [];
         try {
-          if (source.type === "hashtag" && hikerClient) {
+          if (rescrapeSource.type === "hashtag" && hikerClient) {
             const t0 = Date.now();
-            const globalCursor = await storage.getHashtagCursor(source.value);
-            const result = await hikerClient.getHashtagUsers(source.value, needMore + 5, globalCursor);
+            const globalCursor = await storage.getHashtagCursor(rescrapeSource.value);
+            const result = await hikerClient.getHashtagUsers(rescrapeSource.value, needMore + 5, globalCursor);
             moreCandidates = result.users;
             if (result.nextCursor) {
-              await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
+              await storage.setHashtagCursor(rescrapeSource.value, result.nextCursor).catch(() => {});
             } else if (globalCursor) {
-              await storage.setHashtagCursor(source.value, "").catch(() => {});
+              await storage.setHashtagCursor(rescrapeSource.value, "").catch(() => {});
             }
             if (globalSettings.skipScrapedUsers === "true" && moreCandidates.length > 0) {
               const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
@@ -3041,16 +3053,19 @@ class AutomationEngine {
               await storage.addScrapedUsers(fresh).catch(() => {});
               moreCandidates = fresh;
             }
-            logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${source.value} via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
-          } else if (source.type === "target_followers" && hikerClient && source.targetUserId) {
-            // HikerAPI getFollowers has no cursor, but requesting progressively
-            // more records each round lets us reach deeper into the follower list.
-            // Client-side we filter out PKs already seen in prior rounds.
+            logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${rescrapeSource.value} via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
+          } else if (rescrapeSource.type === "target_followers" && hikerClient && rescrapeSource.targetUserId) {
+            if (!seenFollowerPksBySource.has(rescrapeSource.id)) {
+              seenFollowerPksBySource.set(rescrapeSource.id, new Set());
+            }
+            const seenPks = seenFollowerPksBySource.get(rescrapeSource.id)!;
+            const roundsOnSource = (sourceRoundCount.get(rescrapeSource.id) ?? 0) + 1;
+            sourceRoundCount.set(rescrapeSource.id, roundsOnSource);
             const t0 = Date.now();
-            const requestMore = (extraRound + 1) * (processCount + 5) + needMore;
-            const allFollowers = await hikerClient.getFollowers(source.targetUserId, Math.min(requestMore, 200));
-            moreCandidates = allFollowers.filter(u => !seenFollowerPks.has(u.pk));
-            moreCandidates.forEach(u => seenFollowerPks.add(u.pk));
+            const requestMore = (roundsOnSource + 1) * (processCount + 5) + needMore;
+            const allFollowers = await hikerClient.getFollowers(rescrapeSource.targetUserId, Math.min(requestMore, 200));
+            moreCandidates = allFollowers.filter(u => !seenPks.has(u.pk));
+            moreCandidates.forEach(u => seenPks.add(u.pk));
             if (globalSettings.skipScrapedUsers === "true" && moreCandidates.length > 0) {
               const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
               const alreadyScraped = await storage.getScrapedUserIds(moreCandidates.map(c => c.pk), ignoreDays);
@@ -3058,11 +3073,14 @@ class AutomationEngine {
               await storage.addScrapedUsers(fresh).catch(() => {});
               moreCandidates = fresh;
             }
-            logHiker("FollowersScrape", `Re-scrape round ${extraRound} followers via HikerAPI (${allFollowers.length} total, ${moreCandidates.length} new)`, Date.now() - t0);
+            logHiker("FollowersScrape", `Re-scrape round ${extraRound} followers of @${rescrapeSource.value} via HikerAPI (${allFollowers.length} total, ${moreCandidates.length} new)`, Date.now() - t0);
           }
         } catch { break; }
-        if (!moreCandidates.length) break;
-        engineLog("INFO", `@${profile.username}: re-scrape round ${extraRound} — ${moreCandidates.length} new candidates (need ${needMore} more)`);
+        if (!moreCandidates.length) {
+          exhaustedSourceIds.add(rescrapeSource.id);
+          continue;
+        }
+        engineLog("INFO", `@${profile.username}: re-scrape round ${extraRound} #${rescrapeSource.value} — ${moreCandidates.length} new candidates (need ${needMore} more)`);
         for (const user of moreCandidates) {
           if (followed >= processCount || state.stop.stopped || hitHardLimit) break;
           if (maxPerDay > 0 && this.daily(state) >= maxPerDay) { hitHardLimit = true; break; }
@@ -3075,16 +3093,16 @@ class AutomationEngine {
             filterSkipped++; continue;
           }
           if (this.isActionSuspended(state, "follow")) { hitHardLimit = true; break; }
-          if (await this.preFollowActions(profile, tool, client, user, source, s, state, hikerClient)) { hitHardLimit = true; break; }
+          if (await this.preFollowActions(profile, tool, client, user, rescrapeSource, s, state, hikerClient)) { hitHardLimit = true; break; }
           let result: { ok: boolean; status?: string; reason?: string };
           try {
-            const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;
+            const sourceLabel = rescrapeSource.value ? (rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value) : undefined;
             result = await client.followUser(user.pk, user.username, sourceLabel);
           } catch (err: any) {
             const msg = err?.message ?? "";
             const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
             if (acctStatus) hitHardLimit = true;
-            this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "error", msg);
+            this.logAction(profile.id, tool.id, "follow", user.username, rescrapeSource.value, rescrapeSource.type, "error", msg);
             if (hitHardLimit) break; continue;
           }
           if (result.status === "checkpoint_required") {
@@ -3100,7 +3118,7 @@ class AutomationEngine {
               state.client = null; hitHardLimit = true; break;
             }
             if (reason.includes("Please wait") || reason.includes("feedback_required")) {
-              this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
+              this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, rescrapeSource.value, rescrapeSource.type);
               hitHardLimit = true; break;
             }
             if (followed + blocked >= processCount) break;
@@ -3108,9 +3126,9 @@ class AutomationEngine {
           }
           if (!result.ok) { skipped++; continue; }
           try {
-            await storage.createFollowedUser({ profileId: profile.id, instagramUsername: user.username, instagramUserId: String(user.pk ?? ""), sourceValue: source.value, sourceType: source.type, followedAt: new Date().toISOString() });
+            await storage.createFollowedUser({ profileId: profile.id, instagramUsername: user.username, instagramUserId: String(user.pk ?? ""), sourceValue: rescrapeSource.value, sourceType: rescrapeSource.type, followedAt: new Date().toISOString() });
           } catch {}
-          this.logAction(profile.id, tool.id, "follow", user.username, source.value, source.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
+          this.logAction(profile.id, tool.id, "follow", user.username, rescrapeSource.value, rescrapeSource.type, "ok", `Followed [${followed + 1}/${processCount}] users`);
           await storage.incrementStat(profile.id, "follow");
           this.bump(state);
           followed++;
