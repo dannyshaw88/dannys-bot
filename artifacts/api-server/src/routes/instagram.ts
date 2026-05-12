@@ -1711,16 +1711,26 @@ export async function registerInstagramRoutes(
       if (Array.isArray(toolsData)) {
         const existingTools = await storage.getToolsByProfile(created.id);
         for (const savedTool of toolsData) {
+          const match = existingTools.find(t => t.type === savedTool.type);
+          if (!match) continue;
+          // Restore settings
           try {
-            const match = existingTools.find(t => t.type === savedTool.type);
-            if (match) {
-              await storage.updateTool(match.id, { enabled: savedTool.enabled, settings: savedTool.settings });
-              if (Array.isArray(savedTool.sources) && savedTool.sources.length > 0) {
+            await storage.updateTool(match.id, { enabled: savedTool.enabled, settings: savedTool.settings });
+          } catch (e) {
+            req.log.warn({ err: e }, `import-eqx: failed to update settings for ${savedTool.type ?? "unknown"} tool (non-fatal)`);
+          }
+          // Restore sources — filter out any rows missing required fields before bulk insert
+          try {
+            if (Array.isArray(savedTool.sources) && savedTool.sources.length > 0) {
+              const validSources = savedTool.sources.filter(
+                (s: any) => s != null && s.type != null && s.value != null
+              );
+              if (validSources.length > 0) {
                 await storage.createSourcesBulk(
-                  savedTool.sources.map((s: any) => ({
+                  validSources.map((s: any) => ({
                     toolId: match.id,
-                    type: s.type,
-                    value: s.value,
+                    type: String(s.type),
+                    value: String(s.value),
                     rank: s.rank ?? null,
                     nrPosts: s.nrPosts ?? null,
                     targetUserId: s.targetUserId ?? "",
@@ -1730,7 +1740,7 @@ export async function registerInstagramRoutes(
               }
             }
           } catch (e) {
-            req.log.warn({ err: e }, `import-eqx: failed to restore ${savedTool.type ?? "unknown"} tool settings/sources (non-fatal)`);
+            req.log.warn({ err: e }, `import-eqx: failed to restore sources for ${savedTool.type ?? "unknown"} tool (non-fatal)`);
           }
         }
       }
