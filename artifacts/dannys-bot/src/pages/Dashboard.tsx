@@ -50,6 +50,15 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.255",
+    date: "13 May 2026, 00:00",
+    items: [
+      { category: "Human Sessions", text: "Fixed: Watch Reels now correctly detects when there is no mobile session (igApiCookies missing) and logs a clear warning — 'Skipped: no mobile session — run Verify Credentials' — instead of silently reporting 'Watched 0 reels' with an ok status." },
+      { category: "Human Sessions", text: "Fixed: 'Viewed 0 reels' no longer appears in the API calls log when reels are skipped due to no session or an empty feed. The API log entry is suppressed entirely when count is 0 — only successful views are recorded." },
+      { category: "Human Sessions", text: "Debug: First item structure from /api/v1/clips/feed/ is now printed to the server console whenever reels are fetched, so any future response-shape changes can be diagnosed immediately without code changes." },
+    ],
+  },
+  {
     version: "1.0.254",
     date: "12 May 2026, 23:30",
     items: [
