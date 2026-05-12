@@ -1661,7 +1661,7 @@ export class InstagramWebClient {
   // `count` story reels as seen, simulating a user swiping through stories.
   async viewTimelineStories(count: number = 5): Promise<number> {
     return this.timed("ViewTimelineStories", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/reels_tray/`);
+      const j = await this.mobileSessionGet(`/api/v1/feed/reels_tray/`);
       const tray: any[] = j?.tray ?? [];
       if (!tray.length) return 0;
 

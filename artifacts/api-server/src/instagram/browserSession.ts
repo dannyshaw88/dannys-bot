@@ -90,6 +90,9 @@ interface Session {
   // Timestamp (ms) until which the frame-loop error-page auto-retry is suppressed.
   // Set whenever an intentional goto() is fired so the loop doesn't race against it.
   navProtectedUntil?: number;
+  // True while browserAutoLogin is executing — suppresses the screenshot-timeout
+  // kill so the page isn't destroyed mid-login causing a false ok:false result.
+  autoLoginInProgress?: boolean;
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -656,11 +659,18 @@ function startFrameLoop(profileId: number) {
         screenshotTimeoutCount++;
         log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} (${elapsedMs}ms elapsed) url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
         if (screenshotTimeoutCount >= 2) {
-          log(`[frameLoop:${profileId}] 2 consecutive screenshot timeouts — page unresponsive, closing session`, "browser");
-          sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
-          try { s.res.end(); } catch {}
-          s.res = null;
-          if (s.frameLoop) { clearInterval(s.frameLoop); s.frameLoop = null; }
+          if (s.autoLoginInProgress) {
+            // Don't kill the session while Fill Credentials is running — navigation
+            // during login naturally stalls screenshots; killing here would destroy
+            // the page mid-login and cause a false ok:false loginDone result.
+            log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} — suppressed while login is in progress`, "browser");
+          } else {
+            log(`[frameLoop:${profileId}] 2 consecutive screenshot timeouts — page unresponsive, closing session`, "browser");
+            sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
+            try { s.res.end(); } catch {}
+            s.res = null;
+            if (s.frameLoop) { clearInterval(s.frameLoop); s.frameLoop = null; }
+          }
         }
       } else {
         screenshotTimeoutCount = 0; // non-timeout error (navigation busy) — not a crash
@@ -1175,6 +1185,9 @@ export async function browserAutoLogin(
   const s = sessions.get(profileId);
   if (!s) return { ok: false, message: "No active browser session" };
 
+  // Guard: suppress screenshot-timeout kills while login is running so the page
+  // isn't destroyed mid-flow (which would produce a spurious ok:false result).
+  s.autoLoginInProgress = true;
   const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
   try {
@@ -1669,6 +1682,9 @@ export async function browserAutoLogin(
     const msg = err?.message || "Unknown error during login";
     sendStatus(profileId, `Error: ${msg}`);
     return { ok: false, message: msg };
+  } finally {
+    // Always clear the guard — whether the login succeeded, failed, or threw.
+    s.autoLoginInProgress = false;
   }
 }
 
