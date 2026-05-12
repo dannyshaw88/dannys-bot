@@ -219,7 +219,23 @@ function findChromiumPath(): string {
   return nixPath;
 }
 
+function rotateLogs(logPath: string): void {
+  // Keep up to 3 previous sessions: logs → logs.1 → logs.2 → logs.3 (oldest dropped)
+  try {
+    for (let i = 3; i >= 1; i--) {
+      const older = logPath.replace(/(\.[^.]+)?$/, `.${i}$1`);
+      const newer = i === 1 ? logPath : logPath.replace(/(\.[^.]+)?$/, `.${i - 1}$1`);
+      if (fs.existsSync(newer)) {
+        try { fs.renameSync(newer, older); } catch {}
+      }
+    }
+  } catch {}
+}
+
 function startServer(port: number, logPath: string): void {
+  // Rotate previous log so it survives the next restart (logs → logs.1 → logs.2 → logs.3)
+  rotateLogs(logPath);
+
   const entry = getServerEntry();
   const dbPath = path.join(getUserDataPath(), "database.db");
   const frontendPath = getFrontendPath();
@@ -251,7 +267,7 @@ function startServer(port: number, logPath: string): void {
       // which on Windows does not use the system certificate store.  Setting this
       // environment variable tells Node.js to skip TLS certificate verification so
       // that all outbound HTTPS calls to Instagram's API succeed regardless of the
-      // Windows OpenSSL cert bundle state.  This is safe in the Electron context
+      // Windows OpenSSL cert dashboard state.  This is safe in the Electron context
       // because all connections go to known Instagram endpoints.
       NODE_TLS_REJECT_UNAUTHORIZED: "0",
       ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
@@ -259,7 +275,11 @@ function startServer(port: number, logPath: string): void {
     },
   });
 
+  // Open fresh log file (flags:"w") and write a session-start marker so sessions
+  // are clearly separated even when multiple log files are present.
   const logStream = fs.createWriteStream(logPath, { flags: "w" });
+  const sessionStart = `[${new Date().toISOString()}] server-start: session started (v${app.getVersion()})\n`;
+  logStream.write(sessionStart);
   serverProc.stdout?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.stderr?.on("data", (d: Buffer) => logStream.write(d));
   serverProc.on("exit", () => logStream.end());

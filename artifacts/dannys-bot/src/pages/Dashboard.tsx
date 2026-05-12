@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.264",
+    date: "12 May 2026",
+    items: [
+      { category: "Logs", text: "Session logs are now preserved across restarts. The previous 3 sessions are saved as logs.1.log, logs.2.log, logs.3.log in the same folder — useful for diagnosing login issues that happened before a restart." },
+    ],
+  },
+  {
     version: "1.0.263",
     date: "13 May 2026, 07:30",
     items: [

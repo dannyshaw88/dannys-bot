@@ -188,7 +188,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   className="text-[11px] text-primary hover:underline font-medium"
                   onClick={handleToggleAllFiltered}
                 >
-                  {allFilteredSelected ? "None" : "All"}
+                  {allFilteredSelected ? "None" : "ALL"}
                 </button>
               )}
             </div>
@@ -222,7 +222,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Filter… or A||B for multiple"
+                  placeholder="Search"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"

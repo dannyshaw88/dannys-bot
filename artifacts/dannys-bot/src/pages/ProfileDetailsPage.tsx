@@ -673,10 +673,10 @@ export function ProfileDetailsPage() {
 
           <div>
             <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0 pb-0">
+              <CardHeader className="px-0 pt-0 pb-2 border-b border-border">
                 <CardTitle className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Instagram Login Information</CardTitle>
               </CardHeader>
-              <CardContent className="px-0 pb-0 space-y-4">
+              <CardContent className="px-0 pb-0 space-y-4 pt-3">
                 <div className="space-y-4">
                   {/* Credentials + verify */}
                   <div className="space-y-3">
@@ -795,19 +795,19 @@ export function ProfileDetailsPage() {
                     <div className="flex gap-2 items-end">
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-16" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} />
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
