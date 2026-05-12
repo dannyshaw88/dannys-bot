@@ -2347,6 +2347,9 @@ class AutomationEngine {
           if (watched === -1) {
             console.warn(`[engine] @${profile.username}: ⚠️ Watch Reels skipped — no mobile session (run Verify Credentials to fix)`);
             this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "warn", "Skipped: no mobile session — run Verify Credentials to establish igApiCookies");
+          } else if (watched === 0) {
+            console.warn(`[engine] @${profile.username}: ⚠️ Watch Reels: feed returned 0 items — see server log for full response (may be empty feed or unexpected response shape)`);
+            this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "warn", "0 reels in clips feed — check server log for response details");
           } else {
             console.log(`[engine] @${profile.username}: 🎬 watched ${watched} timeline reels`);
             this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reel${watched === 1 ? "" : "s"}`);
