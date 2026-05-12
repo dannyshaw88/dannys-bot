@@ -192,7 +192,7 @@ function ProxyRow({
           )}
         </div>
         {/* actions */}
-        <div className="flex items-center gap-1 ml-auto shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost" size="icon"
             className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
@@ -547,8 +547,9 @@ export function ProxiesPage() {
 
   return (
     <AppLayout>
+      <div className="flex flex-col h-full overflow-hidden">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="mb-3 flex items-center gap-3 flex-wrap">
+      <div className="mb-3 flex items-center gap-3 flex-wrap shrink-0">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Proxy Manager</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-muted-foreground text-sm">
@@ -572,7 +573,7 @@ export function ProxiesPage() {
       </div>
 
       {/* ── Search + Add Proxy ──────────────────────────────────────────────── */}
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2 shrink-0">
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border bg-background flex-1 max-w-md">
           <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           <input
@@ -620,7 +621,7 @@ export function ProxiesPage() {
       </div>
 
       {/* ── Main card ──────────────────────────────────────────────────────── */}
-      <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 210px)" }}>
+      <div className="desktop-card overflow-hidden flex flex-col flex-1 min-h-0">
 
         {/* Column header */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
@@ -637,7 +638,7 @@ export function ProxiesPage() {
           <button onClick={() => handleSort("status")} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors ${sortKey === "status" ? "text-primary" : ""}`} style={{ width: 88 }}>
             Status<SortIcon col="status" />
           </button>
-          <div className="ml-auto shrink-0 pr-1">Actions</div>
+          <div className="shrink-0">Actions</div>
         </div>
 
         {/* Scrollable body */}
@@ -673,6 +674,53 @@ export function ProxiesPage() {
             ))
           )}
         </div>
+
+        {/* ── Split evenly panel — inside card ───────────────────────────── */}
+        {proxies.length > 0 && (
+          <div className="border-t border-border bg-muted/20 px-5 py-3 shrink-0">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">Split Unassigned Accounts Evenly Across All Proxies</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {splitCandidates.length} unassigned {splitCandidates.length === 1 ? "account" : "accounts"}
+                  {splitGroup ? <> in group <span className="font-semibold text-foreground">"{splitGroup}"</span></> : ""}{" "}
+                  will be distributed. Accounts outside the selection are not touched.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm whitespace-nowrap">Group</Label>
+                  <select
+                    value={splitGroup}
+                    onChange={e => setSplitGroup(e.target.value)}
+                    className="h-8 rounded border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  >
+                    <option value="">All accounts</option>
+                    {allGroupNames.map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="maxPerProxy" className="text-sm whitespace-nowrap">Max per proxy</Label>
+                  <Input
+                    id="maxPerProxy"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={maxPerProxy}
+                    onChange={e => setMaxPerProxy(Math.max(1, Number(e.target.value)))}
+                    className="w-20 h-8 text-sm"
+                  />
+                </div>
+                <Button onClick={handleSplitEvenly} disabled={splitting || !splitCandidates.length} className="shrink-0">
+                  {splitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  {splitting ? "Splitting…" : "Split Now"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Bottom toolbar */}
         <div className="flex items-center gap-2 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0 flex-wrap">
@@ -718,54 +766,7 @@ export function ProxiesPage() {
           </button>
         </div>
       </div>
-
-      {/* ── Split evenly panel ─────────────────────────────────────────────── */}
-      {proxies.length > 0 && (
-        <div className="desktop-card mt-4 px-5 py-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Split Unassigned Accounts Evenly Across All Proxies</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {splitCandidates.length} unassigned {splitCandidates.length === 1 ? "account" : "accounts"}
-                {splitGroup ? <> in group <span className="font-semibold text-foreground">"{splitGroup}"</span></> : ""}{" "}
-                will be distributed. Accounts outside the selection are not touched.
-              </p>
-            </div>
-            <div className="flex items-center gap-3 shrink-0 flex-wrap">
-              {/* Group filter — always visible */}
-              <div className="flex items-center gap-2">
-                <Label className="text-sm whitespace-nowrap">Group</Label>
-                <select
-                  value={splitGroup}
-                  onChange={e => setSplitGroup(e.target.value)}
-                  className="h-8 rounded border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-                >
-                  <option value="">All accounts</option>
-                  {allGroupNames.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="maxPerProxy" className="text-sm whitespace-nowrap">Max per proxy</Label>
-                <Input
-                  id="maxPerProxy"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={maxPerProxy}
-                  onChange={e => setMaxPerProxy(Math.max(1, Number(e.target.value)))}
-                  className="w-20 h-8 text-sm"
-                />
-              </div>
-              <Button onClick={handleSplitEvenly} disabled={splitting || !splitCandidates.length} className="shrink-0">
-                {splitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {splitting ? "Splitting…" : "Split Now"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </AppLayout>
   );
 }

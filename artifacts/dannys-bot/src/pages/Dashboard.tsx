@@ -39,6 +39,14 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.240",
+    date: "12 May 2026",
+    items: [
+      { category: "Proxy Manager", text: "Page no longer scrolls — only the proxy list itself scrolls. The Split Accounts panel is now inside the main card." },
+      { category: "Proxy Manager", text: "Ping and Delete buttons now sit immediately to the right of the Status column instead of being pushed to the far right." },
+    ],
+  },
+  {
     version: "1.0.239",
     date: "12 May 2026",
     items: [
