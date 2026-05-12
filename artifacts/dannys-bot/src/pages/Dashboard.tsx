@@ -39,6 +39,14 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.246",
+    date: "12 May 2026, 19:15",
+    items: [
+      { category: "View Stories", text: "Added missing 'surface=2' parameter to the stories API call — Instagram silently returns an empty tray without it, even when followed accounts have active stories." },
+      { category: "View Stories", text: "Now counts only story reels that actually contained items, with a new specific warning if the tray had entries but none had story data." },
+    ],
+  },
+  {
     version: "1.0.245",
     date: "12 May 2026, 18:45",
     items: [

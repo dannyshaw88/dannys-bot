@@ -1678,15 +1678,15 @@ export class InstagramWebClient {
   // `count` story reels as seen, simulating a user swiping through stories.
   async viewTimelineStories(count: number = 5): Promise<number> {
     return this.timed("ViewTimelineStories", async () => {
-      const j = await this.mobileSessionGet(`/api/v1/feed/reels_tray/`);
+      // surface=2 is required — without it Instagram returns an empty tray even
+      // when followed accounts have active stories (Jarvee always includes this param).
+      const j = await this.mobileSessionGet(`/api/v1/feed/reels_tray/?surface=2`);
       if (j === null) {
-        // mobileSessionGet returns null when mobileCookieJar has no sessionid.
-        // This happens when the account has no igApiCookies (Verify Credentials not yet run)
-        // AND the fresh mobile login failed (bad password, 2FA, proxy, etc.).
-        // Return a negative sentinel so the caller can log a specific "no session" warning.
+        // mobileSessionGet returns null when mobileCookieJar has no sessionid OR
+        // when Instagram returns HTTP 4xx (expired/invalid session).
         return -1;
       }
-      const tray: any[] = j?.tray ?? [];
+      const tray: any[] = Array.isArray(j?.tray) ? j.tray : [];
       if (!tray.length) {
         const topKeys = Object.keys(j ?? {}).join(", ") || "(none)";
         const statusField = j?.status ?? "(no status field)";
@@ -1696,10 +1696,11 @@ export class InstagramWebClient {
 
       const toView = tray.slice(0, count);
       const seenBody = new URLSearchParams({ live_vods_skipped: "", nuxes_skipped: "" });
+      let seenCount = 0;
 
       for (const reel of toView) {
         const userId = String(reel.user?.pk ?? reel.id ?? "");
-        const items: any[] = reel.items ?? [];
+        const items: any[] = Array.isArray(reel.items) ? reel.items : [];
         if (!items.length || !userId) continue;
 
         const seenEntries = items.map((item: any) => {
@@ -1708,10 +1709,17 @@ export class InstagramWebClient {
           return `${mediaId}_${takenAt}_${takenAt + 2}`;
         });
         seenBody.set(`reels[${userId}]`, seenEntries.join(","));
+        seenCount++;
+      }
+
+      if (seenCount === 0) {
+        // Tray had entries but none contained story items — API may not inline items.
+        console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries but 0 had items. First entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}]`);
+        return -3;
       }
 
       await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
-      return toView.length;
+      return seenCount;
     }, (n) => `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`);
   }
 
