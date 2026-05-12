@@ -41,12 +41,16 @@ jobs:
 
   package-windows:
     needs: build-web
-    runs-on: self-hosted
+    runs-on: windows-latest
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -69,3 +73,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
         run: npx electron-builder --win --publish always
+
+      - name: Upload installer to Actions artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Equinox-Windows-Installer
+          path: artifacts/electron/release/*.exe
+          if-no-files-found: error
