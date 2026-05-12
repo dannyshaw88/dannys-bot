@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.250",
+    date: "12 May 2026, 21:30",
+    items: [
+      { category: "Architecture", text: "Fixed: ALL Instagram API calls (viewStories, viewHighlights, viewReels, viewTimelineFeed seen, viewTimelineReels, visitNotifications, visitOwnProfile, visitSettingsAndActivity, saveMedia, likeDirectMessage, unsendDirectMessage, getFollowers, searchUserByUsername, getSuggestedUsers, getHashtagUsers, uploadPhoto, disableComments) now use the mobile session (igApiCookies) instead of EB web cookies. Zero actions now touch the EB session." },
+    ],
+  },
+  {
     version: "1.0.249",
     date: "12 May 2026, 21:00",
     items: [
