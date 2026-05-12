@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.247",
+    date: "12 May 2026, 19:45",
+    items: [
+      { category: "View Stories", text: "Fixed: story items are now fetched via a separate API call (reels_media) since Instagram no longer includes them inline in the tray response — stories will now be correctly marked as watched." },
+    ],
+  },
+  {
     version: "1.0.246",
     date: "12 May 2026, 19:15",
     items: [

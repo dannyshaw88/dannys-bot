@@ -1698,11 +1698,43 @@ export class InstagramWebClient {
       const seenBody = new URLSearchParams({ live_vods_skipped: "", nuxes_skipped: "" });
       let seenCount = 0;
 
+      // Instagram's reels_tray does not inline story items — fetch them separately.
+      // Build a map of userId → items from inline data (older API) or fetch via reels_media.
+      let reelsMap: Record<string, any[]> = {};
+
+      // Try inline items first (older API behaviour)
       for (const reel of toView) {
         const userId = String(reel.user?.pk ?? reel.id ?? "");
         const items: any[] = Array.isArray(reel.items) ? reel.items : [];
-        if (!items.length || !userId) continue;
+        if (userId && items.length) reelsMap[userId] = items;
+      }
 
+      // If no inline items, fetch via /api/v1/feed/reels_media/ (modern API behaviour)
+      if (Object.keys(reelsMap).length === 0) {
+        const userIds = toView
+          .map((r: any) => String(r.user?.pk ?? r.id ?? ""))
+          .filter(Boolean);
+        if (userIds.length) {
+          const qs = userIds.map(id => `user_ids[]=${encodeURIComponent(id)}`).join("&");
+          const rm = await this.mobileSessionGet(`/api/v1/feed/reels_media/?${qs}`);
+          if (rm?.reels && typeof rm.reels === "object") {
+            for (const [uid, reelData] of Object.entries(rm.reels as Record<string, any>)) {
+              const items: any[] = Array.isArray(reelData?.items) ? reelData.items : [];
+              if (items.length) reelsMap[uid] = items;
+            }
+          }
+          // Also check reels_media array (alternate response shape)
+          if (Array.isArray(rm?.reels_media)) {
+            for (const reelData of rm.reels_media as any[]) {
+              const uid = String(reelData?.user?.pk ?? reelData?.id ?? "");
+              const items: any[] = Array.isArray(reelData?.items) ? reelData.items : [];
+              if (uid && items.length) reelsMap[uid] = items;
+            }
+          }
+        }
+      }
+
+      for (const [userId, items] of Object.entries(reelsMap)) {
         const seenEntries = items.map((item: any) => {
           const mediaId = String(item.id ?? item.pk ?? "");
           const takenAt = item.taken_at ?? Math.floor(Date.now() / 1000);
@@ -1713,8 +1745,7 @@ export class InstagramWebClient {
       }
 
       if (seenCount === 0) {
-        // Tray had entries but none contained story items — API may not inline items.
-        console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries but 0 had items. First entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}]`);
+        console.log(`[webClient] viewTimelineStories: tray has ${tray.length} entries, reels_media fetch returned 0 items. First tray entry keys: [${Object.keys(toView[0] ?? {}).join(", ")}]`);
         return -3;
       }
 
