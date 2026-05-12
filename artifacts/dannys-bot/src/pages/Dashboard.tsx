@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.241",
+    date: "12 May 2026",
+    items: [
+      { category: "Embedded Browser", text: "Fixed EB freezing blank for up to 40 seconds on pages that are slow to load — it now recovers in ~12 seconds instead." },
+    ],
+  },
+  {
     version: "1.0.240",
     date: "12 May 2026",
     items: [

@@ -583,14 +583,8 @@ function startFrameLoop(profileId: number) {
 
     const frameStart = Date.now();
     try {
-      const screenshotTimeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("screenshot timeout")), 8000)
-      );
       const [screenshot, currentUrl] = await Promise.all([
-        Promise.race([
-          s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
-          screenshotTimeout,
-        ]),
+        s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64", timeout: 6000 } as any),
         s.page.url(),
       ]);
 
@@ -661,8 +655,8 @@ function startFrameLoop(profileId: number) {
         // Chrome renderer may have crashed — count consecutive failures.
         screenshotTimeoutCount++;
         log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} (${elapsedMs}ms elapsed) url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
-        if (screenshotTimeoutCount >= 5) {
-          log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts — page crashed, closing session`, "browser");
+        if (screenshotTimeoutCount >= 2) {
+          log(`[frameLoop:${profileId}] 2 consecutive screenshot timeouts — page unresponsive, closing session`, "browser");
           sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
           try { s.res.end(); } catch {}
           s.res = null;
