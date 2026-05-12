@@ -656,7 +656,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 onClick={() => setShowCopyModal(true)}
                 className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
               >
-                Copy Settings
+                COPY SETTINGS
               </button>
             </div>
           </>
@@ -708,7 +708,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   onClick={() => setShowCopyModal(true)}
                   className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
                 >
-                  Copy Settings
+                  COPY SETTINGS
                 </button>
                 <button
                   onClick={() => setShowSources(true)}
