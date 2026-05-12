@@ -510,12 +510,13 @@ export function attachSSE(profileId: number, res: ServerResponse) {
 
       if (session.pendingInitUrl) {
         // New session — navigate to the URL determined by getOrCreateSession.
-        // Protect for 35s so the frame loop doesn't fire a competing goto() while
+        // Protect for 15s so the frame loop doesn't fire a competing goto() while
         // Chrome is still loading (Chrome briefly shows about:blank at the start
         // of every navigation, which would otherwise trigger the error-page retry).
+        // 15s is enough for Chrome to move past the initial about:blank into a real URL.
         const target = session.pendingInitUrl;
         session.pendingInitUrl = undefined;
-        session.navProtectedUntil = Date.now() + 35000;
+        session.navProtectedUntil = Date.now() + 15000;
         log(`[attachSSE:${profileId}] initial navigation → ${target}`, "browser");
         session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
       } else if (isBlankOrError) {
@@ -525,7 +526,7 @@ export function attachSSE(profileId: number, res: ServerResponse) {
         const target = hasCookies
           ? "https://www.instagram.com/"
           : "https://www.instagram.com/accounts/login/";
-        session.navProtectedUntil = Date.now() + 35000;
+        session.navProtectedUntil = Date.now() + 15000;
         log(`[attachSSE:${profileId}] page is "${currentUrl}" (error/blank) — recovering → ${target}`, "browser");
         session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
       }
@@ -545,8 +546,9 @@ function startFrameLoop(profileId: number) {
   let cookieSaveTick = 0;
   let popupCheckTick = 0;
   let keepAliveTick = 0;
-  let errorRetryTick = 0;  // counts frames while on chrome-error:// (429 / net::ERR_*)
-  let errorRetryCount = 0; // how many times we've auto-retried this session
+  let errorRetryTick = 0;     // counts frames while on chrome-error:// (429 / net::ERR_*)
+  let errorRetryCount = 0;    // how many times we've auto-retried this session
+  let screenshotTimeoutCount = 0; // consecutive screenshot timeouts → detect crashed renderer
   let busy = false;
 
   session.frameLoop = setInterval(async () => {
@@ -586,19 +588,20 @@ function startFrameLoop(profileId: number) {
         sseWrite(s.res, { type: "urlChange", url: currentUrl });
       }
 
+      screenshotTimeoutCount = 0; // successful screenshot — reset crash counter
+
       // ── Error-page auto-retry ────────────────────────────────────────────
       // Only retry when stuck on a genuine error/blank page:
-      //   • chrome-error://  — HTTP 429 / net error
-      //   • about:blank / about:newtab — goto() timed out silently
-      // IMPORTANT: skip entirely during the navProtectedUntil window.
-      // Every intentional goto() (initial load, reconnect recovery, frame-loop retry)
-      // sets navProtectedUntil = now + 35s, because Chrome shows about:blank
-      // momentarily at the START of every navigation before the new URL resolves.
-      // Without this guard the loop would fire a second competing goto() after just
-      // 3 seconds, cancelling the first one and trapping the page on about:blank.
+      //   • chrome-error://  — HTTP 429 / net error / proxy failure (TERMINAL state)
+      //   • about:blank / about:newtab — goto() timed out or navigation in progress
+      // navProtectedUntil guards about:blank (transitional) but NOT chrome-error://.
+      // chrome-error:// is a final failure state — Chrome is done trying. Retrying
+      // immediately is safe and avoids leaving the user staring at an error page.
       const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
       const navProtected = Date.now() < (s.navProtectedUntil ?? 0);
-      if (isErrorPage && !navProtected) {
+      // Bypass nav protection for chrome-error:// (terminal) but respect it for about:blank (transitional).
+      const isTransitionalBlank = currentUrl === "about:blank" || currentUrl === "about:newtab";
+      if (isErrorPage && (!navProtected || !isTransitionalBlank)) {
         errorRetryTick++;
         // First 3 retries: every 3 s (15×200 ms). After that: every 30 s (150×200 ms).
         const retryThreshold = errorRetryCount < 3 ? 15 : 150;
@@ -633,8 +636,20 @@ function startFrameLoop(profileId: number) {
         cookieSaveTick = 0;
         saveCookies(profileId, s.page);
       }
-    } catch {
-      // Page navigating or browser busy — skip frame
+    } catch (err: any) {
+      if (err?.message === "screenshot timeout") {
+        // Chrome renderer may have crashed — count consecutive failures.
+        screenshotTimeoutCount++;
+        if (screenshotTimeoutCount >= 5) {
+          log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts — page crashed, closing session`, "browser");
+          sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
+          try { s.res.end(); } catch {}
+          s.res = null;
+          if (s.frameLoop) { clearInterval(s.frameLoop); s.frameLoop = null; }
+        }
+      } else {
+        screenshotTimeoutCount = 0; // non-timeout error (navigation busy) — not a crash
+      }
     } finally {
       busy = false;
     }

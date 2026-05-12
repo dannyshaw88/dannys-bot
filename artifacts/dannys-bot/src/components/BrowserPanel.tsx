@@ -65,6 +65,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const statusRef = useRef<SSEStatus>("idle");
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
+  const hasReceivedFirstFrameRef = useRef(false);
   const [isFrozen, setIsFrozen] = useState(false);
 
   const setStatusSafe = useCallback((s: SSEStatus) => {
@@ -144,8 +145,10 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       esRef.current = null;
     }
     setStatusSafe("connecting");
+    setIsFrozen(false);
     setErrorMsg(null);
     setIsLoading(true);
+    hasReceivedFirstFrameRef.current = false;
 
     const es = new EventSource(`/api/browser/${profileId}/stream`);
     esRef.current = es;
@@ -162,6 +165,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           case "frame":
             drawFrame(msg.data);
             lastFrameTimeRef.current = Date.now();
+            hasReceivedFirstFrameRef.current = true;
             setIsFrozen(false);
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) {
               setAddressBar(msg.url);
@@ -238,12 +242,19 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   useEffect(() => { connect(); }, [connect]);
 
-  // Stale-frame detector: if connected but no frame arrives for 25 s, flag frozen
+  // Stale-frame detector: if connected AND at least one frame was received but then
+  // no new frame arrives for 25 s, flag as frozen.
+  // hasReceivedFirstFrameRef prevents false "frozen" during Chrome's startup window
+  // (the SSE stream opens before Chrome has launched, so there's a gap before first frame).
   useEffect(() => {
     if (status !== "connected") { setIsFrozen(false); return; }
     lastFrameTimeRef.current = Date.now();
     const timer = setInterval(() => {
-      if (statusRef.current === "connected" && Date.now() - lastFrameTimeRef.current > 25000) {
+      if (
+        statusRef.current === "connected" &&
+        hasReceivedFirstFrameRef.current &&
+        Date.now() - lastFrameTimeRef.current > 25000
+      ) {
         setIsFrozen(true);
       }
     }, 3000);
