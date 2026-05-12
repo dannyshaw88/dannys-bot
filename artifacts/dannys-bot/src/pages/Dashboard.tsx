@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.249",
+    date: "12 May 2026, 21:00",
+    items: [
+      { category: "View Stories", text: "Fixed: the 'seen' report now uses the mobile API session (igApiCookies) instead of the EB web session — the seen POST was previously sent with the wrong cookies, meaning Instagram may not have registered the story views." },
+    ],
+  },
+  {
     version: "1.0.248",
     date: "12 May 2026, 20:40",
     items: [
