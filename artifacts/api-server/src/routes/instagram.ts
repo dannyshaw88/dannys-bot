@@ -982,6 +982,9 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
+    // Block EB access when no proxy is assigned — accounts must have a proxy.
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+    if (!hasProxy) return res.status(403).json({ error: "No proxy assigned — assign a proxy to this account before using the embedded browser." });
     const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
     try {
       await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile));
@@ -1079,6 +1082,16 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) { res.status(404).end(); return; }
+    // Block EB stream when no proxy is assigned.
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+    if (!hasProxy) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.flushHeaders();
+      res.write(`data: ${JSON.stringify({ type: "error", message: "No proxy assigned — assign a proxy to this account before using the embedded browser." })}\n\n`);
+      res.end();
+      return;
+    }
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
