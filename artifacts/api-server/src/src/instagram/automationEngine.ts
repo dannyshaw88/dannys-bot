@@ -2344,8 +2344,13 @@ class AutomationEngine {
         const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
         try {
           const watched = await client.viewTimelineReels(reelCount);
-          console.log(`[engine] @${profile.username}: 🎬 watched ${watched} timeline reels`);
-          this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reels`);
+          if (watched === -1) {
+            console.warn(`[engine] @${profile.username}: ⚠️ Watch Reels skipped — no mobile session (run Verify Credentials to fix)`);
+            this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "warn", "Skipped: no mobile session — run Verify Credentials to establish igApiCookies");
+          } else {
+            console.log(`[engine] @${profile.username}: 🎬 watched ${watched} timeline reels`);
+            this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reel${watched === 1 ? "" : "s"}`);
+          }
         } catch (e: any) {
           if (await checkSessionErr(e, "check_timeline_reels")) return;
           console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
