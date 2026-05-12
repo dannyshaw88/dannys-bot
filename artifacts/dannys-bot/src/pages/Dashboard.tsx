@@ -50,7 +50,7 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.261",
+    version: "1.0.262",
     date: "13 May 2026, 04:00",
     items: [
       { category: "Account Settings", text: "Fixed: White space no longer appears above the Account Name label when any field is edited. The auto-save status bar now always occupies its fixed height so the layout never shifts." },
