@@ -1134,62 +1134,26 @@ export function ProfilesPage() {
                     return;
                   }
 
-                  // Multiple accounts
-                  if ("showDirectoryPicker" in window) {
-                    // File System Access API path:
-                    // MUST call showDirectoryPicker BEFORE any awaited fetch  
-                    // the browser only allows it within the original user gesture.
-                    let dirHandle: any;
+                  // Multiple accounts — sequential browser downloads (works in all environments)
+                  toast({ title: "Preparing export…", description: `Downloading ${selectedProfileIds.length} EQX files…` });
+                  let downloaded = 0;
+                  for (const id of selectedProfileIds) {
+                    const profile = profiles?.find(p => p.id === id);
+                    const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                     try {
-                      dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
-                    } catch (e: any) {
-                      if (e?.name !== "AbortError") {
-                        toast({ title: "Export failed", description: e?.message ?? "Could not open folder picker.", variant: "destructive" });
-                      }
-                      return;
-                    }
-
-                    toast({ title: "Exporting…", description: `Writing ${selectedProfileIds.length} EQX files to folder…` });
-                    let written = 0;
-                    for (const id of selectedProfileIds) {
-                      const profile = profiles?.find(p => p.id === id);
-                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
-                      try {
-                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                        if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
-                        const blob = await res.blob();
-                        const fileHandle = await dirHandle.getFileHandle(`${safeUsername}.eqx`, { create: true });
-                        const writable = await fileHandle.createWritable();
-                        await writable.write(blob);
-                        await writable.close();
-                        written++;
-                      } catch (e: any) {
-                        toast({ title: "Export skipped", description: `Error writing ${safeUsername}: ${e?.message ?? "unknown"}`, variant: "destructive" });
-                      }
-                    }
-                    if (written > 0) toast({ title: "EQX Export Complete", description: `${written} of ${selectedProfileIds.length} file(s) saved to folder.` });
-                  } else {
-                    // Fallback trigger individual browser downloads
-                    toast({ title: "Preparing export…", description: `Downloading ${selectedProfileIds.length} EQX files…` });
-                    let downloaded = 0;
-                    for (const id of selectedProfileIds) {
-                      const profile = profiles?.find(p => p.id === id);
-                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
-                      try {
-                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                        if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
-                        const blob = await res.blob();
-                        const objectUrl = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = objectUrl; a.download = `${safeUsername}.eqx`;
-                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                        await new Promise(r => setTimeout(r, 300));
-                        downloaded++;
-                      } catch { toast({ title: "Export skipped", description: `Error downloading ${safeUsername}`, variant: "destructive" }); }
-                    }
-                    if (downloaded > 0) toast({ title: "EQX Export Complete", description: `${downloaded} of ${selectedProfileIds.length} file(s) downloaded.` });
+                      const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                      if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
+                      const blob = await res.blob();
+                      const objectUrl = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = objectUrl; a.download = `${safeUsername}.eqx`;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                      await new Promise(r => setTimeout(r, 400));
+                      downloaded++;
+                    } catch { toast({ title: "Export skipped", description: `Error downloading ${safeUsername}`, variant: "destructive" }); }
                   }
+                  if (downloaded > 0) toast({ title: "EQX Export Complete", description: `${downloaded} of ${selectedProfileIds.length} file(s) downloaded.` });
                 }}
                 disabled={selectedProfileIds.length === 0}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
