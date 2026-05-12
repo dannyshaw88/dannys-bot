@@ -335,7 +335,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
           <Button size="sm" disabled={!canCopy} onClick={handleCopy} className="min-w-[120px] gap-1.5">
             {status === "copying" && <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Copying…</>}
             {status === "done"    && <><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> Copied!</>}
-            {status === "idle"    && <><Copy className="w-3.5 h-3.5" /> Copy Settings</>}
+            {status === "idle"    && <><Copy className="w-3.5 h-3.5" /> COPY SETTINGS</>}
           </Button>
         </DialogFooter>
       </DialogContent>
