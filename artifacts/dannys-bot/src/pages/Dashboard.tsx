@@ -17,27 +17,47 @@ const ERROR_ACTIONS = new Set([
 ]);
 
 const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
-  tool_start:          { label: "Started",      cls: "bg-blue-100 text-blue-700" },
-  tool_complete:       { label: "Complete",     cls: "bg-emerald-100 text-emerald-700" },
-  verified:            { label: "Verified",     cls: "bg-green-100 text-green-700" },
-  verification_failed: { label: "Verify Fail",  cls: "bg-red-100 text-red-700" },
-  follow:              { label: "Follow",        cls: "bg-sky-100 text-sky-700" },
-  follow_blocked:      { label: "Blocked",       cls: "bg-rose-100 text-rose-700" },
-  follow_skipped:      { label: "Skipped",       cls: "bg-orange-100 text-orange-700" },
-  dedup_skip:          { label: "Skipped",        cls: "bg-amber-100 text-amber-700" },
-  filter_skip:         { label: "Filter Skip",   cls: "bg-yellow-100 text-yellow-800" },
-  unfollow:            { label: "Unfollow",      cls: "bg-violet-100 text-violet-700" },
-  unfollow_blocked:    { label: "UF Block",      cls: "bg-pink-100 text-pink-700" },
-  dm:                  { label: "DM",            cls: "bg-purple-100 text-purple-700" },
-  dm_blocked:          { label: "DM Block",      cls: "bg-fuchsia-100 text-fuchsia-700" },
-  contact_dm_blocked:  { label: "Contact Block", cls: "bg-indigo-100 text-indigo-700" },
-  no_sources:          { label: "No Sources",    cls: "bg-slate-100 text-slate-600" },
-  logged_out:          { label: "Logged Out",    cls: "bg-red-100 text-red-700" },
+  tool_start:              { label: "Started",         cls: "bg-blue-100 text-blue-700" },
+  tool_complete:           { label: "Complete",        cls: "bg-emerald-100 text-emerald-700" },
+  verified:                { label: "Verified",        cls: "bg-green-100 text-green-700" },
+  verification_failed:     { label: "Verify Fail",     cls: "bg-red-100 text-red-700" },
+  follow:                  { label: "Follow",          cls: "bg-sky-100 text-sky-700" },
+  follow_blocked:          { label: "Blocked",         cls: "bg-rose-100 text-rose-700" },
+  follow_skipped:          { label: "Skipped",         cls: "bg-orange-100 text-orange-700" },
+  dedup_skip:              { label: "Skipped",         cls: "bg-amber-100 text-amber-700" },
+  filter_skip:             { label: "Filter Skip",     cls: "bg-yellow-100 text-yellow-800" },
+  unfollow:                { label: "Unfollow",        cls: "bg-violet-100 text-violet-700" },
+  unfollow_blocked:        { label: "UF Block",        cls: "bg-pink-100 text-pink-700" },
+  dm:                      { label: "DM",              cls: "bg-purple-100 text-purple-700" },
+  dm_blocked:              { label: "DM Block",        cls: "bg-fuchsia-100 text-fuchsia-700" },
+  contact_dm_blocked:      { label: "Contact Block",   cls: "bg-indigo-100 text-indigo-700" },
+  no_sources:              { label: "No Sources",      cls: "bg-slate-100 text-slate-600" },
+  logged_out:              { label: "Logged Out",      cls: "bg-red-100 text-red-700" },
+  account_imported:        { label: "EQX Import",      cls: "bg-blue-100 text-blue-700" },
+  account_exported:        { label: "EQX Export",      cls: "bg-cyan-100 text-cyan-700" },
+  view_timeline_feed:      { label: "Timeline Feed",   cls: "bg-teal-100 text-teal-700" },
+  like_timeline_post:      { label: "Timeline Like",   cls: "bg-rose-100 text-rose-600" },
+  check_timeline_reels:    { label: "Watch Reels",     cls: "bg-orange-100 text-orange-700" },
+  check_timeline_stories:  { label: "Watch Stories",   cls: "bg-amber-100 text-amber-700" },
+  visit_notifications:     { label: "Notifications",   cls: "bg-sky-100 text-sky-600" },
+  visit_own_profile:       { label: "Own Profile",     cls: "bg-indigo-100 text-indigo-600" },
+  refresh_own_profile:     { label: "Refresh Profile", cls: "bg-indigo-100 text-indigo-600" },
+  visit_settings_activity: { label: "Settings",        cls: "bg-slate-100 text-slate-600" },
+  save_media:              { label: "Save Media",      cls: "bg-emerald-100 text-emerald-600" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.253",
+    date: "12 May 2026, 23:00",
+    items: [
+      { category: "Dashboard", text: "Fixed: Profile Import notification no longer stays pinned at the top of the activity log — it is now inserted at its correct timestamp and sorts chronologically alongside all other events." },
+      { category: "Dashboard", text: "Added missing ACTION_STYLES labels for: EQX Import, EQX Export, Timeline Feed, Timeline Like, Watch Reels, Watch Stories, Notifications, Own Profile, Refresh Profile, Settings, Save Media — all now show with distinct coloured badges instead of the generic grey fallback." },
+      { category: "Human Sessions", text: "Confirmed: Check Reels from Timeline has no wiring crossover with View Timeline Feed. It correctly uses /api/v1/clips/feed/ (the Reels tab endpoint) and sends a single batch /api/v1/media/seen/ call for all reels — 1 API call for multiple reels, exactly as Instagram's mobile app fires them. ViewTimelineFeedSeen is a separate signal from viewTimelineFeed (home feed)." },
+    ],
+  },
   {
     version: "1.0.252",
     date: "12 May 2026, 22:30",
@@ -299,13 +319,14 @@ type FeedItem = {
   key: string;
   ts: number;
   profileId: number;
-  kind: "api" | "session";
+  kind: "api" | "session" | "import";
   operationName?: string;
   message?: string;
   profileLabel?: string;
   action?: string;
   targetUsername?: string;
   detail?: string;
+  importData?: LastImport;
 };
 
 type LastImport = { ts: number; fileName: string; created: number; updated: number; failed: number; total: number };
@@ -505,6 +526,20 @@ export function Dashboard() {
     !profileSearch.trim() ||
     p.username.toLowerCase().includes(profileSearch.toLowerCase())
   );
+
+  // Merge the CSV-import notification (stored in localStorage) into the sorted feed
+  // so it appears at its correct timestamp instead of being pinned at the top.
+  const displayFeed: FeedItem[] = (() => {
+    if (!lastImport || lastImport.ts <= importDismissed) return filteredFeed;
+    const importItem: FeedItem = {
+      key: "import-notif",
+      ts: lastImport.ts,
+      profileId: 0,
+      kind: "import",
+      importData: lastImport,
+    };
+    return [...filteredFeed, importItem].sort((a, b) => b.ts - a.ts);
+  })();
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -751,44 +786,6 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {lastImport && lastImport.ts > importDismissed && activeTab === "api-log" && (
-                    <tr className="bg-blue-50/60 hover:bg-blue-50 transition-colors">
-                      <td className="px-3 py-3 font-medium truncate">
-                        <span className="flex items-center gap-1.5 text-foreground min-w-0">
-                          <Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                          <span className="truncate text-xs font-semibold">Import</span>
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 truncate">
-                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
-                          Account Import
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground truncate" title={lastImport.fileName}>
-                        {lastImport.fileName}
-                      </td>
-                      <td className="px-3 py-3 text-xs truncate">
-                        <span className="flex items-center gap-2">
-                          {lastImport.created > 0 && <span className="font-semibold text-emerald-600">{lastImport.created} created</span>}
-                          {lastImport.updated > 0 && <span className="font-semibold text-blue-600">{lastImport.updated} updated</span>}
-                          {lastImport.failed > 0 && <span className="font-semibold text-destructive">{lastImport.failed} failed</span>}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
-                        <span className="flex items-center gap-1 min-w-0">
-                          <Clock className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{format(new Date(lastImport.ts), "MMM d yyyy, HH:mm:ss")}</span>
-                          <button
-                            onClick={() => { localStorage.setItem("equinox_import_dismissed", String(lastImport.ts)); setImportDismissed(lastImport.ts); }}
-                            className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                            title="Dismiss"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      </td>
-                    </tr>
-                  )}
                   {initialLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
@@ -816,8 +813,49 @@ export function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    filteredFeed.map((item) => {
+                    displayFeed.map((item) => {
                       const label = getUsername(item.profileId, item.profileLabel);
+                      if (item.kind === "import") {
+                        const imp = item.importData!;
+                        return (
+                          <tr key={item.key} className="bg-blue-50/60 hover:bg-blue-50/80 transition-colors">
+                            <td className="px-3 py-3 font-medium truncate">
+                              <span className="flex items-center gap-1.5 text-foreground min-w-0">
+                                <Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                <span className="truncate text-xs font-semibold">Import</span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 truncate">
+                              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
+                                Profile Import
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 text-xs text-muted-foreground truncate" title={imp.fileName}>
+                              {imp.fileName}
+                            </td>
+                            <td className="px-3 py-3 text-xs truncate">
+                              <span className="flex items-center gap-2">
+                                {imp.created > 0 && <span className="font-semibold text-emerald-600">{imp.created} created</span>}
+                                {imp.updated > 0 && <span className="font-semibold text-blue-600">{imp.updated} updated</span>}
+                                {imp.failed > 0 && <span className="font-semibold text-destructive">{imp.failed} failed</span>}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
+                              <span className="flex items-center gap-1 min-w-0">
+                                <Clock className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{format(new Date(imp.ts), "MMM d yyyy, HH:mm:ss")}</span>
+                                <button
+                                  onClick={() => { localStorage.setItem("equinox_import_dismissed", String(imp.ts)); setImportDismissed(imp.ts); }}
+                                  className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                                  title="Dismiss"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      }
                       if (item.kind === "api") {
                         return (
                           <tr key={item.key} className="hover:bg-accent/5 transition-colors">
