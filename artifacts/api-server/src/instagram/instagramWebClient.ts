@@ -1654,7 +1654,9 @@ export class InstagramWebClient {
     return this.timed("ViewTimelineReels", async () => {
       const body = new URLSearchParams({ reason: "pull_to_refresh", max_id: "" }).toString();
       const j = await this.mobileSessionPost(`/api/v1/clips/feed/`, body);
-      const items: any[] = j?.items ?? [];
+      // clips/feed can return items under "items" or "feed_items" depending on version.
+      const items: any[] = j?.items ?? j?.feed_items ?? [];
+      console.log(`[webClient] viewTimelineReels: status="${j?.status}" keys=[${Object.keys(j ?? {}).join(", ")}] items.length=${items.length}`);
       if (!items.length) return 0;
 
       const toView = items.slice(0, count);
@@ -2015,6 +2017,10 @@ export class InstagramWebClient {
       const isReel = media?.media_type === 2 || media?.product_type === "clips";
 
       if (isReel) {
+        // Mark the reel as seen (natural scroll behaviour) but do NOT like it.
+        // Liking reels is a deliberate tap — not a passive scroll. Liking them here
+        // would crossover with the dedicated Watch Reels tool and produce unexpected
+        // likes whenever the home-feed like% fires. Skip to the next item.
         try {
           const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
           const seenBody = new URLSearchParams({
@@ -2025,6 +2031,7 @@ export class InstagramWebClient {
           await this.mobileSessionPost(`/api/v1/media/seen/`, seenBody);
           watched++;
         } catch (_) { /* best-effort */ }
+        continue;
       }
 
       const result = await this.likeMedia(mediaId);
