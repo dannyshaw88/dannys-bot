@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2,
-  Upload, Download, Trash, Search, ChevronDown, ChevronUp,
+  Upload, Download, Trash, Search,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -64,14 +64,11 @@ interface ProxyRowProps {
   pingResult: PingResult;
   pinging: boolean;
   onPing: (proxyId: number) => void;
-  expanded: boolean;
-  onToggleExpand: () => void;
   even: boolean;
 }
 
 function ProxyRow({
-  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing,
-  expanded, onToggleExpand, even,
+  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing, even,
 }: ProxyRowProps) {
   const deleteProxyMutation = useDeleteProxy();
   const updateProxyMutation = useUpdateProxy();
@@ -158,24 +155,22 @@ function ProxyRow({
             className="text-xs h-7 w-full"
           />
         </div>
-        {/* accounts badge (click to expand) */}
+        {/* accounts badge */}
         <div className="shrink-0 flex justify-center" style={{ width: 76 }}>
-          <button
-            onClick={onToggleExpand}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
               totalCount === 0
-                ? "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                ? "bg-slate-100 text-slate-400"
                 : validCount === totalCount
-                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                ? "bg-emerald-50 text-emerald-700"
                 : validCount === 0
-                ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                : "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                ? "bg-slate-100 text-slate-500"
+                : "bg-yellow-50 text-yellow-700"
             }`}
           >
             <User className="w-3 h-3" />
             {totalCount === 0 ? "0" : `${validCount}/${totalCount}`}
-            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
+          </span>
         </div>
         {/* ping status */}
         <div className="shrink-0" style={{ width: 88 }}>
@@ -222,47 +217,45 @@ function ProxyRow({
         </div>
       </div>
 
-      {/* Expanded assigned accounts */}
-      {expanded && (
-        <div className="border-b border-border/40 bg-accent/10 px-4 py-2">
-          <div className="flex flex-col gap-0.5">
-            {assigned.map(profile => (
-              <div key={profile.id} className="flex items-center justify-between gap-2 px-2 py-0.5 rounded hover:bg-accent/40 transition-colors group">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-foreground min-w-0">
-                  <User className="w-3 h-3 shrink-0 text-primary" />
-                  <span className="truncate">{profile.username}</span>
-                </div>
-                <button
-                  onClick={() => handleUnassign(profile)}
-                  disabled={updateProfileMutation.isPending}
-                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+      {/* Assigned accounts — always visible */}
+      <div className="border-b border-border/40 bg-accent/10 px-4 py-2">
+        <div className="flex flex-col gap-0.5">
+          {assigned.map(profile => (
+            <div key={profile.id} className="flex items-center justify-between gap-2 px-2 py-0.5 rounded hover:bg-accent/40 transition-colors group">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground min-w-0">
+                <User className="w-3 h-3 shrink-0 text-primary" />
+                <span className="truncate">{profile.username}</span>
               </div>
-            ))}
-            {unassignedProfiles.length > 0 && (
-              <select
-                className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
-                value=""
-                onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
+              <button
+                onClick={() => handleUnassign(profile)}
                 disabled={updateProfileMutation.isPending}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
               >
-                <option value="">+ Assign account…</option>
-                {unassignedProfiles.map(p => (
-                  <option key={p.id} value={p.id}>{p.username}</option>
-                ))}
-              </select>
-            )}
-            {assigned.length === 0 && unassignedProfiles.length === 0 && (
-              <span className="text-xs text-muted-foreground italic px-2 py-0.5">All accounts assigned to proxies</span>
-            )}
-            {assigned.length === 0 && unassignedProfiles.length > 0 && (
-              <span className="text-xs text-muted-foreground italic px-2 py-0.5">No accounts assigned — use dropdown to add</span>
-            )}
-          </div>
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          {unassignedProfiles.length > 0 && (
+            <select
+              className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+              value=""
+              onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
+              disabled={updateProfileMutation.isPending}
+            >
+              <option value="">+ Assign account…</option>
+              {unassignedProfiles.map(p => (
+                <option key={p.id} value={p.id}>{p.username}</option>
+              ))}
+            </select>
+          )}
+          {assigned.length === 0 && unassignedProfiles.length === 0 && (
+            <span className="text-xs text-muted-foreground italic px-2 py-0.5">All accounts assigned to proxies</span>
+          )}
+          {assigned.length === 0 && unassignedProfiles.length > 0 && (
+            <span className="text-xs text-muted-foreground italic px-2 py-0.5">No accounts assigned — use dropdown to add</span>
+          )}
         </div>
-      )}
+      </div>
     </>
   );
 }
@@ -286,7 +279,6 @@ export function ProxiesPage() {
   const [splitting, setSplitting] = useState(false);
   const [autoLinking, setAutoLinking] = useState(false);
   const [search, setSearch] = useState("");
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [splitGroup, setSplitGroup] = useState<string>("");
 
   type SortKey = "proxy" | "username" | "accounts" | "status" | null;
@@ -375,14 +367,6 @@ export function ProxiesPage() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [proxies, filterTokens, allProfiles, sortKey, sortDir, pingResults]);
-
-  const toggleExpand = (id: number) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
 
   const pingOne = async (proxyId: number): Promise<PingResult> => {
     setPingingIds(prev => new Set(prev).add(proxyId));
@@ -684,8 +668,6 @@ export function ProxiesPage() {
                 pingResult={pingResults[proxy.id] ?? null}
                 pinging={pingingIds.has(proxy.id)}
                 onPing={pingOne}
-                expanded={expandedIds.has(proxy.id)}
-                onToggleExpand={() => toggleExpand(proxy.id)}
                 even={idx % 2 === 1}
               />
             ))
