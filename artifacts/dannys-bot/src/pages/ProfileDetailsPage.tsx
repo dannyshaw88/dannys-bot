@@ -526,7 +526,7 @@ export function ProfileDetailsPage() {
                 <span className="text-border mx-1 select-none">|</span>
                 <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium transition-colors">
                   <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
-                  <span className="text-blue-500 hover:text-blue-600">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
+                  <span className="text-blue-500 hover:text-blue-600 uppercase">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
                 </Link>
                 {!profile?.creatorMode && (
                   <>
@@ -534,7 +534,7 @@ export function ProfileDetailsPage() {
                     <Link
                       href="/"
                       onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                      className="text-xs font-medium text-blue-500 hover:text-blue-600 transition-colors"
+                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
                     >
                       Dash
                     </Link>
