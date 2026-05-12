@@ -27,6 +27,13 @@
 // ║    • instagram-private-api default v222 → checkpoint_required unsupported   ║
 // ║      (fix: override ig.state.constants.APP_VERSION to MOBILE_VERSION)       ║
 // ║                                                                              ║
+// ║  METHOD NAMING — which cookies each helper uses:                             ║
+// ║    mobileSessionGet / mobileSessionPost  → mobileCookieJar (igApiCookies)  ║
+// ║    ebGet / ebPost                        → cookieJar (EB web cookies)       ║
+// ║    webGet / webPost                      → cookieJar (EB web cookies)       ║
+// ║  Rule: ONLY mobileSession* methods are permitted in human-session actions.  ║
+// ║  Any call to ebGet/ebPost/webGet/webPost in a session action is a BUG.     ║
+// ║                                                                              ║
 // ║  MOBILE SESSION (mobileCookieJar / mobileCsrf):                             ║
 // ║    • Created by _mobileLogin() — logs in via i.instagram.com mobile API    ║
 // ║    • Seeded with locally-generated ig_did / mid / csrftoken=missing         ║
@@ -837,8 +844,9 @@ export class InstagramWebClient {
     return res.json;
   }
 
-  // mobile-style GET (i.instagram.com) — same cookies, mobile app headers
-  private async mobileGet(path: string): Promise<any> {
+  // EB web cookies + mobile app headers → i.instagram.com.
+  // NEVER use for session actions — use mobileSessionGet instead.
+  private async ebGet(path: string): Promise<any> {
     await this.apiThrottle();
     const res = await igReq({
       host: "i.instagram.com",
@@ -857,7 +865,7 @@ export class InstagramWebClient {
       cookieJar: this.cookieJar,
       proxyUrl: this.proxyUrl,
     });
-    if (!res.json) console.log(`[webClient] mobileGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
+    if (!res.json) console.log(`[webClient] ebGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
   }
 
@@ -2354,10 +2362,9 @@ export class InstagramWebClient {
     }, `Profile @${username}`);
   }
 
-  // mobile-style POST (i.instagram.com) — uses EB web cookie jar + web CSRF.
-  // Fine for read/passive actions. NOT for friendships (follow/unfollow) — use
-  // mobileSessionPost() for those so the proper igApiCookies session is used.
-  private async mobilePost(path: string, body = ""): Promise<any> {
+  // EB web cookies + mobile app headers → i.instagram.com.
+  // NEVER use for session actions — use mobileSessionPost instead.
+  private async ebPost(path: string, body = ""): Promise<any> {
     await this.apiThrottle();
     // Must use the mobile App ID (567067343352427) — the web App ID (936619743392459)
     // routes to the web frontend on i.instagram.com instead of the mobile API backend.
@@ -2386,7 +2393,7 @@ export class InstagramWebClient {
     // Cookie header must stay in sync; clobbering causes 302 on follow POST).
     const safeCookies = res.cookies.filter(c => !c.startsWith("csrftoken="));
     this.cookieJar = mergeCookies(this.cookieJar, safeCookies);
-    if (!res.json) console.log(`[webClient] mobilePost ${path} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
+    if (!res.json) console.log(`[webClient] ebPost ${path} status=${res.status} body(300):`, res.rawBody.slice(0, 300));
     return res.json;
   }
 
