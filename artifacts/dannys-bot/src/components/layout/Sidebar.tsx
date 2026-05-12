@@ -124,7 +124,7 @@ export function Sidebar() {
                         key={value}
                         onClick={() => setLocation(`/profiles/${profileId}?tab=${value}`)}
                         className={cn(
-                          "flex items-center w-full px-4 py-1.5 text-xs font-medium transition-all duration-150 text-left rounded-md",
+                          "flex items-center w-full px-4 py-1.5 text-xs font-bold transition-all duration-150 text-left rounded-md",
                           isSubActive
                             ? "text-primary"
                             : "text-muted-foreground hover:text-foreground"
