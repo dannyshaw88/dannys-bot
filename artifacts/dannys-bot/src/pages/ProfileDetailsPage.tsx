@@ -147,6 +147,12 @@ export function ProfileDetailsPage() {
 
   const ACCOUNT_COPY_GROUPS: CopyOptionGroup[] = [
     {
+      label: "Organisation",
+      options: [
+        { key: "group", label: "Group", description: "Assign the same group as this account" },
+      ],
+    },
+    {
       label: "API & Performance",
       options: [
         { key: "apiLimits", label: "API Limits & Control", description: "Min/max calls and interval settings" },
@@ -193,6 +199,7 @@ export function ProfileDetailsPage() {
   const handleAccountCopy = async (targetIds: number[], expandedKeys: string[]) => {
     if (!formData) return;
     const patch: Record<string, any> = {};
+    if (expandedKeys.includes("group")) patch.tags = formData.tags ?? "";
     if (expandedKeys.includes("apiLimits")) patch.apiLimits = formData.apiLimits;
     if (expandedKeys.includes("activeTimer")) {
       patch.activeTimerEnabled = formData.activeTimerEnabled;
@@ -673,8 +680,8 @@ export function ProfileDetailsPage() {
                 <div className="space-y-4">
                   {/* Credentials + verify */}
                   <div className="space-y-3">
-                    <div className="space-y-3 max-w-[280px]">
-                      <div className="space-y-1.5">
+                    <div className="flex items-end gap-3">
+                      <div className="space-y-1.5 flex-1 max-w-[260px]">
                         <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Instagram className="w-3.5 h-3.5" /> Username</Label>
                         <Input
                           value={formData.username}
@@ -682,7 +689,7 @@ export function ProfileDetailsPage() {
                           data-testid="input-username"
                         />
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 flex-1 max-w-[260px]">
                         <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Lock className="w-3.5 h-3.5" /> Password</Label>
                         <PasswordInput
                           value={formData.password}
