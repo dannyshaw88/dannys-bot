@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import crypto from "node:crypto";
+import { crc32 as zlibCrc32 } from "node:zlib";
 import { storage } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
@@ -1610,78 +1611,190 @@ export async function registerInstagramRoutes(
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   }
 
+  // ── ZIP helper (stored, no compression) ─────────────────────────────────
+  function buildStoredZip(files: Array<{ name: string; data: Buffer }>): Buffer {
+    const localParts: Buffer[] = [];
+    const centralDirs: Buffer[] = [];
+    let offset = 0;
+    for (const file of files) {
+      const nameBuf = Buffer.from(file.name, "utf8");
+      const crc = zlibCrc32(file.data) >>> 0;
+      const size = file.data.length;
+      const local = Buffer.alloc(30 + nameBuf.length);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(20, 4);
+      local.writeUInt16LE(0, 6);
+      local.writeUInt16LE(0, 8);
+      local.writeUInt16LE(0, 10);
+      local.writeUInt16LE(0, 12);
+      local.writeUInt32LE(crc, 14);
+      local.writeUInt32LE(size, 18);
+      local.writeUInt32LE(size, 22);
+      local.writeUInt16LE(nameBuf.length, 26);
+      local.writeUInt16LE(0, 28);
+      nameBuf.copy(local, 30);
+      const cd = Buffer.alloc(46 + nameBuf.length);
+      cd.writeUInt32LE(0x02014b50, 0);
+      cd.writeUInt16LE(20, 4);
+      cd.writeUInt16LE(20, 6);
+      cd.writeUInt16LE(0, 8);
+      cd.writeUInt16LE(0, 10);
+      cd.writeUInt16LE(0, 12);
+      cd.writeUInt16LE(0, 14);
+      cd.writeUInt32LE(crc, 16);
+      cd.writeUInt32LE(size, 20);
+      cd.writeUInt32LE(size, 24);
+      cd.writeUInt16LE(nameBuf.length, 28);
+      cd.writeUInt16LE(0, 30);
+      cd.writeUInt16LE(0, 32);
+      cd.writeUInt16LE(0, 34);
+      cd.writeUInt16LE(0, 36);
+      cd.writeUInt32LE(0, 38);
+      cd.writeUInt32LE(offset, 42);
+      nameBuf.copy(cd, 46);
+      localParts.push(local, file.data);
+      centralDirs.push(cd);
+      offset += local.length + size;
+    }
+    const cdBuf = Buffer.concat(centralDirs);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(0, 4);
+    eocd.writeUInt16LE(0, 6);
+    eocd.writeUInt16LE(files.length, 8);
+    eocd.writeUInt16LE(files.length, 10);
+    eocd.writeUInt32LE(cdBuf.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    eocd.writeUInt16LE(0, 20);
+    return Buffer.concat([...localParts, cdBuf, eocd]);
+  }
+
+  // ── Build a single profile's EQX payload ────────────────────────────────
+  async function buildEqxPayload(id: number): Promise<{ encrypted: Buffer; safeUsername: string } | null> {
+    const profile = await storage.getProfile(id);
+    if (!profile) return null;
+    const [allTools, followedUsers, statsData, apiCallsData] = await Promise.all([
+      storage.getToolsByProfile(id),
+      storage.getFollowedUsersByProfile(id, 100000),
+      storage.getStatsByProfile(id),
+      storage.getInstagramApiCallsByProfile(id, 2000),
+    ]);
+    const toolsWithSources = await Promise.all(
+      allTools.map(async t => ({
+        type: t.type,
+        enabled: t.enabled,
+        settings: t.settings,
+        sources: (await storage.getSourcesByTool(t.id)).map(s => ({
+          type: s.type,
+          value: s.value,
+          rank: s.rank,
+          nrPosts: s.nrPosts,
+          targetUserId: s.targetUserId,
+        })),
+      }))
+    );
+    const { id: _id, ...profileData } = profile;
+
+    // Resolve proxy details when profile uses Proxy Manager (proxyId set)
+    let resolvedProxy: { host: string; port: string; username: string | null; password: string | null } | null = null;
+    if (profile.proxyId) {
+      const proxies = await storage.getProxies();
+      const linked = proxies.find(p => p.id === profile.proxyId);
+      if (linked) {
+        resolvedProxy = {
+          host: linked.host,
+          port: String(linked.port),
+          username: linked.username ?? null,
+          password: linked.password ?? null,
+        };
+      }
+    }
+
+    const payload = {
+      version: 2,
+      software: "EQUINOX_BOT",
+      exportedAt: new Date().toISOString(),
+      profile: {
+        ...profileData,
+        ...(resolvedProxy ? {
+          resolvedProxyHost: resolvedProxy.host,
+          resolvedProxyPort: resolvedProxy.port,
+          resolvedProxyUsername: resolvedProxy.username,
+          resolvedProxyPassword: resolvedProxy.password,
+        } : {}),
+      },
+      tools: toolsWithSources,
+      followedUsers: followedUsers.map(f => ({
+        instagramUsername: f.instagramUsername,
+        instagramUserId: f.instagramUserId,
+        sourceValue: f.sourceValue,
+        sourceType: f.sourceType,
+        followedAt: f.followedAt,
+      })),
+      stats: statsData.map(s => ({
+        toolType: s.toolType,
+        count: s.count,
+        date: s.date,
+      })),
+      apiCalls: apiCallsData.map(c => ({
+        operationName: c.operationName,
+        date: c.date,
+        message: c.message,
+        source: c.source,
+        navChain: c.navChain,
+        ipAddress: c.ipAddress,
+        durationMs: c.durationMs,
+      })),
+    };
+    const encrypted = eqxEncrypt(Buffer.from(JSON.stringify(payload), "utf8"));
+    const safeUsername = (profile.username || "account").replace(/[^a-zA-Z0-9_-]/g, "_");
+    return { encrypted, safeUsername };
+  }
+
+  // ── Bulk EQX export → single ZIP download (one save dialog) ─────────────
+  app.get("/api/profiles/export-eqx-bulk", async (req, res) => {
+    try {
+      const raw = String(req.query.ids ?? "");
+      const ids = raw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      if (ids.length === 0) return res.status(400).json({ error: "No valid ids provided" });
+
+      const results = await Promise.all(ids.map(id => buildEqxPayload(id).catch(() => null)));
+      const files: Array<{ name: string; data: Buffer }> = [];
+      for (const r of results) {
+        if (r) files.push({ name: `${r.safeUsername}.eqx`, data: r.encrypted });
+      }
+      if (files.length === 0) return res.status(404).json({ error: "No profiles found for given ids" });
+
+      const zip = buildStoredZip(files);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="equinox-accounts.zip"`);
+      res.send(zip);
+    } catch (e: any) {
+      req.log.error({ err: e }, "export-eqx-bulk failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
   app.get("/api/profiles/:id/export-eqx", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const profile = await storage.getProfile(id);
-      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      const result = await buildEqxPayload(id);
+      if (!result) return res.status(404).json({ error: "Profile not found" });
 
-      const [allTools, followedUsers, statsData, apiCallsData] = await Promise.all([
-        storage.getToolsByProfile(id),
-        storage.getFollowedUsersByProfile(id, 100000),
-        storage.getStatsByProfile(id),
-        storage.getInstagramApiCallsByProfile(id, 2000),
-      ]);
-      const toolsWithSources = await Promise.all(
-        allTools.map(async t => ({
-          type: t.type,
-          enabled: t.enabled,
-          settings: t.settings,
-          sources: (await storage.getSourcesByTool(t.id)).map(s => ({
-            type: s.type,
-            value: s.value,
-            rank: s.rank,
-            nrPosts: s.nrPosts,
-            targetUserId: s.targetUserId,
-          })),
-        }))
-      );
-
-      const { id: _id, ...profileData } = profile;
-
-      const payload = {
-        version: 2,
-        software: "EQUINOX_BOT",
-        exportedAt: new Date().toISOString(),
-        profile: profileData,
-        tools: toolsWithSources,
-        followedUsers: followedUsers.map(f => ({
-          instagramUsername: f.instagramUsername,
-          instagramUserId: f.instagramUserId,
-          sourceValue: f.sourceValue,
-          sourceType: f.sourceType,
-          followedAt: f.followedAt,
-        })),
-        stats: statsData.map(s => ({
-          toolType: s.toolType,
-          count: s.count,
-          date: s.date,
-        })),
-        apiCalls: apiCallsData.map(c => ({
-          operationName: c.operationName,
-          date: c.date,
-          message: c.message,
-          source: c.source,
-          navChain: c.navChain,
-          ipAddress: c.ipAddress,
-          durationMs: c.durationMs,
-        })),
-      };
-
-      const encrypted = eqxEncrypt(Buffer.from(JSON.stringify(payload), "utf8"));
-      const safeUsername = (profile.username || "account").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const { encrypted, safeUsername } = result;
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Disposition", `attachment; filename="${safeUsername}.eqx"`);
       res.send(encrypted);
+      const profile = await storage.getProfile(id);
       storage.createSessionAction({
         profileId: id,
         toolId: 0,
         action: "account_exported",
-        targetUsername: profile.username ?? "",
+        targetUsername: profile?.username ?? "",
         sourceValue: "",
         sourceType: "system",
         result: "ok",
-        detail: `Account @${profile.username} exported as ${safeUsername}.eqx`,
+        detail: `Account @${profile?.username} exported as ${safeUsername}.eqx`,
         timestamp: new Date().toISOString(),
       }).catch(() => {});
     } catch (e: any) {

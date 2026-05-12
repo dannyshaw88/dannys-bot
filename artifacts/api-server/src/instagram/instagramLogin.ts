@@ -420,6 +420,13 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   // or just the device params string ("33/13; 400dpi; ...").  When the full UA is
   // present, parse the version from it; otherwise fall back to MOBILE_VERSION so the
   // library's stale built-in default (222.x) is never sent.
+  //
+  // BLOKS_VERSION_ID must also match the declared app version. The library ships
+  // a v222 value (388ece79…) which Instagram detects as a fingerprint mismatch
+  // when APP_VERSION is set to 378+. Override it to the v378 value so all
+  // request headers are internally consistent.
+  ig.state.constants.BLOKS_VERSION_ID = "3f4e55a5a3f13abe38d703b5fd6d2f678bd00ab21e71e74cd4dc62e08a9a3c27";
+
   {
     const parsed = parseIgUaVersion(profile.userAgentApi ?? "");
     const version     = parsed?.version     ?? MOBILE_VERSION;

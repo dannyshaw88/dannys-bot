@@ -1134,26 +1134,20 @@ export function ProfilesPage() {
                     return;
                   }
 
-                  // Multiple accounts — sequential browser downloads (works in all environments)
-                  toast({ title: "Preparing export…", description: `Downloading ${selectedProfileIds.length} EQX files…` });
-                  let downloaded = 0;
-                  for (const id of selectedProfileIds) {
-                    const profile = profiles?.find(p => p.id === id);
-                    const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
-                    try {
-                      const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                      if (!res.ok) { toast({ title: "Export skipped", description: `Could not fetch ${safeUsername}`, variant: "destructive" }); continue; }
-                      const blob = await res.blob();
-                      const objectUrl = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = objectUrl; a.download = `${safeUsername}.eqx`;
-                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                      await new Promise(r => setTimeout(r, 400));
-                      downloaded++;
-                    } catch { toast({ title: "Export skipped", description: `Error downloading ${safeUsername}`, variant: "destructive" }); }
-                  }
-                  if (downloaded > 0) toast({ title: "EQX Export Complete", description: `${downloaded} of ${selectedProfileIds.length} file(s) downloaded.` });
+                  // Multiple accounts — single ZIP download (one save dialog)
+                  toast({ title: "Preparing export…", description: `Bundling ${selectedProfileIds.length} accounts into a ZIP…` });
+                  try {
+                    const ids = selectedProfileIds.join(",");
+                    const res = await fetch(`/api/profiles/export-eqx-bulk?ids=${ids}`, { credentials: "include" });
+                    if (!res.ok) { toast({ title: "Export failed", description: "Could not generate bulk EQX archive.", variant: "destructive" }); return; }
+                    const blob = await res.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = objectUrl; a.download = "equinox-accounts.zip";
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                    toast({ title: "EQX Export Complete", description: `${selectedProfileIds.length} account(s) saved to equinox-accounts.zip` });
+                  } catch { toast({ title: "Export failed", description: "Error generating bulk EQX archive.", variant: "destructive" }); }
                 }}
                 disabled={selectedProfileIds.length === 0}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"

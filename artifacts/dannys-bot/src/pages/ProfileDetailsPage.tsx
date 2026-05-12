@@ -553,8 +553,8 @@ export function ProfileDetailsPage() {
           </div>
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
-          {/* Auto-save status bar */}
-          {(profile?.creatorMode || saveStatus !== "idle") && <div className="flex items-center justify-between mb-4 h-8">
+          {/* Auto-save status bar — always occupies fixed height to prevent layout shifts */}
+          <div className="flex items-center justify-between mb-4 h-8">
             <div className="flex items-center gap-2">
               {profile?.creatorMode && (
                 <Button
@@ -586,7 +586,7 @@ export function ProfileDetailsPage() {
                 </span>
               )}
             </div>
-          </div>}
+          </div>
 
           <CopySettingsDialog
             key={copyDialogOpen ? "open" : "closed"}
@@ -673,10 +673,10 @@ export function ProfileDetailsPage() {
 
           <div>
             <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0">
+              <CardHeader className="px-0 pt-0 pb-0">
                 <CardTitle className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Instagram Login Information</CardTitle>
               </CardHeader>
-              <CardContent className="px-0 space-y-4">
+              <CardContent className="px-0 pb-0 space-y-4">
                 <div className="space-y-4">
                   {/* Credentials + verify */}
                   <div className="space-y-3">
@@ -988,10 +988,10 @@ export function ProfileDetailsPage() {
 
             {/* Account Details */}
             <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0">
+              <CardHeader className="px-0 pt-0 pb-2">
                 <CardTitle className="flex items-center gap-2 text-base"><Tag className="w-4 h-4 text-primary" /> Account Details</CardTitle>
               </CardHeader>
-              <CardContent className="px-0 space-y-4">
+              <CardContent className="px-0 pb-0 space-y-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tags</Label>
                   <Input
@@ -1037,10 +1037,10 @@ export function ProfileDetailsPage() {
 
             {/* Security */}
             <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0">
+              <CardHeader className="px-0 pt-0 pb-2">
                 <CardTitle className="flex items-center gap-2 text-base"><KeyRound className="w-4 h-4 text-primary" /> Security</CardTitle>
               </CardHeader>
-              <CardContent className="px-0 space-y-4">
+              <CardContent className="px-0 pb-0 space-y-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground"><Phone className="w-3.5 h-3.5" /> Phone Number</Label>
                   <Input
@@ -1065,10 +1065,10 @@ export function ProfileDetailsPage() {
 
             {/* Email Validation */}
             <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0">
+              <CardHeader className="px-0 pt-0 pb-2">
                 <CardTitle className="flex items-center gap-2 text-base"><Server className="w-4 h-4 text-primary" /> Email Validation</CardTitle>
               </CardHeader>
-              <CardContent className="px-0 space-y-4">
+              <CardContent className="px-0 pb-0 space-y-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email Username</Label>
                   <Input
@@ -1116,10 +1116,10 @@ export function ProfileDetailsPage() {
             </Card>
             {/* Profile Sync */}
             <Card className="border-none shadow-none !bg-transparent">
-              <CardHeader className="px-0 pt-0">
+              <CardHeader className="px-0 pt-0 pb-2">
                 <CardTitle className="flex items-center gap-2 text-base"><RefreshCw className="w-4 h-4 text-primary" /> Profile Sync</CardTitle>
               </CardHeader>
-              <CardContent className="px-0">
+              <CardContent className="px-0 pb-0">
                 <div className="flex items-start gap-4">
                   {/* Left stat icons */}
                   <div className="flex flex-col gap-2 shrink-0">

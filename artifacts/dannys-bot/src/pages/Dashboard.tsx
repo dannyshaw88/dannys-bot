@@ -50,6 +50,17 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.261",
+    date: "13 May 2026, 04:00",
+    items: [
+      { category: "Account Settings", text: "Fixed: White space no longer appears above the Account Name label when any field is edited. The auto-save status bar now always occupies its fixed height so the layout never shifts." },
+      { category: "Account Settings", text: "Fixed: Removed the static dead white space block caused by unoverridden CardContent/CardHeader bottom padding (pb-6) leaking through transparent cards in the settings tab." },
+      { category: "EQX Export", text: "Fixed: Exporting multiple accounts now opens exactly ONE save dialog. All selected accounts are bundled into a single equinox-accounts.zip archive instead of triggering one browser download dialog per file." },
+      { category: "EQX Export", text: "Fixed: The assigned proxy IP address is now included in exported EQX files. When an account uses a Proxy Manager proxy (proxyId), the resolved host, port, username, and password are written to resolvedProxyHost/Port/Username/Password fields in the export." },
+      { category: "Instagram Login", text: "Fixed: BLOKS_VERSION_ID is now overridden to the v378 value alongside APP_VERSION. The library's stale v222 default was causing Instagram to detect a fingerprint mismatch and reject the handshake." },
+    ],
+  },
+  {
     version: "1.0.258",
     date: "13 May 2026, 01:30",
     items: [
