@@ -587,21 +587,52 @@ export function ProxiesPage() {
         </div>
       </div>
 
-      {/* ── Search ─────────────────────────────────────────────────────────── */}
-      <div className="mb-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border bg-background max-w-md">
-        <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <input
-          type="text"
-          placeholder="Search proxy, username, account… (use || for multiple)"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
-        />
-        {search && (
-          <button onClick={() => setSearch("")}>
-            <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
-          </button>
-        )}
+      {/* ── Search + Add Proxy ──────────────────────────────────────────────── */}
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border bg-background flex-1 max-w-md">
+          <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <input
+            type="text"
+            placeholder="Search proxy, username, account… (use || for multiple)"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
+          />
+          {search && (
+            <button onClick={() => setSearch("")}>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+        </div>
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="bg-sky-400 hover:bg-sky-500 text-white border-0 gap-1.5 shrink-0">
+              <Plus className="w-4 h-4" /> Add Proxy
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Add New Proxy</DialogTitle></DialogHeader>
+            <form onSubmit={handleCreate} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="hostPort">IP Address &amp; Port</Label>
+                <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" className="font-mono" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="user">Username (Optional)</Label>
+                  <Input id="user" value={username} onChange={e => setUsername(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pass">Password (Optional)</Label>
+                  <PasswordInput id="pass" value={password} onChange={e => setPassword(e.target.value)} />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={createProxyMutation.isPending}>
+                {createProxyMutation.isPending ? "Adding..." : "Save Proxy"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* ── Main card ──────────────────────────────────────────────────────── */}
@@ -703,37 +734,6 @@ export function ProxiesPage() {
             {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}
             {deletingAll ? "Deleting…" : "Delete All"}
           </button>
-          <div className="ml-auto">
-            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-              <DialogTrigger asChild>
-                <button className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap">
-                  <Plus className="w-3.5 h-3.5" /> Add Proxy
-                </button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Add New Proxy</DialogTitle></DialogHeader>
-                <form onSubmit={handleCreate} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="hostPort">IP Address &amp; Port</Label>
-                    <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" className="font-mono" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="user">Username (Optional)</Label>
-                      <Input id="user" value={username} onChange={e => setUsername(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pass">Password (Optional)</Label>
-                      <PasswordInput id="pass" value={password} onChange={e => setPassword(e.target.value)} />
-                    </div>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={createProxyMutation.isPending}>
-                    {createProxyMutation.isPending ? "Adding..." : "Save Proxy"}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
         </div>
       </div>
 

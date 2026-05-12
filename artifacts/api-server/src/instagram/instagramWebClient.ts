@@ -1071,9 +1071,13 @@ export class InstagramWebClient {
       }
       return { ok: false, status: "follow_blocked", reason: "unexpected IgApiClient response: " + JSON.stringify(result).slice(0, 200) };
     } catch (err: any) {
-      const msg: string = err?.message ?? String(err);
+      const rawMsg: string = err?.message ?? String(err);
+      // IgApiClient error messages include the full HTTP request line, e.g.
+      // "POST /api/v1/friendships/create/123/ - 200 OK; We're sorry..."
+      // Strip that prefix so only the Instagram response text is shown to the user.
+      const msg: string = rawMsg.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || rawMsg;
       const body = err?.response?.body ?? err?.text ?? err?.response?.text;
-      console.warn(`[webClient] follow ${userId}: IgApiClient error —`, msg);
+      console.warn(`[webClient] follow ${userId}: IgApiClient error —`, rawMsg);
       if (body) console.warn(`[webClient] follow ${userId}: IgApiClient raw body —`, JSON.stringify(body)?.slice(0, 600));
 
       if (/checkpoint_required/i.test(msg)) {

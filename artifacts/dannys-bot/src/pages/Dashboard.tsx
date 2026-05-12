@@ -39,6 +39,24 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.236",
+    date: "12 May 2026",
+    items: [
+      { category: "Follow Tool", text: "When Instagram returns a block mid-session the tool stops immediately and waits for its next scheduled run — no more scraping new hashtags after a block." },
+      { category: "Follow Tool", text: "Block messages in the activity log now show only the Instagram response (e.g. 'We're sorry, but something went wrong') — the internal HTTP request line is no longer included." },
+      { category: "Embedded Browser", text: "The frozen-page overlay now waits 60 seconds before appearing (was 25s), preventing false alarms during slow post-login page loads." },
+      { category: "Embedded Browser", text: "Added a 'Keep Waiting' button to the frozen-page overlay so you can dismiss it and let the page continue loading without wiping the session." },
+      { category: "Accounts", text: "Switching accounts via the dropdown or arrow buttons now keeps you on the same tab — if you were on the Follow Tool you stay on the Follow Tool for the new account." },
+      { category: "Proxy Manager", text: "Add Proxy button moved to sit directly right of the search field, styled sky-blue to match the Add Profile button." },
+      { category: "Proxy Manager", text: "Split Evenly panel now has a Group dropdown (always visible) so you can restrict distribution to one account group only." },
+      { category: "Proxy Manager", text: "Proxy list columns are now sortable — click Proxy, Username, Accounts, or Status to sort." },
+      { category: "Profiles", text: "EQX import now accepts multiple files at once." },
+      { category: "Profiles", text: "EQX export now includes the last 2000 API call history entries per account." },
+      { category: "Dashboard", text: "Accounts stuck in 'verifying' on startup are automatically reset to inactive." },
+      { category: "App", text: "Create Account sidebar icon changed from a chip to a wand." },
+    ],
+  },
+  {
     version: "1.6.0",
     date: "8 May 2026, 17:58",
     items: [

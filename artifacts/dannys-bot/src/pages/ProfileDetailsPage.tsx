@@ -465,7 +465,7 @@ export function ProfileDetailsPage() {
                   );
                 })()}
                 <button
-                  onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}`)}
+                  onClick={() => prevProfile && navigate(`/profiles/${prevProfile.id}?tab=${activeTab}`)}
                   disabled={!prevProfile}
                   title={prevProfile ? (prevProfile.accountLabel || prevProfile.username) : undefined}
                   className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -504,7 +504,7 @@ export function ProfileDetailsPage() {
                       ) : switcherProfiles.map(p => (
                         <DropdownMenuItem
                           key={p.id}
-                          onClick={() => navigate(`/profiles/${p.id}`)}
+                          onClick={() => navigate(`/profiles/${p.id}?tab=${activeTab}`)}
                           className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 text-sm ${p.id === profileId ? "bg-accent font-semibold" : ""}`}
                         >
                           <Instagram className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -516,7 +516,7 @@ export function ProfileDetailsPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <button
-                  onClick={() => nextProfile && navigate(`/profiles/${nextProfile.id}`)}
+                  onClick={() => nextProfile && navigate(`/profiles/${nextProfile.id}?tab=${activeTab}`)}
                   disabled={!nextProfile}
                   title={nextProfile ? (nextProfile.accountLabel || nextProfile.username) : undefined}
                   className="p-1 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"

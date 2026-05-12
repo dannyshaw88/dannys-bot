@@ -125,8 +125,18 @@ Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-- Current version: **v1.0.206** (the installed app reports the version it was built with; the user's current install is v1.0.205)
-- Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.205` → `1.0.206`
+- Current version: **v1.0.235**
+- Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.235` → `1.0.236`
 - The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 - Include `artifacts/electron/package.json` in every batch push alongside the other changed files
 - Do NOT skip the version bump even for small/doc-only changes
+
+### What's New changelog — REQUIRED on every push
+
+Every push **must** also include a new entry at the top of the `CHANGELOG` array in `artifacts/dannys-bot/src/pages/Dashboard.tsx`.
+
+- The `version` field must match the new version number in `artifacts/electron/package.json` (e.g. `"1.0.236"`)
+- The `date` field should be today's date in plain format (e.g. `"12 May 2026"`)
+- Write `items` in plain English — no technical jargon, no variable names, no internal references. Describe what changed from the user's perspective.
+- One item per visible change. Keep each `text` to a single concise sentence.
+- Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.

@@ -346,7 +346,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   }, [elapsedSecs]);
 
   // Stale-frame detector: if connected AND at least one frame was received but then
-  // no new frame arrives for 25 s, flag as frozen.
+  // no new frame arrives for 60 s, flag as frozen.
   // hasReceivedFirstFrameRef prevents false "frozen" during Chrome's startup window
   // (the SSE stream opens before Chrome has launched, so there's a gap before first frame).
   useEffect(() => {
@@ -356,7 +356,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       if (
         statusRef.current === "connected" &&
         hasReceivedFirstFrameRef.current &&
-        Date.now() - lastFrameTimeRef.current > 25000
+        Date.now() - lastFrameTimeRef.current > 60000
       ) {
         setIsFrozen(true);
       }
@@ -853,15 +853,20 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onContextMenu={onContextMenu}
         />
 
-        {/* Frozen overlay — no frame received for 25 s while connected */}
+        {/* Frozen overlay — no frame received for 60 s while connected */}
         {isFrozen && connected && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/80 z-20 backdrop-blur-sm">
             <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
             <p className="text-sm font-semibold text-white">Browser appears frozen</p>
-            <p className="text-xs text-slate-400 text-center max-w-xs">The page stopped sending frames. Click Clear to reset the session and reload.</p>
-            <Button size="sm" variant="destructive" onClick={clearSession} className="gap-1.5">
-              <Trash2 className="w-3.5 h-3.5" /> Clear &amp; Reset
-            </Button>
+            <p className="text-xs text-slate-400 text-center max-w-xs">The page stopped sending frames. If it just logged in or navigated to a new page, give it more time — Instagram can be slow to load.</p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="gap-1.5 border-slate-500 text-slate-200 hover:bg-slate-700" onClick={() => { lastFrameTimeRef.current = Date.now(); setIsFrozen(false); }}>
+                Keep Waiting
+              </Button>
+              <Button size="sm" variant="destructive" onClick={clearSession} className="gap-1.5">
+                <Trash2 className="w-3.5 h-3.5" /> Clear &amp; Reset
+              </Button>
+            </div>
           </div>
         )}
 

@@ -2968,7 +2968,7 @@ class AutomationEngine {
         }
 
         // Only apply suspension for explicit Instagram account-level blocks
-        const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required");
+        const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong");
         if (isLegitBlock) {
           this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
           hitHardLimit = true; break; // Abort session immediately when legitimately blocked
@@ -3117,7 +3117,7 @@ class AutomationEngine {
               this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", reason.slice(0, 300));
               state.client = null; hitHardLimit = true; break;
             }
-            if (reason.includes("Please wait") || reason.includes("feedback_required")) {
+            if (reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong")) {
               this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, rescrapeSource.value, rescrapeSource.type);
               hitHardLimit = true; break;
             }
