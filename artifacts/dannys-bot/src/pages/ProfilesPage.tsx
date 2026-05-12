@@ -933,26 +933,26 @@ export function ProfilesPage() {
           <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0">
             <button
               onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
-              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+              className="text-[12px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap"
             >
               Select All
             </button>
             <button
               onClick={() => setSelectedProfileIds([])}
-              className="text-[12px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap"
+              className="text-[12px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap"
             >
               Select None
             </button>
             <button
               onClick={() => setActionsOpen(true)}
-              className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+              className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors"
             >
               Actions <ChevronDown className="w-3.5 h-3.5" />
             </button>
             <div ref={manageProfileColsRef} className="relative ml-auto">
               <button
                 onClick={() => setManageProfileColsOpen(o => !o)}
-                className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors"
+                className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors"
               >
                 <Settings2 className="w-3.5 h-3.5" /> Columns
               </button>

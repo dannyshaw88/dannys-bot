@@ -679,7 +679,7 @@ export function ProxiesPage() {
           <button
             onClick={handleAutoLink}
             disabled={autoLinking}
-            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap disabled:opacity-50"
           >
             {autoLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
             {autoLinking ? "Linking…" : "Auto-link"}
@@ -688,13 +688,13 @@ export function ProxiesPage() {
           <button
             onClick={handlePingAll}
             disabled={pingingAll || !proxies.length}
-            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap disabled:opacity-50"
           >
             {pingingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
             {pingingAll ? `Pinging… (${testedCount}/${proxies.length})` : "Ping All"}
           </button>
           <span className="text-border">|</span>
-          <label className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors cursor-pointer whitespace-nowrap">
+          <label className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors cursor-pointer whitespace-nowrap">
             <input type="file" accept=".txt" className="hidden" onChange={handleImport} disabled={importing} />
             {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
             {importing ? "Importing…" : "Import"}
@@ -703,7 +703,7 @@ export function ProxiesPage() {
           <button
             onClick={handleExport}
             disabled={!proxies.length}
-            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" /> Export
           </button>
