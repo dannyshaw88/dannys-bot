@@ -287,6 +287,7 @@ export function ProxiesPage() {
   const [autoLinking, setAutoLinking] = useState(false);
   const [search, setSearch] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [splitGroup, setSplitGroup] = useState<string>("");
 
   type SortKey = "proxy" | "username" | "accounts" | "status" | null;
   type SortDir = "asc" | "desc";
@@ -316,6 +317,22 @@ export function ProxiesPage() {
   const autoPingedRef = useRef(false);
 
   const unassignedProfiles = allProfiles.filter(p => !p.proxyId);
+
+  // Unique non-empty group names from ALL profiles (assigned or not)
+  const allGroupNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const p of allProfiles) {
+      const g = (p.tags ?? "").trim();
+      if (g) names.add(g);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [allProfiles]);
+
+  // Unassigned profiles scoped to the selected group (or all if no group selected)
+  const splitCandidates = useMemo(() => {
+    if (!splitGroup) return unassignedProfiles;
+    return unassignedProfiles.filter(p => (p.tags ?? "").trim() === splitGroup);
+  }, [unassignedProfiles, splitGroup]);
 
   // || filter — match against host:port, username, or any assigned account username
   const filterTokens = useMemo(() =>
@@ -495,14 +512,21 @@ export function ProxiesPage() {
 
   const handleSplitEvenly = async () => {
     if (!proxies.length) { toast({ title: "No proxies to assign to", variant: "destructive" }); return; }
-    if (!unassignedProfiles.length) { toast({ title: "All accounts are already assigned to a proxy" }); return; }
+    if (!splitCandidates.length) {
+      toast({
+        title: splitGroup
+          ? `No unassigned accounts in group "${splitGroup}"`
+          : "All accounts are already assigned to a proxy",
+      });
+      return;
+    }
     setSplitting(true);
     try {
       const slots = proxies.map(proxy => {
         const count = allProfiles.filter(p => p.proxyId === proxy.id).length;
         return { proxy, remaining: Math.max(0, maxPerProxy - count) };
       });
-      const toAssign = [...unassignedProfiles];
+      const toAssign = [...splitCandidates];
       const assignments: Array<{ profileId: number; proxyId: number }> = [];
       let i = 0;
       while (toAssign.length > 0) {
@@ -522,10 +546,12 @@ export function ProxiesPage() {
         ))
       );
       await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
-      const skipped = unassignedProfiles.length - assignments.length;
+      const skipped = splitCandidates.length - assignments.length;
       toast({
         title: `Assigned ${assignments.length} ${assignments.length === 1 ? "account" : "accounts"} across ${proxies.length} proxies`,
-        description: skipped > 0 ? `${skipped} accounts couldn't be assigned — all proxies at the ${maxPerProxy} account limit.` : undefined,
+        description: skipped > 0
+          ? `${skipped} couldn't be assigned — all proxies at the ${maxPerProxy} account limit.`
+          : splitGroup ? `Group: "${splitGroup}"` : undefined,
       });
     } catch { toast({ title: "Split failed", variant: "destructive" }); }
     finally { setSplitting(false); }
@@ -718,10 +744,26 @@ export function ProxiesPage() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Split Unassigned Accounts Evenly Across All Proxies</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {unassignedProfiles.length} unassigned {unassignedProfiles.length === 1 ? "account" : "accounts"} will be distributed. Proxies already at the limit will be skipped.
+                {splitCandidates.length} unassigned {splitCandidates.length === 1 ? "account" : "accounts"}
+                {splitGroup ? <> in group <span className="font-semibold text-foreground">"{splitGroup}"</span></> : ""}{" "}
+                will be distributed. Accounts outside the selection are not touched.
               </p>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+              {/* Group filter — always visible */}
+              <div className="flex items-center gap-2">
+                <Label className="text-sm whitespace-nowrap">Group</Label>
+                <select
+                  value={splitGroup}
+                  onChange={e => setSplitGroup(e.target.value)}
+                  className="h-8 rounded border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                >
+                  <option value="">All accounts</option>
+                  {allGroupNames.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex items-center gap-2">
                 <Label htmlFor="maxPerProxy" className="text-sm whitespace-nowrap">Max per proxy</Label>
                 <Input
@@ -734,7 +776,7 @@ export function ProxiesPage() {
                   className="w-20 h-8 text-sm"
                 />
               </div>
-              <Button onClick={handleSplitEvenly} disabled={splitting || !unassignedProfiles.length} className="shrink-0">
+              <Button onClick={handleSplitEvenly} disabled={splitting || !splitCandidates.length} className="shrink-0">
                 {splitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 {splitting ? "Splitting…" : "Split Now"}
               </Button>

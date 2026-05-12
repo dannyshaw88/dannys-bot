@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Plus, Upload, Phone,
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
@@ -88,6 +88,8 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [logTab, setLogTab] = useState<"login" | "console">("login");
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [activeTab, setActiveTab] = useState(0);
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [fileChooserPending, setFileChooserPending] = useState(false);
@@ -315,6 +317,33 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   }, []);
 
   useEffect(() => { connect(); }, [connect]);
+
+  // Track how long the EB has been open (since first connection)
+  useEffect(() => {
+    if (status === "connected" && openedAt === null) {
+      setOpenedAt(Date.now());
+      setElapsedSecs(0);
+    }
+    if (status !== "connected" && status !== "connecting") {
+      // Reset timer when browser fully disconnects (not just reconnecting)
+    }
+  }, [status, openedAt]);
+
+  useEffect(() => {
+    if (openedAt === null) return;
+    const interval = setInterval(() => {
+      setElapsedSecs(Math.floor((Date.now() - openedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [openedAt]);
+
+  const elapsedLabel = useMemo(() => {
+    const h = Math.floor(elapsedSecs / 3600);
+    const m = Math.floor((elapsedSecs % 3600) / 60);
+    const s = elapsedSecs % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }, [elapsedSecs]);
 
   // Stale-frame detector: if connected AND at least one frame was received but then
   // no new frame arrives for 25 s, flag as frozen.
@@ -632,10 +661,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onClick={clearSession} disabled={!connected} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => send({ type: "newTab" })}
-          disabled={!connected} title="New tab">
-          <Plus className="w-4 h-4" />
-        </Button>
+        <div
+          title={openedAt ? `Browser open for ${elapsedLabel}` : "Browser not yet connected"}
+          className={`h-8 px-2.5 flex items-center rounded-md border text-xs font-mono font-semibold shrink-0 tabular-nums transition-colors ${
+            openedAt ? "border-border bg-muted text-foreground" : "border-transparent text-muted-foreground"
+          }`}
+        >
+          {openedAt ? elapsedLabel : "--:--"}
+        </div>
       </div>
 
       {/* Tab strip visible when 2+ tabs are open */}

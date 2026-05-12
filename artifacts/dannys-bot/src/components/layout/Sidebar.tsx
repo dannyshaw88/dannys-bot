@@ -1,7 +1,7 @@
 import { useLocation, useSearch } from "wouter";
 import {
   LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, Cpu, User, UserMinus, MessageSquare, Cookie,
+  ChevronLeft, ChevronRight, Wand2, User, UserMinus, MessageSquare, Cookie,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
@@ -39,7 +39,7 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard },
     { name: "Accounts",          path: "/profiles",            icon: Users },
-    { name: "Create an Account", path: "/create-account-api", icon: Cpu },
+    { name: "Create an Account", path: "/create-account-api", icon: Wand2 },
     { name: "Statistics",         path: "/stats",              icon: Activity },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert },
   ];
