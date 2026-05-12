@@ -1416,7 +1416,7 @@ export class InstagramWebClient {
 
   // ── Get a user's recent feed media IDs ────────────────────────────────────
   async getUserRecentMediaId(userId: string): Promise<string | null> {
-    const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=3`);
+    const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=3`);
     const items = j?.items;
     if (!Array.isArray(items) || items.length === 0) return null;
     return String(items[0].id ?? items[0].pk ?? "");
@@ -1426,7 +1426,7 @@ export class InstagramWebClient {
   // Returns the stories URL on success, false on failure.
   async viewStories(userId: string, username?: string): Promise<string | false> {
     return this.timed("ViewStories", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/reels_media/?reel_ids=${userId}`);
+      const j = await this.mobileSessionGet(`/api/v1/feed/reels_media/?reel_ids=${userId}`);
       const reel = j?.reels?.[userId] ?? j?.reels_media?.[0];
       const items: any[] = reel?.items ?? [];
       if (!items.length) return false;
@@ -1444,7 +1444,7 @@ export class InstagramWebClient {
         live_vods_skipped: "",
         nuxes_skipped: "",
       }).toString();
-      await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
+      await this.mobileSessionPost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
       return username
         ? `https://www.instagram.com/stories/${username}/`
         : `https://www.instagram.com/`;
@@ -1455,14 +1455,14 @@ export class InstagramWebClient {
   // Returns the specific highlight URL on success, false on failure.
   async viewHighlights(userId: string, username?: string): Promise<string | false> {
     return this.timed("ViewHighlights", async () => {
-      const j = await this.mobileGet(`/api/v1/highlights/${userId}/highlights_tray/`);
+      const j = await this.mobileSessionGet(`/api/v1/highlights/${userId}/highlights_tray/`);
       const trays: any[] = j?.tray ?? [];
       if (!trays.length) return false;
       // Mark first highlight as seen — fetch ALL its items (no slice limit)
       const first = trays[0];
       const reelId = String(first.id ?? "");
       if (!reelId) return false;
-      const details = await this.mobileGet(`/api/v1/feed/reels_media/?reel_ids=${reelId}`);
+      const details = await this.mobileSessionGet(`/api/v1/feed/reels_media/?reel_ids=${reelId}`);
       const items: any[] = details?.reels?.[reelId]?.items ?? details?.reels_media?.[0]?.items ?? [];
       if (!items.length) return false;
       const seenEntries = items.map((item: any) => {
@@ -1475,7 +1475,7 @@ export class InstagramWebClient {
         live_vods_skipped: "",
         nuxes_skipped: "",
       }).toString();
-      await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
+      await this.mobileSessionPost(`/api/v1/media/seen/?reel=1&nuxes=0`, body);
       // reelId looks like "highlight:17873050488030591" — strip the prefix for the URL
       const highlightNumericId = reelId.replace(/^highlight:/, "");
       return `https://www.instagram.com/stories/highlights/${highlightNumericId}/`;
@@ -1489,7 +1489,7 @@ export class InstagramWebClient {
     return this.timed("ViewReels", async () => {
       // clips/user requires POST
       const body = new URLSearchParams({ user_id: userId, max_id: "", count: "6", include_feed_video: "true" }).toString();
-      const j = await this.mobilePost(`/api/v1/clips/user/`, body);
+      const j = await this.mobileSessionPost(`/api/v1/clips/user/`, body);
       const items: any[] = j?.items ?? [];
       if (!items.length) return false;
 
@@ -1511,7 +1511,7 @@ export class InstagramWebClient {
         live_vods_skipped: "",
         nuxes_skipped: "",
       }).toString();
-      await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+      await this.mobileSessionPost(`/api/v1/media/seen/`, seenBody);
       return `https://www.instagram.com/reel/${firstShortcode}/`;
     }, username ? `View reels of @${username}` : `View reels of ${userId}`);
   }
@@ -1520,7 +1520,7 @@ export class InstagramWebClient {
   // Simulates a user tapping the heart/notification icon.
   async visitNotifications(): Promise<boolean> {
     return this.timed("VisitNotifications", async () => {
-      const j = await this.mobileGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
+      const j = await this.mobileSessionGet(`/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true`);
       return !!(j?.new_stories || j?.old_stories || j?.counts);
     }, "Visit notifications");
   }
@@ -1529,7 +1529,7 @@ export class InstagramWebClient {
   // Simulates a user tapping their own profile tab.
   async visitOwnProfile(): Promise<boolean> {
     return this.timed("VisitOwnProfile", async () => {
-      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+      const j = await this.mobileSessionGet(`/api/v1/accounts/current_user/?edit=true`);
       return !!(j?.user);
     }, "Visit own profile");
   }
@@ -1538,7 +1538,7 @@ export class InstagramWebClient {
   // Uses the same current_user endpoint but extracts the counts.
   async getOwnProfileStats(): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
     try {
-      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+      const j = await this.mobileSessionGet(`/api/v1/accounts/current_user/?edit=true`);
       const u = j?.user;
       if (!u) return null;
       return {
@@ -1563,7 +1563,7 @@ export class InstagramWebClient {
     const userId = userIdCookie ? userIdCookie.split("=")[1] : null;
     if (!userId) return false;
     return this.timed("RefreshOwnProfile", async () => {
-      const j = await this.mobileGet(`/api/v1/feed/user/${userId}/?count=12`);
+      const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=12`);
       return !!(j?.items || j?.profile_grid_items);
     }, "Refresh own profile");
   }
@@ -1573,7 +1573,7 @@ export class InstagramWebClient {
   // This endpoint requires POST as of 2024 (GET returns 405).
   async visitSettingsAndActivity(): Promise<boolean> {
     return this.timed("VisitSettingsAndActivity", async () => {
-      const j = await this.mobilePost(`/api/v1/accounts/account_security_info/`);
+      const j = await this.mobileSessionPost(`/api/v1/accounts/account_security_info/`);
       return !!(j?.status !== "fail");
     }, "Visit settings and activity");
   }
@@ -1614,7 +1614,7 @@ export class InstagramWebClient {
       // One seen call per post — matches Jarvee's per-post call pattern and is
       // more authentic than batching (real app reports seen as user scrolls past).
       await this.timed("ViewTimelineFeedSeen", async () => {
-        await this.mobilePost(`/api/v1/media/seen/`, new URLSearchParams({
+        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
           reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
           live_vods_skipped: "",
           nuxes_skipped: "",
@@ -1632,7 +1632,7 @@ export class InstagramWebClient {
   async viewTimelineReels(count: number = 5): Promise<number> {
     return this.timed("ViewTimelineReels", async () => {
       const body = new URLSearchParams({ reason: "pull_to_refresh", max_id: "" }).toString();
-      const j = await this.mobilePost(`/api/v1/clips/feed/`, body);
+      const j = await this.mobileSessionPost(`/api/v1/clips/feed/`, body);
       const items: any[] = j?.items ?? [];
       if (!items.length) return 0;
 
@@ -1653,7 +1653,7 @@ export class InstagramWebClient {
           live_vods_skipped: "",
           nuxes_skipped: "",
         }).toString();
-        await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+        await this.mobileSessionPost(`/api/v1/media/seen/`, seenBody);
       }
 
       return toView.length;
@@ -1931,7 +1931,7 @@ export class InstagramWebClient {
   async saveMedia(mediaId: string): Promise<boolean> {
     return this.timed("SaveMedia", async () => {
       const body = new URLSearchParams({ added_via: "save_to_collection" }).toString();
-      const j = await this.mobilePost(`/api/v1/media/${mediaId}/save/`, body);
+      const j = await this.mobileSessionPost(`/api/v1/media/${mediaId}/save/`, body);
       return j?.status === "ok";
     }, `Save media ${mediaId}`);
   }
@@ -1939,7 +1939,7 @@ export class InstagramWebClient {
   async likeDirectMessage(threadId: string, itemId: string): Promise<boolean> {
     return this.timed("LikeDM", async () => {
       const body = new URLSearchParams({}).toString();
-      const j = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/like/`, body);
+      const j = await this.mobileSessionPost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/like/`, body);
       return j?.status === "ok";
     }, `Like DM thread=${threadId} item=${itemId}`);
   }
@@ -2001,7 +2001,7 @@ export class InstagramWebClient {
             live_vods_skipped: "",
             nuxes_skipped: "",
           }).toString();
-          await this.mobilePost(`/api/v1/media/seen/`, seenBody);
+          await this.mobileSessionPost(`/api/v1/media/seen/`, seenBody);
           watched++;
         } catch (_) { /* best-effort */ }
       }
@@ -2326,7 +2326,7 @@ export class InstagramWebClient {
   async unsendDirectMessage(threadId: string, itemId: string): Promise<boolean> {
     return this.timed("UnsendDM", async () => {
       const body = new URLSearchParams({}).toString();
-      const j = await this.mobilePost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/delete/`, body);
+      const j = await this.mobileSessionPost(`/api/v1/direct_v2/threads/${threadId}/items/${itemId}/delete/`, body);
       return j?.status === "ok";
     }, `Unsend thread=${threadId} item=${itemId}`);
   }
@@ -2680,7 +2680,7 @@ export class InstagramWebClient {
       const user = await this.getUserByUsername(username);
       if (!user) return [];
 
-      const j = await this.mobileGet(`/api/v1/feed/user/${user.pk}/?count=12`);
+      const j = await this.mobileSessionGet(`/api/v1/feed/user/${user.pk}/?count=12`);
       const items: any[] = j?.items ?? [];
 
       return items.flatMap((item: any) => {
@@ -2733,7 +2733,7 @@ export class InstagramWebClient {
         date_time_original: new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14),
       }).toString();
 
-      const confRes = await this.mobilePost("/api/v1/media/configure/", body);
+      const confRes = await this.mobileSessionPost("/api/v1/media/configure/", body);
       const mediaId: string | null = confRes?.media?.id ? String(confRes.media.id) : null;
       if (!mediaId && confRes?.status === "ok") return uploadId;
       return mediaId;
@@ -2744,7 +2744,7 @@ export class InstagramWebClient {
   async disableComments(mediaId: string): Promise<void> {
     return this.timed("DisableComments", async () => {
       const body = new URLSearchParams({ media_id: mediaId }).toString();
-      await this.mobilePost(`/api/v1/media/${mediaId}/disable_comments/`, body);
+      await this.mobileSessionPost(`/api/v1/media/${mediaId}/disable_comments/`, body);
     }, `Disable comments on ${mediaId}`);
   }
 
@@ -2767,7 +2767,7 @@ export class InstagramWebClient {
           ...(maxId ? { max_id: maxId } : {}),
         }).toString();
 
-        const j = await this.mobilePost(`/api/v1/tags/${encodeURIComponent(tag)}/sections/`, body);
+        const j = await this.mobileSessionPost(`/api/v1/tags/${encodeURIComponent(tag)}/sections/`, body);
 
         if (!j?.sections?.length) break;
 
@@ -2802,7 +2802,7 @@ export class InstagramWebClient {
       const maxPages = Math.min(Math.ceil(maxFollowers / 50) + 2, 25);
       for (let page = 0; page < maxPages && users.length < maxFollowers; page++) {
         const qs = new URLSearchParams({ count: "50", ...(maxId ? { max_id: maxId } : {}) });
-        const j = await this.mobileGet(`/api/v1/friendships/${userId}/followers/?${qs}`);
+        const j = await this.mobileSessionGet(`/api/v1/friendships/${userId}/followers/?${qs}`);
         if (!j?.users?.length) break;
         for (const u of j.users) {
           if (u.pk && u.username) users.push({ pk: String(u.pk), username: u.username, fullName: String(u.full_name ?? "") });
@@ -2819,7 +2819,7 @@ export class InstagramWebClient {
   // ── Resolve own account pk (reuses current_user endpoint, no extra call) ──
   async getOwnUserId(): Promise<string | null> {
     return this.timed("GetOwnUser", async () => {
-      const j = await this.mobileGet(`/api/v1/accounts/current_user/?edit=true`);
+      const j = await this.mobileSessionGet(`/api/v1/accounts/current_user/?edit=true`);
       return j?.user?.pk ? String(j.user.pk) : null;
     }, "Get own user ID");
   }
@@ -2828,7 +2828,7 @@ export class InstagramWebClient {
   // Uses the search bar endpoint — looks like a human typing in the search box.
   async searchUserByUsername(username: string): Promise<{ pk: string; username: string } | null> {
     return this.timed("SearchUser", async () => {
-      const j = await this.mobileGet(`/api/v1/users/search/?timezone_offset=0&count=5&q=${encodeURIComponent(username)}`);
+      const j = await this.mobileSessionGet(`/api/v1/users/search/?timezone_offset=0&count=5&q=${encodeURIComponent(username)}`);
       const users: any[] = j?.users ?? [];
       const match = users.find((u: any) => String(u.username).toLowerCase() === username.toLowerCase());
       return match ? { pk: String(match.pk), username: String(match.username) } : null;
@@ -2840,7 +2840,7 @@ export class InstagramWebClient {
   // Called between follows to add natural API variety.
   async getSuggestedUsers(): Promise<void> {
     return this.timed("GetSuggestedUsers", async () => {
-      await this.mobileGet(`/api/v1/discover/ayml/`);
+      await this.mobileSessionGet(`/api/v1/discover/ayml/`);
     }, "Get suggested users");
   }
 }
