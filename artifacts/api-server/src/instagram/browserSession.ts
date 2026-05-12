@@ -550,6 +550,8 @@ function startFrameLoop(profileId: number) {
   let errorRetryCount = 0;    // how many times we've auto-retried this session
   let screenshotTimeoutCount = 0; // consecutive screenshot timeouts → detect crashed renderer
   let busy = false;
+  let lastFrameSentAt = Date.now();   // track when we last successfully pushed a frame
+  let noFrameWarnedAt = 0;           // avoid spamming the no-frame warning
 
   session.frameLoop = setInterval(async () => {
     const s = sessions.get(profileId);
@@ -563,12 +565,23 @@ function startFrameLoop(profileId: number) {
     if (keepAliveTick >= 75) { // 75 * 200ms = 15s
       keepAliveTick = 0;
       try { s.res.write(": keepalive\n\n"); } catch {}
+
+      // ── Server-side freeze diagnostic ─────────────────────────────────────
+      // If we have a live SSE client but haven't successfully sent a frame in
+      // 30 s, log it so the server log captures the freeze even when the
+      // frontend overlay doesn't fire or the user can't see it.
+      const silentMs = Date.now() - lastFrameSentAt;
+      if (silentMs > 30000 && Date.now() - noFrameWarnedAt > 30000) {
+        noFrameWarnedAt = Date.now();
+        log(`[frameLoop:${profileId}] ⚠ no frame sent for ${Math.round(silentMs / 1000)}s — busy=${busy} screenshotTimeouts=${screenshotTimeoutCount} url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
+      }
     }
 
     // Skip frame if a screenshot is already in flight (prevents queuing)
     if (busy) return;
     busy = true;
 
+    const frameStart = Date.now();
     try {
       const screenshotTimeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("screenshot timeout")), 8000)
@@ -581,7 +594,13 @@ function startFrameLoop(profileId: number) {
         s.page.url(),
       ]);
 
+      const screenshotMs = Date.now() - frameStart;
+      if (screenshotMs > 2000) {
+        log(`[frameLoop:${profileId}] slow screenshot: ${screenshotMs}ms url=${currentUrl.slice(0, 80)}`, "browser");
+      }
+
       sseWrite(s.res, { type: "frame", data: screenshot, url: currentUrl });
+      lastFrameSentAt = Date.now();
 
       if (currentUrl !== s.lastUrl) {
         s.lastUrl = currentUrl;
@@ -637,9 +656,11 @@ function startFrameLoop(profileId: number) {
         saveCookies(profileId, s.page);
       }
     } catch (err: any) {
+      const elapsedMs = Date.now() - frameStart;
       if (err?.message === "screenshot timeout") {
         // Chrome renderer may have crashed — count consecutive failures.
         screenshotTimeoutCount++;
+        log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} (${elapsedMs}ms elapsed) url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
         if (screenshotTimeoutCount >= 5) {
           log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts — page crashed, closing session`, "browser");
           sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
@@ -649,6 +670,11 @@ function startFrameLoop(profileId: number) {
         }
       } else {
         screenshotTimeoutCount = 0; // non-timeout error (navigation busy) — not a crash
+        const errMsg = err?.message ?? String(err);
+        // Skip expected navigation-in-progress noise; log everything else
+        if (!errMsg.includes("Execution context was destroyed") && !errMsg.includes("Target closed") && !errMsg.includes("detached")) {
+          log(`[frameLoop:${profileId}] screenshot error (${elapsedMs}ms): ${errMsg}`, "browser");
+        }
       }
     } finally {
       busy = false;
