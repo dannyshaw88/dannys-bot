@@ -1756,7 +1756,7 @@ export class InstagramWebClient {
         return -3;
       }
 
-      await this.mobilePost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
+      await this.mobileSessionPost(`/api/v1/media/seen/?reel=1&nuxes=0`, seenBody.toString());
       return seenCount;
     }, (n) => `Viewed ${n} timeline stor${n === 1 ? "y" : "ies"}`);
   }
