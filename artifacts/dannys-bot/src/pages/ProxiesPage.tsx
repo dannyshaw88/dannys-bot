@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProxies, useCreateProxy, useUpdateProxy, useDeleteProxy } from "@/hooks/use-proxies";
@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2, Upload, Download, Trash } from "lucide-react";
+import {
+  Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2,
+  Upload, Download, Trash, Search, ChevronDown, ChevronUp,
+  ArrowUp, ArrowDown, ArrowUpDown,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Proxy, Profile } from "@shared/schema";
@@ -53,16 +57,22 @@ function exportProxies(proxies: Proxy[]) {
   URL.revokeObjectURL(url);
 }
 
-interface ProxyCardProps {
+interface ProxyRowProps {
   proxy: Proxy;
   allProfiles: Profile[];
   unassignedProfiles: Profile[];
   pingResult: PingResult;
   pinging: boolean;
   onPing: (proxyId: number) => void;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  even: boolean;
 }
 
-function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing }: ProxyCardProps) {
+function ProxyRow({
+  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing,
+  expanded, onToggleExpand, even,
+}: ProxyRowProps) {
   const deleteProxyMutation = useDeleteProxy();
   const updateProxyMutation = useUpdateProxy();
   const updateProfileMutation = useUpdateProfile();
@@ -110,48 +120,67 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
     updateProfileMutation.mutate({ id: profile.id, proxyId: null });
   };
 
+  const rowBg = even ? "bg-slate-50/60" : "bg-white";
+
   return (
-    <div className="overflow-hidden">
-      {/* Proxy fields row */}
-      <div className="flex items-center gap-3 px-4 py-3">
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+    <>
+      <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
+        {/* host:port */}
+        <div className="shrink-0" style={{ width: 210 }}>
           <Input
             value={hostPort}
             onChange={e => setHostPort(e.target.value)}
             onBlur={() => saveField("hostPort")}
-            onKeyDown={e => e.key === "Enter" && (e.currentTarget.blur())}
-            className="font-mono text-sm h-8 w-48 shrink-0"
+            onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+            className="font-mono text-xs h-7 w-full"
             placeholder="host:port"
           />
+        </div>
+        {/* username */}
+        <div className="shrink-0" style={{ width: 120 }}>
           <Input
             value={username}
             onChange={e => setUsername(e.target.value)}
             onBlur={() => saveField("username")}
-            onKeyDown={e => e.key === "Enter" && (e.currentTarget.blur())}
+            onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
             placeholder="username"
-            className="font-mono text-sm h-8 w-32 shrink-0"
+            className="text-xs h-7 w-full"
           />
+        </div>
+        {/* password */}
+        <div className="shrink-0" style={{ width: 120 }}>
           <Input
             value={password}
             onChange={e => setPassword(e.target.value)}
             onBlur={() => saveField("password")}
-            onKeyDown={e => e.key === "Enter" && (e.currentTarget.blur())}
+            onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
             placeholder="password"
-            className="font-mono text-sm h-8 w-32 shrink-0"
+            className="text-xs h-7 w-full"
           />
-          {totalCount > 0 && (
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${
-              validCount === totalCount
-                ? "bg-emerald-50 text-emerald-700"
+        </div>
+        {/* accounts badge (click to expand) */}
+        <div className="shrink-0 flex justify-center" style={{ width: 76 }}>
+          <button
+            onClick={onToggleExpand}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${
+              totalCount === 0
+                ? "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                : validCount === totalCount
+                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                 : validCount === 0
-                ? "bg-slate-100 text-slate-500"
-                : "bg-yellow-50 text-yellow-700"
-            }`}>
-              {validCount}/{totalCount}
-            </span>
-          )}
-          {pingResult && (
-            <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded shrink-0 ${
+                ? "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                : "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+            }`}
+          >
+            <User className="w-3 h-3" />
+            {totalCount === 0 ? "0" : `${validCount}/${totalCount}`}
+            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        </div>
+        {/* ping status */}
+        <div className="shrink-0" style={{ width: 88 }}>
+          {pingResult ? (
+            <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${
               pingResult.alive
                 ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600"
                   : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600"
@@ -163,72 +192,78 @@ function ProxyCard({ proxy, allProfiles, unassignedProfiles, pingResult, pinging
                 : <><WifiOff className="w-3 h-3" />Dead</>
               }
             </span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground/40">—</span>
           )}
+        </div>
+        {/* actions */}
+        <div className="flex items-center gap-1 ml-auto shrink-0">
           <Button
             variant="ghost" size="icon"
-            className={`h-8 w-8 shrink-0 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+            className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
             onClick={() => onPing(proxy.id)}
             disabled={pinging}
-            title="Ping through this proxy"
+            title="Ping proxy"
           >
             {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
           </Button>
           <Button
             variant="ghost" size="icon"
-            className="h-8 w-8 shrink-0 text-white bg-red-500 hover:bg-red-600"
+            className="h-7 w-7 text-white bg-red-500 hover:bg-red-600"
             onClick={() => {
               if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) {
                 deleteProxyMutation.mutate(proxy.id);
               }
             }}
+            title="Delete proxy"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
 
-      {/* Assigned profiles */}
-      <div className="border-t border-border/50 px-4 py-2 bg-accent/10">
-        <div className="flex flex-col gap-0.5">
-          {assigned.map(profile => (
-            <div key={profile.id} className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-accent/40 transition-colors group">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground min-w-0">
-                <User className="w-3 h-3 shrink-0 text-primary" />
-                <span className="truncate">{profile.username}</span>
+      {/* Expanded assigned accounts */}
+      {expanded && (
+        <div className="border-b border-border/40 bg-accent/10 px-4 py-2">
+          <div className="flex flex-col gap-0.5">
+            {assigned.map(profile => (
+              <div key={profile.id} className="flex items-center justify-between gap-2 px-2 py-0.5 rounded hover:bg-accent/40 transition-colors group">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-foreground min-w-0">
+                  <User className="w-3 h-3 shrink-0 text-primary" />
+                  <span className="truncate">{profile.username}</span>
+                </div>
+                <button
+                  onClick={() => handleUnassign(profile)}
+                  disabled={updateProfileMutation.isPending}
+                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
-              <button
-                onClick={() => handleUnassign(profile)}
+            ))}
+            {unassignedProfiles.length > 0 && (
+              <select
+                className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
+                value=""
+                onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
                 disabled={updateProfileMutation.isPending}
-                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
               >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
-
-          {unassignedProfiles.length > 0 && (
-            <select
-              className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
-              value=""
-              onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
-              disabled={updateProfileMutation.isPending}
-            >
-              <option value="">+ Assign account…</option>
-              {unassignedProfiles.map(p => (
-                <option key={p.id} value={p.id}>{p.username}</option>
-              ))}
-            </select>
-          )}
-
-          {assigned.length === 0 && unassignedProfiles.length === 0 && (
-            <span className="text-xs text-muted-foreground italic px-2 py-1">All accounts assigned to proxies</span>
-          )}
-          {assigned.length === 0 && unassignedProfiles.length > 0 && (
-            <span className="text-xs text-muted-foreground italic px-2 py-1">No accounts assigned use dropdown to add</span>
-          )}
+                <option value="">+ Assign account…</option>
+                {unassignedProfiles.map(p => (
+                  <option key={p.id} value={p.id}>{p.username}</option>
+                ))}
+              </select>
+            )}
+            {assigned.length === 0 && unassignedProfiles.length === 0 && (
+              <span className="text-xs text-muted-foreground italic px-2 py-0.5">All accounts assigned to proxies</span>
+            )}
+            {assigned.length === 0 && unassignedProfiles.length > 0 && (
+              <span className="text-xs text-muted-foreground italic px-2 py-0.5">No accounts assigned — use dropdown to add</span>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
@@ -250,14 +285,87 @@ export function ProxiesPage() {
   const [maxPerProxy, setMaxPerProxy] = useState(5);
   const [splitting, setSplitting] = useState(false);
   const [autoLinking, setAutoLinking] = useState(false);
+  const [search, setSearch] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
-  // Centralised ping state
+  type SortKey = "proxy" | "username" | "accounts" | "status" | null;
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      if (sortDir === "asc") setSortDir("desc");
+      else { setSortKey(null); setSortDir("asc"); }
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) return <ArrowUpDown className="w-3 h-3 opacity-30 inline ml-0.5" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="w-3 h-3 text-primary inline ml-0.5" />
+      : <ArrowDown className="w-3 h-3 text-primary inline ml-0.5" />;
+  }
+
   const [pingResults, setPingResults] = useState<Record<number, PingResult>>({});
   const [pingingIds, setPingingIds] = useState<Set<number>>(new Set());
   const [pingingAll, setPingingAll] = useState(false);
   const autoPingedRef = useRef(false);
 
   const unassignedProfiles = allProfiles.filter(p => !p.proxyId);
+
+  // || filter — match against host:port, username, or any assigned account username
+  const filterTokens = useMemo(() =>
+    search.split(/\|\|?/).map(t => t.trim().toLowerCase()).filter(Boolean),
+    [search]
+  );
+
+  const filteredProxies = useMemo(() => {
+    let list = proxies;
+    if (filterTokens.length > 0) {
+      list = proxies.filter(proxy => {
+        const addr = `${proxy.host}:${proxy.port}`.toLowerCase();
+        const user = (proxy.username ?? "").toLowerCase();
+        const assignedNames = allProfiles
+          .filter(p => p.proxyId === proxy.id)
+          .map(p => p.username.toLowerCase());
+        return filterTokens.some(t =>
+          addr.includes(t) || user.includes(t) || assignedNames.some(n => n.includes(t))
+        );
+      });
+    }
+    if (!sortKey) return list;
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "proxy") {
+        cmp = `${a.host}:${a.port}`.localeCompare(`${b.host}:${b.port}`);
+      } else if (sortKey === "username") {
+        cmp = (a.username ?? "").localeCompare(b.username ?? "");
+      } else if (sortKey === "accounts") {
+        const ac = allProfiles.filter(p => p.proxyId === a.id).length;
+        const bc = allProfiles.filter(p => p.proxyId === b.id).length;
+        cmp = ac - bc;
+      } else if (sortKey === "status") {
+        const ar = pingResults[a.id];
+        const br = pingResults[b.id];
+        const aMs = ar ? (ar.alive ? ar.latencyMs : 999999) : 9999999;
+        const bMs = br ? (br.alive ? br.latencyMs : 999999) : 9999999;
+        cmp = aMs - bMs;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [proxies, filterTokens, allProfiles, sortKey, sortDir, pingResults]);
+
+  const toggleExpand = (id: number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const pingOne = async (proxyId: number): Promise<PingResult> => {
     setPingingIds(prev => new Set(prev).add(proxyId));
@@ -307,7 +415,7 @@ export function ProxiesPage() {
       const alive = results.filter(r => r?.alive).length;
       const dead = results.length - alive;
       toast({
-        title: `Ping complete ${alive} alive, ${dead} dead`,
+        title: `Ping complete — ${alive} alive, ${dead} dead`,
         description: dead > 0 ? "Dead proxies are highlighted in red." : "All proxies are responding.",
       });
     } finally {
@@ -315,7 +423,6 @@ export function ProxiesPage() {
     }
   };
 
-  // Auto-ping all proxies once when the page first loads with data
   useEffect(() => {
     if (proxiesLoading || proxies.length === 0 || autoPingedRef.current) return;
     autoPingedRef.current = true;
@@ -418,7 +525,7 @@ export function ProxiesPage() {
       const skipped = unassignedProfiles.length - assignments.length;
       toast({
         title: `Assigned ${assignments.length} ${assignments.length === 1 ? "account" : "accounts"} across ${proxies.length} proxies`,
-        description: skipped > 0 ? `${skipped} accounts couldn't be assigned all proxies at the ${maxPerProxy} account limit.` : undefined,
+        description: skipped > 0 ? `${skipped} accounts couldn't be assigned — all proxies at the ${maxPerProxy} account limit.` : undefined,
       });
     } catch { toast({ title: "Split failed", variant: "destructive" }); }
     finally { setSplitting(false); }
@@ -430,137 +537,183 @@ export function ProxiesPage() {
 
   return (
     <AppLayout>
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Proxy Manager</h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <p className="text-muted-foreground text-sm">
-              {proxies.length} {proxies.length === 1 ? "proxy" : "proxies"} · {unassignedProfiles.length} unassigned {unassignedProfiles.length === 1 ? "account" : "accounts"}
-            </p>
-            {testedCount > 0 && (
-              <div className="flex items-center gap-2 text-xs font-medium">
-                {aliveCount > 0 && (
-                  <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">
-                    <Wifi className="w-3 h-3" />{aliveCount} alive
-                  </span>
-                )}
-                {deadCount > 0 && (
-                  <span className="flex items-center gap-1 bg-red-50 text-red-500 px-2 py-0.5 rounded-full">
-                    <WifiOff className="w-3 h-3" />{deadCount} dead
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="mb-3 flex items-center gap-3 flex-wrap">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Proxy Manager</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            onClick={handleAutoLink}
-            disabled={autoLinking}
-          >
-            {autoLinking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-            {autoLinking ? "Linking…" : "Auto-link Accounts"}
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handlePingAll}
-            disabled={pingingAll || !proxies.length}
-          >
-            {pingingAll
-              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              : <Wifi className="w-4 h-4 mr-2" />
-            }
-            {pingingAll ? `Pinging… (${testedCount}/${proxies.length})` : "Ping All"}
-          </Button>
-
-          <label>
-            <input type="file" accept=".txt" className="hidden" onChange={handleImport} disabled={importing} />
-            <Button variant="outline" disabled={importing} asChild>
-              <span className="cursor-pointer">
-                {importing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                {importing ? "Importing…" : "Import Proxies"}
-              </span>
-            </Button>
-          </label>
-
-          <Button variant="outline" onClick={handleExport} disabled={!proxies.length}>
-            <Download className="w-4 h-4 mr-2" /> Export Proxies
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handleDeleteAll}
-            disabled={deletingAll || !proxies.length}
-            className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
-          >
-            {deletingAll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash className="w-4 h-4 mr-2" />}
-            {deletingAll ? "Deleting…" : "Delete All"}
-          </Button>
-
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="w-4 h-4 mr-2" /> Add Proxy</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add New Proxy</DialogTitle></DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="hostPort">IP Address &amp; Port</Label>
-                  <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" className="font-mono" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="user">Username (Optional)</Label>
-                    <Input id="user" value={username} onChange={e => setUsername(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pass">Password (Optional)</Label>
-                    <PasswordInput id="pass" value={password} onChange={e => setPassword(e.target.value)} />
-                  </div>
-                </div>
-                <Button type="submit" className="w-full" disabled={createProxyMutation.isPending}>
-                  {createProxyMutation.isPending ? "Adding..." : "Save Proxy"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <p className="text-muted-foreground text-sm">
+            {proxies.length} {proxies.length === 1 ? "proxy" : "proxies"} · {unassignedProfiles.length} unassigned {unassignedProfiles.length === 1 ? "account" : "accounts"}
+          </p>
+          {testedCount > 0 && (
+            <div className="flex items-center gap-2 text-xs font-medium">
+              {aliveCount > 0 && (
+                <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">
+                  <Wifi className="w-3 h-3" />{aliveCount} alive
+                </span>
+              )}
+              {deadCount > 0 && (
+                <span className="flex items-center gap-1 bg-red-50 text-red-500 px-2 py-0.5 rounded-full">
+                  <WifiOff className="w-3 h-3" />{deadCount} dead
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {proxiesLoading ? (
-        <div className="desktop-card overflow-hidden divide-y divide-border">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="p-5 animate-pulse h-24 bg-muted/10" />
-          ))}
-        </div>
-      ) : proxies.length === 0 ? (
-        <div className="desktop-card px-6 py-16 text-center text-muted-foreground">
-          <Shield className="w-10 h-10 mx-auto mb-4 opacity-20" />
-          <p className="font-medium">No proxies configured</p>
-          <p className="text-sm mt-1">Import or add a proxy above to get started.</p>
-        </div>
-      ) : (
-        <div className="desktop-card overflow-hidden divide-y divide-border">
-          {proxies.map(proxy => (
-            <ProxyCard
-              key={proxy.id}
-              proxy={proxy}
-              allProfiles={allProfiles}
-              unassignedProfiles={unassignedProfiles}
-              pingResult={pingResults[proxy.id] ?? null}
-              pinging={pingingIds.has(proxy.id)}
-              onPing={pingOne}
-            />
-          ))}
-        </div>
-      )}
+      {/* ── Search ─────────────────────────────────────────────────────────── */}
+      <div className="mb-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border bg-background max-w-md">
+        <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <input
+          type="text"
+          placeholder="Search proxy, username, account… (use || for multiple)"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="text-xs bg-transparent outline-none flex-1 text-foreground placeholder:text-muted-foreground"
+        />
+        {search && (
+          <button onClick={() => setSearch("")}>
+            <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
 
-      {/* Split evenly panel */}
+      {/* ── Main card ──────────────────────────────────────────────────────── */}
+      <div className="desktop-card overflow-hidden flex flex-col" style={{ height: "calc(100vh - 210px)" }}>
+
+        {/* Column header */}
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
+          <button onClick={() => handleSort("proxy")} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors ${sortKey === "proxy" ? "text-primary" : ""}`} style={{ width: 210 }}>
+            Proxy<SortIcon col="proxy" />
+          </button>
+          <button onClick={() => handleSort("username")} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors ${sortKey === "username" ? "text-primary" : ""}`} style={{ width: 120 }}>
+            Username<SortIcon col="username" />
+          </button>
+          <div className="shrink-0" style={{ width: 120 }}>Password</div>
+          <button onClick={() => handleSort("accounts")} className={`shrink-0 flex items-center justify-center gap-0.5 hover:text-primary transition-colors ${sortKey === "accounts" ? "text-primary" : ""}`} style={{ width: 76 }}>
+            Accounts<SortIcon col="accounts" />
+          </button>
+          <button onClick={() => handleSort("status")} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors ${sortKey === "status" ? "text-primary" : ""}`} style={{ width: 88 }}>
+            Status<SortIcon col="status" />
+          </button>
+          <div className="ml-auto shrink-0 pr-1">Actions</div>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="overflow-y-auto flex-1 min-h-0">
+          {proxiesLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-10 animate-pulse bg-muted/10 border-b border-border/30" />
+            ))
+          ) : proxies.length === 0 ? (
+            <div className="flex flex-col items-center py-20 text-muted-foreground">
+              <Shield className="w-10 h-10 mx-auto mb-4 opacity-20" />
+              <p className="font-medium">No proxies configured</p>
+              <p className="text-sm mt-1">Use "Add Proxy" below to get started.</p>
+            </div>
+          ) : filteredProxies.length === 0 ? (
+            <div className="flex flex-col items-center py-16 text-muted-foreground">
+              <Search className="w-8 h-8 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">No proxies match this filter</p>
+              <button onClick={() => setSearch("")} className="text-sm mt-1 text-primary hover:underline">Clear search</button>
+            </div>
+          ) : (
+            filteredProxies.map((proxy, idx) => (
+              <ProxyRow
+                key={proxy.id}
+                proxy={proxy}
+                allProfiles={allProfiles}
+                unassignedProfiles={unassignedProfiles}
+                pingResult={pingResults[proxy.id] ?? null}
+                pinging={pingingIds.has(proxy.id)}
+                onPing={pingOne}
+                expanded={expandedIds.has(proxy.id)}
+                onToggleExpand={() => toggleExpand(proxy.id)}
+                even={idx % 2 === 1}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Bottom toolbar */}
+        <div className="flex items-center gap-2 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0 flex-wrap">
+          <button
+            onClick={handleAutoLink}
+            disabled={autoLinking}
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            {autoLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            {autoLinking ? "Linking…" : "Auto-link"}
+          </button>
+          <span className="text-border">|</span>
+          <button
+            onClick={handlePingAll}
+            disabled={pingingAll || !proxies.length}
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            {pingingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+            {pingingAll ? `Pinging… (${testedCount}/${proxies.length})` : "Ping All"}
+          </button>
+          <span className="text-border">|</span>
+          <label className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors cursor-pointer whitespace-nowrap">
+            <input type="file" accept=".txt" className="hidden" onChange={handleImport} disabled={importing} />
+            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {importing ? "Importing…" : "Import"}
+          </label>
+          <span className="text-border">|</span>
+          <button
+            onClick={handleExport}
+            disabled={!proxies.length}
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5" /> Export
+          </button>
+          <span className="text-border">|</span>
+          <button
+            onClick={handleDeleteAll}
+            disabled={deletingAll || !proxies.length}
+            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-destructive hover:text-destructive/80 transition-colors whitespace-nowrap disabled:opacity-50"
+          >
+            {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}
+            {deletingAll ? "Deleting…" : "Delete All"}
+          </button>
+          <div className="ml-auto">
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger asChild>
+                <button className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors whitespace-nowrap">
+                  <Plus className="w-3.5 h-3.5" /> Add Proxy
+                </button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Add New Proxy</DialogTitle></DialogHeader>
+                <form onSubmit={handleCreate} className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="hostPort">IP Address &amp; Port</Label>
+                    <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" className="font-mono" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="user">Username (Optional)</Label>
+                      <Input id="user" value={username} onChange={e => setUsername(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pass">Password (Optional)</Label>
+                      <PasswordInput id="pass" value={password} onChange={e => setPassword(e.target.value)} />
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={createProxyMutation.isPending}>
+                    {createProxyMutation.isPending ? "Adding..." : "Save Proxy"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Split evenly panel ─────────────────────────────────────────────── */}
       {proxies.length > 0 && (
-        <div className="desktop-card mt-6 px-5 py-4">
+        <div className="desktop-card mt-4 px-5 py-4">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Split Unassigned Accounts Evenly Across All Proxies</p>

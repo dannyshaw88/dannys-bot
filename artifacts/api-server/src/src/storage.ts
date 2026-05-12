@@ -51,7 +51,9 @@ export interface IStorage {
 
   // Instagram API Calls
   getInstagramApiCalls(limit?: number): Promise<any[]>;
+  getInstagramApiCallsByProfile(profileId: number, limit?: number): Promise<any[]>;
   createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
+  resetStuckVerifyingAccounts(): Promise<number>;
 
   // Followed Users
   getFollowedUsersByProfile(profileId: number, limit?: number): Promise<FollowedUser[]>;
@@ -266,6 +268,25 @@ export class DatabaseStorage implements IStorage {
 
   async getInstagramApiCalls(limit: number = 100000): Promise<any[]> {
     return await db.select().from(instagramApiCalls).orderBy(desc(instagramApiCalls.id)).limit(limit);
+  }
+
+  async getInstagramApiCallsByProfile(profileId: number, limit: number = 2000): Promise<any[]> {
+    return await db.select().from(instagramApiCalls)
+      .where(eq(instagramApiCalls.profileId, profileId))
+      .orderBy(desc(instagramApiCalls.id))
+      .limit(limit);
+  }
+
+  async resetStuckVerifyingAccounts(): Promise<number> {
+    const stuck = await db.select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.accountStatus, "verifying"));
+    if (stuck.length === 0) return 0;
+    for (const p of stuck) {
+      await db.update(profiles).set({ accountStatus: "pending" }).where(eq(profiles.id, p.id));
+    }
+    console.warn(`[startup] Reset ${stuck.length} stuck-in-verifying account(s) → pending`);
+    return stuck.length;
   }
 
   async getInstagramApiCallsSince(sinceId: number, limit: number = 5000): Promise<any[]> {

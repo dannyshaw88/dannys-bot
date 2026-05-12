@@ -1011,44 +1011,77 @@ export function ProfilesPage() {
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
 
-      {/* Hidden EQX import file input */}
+      {/* Hidden EQX import file input — multiple allowed */}
       <input
         ref={eqxImportRef}
         type="file"
         accept=".eqx"
+        multiple
         className="hidden"
         onChange={async (e) => {
-          const file = e.target.files?.[0];
+          const files = Array.from(e.target.files ?? []);
           if (!eqxImportRef.current) return;
           eqxImportRef.current.value = "";
-          if (!file) return;
+          if (!files.length) return;
           setEqxImporting(true);
-          try {
-            const buffer = await file.arrayBuffer();
-            const bytes = new Uint8Array(buffer);
-            let binary = "";
-            const CHUNK = 8192;
-            for (let i = 0; i < bytes.length; i += CHUNK) {
-              binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+
+          const results: { username: string; ok: boolean; error?: string }[] = [];
+
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (files.length > 1) {
+              toast({ title: `Importing ${i + 1} of ${files.length}…`, description: file.name });
             }
-            const eqxBase64 = btoa(binary);
-            const res = await fetch("/api/profiles/import-eqx", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ eqxBase64 }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-              toast({ title: "Import failed", description: data.error ?? "Unknown error", variant: "destructive" });
-            } else {
-              toast({ title: "EQX imported", description: `@${data.username} imported successfully (${data.followedImported} followed users).` });
+            try {
+              const buffer = await file.arrayBuffer();
+              const bytes = new Uint8Array(buffer);
+              let binary = "";
+              const CHUNK = 8192;
+              for (let j = 0; j < bytes.length; j += CHUNK) {
+                binary += String.fromCharCode(...bytes.subarray(j, j + CHUNK));
+              }
+              const eqxBase64 = btoa(binary);
+              const res = await fetch("/api/profiles/import-eqx", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ eqxBase64 }),
+              });
+              const data = await res.json();
+              if (!res.ok) {
+                results.push({ username: file.name, ok: false, error: data.error ?? "Unknown error" });
+              } else {
+                results.push({ username: data.username, ok: true });
+              }
+            } catch (err: any) {
+              results.push({ username: file.name, ok: false, error: err?.message ?? "Could not read file" });
             }
-          } catch (err: any) {
-            toast({ title: "Import failed", description: err?.message ?? "Could not read file", variant: "destructive" });
-          } finally {
-            setEqxImporting(false);
           }
+
+          // Summary toast
+          if (files.length === 1) {
+            const r = results[0];
+            if (r.ok) {
+              toast({ title: "EQX imported", description: `@${r.username} imported successfully.` });
+            } else {
+              toast({ title: "Import failed", description: r.error, variant: "destructive" });
+            }
+          } else {
+            const ok = results.filter(r => r.ok);
+            const failed = results.filter(r => !r.ok);
+            if (ok.length > 0) {
+              toast({
+                title: `${ok.length} of ${files.length} EQX files imported`,
+                description: failed.length > 0
+                  ? `Failed: ${failed.map(r => r.username).join(", ")}`
+                  : `${ok.map(r => `@${r.username}`).join(", ")}`,
+              });
+            } else {
+              toast({ title: "All imports failed", description: failed.map(r => r.error).join("; "), variant: "destructive" });
+            }
+          }
+
+          setEqxImporting(false);
         }}
       />
 

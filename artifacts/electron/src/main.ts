@@ -74,13 +74,12 @@ function getIconPath(): string {
 }
 
 function getTrayIconPath(): string {
-  // On Windows use the solid-background ICO — transparent PNGs render as black
-  // blobs or are invisible in the system tray against light/dark taskbars.
+  // Use the same icon.ico as the .exe so the tray icon matches the app icon.
   if (process.platform === "win32") {
     if (app.isPackaged) {
-      return path.join(process.resourcesPath, "app", "dist", "assets", "icon-tray.ico");
+      return path.join(process.resourcesPath, "app", "dist", "assets", "icon.ico");
     }
-    return path.join(__dirname, "..", "assets", "icon-tray.ico");
+    return path.join(__dirname, "..", "assets", "icon.ico");
   }
   return getIconPath();
 }

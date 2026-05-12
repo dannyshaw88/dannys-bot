@@ -708,8 +708,8 @@ export async function browserMouseMove(profileId: number, x: number, y: number) 
 export async function browserScroll(profileId: number, x: number, y: number, deltaX: number, deltaY: number) {
   const s = sessions.get(profileId);
   if (!s) return;
-  // Use Puppeteer's wheel event for accurate scroll
-  await s.page.mouse.move(x, y);
+  // Fire the wheel event directly — mouse.move is unnecessary for page-level
+  // scrolling and was halving throughput by adding an extra CDP round-trip.
   await s.page.mouse.wheel({ deltaX, deltaY });
 }
 

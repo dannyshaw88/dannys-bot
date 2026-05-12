@@ -494,22 +494,6 @@ export function Dashboard() {
           </div>
         </div>
 
-        {lastImport && lastImport.ts > importDismissed && (
-          <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/10 text-xs">
-            <Upload className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="font-medium text-foreground">Last import:</span>
-            <span className="text-muted-foreground truncate max-w-[180px]" title={lastImport.fileName}>{lastImport.fileName}</span>
-            {lastImport.created > 0 && <span className="font-semibold text-emerald-600">{lastImport.created} created</span>}
-            {lastImport.updated > 0 && <span className="font-semibold text-blue-600">{lastImport.updated} updated</span>}
-            {lastImport.failed > 0 && <span className="font-semibold text-destructive">{lastImport.failed} failed</span>}
-            <button
-              onClick={() => { localStorage.setItem("equinox_import_dismissed", String(lastImport.ts)); setImportDismissed(lastImport.ts); }}
-              className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        )}
 
         <CardHeader className="border-b border-border/50 bg-muted/5 py-3 px-6">
           <div className={`flex items-center gap-3 flex-wrap ${activeTab !== "api-log" ? "hidden" : ""}`}>
@@ -627,6 +611,44 @@ export function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
+                  {lastImport && lastImport.ts > importDismissed && activeTab === "api-log" && (
+                    <tr className="bg-blue-50/60 hover:bg-blue-50 transition-colors">
+                      <td className="px-3 py-3 font-medium truncate">
+                        <span className="flex items-center gap-1.5 text-foreground min-w-0">
+                          <Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          <span className="truncate text-xs font-semibold">Import</span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 truncate">
+                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
+                          Account Import
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground truncate" title={lastImport.fileName}>
+                        {lastImport.fileName}
+                      </td>
+                      <td className="px-3 py-3 text-xs truncate">
+                        <span className="flex items-center gap-2">
+                          {lastImport.created > 0 && <span className="font-semibold text-emerald-600">{lastImport.created} created</span>}
+                          {lastImport.updated > 0 && <span className="font-semibold text-blue-600">{lastImport.updated} updated</span>}
+                          {lastImport.failed > 0 && <span className="font-semibold text-destructive">{lastImport.failed} failed</span>}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-muted-foreground text-xs font-mono truncate">
+                        <span className="flex items-center gap-1 min-w-0">
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{format(new Date(lastImport.ts), "MMM d yyyy, HH:mm:ss")}</span>
+                          <button
+                            onClick={() => { localStorage.setItem("equinox_import_dismissed", String(lastImport.ts)); setImportDismissed(lastImport.ts); }}
+                            className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                            title="Dismiss"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      </td>
+                    </tr>
+                  )}
                   {initialLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">

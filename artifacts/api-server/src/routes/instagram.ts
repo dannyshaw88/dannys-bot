@@ -101,6 +101,11 @@ export async function registerInstagramRoutes(
     // If DB read fails, keep the in-memory start time
   }
 
+  // Reset any accounts stuck in "verifying" from a previous crashed/restarted server.
+  // A "verifying" status only makes sense while the server is actively running the
+  // verify call — on startup there can be no such call in flight.
+  storage.resetStuckVerifyingAccounts().catch(() => {});
+
   automationEngine.start();
 
   // Proxies
@@ -1598,7 +1603,12 @@ export async function registerInstagramRoutes(
       const profile = await storage.getProfile(id);
       if (!profile) return res.status(404).json({ error: "Profile not found" });
 
-      const allTools = await storage.getToolsByProfile(id);
+      const [allTools, followedUsers, statsData, apiCallsData] = await Promise.all([
+        storage.getToolsByProfile(id),
+        storage.getFollowedUsersByProfile(id, 100000),
+        storage.getStatsByProfile(id),
+        storage.getInstagramApiCallsByProfile(id, 2000),
+      ]);
       const toolsWithSources = await Promise.all(
         allTools.map(async t => ({
           type: t.type,
@@ -1613,13 +1623,11 @@ export async function registerInstagramRoutes(
           })),
         }))
       );
-      const followedUsers = await storage.getFollowedUsersByProfile(id, 100000);
-      const statsData = await storage.getStatsByProfile(id);
 
       const { id: _id, ...profileData } = profile;
 
       const payload = {
-        version: 1,
+        version: 2,
         software: "EQUINOX_BOT",
         exportedAt: new Date().toISOString(),
         profile: profileData,
@@ -1635,6 +1643,15 @@ export async function registerInstagramRoutes(
           toolType: s.toolType,
           count: s.count,
           date: s.date,
+        })),
+        apiCalls: apiCallsData.map(c => ({
+          operationName: c.operationName,
+          date: c.date,
+          message: c.message,
+          source: c.source,
+          navChain: c.navChain,
+          ipAddress: c.ipAddress,
+          durationMs: c.durationMs,
         })),
       };
 

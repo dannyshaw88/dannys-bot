@@ -80,6 +80,10 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [loginState, setLoginState] = useState<LoginState>("idle");
   const [loginLog, setLoginLog] = useState<LogEntry[]>([]);
   const [consoleLogs, setConsoleLogs] = useState<ConsoleEntry[]>([]);
+  const [totpCode, setTotpCode] = useState<string | null>(null);
+  const [totpCopied, setTotpCopied] = useState(false);
+  const [totpNoKey, setTotpNoKey] = useState(false);
+  const cachedTwoFASecretRef = useRef<string | null | undefined>(undefined);
   const [showLog, setShowLog] = useState(false);
   const [logTab, setLogTab] = useState<"login" | "console">("login");
   const [tabs, setTabs] = useState<TabInfo[]>([]);
@@ -104,6 +108,48 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     setLoginLog(prev => [...prev, { ts: nowTs(), text, kind }]);
   }, []);
 
+  const generateTotp = useCallback(async () => {
+    setTotpNoKey(false);
+    let secret = cachedTwoFASecretRef.current;
+    if (secret === undefined) {
+      try {
+        const res = await fetch(`/api/profiles/${profileId}`);
+        const p = await res.json();
+        secret = (p.twoFASecretKey as string | null) ?? null;
+        cachedTwoFASecretRef.current = secret;
+      } catch { return; }
+    }
+    if (!secret?.trim()) { setTotpNoKey(true); setTimeout(() => setTotpNoKey(false), 3000); return; }
+    try {
+      const b32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+      const cleaned = secret.toUpperCase().replace(/\s+/g, "").replace(/=/g, "");
+      let bits = 0, val = 0;
+      const bytes: number[] = [];
+      for (const ch of cleaned) {
+        const idx = b32.indexOf(ch);
+        if (idx < 0) continue;
+        val = (val << 5) | idx; bits += 5;
+        if (bits >= 8) { bytes.push((val >>> (bits - 8)) & 0xff); bits -= 8; }
+      }
+      if (!bytes.length) { setTotpNoKey(true); setTimeout(() => setTotpNoKey(false), 3000); return; }
+      const key = await crypto.subtle.importKey(
+        "raw", new Uint8Array(bytes), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+      );
+      const counter = Math.floor(Date.now() / 1000 / 30);
+      const buf = new Uint8Array(8);
+      let c = counter;
+      for (let i = 7; i >= 0; i--) { buf[i] = c & 0xff; c = Math.floor(c / 256); }
+      const hmac = new Uint8Array(await crypto.subtle.sign("HMAC", key, buf));
+      const offset = hmac[19] & 0xf;
+      const code = ((hmac[offset] & 0x7f) << 24 | hmac[offset+1] << 16 | hmac[offset+2] << 8 | hmac[offset+3]) % 1_000_000;
+      const codeStr = code.toString().padStart(6, "0");
+      setTotpCode(codeStr);
+      navigator.clipboard.writeText(codeStr).catch(() => {});
+      setTotpCopied(true);
+      setTimeout(() => { setTotpCopied(false); setTotpCode(null); }, 4000);
+    } catch { setTotpNoKey(true); setTimeout(() => setTotpNoKey(false), 3000); }
+  }, [profileId]);
+
   // Auto-scroll log to bottom on new entries
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -119,7 +165,15 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     }).catch(() => {});
   }, [profileId]);
 
-  // ── Non-passive wheel listener ────────────────────────────────────────────
+  // ── Non-passive wheel listener (throttled) ───────────────────────────────
+  // Wheel events fire at up to 60/s on a trackpad. Each one was spawning a
+  // separate fetch → 2 Puppeteer CDP commands (move + wheel) that queue serially,
+  // jamming the CDP pipeline and blocking screenshots → the "frozen" scroll.
+  // Fix: accumulate all deltas in an 80 ms window and send one batched scroll,
+  // capping scroll throughput at ~12/s regardless of device scroll speed.
+  const scrollBufRef = useRef<{ x: number; y: number; dX: number; dY: number } | null>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -128,10 +182,30 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       const rect = canvas.getBoundingClientRect();
       const x = Math.round((e.clientX - rect.left) * (BROWSER_W / rect.width));
       const y = Math.round((e.clientY - rect.top) * (BROWSER_H / rect.height));
-      send({ type: "scroll", x, y, deltaX: e.deltaX, deltaY: e.deltaY * 3 });
+      if (scrollBufRef.current) {
+        scrollBufRef.current.dX += e.deltaX;
+        scrollBufRef.current.dY += e.deltaY;
+        scrollBufRef.current.x = x;
+        scrollBufRef.current.y = y;
+      } else {
+        scrollBufRef.current = { x, y, dX: e.deltaX, dY: e.deltaY };
+      }
+      if (!scrollTimerRef.current) {
+        scrollTimerRef.current = setTimeout(() => {
+          scrollTimerRef.current = null;
+          if (!scrollBufRef.current) return;
+          const { x, y, dX, dY } = scrollBufRef.current;
+          scrollBufRef.current = null;
+          send({ type: "scroll", x, y, deltaX: dX, deltaY: dY * 3 });
+        }, 80);
+      }
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
-    return () => canvas.removeEventListener("wheel", onWheel);
+    return () => {
+      canvas.removeEventListener("wheel", onWheel);
+      if (scrollTimerRef.current) { clearTimeout(scrollTimerRef.current); scrollTimerRef.current = null; }
+      scrollBufRef.current = null;
+    };
   }, [send]);
 
   // ── SSE connection lifecycle ──────────────────────────────────────────────
@@ -518,6 +592,20 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
            loginState === "ok"      ? "Logged In" :
                                       "Fill Credentials"}
         </Button>
+
+        <button
+          type="button"
+          onClick={generateTotp}
+          disabled={!connected}
+          title="Generate a live 2FA/TOTP code and copy to clipboard"
+          className={`h-8 px-3 rounded-md border text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
+            totpCopied  ? "border-green-400 text-green-700 bg-green-50" :
+            totpNoKey   ? "border-red-300 text-red-700 bg-red-50" :
+            "border-border bg-muted hover:bg-accent"
+          }`}
+        >
+          {totpCopied ? `✓ ${totpCode}` : totpNoKey ? "No 2FA key" : "2FA Code"}
+        </button>
 
         <Button
           variant="ghost" size="sm"
