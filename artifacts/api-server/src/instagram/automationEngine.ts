@@ -1491,9 +1491,9 @@ class AutomationEngine {
       // EB login never changes account status — only the mobile API login (Verify
       // Credentials / mobileLogin) is authoritative for validity.
       if (!client.isMobileLoggedIn()) {
-        console.log(`[engine] @${profile.username}: establishing mobile session for DMs...`);
+        console.log(`[engine] @${profile.username}: no igApiCookies — attempting mobile login to establish API session...`);
         client.lastMobileLoginFailureReason = null;
-      const mobileOk = await client.mobileLogin(
+        const mobileOk = await client.mobileLogin(
           profile.username,
           profile.password,
           profile.twoFASecretKey ?? undefined,
@@ -1504,7 +1504,16 @@ class AutomationEngine {
             await storage.updateProfile(profile.id, { accountStatus: "bad_password", statusMessage: "Wrong password — mobile login rejected" });
             return null;
           }
-          console.error(`[engine] @${profile.username}: mobile login FAILED — transient error, status unchanged.`);
+          console.error(`[engine] @${profile.username}: mobile login FAILED — transient error, status unchanged. Mobile-API tools (Watch Reels, Watch Stories) will be skipped this session.`);
+        } else {
+          // Persist the freshly-minted igApiCookies so subsequent sessions can
+          // restore the mobile session without re-logging in (avoiding Instagram's
+          // new-device email challenge on every restart).
+          const serialized = client.getSerializedIgApiCookies();
+          if (serialized) {
+            await storage.updateProfile(profile.id, { igApiCookies: serialized });
+            console.log(`[engine] @${profile.username}: ✅ mobile login OK — igApiCookies saved to DB (${serialized.split(";").length} cookies). Next session will restore without login.`);
+          }
         }
       }
       return client;
@@ -1528,9 +1537,14 @@ class AutomationEngine {
     );
 
     if (mobileOk) {
-      // Account status is NEVER changed by the engine — only the explicit
-      // Verify Credentials route is authoritative for setting "valid".
-      console.log(`[engine] @${profile.username}: mobile API login OK`);
+      // Persist igApiCookies so subsequent sessions restore without re-login.
+      const serialized = client.getSerializedIgApiCookies();
+      if (serialized) {
+        await storage.updateProfile(profile.id, { igApiCookies: serialized });
+        console.log(`[engine] @${profile.username}: ✅ mobile API login OK — igApiCookies saved to DB (${serialized.split(";").length} cookies). Next session will restore without login.`);
+      } else {
+        console.log(`[engine] @${profile.username}: mobile API login OK`);
+      }
       return client;
     }
 
