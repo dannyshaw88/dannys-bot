@@ -16,39 +16,48 @@ const ERROR_ACTIONS = new Set([
   "dm_blocked", "contact_dm_blocked", "logged_out",
 ]);
 
-const ACTION_STYLES: Record<string, { label: string; cls: string }> = {
-  tool_start:              { label: "Started",         cls: "bg-blue-100 text-blue-700" },
-  tool_complete:           { label: "Complete",        cls: "bg-emerald-100 text-emerald-700" },
-  verified:                { label: "Verified",        cls: "bg-green-100 text-green-700" },
-  verification_failed:     { label: "Verify Fail",     cls: "bg-red-100 text-red-700" },
-  follow:                  { label: "Follow",          cls: "bg-sky-100 text-sky-700" },
-  follow_blocked:          { label: "Blocked",         cls: "bg-rose-100 text-rose-700" },
-  follow_skipped:          { label: "Skipped",         cls: "bg-orange-100 text-orange-700" },
-  dedup_skip:              { label: "Skipped",         cls: "bg-amber-100 text-amber-700" },
-  filter_skip:             { label: "Filter Skip",     cls: "bg-yellow-100 text-yellow-800" },
-  unfollow:                { label: "Unfollow",        cls: "bg-violet-100 text-violet-700" },
-  unfollow_blocked:        { label: "UF Block",        cls: "bg-pink-100 text-pink-700" },
-  dm:                      { label: "DM",              cls: "bg-purple-100 text-purple-700" },
-  dm_blocked:              { label: "DM Block",        cls: "bg-fuchsia-100 text-fuchsia-700" },
-  contact_dm_blocked:      { label: "Contact Block",   cls: "bg-indigo-100 text-indigo-700" },
-  no_sources:              { label: "No Sources",      cls: "bg-slate-100 text-slate-600" },
-  logged_out:              { label: "Logged Out",      cls: "bg-red-100 text-red-700" },
-  account_imported:        { label: "EQX Import",      cls: "bg-blue-100 text-blue-700" },
-  account_exported:        { label: "EQX Export",      cls: "bg-cyan-100 text-cyan-700" },
-  view_timeline_feed:      { label: "Timeline Feed",   cls: "bg-teal-100 text-teal-700" },
-  like_timeline_post:      { label: "Timeline Like",   cls: "bg-rose-100 text-rose-600" },
-  check_timeline_reels:    { label: "Watch Reels",     cls: "bg-orange-100 text-orange-700" },
-  check_timeline_stories:  { label: "Watch Stories",   cls: "bg-amber-100 text-amber-700" },
-  visit_notifications:     { label: "Notifications",   cls: "bg-sky-100 text-sky-600" },
-  visit_own_profile:       { label: "Own Profile",     cls: "bg-indigo-100 text-indigo-600" },
-  refresh_own_profile:     { label: "Refresh Profile", cls: "bg-indigo-100 text-indigo-600" },
-  visit_settings_activity: { label: "Settings",        cls: "bg-slate-100 text-slate-600" },
-  save_media:              { label: "Save Media",      cls: "bg-emerald-100 text-emerald-600" },
+const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }> = {
+  tool_start:              { label: "Started",         cls: "bg-blue-100 text-blue-700",      icon: "▶" },
+  tool_complete:           { label: "Complete",        cls: "bg-emerald-100 text-emerald-700", icon: "✓" },
+  verified:                { label: "Verified",        cls: "bg-green-100 text-green-700",    icon: "✓" },
+  verification_failed:     { label: "Verify Fail",     cls: "bg-red-100 text-red-700",        icon: "✗" },
+  follow:                  { label: "Follow",          cls: "bg-sky-100 text-sky-700",        icon: "+" },
+  follow_blocked:          { label: "Blocked",         cls: "bg-rose-100 text-rose-700",      icon: "⊘" },
+  follow_skipped:          { label: "Skipped",         cls: "bg-orange-100 text-orange-700",  icon: "⇥" },
+  dedup_skip:              { label: "Skipped",         cls: "bg-amber-100 text-amber-700",    icon: "⇥" },
+  filter_skip:             { label: "Filter Skip",     cls: "bg-yellow-100 text-yellow-800",  icon: "⊘" },
+  unfollow:                { label: "Unfollow",        cls: "bg-violet-100 text-violet-700",  icon: "−" },
+  unfollow_blocked:        { label: "UF Block",        cls: "bg-pink-100 text-pink-700",      icon: "⊘" },
+  dm:                      { label: "DM",              cls: "bg-purple-100 text-purple-700",  icon: "✉" },
+  dm_blocked:              { label: "DM Block",        cls: "bg-fuchsia-100 text-fuchsia-700",icon: "⊘" },
+  contact_dm_blocked:      { label: "Contact Block",   cls: "bg-indigo-100 text-indigo-700",  icon: "⊘" },
+  no_sources:              { label: "No Sources",      cls: "bg-slate-100 text-slate-600",    icon: "⚠" },
+  logged_out:              { label: "Logged Out",      cls: "bg-red-100 text-red-700",        icon: "⚠" },
+  account_imported:        { label: "EQX Import",      cls: "bg-blue-100 text-blue-700",      icon: "↓" },
+  account_exported:        { label: "EQX Export",      cls: "bg-cyan-100 text-cyan-700",      icon: "↑" },
+  view_timeline_feed:      { label: "Timeline Feed",   cls: "bg-teal-100 text-teal-700",      icon: "≡" },
+  like_timeline_post:      { label: "Timeline Like",   cls: "bg-rose-100 text-rose-600",      icon: "♥" },
+  check_timeline_reels:    { label: "Watch Reels",     cls: "bg-orange-100 text-orange-700",  icon: "▶" },
+  check_timeline_stories:  { label: "Watch Stories",   cls: "bg-amber-100 text-amber-700",    icon: "◎" },
+  visit_notifications:     { label: "Notifications",   cls: "bg-sky-100 text-sky-600",        icon: "🔔" },
+  visit_own_profile:       { label: "Own Profile",     cls: "bg-indigo-100 text-indigo-600",  icon: "◉" },
+  refresh_own_profile:     { label: "Refresh Profile", cls: "bg-indigo-100 text-indigo-600",  icon: "↺" },
+  visit_settings_activity: { label: "Settings",        cls: "bg-slate-100 text-slate-600",    icon: "⚙" },
+  save_media:              { label: "Save Media",      cls: "bg-emerald-100 text-emerald-600", icon: "⊙" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.257",
+    date: "13 May 2026, 01:00",
+    items: [
+      { category: "Dashboard", text: "Each event in the activity feed now has its own icon inside the coloured badge. Heart (♥) for Timeline Like, play (▶) for Watch Reels and Started, checkmark (✓) for Verified/Complete, plus (⊕) for Follow, minus (−) for Unfollow, envelope (✉) for DM, bell (🔔) for Notifications, and more. All 29 action types now have distinct icons." },
+      { category: "Human Sessions", text: "Fixed: Watch Reels no longer shows 'Skipped: no mobile session' without explanation. The engine now checks isMobileLoggedIn() before attempting to call the clips feed and logs the exact reason — either 'No igApiCookies stored for this account' (needs Verify Credentials run) or 'igApiCookies found but session failed to restore — cookies may be expired' — so you know exactly what action to take." },
+      { category: "Human Sessions", text: "Debug: Added explicit ENQUEUE FIRED trace logs to the server console for both the standalone Like Timeline Posts block and the inline like-% block inside View Timeline Feed. When likes happen unexpectedly, the server log will now show exactly which code path triggered them (STANDALONE vs INLINE LIKE%) so the source can be identified immediately." },
+    ],
+  },
   {
     version: "1.0.256",
     date: "13 May 2026, 00:30",
@@ -912,7 +921,7 @@ export function Dashboard() {
                           </tr>
                         );
                       }
-                      const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "bg-muted text-muted-foreground" };
+                      const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "bg-muted text-muted-foreground", icon: "·" };
                       return (
                         <tr key={item.key} className="hover:bg-accent/5 transition-colors">
                           <td className="px-3 py-3 font-medium truncate">
@@ -925,8 +934,9 @@ export function Dashboard() {
                             </Link>
                           </td>
                           <td className="px-3 py-3 truncate">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full ${style.cls}`}>
-                              {style.label}
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}>
+                              <span className="shrink-0 leading-none">{style.icon}</span>
+                              <span>{style.label}</span>
                             </span>
                           </td>
                           <td className="px-3 py-3 text-xs text-foreground/80 truncate" title={item.targetUsername || undefined}>
