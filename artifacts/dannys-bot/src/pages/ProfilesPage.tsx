@@ -448,6 +448,14 @@ export function ProfilesPage() {
     }
   };
 
+  const handleBulkToggle = useCallback(() => {
+    if (selectedProfileIds.length === 0) return;
+    for (const id of selectedProfileIds) {
+      const p = profiles?.find(pr => pr.id === id);
+      if (p) toggleStopped(id, p.accountStatus ?? "valid");
+    }
+  }, [selectedProfileIds, profiles, toggleStopped]);
+
   // ── Bulk: Verify All ─────────────────────────────────────────────────────
   const handleVerifyAll = useCallback(async () => {
     const ids = selectedProfileIds.length > 0 ? selectedProfileIds : filteredProfiles.map(p => p.id);
@@ -594,11 +602,15 @@ export function ProfilesPage() {
           e.preventDefault();
           handleBulkLoginEB();
           break;
+        case "t":
+          e.preventDefault();
+          handleBulkToggle();
+          break;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers, handleBulkLoginEB]);
+  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers, handleBulkLoginEB, handleBulkToggle]);
 
   // Click-outside handler for the profiles manage-columns popup
   useEffect(() => {
@@ -631,11 +643,14 @@ export function ProfilesPage() {
           {addProfilePanelOpen && (
             <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-2 duration-150">
               <input
-                type="number"
-                min={1}
-                max={500}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={addProfileCount}
-                onChange={e => setAddProfileCount(e.target.value)}
+                onChange={e => {
+                  const v = e.target.value.replace(/[^0-9]/g, "");
+                  setAddProfileCount(v);
+                }}
                 onKeyDown={e => { if (e.key === "Enter") handleCreateMultiple(); if (e.key === "Escape") setAddProfilePanelOpen(false); }}
                 autoFocus
                 placeholder="Count"
