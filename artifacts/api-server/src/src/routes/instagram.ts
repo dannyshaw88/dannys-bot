@@ -102,6 +102,8 @@ export async function registerInstagramRoutes(
   }
 
   // Reset any accounts stuck in "verifying" from a previous crashed/restarted server.
+  // A "verifying" status only makes sense while the server is actively running the
+  // verify call — on startup there can be no such call in flight.
   storage.resetStuckVerifyingAccounts().catch(() => {});
 
   automationEngine.start();
@@ -348,6 +350,7 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.id);
     const profile = await storage.getProfile(profileId).catch(() => null);
     await storage.deleteProfile(profileId);
+    closeSession(profileId).catch(() => {});
     if (profile) {
       storage.createSessionAction({
         profileId,
@@ -979,6 +982,9 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
+    // Block EB access when no proxy is assigned — accounts must have a proxy.
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+    if (!hasProxy) return res.status(403).json({ error: "No proxy assigned — assign a proxy to this account before using the embedded browser." });
     const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
     try {
       await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile));
@@ -1076,6 +1082,16 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) { res.status(404).end(); return; }
+    // Block EB stream when no proxy is assigned.
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+    if (!hasProxy) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.flushHeaders();
+      res.write(`data: ${JSON.stringify({ type: "error", message: "No proxy assigned — assign a proxy to this account before using the embedded browser." })}\n\n`);
+      res.end();
+      return;
+    }
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -1600,7 +1616,12 @@ export async function registerInstagramRoutes(
       const profile = await storage.getProfile(id);
       if (!profile) return res.status(404).json({ error: "Profile not found" });
 
-      const allTools = await storage.getToolsByProfile(id);
+      const [allTools, followedUsers, statsData, apiCallsData] = await Promise.all([
+        storage.getToolsByProfile(id),
+        storage.getFollowedUsersByProfile(id, 100000),
+        storage.getStatsByProfile(id),
+        storage.getInstagramApiCallsByProfile(id, 2000),
+      ]);
       const toolsWithSources = await Promise.all(
         allTools.map(async t => ({
           type: t.type,
@@ -1615,11 +1636,6 @@ export async function registerInstagramRoutes(
           })),
         }))
       );
-      const [followedUsers, statsData, apiCallsData] = await Promise.all([
-        storage.getFollowedUsersByProfile(id, 100000),
-        storage.getStatsByProfile(id),
-        storage.getInstagramApiCallsByProfile(id, 2000),
-      ]);
 
       const { id: _id, ...profileData } = profile;
 
