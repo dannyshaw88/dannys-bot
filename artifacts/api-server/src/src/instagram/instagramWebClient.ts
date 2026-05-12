@@ -1670,7 +1670,10 @@ export class InstagramWebClient {
         const firstRaw = items[0];
         console.log(`[webClient] viewTimelineReels: first item keys=[${Object.keys(firstRaw ?? {}).join(", ")}] media keys=[${Object.keys(firstRaw?.media ?? firstRaw ?? {}).join(", ")}]`);
       }
-      if (!items.length) return 0;
+      if (!items.length) {
+        console.warn(`[webClient] viewTimelineReels: 0 items — full response (500 chars): ${JSON.stringify(j).slice(0, 500)}`);
+        return 0;
+      }
 
       const toView = items.slice(0, count);
       const seenEntries: string[] = [];
