@@ -255,18 +255,22 @@ function patchDeviceStringVersionCode(ig: IgApiClient, targetVersionCode: string
 
 type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 
-// Keep this version current — Instagram rejects sessions from versions older
-// than ~18 months with a checkpoint_required → unsupported_version response.
-// Version 361 ≈ early 2025; update periodically as Instagram raises the floor.
-const MOBILE_VERSION           = "384.0.0.36.112";
-export const MOBILE_VERSION_CODE = "663869969";
-// Date this version was last confirmed working. If it's been more than 12
-// months, Instagram may have started rejecting it — update MOBILE_VERSION.
-const MOBILE_VERSION_DATE = "2026-05-08";
+// Keep this version current — Instagram rejects signup requests from versions
+// older than a few months with error_type:"needs_upgrade".
+// Play Store confirmed 427.0.0.47.73 on 2026-05-11.
+// Version code estimated from the linear progression between known pairs:
+//   222.0.0.13.114 → 350696709
+//   384.0.0.36.112 → 663869969  (rate ≈ 1,933,168 / major version)
+//   427.0.0.47.73  → 746996204  (estimated; update if Instagram rejects again)
+const MOBILE_VERSION           = "427.0.0.47.73";
+export const MOBILE_VERSION_CODE = "746996204";
+// Date this version was last confirmed / updated. Warn after 90 days so there
+// is time to update before Instagram starts rejecting the version.
+const MOBILE_VERSION_DATE = "2026-05-11";
 (() => {
   const ageMs = Date.now() - new Date(MOBILE_VERSION_DATE).getTime();
   const ageDays = Math.floor(ageMs / 86_400_000);
-  if (ageDays > 365) {
+  if (ageDays > 90) {
     console.warn(
       `[webClient] ⚠️  MOBILE_VERSION (${MOBILE_VERSION}) was last updated ${ageDays} days ago.` +
       ` Instagram may be rejecting it — update MOBILE_VERSION + MOBILE_VERSION_CODE in instagramWebClient.ts.`
@@ -1592,10 +1596,14 @@ export class InstagramWebClient {
   async viewTimelineFeed(count: number = 5): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string }> {
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
-    const j = await this.timed("ViewTimelineFeed", () =>
-      this.mobileSessionPost(`/api/v1/feed/timeline/`, new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString()),
-      "Fetch timeline feed"
+    const j = await this.mobileSessionPost(
+      `/api/v1/feed/timeline/`,
+      new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString(),
     );
+    if (!j) {
+      console.warn(`[webClient] viewTimelineFeed: mobileSessionPost returned null — no igApiCookies session`);
+      return { viewed: 0 };
+    }
     if (j?.message === "login_required" || j?.require_login || (j?.status === "fail" && /login|logged.?out|logout/i.test(j?.message ?? ""))) {
       const reason = [
         j?.message ? `message: ${j.message}` : null,
@@ -1606,7 +1614,12 @@ export class InstagramWebClient {
       this.mobileSessionReady = false;
       return { viewed: 0, sessionExpired: true, reason };
     }
+    if (j?.status === "fail") {
+      console.warn(`[webClient] viewTimelineFeed: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
+      return { viewed: 0 };
+    }
     const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
+    console.log(`[webClient] viewTimelineFeed: timeline returned ${rawItems.length} raw items`);
     if (!rawItems.length) return { viewed: 0 };
 
     const items = rawItems
@@ -1641,7 +1654,9 @@ export class InstagramWebClient {
     return this.timed("ViewTimelineReels", async () => {
       const body = new URLSearchParams({ reason: "pull_to_refresh", max_id: "" }).toString();
       const j = await this.mobileSessionPost(`/api/v1/clips/feed/`, body);
-      const items: any[] = j?.items ?? [];
+      // clips/feed can return items under "items" or "feed_items" depending on version.
+      const items: any[] = j?.items ?? j?.feed_items ?? [];
+      console.log(`[webClient] viewTimelineReels: status="${j?.status}" keys=[${Object.keys(j ?? {}).join(", ")}] items.length=${items.length}`);
       if (!items.length) return 0;
 
       const toView = items.slice(0, count);
@@ -2002,6 +2017,10 @@ export class InstagramWebClient {
       const isReel = media?.media_type === 2 || media?.product_type === "clips";
 
       if (isReel) {
+        // Mark the reel as seen (natural scroll behaviour) but do NOT like it.
+        // Liking reels is a deliberate tap — not a passive scroll. Liking them here
+        // would crossover with the dedicated Watch Reels tool and produce unexpected
+        // likes whenever the home-feed like% fires. Skip to the next item.
         try {
           const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
           const seenBody = new URLSearchParams({
@@ -2012,6 +2031,7 @@ export class InstagramWebClient {
           await this.mobileSessionPost(`/api/v1/media/seen/`, seenBody);
           watched++;
         } catch (_) { /* best-effort */ }
+        continue;
       }
 
       const result = await this.likeMedia(mediaId);
