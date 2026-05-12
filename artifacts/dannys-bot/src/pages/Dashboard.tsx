@@ -50,6 +50,14 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.254",
+    date: "12 May 2026, 23:30",
+    items: [
+      { category: "Human Sessions", text: "Fixed: Like % from View Timeline Feed no longer likes reels. When the home timeline contains a reel, it is now marked as seen (natural scroll behaviour) but skipped for liking — only standard photo/video posts are liked. This eliminates the crossover between the like percentage selector and the Watch Reels tool." },
+      { category: "Human Sessions", text: "Fixed: Watch Reels from Timeline showed Viewed 0 Reels in the API log. The clips feed response key fallback now covers both 'items' and 'feed_items' response shapes, and debug logging has been added so the exact response structure is visible in the server log if it happens again." },
+    ],
+  },
+  {
     version: "1.0.253",
     date: "12 May 2026, 23:00",
     items: [
