@@ -419,6 +419,15 @@ export class InstagramWebClient {
     this.logCallFn = fn;
   }
 
+  // Returns the current mobile cookie jar serialised in igApiCookies format
+  // ("key=value;key=value") so the engine can persist it back to the DB after
+  // a successful mobileLogin. Returns null if no mobile session is active.
+  getSerializedIgApiCookies(): string | null {
+    if (!this.mobileSessionReady) return null;
+    if (!this.mobileCookieJar.some(c => c.startsWith("sessionid="))) return null;
+    return this.mobileCookieJar.join(";");
+  }
+
   // Set the user-agent for web POST requests so it matches the EB browser's UA.
   // This is critical — cookies are bound to the UA that created them.
   // Using a different UA than the EB browser causes Instagram to 302-redirect to login.
