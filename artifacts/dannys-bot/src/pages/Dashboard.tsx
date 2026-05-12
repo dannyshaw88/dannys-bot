@@ -39,6 +39,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.248",
+    date: "12 May 2026, 20:40",
+    items: [
+      { category: "View Stories", text: "Fixed: reels_media fetch now uses POST (not GET) with a JSON user_ids body — Instagram returns HTTP 400 'Invalid reel id list' for GET requests. Stories are now correctly watched." },
+    ],
+  },
+  {
     version: "1.0.247",
     date: "12 May 2026, 19:45",
     items: [
