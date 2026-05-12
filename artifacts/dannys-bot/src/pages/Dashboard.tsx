@@ -39,8 +39,18 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.243",
+    date: "12 May 2026, 17:30",
+    items: [
+      { category: "What's New", text: "All changelog entries now show a time alongside the date (e.g. '12 May 2026, 17:30')." },
+      { category: "Human Session Tools", text: "Repost settings now fully collapse and hide when the Repost checkbox is unticked, instead of remaining visible but dimmed." },
+      { category: "EQX Import", text: "Each tool's settings and sources are now restored independently — a failure on one tool (e.g. Like) no longer blocks sources from being imported for other tools (e.g. Follow)." },
+      { category: "Human Session Tools", text: "View Stories: added a clear 'no mobile session' activity-log warning when the account has not yet established a mobile API session — run Verify Credentials to fix." },
+    ],
+  },
+  {
     version: "1.0.242",
-    date: "12 May 2026",
+    date: "12 May 2026, 16:30",
     items: [
       { category: "Embedded Browser", text: "Fill Credentials no longer turns red on a successful login — screenshot-timeout kills are now suppressed while the auto-login flow is running." },
       { category: "Human Session Tools", text: "View Stories now correctly fetches the timeline tray using the authenticated mobile session, fixing the '0 stories viewed' result." },
@@ -48,14 +58,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.0.241",
-    date: "12 May 2026",
+    date: "12 May 2026, 14:00",
     items: [
       { category: "Embedded Browser", text: "Fixed EB freezing blank for up to 40 seconds on pages that are slow to load — it now recovers in ~12 seconds instead." },
     ],
   },
   {
     version: "1.0.240",
-    date: "12 May 2026",
+    date: "12 May 2026, 12:00",
     items: [
       { category: "Proxy Manager", text: "Page no longer scrolls — only the proxy list itself scrolls. The Split Accounts panel is now inside the main card." },
       { category: "Proxy Manager", text: "Ping and Delete buttons now sit immediately to the right of the Status column instead of being pushed to the far right." },
@@ -63,7 +73,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.0.239",
-    date: "12 May 2026",
+    date: "12 May 2026, 10:30",
     items: [
       { category: "Accounts", text: "Bottom toolbar buttons (Select All, Select None, Actions, Columns) are now cyan to match the app logo." },
       { category: "Proxy Manager", text: "Bottom toolbar buttons (Auto-link, Ping All, Import, Export) are now cyan to match the app logo." },
@@ -71,21 +81,21 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
   },
   {
     version: "1.0.238",
-    date: "12 May 2026",
+    date: "12 May 2026, 09:30",
     items: [
       { category: "Embedded Browser", text: "Added detailed server-side logging for browser freezes: every screenshot timeout, slow screenshot (>2s), and unexpected error now appears in the server log with timing and URL so the cause of freezes can be identified." },
     ],
   },
   {
     version: "1.0.237",
-    date: "12 May 2026",
+    date: "12 May 2026, 08:30",
     items: [
       { category: "Proxy Manager", text: "Assigned accounts are now always visible underneath each proxy — no more clicking to expand." },
     ],
   },
   {
     version: "1.0.236",
-    date: "12 May 2026",
+    date: "12 May 2026, 07:30",
     items: [
       { category: "Follow Tool", text: "When Instagram returns a block mid-session the tool stops immediately and waits for its next scheduled run — no more scraping new hashtags after a block." },
       { category: "Follow Tool", text: "Block messages in the activity log now show only the Instagram response (e.g. 'We're sorry, but something went wrong') — the internal HTTP request line is no longer included." },

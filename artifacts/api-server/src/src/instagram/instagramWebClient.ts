@@ -1662,6 +1662,13 @@ export class InstagramWebClient {
   async viewTimelineStories(count: number = 5): Promise<number> {
     return this.timed("ViewTimelineStories", async () => {
       const j = await this.mobileSessionGet(`/api/v1/feed/reels_tray/`);
+      if (j === null) {
+        // mobileSessionGet returns null when mobileCookieJar has no sessionid.
+        // This happens when the account has no igApiCookies (Verify Credentials not yet run)
+        // AND the fresh mobile login failed (bad password, 2FA, proxy, etc.).
+        // Return a negative sentinel so the caller can log a specific "no session" warning.
+        return -1;
+      }
       const tray: any[] = j?.tray ?? [];
       if (!tray.length) return 0;
 

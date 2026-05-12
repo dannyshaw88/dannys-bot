@@ -1706,12 +1706,12 @@ export async function registerInstagramRoutes(
 
       const created = await storage.createProfile(cleanProfile);
 
-      // Update auto-created tools with saved settings/enabled state, and insert sources
-      // Each step is best-effort — a failure here must not roll back the already-committed profile
-      try {
-        if (Array.isArray(toolsData)) {
-          const existingTools = await storage.getToolsByProfile(created.id);
-          for (const savedTool of toolsData) {
+      // Update auto-created tools with saved settings/enabled state, and insert sources.
+      // Each tool is restored independently — a failure on one tool never blocks the others.
+      if (Array.isArray(toolsData)) {
+        const existingTools = await storage.getToolsByProfile(created.id);
+        for (const savedTool of toolsData) {
+          try {
             const match = existingTools.find(t => t.type === savedTool.type);
             if (match) {
               await storage.updateTool(match.id, { enabled: savedTool.enabled, settings: savedTool.settings });
@@ -1729,10 +1729,10 @@ export async function registerInstagramRoutes(
                 );
               }
             }
+          } catch (e) {
+            req.log.warn({ err: e }, `import-eqx: failed to restore ${savedTool.type ?? "unknown"} tool settings/sources (non-fatal)`);
           }
         }
-      } catch (e) {
-        req.log.warn({ err: e }, "import-eqx: failed to restore tool settings (non-fatal)");
       }
 
       // Import followed users

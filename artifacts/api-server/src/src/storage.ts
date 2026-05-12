@@ -45,6 +45,7 @@ export interface IStorage {
   // Sources
   getSourcesByTool(toolId: number): Promise<Source[]>;
   createSource(source: InsertSource): Promise<Source>;
+  createSourcesBulk(rows: InsertSource[]): Promise<Source[]>;
   deleteSource(id: number): Promise<void>;
   updateSourceTargetUserId(id: number, targetUserId: string): Promise<void>;
   updateSourceHashtagCursor(id: number, cursor: string): Promise<void>;

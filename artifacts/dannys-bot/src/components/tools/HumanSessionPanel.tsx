@@ -591,7 +591,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               Repost
             </label>
           </div>
-          <div className={`flex flex-col items-end gap-1.5 transition-opacity ${!settings.repostEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          {settings.repostEnabled && (
+          <div className="flex flex-col items-end gap-1.5">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
               {pctInputs("repostOrderMin", "repostOrderMax")}
@@ -601,9 +602,10 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
               {pctInputs("repostNotUsedMin", "repostNotUsedMax")}
             </div>
           </div>
+          )}
         </div>
 
-        <div className={`space-y-3 transition-opacity ${!settings.repostEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className={`space-y-3 ${!settings.repostEnabled ? 'hidden' : ''}`}>
           {/* Source 1: @username */}
           <div className="border border-border/60 rounded-lg p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">

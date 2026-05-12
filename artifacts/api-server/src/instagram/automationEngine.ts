@@ -2362,8 +2362,13 @@ class AutomationEngine {
         const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
         try {
           const watched = await client.viewTimelineStories(storyCount);
-          console.log(`[engine] @${profile.username}: 📖 watched ${watched} timeline stories`);
-          this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
+          if (watched === -1) {
+            console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — no mobile session (run Verify Credentials to fix)`);
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no mobile session — run Verify Credentials to establish igApiCookies");
+          } else {
+            console.log(`[engine] @${profile.username}: 📖 watched ${watched} timeline stories`);
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
+          }
         } catch (e: any) {
           if (await checkSessionErr(e, "check_timeline_stories")) return;
           console.warn(`[engine] @${profile.username}: timeline stories error: ${e?.message}`);
