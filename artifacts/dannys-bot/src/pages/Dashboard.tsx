@@ -50,6 +50,15 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.265",
+    date: "13 May 2026",
+    items: [
+      { category: "Watch Reels", text: "Fixed: Watch Reels was returning 'mobile session check passed but POST returned null' for many accounts. The clips/home endpoint now uses a GET request (the correct method for feed endpoints) with a fallback to the home timeline filtered for reels — so Watch Reels works regardless of which endpoint Instagram accepts for the account." },
+      { category: "Like Timeline", text: "Fixed: Accounts whose home feed is dominated by Reels were getting 0 likes because reels were being watched but never liked. Reels are now liked after being watched, matching real user behaviour." },
+      { category: "Session Handling", text: "Fixed: When Instagram rejects a mobile API call (returns an error page instead of JSON), the account's session is now immediately flagged as expired. The next tool cycle will surface a clear message to re-run Verify Credentials instead of the confusing 'POST returned null despite session check passing'." },
+    ],
+  },
+  {
     version: "1.0.264",
     date: "12 May 2026",
     items: [

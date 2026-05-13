@@ -1662,31 +1662,50 @@ export class InstagramWebClient {
   async viewTimelineReels(count: number = 5): Promise<number> {
     // Returns: >=0 reels watched, -1 if no mobile session (igApiCookies missing).
     return this.timed("ViewTimelineReels", async () => {
-      // /api/v1/clips/feed/ was deprecated by Instagram (returns 404 HTML).
-      // The replacement is /api/v1/clips/home/ which requires a session_id + tab_type.
-      const body = new URLSearchParams({
-        session_id: randomUUID(),
-        tab_type: "clips",
-        next_max_id: "",
-      }).toString();
-      const j = await this.mobileSessionPost(`/api/v1/clips/home/`, body);
-
-      // mobileSessionPost returns null when mobileCookieJar has no sessionid.
-      if (j === null) {
+      if (!this.mobileCookieJar.some(c => c.startsWith("sessionid="))) {
         console.warn(`[webClient] viewTimelineReels: no mobile session — run Verify Credentials to establish igApiCookies`);
         return -1;
       }
 
-      // clips/feed can return items under "items" or "feed_items" depending on app version.
+      // ── Strategy 1: GET /api/v1/clips/home/ ─────────────────────────────────
+      // Feed endpoints are naturally GET requests. The prior POST approach returned
+      // null JSON (HTML error page) for many accounts. Switching to GET fixes this.
+      const sessionId = randomUUID();
+      let j = await this.mobileSessionGet(
+        `/api/v1/clips/home/?session_id=${sessionId}&tab_type=clips&next_max_id=`
+      );
+      let source = "clips/home";
+
+      // ── Strategy 2: fallback to feed/timeline filtered for reels ────────────
+      // If clips/home is unavailable for this account (returns null), fall back to
+      // the home timeline feed and pick out the reel items (media_type === 2).
+      // This endpoint works for all accounts and already returns reels in the feed.
+      if (!j) {
+        console.warn(`[webClient] viewTimelineReels: clips/home returned null — falling back to feed/timeline`);
+        const body = new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString();
+        const tj = await this.mobileSessionPost(`/api/v1/feed/timeline/`, body);
+        if (!tj) {
+          console.warn(`[webClient] viewTimelineReels: feed/timeline also returned null — session expired`);
+          return -1;
+        }
+        // Build a synthetic clips/home-like response using only the reel items
+        const allItems: any[] = tj?.feed_items ?? tj?.items ?? [];
+        const reelItems = allItems
+          .map((raw: any) => raw?.media_or_ad ?? raw?.media ?? raw)
+          .filter((m: any) => m?.media_type === 2 || m?.product_type === "clips");
+        j = { items: reelItems, status: "ok" };
+        source = "feed/timeline (reels only)";
+      }
+
+      // clips/home returns items under "items"; feed_items is an older alias.
       const items: any[] = j?.items ?? j?.feed_items ?? [];
-      console.log(`[webClient] viewTimelineReels: status="${j?.status}" keys=[${Object.keys(j).join(", ")}] items.length=${items.length}`);
+      console.log(`[webClient] viewTimelineReels [${source}]: status="${j?.status}" items.length=${items.length}`);
       if (items.length > 0) {
-        // Log first item structure once so we can confirm the shape if count=0 debugging is needed
         const firstRaw = items[0];
-        console.log(`[webClient] viewTimelineReels: first item keys=[${Object.keys(firstRaw ?? {}).join(", ")}] media keys=[${Object.keys(firstRaw?.media ?? firstRaw ?? {}).join(", ")}]`);
+        console.log(`[webClient] viewTimelineReels: first item keys=[${Object.keys(firstRaw?.media ?? firstRaw ?? {}).join(", ")}]`);
       }
       if (!items.length) {
-        console.warn(`[webClient] viewTimelineReels: 0 items — full response (500 chars): ${JSON.stringify(j).slice(0, 500)}`);
+        console.warn(`[webClient] viewTimelineReels: 0 items — response (500 chars): ${JSON.stringify(j).slice(0, 500)}`);
         return 0;
       }
 
@@ -2049,10 +2068,11 @@ export class InstagramWebClient {
       const isReel = media?.media_type === 2 || media?.product_type === "clips";
 
       if (isReel) {
-        // Mark the reel as seen (natural scroll behaviour) but do NOT like it.
-        // Liking reels is a deliberate tap — not a passive scroll. Liking them here
-        // would crossover with the dedicated Watch Reels tool and produce unexpected
-        // likes whenever the home-feed like% fires. Skip to the next item.
+        // Mark the reel as seen first (natural scroll behaviour before liking).
+        // Instagram's home feed is now predominantly Reels, so skipping them entirely
+        // results in 0 likes. We watch then like — exactly what a real user does.
+        // The dedicated Watch Reels tool uses /api/v1/clips/home/ (a separate endpoint),
+        // so there is no overlap.
         try {
           const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
           const seenBody = new URLSearchParams({
@@ -2063,7 +2083,7 @@ export class InstagramWebClient {
           await this.mobileSessionPost(`/api/v1/media/seen/`, seenBody);
           watched++;
         } catch (_) { /* best-effort */ }
-        continue;
+        // Fall through to like the reel below (no continue).
       }
 
       const result = await this.likeMedia(mediaId);
@@ -2636,6 +2656,14 @@ export class InstagramWebClient {
       // Always log non-200 responses; log body snippet for debugging
     if (res.status !== 200 || !res.json) {
       console.warn(`[webClient] mobileSessionPost ${path} status=${res.status} body(400):`, res.rawBody.slice(0, 400));
+      // If Instagram explicitly rejected the request (4xx/5xx or non-JSON response
+      // despite a 200), the session cookies are expired or invalid. Mark the session
+      // as needing refresh so the next isMobileLoggedIn() call returns false and the
+      // engine surfaces a clear "re-run Verify Credentials" message instead of the
+      // cryptic "POST returned null despite session check passing".
+      if (res.status >= 400 || !res.json) {
+        this.mobileSessionReady = false;
+      }
     } else {
       const feedLen = res.json?.feed_items?.length ?? res.json?.items?.length ?? null;
       if (feedLen !== null) {
