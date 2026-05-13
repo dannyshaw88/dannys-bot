@@ -553,9 +553,66 @@ export function ProfileDetailsPage() {
           </div>
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
-          {/* Auto-save status bar — only rendered when it has visible content */}
-          {(profile?.creatorMode || saveStatus === "saving" || saveStatus === "saved") && <div className="flex items-center justify-between mb-4 h-8">
-            <div className="flex items-center gap-2">
+          <CopySettingsDialog
+            key={copyDialogOpen ? "open" : "closed"}
+            open={copyDialogOpen}
+            onOpenChange={setCopyDialogOpen}
+            title="Copy Account Settings"
+            profiles={otherProfiles}
+            optionGroups={ACCOUNT_COPY_GROUPS}
+            onCopy={handleAccountCopy}
+          />
+
+          {/* Group — shown first */}
+          <div className="space-y-1 pb-2">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
+            <div className="max-w-[40%]">
+              <Select
+                value={formData.tags || "__none__"}
+                onValueChange={val => updateField({ tags: val === "__none__" ? "" : val })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="No group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No group</SelectItem>
+                  {Array.from(
+                    new Set(
+                      (allProfiles ?? [])
+                        .map(p => (p.tags ?? "").trim())
+                        .filter(Boolean)
+                    )
+                  ).sort().map(group => (
+                    <SelectItem key={group} value={group}>{group}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Group this account belongs to. Groups are managed on the Accounts page.</p>
+          </div>
+
+          {/* Account Label */}
+          <div className="space-y-2 pb-2">
+            <div className="flex items-center gap-3">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Account Name
+              </Label>
+              <button
+                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
+                onClick={() => setCopyDialogOpen(true)}
+              >
+                <Copy className="w-3 h-3" /> COPY SETTINGS
+              </button>
+              {saveStatus === "saving" && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+                </span>
+              )}
+              {saveStatus === "saved" && (
+                <span className="flex items-center gap-1 text-xs text-green-600">
+                  <CheckCircle2 className="w-3 h-3" /> Saved
+                </span>
+              )}
               {profile?.creatorMode && (
                 <Button
                   variant="outline"
@@ -573,43 +630,6 @@ export function ProfileDetailsPage() {
                   {moveToAccountsMutation.isPending ? "Moving…" : "Move to Accounts"}
                 </Button>
               )}
-            </div>
-            <div className="flex items-center h-5">
-              {saveStatus === "saving" && (
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Saving…
-                </span>
-              )}
-              {saveStatus === "saved" && (
-                <span className="flex items-center gap-1.5 text-xs text-green-600">
-                  <CheckCircle2 className="w-3 h-3" /> Saved
-                </span>
-              )}
-            </div>
-          </div>}
-
-          <CopySettingsDialog
-            key={copyDialogOpen ? "open" : "closed"}
-            open={copyDialogOpen}
-            onOpenChange={setCopyDialogOpen}
-            title="Copy Account Settings"
-            profiles={otherProfiles}
-            optionGroups={ACCOUNT_COPY_GROUPS}
-            onCopy={handleAccountCopy}
-          />
-
-          {/* Account Label */}
-          <div className="space-y-2 pb-2">
-            <div className="flex items-center gap-3">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Account Name
-              </Label>
-              <button
-                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
-                onClick={() => setCopyDialogOpen(true)}
-              >
-                <Copy className="w-3 h-3" /> COPY SETTINGS
-              </button>
               <div className="flex items-center gap-1.5 ml-1">
                 <Switch
                   checked={profile?.accountStatus !== "stopped"}
@@ -646,29 +666,6 @@ export function ProfileDetailsPage() {
               />
             </div>
             <p className="text-[11px] text-muted-foreground">A display label for quick identification use any format you like.</p>
-            <div className="mt-2 max-w-[40%]">
-              <Select
-                value={formData.tags || "__none__"}
-                onValueChange={val => updateField({ tags: val === "__none__" ? "" : val })}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="No group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">No group</SelectItem>
-                  {Array.from(
-                    new Set(
-                      (allProfiles ?? [])
-                        .map(p => (p.tags ?? "").trim())
-                        .filter(Boolean)
-                    )
-                  ).sort().map(group => (
-                    <SelectItem key={group} value={group}>{group}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground mt-1">Group this account belongs to. Groups are managed on the Accounts page.</p>
-            </div>
           </div>
 
           <div>
