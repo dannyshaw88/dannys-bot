@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.281",
+    date: "13 May 2026",
+    items: [
+      { category: "Accounts", text: "Fixed: Adding a new account no longer pre-fills a random username or the word 'password' — both fields now start completely blank." },
+    ],
+  },
+  {
     version: "1.0.280",
     date: "13 May 2026",
     items: [
