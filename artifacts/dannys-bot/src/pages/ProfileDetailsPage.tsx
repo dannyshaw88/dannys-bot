@@ -72,6 +72,74 @@ const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementTyp
   review:               { label: "Review",             icon: Eye,           pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
 };
 
+function GroupCombobox({ value, groups, onChange }: { value: string; groups: string[]; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const inputVal = value || "";
+  const filtered = inputVal
+    ? groups.filter(g => g.toLowerCase().includes(inputVal.toLowerCase()))
+    : groups;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="max-w-[40%] relative" ref={ref}>
+      <Input
+        className="h-8 text-xs pr-7"
+        placeholder="No group"
+        value={inputVal}
+        onFocus={() => setOpen(true)}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onKeyDown={e => { if (e.key === "Escape") setOpen(false); }}
+      />
+      <button
+        type="button"
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        tabIndex={-1}
+        onMouseDown={e => { e.preventDefault(); setOpen(o => !o); }}
+      >
+        <ChevronDown className="w-3.5 h-3.5" />
+      </button>
+      {open && (filtered.length > 0 || !inputVal) && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-popover border border-border rounded-md shadow-md overflow-hidden">
+          {filtered.length === 0 && !inputVal ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground">No groups yet — type to create one</div>
+          ) : (
+            <>
+              {inputVal && (
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 italic"
+                  onMouseDown={e => { e.preventDefault(); onChange(""); setOpen(false); }}
+                >
+                  Clear (no group)
+                </button>
+              )}
+              {filtered.map(group => (
+                <button
+                  key={group}
+                  type="button"
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 ${group === inputVal ? "font-semibold" : ""} text-foreground`}
+                  onMouseDown={e => { e.preventDefault(); onChange(group); setOpen(false); }}
+                >
+                  {group}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProfileDetailsPage() {
   const params = useParams();
   const profileId = Number(params.id);
@@ -573,27 +641,12 @@ export function ProfileDetailsPage() {
           {/* Group — shown first */}
           <div className="space-y-1 pb-2">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
-            <div className="max-w-[40%]">
-              <Input
-                list="group-suggestions"
-                className="h-8 text-xs"
-                placeholder="No group"
-                value={formData.tags || ""}
-                onChange={e => updateField({ tags: e.target.value })}
-              />
-              <datalist id="group-suggestions">
-                {Array.from(
-                  new Set(
-                    (allProfiles ?? [])
-                      .map(p => (p.tags ?? "").trim())
-                      .filter(Boolean)
-                  )
-                ).sort().map(group => (
-                  <option key={group} value={group} />
-                ))}
-              </datalist>
-            </div>
-            <p className="text-[11px] text-muted-foreground">Type a group name or pick an existing one. Leave blank to remove from any group.</p>
+            <GroupCombobox
+              value={formData.tags || ""}
+              groups={Array.from(new Set((allProfiles ?? []).map(p => (p.tags ?? "").trim()).filter(Boolean))).sort()}
+              onChange={val => updateField({ tags: val })}
+            />
+            <p className="text-[11px] text-muted-foreground">Pick an existing group or type a new name. Leave blank to remove from any group.</p>
           </div>
 
           {/* Account Label */}

@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.275",
+    date: "13 May 2026",
+    items: [
+      { category: "Account Settings", text: "Fixed: The Group field now correctly works as both a dropdown and a text input — click the chevron or focus the field to see your existing groups as a list, and type freely to create a new one." },
+    ],
+  },
+  {
     version: "1.0.274",
     date: "13 May 2026",
     items: [
