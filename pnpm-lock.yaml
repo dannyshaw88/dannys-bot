@@ -188,6 +188,9 @@ importers:
       instagram-private-api:
         specifier: ^1.46.1
         version: 1.46.1
+      libsodium-wrappers:
+        specifier: ^0.8.4
+        version: 0.8.4
       otplib:
         specifier: ^13.4.0
         version: 13.4.0
@@ -206,6 +209,9 @@ importers:
       socks-proxy-agent:
         specifier: ^8.0.5
         version: 8.0.5
+      tweetsodium:
+        specifier: ^0.0.6
+        version: 0.0.6
       ws:
         specifier: ^8.18.2
         version: 8.20.0
@@ -2442,6 +2448,9 @@ packages:
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
 
+  blakejs@1.2.1:
+    resolution: {integrity: sha512-QXUSXI3QVc/gJME0dBpXrag1kbzOqCjCX8/b54ntNyW6sjtoqxqRk3LTmXzaJoh71zMsDCjM+47jS7XiwN/+fQ==}
+
   bluebird-lst@1.0.9:
     resolution: {integrity: sha512-7B1Rtx82hjnSD4PGLAjVWeYH3tHAcVUmChh85a3lltKQm6FresXh9ErQo6oAv6CqxttczC3/kEg8SY5NluPuUw==}
 
@@ -3702,6 +3711,12 @@ packages:
   libqp@2.1.1:
     resolution: {integrity: sha512-0Wd+GPz1O134cP62YU2GTOPNA7Qgl09XwCqM5zpBv87ERCXdfDtyKXvV7c9U22yWJh44QZqBocFnXN11K96qow==}
 
+  libsodium-wrappers@0.8.4:
+    resolution: {integrity: sha512-mu8aAWucZjTB5O/BtGXtW4e1agy7uHxNYG7zPthmmD1jU43LCDmSWZLN4JhflbdPXj3yDO4lxM1O9hLDgIOXDw==}
+
+  libsodium@0.8.4:
+    resolution: {integrity: sha512-lMcYaRi0zcs7tarATsQUYC7rstliIXZuoq0c6zXSgNtSNtdvBgkSegjWhpMJAXzKX3SUSwIp7+zEsob+j3LuRw==}
+
   lightningcss-linux-x64-gnu@1.31.1:
     resolution: {integrity: sha512-xGlFWRMl+0KvUhgySdIaReQdB4FNudfUTARn7q0hh/V67PVGCs3ADFjw+6++kG1RNd0zdGRlEKa+T13/tQjPMA==}
     engines: {node: '>= 12.0.0'}
@@ -4830,6 +4845,13 @@ packages:
 
   tweetnacl@0.14.5:
     resolution: {integrity: sha512-KXXFFdAbFXY4geFIwoyNK+f5Z1b7swfXABfL7HXCmoIWMKU3dmS26672A4EeQtDzLKy7SXmfBu51JolvEKwtGA==}
+
+  tweetnacl@1.0.3:
+    resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
+
+  tweetsodium@0.0.6:
+    resolution: {integrity: sha512-vMglGijHoottUKHWaEFjgzHias6Rl+2h/qljRoebJH9GXjBmB5/C+rttmFo8bw6F0aokguV9QTWTR4P2m5vUvg==}
+    deprecated: 'tweetsodium is deprecated and unmaintained. Please consider using libsodium.js, maintained by the same author as libsodium: https://github.com/jedisct1/libsodium.js'
 
   type-fest@0.13.1:
     resolution: {integrity: sha512-34R7HTnG0XIJcBSn5XhDd7nNFPRcXYRZrBB2O2jdKqYODldSzBAqzsWoZYYvduky73toYS/ESqxPvkDf/F0XMg==}
@@ -6989,6 +7011,8 @@ snapshots:
       inherits: 2.0.4
       readable-stream: 3.6.2
 
+  blakejs@1.2.1: {}
+
   bluebird-lst@1.0.9:
     dependencies:
       bluebird: 3.7.2
@@ -8287,6 +8311,12 @@ snapshots:
       libqp: 2.1.1
 
   libqp@2.1.1: {}
+
+  libsodium-wrappers@0.8.4:
+    dependencies:
+      libsodium: 0.8.4
+
+  libsodium@0.8.4: {}
 
   lightningcss-linux-x64-gnu@1.31.1:
     optional: true
@@ -9589,6 +9619,13 @@ snapshots:
   tw-animate-css@1.4.0: {}
 
   tweetnacl@0.14.5: {}
+
+  tweetnacl@1.0.3: {}
+
+  tweetsodium@0.0.6:
+    dependencies:
+      blakejs: 1.2.1
+      tweetnacl: 1.0.3
 
   type-fest@0.13.1:
     optional: true
