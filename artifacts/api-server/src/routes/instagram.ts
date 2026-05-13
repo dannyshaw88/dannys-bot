@@ -431,6 +431,18 @@ export async function registerInstagramRoutes(
       return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
     }
 
+    // Block re-verify when account is awaiting email confirmation.
+    // Re-verifying before clicking the email link sends ANOTHER unknown-device
+    // login attempt → Instagram increments its suspicious-activity counter →
+    // account gets locked. The user must click the link in the email first.
+    if (profile.accountStatus === "email_confirmation") {
+      verifyInFlight.delete(profileId);
+      return res.status(400).json({
+        ok: false,
+        message: `@${profile.username} is waiting for email confirmation. Check the account's registered email inbox, click the Instagram verification link, then verify again.`,
+      });
+    }
+
     // Log "Initiating" BEFORE the verify call so it gets a genuinely earlier
     // timestamp/ID than the result entry — dashboard is newest-first so
     // "Initiating" (older) must have a lower ID than "Verified" (newer).

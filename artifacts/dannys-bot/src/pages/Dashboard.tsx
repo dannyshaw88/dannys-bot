@@ -50,6 +50,15 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.270",
+    date: "13 May 2026",
+    items: [
+      { category: "Login", text: "Fixed account locking during API verification — the login request now sends plain fields instead of a signed wrapper, matching how the current Instagram app actually works." },
+      { category: "Login", text: "Fixed incorrect password error — reverted an encryption change that was causing Instagram to reject valid passwords." },
+      { category: "Login", text: "Added a guard that blocks re-verifying an account that is already awaiting email confirmation, preventing repeated attempts from compounding the issue." },
+    ],
+  },
+  {
     version: "1.0.269",
     date: "13 May 2026",
     items: [
