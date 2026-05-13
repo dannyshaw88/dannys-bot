@@ -323,7 +323,7 @@ export async function registerInstagramRoutes(
         const passwordChanged = current && "password" in body && body.password !== current.password;
         if (usernameChanged || passwordChanged) {
           body.credentialsDirty = true;
-          body.accountStatus = "logged_out";
+          body.accountStatus = "pending";
         }
       }
       const updated = await storage.updateProfile(id, body);
@@ -472,6 +472,9 @@ export async function registerInstagramRoutes(
       accountStatus: result.accountStatus,
       ...(result.ok ? { credentialsDirty: false } : {}),
       ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
+      // Save session cookies captured from the fresh login so follow/DM tools
+      // can restore the session on Path 2 without re-logging in.
+      ...("igApiCookies" in result && result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
     });
 
     // Log verify result as a session action so the LiveActivityTicker can surface it

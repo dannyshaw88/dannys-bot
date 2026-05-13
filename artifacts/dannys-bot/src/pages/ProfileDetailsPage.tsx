@@ -611,16 +611,6 @@ export function ProfileDetailsPage() {
               >
                 <Copy className="w-3 h-3" /> COPY SETTINGS
               </button>
-              {saveStatus === "saving" && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Saving…
-                </span>
-              )}
-              {saveStatus === "saved" && (
-                <span className="flex items-center gap-1 text-xs text-green-600">
-                  <CheckCircle2 className="w-3 h-3" /> Saved
-                </span>
-              )}
               {profile?.creatorMode && (
                 <Button
                   variant="outline"

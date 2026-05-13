@@ -50,6 +50,15 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.273",
+    date: "13 May 2026",
+    items: [
+      { category: "Create an Account", text: "Fixed: Adding a new account no longer pre-fills a random username and the word 'password' — the username, password, and 2FA fields now start blank." },
+      { category: "Account Settings", text: "Fixed: Editing the username or password no longer changes the account status to Logged Out. The status is now set to Pending instead, which is correct since the credentials have not been verified yet." },
+      { category: "Account Settings", text: "Removed: The 'Saving…' and 'Saved' indicators no longer appear next to Account Name when editing any field. Changes still save automatically — the confirmation message is just gone." },
+    ],
+  },
+  {
     version: "1.0.272",
     date: "13 May 2026",
     items: [

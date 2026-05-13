@@ -223,8 +223,8 @@ export function CreateAccountPage() {
 
   const handleCreate = () => {
     createProfileMutation.mutate({
-      username: "new_account_" + Math.floor(Math.random() * 10000),
-      password: "password",
+      username: "",
+      password: "",
       proxyHost: "",
       proxyPort: null,
       proxyUsername: "",
