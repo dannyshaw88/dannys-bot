@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.278",
+    date: "13 May 2026",
+    items: [
+      { category: "Verify Account", text: "Fixed: Accounts with two-factor authentication (2FA) now verify correctly. The app was incorrectly reporting a successful 2FA login as rejected because Instagram's login page does not change its web address after you confirm a 2FA code — the app now detects success by checking the page content and session cookie instead." },
+    ],
+  },
+  {
     version: "1.0.277",
     date: "13 May 2026",
     items: [

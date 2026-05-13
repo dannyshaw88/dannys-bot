@@ -1,6 +1,6 @@
 import type { Browser, Page } from "puppeteer";
 import type { ServerResponse } from "http";
-import { generateSync as totpGenerate } from "otplib";
+import { generateTotp } from "./totp";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -610,32 +610,9 @@ function startFrameLoop(profileId: number) {
       // Only retry when stuck on a genuine error/blank page:
       //   • chrome-error://  — HTTP 429 / net error / proxy failure (TERMINAL state)
       //   • about:blank / about:newtab — goto() timed out or navigation in progress
-      // navProtectedUntil guards about:blank (transitional) but NOT chrome-error://.
-      // chrome-error:// is a final failure state — Chrome is done trying. Retrying
-      // immediately is safe and avoids leaving the user staring at an error page.
       const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
-      const navProtected = Date.now() < (s.navProtectedUntil ?? 0);
-      // Bypass nav protection for chrome-error:// (terminal) but respect it for about:blank (transitional).
-      const isTransitionalBlank = currentUrl === "about:blank" || currentUrl === "about:newtab";
-      if (isErrorPage && (!navProtected || !isTransitionalBlank)) {
-        errorRetryTick++;
-        // First 3 retries: every 3 s (15×200 ms). After that: every 30 s (150×200 ms).
-        const retryThreshold = errorRetryCount < 3 ? 15 : 150;
-        if (errorRetryTick >= retryThreshold) {
-          errorRetryTick = 0;
-          errorRetryCount++;
-          const hasCookies = await s.page.cookies().then(c => c.some(ck => ck.name === "sessionid")).catch(() => false);
-          const retryTarget = hasCookies
-            ? "https://www.instagram.com/"
-            : "https://www.instagram.com/accounts/login/";
-          log(`[retry:${profileId}] "${currentUrl}" — retry #${errorRetryCount} → ${retryTarget}`, "browser");
-          // Protect against the next round of retries while this goto() is in flight
-          s.navProtectedUntil = Date.now() + 35000;
-          s.page.goto(retryTarget, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
-        }
-      } else if (!isErrorPage) {
-        errorRetryTick = 0;
-        errorRetryCount = 0; // reset so future failures also get fast retries
+      if (isErrorPage) {
+        // No automatic retry — leave the error page as-is.
       }
       // ─────────────────────────────────────────────────────────────────────
 
@@ -1152,6 +1129,14 @@ export function sendLoginDone(profileId: number, ok: boolean, message: string) {
   log(`[loginDone:${profileId}] ${ok ? "✅" : "❌"} ${message}`, "browser");
 }
 
+// Extract raw cookies from the active browser session page.
+// Used by the verify route to hand browser-authenticated cookies to the API client.
+export async function getSessionPageCookies(profileId: number): Promise<Array<{ name: string; value: string }>> {
+  const s = sessions.get(profileId);
+  if (!s) return [];
+  try { return await s.page.cookies(); } catch { return []; }
+}
+
 // Fill a field using real keyboard events so React's controlled inputs update correctly.
 async function fillField(page: Page, selector: string, text: string) {
   await page.click(selector);
@@ -1416,28 +1401,45 @@ export async function browserAutoLogin(
       return { ok: false, message: "Incorrect password — update it in Account Details." };
     }
 
-    // DOM-based 2FA detection: Instagram's 2FA overlay renders on top of the login
-    // page in the SPA. The background login form text dominates the early DOM, so
-    // text-only detection misses it. A visible non-login input (the "Code" field) or
-    // the "Trust this device" / "Try another way" text reliably identifies the screen.
+    // ── Step 6a: Detect security checkpoint BEFORE 2FA check ─────────────────
+    // Challenge/checkpoint pages contain "challenge" in the URL and should never
+    // trigger TOTP auto-fill — they need a different resolution (browser, SMS, etc.)
+    const isCheckpoint = pageUrl.includes("/challenge") ||
+                         /verify.{0,30}(identity|phone|email)|unusual.{0,20}activity|suspicious.{0,20}activity|confirm.{0,20}(phone|email|identity)/i.test(allText);
+    if (isCheckpoint) {
+      sendStatus(profileId, `⚠ Instagram security checkpoint detected — URL: ${pageUrl.slice(0, 80)}`);
+      return { ok: false, message: "Instagram is showing a security checkpoint — handle it in the browser." };
+    }
+
+    // DOM-based 2FA detection: only fire on inputs that are specifically OTP/code
+    // inputs — not just any visible non-login field. Challenge pages and other screens
+    // can have visible text inputs that are NOT TOTP code fields.
     const is2FAByDom = await s.page.evaluate(() => {
-      const SKIP_NAMES = new Set(["username", "email", "pass", "password", "search", "q"]);
-      const SKIP_TYPES = new Set(["password", "submit", "button", "hidden", "checkbox", "radio", "file", "image"]);
+      const CODE_NAMES = new Set(["verificationcode", "verification_code", "security_code", "totp_code", "code"]);
       const hasCodeInput = Array.from(document.querySelectorAll("input")).some(el => {
-        const name = (el as HTMLInputElement).name?.toLowerCase() || "";
-        const type = (el as HTMLInputElement).type?.toLowerCase() || "text";
-        if (SKIP_NAMES.has(name) || SKIP_TYPES.has(type)) return false;
+        const name  = ((el as HTMLInputElement).name || "").toLowerCase();
+        const type  = ((el as HTMLInputElement).type || "text").toLowerCase();
+        const imode = (el.getAttribute("inputmode") || "").toLowerCase();
+        const ac    = ((el as HTMLInputElement).autocomplete || "").toLowerCase();
+        const ph    = ((el as HTMLInputElement).placeholder || "").toLowerCase();
+        const ml    = parseInt(el.getAttribute("maxlength") || "0", 10);
+        if (["password","submit","button","hidden","checkbox","radio","file","image"].includes(type)) return false;
         const r = el.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
+        if (r.width === 0 || r.height === 0) return false;
+        return CODE_NAMES.has(name) ||
+               ac === "one-time-code" ||
+               imode === "numeric" ||
+               (ml >= 6 && ml <= 8) ||
+               ph.includes("code") || ph.includes("digit") || ph.includes("otp");
       });
       const bodyText = document.body?.innerText || "";
-      const hasTrustDevice = /trust.this.device|try.another.way/i.test(bodyText);
+      const hasTrustDevice = /trust.this.device|try.another.way|two-factor/i.test(bodyText);
       return hasCodeInput || hasTrustDevice;
     }).catch(() => false);
 
     const is2FA = is2FAByDom ||
-                  /authentication.app|6.digit|two.factor|verif|security.code|confirmation.code|backup.code|enter.the.code/i.test(allText) ||
-                  pageUrl.includes("/two_factor") || pageUrl.includes("challenge");
+                  /authentication.app|6.digit|two.factor|security.code|confirmation.code|backup.code|enter.the.code/i.test(allText) ||
+                  pageUrl.includes("/two_factor");
 
     const isLoggedIn = !pageText.includes("Username, email or mobile number") &&
                        !pageText.includes("Create new account") &&
@@ -1453,7 +1455,7 @@ export async function browserAutoLogin(
         sendStatus(profileId, "2FA screen — entering TOTP code automatically…");
         let code: string;
         try {
-          code = totpGenerate({ secret: keyClean });
+          code = generateTotp(keyClean);
           sendStatus(profileId, `TOTP code generated: ${code.slice(0, 2)}****`);
         } catch (totpErr: any) {
           sendStatus(profileId, `⚠ Invalid 2FA secret key — ${totpErr?.message ?? "check your TOTP key in Account Details"}`);
@@ -1620,14 +1622,30 @@ export async function browserAutoLogin(
             await s.page.keyboard.press("Enter");
           }
 
-          // Wait up to 10s for Instagram to navigate away from the 2FA page
+          // Wait up to 12s for Instagram to accept the 2FA code.
+          // Instagram's SPA often does NOT change the URL after accepting 2FA —
+          // it removes the overlay in-place while the URL stays /accounts/login/.
+          // So we must detect success via DOM state, not URL alone.
           sendStatus(profileId, "2FA code submitted — waiting for Instagram…");
           await Promise.race([
-            s.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => null),
-            s.page.waitForFunction(
-              () => !window.location.href.includes("/two_factor") && !window.location.href.includes("/accounts/login"),
-              { timeout: 10000 }
-            ).catch(() => null),
+            s.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 12000 }).catch(() => null),
+            s.page.waitForFunction(() => {
+              const url = window.location.href;
+              // Hard navigation away from login = success
+              if (!url.includes("/two_factor") && !url.includes("/accounts/login")) return true;
+              // SPA case: 2FA overlay removed and login form gone = success
+              const hasLoginForm = !!document.querySelector('input[name="username"], input[autocomplete="username"]');
+              const has2FAInput  = Array.from(document.querySelectorAll("input")).some((el: any) => {
+                const imode = el.getAttribute("inputmode");
+                const ac    = el.autocomplete || "";
+                const ml    = parseInt(el.getAttribute("maxlength") || "0", 10);
+                const nm    = (el.name || "").toLowerCase();
+                return imode === "numeric" || ac === "one-time-code" || (ml >= 6 && ml <= 8) ||
+                       ["verificationcode","verification_code","security_code","totp_code","code"].includes(nm);
+              });
+              // Both forms gone → accepted (or rejected with a different overlay)
+              return !hasLoginForm && !has2FAInput;
+            }, { timeout: 12000 }).catch(() => null),
           ]);
 
           // Dismiss any post-login popups (save login info, notifications, etc.)
@@ -1643,7 +1661,26 @@ export async function browserAutoLogin(
           sendStatus(profileId, `After 2FA: URL="${afterUrl.slice(0, 80)}" text="${afterText.slice(0, 80)}"`);
           log(`[autoLogin:${profileId}] After 2FA submit: url="${afterUrl}" text="${afterText.slice(0, 100)}"`, "browser");
 
-          const twoFaAccepted = !afterUrl.includes("/two_factor") && !afterUrl.includes("/accounts/login");
+          // Check URL AND DOM — SPA keeps /accounts/login in URL even after success
+          const urlAccepted = !afterUrl.includes("/two_factor") && !afterUrl.includes("/accounts/login");
+          const domAccepted = await s.page.evaluate(() => {
+            const hasLoginForm = !!document.querySelector('input[name="username"], input[autocomplete="username"]');
+            const has2FAInput  = Array.from(document.querySelectorAll("input")).some((el: any) => {
+              const imode = el.getAttribute("inputmode");
+              const ac    = el.autocomplete || "";
+              const ml    = parseInt(el.getAttribute("maxlength") || "0", 10);
+              const nm    = (el.name || "").toLowerCase();
+              return imode === "numeric" || ac === "one-time-code" || (ml >= 6 && ml <= 8) ||
+                     ["verificationcode","verification_code","security_code","totp_code","code"].includes(nm);
+            });
+            return !hasLoginForm && !has2FAInput;
+          }).catch(() => false);
+          // Use sessionid cookie as ground-truth override — if it exists, we're logged in
+          const hasCookieSession = await s.page.cookies()
+            .then(cs => cs.some(c => c.name === "sessionid" && c.value.length > 5))
+            .catch(() => false);
+          const twoFaAccepted = urlAccepted || domAccepted || hasCookieSession;
+          sendStatus(profileId, `2FA result: url=${urlAccepted} dom=${domAccepted} cookie=${hasCookieSession}`);
           if (twoFaAccepted) {
             await saveCookies(profileId, s.page);
             sendStatus(profileId, "✓ 2FA accepted — logged in successfully!");
@@ -1656,11 +1693,11 @@ export async function browserAutoLogin(
           return { ok: false, message: "2FA code rejected" };
         } else {
           sendStatus(profileId, "⚠ 2FA screen — NO input field found. Cannot type code.");
-          return { ok: true, message: "2FA screen shown" };
+          return { ok: false, message: "2FA screen — input field not found. Open the browser and enter the code manually." };
         }
       } else {
         sendStatus(profileId, "⚠ 2FA screen — no TOTP secret stored for this account. Go to Account Details and paste the 16-character TOTP secret key from your authenticator app, then try Fill Credentials again. You can also type the code manually in the browser window.");
-        return { ok: true, message: "2FA screen — no TOTP key stored. Add the TOTP secret in Account Details and retry." };
+        return { ok: false, message: "2FA screen — no TOTP key stored. Add the TOTP secret in Account Details and retry." };
       }
     }
 
