@@ -50,6 +50,14 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.267",
+    date: "13 May 2026",
+    items: [
+      { category: "Accounts", text: "Fixed: Importing an account (via CSV or EQX file) no longer instantly sets the status to Valid. All imported accounts now start as Pending so you can verify them before they run." },
+      { category: "Accounts", text: "Fixed: All tools are now toggled off by default when importing an account from an EQX file. Previously the saved enabled state was restored, which could cause tools to start running immediately on import." },
+    ],
+  },
+  {
     version: "1.0.266",
     date: "13 May 2026",
     items: [

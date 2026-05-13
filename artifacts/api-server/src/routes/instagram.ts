@@ -497,16 +497,8 @@ export async function registerInstagramRoutes(
     res.json(result);
   });
 
-  function resolveImportStatus(raw: string | undefined): string {
-    const s = (raw ?? "").toLowerCase().trim().replace(/\s+/g, "_");
-    const valid = ["pending","valid","banned","captcha","email_confirmation","phone_verification","2fa_verification","stopped","logged_out","bad_password","action_blocked"];
-    if (valid.includes(s)) return s;
-    const aliases: Record<string, string> = {
-      "ok": "valid", "active": "valid", "verified": "valid",
-      "email_confirm": "email_confirmation", "phone_verify": "phone_verification",
-      "2fa_verify": "2fa_verification", "action_block": "action_blocked",
-    };
-    return aliases[s] ?? "pending";
+  function resolveImportStatus(_raw: string | undefined): string {
+    return "pending";
   }
 
   app.post("/api/profiles/import", async (req, res) => {
@@ -1829,6 +1821,7 @@ export async function registerInstagramRoutes(
       const { profile: profileData, tools: toolsData, followedUsers: fuData, stats: statsData } = payload;
 
       const { id: _id, ...cleanProfile } = profileData;
+      cleanProfile.accountStatus = "pending";
 
       const created = await storage.createProfile(cleanProfile);
 
@@ -1841,7 +1834,7 @@ export async function registerInstagramRoutes(
           if (!match) continue;
           // Restore settings
           try {
-            await storage.updateTool(match.id, { enabled: savedTool.enabled, settings: savedTool.settings });
+            await storage.updateTool(match.id, { enabled: false, settings: savedTool.settings });
           } catch (e) {
             req.log.warn({ err: e }, `import-eqx: failed to update settings for ${savedTool.type ?? "unknown"} tool (non-fatal)`);
           }
