@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.282",
+    date: "13 May 2026",
+    items: [
+      { category: "Internal", text: "Fixed: CI build failure caused by a missing file — the TOTP code generator was created locally but never included in the repository." },
+    ],
+  },
+  {
     version: "1.0.281",
     date: "13 May 2026",
     items: [
