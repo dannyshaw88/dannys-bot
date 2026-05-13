@@ -35,6 +35,7 @@ import {
   browserAutoLogin,
   sendLoginDone,
   setCheckpointUrl,
+  getSessionPageCookies,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -431,17 +432,6 @@ export async function registerInstagramRoutes(
       return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
     }
 
-    // Block re-verify when account is awaiting email confirmation.
-    // Re-verifying before clicking the email link sends ANOTHER unknown-device
-    // login attempt → Instagram increments its suspicious-activity counter →
-    // account gets locked. The user must click the link in the email first.
-    if (profile.accountStatus === "email_confirmation") {
-      verifyInFlight.delete(profileId);
-      return res.status(400).json({
-        ok: false,
-        message: `@${profile.username} is waiting for email confirmation. Check the account's registered email inbox, click the Instagram verification link, then verify again.`,
-      });
-    }
 
     // Log "Initiating" BEFORE the verify call so it gets a genuinely earlier
     // timestamp/ID than the result entry — dashboard is newest-first so
@@ -456,17 +446,88 @@ export async function registerInstagramRoutes(
       durationMs: 0,
     }).catch(() => {});
 
-    let result: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
+    // ── Jarvee-style EB-first verify ──────────────────────────────────────────
+    // Step 1: Launch the embedded browser (headless) for this profile.
+    // Step 2: Auto-login via Instagram web (handles 2FA, challenges, etc.)
+    // Step 3: Extract sessionid/csrftoken/ds_user_id from the browser.
+    // Step 4: Hand those cookies to the API client — account marked valid.
+    // This is exactly how Jarvee authenticates: EB logs in first, then the API
+    // uses the browser-generated session cookies for all follow/like/DM actions.
+
+    const proxyConfig: ProxyConfig | undefined = effectiveProfile.proxyHost ? {
+      host: effectiveProfile.proxyHost,
+      port: effectiveProfile.proxyPort!,
+      username: effectiveProfile.proxyUsername ?? undefined,
+      password: effectiveProfile.proxyPassword ?? undefined,
+    } : undefined;
+
+    const ebUA = (effectiveProfile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+
+    // Step 1: Get or create the browser session
+    let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
     try {
-      result = await verifyInstagramCredentials(effectiveProfile as typeof profile);
-    } catch (err) {
+      await getOrCreateSession(profileId, ebUA, proxyConfig);
+    } catch (ebErr: any) {
+      verifyInFlight.delete(profileId);
       await storage.updateProfile(profile.id, { accountStatus: "pending" });
-      const msg = err instanceof Error ? err.message : "Unexpected verify error";
-      return fail(500, msg);
+      return fail(500, `Browser failed to launch: ${ebErr?.message ?? "Unknown error"}`);
+    }
+
+    // Step 2: Auto-login via browser (web login)
+    let loginResult: { ok: boolean; message: string };
+    try {
+      loginResult = await browserAutoLogin(
+        profileId,
+        profile.username,
+        profile.password!,
+        profile.twoFASecretKey || "",
+      );
+    } catch (loginErr: any) {
+      loginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
     } finally {
-      // Always release — whether verifyInstagramCredentials threw or returned normally.
       verifyInFlight.delete(profileId);
     }
+
+    // Step 3: Extract cookies and build result
+    if (loginResult.ok) {
+      const rawCookies = await getSessionPageCookies(profileId);
+      const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
+      const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
+      const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;
+      const mid       = rawCookies.find(c => c.name === "mid")?.value;
+
+      if (!sessionid) {
+        result = {
+          ok: false,
+          accountStatus: "pending",
+          message: `@${profile.username} — browser login appeared to succeed but no sessionid cookie was found. Try again.`,
+        };
+      } else {
+        // Step 4: Format cookies for the API client (handed over exactly like Jarvee)
+        const cookieParts = [`sessionid=${sessionid}`];
+        if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
+        if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
+        if (mid)       cookieParts.push(`mid=${mid}`);
+        result = {
+          ok: true,
+          accountStatus: "valid",
+          message: `@${profile.username} — logged in via browser. Session handed to API.`,
+          igApiCookies: cookieParts.join("; "),
+        };
+      }
+    } else {
+      // Classify the failure
+      const msg = loginResult.message ?? "";
+      let accountStatus = "locked";
+      if (/2fa|two.factor|two_factor/i.test(msg))   accountStatus = "2fa_verification";
+      else if (/challenge|checkpoint/i.test(msg))    accountStatus = "captcha";
+      else if (/disabled/i.test(msg))                accountStatus = "account_disabled";
+      else if (/suspended/i.test(msg))               accountStatus = "suspended";
+      result = { ok: false, accountStatus, message: `@${profile.username} — ${msg}` };
+    }
+
+    // Signal the browser panel SSE (if the user has it open) that login is done
+    sendLoginDone(profileId, result.ok, result.message);
 
     await storage.updateProfile(profile.id, {
       accountStatus: result.accountStatus,
@@ -1020,13 +1081,9 @@ export async function registerInstagramRoutes(
     )
       .then(async result => {
         sendLoginDone(profileId, result.ok, result.message);
-        // Only mark the account valid when login genuinely succeeded.
-        // result.ok is also true for 2FA/challenge screens ("2FA code submitted",
-        // "2FA screen shown", etc.) — those must NOT set the account to valid
-        // because we don't yet know whether the 2FA step passed.
-        // EB login never sets account status — only the mobile API login
-        // (Verify Credentials) is authoritative. A banned account that happens
-        // to reach the EB login screen must not be silently marked valid.
+        // This standalone browser-login route is for MANUAL browser use.
+        // Account status is set by the /verify route (EB-first flow) which
+        // also extracts and hands cookies to the API after login succeeds.
       })
       .catch(err  => sendLoginDone(profileId, false, String(err)));
   });

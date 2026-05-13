@@ -1681,6 +1681,12 @@ export async function browserAutoLogin(
             .catch(() => false);
           const twoFaAccepted = urlAccepted || domAccepted || hasCookieSession;
           sendStatus(profileId, `2FA result: url=${urlAccepted} dom=${domAccepted} cookie=${hasCookieSession}`);
+          // Check for disabled/suspended BEFORE declaring success — a disabled account
+          // can still pass 2FA and get a sessionid, but Instagram redirects to /accounts/disabled/
+          if (afterUrl.includes("/accounts/disabled") || afterUrl.includes("/disabled/") || afterUrl.includes("/suspended")) {
+            sendStatus(profileId, `⚠ Account is disabled by Instagram (URL: ${afterUrl.slice(0, 80)})`);
+            return { ok: false, message: "Account disabled by Instagram" };
+          }
           if (twoFaAccepted) {
             await saveCookies(profileId, s.page);
             sendStatus(profileId, "✓ 2FA accepted — logged in successfully!");
@@ -1702,6 +1708,11 @@ export async function browserAutoLogin(
     }
 
     if (isLoggedIn) {
+      const currentUrl = s.page.url();
+      if (currentUrl.includes("/accounts/disabled") || currentUrl.includes("/disabled/") || currentUrl.includes("/suspended")) {
+        sendStatus(profileId, `⚠ Account is disabled by Instagram (URL: ${currentUrl.slice(0, 80)})`);
+        return { ok: false, message: "Account disabled by Instagram" };
+      }
       await saveCookies(profileId, s.page);
       sendStatus(profileId, "✓ Logged in — browser is showing your Instagram.");
       return { ok: true, message: "Login successful" };

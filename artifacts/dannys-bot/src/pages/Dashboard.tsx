@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.280",
+    date: "13 May 2026",
+    items: [
+      { category: "Verify Account", text: "Fixed: Disabled accounts now correctly show as Disabled instead of Valid. Instagram allows a disabled account to complete the login and 2FA steps, then redirects to a disabled-account page — the app now detects that redirect and marks the account as Disabled rather than treating it as a successful login." },
+    ],
+  },
+  {
     version: "1.0.279",
     date: "13 May 2026",
     items: [
