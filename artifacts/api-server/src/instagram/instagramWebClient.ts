@@ -210,7 +210,8 @@ function encryptPassword(plaintext: string, pubKeyBase64: string, keyId: number)
 // ensures hung calls fail fast instead of holding sockets open forever.
 function newIgClient(): IgApiClient {
   const ig = new IgApiClient();
-  ig.request.defaults = { timeout: 30000 };
+  // Spread existing defaults so the library's cookie jar is preserved.
+  ig.request.defaults = { ...ig.request.defaults, timeout: 30000 };
   return ig;
 }
 
@@ -262,7 +263,7 @@ type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 //   222.0.0.13.114 → 350696709
 //   384.0.0.36.112 → 663869969  (rate ≈ 1,933,168 / major version)
 //   427.0.0.47.73  → 746996204  (estimated; update if Instagram rejects again)
-const MOBILE_VERSION           = "427.0.0.47.73";
+export const MOBILE_VERSION      = "427.0.0.47.73";
 export const MOBILE_VERSION_CODE = "746996204";
 // Date this version was last confirmed / updated. Warn after 90 days so there
 // is time to update before Instagram starts rejecting the version.
@@ -325,6 +326,9 @@ export class InstagramWebClient {
   // Set by _mobileLogin when the failure is definitively bad credentials so
   // ensureClient can propagate the status to the DB without guessing.
   lastMobileLoginFailureReason: "bad_password" | null = null;
+
+  // Set by _login (web login) before each failure return — gives loginDetailed() the error reason.
+  private _webLoginLastError: { reason: 'bad_password' | 'email_confirmation' | 'two_factor_failed' | 'network_error'; message: string } | null = null;
 
   // Device state from the profile — used by IgApiClient to maintain consistent
   // device fingerprint across mobile login attempts (same uuid/deviceId/phoneId).
@@ -521,6 +525,37 @@ export class InstagramWebClient {
     return this.timed("Login", () => this._login(username, password, twoFaSecret), `@${username} login`);
   }
 
+  /**
+   * Web-based credential verification. Bootstraps CSRF from the Instagram login page before
+   * posting credentials — avoids the _csrftoken="missing" problem that plagues the mobile library.
+   * Returns cookies in igApiCookies format on success, or a structured error on failure.
+   */
+  async loginDetailed(
+    username: string,
+    password: string,
+    twoFaSecret?: string,
+  ): Promise<
+    | { ok: true; cookies: string }
+    | { ok: false; reason: 'bad_password' | 'email_confirmation' | 'two_factor_failed' | 'network_error'; message: string }
+  > {
+    this._webLoginLastError = null;
+    let ok = false;
+    try {
+      ok = await this._login(username, password, twoFaSecret);
+    } catch (e: any) {
+      return { ok: false, reason: 'network_error', message: e?.message ?? 'Network error during login' };
+    }
+    if (ok) {
+      const cookies = this.cookieJar.join('; ');
+      if (!cookies.includes('sessionid=')) {
+        return { ok: false, reason: 'network_error', message: 'Login succeeded but no session cookie received' };
+      }
+      return { ok: true, cookies };
+    }
+    const err = this._webLoginLastError ?? { reason: 'network_error' as const, message: 'Unknown login failure' };
+    return { ok: false, reason: err.reason, message: err.message };
+  }
+
   private async _login(username: string, password: string, twoFaSecret?: string): Promise<boolean> {
     // Step 1 — get CSRF from login page
     const pageRes = await igReq({
@@ -540,7 +575,7 @@ export class InstagramWebClient {
       const m = pageRes.rawBody.match(/"csrf_token":"([^"]+)"/);
       if (m) csrf = m[1];
     }
-    if (!csrf) { console.error("[webClient] login: no csrf on login page"); return false; }
+    if (!csrf) { this._webLoginLastError = { reason: 'network_error', message: 'No CSRF token on Instagram login page' }; console.error("[webClient] login: no csrf on login page"); return false; }
 
     this.cookieJar = pageRes.cookies;
     this.csrfToken = csrf;
@@ -587,10 +622,10 @@ export class InstagramWebClient {
     if (j?.two_factor_required) {
       const identifier: string = j?.two_factor_info?.two_factor_identifier ?? "";
       const secret = twoFaSecret?.replace(/\s+/g, "");
-      if (!secret) { console.error(`[webClient] @${username}: 2FA required but no secret`); return false; }
+      if (!secret) { this._webLoginLastError = { reason: 'two_factor_failed', message: '2FA required but no TOTP secret is set' }; console.error(`[webClient] @${username}: 2FA required but no secret`); return false; }
 
       let code: string;
-      try { code = totpGenerate({ secret }); } catch { console.error(`[webClient] @${username}: invalid 2FA secret`); return false; }
+      try { code = totpGenerate({ secret }); } catch { this._webLoginLastError = { reason: 'two_factor_failed', message: 'Invalid 2FA secret key' }; console.error(`[webClient] @${username}: invalid 2FA secret`); return false; }
 
       const twoFaBody = new URLSearchParams({
         username,
@@ -628,10 +663,18 @@ export class InstagramWebClient {
         console.log(`[webClient] @${username}: 2FA OK`);
         return true;
       }
+      this._webLoginLastError = { reason: 'two_factor_failed', message: `2FA code rejected: ${tfRes.rawBody.slice(0, 100)}` };
       console.error(`[webClient] @${username}: 2FA rejected: ${tfRes.rawBody.slice(0, 200)}`);
       return false;
     }
 
+    {
+      const errButtons: any[] = j?.buttons ?? [];
+      const errMsg: string = j?.message ?? j?.error_type ?? 'Login failed';
+      this._webLoginLastError = errButtons.some((b: any) => b?.action === 'send_one_click_login_email')
+        ? { reason: 'email_confirmation', message: errMsg }
+        : { reason: 'bad_password', message: errMsg };
+    }
     console.error(`[webClient] @${username}: login failed: ${loginRes.rawBody.slice(0, 200)}`);
     return false;
   }
