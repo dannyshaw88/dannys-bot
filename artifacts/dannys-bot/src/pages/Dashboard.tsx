@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.271",
+    date: "13 May 2026",
+    items: [
+      { category: "Login", text: "No changes — version bump to trigger build." },
+    ],
+  },
+  {
     version: "1.0.270",
     date: "13 May 2026",
     items: [
