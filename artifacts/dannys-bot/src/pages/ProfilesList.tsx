@@ -118,9 +118,11 @@ export default function ProfilesList() {
             <div key={profile.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col">
               <div className="flex justify-between items-start mb-6">
                 <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-full bg-gradient-to-tr from-pink-500 to-orange-400 p-0.5 shadow-md">
+                  <div className="h-14 w-14 rounded-full bg-gradient-to-tr from-pink-500 to-orange-400 p-0.5 shadow-md shrink-0">
                     <div className="h-full w-full bg-white rounded-full flex items-center justify-center border-2 border-white">
-                      <Instagram className="h-6 w-6 text-slate-700" />
+                      <span className="text-xl font-bold text-slate-700 select-none leading-none">
+                        {(profile.username ?? "?")[0].toUpperCase()}
+                      </span>
                     </div>
                   </div>
                   <div>

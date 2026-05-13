@@ -1,7 +1,7 @@
 import { useLocation, useSearch } from "wouter";
 import {
   LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, Wand2, User, UserMinus, MessageSquare, Cookie,
+  ChevronLeft, ChevronRight, PlusCircle, User, UserMinus, MessageSquare, Cookie,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
@@ -36,12 +36,13 @@ export function Sidebar() {
   const { data: profile } = useProfile(profileId);
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
 
+  const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard, iconColor: undefined },
-    { name: "Accounts",          path: "/profiles",            icon: Users,           iconColor: "text-cyan-500" },
-    { name: "Create an Account", path: "/create-account-api", icon: Wand2,            iconColor: "text-foreground" },
-    { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: "text-red-500" },
-    { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: "text-green-500" },
+    { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard, iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "Accounts",          path: "/profiles",            icon: Users,           iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "Create an Account", path: "/create-account-api", icon: PlusCircle,       iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: undefined,  iconStyle: { color: BRAND } },
   ];
 
   function goBack() {
@@ -107,10 +108,13 @@ export function Sidebar() {
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <Icon className={cn(
-                  "w-5 h-5 mr-3 transition-colors",
-                  item.iconColor ?? (isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")
-                )} />
+                <Icon
+                  className={cn(
+                    "w-5 h-5 mr-3 transition-colors",
+                    item.iconColor ?? (isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")
+                  )}
+                  style={item.iconStyle}
+                />
                 {item.name}
               </button>
 

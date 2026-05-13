@@ -546,6 +546,14 @@ export function ProfileDetailsPage() {
                     >
                       Dash
                     </Link>
+                    <span className="text-border mx-1 select-none">|</span>
+                    <button
+                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
+                    >
+                      <Monitor className="w-3 h-3" />
+                      Browser
+                    </button>
                   </>
                 )}
               </div>
@@ -647,16 +655,6 @@ export function ProfileDetailsPage() {
                   {profile?.accountStatus === "stopped" ? "Stopped" : "Active"}
                 </span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 shrink-0"
-                onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                data-testid="button-open-browser"
-              >
-                <Monitor className="w-4 h-4" />
-                Open Browser
-              </Button>
             </div>
             <div className="max-w-[40%]">
               <Input

@@ -376,9 +376,10 @@ export class InstagramWebClient {
     this.userAgentApi  = userAgentApi  ?? undefined;
     this.igApiCookies  = igApiCookies  ?? undefined;
     // Eagerly restore mobile session so isMobileLoggedIn() returns true immediately.
-    // This lets ensureClient skip the web login when igApiCookies from a prior
-    // Verify Credentials run are still valid.
-    this._restoreMobileFromApiCookies();
+    // Fast path 1: igApiCookies has a sessionid (Jarvee-imported or prior login).
+    // Fast path 2: igDeviceState has a Bearer authorization token saved from verify
+    //              (used when proxy strips all Set-Cookie so sessionid is unavailable).
+    this._restoreMobileFromApiCookies() || this._restoreMobileFromAuthorization();
   }
 
   // Parse igApiCookies (Jarvee-style "key=value;key=value" with URL-encoded values)
@@ -417,6 +418,35 @@ export class InstagramWebClient {
     this.mobileSessionReady = true;
     console.log(`[webClient] mobile session restored from igApiCookies (${cookies.length} cookies, sessionid=true, csrf=${this.mobileCsrf || "none"})`);
     return true;
+  }
+
+  // Fast path: proxy strips all Set-Cookie so sessionid is never available, but the
+  // ig-set-authorization Bearer token (a normal response header) does survive and is
+  // stored in igDeviceState after a successful Verify Credentials run.
+  // When that token is present, skip the fresh re-login (which would trigger bad_password
+  // from Instagram detecting a rapid device re-login) and use the token directly.
+  private _restoreMobileFromAuthorization(): boolean {
+    if (!this.igDeviceState) return false;
+    try {
+      const saved = JSON.parse(this.igDeviceState);
+      if (!saved.authorization) return false;
+      const igDid = saved.igDid ?? randomUUID();
+      const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      // Use saved csrftoken from igApiCookies if available, otherwise synthetic
+      let csrf: string | undefined;
+      if (this.igApiCookies) {
+        const csrfPair = this.igApiCookies.split(";").find((s: string) => s.trim().startsWith("csrftoken="));
+        if (csrfPair) csrf = csrfPair.split("=").slice(1).join("=");
+      }
+      if (!csrf) csrf = randomBytes(16).toString("hex");
+      this.mobileCookieJar = [`ig_did=${igDid}`, `mid=${mid}`, `csrftoken=${csrf}`];
+      this.mobileCsrf = csrf;
+      this.mobileSessionReady = true;
+      console.log(`[webClient] mobile session restored from authorization token (Bearer IGT:2:... in igDeviceState)`);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   setLogger(fn: ApiCallLogger) {
@@ -729,10 +759,15 @@ export class InstagramWebClient {
   }
 
   private async _mobileLogin(username: string, password: string, twoFaSecret?: string): Promise<boolean> {
-    // Fast path: if we have stored igApiCookies from a prior Verify Credentials,
-    // use them directly — they are genuine mobile-API cookies and avoid triggering
-    // Instagram's new-device email challenge on every restart.
+    // Fast path 1: stored igApiCookies with sessionid from a prior Verify Credentials run.
     if (this._restoreMobileFromApiCookies()) {
+      return true;
+    }
+
+    // Fast path 2: stored Bearer authorization token in igDeviceState (set when proxy
+    // strips all Set-Cookie so sessionid is never reachable — the token IS the session).
+    // Skipping fresh login avoids Instagram returning bad_password on rapid device re-login.
+    if (this._restoreMobileFromAuthorization()) {
       return true;
     }
 
@@ -844,8 +879,9 @@ export class InstagramWebClient {
 
     // Extract cookies from IgApiClient's tough-cookie jar into our flat string array
     try {
-      const serialized = await ig.state.serializeCookieJar();
-      const jar = JSON.parse(serialized);
+      const raw = await ig.state.serializeCookieJar();
+      // serializeCookieJar() returns a plain object, not a JSON string — do NOT JSON.parse it
+      const jar = typeof raw === "string" ? JSON.parse(raw) : raw;
       const WANTED = new Set(["sessionid", "csrftoken", "ds_user_id", "rur", "mid", "ig_did"]);
       const extracted: string[] = (jar.cookies ?? [])
         .filter((c: any) => WANTED.has(c.key))
@@ -928,8 +964,14 @@ export class InstagramWebClient {
   // Authenticated GET using the igApiCookies mobile session (mobileCookieJar).
   // Use this for any read that needs the real account session — inbox, timeline, etc.
   // Zero dependency on the EB; works whether or not the browser is open or logged in.
+  private get _deviceAuthorization(): string | undefined {
+    if (!this.igDeviceState) return undefined;
+    try { return (JSON.parse(this.igDeviceState) as any).authorization ?? undefined; } catch { return undefined; }
+  }
+
   private async mobileSessionGet(path: string): Promise<any> {
-    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid="));
+    const authorization = this._deviceAuthorization;
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
     if (!hasMobileSession) {
       console.warn(`[webClient] mobileSessionGet ${path}: no igApiCookies session`);
       return null;
@@ -969,6 +1011,7 @@ export class InstagramWebClient {
         "X-IG-Bandwidth-Speed-KBPS": "-1.000",
         "X-IG-Bandwidth-TotalBytes-B": "0",
         "X-IG-Bandwidth-TotalTime-MS": "0",
+        ...(authorization ? { Authorization: authorization } : {}),
       },
       cookieJar: this.mobileCookieJar,
       proxyUrl: this.proxyUrl,
@@ -1070,13 +1113,17 @@ export class InstagramWebClient {
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
-        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
         ig.state.generateDevice(deviceSeed);
         if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
         if (saved.uuid)         ig.state.uuid         = saved.uuid;
         if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
         if (saved.adid)         ig.state.adid         = saved.adid;
         if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+        // Restore Bearer token — this is the real session credential when the proxy
+        // strips Set-Cookie (so sessionid never lands in the jar).
+        if (saved.authorization) ig.state.authorization = saved.authorization;
+        if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
       } catch { ig.state.generateDevice(deviceSeed); }
     } else {
       ig.state.generateDevice(deviceSeed);
@@ -1323,13 +1370,15 @@ export class InstagramWebClient {
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
       try {
-        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string };
+        const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
         ig.state.generateDevice(deviceSeed);
         if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
         if (saved.uuid)         ig.state.uuid         = saved.uuid;
         if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
         if (saved.adid)         ig.state.adid         = saved.adid;
         if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+        if (saved.authorization) ig.state.authorization = saved.authorization;
+        if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
       } catch { ig.state.generateDevice(deviceSeed); }
     } else {
       ig.state.generateDevice(deviceSeed);
@@ -2637,7 +2686,8 @@ export class InstagramWebClient {
   // a proper mobile-originated session — web cookies return login_required on those.
   // If no igApiCookies session is available, returns null immediately (no fallback).
   private async mobileSessionPost(path: string, body = ""): Promise<any> {
-    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid="));
+    const authorization = this._deviceAuthorization;
+    const hasMobileSession = this.mobileCookieJar.some(c => c.startsWith("sessionid=")) || !!authorization;
     if (!hasMobileSession) {
       console.warn(`[webClient] mobileSessionPost ${path}: no igApiCookies session — cannot proceed (igApiCookies required for write actions)`);
       return null;
@@ -2685,6 +2735,7 @@ export class InstagramWebClient {
         "X-IG-Bandwidth-Speed-KBPS": "-1.000",
         "X-IG-Bandwidth-TotalBytes-B": "0",
         "X-IG-Bandwidth-TotalTime-MS": "0",
+        ...(authorization ? { Authorization: authorization } : {}),
       },
       body,
       cookieJar: this.mobileCookieJar,

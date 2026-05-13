@@ -50,6 +50,19 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.272",
+    date: "13 May 2026",
+    items: [
+      { category: "Accounts", text: "Account cards now show the first letter of the username as an avatar instead of a generic Instagram logo, making each account visually distinct at a glance." },
+      { category: "UI", text: "Open Browser button moved from the Account Settings tab to the top navigation bar next to Dash, so it is accessible from any tool tab without switching tabs." },
+      { category: "Human Sessions", text: "Fixed: View Timeline Feed was returning 0 posts. The mobile session check incorrectly required a session cookie that the proxy always strips — it now correctly uses the saved Bearer token instead." },
+      { category: "Human Sessions", text: "Fixed: Like Timeline Posts was returning 0 likes. The like client was not restoring the Bearer token from saved device state, so every like request was sent without credentials and rejected." },
+      { category: "Login", text: "Fixed: Re-verifying an account that had already been verified once would always fail with no valid session. The verify flow now correctly detects the saved Bearer token as an active session and validates it directly instead of requiring a session cookie that the proxy strips." },
+      { category: "Sidebar", text: "All five navigation icons (Dashboard, Accounts, Create an Account, Statistics, Proxy Manager) now use the same cyan-blue as the Equinox logo." },
+      { category: "Sidebar", text: "Create an Account icon changed from a magic wand to a circle-plus, which more clearly conveys creating a new item." },
+    ],
+  },
+  {
     version: "1.0.271",
     date: "13 May 2026",
     items: [

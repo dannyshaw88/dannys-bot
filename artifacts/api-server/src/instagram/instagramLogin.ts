@@ -8,7 +8,7 @@ import { storage } from "../storage";
 import { MOBILE_VERSION, MOBILE_VERSION_CODE } from "./instagramWebClient";
 
 export type VerifyResult =
-  | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
+  | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string; igApiCookies?: string }
   | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password" | "invalid_credentials"; igDeviceState?: string; checkpointUrl?: string };
 
 // Parse app version and version code from a FULL Instagram mobile user-agent string.
@@ -415,6 +415,45 @@ async function restoreSessionCookies(ig: IgApiClient, cookieString: string): Pro
   }));
 }
 
+/**
+ * After a successful password login, extract the session cookies from the
+ * IgApiClient's cookie jar and return them as a Jarvee-style semicolon string
+ * (e.g. "sessionid=X;ds_user_id=Y;csrftoken=Z;mid=W") so they can be stored
+ * as igApiCookies and reused by the follow/unfollow/DM tools on Path 2.
+ */
+async function extractSessionCookies(ig: IgApiClient): Promise<string | null> {
+  try {
+    const raw = await ig.state.serializeCookieJar();
+    // serializeCookieJar() returns a plain object, not a JSON string — do NOT JSON.parse it
+    const jar = (typeof raw === "string" ? JSON.parse(raw) : raw) as { cookies?: { key: string; value: string; domain?: string }[] };
+    const KEEP = new Set(["sessionid", "ds_user_id", "csrftoken", "mid", "ig_did", "rur"]);
+    const seen = new Set<string>();
+    const pairs: string[] = [];
+    for (const c of jar.cookies ?? []) {
+      if (KEEP.has(c.key) && !seen.has(c.key) && c.value) {
+        seen.add(c.key);
+        pairs.push(`${c.key}=${c.value}`);
+      }
+    }
+    if (!seen.has("sessionid")) {
+      const allKeys = (jar.cookies ?? []).map((c: any) => c.key ?? c.name ?? "(?)").join(",");
+      // The proxy strips all Set-Cookie headers so sessionid never lands in the jar.
+      // The ig-set-authorization Bearer token (saved in igDeviceState) is the real
+      // session credential. Return whatever cookies we have — the auth token path works
+      // without sessionid in igApiCookies.
+      if (pairs.length === 0) {
+        console.error(`[instagramLogin] extractSessionCookies: no cookies at all — jar has ${(jar.cookies ?? []).length} entries: [${allKeys}]`);
+        return null;
+      }
+      console.error(`[instagramLogin] extractSessionCookies: no sessionid (proxy strips Set-Cookie) — saving ${pairs.length} available cookies: [${pairs.map(p => p.split("=")[0]).join(",")}]`);
+    }
+    return pairs.join(";");
+  } catch (e: any) {
+    console.error(`[instagramLogin] extractSessionCookies failed: ${e?.message}`);
+    return null;
+  }
+}
+
 function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiClient; captureDeviceState: () => string } {
   const ig = new IgApiClient();
   // request-promise has no default timeout — hang indefinitely on dead proxies
@@ -521,6 +560,11 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
     adid: ig.state.adid,
     deviceString: ig.state.deviceString,
     igDid,
+    // ig-set-authorization is a normal response header (not a cookie) so the proxy
+    // cannot strip it. It contains Bearer IGT:2:... and is the real session credential
+    // when the proxy strips all Set-Cookie (meaning sessionid is never in the jar).
+    authorization: ig.state.authorization ?? undefined,
+    igWWWClaim: ig.state.igWWWClaim ?? undefined,
   });
 
   return { ig, captureDeviceState };
@@ -549,15 +593,24 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   // 2. Cookie session restore — used only when no password is stored.
   //    For accounts managed purely by session cookie.
 
-  if (profile.password && !profile.igApiCookies) {
-    // ── Path 1: Fresh password login — ONLY for accounts with no stored session ──
-    // CRITICAL: Do NOT run a password login when igApiCookies exist. Instagram
-    // treats a fresh mobile API login as a NEW device login attempt. When the
-    // account already has an active mobile session (igApiCookies), this new
-    // attempt looks like an account takeover and triggers an immediate lock —
-    // regardless of preLoginFlow, proxy, or any other factor.
-    // Accounts with igApiCookies go directly to Path 2 (session validation).
-    console.error(`[instagramLogin] @${profile.username} — attempting fresh password login (no stored session)`);
+  // "Real session" = either a sessionid cookie (traditional) OR a Bearer token in
+  // igDeviceState (proxy-stripped-cookie path). Synthetic cookies (ig_did/mid/csrftoken)
+  // without a sessionid or Bearer token are NOT a real session — they're just device
+  // fingerprint cookies saved by extractSessionCookies after the first login.
+  // Path 1 must NOT be skipped just because those synthetic cookies are present.
+  const hasSavedSessionid = !!profile.igApiCookies?.split(';').some((s: string) => s.trim().toLowerCase().startsWith('sessionid='));
+  const hasSavedBearer = (() => {
+    try { return !!(profile.igDeviceState && (JSON.parse(profile.igDeviceState) as any).authorization); } catch { return false; }
+  })();
+
+  if (profile.password && !hasSavedSessionid && !hasSavedBearer) {
+    // ── Path 1: Fresh password login — ONLY for accounts with no real active session ──
+    // CRITICAL: Do NOT run a password login when a real session already exists. Instagram
+    // treats a fresh mobile API login as a NEW device login attempt. When the account
+    // already has an active mobile session (sessionid cookie or Bearer token), this new
+    // attempt looks like an account takeover and triggers an immediate lock.
+    // Accounts with a real session go directly to Path 2 (session validation).
+    console.error(`[instagramLogin] @${profile.username} — attempting fresh password login (no real active session: hasSavedSessionid=${hasSavedSessionid} hasSavedBearer=${hasSavedBearer})`);
     const { ig: igPw, captureDeviceState: capturePw } = buildIgClient(profile, proxyUrl);
     attachRequestLogger(igPw, profile.id, profile.username, "Verify", proxyIp, profile.apiLimits as any);
 
@@ -697,7 +750,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // Sending signed_body with a modern UA is a known automation fingerprint
         // that Instagram uses to flag and lock accounts. Send plain form fields.
         console.error(`[instagramLogin] @${profile.username} — SendLoginRequest /api/v1/accounts/login/ (unsigned) navChain=${loginNavChain}`);
-        await igPw.request.send({
+        const loginResp: any = await igPw.request.send({
           method: "POST",
           url: "/api/v1/accounts/login/",
           headers: {
@@ -726,6 +779,20 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             default: throw e;
           }
         });
+        // Log raw Set-Cookie from the login response to diagnose cookie jar issues
+        const respSetCookies: string[] = loginResp?.headers?.['set-cookie'] ?? [];
+        console.error(`[instagramLogin] @${profile.username} — login response Set-Cookie headers (${respSetCookies.length}): ${respSetCookies.map((c: string) => c.split(';')[0]).join(" | ").slice(0, 300)}`);
+        // Manually inject any Set-Cookie values into the jar in case request-promise
+        // didn't auto-store them (observed when running behind certain proxy configs)
+        if (respSetCookies.length > 0) {
+          const innerJar = (igPw.state as any).cookieJar?._jar;
+          if (innerJar?.setCookieSync) {
+            for (const cs of respSetCookies) {
+              try { innerJar.setCookieSync(cs, "https://i.instagram.com/"); } catch {}
+            }
+            console.error(`[instagramLogin] @${profile.username} — manually injected ${respSetCookies.length} login response cookies into jar`);
+          }
+        }
       }
       try {
         await igPw.simulate.postLoginFlow();
@@ -735,7 +802,9 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         }
       }
       console.error(`[instagramLogin] @${profile.username} — password login OK ✓`);
-      return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: capturePw() };
+      const sessionCookies = await extractSessionCookies(igPw);
+      console.error(`[instagramLogin] @${profile.username} — captured cookies: ${sessionCookies ? sessionCookies.slice(0, 60) + "…" : "(none)"}`);
+      return { ok: true, message: `@${profile.username} logged in successfully.`, accountStatus: "valid", igDeviceState: capturePw(), igApiCookies: sessionCookies ?? undefined };
 
     } catch (err: any) {
       const errName: string = err?.constructor?.name ?? "";
@@ -771,7 +840,9 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
               return { ok: false, message: `@${profile.username} — passed 2FA but Instagram requires a checkpoint before API access. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(plErr), igDeviceState: capturePw() };
             }
           }
-          return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: capturePw() };
+          const sessionCookies2fa = await extractSessionCookies(igPw);
+          console.error(`[instagramLogin] @${profile.username} — 2FA cookies: ${sessionCookies2fa ? sessionCookies2fa.slice(0, 60) + "…" : "(none)"}`);
+          return { ok: true, message: `@${profile.username} passed 2FA and logged in successfully.`, accountStatus: "valid", igDeviceState: capturePw(), igApiCookies: sessionCookies2fa ?? undefined };
         } catch (e2: any) {
           return { ok: false, message: `@${profile.username} — 2FA code rejected: ${e2?.message ?? "unknown"}`, accountStatus: "2fa_verification", igDeviceState: ds };
         }
@@ -863,11 +934,45 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       .map(s => s.trim())
       .find(s => s.toLowerCase().startsWith('sessionid='));
     if (!sessionPair) {
-      // No sessionid in stored cookies — session is unusable. Return logged_out so the
-      // user is prompted to re-enter credentials. Never fall through to password login:
-      // making a fresh password attempt immediately after a failed cookie probe looks
-      // like an account takeover to Instagram and will trigger an account block.
-      console.error(`[instagramLogin] @${profile.username} — igApiCookies has no sessionid, returning logged_out`);
+      // No sessionid in stored cookies — the proxy strips all Set-Cookie headers so
+      // sessionid never lands in the jar. However, the ig-set-authorization Bearer token
+      // (saved in igDeviceState.authorization) IS the real session credential and survives
+      // the proxy. Try it before declaring the session dead.
+      let savedAuthToken: string | undefined;
+      try { savedAuthToken = (JSON.parse(profile.igDeviceState ?? "{}") as any).authorization ?? undefined; } catch {}
+
+      if (savedAuthToken) {
+        console.error(`[instagramLogin] @${profile.username} — no sessionid (proxy strips cookies), trying Bearer token validation`);
+        ig.state.authorization = savedAuthToken;
+        try {
+          const me = await ig.account.currentUser();
+          const userId = String((me as any).pk ?? "");
+          console.error(`[instagramLogin] @${profile.username} — Bearer token valid ✓ userId=${userId}`);
+          return {
+            ok: true,
+            message: `@${profile.username} — session valid (Bearer token).`,
+            accountStatus: "valid",
+            igDeviceState: captureDeviceState(),
+            igApiCookies: profile.igApiCookies ?? undefined,
+          };
+        } catch (bearerErr: any) {
+          // Bearer token expired or rejected — clear it so the next verify attempt
+          // falls through to Path 1 (fresh password login) instead of looping here.
+          console.error(`[instagramLogin] @${profile.username} — Bearer token rejected: ${bearerErr?.message} — clearing saved auth`);
+          ig.state.authorization = undefined;
+          ig.state.igWWWClaim = undefined;
+          return {
+            ok: false,
+            message: `@${profile.username} — session expired. Please re-verify to log in again.`,
+            accountStatus: "logged_out",
+            igDeviceState: captureDeviceState(),
+          };
+        }
+      }
+
+      // No sessionid and no Bearer token — session is genuinely unusable.
+      // Never fall through to password login from here (looks like account takeover).
+      console.error(`[instagramLogin] @${profile.username} — igApiCookies has no sessionid and no Bearer token, returning logged_out`);
       return {
         ok: false,
         message: `@${profile.username} — saved session is missing a sessionid cookie. Please update the password and re-verify, or restore the session via the embedded browser.`,
