@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { queryClient } from "@/lib/queryClient";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -575,28 +574,26 @@ export function ProfileDetailsPage() {
           <div className="space-y-1 pb-2">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
             <div className="max-w-[40%]">
-              <Select
-                value={formData.tags || "__none__"}
-                onValueChange={val => updateField({ tags: val === "__none__" ? "" : val })}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="No group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">No group</SelectItem>
-                  {Array.from(
-                    new Set(
-                      (allProfiles ?? [])
-                        .map(p => (p.tags ?? "").trim())
-                        .filter(Boolean)
-                    )
-                  ).sort().map(group => (
-                    <SelectItem key={group} value={group}>{group}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                list="group-suggestions"
+                className="h-8 text-xs"
+                placeholder="No group"
+                value={formData.tags || ""}
+                onChange={e => updateField({ tags: e.target.value })}
+              />
+              <datalist id="group-suggestions">
+                {Array.from(
+                  new Set(
+                    (allProfiles ?? [])
+                      .map(p => (p.tags ?? "").trim())
+                      .filter(Boolean)
+                  )
+                ).sort().map(group => (
+                  <option key={group} value={group} />
+                ))}
+              </datalist>
             </div>
-            <p className="text-[11px] text-muted-foreground">Group this account belongs to. Groups are managed on the Accounts page.</p>
+            <p className="text-[11px] text-muted-foreground">Type a group name or pick an existing one. Leave blank to remove from any group.</p>
           </div>
 
           {/* Account Label */}

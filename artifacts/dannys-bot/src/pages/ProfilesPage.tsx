@@ -606,11 +606,15 @@ export function ProfilesPage() {
           e.preventDefault();
           handleBulkToggle();
           break;
+        case "c":
+          e.preventDefault();
+          handleUngroup();
+          break;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers, handleBulkLoginEB, handleBulkToggle]);
+  }, [handleBulkDelete, handleBulkRemoveProxies, handleVerifyAll, handleBulkFixCaptcha, handleBulkOpenBrowsers, handleBulkLoginEB, handleBulkToggle, handleUngroup]);
 
   // Click-outside handler for the profiles manage-columns popup
   useEffect(() => {

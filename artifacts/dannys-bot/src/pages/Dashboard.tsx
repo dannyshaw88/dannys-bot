@@ -50,6 +50,14 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.274",
+    date: "13 May 2026",
+    items: [
+      { category: "Accounts", text: "Added: Ctrl+C now removes the selected accounts from their group. Select the accounts you want to ungroup and press Ctrl+C — no menus needed." },
+      { category: "Account Settings", text: "The Group field is now a free-text input. You can type any group name directly, or click the field to pick from your existing groups. Clear it to remove the account from its group." },
+    ],
+  },
+  {
     version: "1.0.273",
     date: "13 May 2026",
     items: [
