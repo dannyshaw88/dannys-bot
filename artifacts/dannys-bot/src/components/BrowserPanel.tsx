@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone,
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
@@ -639,7 +639,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
                                       <LogIn className="w-3.5 h-3.5" />}
           {loginState === "running" ? "Logging In" :
            loginState === "ok"      ? "Logged In" :
-                                      "Fill Credentials"}
+                                      "Login"}
         </Button>
 
         <button
@@ -670,7 +670,39 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             } catch {}
           }}
         >
-          <Phone className="w-3.5 h-3.5" /> Add Phone Number
+          <Phone className="w-3.5 h-3.5" /> Phone Number
+        </Button>
+        <Button
+          variant="ghost" size="sm"
+          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
+          disabled={!connected}
+          title="Type the email validation username into the focused field"
+          onClick={async () => {
+            try {
+              const res = await fetch(`/api/profiles/${profileId}`);
+              const p = await res.json();
+              const val = (p.emailValidationUsername ?? "").trim();
+              if (val) send({ type: "type", text: val });
+            } catch {}
+          }}
+        >
+          <Mail className="w-3.5 h-3.5" /> Email Account
+        </Button>
+        <Button
+          variant="ghost" size="sm"
+          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
+          disabled={!connected}
+          title="Type the email validation password into the focused field"
+          onClick={async () => {
+            try {
+              const res = await fetch(`/api/profiles/${profileId}`);
+              const p = await res.json();
+              const val = (p.emailValidationPassword ?? "").trim();
+              if (val) send({ type: "type", text: val });
+            } catch {}
+          }}
+        >
+          <KeyRound className="w-3.5 h-3.5" /> Email Password
         </Button>
         <label
           className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}

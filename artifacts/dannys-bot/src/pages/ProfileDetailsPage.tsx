@@ -171,6 +171,9 @@ export function ProfileDetailsPage() {
   const [linkedUsername, setLinkedUsername] = useState("");
   const [linkedPassword, setLinkedPassword] = useState("");
 
+  const [cascadeToGroup, setCascadeToGroup] = useState(false);
+  const cascadeToGroupRef = useRef(false);
+
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [totpCode, setTotpCode] = useState<string | null>(null);
@@ -340,6 +343,12 @@ export function ProfileDetailsPage() {
   }, [profile]);
 
 
+  const CASCADE_FIELDS = new Set([
+    "tags", "email", "dateOfBirth", "notes",
+    "phoneNumber", "twoFASecretKey", "backupCodes",
+    "emailValidationUsername", "emailValidationPassword", "emailValidationPop3Server", "emailValidationPort",
+  ]);
+
   // Auto-save: fires 800ms after the last field change
   const scheduleAutoSave = useCallback((data: any) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -348,10 +357,36 @@ export function ProfileDetailsPage() {
       updateProfileMutation.mutate(
         { id: profileId, ...data, proxyPort: data.proxyPort ? Number(data.proxyPort) : null },
         {
-          onSuccess: () => {
+          onSuccess: async () => {
             setSaveStatus("saved");
             queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
             setTimeout(() => setSaveStatus("idle"), 2000);
+            // Cascade to group members if enabled and any cascade field is in the patch
+            if (cascadeToGroupRef.current) {
+              const hasCascadeField = Object.keys(data).some(k => CASCADE_FIELDS.has(k));
+              if (hasCascadeField) {
+                const cascadePatch: Record<string, any> = {};
+                for (const k of Object.keys(data)) {
+                  if (CASCADE_FIELDS.has(k)) cascadePatch[k] = data[k];
+                }
+                const currentProfile = queryClient.getQueryData<any>(["/api/profiles", profileId]);
+                const group = (currentProfile?.tags ?? "").trim();
+                if (group) {
+                  const allP: any[] = queryClient.getQueryData(["/api/profiles"]) ?? [];
+                  const peers = allP.filter(p => p.id !== profileId && (p.tags ?? "").trim() === group);
+                  for (const peer of peers) {
+                    try {
+                      await fetch(`/api/profiles/${peer.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(cascadePatch),
+                      });
+                    } catch {}
+                  }
+                  if (peers.length > 0) queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+                }
+              }
+            }
           },
           onError: () => setSaveStatus("idle"),
         }
@@ -762,53 +797,55 @@ export function ProfileDetailsPage() {
                       <p className="text-[11px] text-muted-foreground">Generate a live TOTP code to paste manually if the auto-fill fails.</p>
                     </div>
 
-                    {/* Verify button constrained to match username/password width */}
-                    <div className="max-w-[280px]">
-                    {canVerify && (
-                      <div>
-                        {verifyStatus === "ok" ? (
-                          <div
-                            data-testid="status-logged-in"
-                            className="h-9 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                            Logged In
+                    {/* Verify + Reset Device IDs on same row */}
+                    <div className="flex items-center gap-3">
+                      <div className="max-w-[280px] flex-1">
+                        {canVerify && (
+                          <div>
+                            {verifyStatus === "ok" ? (
+                              <div
+                                data-testid="status-logged-in"
+                                className="h-9 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                                Logged In
+                              </div>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant={verifyStatus === "fail" ? "outline" : "default"}
+                                className={`w-full h-9 gap-2 transition-all ${
+                                  verifyStatus === "fail"
+                                    ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
+                                    : "bg-sky-400 hover:bg-sky-500 text-white border-0"
+                                }`}
+                                onClick={() => handleVerify(false)}
+                                disabled={verifyStatus === "pending" || profile.accountStatus === "verifying"}
+                                data-testid="button-verify-credentials"
+                              >
+                                {(verifyStatus === "pending" || profile.accountStatus === "verifying") && <Loader2 className="w-4 h-4 animate-spin" />}
+                                {verifyStatus === "fail" && profile.accountStatus !== "verifying" && <XCircle className="w-4 h-4" />}
+                                {verifyStatus === "idle" && profile.accountStatus !== "verifying" && <ShieldCheck className="w-4 h-4" />}
+                                {(verifyStatus === "pending" || profile.accountStatus === "verifying") ? "Verifying…"
+                                  : verifyStatus === "fail" ? "Retry Verification"
+                                  : "Verify Account"}
+                              </Button>
+                            )}
                           </div>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant={verifyStatus === "fail" ? "outline" : "default"}
-                            className={`w-[85%] h-9 gap-2 transition-all ${
-                              verifyStatus === "fail"
-                                ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
-                                : "bg-sky-400 hover:bg-sky-500 text-white border-0"
-                            }`}
-                            onClick={() => handleVerify(false)}
-                            disabled={verifyStatus === "pending" || profile.accountStatus === "verifying"}
-                            data-testid="button-verify-credentials"
-                          >
-                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {verifyStatus === "fail" && profile.accountStatus !== "verifying" && <XCircle className="w-4 h-4" />}
-                            {verifyStatus === "idle" && profile.accountStatus !== "verifying" && <ShieldCheck className="w-4 h-4" />}
-                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") ? "Verifying…"
-                              : verifyStatus === "fail" ? "Retry Verification"
-                              : "Verify Account"}
-                          </Button>
                         )}
                       </div>
-                    )}
+                      {canVerify && <span className="text-border text-lg select-none">|</span>}
+                      <button
+                        type="button"
+                        onClick={() => setResetDeviceConfirmOpen(true)}
+                        disabled={updateProfileMutation.isPending}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50 text-left shrink-0"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                        Reset Device IDs
+                      </button>
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setResetDeviceConfirmOpen(true)}
-                    disabled={updateProfileMutation.isPending}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50 text-left w-fit"
-                  >
-                    <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                    Reset Device IDs
-                  </button>
 
                   <AlertDialog open={resetDeviceConfirmOpen} onOpenChange={setResetDeviceConfirmOpen}>
                     <AlertDialogContent>
@@ -1019,7 +1056,22 @@ export function ProfileDetailsPage() {
           </div>
 
           {/* ── Second row: Account Details + Security + Email Validation ── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+          <div className="flex items-center gap-2 mt-6 mb-1">
+            <Checkbox
+              id="cascade-group"
+              checked={cascadeToGroup}
+              onCheckedChange={checked => {
+                const next = !!checked;
+                setCascadeToGroup(next);
+                cascadeToGroupRef.current = next;
+              }}
+              className="w-3.5 h-3.5"
+            />
+            <label htmlFor="cascade-group" className="text-xs text-muted-foreground cursor-pointer select-none">
+              Cascade changes to all accounts in the same group
+            </label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             {/* Account Details */}
             <Card className="border-none shadow-none !bg-transparent">
