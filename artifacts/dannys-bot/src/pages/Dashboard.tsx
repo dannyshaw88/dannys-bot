@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.269",
+    date: "13 May 2026",
+    items: [
+      { category: "Login", text: "Improved login reliability by aligning the pre-login call sequence exactly with known working patterns, including the correct call order and an additional header-fetch step before logging in." },
+    ],
+  },
+  {
     version: "1.0.268",
     date: "13 May 2026",
     items: [
