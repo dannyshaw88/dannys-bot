@@ -433,7 +433,7 @@ export function ProfilesPage() {
       // Restore to the exact status the account had before being stopped.
       // Use localStorage so the mapping survives page reloads.
       const map = getPreStopMap();
-      const restore = map[String(id)] ?? preStoppedStatus.current.get(id) ?? "valid";
+      const restore = map[String(id)] ?? preStoppedStatus.current.get(id) ?? "pending";
       delete map[String(id)];
       localStorage.setItem(PRESTOP_KEY, JSON.stringify(map));
       preStoppedStatus.current.delete(id);

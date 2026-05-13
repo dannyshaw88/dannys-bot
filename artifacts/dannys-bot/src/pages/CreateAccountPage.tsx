@@ -306,9 +306,23 @@ export function CreateAccountPage() {
     toast({ title: "Exported", description: `${toExport.length} profile(s) saved.` });
   }, [profiles, selectedIds, toast]);
 
+  const PRESTOP_KEY = "profiles_prestop_status";
+  const getPreStopMap = (): Record<string, string> => {
+    try { return JSON.parse(localStorage.getItem(PRESTOP_KEY) ?? "{}"); } catch { return {}; }
+  };
   const toggleStopped = (id: number, currentStatus: string, credentialsDirty?: boolean | null) => {
-    const next = currentStatus === "stopped" ? (credentialsDirty ? "pending" : "valid") : "stopped";
-    updateAccountStatus.mutate({ id, accountStatus: next });
+    if (currentStatus === "stopped") {
+      const map = getPreStopMap();
+      const restore = map[String(id)] ?? (credentialsDirty ? "pending" : "pending");
+      delete map[String(id)];
+      localStorage.setItem(PRESTOP_KEY, JSON.stringify(map));
+      updateAccountStatus.mutate({ id, accountStatus: restore });
+    } else {
+      const map = getPreStopMap();
+      map[String(id)] = currentStatus;
+      localStorage.setItem(PRESTOP_KEY, JSON.stringify(map));
+      updateAccountStatus.mutate({ id, accountStatus: "stopped" });
+    }
   };
 
   const handleSetGroup = useCallback(async () => {

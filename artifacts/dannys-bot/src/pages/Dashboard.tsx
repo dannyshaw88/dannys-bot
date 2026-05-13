@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.268",
+    date: "13 May 2026",
+    items: [
+      { category: "Accounts", text: "Fixed: Toggling an imported account back on no longer sets it to Valid. The toggle now restores whatever status the account had before it was stopped — so a Pending account stays Pending when re-enabled." },
+    ],
+  },
+  {
     version: "1.0.267",
     date: "13 May 2026",
     items: [
