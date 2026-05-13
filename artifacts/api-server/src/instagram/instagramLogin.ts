@@ -1,17 +1,15 @@
 import { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError, IgLoginInvalidUserError } from "instagram-private-api";
+import { randomBytes } from "crypto";
 import { generateSync as totpGenerate } from "otplib";
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
 import type { Profile } from "../shared/schema";
 import { storage } from "../storage";
+import { MOBILE_VERSION, MOBILE_VERSION_CODE } from "./instagramWebClient";
 
 export type VerifyResult =
   | { ok: true; message: string; accountStatus: "valid"; igDeviceState?: string }
   | { ok: false; message: string; accountStatus: "banned" | "captcha" | "2fa_verification" | "phone_verification" | "email_confirmation" | "logged_out" | "bad_password" | "invalid_credentials"; igDeviceState?: string; checkpointUrl?: string };
-
-// Must stay in sync with MOBILE_VERSION in instagramWebClient.ts
-const MOBILE_VERSION      = "378.1.0.45.111";
-const MOBILE_VERSION_CODE = "651869969";
 
 // Parse app version and version code from a FULL Instagram mobile user-agent string.
 // UA format: "Instagram 361.0.0.32.109 Android (30/11; 480dpi; 1080x2400; samsung; SM-G998B; ...; en_US; 558538758)"
@@ -388,7 +386,10 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   const ig = new IgApiClient();
   // request-promise has no default timeout — hang indefinitely on dead proxies
   // without this, leading to FD exhaustion and server unresponsiveness after ~1h.
-  ig.request.defaults = { timeout: 30000 };
+  // CRITICAL: spread existing defaults so the library's cookie jar is preserved.
+  // Assigning { timeout } directly replaces the whole object, wiping the jar —
+  // no cookies are ever stored, csrftoken stays "missing", login fails.
+  ig.request.defaults = { ...ig.request.defaults, timeout: 30000 };
   // ALWAYS include username in the seed so that accounts sharing the same userAgentApi
   // (same device model) still generate distinct uuid/deviceId/phoneId fingerprints.
   // Without the username, two accounts with the same UA string would get identical
@@ -421,11 +422,25 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   // present, parse the version from it; otherwise fall back to MOBILE_VERSION so the
   // library's stale built-in default (222.x) is never sent.
   //
-  // BLOKS_VERSION_ID must also match the declared app version. The library ships
+  // BLOKS_VERSION_ID must match the declared app version. The library ships
   // a v222 value (388ece79…) which Instagram detects as a fingerprint mismatch
-  // when APP_VERSION is set to 378+. Override it to the v378 value so all
-  // request headers are internally consistent.
+  // when APP_VERSION is 378+. Override it to match MOBILE_VERSION_CODE above.
   ig.state.constants.BLOKS_VERSION_ID = "3f4e55a5a3f13abe38d703b5fd6d2f678bd00ab21e71e74cd4dc62e08a9a3c27";
+
+  // CRITICAL: Fix two library defaults that stayed at v222-era values even though
+  // APP_VERSION is now 427.  Instagram fingerprints these headers against the
+  // User-Agent — a mismatch is detected as bot traffic and returns bad_password.
+  //
+  // 1. X-IG-Capabilities: library default '3brTv10=' is the v222-era bitmask.
+  //    For v350+ the correct value is '3brTvwQ='. Sending the old value while
+  //    advertising v427 in the User-Agent is a clear inconsistency.
+  //
+  // 2. SIGNATURE_KEY: library default is the v222 HMAC key.  Instagram's server
+  //    re-computes the signed_body HMAC; a key mismatch causes request rejection
+  //    disguised as bad_password rather than a signature error.
+  ig.state.capabilitiesHeader = "3brTvwQ=";
+  ig.state.constants.SIGNATURE_KEY = "fc4e50e6811bb3ff04fb58c49a70b8c9b23a9cde8d74e574c5987d9ebfbf1818";
+  console.error(`[instagramLogin] Patched capabilitiesHeader=3brTvwQ= SIGNATURE_KEY=fc4e50e6… for @${profile.username}`);
 
   {
     const parsed = parseIgUaVersion(profile.userAgentApi ?? "");
@@ -520,33 +535,103 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       };
     }
 
-    // ── Safe partial preLoginFlow ──────────────────────────────────────────
-    // Full simulate.preLoginFlow() executes 7 requests (shuffled).  Two of them
-    // are dangerous for our use case:
-    //   • contactPointPrefill('prefill') — asks Instagram "what accounts are on
-    //     this device?".  On a fresh/restored device this triggers the
-    //     "Forgotten password" device-trust security response.
-    //   • getPrefillCandidates()         — asks for account login suggestions.
-    //     Same trigger.
-    // The remaining 5 are harmless device-registration calls that Instagram
-    // needs to see before it will accept a login from an unknown device.
-    // Without ANY of them, Instagram fakes an "Incorrect password" response
-    // even when the credentials are correct.
-    // We call only the safe 5 here, skipping the two dangerous ones.
+    // ── Full preLoginFlow (all 7 standard calls) ──────────────────────────
+    // Jarvee API call log (JARVEEAPICALLS, confirmed 2026-05) shows the exact
+    // pre-login sequence and when X-IG-Nav-Chain is introduced:
+    //
+    //
+    // Jarvee screenshot (2026-05) shows the EXACT pre-login order:
+    //   1. GetTokenResult       (ZR token)         — no NavChain
+    //   2. ContactPointPrefill                     — no NavChain
+    //   3. GetPrefillCandidates                    — no NavChain
+    //   4. SendMsisdnBootstrap                     — no NavChain
+    //   5. ReadMsisdnHeader                        — no NavChain
+    //   ── NavChain injected here (confirmed by JARVEEAPICALLS) ────────────
+    //   6. FetchConfig (SendMobileConfig/launcher) — WITH NavChain
+    //   7. FetchHeaders (/api/v1/si/fetch_headers/)— WITH NavChain  ← NEW
+    //   8. VerifyAccount (SendLoginRequest)        — WITH NavChain
+    //
+    // FetchHeaders sets the `mid` (machine-ID) cookie. Missing it means the
+    // X-MID header is absent from the login request — a strong bot signal.
+
+    // Generate the nav chain timestamp once — reused for all subsequent calls
+    const loginNavChainTs = (Date.now() / 1000).toFixed(3);
+    const loginNavChain = `com.bloks.www.caa.login.login_homepage:com.bloks.www.caa.login.login_homepage:1:button:${loginNavChainTs}::`;
+
     const ig_ = igPw as any;
+
+    // Phase 1 — NO NavChain, Jarvee order exactly
     for (const [name, fn] of [
-      ["readMsisdnHeader",        () => igPw.account.readMsisdnHeader()],
-      ["msisdnHeaderBootstrap",   () => ig_.account.msisdnHeaderBootstrap?.("ig_select_app")],
-      ["zrTokenResult",           () => ig_.zr?.tokenResult?.()],
-      ["launcherPreLoginSync",    () => ig_.launcher?.preLoginSync?.()],
-      ["logAttribution",          () => ig_.attribution?.logAttribution?.()],
+      ["zrTokenResult",         () => ig_.zr?.tokenResult?.()],
+      ["contactPointPrefill",   () => ig_.account.contactPointPrefill?.("prefill")],
+      ["getPrefillCandidates",  () => ig_.account.getPrefillCandidates?.()],
+      ["msisdnHeaderBootstrap", () => ig_.account.msisdnHeaderBootstrap?.("ig_select_app")],
+      ["readMsisdnHeader",      () => igPw.account.readMsisdnHeader()],
     ] as [string, () => Promise<any>][]) {
       try {
         await fn();
-        console.error(`[instagramLogin] @${profile.username} safe-preLogin: ${name} OK`);
+        console.error(`[instagramLogin] @${profile.username} pre-login: ${name} OK`);
       } catch (e: any) {
-        console.error(`[instagramLogin] @${profile.username} safe-preLogin: ${name} failed (non-fatal): ${e?.message}`);
+        console.error(`[instagramLogin] @${profile.username} pre-login: ${name} failed (non-fatal): ${e?.message}`);
       }
+    }
+
+    // ── Inject X-IG-Nav-Chain into all subsequent ig client requests ───────
+    // Wrap ig.request.send() — the library has no generateHeaders() hook.
+    // Every call from this point (launcherPreLoginSync, siFetchHeaders, login)
+    // will carry the NavChain header automatically.
+    const origSend = igPw.request.send.bind(igPw.request);
+    (igPw.request as any).send = function(userOptions: any, ...rest: any[]) {
+      const patched = {
+        ...userOptions,
+        headers: { "X-IG-Nav-Chain": loginNavChain, ...(userOptions?.headers ?? {}) },
+      };
+      return origSend(patched, ...rest);
+    };
+    console.error(`[instagramLogin] @${profile.username} — NavChain injected into ig.request.send wrapper: ${loginNavChain}`);
+
+    // Phase 2 — WITH NavChain, Jarvee order exactly
+    // 6. FetchConfig (launcherPreLoginSync = SendMobileConfig in Jarvee)
+    try {
+      await ig_.launcher?.preLoginSync?.();
+      console.error(`[instagramLogin] @${profile.username} pre-login: launcherPreLoginSync OK`);
+    } catch (e: any) {
+      console.error(`[instagramLogin] @${profile.username} pre-login: launcherPreLoginSync failed (non-fatal): ${e?.message}`);
+    }
+
+    // 7. FetchHeaders = /api/v1/si/fetch_headers/ — sets mid cookie (machine ID).
+    //    Right before login in Jarvee's sequence. Proxy may strip Set-Cookie but
+    //    the call itself must be present to match Instagram's expected session flow.
+    try {
+      await igPw.request.send({
+        method: "GET",
+        url: "/api/v1/si/fetch_headers/",
+        qs: { challenge_type: "signup", guid: igPw.state.uuid },
+      });
+      console.error(`[instagramLogin] @${profile.username} pre-login: siFetchHeaders OK`);
+    } catch (e: any) {
+      console.error(`[instagramLogin] @${profile.username} pre-login: siFetchHeaders failed (non-fatal): ${e?.message}`);
+    }
+
+    // If mid still absent (proxy stripped Set-Cookie), inject synthetically.
+    // X-MID absent from the login request is a known bot-detection signal.
+    const midCookie = igPw.state.extractCookie?.("mid");
+    if (!midCookie?.value) {
+      const syntheticMid = Buffer.from(igPw.state.uuid.replace(/-/g, ""), "hex").toString("base64").replace(/=/g, "");
+      try {
+        const innerJar = (igPw.state as any).cookieJar?._jar;
+        if (innerJar?.setCookieSync) {
+          innerJar.setCookieSync(
+            `mid=${syntheticMid}; Domain=.instagram.com; Path=/; Secure`,
+            "https://i.instagram.com/",
+          );
+          console.error(`[instagramLogin] @${profile.username} — injected synthetic mid=${syntheticMid} (jar had no mid after siFetchHeaders)`);
+        }
+      } catch (midErr: any) {
+        console.error(`[instagramLogin] @${profile.username} — mid injection failed: ${midErr?.message}`);
+      }
+    } else {
+      console.error(`[instagramLogin] @${profile.username} — mid present after siFetchHeaders: ${midCookie.value}`);
     }
 
     // ── Pre-login account metadata (for debugging) ─────────────────────────
@@ -559,6 +644,34 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
       ` has_igDeviceState=${!!profile.igDeviceState}` +
       ` has_userAgentApi=${!!profile.userAgentApi}`
     );
+
+    // ── Ensure csrftoken is present in the cookie jar ─────────────────────
+    // Instagram's mobile API endpoints (i.instagram.com) don't return Set-Cookie
+    // headers — either because they rely solely on ig-set-* custom headers, or
+    // because the proxy strips Set-Cookie.  Either way, the tough-cookie jar is
+    // always empty after pre-login, making ig.state.cookieCsrfToken = "missing".
+    // Instagram's mobile login endpoint uses HMAC-signed bodies, not browser CSRF,
+    // so the _csrftoken field value is NOT strictly validated server-side.
+    // However, sending the literal string "missing" is flagged as a suspicious
+    // client signal and causes Instagram to reject the login as bad_password even
+    // for correct credentials.  Injecting any valid-looking token resolves this.
+    if (igPw.state.cookieCsrfToken === "missing") {
+      const syntheticCsrf = randomBytes(16).toString("hex");
+      try {
+        const innerJar = (igPw.state as any).cookieJar?._jar;
+        if (innerJar?.setCookieSync) {
+          innerJar.setCookieSync(
+            `csrftoken=${syntheticCsrf}; Domain=.instagram.com; Path=/; Secure`,
+            "https://i.instagram.com/",
+          );
+          console.error(`[instagramLogin] @${profile.username} — injected synthetic csrftoken (jar was empty, likely proxy strips Set-Cookie)`);
+        } else {
+          console.error(`[instagramLogin] @${profile.username} — could not inject csrftoken (no inner jar accessor)`);
+        }
+      } catch (csrfErr: any) {
+        console.error(`[instagramLogin] @${profile.username} — csrftoken injection failed: ${csrfErr?.message}`);
+      }
+    }
 
     // ── Device state snapshot before login (for debugging) ────────────────
     console.error(`[instagramLogin] LOGIN DEVICE SNAPSHOT @${profile.username}` +
@@ -573,7 +686,55 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     );
 
     try {
-      await igPw.account.login(profile.username, profile.password);
+      // ── Traditional login endpoint with NavChain context ──────────────────
+      // Jarvee JARVEEAPICALLS log (confirmed 2026-05) shows SendLoginRequest
+      // calls POST /api/v1/accounts/login/ — NOT a Bloks endpoint.
+      // The login_source is set correctly by Instagram because X-IG-Nav-Chain
+      // was already present on the launcherPreLoginSync call above (injected via
+      // generateHeaders patch). By the time the login request arrives, Instagram
+      // has seen the login_homepage nav chain in the same session and sets
+      // login_source="com.bloks.www.caa.login.login_homepage" in its response.
+      {
+        const { encrypted, time } = (igPw.account as any).encryptPassword(profile.password);
+        const phoneId = igPw.state.phoneId;
+        const jazoestVal = (() => {
+          const buf = Buffer.from(phoneId, "ascii");
+          let s = 0; for (let i = 0; i < buf.byteLength; i++) s += buf[i];
+          return `2${s}`;
+        })();
+        console.error(`[instagramLogin] @${profile.username} — SendLoginRequest /api/v1/accounts/login/ navChain=${loginNavChain}`);
+        await igPw.request.send({
+          method: "POST",
+          url: "/api/v1/accounts/login/",
+          // NavChain already set globally via generateHeaders patch above;
+          // include explicitly here too to guarantee it's on this call.
+          headers: {
+            "X-IG-Nav-Chain": loginNavChain,
+            "X-Bloks-Is-Panorama-Enabled": "true",
+          },
+          form: igPw.request.sign({
+            username: profile.username,
+            enc_password: `#PWD_INSTAGRAM:4:${time}:${encrypted}`,
+            guid: igPw.state.uuid,
+            phone_id: phoneId,
+            _csrftoken: igPw.state.cookieCsrfToken,
+            device_id: igPw.state.deviceId,
+            adid: igPw.state.adid,
+            google_tokens: "[]",
+            login_attempt_count: 0,
+            country_codes: JSON.stringify([{ country_code: "1", source: "default" }]),
+            jazoest: jazoestVal,
+            login_source: "com.bloks.www.caa.login.login_homepage",
+          }),
+        }).catch((e: any) => {
+          if (e?.response?.body?.two_factor_required) throw new IgLoginTwoFactorRequiredError(e.response);
+          switch (e?.response?.body?.error_type) {
+            case "bad_password":  throw new IgLoginBadPasswordError(e.response);
+            case "invalid_user":  throw new IgLoginInvalidUserError(e.response);
+            default: throw e;
+          }
+        });
+      }
       try {
         await igPw.simulate.postLoginFlow();
       } catch (plErr: any) {
