@@ -1587,38 +1587,38 @@ export async function browserAutoLogin(
         sendStatus(profileId, `2FA input: ${codeSelector || "NONE FOUND"}`);
 
         if (codeInput) {
-          // Click directly on the element handle's bounding box
+          // Scroll input into view first — it may be near the bottom of the viewport
+          await codeInput.evaluate((el: Element) => el.scrollIntoView({ block: "center" })).catch(() => null);
+          await delay(150);
           const box = await codeInput.boundingBox().catch(() => null);
           sendStatus(profileId, `Input bounding box: ${JSON.stringify(box)}`);
-          if (box) {
-            await s.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-          } else {
-            await codeInput.click();
-          }
+          // Use ElementHandle.click() — auto-scrolls into view and focuses the element
+          await codeInput.click({ clickCount: 3 }).catch(() => null);
           await delay(200);
-          // Clear then type
-          await s.page.keyboard.down("Control");
-          await s.page.keyboard.press("a");
-          await s.page.keyboard.up("Control");
-          await s.page.keyboard.press("Backspace");
-          await s.page.keyboard.type(code, { delay: 80 });
-          sendStatus(profileId, `Typed TOTP code into input`);
+          // Use ElementHandle.type() — dispatches proper keyboard events that React hears
+          await codeInput.evaluate((el: Element) => { (el as HTMLInputElement).value = ""; }).catch(() => null);
+          await (codeInput as any).type(code, { delay: 80 });
+          // Verify the value was actually received
+          const typedVal = await codeInput.evaluate((el: Element) => (el as HTMLInputElement).value).catch(() => "?");
+          sendStatus(profileId, `Typed TOTP code — input now contains: "${typedVal}"`);
           await delay(400);
-          // Click "Confirm" / "Continue" / "Verify" / "Submit" button
-          const contBtns = await s.page.evaluate(() =>
-            Array.from(document.querySelectorAll('button, [role="button"]')).map((el) => {
-              const r = (el as HTMLElement).getBoundingClientRect();
-              return { text: (el as HTMLElement).innerText?.trim(), x: r.x, y: r.y, w: r.width, h: r.height };
-            })
-          ).catch(() => [] as any[]);
-          sendStatus(profileId, `Buttons found: ${contBtns.map((b: any) => `"${b.text}"`).join(", ").slice(0, 150)}`);
-          const contBtn = contBtns.find((b: any) => /confirm|continue|verify|submit/i.test(b.text) && b.w > 50);
-          sendStatus(profileId, `Submit button: ${contBtn ? `"${contBtn.text}"` : "NONE — using Enter"}`);
-          if (contBtn) {
-            await s.page.mouse.move(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
+
+          // Find and click the Continue/Confirm button using an ElementHandle so Puppeteer
+          // automatically scrolls it into view — getBoundingClientRect + page.mouse.click fails
+          // silently when the button is below the visible viewport fold.
+          const btnHandle = await s.page.evaluateHandle(() => {
+            const all = Array.from(document.querySelectorAll('button, [role="button"]'));
+            return (all.find(b => /confirm|continue|verify|submit/i.test((b as HTMLElement).innerText?.trim() || "")) ?? null) as Element | null;
+          }).catch(() => null);
+          const btnEl = btnHandle && (btnHandle as any).asElement ? (btnHandle as any).asElement() : null;
+          if (btnEl) {
+            const btnText = await btnEl.evaluate((b: Element) => (b as HTMLElement).innerText?.trim()).catch(() => "?");
+            sendStatus(profileId, `Submit button: "${btnText}" — clicking via ElementHandle`);
+            await btnEl.evaluate((b: Element) => b.scrollIntoView({ block: "center" })).catch(() => null);
             await delay(100);
-            await s.page.mouse.click(contBtn.x + contBtn.w / 2, contBtn.y + contBtn.h / 2);
+            await btnEl.click().catch(() => null);
           } else {
+            sendStatus(profileId, `No submit button found — pressing Enter`);
             await s.page.keyboard.press("Enter");
           }
 

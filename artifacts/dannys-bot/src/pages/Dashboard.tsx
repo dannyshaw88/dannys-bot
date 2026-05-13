@@ -50,6 +50,13 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.279",
+    date: "13 May 2026",
+    items: [
+      { category: "Verify Account", text: "Fixed: The 2FA code is now reliably typed and submitted. The Continue button was being clicked at the wrong position when it appeared below the visible area of the screen — it now scrolls into view before clicking, so the code is always actually submitted to Instagram." },
+    ],
+  },
+  {
     version: "1.0.278",
     date: "13 May 2026",
     items: [
