@@ -553,8 +553,8 @@ export function ProfileDetailsPage() {
           </div>
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
-          {/* Auto-save status bar — always occupies fixed height to prevent layout shifts */}
-          <div className="flex items-center justify-between mb-4 h-8">
+          {/* Auto-save status bar — only rendered when it has visible content */}
+          {(profile?.creatorMode || saveStatus === "saving" || saveStatus === "saved") && <div className="flex items-center justify-between mb-4 h-8">
             <div className="flex items-center gap-2">
               {profile?.creatorMode && (
                 <Button
@@ -586,7 +586,7 @@ export function ProfileDetailsPage() {
                 </span>
               )}
             </div>
-          </div>
+          </div>}
 
           <CopySettingsDialog
             key={copyDialogOpen ? "open" : "closed"}

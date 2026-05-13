@@ -2350,46 +2350,6 @@ class AutomationEngine {
       },
     );
 
-    // ── Watch Timeline Reels ─────────────────────────────────────────────────
-    enqueue("checkTimelineReels",
-      s.checkTimelineReelsEnabled === true,
-      "checkTimelineReelsNotUsedMin", "checkTimelineReelsNotUsedMax",
-      "checkTimelineReelsOrderMin",   "checkTimelineReelsOrderMax",
-      async () => {
-        console.log(`[engine] @${profile.username}: ▶ ENQUEUE FIRED: checkTimelineReels (Watch Reels)`);
-        // Guard: Watch Reels requires a mobile session (igApiCookies). If the account
-        // only has an EB browser session (web cookies) and no stored igApiCookies, this
-        // will always fail. Run Verify Credentials — not just EB browser login — to
-        // store the mobile API cookies that this tool needs.
-        if (!client.isMobileLoggedIn()) {
-          const hasCookies = !!(profile.igApiCookies);
-          const reason = hasCookies
-            ? "igApiCookies found in DB but mobile session failed to restore — cookies may be expired. Re-run Verify Credentials."
-            : "No igApiCookies stored for this account. Watch Reels uses the mobile API and needs igApiCookies — run Verify Credentials (mobile login, not just EB browser login) to create them.";
-          console.warn(`[engine] @${profile.username}: ⚠️ Watch Reels skipped — ${reason}`);
-          this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "warn", `Skipped: ${reason}`);
-          return;
-        }
-        const reelCount = randInt(s.checkTimelineReelsMin ?? 3, s.checkTimelineReelsMax ?? 8);
-        try {
-          const watched = await client.viewTimelineReels(reelCount);
-          if (watched === -1) {
-            console.warn(`[engine] @${profile.username}: ⚠️ Watch Reels skipped — mobileSessionPost returned null despite isMobileLoggedIn=true. Possible cookie corruption.`);
-            this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "warn", "Skipped: mobile session check passed but POST returned null — re-run Verify Credentials");
-          } else if (watched === 0) {
-            console.warn(`[engine] @${profile.username}: ⚠️ Watch Reels: feed returned 0 items — see server log for full response`);
-            this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "warn", "0 reels in clips feed — check server log for response details");
-          } else {
-            console.log(`[engine] @${profile.username}: 🎬 watched ${watched} timeline reels`);
-            this.logAction(profile.id, tool.id, "check_timeline_reels", "", "", "", "ok", `Watched ${watched} timeline reel${watched === 1 ? "" : "s"}`);
-          }
-        } catch (e: any) {
-          if (await checkSessionErr(e, "check_timeline_reels")) return;
-          console.warn(`[engine] @${profile.username}: timeline reels error: ${e?.message}`);
-        }
-      },
-    );
-
     // ── Watch Timeline Stories ───────────────────────────────────────────────
     enqueue("checkTimelineStories",
       s.checkTimelineStoriesEnabled === true,
@@ -2411,6 +2371,7 @@ class AutomationEngine {
           } else {
             console.log(`[engine] @${profile.username}: 📖 watched ${watched} timeline stories`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "ok", `Watched ${watched} timeline stories`);
+            for (let _i = 0; _i < watched; _i++) await storage.incrementStat(profile.id, "story");
           }
         } catch (e: any) {
           if (await checkSessionErr(e, "check_timeline_stories")) return;

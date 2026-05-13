@@ -275,7 +275,10 @@ export function ProxiesPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [importing, setImporting] = useState(false);
-  const [maxPerProxy, setMaxPerProxy] = useState(5);
+  const [maxPerProxy, setMaxPerProxy] = useState<number>(() => {
+    const saved = localStorage.getItem("proxies:maxPerProxy");
+    return saved ? parseInt(saved, 10) || 5 : 5;
+  });
   const [splitting, setSplitting] = useState(false);
   const [autoLinking, setAutoLinking] = useState(false);
   const [search, setSearch] = useState("");
@@ -709,7 +712,7 @@ export function ProxiesPage() {
                     min={1}
                     max={100}
                     value={maxPerProxy}
-                    onChange={e => setMaxPerProxy(Math.max(1, Number(e.target.value)))}
+                    onChange={e => { const v = Math.max(1, Number(e.target.value)); setMaxPerProxy(v); localStorage.setItem("proxies:maxPerProxy", String(v)); }}
                     className="w-20 h-8 text-sm"
                   />
                 </div>

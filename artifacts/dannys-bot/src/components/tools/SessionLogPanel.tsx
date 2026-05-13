@@ -21,7 +21,6 @@ const ACTION_META: Record<string, { label: string; icon: any; color: string }> =
   visit_own_profile:       { label: "Own Profile",        icon: User,         color: "text-indigo-600 bg-indigo-50 border-indigo-200" },
   refresh_own_profile:     { label: "Refreshed Profile",  icon: RefreshCw,    color: "text-cyan-600 bg-cyan-50 border-cyan-200" },
   visit_settings_activity: { label: "Settings & Activity",icon: Settings,     color: "text-gray-600 bg-gray-50 border-gray-200" },
-  check_timeline_reels:    { label: "Timeline Reels",     icon: PlaySquare,   color: "text-rose-600 bg-rose-50 border-rose-200" },
   check_timeline_stories:  { label: "Timeline Stories",   icon: BookOpen,     color: "text-sky-600 bg-sky-50 border-sky-200" },
   check_dm:                { label: "Checked DMs",        icon: MessageSquare,color: "text-teal-600 bg-teal-50 border-teal-200" },
   like_timeline_post:      { label: "Liked Timeline Post",icon: Heart,        color: "text-pink-600 bg-pink-50 border-pink-200" },

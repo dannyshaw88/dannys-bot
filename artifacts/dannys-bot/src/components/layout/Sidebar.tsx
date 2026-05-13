@@ -37,11 +37,11 @@ export function Sidebar() {
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
 
   const navItems = [
-    { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard },
-    { name: "Accounts",          path: "/profiles",            icon: Users },
-    { name: "Create an Account", path: "/create-account-api", icon: Wand2 },
-    { name: "Statistics",         path: "/stats",              icon: Activity },
-    { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert },
+    { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard, iconColor: undefined },
+    { name: "Accounts",          path: "/profiles",            icon: Users,           iconColor: "text-cyan-500" },
+    { name: "Create an Account", path: "/create-account-api", icon: Wand2,            iconColor: "text-foreground" },
+    { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: "text-red-500" },
+    { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: "text-green-500" },
   ];
 
   function goBack() {
@@ -109,7 +109,7 @@ export function Sidebar() {
               >
                 <Icon className={cn(
                   "w-5 h-5 mr-3 transition-colors",
-                  isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                  item.iconColor ?? (isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")
                 )} />
                 {item.name}
               </button>

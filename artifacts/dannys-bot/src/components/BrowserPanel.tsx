@@ -110,7 +110,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     setLoginLog(prev => [...prev, { ts: nowTs(), text, kind }]);
   }, []);
 
-  const generateTotp = useCallback(async () => {
+  const generateTotp = useCallback(async (onCode?: (code: string) => void) => {
     setTotpNoKey(false);
     let secret = cachedTwoFASecretRef.current;
     if (secret === undefined) {
@@ -148,6 +148,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       setTotpCode(codeStr);
       navigator.clipboard.writeText(codeStr).catch(() => {});
       setTotpCopied(true);
+      onCode?.(codeStr);
       setTimeout(() => { setTotpCopied(false); setTotpCode(null); }, 4000);
     } catch { setTotpNoKey(true); setTimeout(() => setTotpNoKey(false), 3000); }
   }, [profileId]);
@@ -277,9 +278,28 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
               setLoginState("ok");
               appendLog(msg.message || "Done", "ok");
             } else {
-              setLoginState("fail");
-              appendLog(msg.message || "Login failed", "fail");
-              setTimeout(() => setLoginState("idle"), 12000);
+              // Only show the red button when Instagram itself rejected the login
+              // (wrong password, checkpoint, 2FA, disabled, etc.). Technical failures
+              // that happen after a successful auth — screenshot timeout, session capture
+              // error, network blip — should NOT brand the button red.
+              const em = (msg.message ?? "").toLowerCase();
+              const isInstagramErr =
+                em.includes("incorrect") || em.includes("bad_password") ||
+                em.includes("checkpoint") || em.includes("challenge_required") ||
+                em.includes("two_factor") || em.includes("2fa") ||
+                em.includes("disabled") || em.includes("banned") ||
+                em.includes("not found") || em.includes("no user") ||
+                em.includes("rate") || em.includes("flood") ||
+                em.includes("feedback_required") || em.includes("proxy") ||
+                em.includes("login failed") || em.includes("bad credentials");
+              if (isInstagramErr) {
+                setLoginState("fail");
+                appendLog(msg.message || "Login failed", "fail");
+                setTimeout(() => setLoginState("idle"), 12000);
+              } else {
+                setLoginState("idle");
+                appendLog(msg.message || "Login flow ended", "step");
+              }
             }
             break;
           case "fileChooserNeeded":
@@ -624,9 +644,9 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
         <button
           type="button"
-          onClick={generateTotp}
+          onClick={() => generateTotp((code) => send({ type: "type", text: code }))}
           disabled={!connected}
-          title="Generate a live 2FA/TOTP code and copy to clipboard"
+          title="Generate a live 2FA/TOTP code, copy to clipboard, and paste into the browser"
           className={`h-8 px-3 rounded-md border text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
             totpCopied  ? "border-green-400 text-green-700 bg-green-50" :
             totpNoKey   ? "border-red-300 text-red-700 bg-red-50" :
@@ -652,11 +672,34 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         >
           <Phone className="w-3.5 h-3.5" /> Add Phone Number
         </Button>
-        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-          onClick={() => setFileChooserPending(true)} disabled={!connected}
-          title="Upload a file to the browser">
+        <label
+          className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}
+          title="Upload a file to the browser"
+        >
           <Upload className="w-3.5 h-3.5" /> Upload
-        </Button>
+          <input
+            type="file"
+            accept="image/*,video/*,*/*"
+            className="sr-only"
+            disabled={!connected}
+            onChange={async e => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              e.target.value = "";
+              const reader = new FileReader();
+              reader.onload = async ev => {
+                const base64 = (ev.target?.result as string)?.split(",")[1];
+                if (!base64) return;
+                await fetch(`/api/browser/${profileId}/files`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ fileName: file.name, data: base64 }),
+                }).catch(() => {});
+              };
+              reader.readAsDataURL(file);
+            }}
+          />
+        </label>
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
           onClick={clearSession} disabled={!connected} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear

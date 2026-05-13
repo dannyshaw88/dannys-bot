@@ -50,6 +50,21 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.266",
+    date: "13 May 2026",
+    items: [
+      { category: "Statistics", text: "Fixed: Story Views column was always showing 0. The Timeline Stories engine block was watching and logging stories correctly but never calling incrementStat — the counter is now incremented for each story successfully watched, so the daily and lifetime totals update as expected." },
+      { category: "Proxy Manager", text: "Fixed: Max per proxy split value now persists across page changes. The number you enter is saved to browser storage and restored when you return to the page instead of resetting to the default of 5." },
+      { category: "Login", text: "Fixed: The Fill Credentials button no longer turns red for technical post-login failures (screenshot timeout, session capture errors, network blips). It only goes red when Instagram itself rejects the login — wrong password, checkpoint, 2FA challenge, banned account, etc." },
+      { category: "Upload", text: "Fixed: The Upload button in the Embedded Browser now opens your file browser immediately. The intermediate 'File Upload Requested' confirmation dialog no longer appears — clicking Upload goes straight to the OS file picker." },
+      { category: "2FA Code", text: "Fixed: The 2FA Code button now copies the generated TOTP code to clipboard AND automatically types it into the focused field in the browser — no manual paste needed." },
+      { category: "UI", text: "Fixed: Dead white space above Account Name label is gone. The auto-save status bar is now only rendered when it has visible content (saving in progress, or creator mode active)." },
+      { category: "Human Sessions", text: "Removed: 'Check Reels from Timeline' tool has been removed. View Timeline Feed already fetches the home feed which includes reels, and Like Timeline handles liking them at the configured percentage. No separate reels-only tool is needed." },
+      { category: "Sidebar", text: "Accounts icon is now cyan, Statistics icon is red, Proxy Manager shield is green, Create an Account wand is black." },
+      { category: "Dashboard", text: "Activity Log lightning bolt icon is now yellow. What's New bell icon is now red." },
+    ],
+  },
+  {
     version: "1.0.265",
     date: "13 May 2026",
     items: [
@@ -667,10 +682,10 @@ export function Dashboard() {
       <Card className="desktop-card border-none shadow-sm">
         <div className="flex items-center border-b border-border/50 px-4">
           <button className={tabClass("api-log")} onClick={() => setActiveTab("api-log")}>
-            <Zap className="w-4 h-4" /> Activity Log
+            <Zap className="w-4 h-4 text-yellow-400" /> Activity Log
           </button>
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
-            <Bell className="w-4 h-4" /> What's New
+            <Bell className="w-4 h-4 text-red-500" /> What's New
           </button>
           <div className="ml-auto flex items-center gap-1">
             {activeTab === "api-log" && (
