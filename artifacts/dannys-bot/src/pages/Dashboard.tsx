@@ -50,11 +50,11 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.276",
+    version: "1.0.277",
     date: "13 May 2026",
     items: [
-      { category: "Account Settings", text: "Reset Device IDs is now on the same row as Verify Account, separated by a divider, so both actions are visible together without scrolling." },
-      { category: "Account Settings", text: "Added a Cascade checkbox above the Account Details, Security, and Email Validation sections. When ticked, any change you save in those sections is automatically applied to all other accounts in the same group." },
+      { category: "Account Settings", text: "Removed the Cascade checkbox." },
+      { category: "Account Settings", text: "Reset Device IDs is now on the same row as Verify Account, separated by a divider." },
       { category: "Embedded Browser", text: "Added Email Account and Email Password buttons to the toolbar. Clicking either one pastes the corresponding value from the Email Validation section of Account Settings into the focused field in the browser." },
       { category: "Embedded Browser", text: "Fill Credentials button renamed to Login." },
       { category: "Embedded Browser", text: "Add Phone Number button renamed to Phone Number." },

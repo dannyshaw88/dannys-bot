@@ -171,9 +171,6 @@ export function ProfileDetailsPage() {
   const [linkedUsername, setLinkedUsername] = useState("");
   const [linkedPassword, setLinkedPassword] = useState("");
 
-  const [cascadeToGroup, setCascadeToGroup] = useState(false);
-  const cascadeToGroupRef = useRef(false);
-
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [totpCode, setTotpCode] = useState<string | null>(null);
@@ -343,12 +340,6 @@ export function ProfileDetailsPage() {
   }, [profile]);
 
 
-  const CASCADE_FIELDS = new Set([
-    "tags", "email", "dateOfBirth", "notes",
-    "phoneNumber", "twoFASecretKey", "backupCodes",
-    "emailValidationUsername", "emailValidationPassword", "emailValidationPop3Server", "emailValidationPort",
-  ]);
-
   // Auto-save: fires 800ms after the last field change
   const scheduleAutoSave = useCallback((data: any) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -357,36 +348,10 @@ export function ProfileDetailsPage() {
       updateProfileMutation.mutate(
         { id: profileId, ...data, proxyPort: data.proxyPort ? Number(data.proxyPort) : null },
         {
-          onSuccess: async () => {
+          onSuccess: () => {
             setSaveStatus("saved");
             queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
             setTimeout(() => setSaveStatus("idle"), 2000);
-            // Cascade to group members if enabled and any cascade field is in the patch
-            if (cascadeToGroupRef.current) {
-              const hasCascadeField = Object.keys(data).some(k => CASCADE_FIELDS.has(k));
-              if (hasCascadeField) {
-                const cascadePatch: Record<string, any> = {};
-                for (const k of Object.keys(data)) {
-                  if (CASCADE_FIELDS.has(k)) cascadePatch[k] = data[k];
-                }
-                const currentProfile = queryClient.getQueryData<any>(["/api/profiles", profileId]);
-                const group = (currentProfile?.tags ?? "").trim();
-                if (group) {
-                  const allP: any[] = queryClient.getQueryData(["/api/profiles"]) ?? [];
-                  const peers = allP.filter(p => p.id !== profileId && (p.tags ?? "").trim() === group);
-                  for (const peer of peers) {
-                    try {
-                      await fetch(`/api/profiles/${peer.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(cascadePatch),
-                      });
-                    } catch {}
-                  }
-                  if (peers.length > 0) queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
-                }
-              }
-            }
           },
           onError: () => setSaveStatus("idle"),
         }
@@ -1056,22 +1021,7 @@ export function ProfileDetailsPage() {
           </div>
 
           {/* ── Second row: Account Details + Security + Email Validation ── */}
-          <div className="flex items-center gap-2 mt-6 mb-1">
-            <Checkbox
-              id="cascade-group"
-              checked={cascadeToGroup}
-              onCheckedChange={checked => {
-                const next = !!checked;
-                setCascadeToGroup(next);
-                cascadeToGroupRef.current = next;
-              }}
-              className="w-3.5 h-3.5"
-            />
-            <label htmlFor="cascade-group" className="text-xs text-muted-foreground cursor-pointer select-none">
-              Cascade changes to all accounts in the same group
-            </label>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
 
             {/* Account Details */}
             <Card className="border-none shadow-none !bg-transparent">
