@@ -129,7 +129,7 @@ function ProxyRow({
             onChange={e => setHostPort(e.target.value)}
             onBlur={() => saveField("hostPort")}
             onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-            className="font-mono text-xs h-7 w-full"
+            className="text-xs h-7 w-full"
             placeholder="host:port"
           />
         </div>
@@ -603,7 +603,7 @@ export function ProxiesPage() {
             <form onSubmit={handleCreate} className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label htmlFor="hostPort">IP Address &amp; Port</Label>
-                <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" className="font-mono" />
+                <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

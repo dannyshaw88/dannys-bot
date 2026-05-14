@@ -308,7 +308,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     // don't all fire at the same time. No need to check source tool value  
     // the user explicitly chose to stagger via the copy dialog.
     const willEnable    = copyEnabled && tool.enabled;
-    const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
+    const willRandomise = expandedKeys.includes("randomiseTiming");
     let staggerOffsets: number[] | undefined;
     if (willRandomise && targetIds.length > 1) {
       const delayMax = (settings as any).delayMax ?? 5;

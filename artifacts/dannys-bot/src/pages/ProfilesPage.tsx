@@ -69,7 +69,7 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
   return (
     <span
       title={statusMessage || undefined}
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${statusMessage ? " cursor-help underline decoration-dotted decoration-current underline-offset-2" : ""}`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${statusMessage ? " cursor-help" : ""}`}
     >
       <Icon className="w-2.5 h-2.5" />
       {meta.label}
@@ -78,6 +78,11 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
 }
 
 const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, actions: 176, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, actions: true, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "actions", "ip"];
+const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
+  account: "Account", status: "Status", active: "Active", actions: "Actions", ip: "IP:Port",
+};
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function ProfilesPage() {
@@ -115,6 +120,30 @@ export function ProfilesPage() {
       return s ? { ...DEFAULT_PROFILES_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_PROFILES_COL_WIDTHS;
     } catch { return DEFAULT_PROFILES_COL_WIDTHS; }
   });
+  const [profColVisible, setProfColVisible] = useState<typeof DEFAULT_PROFILES_COL_VISIBLE>(() => {
+    try {
+      const s = localStorage.getItem("profiles_col_visible");
+      return s ? { ...DEFAULT_PROFILES_COL_VISIBLE, ...JSON.parse(s) } : DEFAULT_PROFILES_COL_VISIBLE;
+    } catch { return DEFAULT_PROFILES_COL_VISIBLE; }
+  });
+  const [profColOrder, setProfColOrder] = useState<(keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[]>(() => {
+    try {
+      const s = localStorage.getItem("profiles_col_order");
+      return s ? JSON.parse(s) : DEFAULT_PROFILES_COL_ORDER;
+    } catch { return DEFAULT_PROFILES_COL_ORDER; }
+  });
+  const moveProfCol = (key: keyof typeof DEFAULT_PROFILES_COL_WIDTHS, dir: -1 | 1) => {
+    const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
+    const idx = reorderable.indexOf(key as any);
+    if (idx === -1) return;
+    const next = [...reorderable];
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= next.length) return;
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    const fullOrder = ["account" as const, ...next, "ip" as const];
+    setProfColOrder(fullOrder);
+    localStorage.setItem("profiles_col_order", JSON.stringify(fullOrder));
+  };
   const [manageProfileColsOpen, setManageProfileColsOpen] = useState(false);
   const manageProfileColsRef = useRef<HTMLDivElement>(null);
 
@@ -733,29 +762,29 @@ export function ProfilesPage() {
                 </span>
               </button>
             </div>
-            <button
-              onClick={() => cycleSort("status")}
-              style={{ width: profColWidths.status }}
-              className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors"
-            >
-              Status
-              <span className="text-[9px]">
-                {sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
-              </span>
-            </button>
-            <div style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>
-            <div style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>
+            {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
+              if (key === "status") return (
+                <button key={key} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
+                  Status<span className="text-[9px]">{sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}</span>
+                </button>
+              );
+              if (key === "active") return <div key={key} style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>;
+              if (key === "actions") return <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>;
+              return null;
+            })}
             <div className="flex-1" />
-            <button
-              onClick={() => cycleSort("ip")}
-              style={{ width: profColWidths.ip }}
-              className="shrink-0 flex items-center justify-start gap-1 pl-2 hover:text-foreground transition-colors"
-            >
-              IP:PORT
-              <span className="text-[9px]">
-                {sortField === "ip" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
-              </span>
-            </button>
+            {profColVisible.ip && (
+              <button
+                onClick={() => cycleSort("ip")}
+                style={{ width: profColWidths.ip }}
+                className="shrink-0 flex items-center justify-start gap-1 pl-2 hover:text-foreground transition-colors"
+              >
+                IP:PORT
+                <span className="text-[9px]">
+                  {sortField === "ip" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* ── Scrollable body conditional content ────────────────────── */}
@@ -834,51 +863,35 @@ export function ProfilesPage() {
                       </span>
                     </Link>
                   </div>
-                  <div style={{ width: profColWidths.status }} className="flex items-center justify-start gap-1.5 shrink-0">
-                    {hasProxy
-                      ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} />
-                      : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
-                          <Globe className="w-2.5 h-2.5" />No Proxy
-                        </span>
-                    }
-                    {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && acctStatus !== "verifying" && (
-                      <button
-                        onClick={() => handleVerify(profile.id)}
-                        disabled={verifyMutation.isPending && verifyMutation.variables === profile.id}
-                        data-testid={`button-verify-${profile.id}`}
-                        className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors"
-                      >
-                        Verify
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
-                    <Switch
-                      checked={!isStopped}
-                      onCheckedChange={() => toggleStopped(profile.id, acctStatus)}
-                      data-testid={`switch-active-${profile.id}`}
-                      className="data-[state=checked]:bg-green-500"
-                    />
-                  </div>
-                  <div style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden">
-                    <button
-                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")}
-                      title="Open embedded browser"
-                      data-testid={`btn-open-browser-${profile.id}`}
-                      className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      Browser
-                    </button>
-                    <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
-                    <button
-                      onClick={() => setDeleteConfirm({ ids: [profile.id] })}
-                      data-testid={`button-delete-${profile.id}`}
-                      className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                  {(() => {
+                  {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
+                    if (key === "status") return (
+                      <div key={key} style={{ width: profColWidths.status }} className="flex items-center justify-start gap-1.5 shrink-0">
+                        {hasProxy
+                          ? <AccountStatusBadge status={acctStatus} statusMessage={profile.statusMessage} />
+                          : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border bg-red-50 text-red-700 border-red-200">
+                              <Globe className="w-2.5 h-2.5" />No Proxy
+                            </span>
+                        }
+                        {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && acctStatus !== "verifying" && (
+                          <button onClick={() => handleVerify(profile.id)} disabled={verifyMutation.isPending && verifyMutation.variables === profile.id} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors">Verify</button>
+                        )}
+                      </div>
+                    );
+                    if (key === "active") return (
+                      <div key={key} style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
+                        <Switch checked={!isStopped} onCheckedChange={() => toggleStopped(profile.id, acctStatus)} data-testid={`switch-active-${profile.id}`} className="data-[state=checked]:bg-green-500" />
+                      </div>
+                    );
+                    if (key === "actions") return (
+                      <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden">
+                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title="Open embedded browser" data-testid={`btn-open-browser-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-primary transition-colors">Browser</button>
+                        <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
+                        <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>
+                      </div>
+                    );
+                    return null;
+                  })}
+                  {profColVisible.ip && (() => {
                     let ip = "";
                     if (profile.proxyId && proxies) {
                       const px = proxies.find(p => p.id === profile.proxyId);
@@ -961,48 +974,48 @@ export function ProfilesPage() {
                 <Settings2 className="w-3.5 h-3.5" /> Columns
               </button>
               {manageProfileColsOpen && (
-                <div className="absolute right-0 bottom-full mb-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-64">
-                  <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Column Widths (px)</p>
-                  {([ ["account", "Account"], ["status", "Status"], ["active", "Active"], ["actions", "Actions"], ["ip", "IP:Port"] ] as [keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string][]).map(([key, label]) => {
+                <div className="absolute right-0 bottom-full mb-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
+                  <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Columns</p>
+                  {profColOrder.map((key, idx) => {
+                    const label = PROFILES_COL_LABELS[key];
+                    const isAccount = key === "account";
+                    const isIp = key === "ip";
+                    const isMiddle = !isAccount && !isIp;
+                    const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
+                    const midIdx = reorderable.indexOf(key as any);
                     const updateCol = (delta: number) => {
                       const v = Math.max(40, Math.min(600, profColWidths[key] + delta));
                       const next = { ...profColWidths, [key]: v };
                       setProfColWidths(next);
                       localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
                     };
+                    const isVisible = isAccount || profColVisible[key as keyof typeof DEFAULT_PROFILES_COL_VISIBLE];
                     return (
-                      <div key={key} className="flex items-center gap-1.5 mb-2">
-                        <label className="text-xs w-20 text-muted-foreground shrink-0">{label}</label>
-                        <button
-                          onClick={() => updateCol(-10)}
-                          className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                        >
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                        <input
-                          type="number"
-                          min={40}
-                          max={600}
-                          value={profColWidths[key]}
-                          onChange={e => {
-                            const v = Math.max(40, Math.min(600, Number(e.target.value)));
-                            const next = { ...profColWidths, [key]: v };
-                            setProfColWidths(next);
-                            localStorage.setItem("profiles_col_widths_px", JSON.stringify(next));
+                      <div key={key} className="flex items-center gap-1 mb-2">
+                        <div className="flex flex-col mr-0.5">
+                          <button onClick={() => moveProfCol(key, -1)} disabled={!isMiddle || midIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
+                          <button onClick={() => moveProfCol(key, 1)} disabled={!isMiddle || midIdx === reorderable.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
+                        </div>
+                        <Checkbox
+                          checked={isAccount || isVisible}
+                          disabled={isAccount}
+                          onCheckedChange={checked => {
+                            if (isAccount) return;
+                            const next = { ...profColVisible, [key]: !!checked };
+                            setProfColVisible(next);
+                            localStorage.setItem("profiles_col_visible", JSON.stringify(next));
                           }}
-                          className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
+                          className="mr-1"
                         />
-                        <button
-                          onClick={() => updateCol(10)}
-                          className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
-                        >
-                          <ChevronUp className="w-3 h-3" />
-                        </button>
+                        <label className="text-xs w-16 text-muted-foreground shrink-0">{label}</label>
+                        <button onClick={() => updateCol(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                        <input type="number" min={40} max={600} value={profColWidths[key]} onChange={e => { const v = Math.max(40, Math.min(600, Number(e.target.value))); const next = { ...profColWidths, [key]: v }; setProfColWidths(next); localStorage.setItem("profiles_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
+                        <button onClick={() => updateCol(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
                       </div>
                     );
                   })}
                   <button
-                    onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); }}
+                    onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); setProfColVisible(DEFAULT_PROFILES_COL_VISIBLE); localStorage.removeItem("profiles_col_visible"); setProfColOrder(DEFAULT_PROFILES_COL_ORDER); localStorage.removeItem("profiles_col_order"); }}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
                   >
                     Reset to defaults

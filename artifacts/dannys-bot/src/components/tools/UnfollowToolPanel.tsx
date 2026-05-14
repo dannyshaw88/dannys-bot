@@ -91,7 +91,7 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
     const keysToSend  = expandedKeys.filter(k => k !== "startStop");
 
     const willEnable    = copyEnabled && tool.enabled;
-    const willRandomise = expandedKeys.includes("randomiseTiming") && willEnable;
+    const willRandomise = expandedKeys.includes("randomiseTiming");
     let staggerOffsets: number[] | undefined;
     if (willRandomise && targetIds.length > 1) {
       const delayMax = (settings as any).delayMax ?? 15;

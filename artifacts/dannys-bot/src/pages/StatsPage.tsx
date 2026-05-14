@@ -27,8 +27,8 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "human_session", label: "Human Sessions",icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: false },
 ];
 
-const DEFAULT_COL_WIDTHS: Record<StatKey | "account", number> = {
-  account: 160, follow: 110, unfollow: 110, dm: 110,
+const DEFAULT_COL_WIDTHS: Record<StatKey | "account" | "open_eb", number> = {
+  account: 160, open_eb: 80, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, human_session: 140,
 };
 
@@ -48,7 +48,7 @@ function ProfileStatsRow({
 }: {
   profile: Profile;
   visibleCols: Record<StatKey, boolean>;
-  colWidths: Record<StatKey | "account", number>;
+  colWidths: Record<StatKey | "account" | "open_eb", number>;
   statsData: any[];
   onOpenBrowser: () => void;
   onNavigateToProfile: () => void;
@@ -86,7 +86,7 @@ function ProfileStatsRow({
       </td>
 
       {/* Open EB column */}
-      <td className="px-4 py-3">
+      <td style={{ width: colWidths.open_eb }} className="px-4 py-3">
         <button
           className="flex items-center gap-1.5 text-xs text-cyan-500 hover:text-cyan-400 transition-colors font-medium whitespace-nowrap"
           onClick={onOpenBrowser}
@@ -129,7 +129,7 @@ export function StatsPage() {
   const [, setLocation] = useLocation();
   const { openWindow } = useBrowserWindows();
 
-  const [colWidths, setColWidths] = useState<Record<StatKey | "account", number>>(() => {
+  const [colWidths, setColWidths] = useState<Record<StatKey | "account" | "open_eb", number>>(() => {
     try {
       const s = localStorage.getItem("stats_col_widths_px");
       return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS;
@@ -229,7 +229,7 @@ export function StatsPage() {
     localStorage.setItem("stats_visible_cols", JSON.stringify(next));
   };
 
-  const updateWidth = (key: StatKey | "account", delta: number) => {
+  const updateWidth = (key: StatKey | "account" | "open_eb", delta: number) => {
     const v = Math.max(40, colWidths[key] + delta);
     const next = { ...colWidths, [key]: v };
     setColWidths(next);
@@ -242,6 +242,7 @@ export function StatsPage() {
 
   const colGroups: [string, string][] = [
     ["account", "Account"],
+    ["open_eb", "Open EB"],
     ...ALL_STAT_TYPES.map(({ key, label }) => [key, label] as [string, string]),
   ];
 
@@ -365,7 +366,7 @@ export function StatsPage() {
                       Account{sortIcon("account")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 font-bold uppercase tracking-wide">
+                  <th style={{ width: colWidths.open_eb }} className="px-4 py-3 font-bold uppercase tracking-wide">
                     <span className="flex items-center gap-1 text-cyan-500/70">
                       <Monitor className="w-3 h-3" />
                       <span className="text-[10px]">Open EB</span>

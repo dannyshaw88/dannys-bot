@@ -513,7 +513,7 @@ export function ProfileDetailsPage() {
                       <DropdownMenuTrigger asChild>
                         <button
                           title={profile.statusMessage || undefined}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}${profile.statusMessage ? " underline decoration-dotted underline-offset-2" : ""}`}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border cursor-pointer hover:opacity-80 transition-opacity ${meta.pill}`}
                         >
                           <Icon className="w-3 h-3" />
                           {meta.label}
@@ -640,7 +640,15 @@ export function ProfileDetailsPage() {
 
           {/* Group — shown first */}
           <div className="space-y-1 pb-2">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
+            <div className="flex items-center gap-3">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
+              <button
+                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
+                onClick={() => setCopyDialogOpen(true)}
+              >
+                <Copy className="w-3 h-3" /> COPY SETTINGS
+              </button>
+            </div>
             <GroupCombobox
               value={formData.tags || ""}
               groups={Array.from(new Set((allProfiles ?? []).map(p => (p.tags ?? "").trim()).filter(Boolean))).sort()}
@@ -655,12 +663,6 @@ export function ProfileDetailsPage() {
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Account Name
               </Label>
-              <button
-                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
-                onClick={() => setCopyDialogOpen(true)}
-              >
-                <Copy className="w-3 h-3" /> COPY SETTINGS
-              </button>
               {profile?.creatorMode && (
                 <Button
                   variant="outline"

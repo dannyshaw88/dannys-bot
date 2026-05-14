@@ -9,23 +9,23 @@ import { type Tool, type Profile, type SessionAction } from "@shared/schema";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 const ACTION_META: Record<string, { label: string; icon: any; color: string }> = {
-  follow:                  { label: "Followed",           icon: UserCheck,    color: "text-green-600 bg-green-50 border-green-200" },
-  follow_blocked:          { label: "Follow Blocked",     icon: Ban,          color: "text-red-600 bg-red-50 border-red-200" },
-  follow_skipped:          { label: "Follow Skipped",     icon: SkipForward,  color: "text-orange-500 bg-orange-50 border-orange-200" },
-  dedup_skip:              { label: "Skipped",             icon: SkipForward,  color: "text-slate-500 bg-slate-50 border-slate-200" },
-  like:                    { label: "Liked Post",          icon: Heart,        color: "text-pink-600 bg-pink-50 border-pink-200" },
-  view_stories:            { label: "Viewed Stories",     icon: BookOpen,     color: "text-blue-600 bg-blue-50 border-blue-200" },
-  view_reels:              { label: "Viewed Reels",       icon: PlaySquare,   color: "text-violet-600 bg-violet-50 border-violet-200" },
-  view_highlights:         { label: "Viewed Highlights",  icon: Star,         color: "text-amber-600 bg-amber-50 border-amber-200" },
-  visit_notifications:     { label: "Notifications",      icon: Bell,         color: "text-orange-600 bg-orange-50 border-orange-200" },
-  visit_own_profile:       { label: "Own Profile",        icon: User,         color: "text-indigo-600 bg-indigo-50 border-indigo-200" },
-  refresh_own_profile:     { label: "Refreshed Profile",  icon: RefreshCw,    color: "text-cyan-600 bg-cyan-50 border-cyan-200" },
-  visit_settings_activity: { label: "Settings & Activity",icon: Settings,     color: "text-gray-600 bg-gray-50 border-gray-200" },
-  check_timeline_stories:  { label: "Timeline Stories",   icon: BookOpen,     color: "text-sky-600 bg-sky-50 border-sky-200" },
-  check_dm:                { label: "Checked DMs",        icon: MessageSquare,color: "text-teal-600 bg-teal-50 border-teal-200" },
-  like_timeline_post:      { label: "Liked Timeline Post",icon: Heart,        color: "text-pink-600 bg-pink-50 border-pink-200" },
-  contact_dm:              { label: "New-Follower DM",    icon: MessageSquare,color: "text-blue-600 bg-blue-50 border-blue-200" },
-  contact_dm_blocked:      { label: "DM Blocked",         icon: Ban,          color: "text-red-600 bg-red-50 border-red-200" },
+  follow:                  { label: "Followed",           icon: UserCheck,    color: "text-green-600" },
+  follow_blocked:          { label: "Follow Blocked",     icon: Ban,          color: "text-red-600" },
+  follow_skipped:          { label: "Follow Skipped",     icon: SkipForward,  color: "text-orange-500" },
+  dedup_skip:              { label: "Skipped",             icon: SkipForward,  color: "text-slate-500" },
+  like:                    { label: "Liked Post",          icon: Heart,        color: "text-pink-600" },
+  view_stories:            { label: "Viewed Stories",     icon: BookOpen,     color: "text-blue-600" },
+  view_reels:              { label: "Viewed Reels",       icon: PlaySquare,   color: "text-violet-600" },
+  view_highlights:         { label: "Viewed Highlights",  icon: Star,         color: "text-amber-600" },
+  visit_notifications:     { label: "Notifications",      icon: Bell,         color: "text-orange-600" },
+  visit_own_profile:       { label: "Own Profile",        icon: User,         color: "text-indigo-600" },
+  refresh_own_profile:     { label: "Refreshed Profile",  icon: RefreshCw,    color: "text-cyan-600" },
+  visit_settings_activity: { label: "Settings & Activity",icon: Settings,     color: "text-gray-600" },
+  check_timeline_stories:  { label: "Timeline Stories",   icon: BookOpen,     color: "text-sky-600" },
+  check_dm:                { label: "Checked DMs",        icon: MessageSquare,color: "text-teal-600" },
+  like_timeline_post:      { label: "Liked Timeline Post",icon: Heart,        color: "text-pink-600" },
+  contact_dm:              { label: "New-Follower DM",    icon: MessageSquare,color: "text-blue-600" },
+  contact_dm_blocked:      { label: "DM Blocked",         icon: Ban,          color: "text-red-600" },
 };
 
 interface SessionLogPanelProps {
@@ -84,7 +84,7 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                 </tr>
               ) : (
                 sessionActionsList.map(sa => {
-                  const meta = ACTION_META[sa.action] ?? { label: sa.action, icon: AlertCircle, color: "text-muted-foreground bg-muted/30 border-border" };
+                  const meta = ACTION_META[sa.action] ?? { label: sa.action, icon: AlertCircle, color: "text-muted-foreground" };
                   const Icon = meta.icon;
                   const isError = sa.result === "error";
                   return (
@@ -96,7 +96,7 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                         </span>
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold ${meta.color}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold ${meta.color}`}>
                           <Icon className="w-3 h-3" />
                           {meta.label}
                           {isError && <AlertCircle className="w-3 h-3 text-red-500" />}
