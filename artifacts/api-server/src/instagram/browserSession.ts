@@ -111,6 +111,13 @@ function sseWrite(res: ServerResponse | null, data: object) {
 const sessions = new Map<number, Session>();
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
+// Global screenshot concurrency limiter. With 5+ Chrome instances all taking
+// screenshots simultaneously, the Node.js event loop and CPU saturate, causing
+// all EBs to freeze. Cap at 3 concurrent screenshot operations — sessions that
+// hit the limit skip that tick and retry 150 ms later, spreading the load evenly.
+let globalScreenshotCount = 0;
+const MAX_CONCURRENT_SCREENSHOTS = 3;
+
 // --no-sandbox is required in all environments.
 // --no-zygote is intentionally EXCLUDED — it crashes Chrome silently on Windows
 //   when combined with --no-sandbox. It is only needed in sandboxed Linux containers.
@@ -588,6 +595,14 @@ function startFrameLoop(profileId: number) {
     if (busy) return;
     busy = true;
 
+    // Global concurrency guard — skip this tick if too many Chrome instances
+    // are already mid-screenshot. They'll retry on the next 150 ms tick.
+    if (globalScreenshotCount >= MAX_CONCURRENT_SCREENSHOTS) {
+      busy = false;
+      return;
+    }
+    globalScreenshotCount++;
+
     const frameStart = Date.now();
     try {
       // Wrap in an external hard deadline so that if Chrome's CDP connection
@@ -692,6 +707,7 @@ function startFrameLoop(profileId: number) {
         }
       }
     } finally {
+      globalScreenshotCount--;
       busy = false;
     }
   }, 150); // ~6 fps — fast enough for responsive CAPTCHA solving

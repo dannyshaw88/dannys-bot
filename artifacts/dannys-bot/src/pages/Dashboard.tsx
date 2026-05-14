@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.287",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: Opening 5 or more browsers at the same time no longer causes them to freeze — screenshot operations are now limited to 3 at a time and staggered so they don't all compete for the CPU simultaneously." },
+    ],
+  },
+  {
     version: "1.0.286",
     date: "14 May 2026",
     items: [
