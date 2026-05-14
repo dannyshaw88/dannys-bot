@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.285",
+    date: "14 May 2026",
+    items: [
+      { category: "Updates", text: "Fixed: The automatic update checker was failing with an authentication error — the app now correctly authenticates when checking for new versions." },
+      { category: "Browser", text: "Fixed: The embedded browser could freeze permanently when landing on a suspended Instagram account page — it now detects the freeze and closes the session cleanly instead of hanging forever." },
+    ],
+  },
+  {
     version: "1.0.283",
     date: "14 May 2026",
     items: [
