@@ -54,6 +54,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.292",
+    date: "14 May 2026",
+    items: [
+      { category: "Security", text: "Fixed: Accounts were being flagged or locked because a security-token request was accidentally sent with the account's active login cookie to an Instagram endpoint that is only meant to be called before any login — now that request is sent anonymously, matching how the real Instagram app behaves." },
+      { category: "Security", text: "Fixed: Automation could contact Instagram's API on accounts that had never been logged in through the browser first — the engine now waits until browser verification is complete before doing anything." },
+      { category: "Accounts", text: "Fixed: Accounts in Pending status (never verified) were allowed to run automation tools — they now pause and wait until Verify Credentials has been run successfully." },
+    ],
+  },
+  {
     version: "1.0.291",
     date: "14 May 2026",
     items: [
