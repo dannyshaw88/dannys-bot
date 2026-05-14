@@ -4,6 +4,7 @@ import { generateTotp } from "./totp";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import net from "net";
 
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
@@ -11,6 +12,30 @@ import { instagramApiCalls } from "../shared/schema";
 function log(msg: string, _category?: string) {
   const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
   console.log(`[${ts}] [browser] ${msg}`);
+}
+
+// ── Proxy health check ────────────────────────────────────────────────────────
+// Before launching Chrome we do a quick TCP connect to the proxy host:port.
+// A dead or unreachable proxy causes Chrome to hang completely (its renderer
+// thread blocks on the CONNECT tunnel) making even screenshots time out.
+// Detecting this upfront avoids the 40-second crash loop entirely.
+function testProxyReachable(host: string, port: number, timeoutMs = 6000): Promise<{ ok: boolean; errorCode?: string }> {
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ host, port });
+    const timer = setTimeout(() => {
+      sock.destroy();
+      resolve({ ok: false, errorCode: "TIMEOUT" });
+    }, timeoutMs);
+    sock.on("connect", () => {
+      clearTimeout(timer);
+      sock.destroy();
+      resolve({ ok: true });
+    });
+    sock.on("error", (err: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      resolve({ ok: false, errorCode: err.code ?? err.message });
+    });
+  });
 }
 
 // ── Cookie persistence ───────────────────────────────────────────────────────
@@ -257,6 +282,20 @@ export async function getOrCreateSession(
   } else {
     log(`Launching Chrome for profile ${profileId} — NO PROXY (direct connection)`, "browser");
   }
+  // ── Pre-flight proxy check ──────────────────────────────────────────────────
+  // A dead proxy causes Chrome's renderer to hang completely — the page shows
+  // chrome-error:// and even Puppeteer screenshots time out. Test reachability
+  // before launching so we fail fast instead of spending 40 s in a crash loop.
+  if (proxy) {
+    const proxyCheck = await testProxyReachable(proxy.host, proxy.port, 6000);
+    if (!proxyCheck.ok) {
+      const errMsg = `Proxy ${proxy.host}:${proxy.port} is unreachable (${proxyCheck.errorCode ?? "unknown"}) — not launching Chrome to avoid renderer freeze. Will retry on next open.`;
+      log(`[proxy-check:${profileId}] ${errMsg}`, "browser");
+      throw new Error(errMsg);
+    }
+    log(`[proxy-check:${profileId}] Proxy ${proxy.host}:${proxy.port} reachable ✓`, "browser");
+  }
+
   const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
 
   // Each session gets its OWN isolated user-data-dir so Chrome never reuses or
@@ -653,33 +692,45 @@ function startFrameLoop(profileId: number) {
       screenshotTimeoutCount = 0; // successful screenshot — reset crash counter
 
       // ── Error-page recovery ──────────────────────────────────────────────
-      // When the browser lands on chrome-error:// (ERR_TOO_MANY_REDIRECTS,
-      // ERR_CONNECTION_REFUSED, net::ERR_*, etc.) or a blank page, wait 3 s
-      // then clear all Instagram cookies and navigate to the login page.
-      // Clearing cookies is essential for redirect-loop recovery — if bad/stale
-      // cookies caused the loop, navigating back to instagram.com without
-      // clearing them just triggers the same loop again.
+      // When the browser lands on chrome-error:// or a blank page, wait 3 s
+      // then navigate to the login page.
+      //
+      // Cookie handling depends on the error type:
+      //   ERR_TOO_MANY_REDIRECTS / ERR_FAILED  →  stale cookies caused the
+      //     loop; clear cookies so the next navigation doesn't loop again.
+      //   ERR_PROXY_* / ERR_TUNNEL_* / TIMEOUT →  proxy failure; the
+      //     Instagram cookies are valid. Do NOT clear them — deleting good
+      //     session cookies forces a fresh login and risks account flags.
+      //
+      // Chrome's error page title contains the error code (e.g.
+      // "ERR_TOO_MANY_REDIRECTS"), so we read it here on success and cache it.
       const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
       if (isErrorPage) {
         errorRetryTick++;
-        // Fire at tick 15 (3 s) and then every 150 ticks (30 s) after that so
-        // the browser keeps retrying if the first recovery attempt also fails.
-        // navProtectedUntil is cleared to 0 by the framenavigated handler whenever
-        // chrome-error:// is detected, so this check will always pass promptly at
-        // tick 15 (~2 s) for redirect-loop errors.
+        // Read the error code from the page title on the first tick so we can
+        // decide whether to delete cookies.
+        if (errorRetryTick === 1) {
+          try {
+            const title: string = await s.page.title().catch(() => "");
+            (s as any)._lastErrorPageTitle = title;
+            log(`[frameLoop:${profileId}] error page detected — title: "${title}"`, "browser");
+          } catch {}
+        }
+        // Fire at tick 15 (3 s) and then every 150 ticks (30 s) after that.
         const shouldRecover = errorRetryTick === 15 || (errorRetryTick > 15 && (errorRetryTick - 15) % 150 === 0);
         if (shouldRecover && Date.now() > (s.navProtectedUntil ?? 0)) {
-          log(`[frameLoop:${profileId}] error page for ${Math.round(errorRetryTick * 200 / 1000)}s — clearing cookies and navigating to login`, "browser");
-          try {
-            // Must pass the Instagram URL explicitly — page.cookies() with no args
-            // returns cookies for the *current* URL (chrome-error://), which has none.
-            // Without the URL argument, deleteCookie is never called and the stale
-            // cookies that caused the redirect loop remain, triggering another loop.
-            const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
-            if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
-          } catch {}
-          // Also delete the saved cookie file so they aren't reloaded on next session open
-          deleteSavedCookies(profileId);
+          const errTitle: string = (s as any)._lastErrorPageTitle ?? "";
+          const isProxyError = /ERR_PROXY|ERR_TUNNEL|ERR_SOCKS|TIMEOUT/i.test(errTitle);
+          const isRedirectLoop = /ERR_TOO_MANY_REDIRECTS|ERR_FAILED/i.test(errTitle) || !isProxyError;
+          log(`[frameLoop:${profileId}] error page for ${Math.round(errorRetryTick * 200 / 1000)}s — ${isProxyError ? "proxy error (keeping cookies)" : "redirect/cookie error (clearing cookies)"} — navigating to login`, "browser");
+          if (isRedirectLoop) {
+            // Clear cookies — they caused the redirect loop and would trigger it again.
+            try {
+              const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
+              if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
+            } catch {}
+            deleteSavedCookies(profileId);
+          }
           s.navProtectedUntil = Date.now() + 20000;
           s.page.goto("https://www.instagram.com/accounts/login/", {
             waitUntil: "domcontentloaded", timeout: 25000,
@@ -687,6 +738,7 @@ function startFrameLoop(profileId: number) {
         }
       } else {
         errorRetryTick = 0;
+        (s as any)._lastErrorPageTitle = undefined;
       }
       // ─────────────────────────────────────────────────────────────────────
 
@@ -720,12 +772,12 @@ function startFrameLoop(profileId: number) {
           const isFrozenOnError = frozenUrl.startsWith("chrome-error://") || frozenUrl === "about:blank";
           const navOk = !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0);
           if (isFrozenOnError && navOk) {
-            log(`[frameLoop:${profileId}] screenshot timeout #3 on error page — attempting early recovery goto`, "browser");
-            try {
-              const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
-              if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
-            } catch {}
-            deleteSavedCookies(profileId);
+            // Screenshot timeouts on chrome-error:// almost always mean the proxy
+            // is dead/hanging — NOT a cookie/redirect issue. The Instagram cookies
+            // are still valid. Do NOT delete them here.
+            // We still attempt a goto() in case the renderer can be unblocked,
+            // but we preserve cookies so the next open restores the session.
+            log(`[frameLoop:${profileId}] screenshot timeout #3 on error page — attempting early recovery goto (cookies preserved)`, "browser");
             s.navProtectedUntil = Date.now() + 20000;
             s.page.goto("https://www.instagram.com/accounts/login/", {
               waitUntil: "domcontentloaded", timeout: 25000,
@@ -740,18 +792,16 @@ function startFrameLoop(profileId: number) {
             log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} — suppressed (login=${!!s.autoLoginInProgress} navProtected=${navProtected})`, "browser");
           } else {
             const crashUrl = (() => { try { return s.page.url(); } catch { return "unknown"; } })();
-            log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts on "${crashUrl}" — closing Chrome entirely`, "browser");
-            sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
+            log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts on "${crashUrl}" — closing Chrome entirely (cookies preserved)`, "browser");
+            sseWrite(s.res, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
             try { s.res.end(); } catch {}
             s.res = null;
             if (s.frameLoop) { clearInterval(s.frameLoop); s.frameLoop = null; }
-            // Close the Chrome process entirely — just closing the SSE leaves a frozen
-            // browser in the sessions map. When the frontend reconnects, attachSSE reuses
-            // the same broken Chrome and immediately hits the same freeze again.
-            // Delete cookies first so a redirect-loop doesn't repeat on the next open.
-            if (crashUrl.startsWith("chrome-error://") || crashUrl === "about:blank") {
-              deleteSavedCookies(profileId);
-            }
+            // Close the Chrome process entirely so the next open gets a fresh start.
+            // Screenshot timeouts = proxy freeze (renderer stuck on TCP tunnel),
+            // NOT a cookie/redirect loop — cookies are valid, do NOT delete them.
+            // The pre-flight proxy check on next open will refuse to launch Chrome
+            // again if the proxy is still dead, keeping the session clean.
             closeSession(profileId).catch(() => {});
           }
         }
