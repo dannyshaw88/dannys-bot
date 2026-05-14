@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.286",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: The embedded browser no longer shows a blank white screen when opening — it now waits until the page has actually loaded before removing the loading indicator." },
+    ],
+  },
+  {
     version: "1.0.285",
     date: "14 May 2026",
     items: [

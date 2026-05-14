@@ -64,6 +64,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [status, setStatus] = useState<SSEStatus>("idle");
   const statusRef = useRef<SSEStatus>("idle");
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstFrameFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
   const hasReceivedFirstFrameRef = useRef(false);
   const [isFrozen, setIsFrozen] = useState(false);
@@ -222,12 +223,25 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       esRef.current.close();
       esRef.current = null;
     }
+    if (firstFrameFallbackRef.current) {
+      clearTimeout(firstFrameFallbackRef.current);
+      firstFrameFallbackRef.current = null;
+    }
     setStatusSafe("connecting");
     setIsFrozen(false);
     setErrorMsg(null);
     setIsLoading(true);
     setWaitingFirstFrame(true);
     hasReceivedFirstFrameRef.current = false;
+
+    // Safety net: if Chrome only ever sends blank frames (e.g. very slow proxy),
+    // dismiss the overlay after 45 s so the user isn't stuck staring at the spinner.
+    firstFrameFallbackRef.current = setTimeout(() => {
+      if (!hasReceivedFirstFrameRef.current) {
+        hasReceivedFirstFrameRef.current = true;
+        setWaitingFirstFrame(false);
+      }
+    }, 45000);
 
     const es = new EventSource(`/api/browser/${profileId}/stream`);
     esRef.current = es;
@@ -245,8 +259,19 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             drawFrame(msg.data);
             lastFrameTimeRef.current = Date.now();
             if (!hasReceivedFirstFrameRef.current) {
-              hasReceivedFirstFrameRef.current = true;
-              setWaitingFirstFrame(false);
+              // Only dismiss the "Starting browser…" overlay once a frame with
+              // actual content arrives. A blank-white JPEG at quality 70 is
+              // ~2–8 KB (base64 len < 12000). Real Instagram pages are always
+              // >15 KB. This prevents the overlay clearing prematurely on a
+              // blank frame while Chrome is still warming up through the proxy.
+              if (msg.data.length > 15000) {
+                hasReceivedFirstFrameRef.current = true;
+                setWaitingFirstFrame(false);
+                if (firstFrameFallbackRef.current) {
+                  clearTimeout(firstFrameFallbackRef.current);
+                  firstFrameFallbackRef.current = null;
+                }
+              }
             }
             setIsFrozen(false);
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) {
