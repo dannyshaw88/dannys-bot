@@ -650,7 +650,7 @@ export function ProfileDetailsPage() {
             <div className="flex items-center gap-3">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
               <button
-                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
+                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 transition-colors cursor-pointer rounded px-1.5 py-0.5"
                 onClick={() => setCopyDialogOpen(true)}
               >
                 <Copy className="w-3 h-3" /> COPY SETTINGS
@@ -813,7 +813,7 @@ export function ProfileDetailsPage() {
                         type="button"
                         onClick={() => setResetDeviceConfirmOpen(true)}
                         disabled={updateProfileMutation.isPending}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50 text-left shrink-0"
+                        className="flex items-center gap-1.5 text-xs text-foreground font-bold hover:text-foreground/70 transition-colors disabled:opacity-50 text-left shrink-0"
                       >
                         <Smartphone className="w-3.5 h-3.5 shrink-0" />
                         Reset Device IDs
@@ -873,7 +873,7 @@ export function ProfileDetailsPage() {
                                 onChange={e => setLinkedHostPort(e.target.value)}
                                 onBlur={() => saveLinkedField("hostPort")}
                                 onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-                                className="font-mono text-sm h-8 w-48 shrink-0"
+                                className="text-sm h-8 w-48 shrink-0"
                                 placeholder="host:port"
                               />
                               <Input
@@ -882,7 +882,7 @@ export function ProfileDetailsPage() {
                                 onBlur={() => saveLinkedField("username")}
                                 onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
                                 placeholder="username"
-                                className="font-mono text-sm h-8 w-32 shrink-0"
+                                className="text-sm h-8 w-32 shrink-0"
                               />
                               <Input
                                 value={linkedPassword}
@@ -890,7 +890,7 @@ export function ProfileDetailsPage() {
                                 onBlur={() => saveLinkedField("password")}
                                 onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
                                 placeholder="password"
-                                className="font-mono text-sm h-8 w-32 shrink-0"
+                                className="text-sm h-8 w-32 shrink-0"
                               />
                               <Button
                                 type="button"
@@ -923,7 +923,7 @@ export function ProfileDetailsPage() {
                               onBlur={saveManualProxyField}
                               onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
                               placeholder="host:port"
-                              className="font-mono text-sm h-8 w-48 shrink-0"
+                              className="text-sm h-8 w-48 shrink-0"
                             />
                             <Input
                               value={formData.proxyUsername}
@@ -931,7 +931,7 @@ export function ProfileDetailsPage() {
                               onBlur={saveManualProxyField}
                               onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
                               placeholder="username"
-                              className="font-mono text-sm h-8 w-32 shrink-0"
+                              className="text-sm h-8 w-32 shrink-0"
                             />
                             <Input
                               value={formData.proxyPassword}
@@ -939,7 +939,7 @@ export function ProfileDetailsPage() {
                               onBlur={saveManualProxyField}
                               onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
                               placeholder="password"
-                              className="font-mono text-sm h-8 w-32 shrink-0"
+                              className="text-sm h-8 w-32 shrink-0"
                             />
                           </div>
                           {proxies && proxies.length > 0 && (
