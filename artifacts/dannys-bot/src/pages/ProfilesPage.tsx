@@ -963,7 +963,7 @@ export function ProfilesPage() {
               onClick={() => setSelectedProfileIds(filteredProfiles.map(p => p.id))}
               className="text-[12px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap"
             >
-              Select All
+              Select All{selectedProfileIds.length > 0 && <span className="ml-1 text-[11px] font-bold text-sky-400">({selectedProfileIds.length})</span>}
             </button>
             <button
               onClick={() => setSelectedProfileIds([])}

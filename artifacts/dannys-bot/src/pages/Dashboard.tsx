@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.290",
+    date: "14 May 2026",
+    items: [
+      { category: "Accounts", text: "The Select All button on the Accounts page now shows a count of how many accounts are currently selected next to it." },
+    ],
+  },
+  {
     version: "1.0.289",
     date: "14 May 2026",
     items: [
