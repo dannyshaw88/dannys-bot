@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.293",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: Embedded browsers were getting stuck on the 'This page isn't working — ERR_TOO_MANY_REDIRECTS' error screen and never recovering. Stale saved cookies that caused the redirect loop are now properly cleared (they weren't being found before because the browser was on an error page, not Instagram), and the recovery now fires within 3 seconds instead of waiting up to 25 seconds." },
+    ],
+  },
+  {
     version: "1.0.292",
     date: "14 May 2026",
     items: [

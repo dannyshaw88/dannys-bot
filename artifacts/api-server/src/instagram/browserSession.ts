@@ -351,6 +351,10 @@ export async function getOrCreateSession(
     const navUrl = frame.url();
     if (sNav && !navUrl.startsWith("chrome-error://")) {
       sNav.navProtectedUntil = Math.max(sNav.navProtectedUntil ?? 0, Date.now() + 12000);
+    } else if (sNav && navUrl.startsWith("chrome-error://")) {
+      // Clear nav protection so the frame-loop error recovery fires promptly at tick 15
+      // instead of waiting for the initial 15-second navProtectedUntil to expire.
+      sNav.navProtectedUntil = 0;
     }
     const url = frame.url();
     // Small delay so banners/dialogs have time to render
@@ -660,16 +664,22 @@ function startFrameLoop(profileId: number) {
         errorRetryTick++;
         // Fire at tick 15 (3 s) and then every 150 ticks (30 s) after that so
         // the browser keeps retrying if the first recovery attempt also fails.
-        // The navProtectedUntil guard is intentionally NOT applied here — we never
-        // extend navProtectedUntil on chrome-error:// navigations precisely so
-        // this check is always able to fire when the page is stuck on an error.
+        // navProtectedUntil is cleared to 0 by the framenavigated handler whenever
+        // chrome-error:// is detected, so this check will always pass promptly at
+        // tick 15 (~2 s) for redirect-loop errors.
         const shouldRecover = errorRetryTick === 15 || (errorRetryTick > 15 && (errorRetryTick - 15) % 150 === 0);
         if (shouldRecover && Date.now() > (s.navProtectedUntil ?? 0)) {
           log(`[frameLoop:${profileId}] error page for ${Math.round(errorRetryTick * 200 / 1000)}s — clearing cookies and navigating to login`, "browser");
           try {
-            const cookies = await s.page.cookies().catch(() => [] as any[]);
-            if (cookies.length) await (s.page as any).deleteCookie(...cookies).catch(() => null);
+            // Must pass the Instagram URL explicitly — page.cookies() with no args
+            // returns cookies for the *current* URL (chrome-error://), which has none.
+            // Without the URL argument, deleteCookie is never called and the stale
+            // cookies that caused the redirect loop remain, triggering another loop.
+            const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
+            if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
           } catch {}
+          // Also delete the saved cookie file so they aren't reloaded on next session open
+          deleteSavedCookies(profileId);
           s.navProtectedUntil = Date.now() + 20000;
           s.page.goto("https://www.instagram.com/accounts/login/", {
             waitUntil: "domcontentloaded", timeout: 25000,
