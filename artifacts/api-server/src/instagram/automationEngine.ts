@@ -522,6 +522,18 @@ class AutomationEngine {
           await sleep(5 * 60_000);
           continue;
         }
+        // EB-first enforcement: never run automation on an account that has not
+        // completed at least one successful EB verification.  "pending" means the
+        // account was added but Verify Credentials was never run, so no EB session
+        // cookie was ever captured — touching the Instagram API from a cold start
+        // without a prior browser session is a trust signal Instagram uses to flag
+        // accounts.  Pause and retry every 5 min so the runner picks it up as soon
+        // as the user runs Verify Credentials on it.
+        if (freshProfile.accountStatus === "pending") {
+          engineLog("WARN", `@${freshProfile.username}: account not yet verified via browser — pausing 5min (run Verify Credentials to start automation)`);
+          await sleep(5 * 60_000);
+          continue;
+        }
         // ── Active timer gate ─────────────────────────────────────────────────
         if (
           freshProfile.activeTimerEnabled &&
@@ -1560,35 +1572,14 @@ class AutomationEngine {
       return client;
     }
 
-    // Per architecture rules: this is a pure API bot — web login is never used
-    // for automation. All Instagram actions go through the mobile API.
-    // Attempt a fresh mobile login if no session is available.
-    const mobileOk = await client.mobileLogin(
-      profile.username,
-      profile.password,
-      profile.twoFASecretKey ?? undefined,
-    );
-
-    if (mobileOk) {
-      // Persist igApiCookies so subsequent sessions restore without re-login.
-      const serialized = client.getSerializedIgApiCookies();
-      if (serialized) {
-        await storage.updateProfile(profile.id, { igApiCookies: serialized });
-        console.log(`[engine] @${profile.username}: ✅ mobile API login OK — igApiCookies saved to DB (${serialized.split(";").length} cookies). Next session will restore without login.`);
-      } else {
-        console.log(`[engine] @${profile.username}: mobile API login OK`);
-      }
-      return client;
-    }
-
-    // Mobile login failed.
-    if (client.lastMobileLoginFailureReason === "bad_password") {
-      console.error(`[engine] @${profile.username}: mobile login FAILED — wrong password confirmed. Marking bad_password.`);
-      await storage.updateProfile(profile.id, { accountStatus: "bad_password", statusMessage: "Wrong password — mobile login rejected" });
-      return null;
-    }
-    // Transient network/proxy issue — do not mark bad_password.
-    console.warn(`[engine] @${profile.username}: mobile login failed — skipping session, status unchanged`);
+    // EB-first enforcement: reaching here means the EB browser is NOT providing
+    // a fresh session (browserOk = false) AND no stored API session is available
+    // (isMobileLoggedIn = false).  Do NOT attempt a cold mobile login — calling
+    // the Instagram API before any EB session has been established is a trust-
+    // signal Instagram uses to flag accounts.  Instead, skip this run and let
+    // the runner retry on the next cycle.  The account should be verified via
+    // the embedded browser first (Verify Credentials button).
+    console.warn(`[engine] @${profile.username}: no EB session and no stored mobile session — skipping run (verify the account in the browser first)`);
     return null;
   }
 
