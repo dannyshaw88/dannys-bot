@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.298",
+    date: "14 May 2026",
+    items: [
+      { category: "Architecture", text: "Removed: Cold mobile API login fallback that could fire during automation. If the embedded browser cookie file existed but had no sessionid, the engine would silently fall back to a direct mobile API password login — bypassing the browser entirely. This is now removed. Mobile-API tools are skipped with a warning instead, and re-verifying the account restores them cleanly." },
+      { category: "Help", text: "Updated: The 'What does Verify Account do?' help text now correctly describes the browser-first login flow." },
+    ],
+  },
+  {
     version: "1.0.297",
     date: "14 May 2026",
     items: [

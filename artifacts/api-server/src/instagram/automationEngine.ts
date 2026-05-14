@@ -1525,41 +1525,21 @@ class AutomationEngine {
     const browserOk = client.loadBrowserCookies();
     if (browserOk) {
       console.log(`[engine] @${profile.username}: using EB browser session (cookies synced)`);
-      // Always bootstrap the mobile session from fresh EB web cookies so Watch
-      // Stories / Watch Reels always have a valid i.instagram.com session — even
-      // when the stored igApiCookies are stale from a previous login.  The EB
-      // sessionid is definitively valid right now (browserOk = true) and
-      // Instagram accepts it on i.instagram.com identically to www.instagram.com.
+      // Bootstrap the mobile session from fresh EB web cookies so Watch Stories /
+      // Watch Reels have a valid i.instagram.com session.
+      // EB-FIRST RULE: mobileBootstrapFromWebCookies is the ONLY way the mobile
+      // session is seeded here. A cold mobileLogin() is never called — the mobile
+      // API must always be bootstrapped from an EB-originated cookie, never via a
+      // direct password login that bypasses the embedded browser.
       const mobileBootOk = client.mobileBootstrapFromWebCookies();
       if (mobileBootOk) {
         console.log(`[engine] @${profile.username}: mobile session synced from fresh EB cookies`);
-      } else if (!client.isMobileLoggedIn()) {
-        // mobileBootstrapFromWebCookies can only fail if there is no sessionid in
-        // the EB jar (shouldn't happen when browserOk=true, but guard anyway).
-        console.log(`[engine] @${profile.username}: no igApiCookies — attempting mobile login to establish API session...`);
-        client.lastMobileLoginFailureReason = null;
-        const mobileOk = await client.mobileLogin(
-          profile.username,
-          profile.password,
-          profile.twoFASecretKey ?? undefined,
-        );
-        if (!mobileOk) {
-          if (client.lastMobileLoginFailureReason === "bad_password") {
-            console.error(`[engine] @${profile.username}: mobile login FAILED — wrong password confirmed. Marking bad_password.`);
-            await storage.updateProfile(profile.id, { accountStatus: "bad_password", statusMessage: "Wrong password — mobile login rejected" });
-            return null;
-          }
-          console.error(`[engine] @${profile.username}: mobile login FAILED — transient error, status unchanged. Mobile-API tools (Watch Reels, Watch Stories) will be skipped this session.`);
-        } else {
-          // Persist the freshly-minted igApiCookies so subsequent sessions can
-          // restore the mobile session without re-logging in (avoiding Instagram's
-          // new-device email challenge on every restart).
-          const serialized = client.getSerializedIgApiCookies();
-          if (serialized) {
-            await storage.updateProfile(profile.id, { igApiCookies: serialized });
-            console.log(`[engine] @${profile.username}: ✅ mobile login OK — igApiCookies saved to DB (${serialized.split(";").length} cookies). Next session will restore without login.`);
-          }
-        }
+      } else {
+        // EB cookie file exists but has no sessionid — EB is not properly logged in.
+        // Do NOT fall back to a cold mobile API login. Mobile-API tools (Watch Reels,
+        // Watch Stories) will be skipped this session. The account needs to be
+        // re-verified via the Verify button so the EB logs in and saves a sessionid.
+        console.warn(`[engine] @${profile.username}: EB cookie file has no sessionid — mobile-API tools skipped this session. Re-verify the account via the Verify button.`);
       }
       return client;
     }

@@ -40,6 +40,31 @@ An Instagram automation platform for managing multiple accounts with tools for f
 - Puppeteer-based embedded browser for session management and cookie creation
 - The server also statically serves the built frontend from `artifacts/dannys-bot/dist/public` when it exists
 
+## EB-FIRST AUTHENTICATION RULE (non-negotiable, do not break)
+
+**Every account session must originate from the embedded browser (EB). No Instagram API call may ever be made without a browser-originated cookie. This is the Jarvee model and must never be bypassed.**
+
+### The only valid session establishment flow:
+1. Embedded browser (Chrome/Puppeteer) logs in via `instagram.com/accounts/login/`
+2. App extracts `sessionid`, `csrftoken`, `ds_user_id`, `mid` from Chrome's cookie jar
+3. Those cookies are saved to `igApiCookies` in the DB and to `browser-data/cookies-{profileId}.json`
+4. The mobile API (`i.instagram.com`) is bootstrapped from those EB cookies via `mobileBootstrapFromWebCookies()`
+
+### What is FORBIDDEN:
+- Calling `client.mobileLogin(username, password)` directly from the automation engine — this is a cold mobile API login that bypasses the EB entirely. Instagram treats it as a new-device takeover and risks account locks.
+- Calling `verifyInstagramCredentials()` (in `instagramLogin.ts`) from any verify route — this function does a direct mobile API password login. It must NOT be called from `/api/profiles/:id/verify` or `/api/profiles/verify-all`. Those routes use the EB-first flow exclusively.
+- Returning a usable API client from `ensureClient()` that has no session from an EB login (either `browserOk=true` via fresh EB cookies, or `isMobileLoggedIn()=true` from previously-verified igApiCookies that originated from an EB login).
+
+### Where this is enforced:
+- `/api/profiles/:id/verify` → `getOrCreateSession` → `browserAutoLogin` → `getSessionPageCookies` → save to DB
+- `/api/profiles/verify-all` → same EB-first flow, sequential with delay
+- `ensureClient()` in `automationEngine.ts`: if no EB session AND no stored igApiCookies → returns null, skips run
+- If EB session exists but `mobileBootstrapFromWebCookies()` fails → logs warning, skips mobile-API tools, does NOT fall back to `mobileLogin()`
+
+### Legacy dead code — do not use:
+- `artifacts/api-server/src/src/` — duplicate directory, NOT imported by any active code, NOT bundled. It still references the old `verifyInstagramCredentials` mobile-API path. Ignore it; it is dead. Active code lives exclusively in `artifacts/api-server/src/` (without the nested `src/src`).
+- `verifyInstagramCredentials()` in `artifacts/api-server/src/instagram/instagramLogin.ts` — the mobile-API direct login function. Still present for historical reference but must not be called from any verify or automation path.
+
 ## Product
 
 - Multi-account Instagram manager
@@ -125,7 +150,7 @@ Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-- Current version: **v1.0.291**
+- Current version: **v1.0.298**
 - Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.291` → `1.0.292`
 - The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 - Include `artifacts/electron/package.json` in every batch push alongside the other changed files

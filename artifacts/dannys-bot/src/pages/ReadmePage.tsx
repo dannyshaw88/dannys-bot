@@ -39,11 +39,11 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: "What does Verify Account do?",
-        a: "Verify checks that the account's mobile API session is still valid. It attempts a lightweight authenticated request using the stored mobile session cookies (igApiCookies). If the session is valid the account turns green. If not, it re-authenticates using the username and password. If Instagram requires a challenge (CAPTCHA, email/SMS code) the embedded browser opens automatically so you can complete it manually.",
+        a: "Verify logs the account in through the embedded browser (Chrome) first — exactly like Jarvee does. The browser fills the username and password on the Instagram login page, handles 2FA automatically, then the app extracts the session cookies from Chrome and hands them to the API. No API call is ever made without this browser-originated cookie. This is the only safe way to establish a session — a direct API login looks like a new-device takeover to Instagram and risks an account lock.",
       },
       {
         q: "Why is my account showing Invalid Session?",
-        a: "This means the stored mobile session cookies have expired or been invalidated by Instagram. Open the account, click Verify, and complete any challenge that appears in the browser window. Once you pass the challenge the session is refreshed and automation resumes. If the account is frequently going invalid, check your proxy a changing or shared IP triggers session invalidation.",
+        a: "The browser session cookie has expired or been revoked by Instagram. Click Verify to re-run the browser login. If the browser opens to a challenge (email code, phone code, CAPTCHA) complete it manually and the session will be restored. If the account keeps going invalid, check the proxy — a changing or shared IP causes frequent session invalidation.",
       },
       {
         q: "What is Fix Captcha?",
