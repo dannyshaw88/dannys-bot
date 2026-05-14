@@ -693,7 +693,7 @@ export async function registerInstagramRoutes(
             proxyPassword: (p.proxyPassword || null) as string | null,
             userAgentApi: p.userAgentApi || null,
             userAgentEmbedded: p.userAgentEmbedded || null,
-            tags: p.tags || null,
+            tags: p.tags || "Ungrouped",
             dateOfBirth: p.dateOfBirth || null,
             notes: p.notes || null,
             phoneNumber: p.phoneNumber || null,

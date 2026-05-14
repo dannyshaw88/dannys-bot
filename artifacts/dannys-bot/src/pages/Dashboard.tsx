@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.288",
+    date: "14 May 2026",
+    items: [
+      { category: "Fix", text: "Watch Stories / Watch Reels: Fixed \"Skipped: no mobile session\" appearing even after running Verify Credentials — the mobile API session is now always refreshed from the current embedded browser session, so it cannot be stale." },
+      { category: "Accounts", text: "New accounts added without a group are now automatically placed into a group called \"Ungrouped\" instead of floating outside any group." },
+    ],
+  },
+  {
     version: "1.0.287",
     date: "14 May 2026",
     items: [
