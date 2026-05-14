@@ -18,7 +18,7 @@ import {
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown, ChevronLeft, ChevronRight,
   Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
   UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
-  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie
+  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie, PlusCircle
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -71,6 +71,16 @@ const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementTyp
   upload:               { label: "Upload",             icon: AlertTriangle, pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   review:               { label: "Review",             icon: Eye,           pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
 };
+
+function parseActiveTimerSlots(start: string | null | undefined, end: string | null | undefined): { start: string; end: string }[] {
+  if (start) {
+    try {
+      const parsed = JSON.parse(start);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {}
+  }
+  return [{ start: start || "09:00", end: end || "22:00" }];
+}
 
 function GroupCombobox({ value, groups, onChange }: { value: string; groups: string[]; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -650,7 +660,7 @@ export function ProfileDetailsPage() {
             <div className="flex items-center gap-3">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
               <button
-                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 transition-colors cursor-pointer rounded px-1.5 py-0.5"
+                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer"
                 onClick={() => setCopyDialogOpen(true)}
               >
                 <Copy className="w-3 h-3" /> COPY SETTINGS
@@ -960,35 +970,68 @@ export function ProfileDetailsPage() {
 
                   {/* ── Active Timer ── */}
                   <div className="space-y-4 pt-4 border-t border-border mt-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-primary" /> Active Timer
-                      </h4>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-primary" />
+                      <h4 className="text-sm font-bold">Active Timer</h4>
                       <Switch
                         checked={!!formData.activeTimerEnabled}
                         onCheckedChange={checked => updateField({ activeTimerEnabled: checked })}
                       />
                     </div>
                     {formData.activeTimerEnabled ? (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Start Time</Label>
-                          <Input
-                            type="time"
-                            value={formData.activeTimerStart || "00:00"}
-                            onChange={e => updateField({ activeTimerStart: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">End Time</Label>
-                          <Input
-                            type="time"
-                            value={formData.activeTimerEnd || "23:59"}
-                            onChange={e => updateField({ activeTimerEnd: e.target.value })}
-                          />
-                        </div>
-                        <p className="col-span-2 text-xs text-muted-foreground -mt-1">
-                          The account will only run automation tasks between these times. Outside this window it stays dormant.
+                      <div className="space-y-3">
+                        {parseActiveTimerSlots(formData.activeTimerStart, formData.activeTimerEnd).map((slot, i, arr) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <div className="space-y-1 flex-1">
+                              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Start</Label>
+                              <Input
+                                type="time"
+                                value={slot.start}
+                                onChange={e => {
+                                  const slots = arr.map((s, j) => j === i ? { ...s, start: e.target.value } : s);
+                                  updateField({ activeTimerStart: slots.length === 1 ? slots[0].start : JSON.stringify(slots), activeTimerEnd: slots[0].end });
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-1 flex-1">
+                              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">End</Label>
+                              <Input
+                                type="time"
+                                value={slot.end}
+                                onChange={e => {
+                                  const slots = arr.map((s, j) => j === i ? { ...s, end: e.target.value } : s);
+                                  updateField({ activeTimerStart: slots.length === 1 ? slots[0].start : JSON.stringify(slots), activeTimerEnd: slots[0].end });
+                                }}
+                              />
+                            </div>
+                            {arr.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const slots = arr.filter((_, j) => j !== i);
+                                  updateField({ activeTimerStart: slots.length === 1 ? slots[0].start : JSON.stringify(slots), activeTimerEnd: slots[0].end });
+                                }}
+                                className="mt-5 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                title="Remove this window"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const existing = parseActiveTimerSlots(formData.activeTimerStart, formData.activeTimerEnd);
+                            const slots = [...existing, { start: "09:00", end: "22:00" }];
+                            updateField({ activeTimerStart: JSON.stringify(slots), activeTimerEnd: slots[0].end });
+                          }}
+                          className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" /> Add time window
+                        </button>
+                        <p className="text-xs text-muted-foreground">
+                          The account only runs automation tasks within these windows. Outside all windows it stays dormant.
                         </p>
                       </div>
                     ) : (

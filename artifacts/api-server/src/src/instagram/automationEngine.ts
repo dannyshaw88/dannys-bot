@@ -111,23 +111,48 @@ function engineLog(level: "INFO" | "WARN" | "ERROR", msg: string): void {
 }
 
 /** Returns true when the current local time is within [start, end] (HH:MM). Handles overnight windows. */
+function parseTimerSlots(start: string): { start: string; end: string }[] | null {
+  try {
+    const parsed = JSON.parse(start);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {}
+  return null;
+}
+
 function isWithinActiveWindow(start: string, end: string): boolean {
   const now = new Date();
   const cur = now.getHours() * 60 + now.getMinutes();
+  const checkWindow = (s: number, e: number) => s <= e ? cur >= s && cur <= e : cur >= s || cur <= e;
+
+  const slots = parseTimerSlots(start);
+  if (slots) return slots.some(slot => {
+    const [sh, sm] = slot.start.split(":").map(Number);
+    const [eh, em] = slot.end.split(":").map(Number);
+    return checkWindow(sh * 60 + sm, eh * 60 + em);
+  });
+
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
-  const s = sh * 60 + sm;
-  const e = eh * 60 + em;
-  return s <= e ? cur >= s && cur <= e : cur >= s || cur <= e;
+  return checkWindow(sh * 60 + sm, eh * 60 + em);
 }
 
-/** Minutes until the start of the active window. */
+/** Minutes until the nearest upcoming active window opens. */
 function minutesUntilWindowOpen(start: string): number {
   const now = new Date();
   const cur = now.getHours() * 60 + now.getMinutes();
+  const minsUntil = (s: number) => s > cur ? s - cur : 1440 - cur + s;
+
+  const slots = parseTimerSlots(start);
+  if (slots) {
+    const waits = slots.map(slot => {
+      const [sh, sm] = slot.start.split(":").map(Number);
+      return minsUntil(sh * 60 + sm);
+    });
+    return Math.min(...waits);
+  }
+
   const [sh, sm] = start.split(":").map(Number);
-  const s = sh * 60 + sm;
-  return s > cur ? s - cur : 1440 - cur + s;
+  return minsUntil(sh * 60 + sm);
 }
 
 // ── Cookie baker state ────────────────────────────────────────────────────────
