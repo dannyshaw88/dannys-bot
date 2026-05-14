@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.299",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: After passing 2FA, Instagram's post-login redirects sometimes end in ERR_TOO_MANY_REDIRECTS (chrome-error:// page). The session cookie was already set by Instagram before the loop but couldn't be read because the browser was on an error page. The app now: (1) reads Instagram cookies by domain directly — bypassing the current page URL — so cookies are always retrievable regardless of what page Chrome is on; (2) automatically navigates back to instagram.com after detecting the redirect loop so the embedded browser shows your account instead of an error page." },
+    ],
+  },
+  {
     version: "1.0.298",
     date: "14 May 2026",
     items: [

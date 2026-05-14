@@ -47,11 +47,19 @@ function cookiePath(profileId: number) {
 
 async function saveCookies(profileId: number, page: Page): Promise<void> {
   try {
-    const cookies = await page.cookies();
+    // Always request cookies for instagram.com explicitly — page.cookies() without args
+    // returns cookies for the CURRENT page URL only. When the page is on chrome-error://
+    // (ERR_TOO_MANY_REDIRECTS after login) that returns nothing. CDP's Network.getCookies
+    // accepts an explicit URL list and returns matching cookies regardless of current page.
+    const cookies = await page.cookies(
+      "https://www.instagram.com",
+      "https://i.instagram.com",
+      "https://instagram.com",
+    );
     if (!cookies.length) return;
     fs.mkdirSync(COOKIES_DIR, { recursive: true });
     fs.writeFileSync(cookiePath(profileId), JSON.stringify(cookies, null, 2), "utf8");
-    log(`[cookies:${profileId}] Saved ${cookies.length} cookies`, "browser");
+    log(`[cookies:${profileId}] Saved ${cookies.length} cookies (explicit IG domain fetch)`, "browser");
   } catch (e: any) {
     log(`[cookies:${profileId}] Save error: ${e?.message}`, "browser");
   }
@@ -1319,7 +1327,17 @@ export function sendLoginDone(profileId: number, ok: boolean, message: string) {
 export async function getSessionPageCookies(profileId: number): Promise<Array<{ name: string; value: string }>> {
   const s = sessions.get(profileId);
   if (!s) return [];
-  try { return await s.page.cookies(); } catch { return []; }
+  try {
+    // Explicitly request instagram.com cookies by URL — page.cookies() without args
+    // returns nothing when the page is on chrome-error:// (ERR_TOO_MANY_REDIRECTS
+    // after post-login redirects). CDP returns cookies for any URL regardless of
+    // what page is currently loaded.
+    return await s.page.cookies(
+      "https://www.instagram.com",
+      "https://i.instagram.com",
+      "https://instagram.com",
+    );
+  } catch { return []; }
 }
 
 // Fill a field using real keyboard events so React's controlled inputs update correctly.
@@ -1873,6 +1891,18 @@ export async function browserAutoLogin(
             return { ok: false, message: "Account disabled by Instagram" };
           }
           if (twoFaAccepted) {
+            // If the post-login redirect chain caused ERR_TOO_MANY_REDIRECTS the page
+            // will be on chrome-error://. The sessionid cookie was already set by
+            // Instagram before the loop. Navigate back to instagram.com so the EB
+            // shows a real page and the frame loop runs normally after login.
+            // saveCookies/getSessionPageCookies already use explicit domain fetching
+            // so cookies are readable even before this navigation, but navigating back
+            // also ensures the EB panel displays something useful to the user.
+            if (s.page.url().startsWith("chrome-error://")) {
+              sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
+              await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+              await delay(1500);
+            }
             await saveCookies(profileId, s.page);
             sendStatus(profileId, "✓ 2FA accepted — logged in successfully!");
             return { ok: true, message: "Login successful" };
@@ -1897,6 +1927,12 @@ export async function browserAutoLogin(
       if (currentUrl.includes("/accounts/disabled") || currentUrl.includes("/disabled/") || currentUrl.includes("/suspended")) {
         sendStatus(profileId, `⚠ Account is disabled by Instagram (URL: ${currentUrl.slice(0, 80)})`);
         return { ok: false, message: "Account disabled by Instagram" };
+      }
+      // Same ERR_TOO_MANY_REDIRECTS recovery as the 2FA path — navigate back if on error page.
+      if (currentUrl.startsWith("chrome-error://")) {
+        sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
+        await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+        await delay(1500);
       }
       await saveCookies(profileId, s.page);
       sendStatus(profileId, "✓ Logged in — browser is showing your Instagram.");
