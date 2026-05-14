@@ -50,6 +50,14 @@ const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200,
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.283",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: When Instagram gets into a redirect loop (ERR_TOO_MANY_REDIRECTS), the browser now automatically clears the bad session cookies and returns to the login page after 3 seconds instead of staying stuck on the error screen." },
+      { category: "Browser", text: "Fixed: Clicking links and buttons in the embedded browser is now more reliable — buttons, links, and interactive elements that previously required multiple clicks now respond on the first click." },
+    ],
+  },
+  {
     version: "1.0.282",
     date: "13 May 2026",
     items: [

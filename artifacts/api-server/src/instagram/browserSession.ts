@@ -606,13 +606,30 @@ function startFrameLoop(profileId: number) {
 
       screenshotTimeoutCount = 0; // successful screenshot — reset crash counter
 
-      // ── Error-page auto-retry ────────────────────────────────────────────
-      // Only retry when stuck on a genuine error/blank page:
-      //   • chrome-error://  — HTTP 429 / net error / proxy failure (TERMINAL state)
-      //   • about:blank / about:newtab — goto() timed out or navigation in progress
+      // ── Error-page recovery ──────────────────────────────────────────────
+      // When the browser lands on chrome-error:// (ERR_TOO_MANY_REDIRECTS,
+      // ERR_CONNECTION_REFUSED, net::ERR_*, etc.) or a blank page, wait 3 s
+      // then clear all Instagram cookies and navigate to the login page.
+      // Clearing cookies is essential for redirect-loop recovery — if bad/stale
+      // cookies caused the loop, navigating back to instagram.com without
+      // clearing them just triggers the same loop again.
       const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
       if (isErrorPage) {
-        // No automatic retry — leave the error page as-is.
+        errorRetryTick++;
+        if (errorRetryTick === 15 && Date.now() > (s.navProtectedUntil ?? 0)) {
+          // 15 × 200 ms = 3 s — enough to confirm it's stuck, not just transitional
+          log(`[frameLoop:${profileId}] error page for 3 s — clearing cookies and navigating to login`, "browser");
+          try {
+            const cookies = await s.page.cookies().catch(() => [] as any[]);
+            if (cookies.length) await (s.page as any).deleteCookie(...cookies).catch(() => null);
+          } catch {}
+          s.navProtectedUntil = Date.now() + 20000;
+          s.page.goto("https://www.instagram.com/accounts/login/", {
+            waitUntil: "domcontentloaded", timeout: 25000,
+          }).catch(() => null);
+        }
+      } else {
+        errorRetryTick = 0;
       }
       // ─────────────────────────────────────────────────────────────────────
 
@@ -702,7 +719,28 @@ function sendTabsUpdate(profileId: number) {
 export async function browserClick(profileId: number, x: number, y: number) {
   const s = sessions.get(profileId);
   if (!s) return;
+  // Fire raw mouse events first (gives visual hover/active feedback in the screenshot)
   await s.page.mouse.click(x, y);
+  // Also dispatch a programmatic click via elementFromPoint — React SPAs and Instagram's
+  // SPA often attach synthetic event listeners that don't respond to raw mouse events
+  // alone (especially <a> tags handled by React Router and role="button" divs).
+  await s.page.evaluate((cx, cy) => {
+    const el = document.elementFromPoint(cx, cy) as HTMLElement | null;
+    if (el) {
+      // Walk up the DOM to find the nearest clickable ancestor if the target itself isn't interactive
+      let target: HTMLElement | null = el;
+      for (let i = 0; i < 5 && target; i++) {
+        const tag = target.tagName?.toLowerCase();
+        const role = target.getAttribute("role")?.toLowerCase();
+        if (tag === "a" || tag === "button" || role === "button" || role === "link") {
+          target.click();
+          return;
+        }
+        target = target.parentElement;
+      }
+      el.click(); // fallback: click whatever was under the cursor
+    }
+  }, x, y).catch(() => null);
   kickFrame(profileId).catch(() => {});
 }
 
