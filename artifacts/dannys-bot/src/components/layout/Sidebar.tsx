@@ -121,7 +121,7 @@ export function Sidebar() {
 
               {/* Sub-tabs — only shown when on a profile details page under Accounts */}
               {item.path === "/profiles" && profileId > 0 && (
-                <div className="ml-2 mt-0.5 mb-0.5 space-y-0">
+                <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">
                   {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label }) => {
                     const isSubActive = activeTab === value;
                     return (

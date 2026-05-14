@@ -760,6 +760,16 @@ export function ProfileDetailsPage() {
                         >
                           Generate Code
                         </button>
+                        <span className="text-border text-lg select-none">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setResetDeviceConfirmOpen(true)}
+                          disabled={updateProfileMutation.isPending}
+                          className="flex items-center gap-1.5 text-xs text-foreground font-bold hover:text-foreground/70 transition-colors disabled:opacity-50 text-left shrink-0"
+                        >
+                          <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                          Reset Device IDs
+                        </button>
                         {totpCode && (
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-base font-bold tracking-[0.25em] text-primary select-all">{totpCode}</span>
@@ -771,54 +781,40 @@ export function ProfileDetailsPage() {
                       <p className="text-[11px] text-muted-foreground">Generate a live TOTP code to paste manually if the auto-fill fails.</p>
                     </div>
 
-                    {/* Verify + Reset Device IDs on same row */}
-                    <div className="flex items-center gap-3">
-                      <div className="max-w-[280px] flex-1">
-                        {canVerify && (
-                          <div>
-                            {verifyStatus === "ok" ? (
-                              <div
-                                data-testid="status-logged-in"
-                                className="h-9 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                                Logged In
-                              </div>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant={verifyStatus === "fail" ? "outline" : "default"}
-                                className={`w-full h-9 gap-2 transition-all ${
-                                  verifyStatus === "fail"
-                                    ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
-                                    : "bg-sky-400 hover:bg-sky-500 text-white border-0"
-                                }`}
-                                onClick={() => handleVerify(false)}
-                                disabled={verifyStatus === "pending" || profile.accountStatus === "verifying"}
-                                data-testid="button-verify-credentials"
-                              >
-                                {(verifyStatus === "pending" || profile.accountStatus === "verifying") && <Loader2 className="w-4 h-4 animate-spin" />}
-                                {verifyStatus === "fail" && profile.accountStatus !== "verifying" && <XCircle className="w-4 h-4" />}
-                                {verifyStatus === "idle" && profile.accountStatus !== "verifying" && <ShieldCheck className="w-4 h-4" />}
-                                {(verifyStatus === "pending" || profile.accountStatus === "verifying") ? "Verifying…"
-                                  : verifyStatus === "fail" ? "Retry Verification"
-                                  : "Verify Account"}
-                              </Button>
-                            )}
+                    {/* Verify Account */}
+                    {canVerify && (
+                      <div className="max-w-[280px]">
+                        {verifyStatus === "ok" ? (
+                          <div
+                            data-testid="status-logged-in"
+                            className="h-9 flex items-center justify-center gap-2 rounded-md border border-green-500 bg-green-50 text-green-700 font-medium text-sm cursor-default select-none"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Logged In
                           </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant={verifyStatus === "fail" ? "outline" : "default"}
+                            className={`w-full h-9 gap-2 transition-all ${
+                              verifyStatus === "fail"
+                                ? "border-destructive text-destructive bg-destructive/5 hover:bg-destructive/10"
+                                : "bg-sky-400 hover:bg-sky-500 text-white border-0"
+                            }`}
+                            onClick={() => handleVerify(false)}
+                            disabled={verifyStatus === "pending" || profile.accountStatus === "verifying"}
+                            data-testid="button-verify-credentials"
+                          >
+                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {verifyStatus === "fail" && profile.accountStatus !== "verifying" && <XCircle className="w-4 h-4" />}
+                            {verifyStatus === "idle" && profile.accountStatus !== "verifying" && <ShieldCheck className="w-4 h-4" />}
+                            {(verifyStatus === "pending" || profile.accountStatus === "verifying") ? "Verifying…"
+                              : verifyStatus === "fail" ? "Retry Verification"
+                              : "Verify Account"}
+                          </Button>
                         )}
                       </div>
-                      {canVerify && <span className="text-border text-lg select-none">|</span>}
-                      <button
-                        type="button"
-                        onClick={() => setResetDeviceConfirmOpen(true)}
-                        disabled={updateProfileMutation.isPending}
-                        className="flex items-center gap-1.5 text-xs text-foreground font-bold hover:text-foreground/70 transition-colors disabled:opacity-50 text-left shrink-0"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                        Reset Device IDs
-                      </button>
-                    </div>
+                    )}
                   </div>
 
                   <AlertDialog open={resetDeviceConfirmOpen} onOpenChange={setResetDeviceConfirmOpen}>
