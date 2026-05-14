@@ -342,10 +342,16 @@ export async function getOrCreateSession(
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
   page.on("framenavigated", async (frame) => {
     if (frame !== page.mainFrame()) return;
-    // Immediately extend navProtectedUntil so the crash detector doesn't fire
-    // while Chrome is mid-navigation (screenshots reliably fail during page load).
+    // Extend navProtectedUntil so the crash detector doesn't fire while Chrome is
+    // mid-navigation — BUT skip this for chrome-error:// pages (ERR_TOO_MANY_REDIRECTS
+    // etc.).  If we extend navProtectedUntil when an error page loads, the error-page
+    // recovery check in the frame loop is blocked for 12 s and misses its one-shot
+    // tick-15 window, leaving the browser permanently stuck on the error screen.
     const sNav = sessions.get(profileId);
-    if (sNav) sNav.navProtectedUntil = Math.max(sNav.navProtectedUntil ?? 0, Date.now() + 12000);
+    const navUrl = frame.url();
+    if (sNav && !navUrl.startsWith("chrome-error://")) {
+      sNav.navProtectedUntil = Math.max(sNav.navProtectedUntil ?? 0, Date.now() + 12000);
+    }
     const url = frame.url();
     // Small delay so banners/dialogs have time to render
     await new Promise(r => setTimeout(r, 1500));
@@ -646,9 +652,14 @@ function startFrameLoop(profileId: number) {
       const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
       if (isErrorPage) {
         errorRetryTick++;
-        if (errorRetryTick === 15 && Date.now() > (s.navProtectedUntil ?? 0)) {
-          // 15 × 200 ms = 3 s — enough to confirm it's stuck, not just transitional
-          log(`[frameLoop:${profileId}] error page for 3 s — clearing cookies and navigating to login`, "browser");
+        // Fire at tick 15 (3 s) and then every 150 ticks (30 s) after that so
+        // the browser keeps retrying if the first recovery attempt also fails.
+        // The navProtectedUntil guard is intentionally NOT applied here — we never
+        // extend navProtectedUntil on chrome-error:// navigations precisely so
+        // this check is always able to fire when the page is stuck on an error.
+        const shouldRecover = errorRetryTick === 15 || (errorRetryTick > 15 && (errorRetryTick - 15) % 150 === 0);
+        if (shouldRecover && Date.now() > (s.navProtectedUntil ?? 0)) {
+          log(`[frameLoop:${profileId}] error page for ${Math.round(errorRetryTick * 200 / 1000)}s — clearing cookies and navigating to login`, "browser");
           try {
             const cookies = await s.page.cookies().catch(() => [] as any[]);
             if (cookies.length) await (s.page as any).deleteCookie(...cookies).catch(() => null);

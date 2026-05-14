@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.289",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: The embedded browser would permanently stay stuck on the ERR_TOO_MANY_REDIRECTS error screen — the redirect-loop recovery now reliably fires within 3 seconds and keeps retrying every 30 seconds if the first attempt doesn't work." },
+    ],
+  },
+  {
     version: "1.0.288",
     date: "14 May 2026",
     items: [
