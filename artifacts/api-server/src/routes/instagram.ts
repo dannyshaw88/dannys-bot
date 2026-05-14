@@ -1401,11 +1401,85 @@ export async function registerInstagramRoutes(
 
         try {
           await storage.updateProfile(profile.id, { accountStatus: "verifying" });
-          const result = await verifyInstagramCredentials(profile);
+
+          // ── EB-first verify (matches Jarvee: web login → grab cookies → hand to API) ──
+          let effectiveP = { ...profile };
+          if (profile.proxyId) {
+            const linked = allProxies.find(px => px.id === profile.proxyId);
+            if (linked) {
+              effectiveP = {
+                ...effectiveP,
+                proxyHost: linked.host,
+                proxyPort: linked.port,
+                proxyUsername: linked.username ?? "",
+                proxyPassword: linked.password ?? "",
+              };
+            }
+          }
+          const bulkProxyConfig: ProxyConfig | undefined = effectiveP.proxyHost ? {
+            host: effectiveP.proxyHost,
+            port: effectiveP.proxyPort!,
+            username: effectiveP.proxyUsername ?? undefined,
+            password: effectiveP.proxyPassword ?? undefined,
+          } : undefined;
+          const bulkEbUA = (effectiveP.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+
+          // Step 1: Launch EB
+          await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig);
+
+          // Step 2: Web login
+          let bulkLoginResult: { ok: boolean; message: string };
+          try {
+            bulkLoginResult = await browserAutoLogin(
+              profile.id,
+              profile.username,
+              profile.password!,
+              profile.twoFASecretKey || "",
+            );
+          } catch (loginErr: any) {
+            bulkLoginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+          }
+
+          // Step 3: Extract cookies and build result
+          let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
+          if (bulkLoginResult.ok) {
+            const rawCookies = await getSessionPageCookies(profile.id);
+            const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
+            const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
+            const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;
+            const mid       = rawCookies.find(c => c.name === "mid")?.value;
+            if (!sessionid) {
+              result = {
+                ok: false,
+                accountStatus: "pending",
+                message: `@${profile.username} — browser login appeared to succeed but no sessionid cookie was found.`,
+              };
+            } else {
+              const cookieParts = [`sessionid=${sessionid}`];
+              if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
+              if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
+              if (mid)       cookieParts.push(`mid=${mid}`);
+              result = {
+                ok: true,
+                accountStatus: "valid",
+                message: `@${profile.username} — logged in via browser. Session handed to API.`,
+                igApiCookies: cookieParts.join("; "),
+              };
+            }
+          } else {
+            const msg = bulkLoginResult.message ?? "";
+            let accountStatus = "locked";
+            if (/2fa|two.factor|two_factor/i.test(msg))   accountStatus = "2fa_verification";
+            else if (/challenge|checkpoint/i.test(msg))    accountStatus = "captcha";
+            else if (/disabled/i.test(msg))                accountStatus = "account_disabled";
+            else if (/suspended/i.test(msg))               accountStatus = "suspended";
+            result = { ok: false, accountStatus, message: `@${profile.username} — ${msg}` };
+          }
+
           await storage.updateProfile(profile.id, {
             accountStatus: result.accountStatus,
             ...(result.ok ? { credentialsDirty: false } : {}),
-            ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
+            ...(result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
           });
           if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
             setCheckpointUrl(profile.id, result.checkpointUrl);

@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.297",
+    date: "14 May 2026",
+    items: [
+      { category: "Verify", text: "Fixed: Verify All was using direct mobile API login (Path 1) instead of the Jarvee-style EB-first flow. It now follows the same path as single-account Verify: launch embedded browser → web login → extract sessionid/csrftoken/ds_user_id/mid from Chrome → save to DB. Direct mobile API logins look like new-device takeovers to Instagram and risk account locks." },
+    ],
+  },
+  {
     version: "1.0.296",
     date: "14 May 2026",
     items: [
