@@ -1513,9 +1513,17 @@ class AutomationEngine {
     const browserOk = client.loadBrowserCookies();
     if (browserOk) {
       console.log(`[engine] @${profile.username}: using EB browser session (cookies synced)`);
-      // EB login never changes account status — only the mobile API login (Verify
-      // Credentials / mobileLogin) is authoritative for validity.
-      if (!client.isMobileLoggedIn()) {
+      // Always bootstrap the mobile session from fresh EB web cookies so Watch
+      // Stories / Watch Reels always have a valid i.instagram.com session — even
+      // when the stored igApiCookies are stale from a previous login.  The EB
+      // sessionid is definitively valid right now (browserOk = true) and
+      // Instagram accepts it on i.instagram.com identically to www.instagram.com.
+      const mobileBootOk = client.mobileBootstrapFromWebCookies();
+      if (mobileBootOk) {
+        console.log(`[engine] @${profile.username}: mobile session synced from fresh EB cookies`);
+      } else if (!client.isMobileLoggedIn()) {
+        // mobileBootstrapFromWebCookies can only fail if there is no sessionid in
+        // the EB jar (shouldn't happen when browserOk=true, but guard anyway).
         console.log(`[engine] @${profile.username}: no igApiCookies — attempting mobile login to establish API session...`);
         client.lastMobileLoginFailureReason = null;
         const mobileOk = await client.mobileLogin(
