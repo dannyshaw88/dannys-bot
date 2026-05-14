@@ -150,7 +150,7 @@ Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-- Current version: **v1.0.299**
+- Current version: **v1.0.300**
 - Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.291` → `1.0.292`
 - The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 - Include `artifacts/electron/package.json` in every batch push alongside the other changed files

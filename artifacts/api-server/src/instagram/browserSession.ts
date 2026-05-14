@@ -732,8 +732,12 @@ function startFrameLoop(profileId: number) {
           } catch {}
         }
         // Fire at tick 15 (3 s) and then every 150 ticks (30 s) after that.
+        // Skip entirely while autoLogin is running — browserAutoLogin handles the
+        // chrome-error:// recovery itself (navigate back + save cookies). If the
+        // frameLoop fires here concurrently it clears the just-set sessionid cookie
+        // and navigates away, sabotaging the login that already succeeded.
         const shouldRecover = errorRetryTick === 15 || (errorRetryTick > 15 && (errorRetryTick - 15) % 150 === 0);
-        if (shouldRecover && Date.now() > (s.navProtectedUntil ?? 0)) {
+        if (shouldRecover && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
           const errTitle: string = (s as any)._lastErrorPageTitle ?? "";
           const isProxyError = /ERR_PROXY|ERR_TUNNEL|ERR_SOCKS|TIMEOUT/i.test(errTitle);
           const isRedirectLoop = /ERR_TOO_MANY_REDIRECTS|ERR_FAILED/i.test(errTitle) || !isProxyError;

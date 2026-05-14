@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.300",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: The frame loop's error-page recovery was firing concurrently with the post-2FA redirect-loop recovery, clearing the just-set sessionid cookie and navigating back to the login page — undoing the successful login. The frame loop now stands down completely while auto-login is in progress, letting browserAutoLogin handle the chrome-error:// state on its own." },
+    ],
+  },
+  {
     version: "1.0.299",
     date: "14 May 2026",
     items: [
