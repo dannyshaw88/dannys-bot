@@ -159,6 +159,13 @@ const LAUNCH_ARGS = [
   "--mute-audio",
   "--hide-scrollbars",
   "--window-size=1280,760",
+  // On Windows, headless Chrome still tries to spin up a GPU process.
+  // When multiple EB instances launch simultaneously they race for GPU
+  // resources — whichever loses gets a frozen renderer (screenshot timeouts,
+  // chrome-error://) with no rhyme or reason as to which account is affected.
+  // --disable-gpu forces software rendering and eliminates the race entirely.
+  "--disable-gpu",
+  "--disable-software-rasterizer",
 ];
 
 // Chromium executable — resolved from env (set by Electron main on Windows via

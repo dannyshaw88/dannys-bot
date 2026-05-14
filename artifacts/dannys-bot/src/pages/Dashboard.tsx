@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.296",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: Random embedded browser freezes (screenshot timeouts, chrome-error://) affecting different accounts on every startup with no pattern. Root cause: headless Chrome on Windows still spins up a GPU process, and when multiple EBs launch at the same time they race for GPU resources — whichever loses gets a frozen renderer. Added --disable-gpu and --disable-software-rasterizer to Chrome launch flags, forcing software rendering and eliminating the race condition entirely." },
+    ],
+  },
+  {
     version: "1.0.295",
     date: "14 May 2026",
     items: [
