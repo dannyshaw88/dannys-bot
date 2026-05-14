@@ -590,9 +590,20 @@ function startFrameLoop(profileId: number) {
 
     const frameStart = Date.now();
     try {
-      const [screenshot, currentUrl] = await Promise.all([
-        s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64", timeout: 6000 } as any),
-        s.page.url(),
+      // Wrap in an external hard deadline so that if Chrome's CDP connection
+      // freezes entirely (e.g. renderer OOM, suspended-account page crash),
+      // our outer timer always rejects after 8 s — which is 2 s longer than
+      // Puppeteer's internal 6 s timeout. This guarantees busy=false is
+      // always reset via the finally block, and screenshotTimeoutCount
+      // increments properly so the crash detector eventually fires.
+      const [screenshot, currentUrl] = await Promise.race([
+        Promise.all([
+          s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64", timeout: 6000 } as any),
+          s.page.url(),
+        ]),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("screenshot timeout")), 8000)
+        ),
       ]);
 
       const screenshotMs = Date.now() - frameStart;
