@@ -621,6 +621,13 @@ export function ProfileDetailsPage() {
                       <Monitor className="w-3 h-3" />
                       Browser
                     </button>
+                    <span className="text-border mx-1 select-none">|</span>
+                    <Link
+                      href={`/profiles/${profileId}?tab=settings`}
+                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
+                    >
+                      Account Settings
+                    </Link>
                   </>
                 )}
               </div>

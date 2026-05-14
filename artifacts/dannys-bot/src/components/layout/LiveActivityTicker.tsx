@@ -123,9 +123,9 @@ export function LiveActivityTicker() {
   );
 
   return (
-    <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center justify-center gap-2 w-full overflow-hidden">
+    <div className="border-b border-border/50 bg-muted/30 pl-6 pr-8 py-1.5 flex items-center justify-start gap-2 w-full overflow-hidden">
       <Activity className={`w-3 h-3 shrink-0 ${isError ? "text-red-500" : "text-primary"}`} />
-      <span className={`text-xs overflow-hidden min-w-0 truncate text-center ${isError ? "text-red-500" : "text-muted-foreground"}`}>
+      <span className={`text-xs overflow-hidden min-w-0 truncate ${isError ? "text-red-500" : "text-muted-foreground"}`}>
         {label}
       </span>
     </div>

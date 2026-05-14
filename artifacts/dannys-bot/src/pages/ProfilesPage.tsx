@@ -282,10 +282,19 @@ export function ProfilesPage() {
     }
   };
 
+  const getNextAccountNum = () => {
+    const existing = (profiles ?? [])
+      .map(p => { const m = (p.accountLabel ?? "").match(/^Account(\d+)$/i); return m ? Number(m[1]) : 0; })
+      .filter(n => n > 0);
+    return existing.length > 0 ? Math.max(...existing) + 1 : (profiles?.length ?? 0) + 1;
+  };
+
   const handleCreate = () => {
+    const nextNum = getNextAccountNum();
     createProfileMutation.mutate({
       username: "",
       password: "",
+      accountLabel: `Account${nextNum}`,
       proxyHost: "",
       proxyPort: null,
       proxyUsername: "",
@@ -300,11 +309,13 @@ export function ProfilesPage() {
   const handleCreateMultiple = async () => {
     const count = Math.max(1, Math.min(500, parseInt(addProfileCount, 10) || 1));
     setAddProfileCreating(true);
+    let startNum = getNextAccountNum();
     try {
       for (let i = 0; i < count; i++) {
         await createProfileMutation.mutateAsync({
           username: "",
           password: "",
+          accountLabel: `Account${startNum + i}`,
           proxyHost: "",
           proxyPort: null,
           proxyUsername: "",
