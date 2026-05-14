@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.291",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: Embedded browsers were freezing indefinitely — Puppeteer's internal screenshot timeout was silently resetting the crash detector counter instead of incrementing it, so Chrome hung pages were never recovered." },
+      { category: "Accounts", text: "Fixed: Accounts flagged as bad_password when the real cause was an account lock, security challenge, or new-device block — the mobile login error is now inspected before deciding whether the password is actually wrong." },
+    ],
+  },
+  {
     version: "1.0.290",
     date: "14 May 2026",
     items: [

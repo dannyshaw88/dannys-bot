@@ -617,9 +617,15 @@ function startFrameLoop(profileId: number) {
       // Puppeteer's internal 6 s timeout. This guarantees busy=false is
       // always reset via the finally block, and screenshotTimeoutCount
       // increments properly so the crash detector eventually fires.
+      //
+      // IMPORTANT: Do NOT pass `timeout` to page.screenshot(). If Puppeteer throws
+      // its own TimeoutError (before our 8 s outer deadline), the catch block's
+      // `err.message === "screenshot timeout"` check fails, screenshotTimeoutCount
+      // is reset to 0, and the crash detector never fires — the EB freezes silently.
+      // Relying solely on the outer Promise.race deadline fixes this.
       const [screenshot, currentUrl] = await Promise.race([
         Promise.all([
-          s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64", timeout: 6000 } as any),
+          s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" } as any),
           s.page.url(),
         ]),
         new Promise<never>((_, reject) =>

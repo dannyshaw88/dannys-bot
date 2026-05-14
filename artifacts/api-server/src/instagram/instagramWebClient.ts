@@ -863,10 +863,35 @@ export class InstagramWebClient {
         const needsEmail = buttons.some((b: any) => b?.action === "send_one_click_login_email");
         const errorTitle: string = body?.error_title ?? "";
         const errorType: string = body?.error_type ?? body?.feedback_title ?? "";
-        if (needsEmail) {
-          console.error(`[webClient] @${username}: mobile login — Instagram says: "${errorTitle}" (email action present). error_type="${errorType}"`);
+        const titleLow  = errorTitle.toLowerCase();
+        const typeLow   = errorType.toLowerCase();
+
+        // Determine whether this is genuinely wrong credentials or something else.
+        // Instagram raises IgLoginBadPasswordError for several non-password reasons:
+        // account locked, suspicious device, security challenge, new-device block, etc.
+        // We must NOT mark bad_password in those cases — the password IS correct; the
+        // account just needs verification via the embedded browser.
+        const isAccountIssue =
+          needsEmail ||                                      // email one-click login offered
+          buttons.length > 0 ||                             // any recovery button = not plain wrong-pw
+          typeLow.includes("account_locked") ||
+          typeLow.includes("challenge") ||
+          typeLow.includes("feedback") ||
+          titleLow.includes("lock") ||
+          titleLow.includes("suspend") ||
+          titleLow.includes("disabled") ||
+          titleLow.includes("unusual") ||
+          titleLow.includes("security") ||
+          titleLow.includes("verify") ||
+          titleLow.includes("confirm");
+
+        if (isAccountIssue) {
+          console.error(`[webClient] @${username}: mobile login blocked — account issue, NOT a bad password. error_type="${errorType}" error_title="${errorTitle}" buttons=${buttons.length}`);
+          // Do NOT set lastMobileLoginFailureReason — treat as transient so the account
+          // is not permanently marked bad_password. The user should open the EB and
+          // resolve the challenge there.
         } else {
-          console.error(`[webClient] @${username}: mobile login — bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}"`);
+          console.error(`[webClient] @${username}: mobile login — confirmed bad password. error_type="${errorType}" error_title="${errorTitle}"`);
           // Signal to ensureClient that this is definitively wrong credentials, not a transient error.
           this.lastMobileLoginFailureReason = "bad_password";
         }

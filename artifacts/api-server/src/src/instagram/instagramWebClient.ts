@@ -785,11 +785,27 @@ export class InstagramWebClient {
         const needsEmail = buttons.some((b: any) => b?.action === "send_one_click_login_email");
         const errorTitle: string = body?.error_title ?? "";
         const errorType: string = body?.error_type ?? body?.feedback_title ?? "";
-        if (needsEmail) {
-          console.error(`[webClient] @${username}: mobile login — Instagram says: "${errorTitle}" (email action present). error_type="${errorType}"`);
+        const titleLow  = errorTitle.toLowerCase();
+        const typeLow   = errorType.toLowerCase();
+
+        const isAccountIssue =
+          needsEmail ||
+          buttons.length > 0 ||
+          typeLow.includes("account_locked") ||
+          typeLow.includes("challenge") ||
+          typeLow.includes("feedback") ||
+          titleLow.includes("lock") ||
+          titleLow.includes("suspend") ||
+          titleLow.includes("disabled") ||
+          titleLow.includes("unusual") ||
+          titleLow.includes("security") ||
+          titleLow.includes("verify") ||
+          titleLow.includes("confirm");
+
+        if (isAccountIssue) {
+          console.error(`[webClient] @${username}: mobile login blocked — account issue, NOT a bad password. error_type="${errorType}" error_title="${errorTitle}" buttons=${buttons.length}`);
         } else {
-          console.error(`[webClient] @${username}: mobile login — bad password / device rejected. error_type="${errorType}" error_title="${errorTitle}"`);
-          // Signal to ensureClient that this is definitively wrong credentials, not a transient error.
+          console.error(`[webClient] @${username}: mobile login — confirmed bad password. error_type="${errorType}" error_title="${errorTitle}"`);
           this.lastMobileLoginFailureReason = "bad_password";
         }
         return false;
