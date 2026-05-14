@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Copy, CheckCircle2, Loader2, Search } from "lucide-react";
+import { Copy, CheckCircle2, Loader2, Search, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,6 +36,18 @@ interface Props {
   onCopy: (targetIds: number[], expandedKeys: string[]) => Promise<void>;
 }
 
+type SortBy = "name" | "status" | "group";
+
+function statusBadgeClass(status: string) {
+  const s = (status ?? "").toLowerCase();
+  if (s === "active")                          return "bg-green-500/15 text-green-400 border-green-500/30";
+  if (s === "warming")                         return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
+  if (s === "disabled" || s === "inactive")    return "bg-zinc-500/15 text-zinc-400 border-zinc-500/30";
+  if (s === "banned" || s === "restricted")    return "bg-red-500/15 text-red-400 border-red-500/30";
+  if (s === "suspended")                       return "bg-orange-500/15 text-orange-400 border-orange-500/30";
+  return "bg-muted/60 text-muted-foreground border-border";
+}
+
 function buildInitialSelected(groups: CopyOptionGroup[]): Set<string> {
   const all = new Set<string>();
   groups.forEach(g =>
@@ -69,6 +81,7 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
   const [targets, setTargets]   = useState<Set<number>>(new Set());
   const [search, setSearch]     = useState("");
+  const [sortBy, setSortBy]     = useState<SortBy>("name");
   const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
   const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
 
@@ -76,6 +89,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     if (open) {
       setTargets(new Set());
       setSearch("");
+      setSortBy("name");
       setStatus("idle");
       setSelected(buildInitialSelected(optionGroups));
     }
@@ -92,17 +106,30 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     return map;
   }, [profiles]);
 
-  // Multi-term search: split on "||" and match any term against label or username
+  // Multi-term search: split on "||" and match any term against label, username, status, or group
   const filteredProfiles = useMemo(() => {
     const terms = search.split("||").map(t => t.trim().toLowerCase()).filter(Boolean);
-    if (terms.length === 0) return profiles;
-    return profiles.filter(p =>
+    const base = terms.length === 0 ? profiles : profiles.filter(p =>
       terms.some(q =>
         p.username.toLowerCase().includes(q) ||
-        (p.accountLabel ?? "").toLowerCase().includes(q)
+        (p.accountLabel ?? "").toLowerCase().includes(q) ||
+        (p.status ?? "").toLowerCase().includes(q) ||
+        (p.tags ?? "").toLowerCase().includes(q)
       )
     );
-  }, [profiles, search]);
+
+    return [...base].sort((a, b) => {
+      if (sortBy === "status") {
+        const sc = (a.status ?? "").localeCompare(b.status ?? "");
+        if (sc !== 0) return sc;
+      }
+      if (sortBy === "group") {
+        const gc = (a.tags ?? "").localeCompare(b.tags ?? "");
+        if (gc !== 0) return gc;
+      }
+      return (a.accountLabel || a.username).localeCompare(b.accountLabel || b.username);
+    });
+  }, [profiles, search, sortBy]);
 
   const toggleTarget = (id: number) => setTargets(prev => {
     const next = new Set(prev);
@@ -169,9 +196,15 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   const canCopy = targets.size > 0 && selected.size > 0 && status === "idle";
 
+  const sortButtons: { key: SortBy; label: string }[] = [
+    { key: "name",   label: "Name"   },
+    { key: "status", label: "Status" },
+    { key: "group",  label: "Group"  },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) setStatus("idle"); onOpenChange(v); }}>
-      <DialogContent className="max-w-[1008px] p-0 overflow-hidden">
+      <DialogContent className="max-w-[1160px] p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
             <Copy className="w-4 h-4 text-primary" /> {title}
@@ -179,8 +212,10 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         </DialogHeader>
 
         <div className="flex min-h-0" style={{ maxHeight: "calc(81vh - 140px)" }}>
-          {/* LEFT profile list */}
-          <div className="w-72 shrink-0 border-r border-border flex flex-col">
+          {/* LEFT profile list — wider to show status + group */}
+          <div className="w-[420px] shrink-0 border-r border-border flex flex-col">
+
+            {/* Header row */}
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
               {filteredProfiles.length > 1 && (
@@ -192,6 +227,27 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 </button>
               )}
             </div>
+
+            {/* Sort controls */}
+            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-muted/10">
+              <ArrowUpDown className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="text-[11px] text-muted-foreground mr-0.5">Sort:</span>
+              {sortButtons.map(b => (
+                <button
+                  key={b.key}
+                  onClick={() => setSortBy(b.key)}
+                  className={`text-[11px] px-2 py-0.5 rounded font-medium transition-colors ${
+                    sortBy === b.key
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Group quick-select */}
             {profileGroups.size > 0 && (
               <div className="px-3 py-2 border-b border-border bg-muted/10">
                 <select
@@ -217,18 +273,22 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 </select>
               </div>
             )}
+
+            {/* Search */}
             <div className="px-3 py-2 border-b border-border">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search"
+                  placeholder="Search name, group, status…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
             </div>
+
+            {/* Account rows */}
             <div className="overflow-y-auto flex-1 divide-y divide-border/40">
               {filteredProfiles.length === 0 && (
                 <p className="px-4 py-3 text-xs text-muted-foreground text-center">No profiles match.</p>
@@ -236,15 +296,28 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               {filteredProfiles.map(p => (
                 <label
                   key={p.id}
-                  className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
+                  className="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
                 >
-                  <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} />
-                  <span className="text-sm font-medium tracking-tight truncate">
-                    {p.accountLabel || p.username}
-                  </span>
+                  <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} className="shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium tracking-tight truncate block">
+                      {p.accountLabel || p.username}
+                    </span>
+                    {p.tags && (
+                      <span className="text-[10px] text-muted-foreground truncate block leading-tight mt-0.5">
+                        {p.tags}
+                      </span>
+                    )}
+                  </div>
+                  {p.status && (
+                    <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border capitalize ${statusBadgeClass(p.status)}`}>
+                      {p.status}
+                    </span>
+                  )}
                 </label>
               ))}
             </div>
+
             {targets.size > 0 && (
               <div className="px-4 py-2 border-t border-border bg-muted/20">
                 <p className="text-[11px] text-muted-foreground">{targets.size} profile{targets.size > 1 ? "s" : ""} selected</p>
