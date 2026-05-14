@@ -2612,8 +2612,21 @@ export class InstagramWebClient {
     // This is the real Instagram app cold-start call. It requires NO authentication
     // and reliably returns a fresh csrftoken in Set-Cookie — exactly what the app
     // does after every cold start to bootstrap CSRF before any write action.
+    //
+    // CRITICAL: send ONLY anonymous device cookies (ig_did, mid) — never the
+    // sessionid.  fetch_headers is a pre-login signup endpoint; sending a valid
+    // sessionid to it tells Instagram "I'm a brand-new installation but I already
+    // have an active session", which is a device-spoofing signal and causes account
+    // locks.  The response cookies are merged back into the full mobileCookieJar so
+    // the sessionid is preserved for subsequent authenticated calls.
     try {
       const guid = randomUUID();
+      // Build an anonymous cookie jar: only ig_did + mid, no sessionid
+      const igDidCookie = this.mobileCookieJar.find(c => c.startsWith("ig_did="))
+        ?? `ig_did=${randomUUID()}`;
+      const midCookie   = this.mobileCookieJar.find(c => c.startsWith("mid="))
+        ?? `mid=${Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`;
+      const anonJar = [igDidCookie, midCookie];
       const res = await igReq({
         host: "i.instagram.com",
         path: `/api/v1/si/fetch_headers/?challenge_type=signup&guid=${guid}`,
@@ -2630,10 +2643,11 @@ export class InstagramWebClient {
           "X-IG-Bandwidth-TotalBytes-B": "0",
           "X-IG-Bandwidth-TotalTime-MS": "0",
         },
-        cookieJar: this.mobileCookieJar,
+        cookieJar: anonJar,
         proxyUrl: this.proxyUrl,
       });
-      // Merge all cookies back (mid, csrftoken, ig_did, etc.)
+      // Merge response cookies (csrftoken, mid updates, etc.) back into the FULL
+      // mobileCookieJar — this preserves the sessionid while adding the new token.
       if (res.cookies.length) {
         this.mobileCookieJar = mergeCookies(this.mobileCookieJar, res.cookies);
       }
