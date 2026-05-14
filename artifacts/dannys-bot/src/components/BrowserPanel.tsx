@@ -91,6 +91,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [openedAt, setOpenedAt] = useState<number | null>(null);
   const [elapsedSecs, setElapsedSecs] = useState(0);
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
+  const [waitingFirstFrame, setWaitingFirstFrame] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [fileChooserPending, setFileChooserPending] = useState(false);
 
@@ -225,6 +226,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     setIsFrozen(false);
     setErrorMsg(null);
     setIsLoading(true);
+    setWaitingFirstFrame(true);
     hasReceivedFirstFrameRef.current = false;
 
     const es = new EventSource(`/api/browser/${profileId}/stream`);
@@ -242,7 +244,10 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           case "frame":
             drawFrame(msg.data);
             lastFrameTimeRef.current = Date.now();
-            hasReceivedFirstFrameRef.current = true;
+            if (!hasReceivedFirstFrameRef.current) {
+              hasReceivedFirstFrameRef.current = true;
+              setWaitingFirstFrame(false);
+            }
             setIsFrozen(false);
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) {
               setAddressBar(msg.url);
@@ -927,6 +932,15 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onPaste={onPaste}
           onContextMenu={onContextMenu}
         />
+
+        {/* First-frame overlay — connected but Chrome hasn't rendered anything yet */}
+        {connected && waitingFirstFrame && !isFrozen && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-sm font-medium text-foreground">Starting browser…</p>
+            <p className="text-xs text-muted-foreground">Loading Instagram, please wait</p>
+          </div>
+        )}
 
         {/* Frozen overlay — no frame received for 60 s while connected */}
         {isFrozen && connected && (

@@ -335,6 +335,10 @@ export async function getOrCreateSession(
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
   page.on("framenavigated", async (frame) => {
     if (frame !== page.mainFrame()) return;
+    // Immediately extend navProtectedUntil so the crash detector doesn't fire
+    // while Chrome is mid-navigation (screenshots reliably fail during page load).
+    const sNav = sessions.get(profileId);
+    if (sNav) sNav.navProtectedUntil = Math.max(sNav.navProtectedUntil ?? 0, Date.now() + 12000);
     const url = frame.url();
     // Small delay so banners/dialogs have time to render
     await new Promise(r => setTimeout(r, 1500));
@@ -652,14 +656,16 @@ function startFrameLoop(profileId: number) {
         // Chrome renderer may have crashed — count consecutive failures.
         screenshotTimeoutCount++;
         log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} (${elapsedMs}ms elapsed) url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
-        if (screenshotTimeoutCount >= 2) {
-          if (s.autoLoginInProgress) {
-            // Don't kill the session while Fill Credentials is running — navigation
-            // during login naturally stalls screenshots; killing here would destroy
-            // the page mid-login and cause a false ok:false loginDone result.
-            log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} — suppressed while login is in progress`, "browser");
+        // Raise threshold to 5 (750 ms) — navigations routinely cause 1-3 consecutive
+        // screenshot failures as Chrome tears down the old renderer and builds the new one.
+        // Also respect navProtectedUntil which is extended on every framenavigated event.
+        if (screenshotTimeoutCount >= 5) {
+          const navProtected = Date.now() < (s.navProtectedUntil ?? 0);
+          if (s.autoLoginInProgress || navProtected) {
+            // Suppress: login is running, or a navigation recently started.
+            log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} — suppressed (login=${!!s.autoLoginInProgress} navProtected=${navProtected})`, "browser");
           } else {
-            log(`[frameLoop:${profileId}] 2 consecutive screenshot timeouts — page unresponsive, closing session`, "browser");
+            log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts — page unresponsive, closing session`, "browser");
             sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
             try { s.res.end(); } catch {}
             s.res = null;
