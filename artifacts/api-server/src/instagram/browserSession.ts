@@ -712,17 +712,47 @@ function startFrameLoop(profileId: number) {
         // Raise threshold to 5 (750 ms) — navigations routinely cause 1-3 consecutive
         // screenshot failures as Chrome tears down the old renderer and builds the new one.
         // Also respect navProtectedUntil which is extended on every framenavigated event.
+        // At timeout #3: if frozen on an error page and not nav-protected,
+        // fire a recovery goto() — this sometimes unblocks a stuck renderer
+        // before the crash detector fires at #5.
+        if (screenshotTimeoutCount === 3) {
+          const frozenUrl = (() => { try { return s.page.url(); } catch { return ""; } })();
+          const isFrozenOnError = frozenUrl.startsWith("chrome-error://") || frozenUrl === "about:blank";
+          const navOk = !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0);
+          if (isFrozenOnError && navOk) {
+            log(`[frameLoop:${profileId}] screenshot timeout #3 on error page — attempting early recovery goto`, "browser");
+            try {
+              const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
+              if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
+            } catch {}
+            deleteSavedCookies(profileId);
+            s.navProtectedUntil = Date.now() + 20000;
+            s.page.goto("https://www.instagram.com/accounts/login/", {
+              waitUntil: "domcontentloaded", timeout: 25000,
+            }).catch(() => null);
+          }
+        }
+
         if (screenshotTimeoutCount >= 5) {
           const navProtected = Date.now() < (s.navProtectedUntil ?? 0);
           if (s.autoLoginInProgress || navProtected) {
             // Suppress: login is running, or a navigation recently started.
             log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} — suppressed (login=${!!s.autoLoginInProgress} navProtected=${navProtected})`, "browser");
           } else {
-            log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts — page unresponsive, closing session`, "browser");
+            const crashUrl = (() => { try { return s.page.url(); } catch { return "unknown"; } })();
+            log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts on "${crashUrl}" — closing Chrome entirely`, "browser");
             sseWrite(s.res, { type: "error", message: "Browser page is unresponsive. Click Retry to restart." });
             try { s.res.end(); } catch {}
             s.res = null;
             if (s.frameLoop) { clearInterval(s.frameLoop); s.frameLoop = null; }
+            // Close the Chrome process entirely — just closing the SSE leaves a frozen
+            // browser in the sessions map. When the frontend reconnects, attachSSE reuses
+            // the same broken Chrome and immediately hits the same freeze again.
+            // Delete cookies first so a redirect-loop doesn't repeat on the next open.
+            if (crashUrl.startsWith("chrome-error://") || crashUrl === "about:blank") {
+              deleteSavedCookies(profileId);
+            }
+            closeSession(profileId).catch(() => {});
           }
         }
       } else {

@@ -54,6 +54,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.294",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: Embedded browsers that froze completely (screenshot timed out repeatedly) were reusing the same broken Chrome process on every reconnect, causing an endless crash loop. Chrome is now fully closed when this happens so the next open always starts fresh." },
+      { category: "Browser", text: "Fixed: When a frozen EB was closed, its saved cookies were not being deleted — the next open would load the same bad cookies and immediately crash again. Cookies are now cleared alongside the Chrome process." },
+      { category: "Browser", text: "Improvement: Added an early recovery attempt at screenshot timeout #3 (before the 5-timeout crash threshold) so a stuck error-page EB gets a navigation kick sooner, reducing the time spent frozen." },
+    ],
+  },
+  {
     version: "1.0.293",
     date: "14 May 2026",
     items: [
