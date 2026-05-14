@@ -58,6 +58,30 @@ jobs:
           name: web-builds
           path: artifacts
 
+      - name: Bump version from latest GitHub release
+        working-directory: artifacts/electron
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          try {
+            $rel = Invoke-RestMethod `
+              -Uri "https://api.github.com/repos/dannyshaw88/dannys-bot/releases/latest" `
+              -Headers @{Authorization="Bearer $env:GH_TOKEN"}
+            $parts = $rel.tag_name.TrimStart('v') -split '\.'
+            $parts[2] = [int]$parts[2] + 1
+            $newVersion = $parts -join '.'
+          } catch {
+            $pkg = Get-Content package.json | ConvertFrom-Json
+            $parts = $pkg.version -split '\.'
+            $parts[2] = [int]$parts[2] + 1
+            $newVersion = $parts -join '.'
+          }
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          Write-Host "Bumping version: $($pkg.version) -> $newVersion"
+          $pkg.version = $newVersion
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+
       - name: Install Electron dependencies
         working-directory: artifacts/electron
         run: npm install
