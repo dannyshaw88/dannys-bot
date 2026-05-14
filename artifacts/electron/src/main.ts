@@ -428,12 +428,13 @@ function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // Public repo — no token needed. Sending an expired/invalid token causes
-  // GitHub to return 401 even on public endpoints, so we omit it entirely.
+  // Private repo — token is baked in at build time from the UPDATER_TOKEN
+  // GitHub Actions secret via DANNY_BOT_UPDATER_TOKEN env var in build.mjs.
   autoUpdater.setFeedURL({
     provider: "github",
     owner: "dannyshaw88",
     repo: "dannys-bot",
+    token: __UPDATER_TOKEN__,
   } as any);
 
   autoUpdater.on("update-downloaded", () => {
