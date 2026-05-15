@@ -156,8 +156,7 @@ export class DatabaseStorage implements IStorage {
       // Only fall back to random UA if the caller did not supply one
       userAgentApi: profile.userAgentApi || randomUA.api,
       userAgentEmbedded: profile.userAgentEmbedded || randomUA.embedded,
-      // New accounts with no group go into "Ungrouped" — a real group, not a sentinel
-      tags: profile.tags || "Ungrouped",
+      tags: profile.tags || "",
     }).returning();
     await this.initializeToolsForProfile(created.id);
     return created;

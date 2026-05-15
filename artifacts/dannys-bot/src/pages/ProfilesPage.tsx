@@ -928,25 +928,27 @@ export function ProfilesPage() {
                 const allInGroupSelected = groupIds.every(id => selectedProfileIds.includes(id));
                 return (
                   <div key={groupKey}>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
-                      <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                        {isCollapsed
-                          ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                        <span className="text-sm font-bold text-foreground truncate">{displayName}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (allInGroupSelected) setSelectedProfileIds(prev => prev.filter(id => !groupIds.includes(id)));
-                          else setSelectedProfileIds(prev => [...new Set([...prev, ...groupIds])]);
-                        }}
-                        className="text-[10px] text-primary hover:underline shrink-0 font-medium"
-                      >
-                        {allInGroupSelected ? "None" : "All"}
-                      </button>
-                    </div>
-                    {!isCollapsed && groupProfiles.map((p, i) => renderProfileRow(p, i))}
+                    {groupKey !== "__ungrouped__" && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
+                        <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                          {isCollapsed
+                            ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                          <span className="text-sm font-bold text-foreground truncate">{displayName}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (allInGroupSelected) setSelectedProfileIds(prev => prev.filter(id => !groupIds.includes(id)));
+                            else setSelectedProfileIds(prev => [...new Set([...prev, ...groupIds])]);
+                          }}
+                          className="text-[10px] text-primary hover:underline shrink-0 font-medium"
+                        >
+                          {allInGroupSelected ? "None" : "All"}
+                        </button>
+                      </div>
+                    )}
+                    {(groupKey === "__ungrouped__" || !isCollapsed) && groupProfiles.map((p, i) => renderProfileRow(p, i))}
                   </div>
                 );
               });
@@ -1144,38 +1146,24 @@ export function ProfilesPage() {
                     return;
                   }
 
-                  // Single account simple browser download
-                  if (selectedProfileIds.length === 1) {
-                    const id = selectedProfileIds[0];
+                  // Download each selected account as its own .eqx file
+                  let successCount = 0;
+                  for (const id of selectedProfileIds) {
                     const profile = profiles?.find(p => p.id === id);
                     const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                     try {
                       const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); return; }
+                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
                       const blob = await res.blob();
                       const objectUrl = URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = objectUrl; a.download = `${safeUsername}.eqx`;
                       document.body.appendChild(a); a.click(); document.body.removeChild(a);
                       setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                      successCount++;
                     } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
-                    return;
                   }
-
-                  // Multiple accounts — single ZIP download (one save dialog)
-                  toast({ title: "Preparing export…", description: `Bundling ${selectedProfileIds.length} accounts into a ZIP…` });
-                  try {
-                    const ids = selectedProfileIds.join(",");
-                    const res = await fetch(`/api/profiles/export-eqx-bulk?ids=${ids}`, { credentials: "include" });
-                    if (!res.ok) { toast({ title: "Export failed", description: "Could not generate bulk EQX archive.", variant: "destructive" }); return; }
-                    const blob = await res.blob();
-                    const objectUrl = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = objectUrl; a.download = "equinox-accounts.zip";
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                    toast({ title: "EQX Export Complete", description: `${selectedProfileIds.length} account(s) saved to equinox-accounts.zip` });
-                  } catch { toast({ title: "Export failed", description: "Error generating bulk EQX archive.", variant: "destructive" }); }
+                  if (successCount > 1) toast({ title: "EQX Export Complete", description: `${successCount} accounts exported` });
                 }}
                 disabled={selectedProfileIds.length === 0}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"

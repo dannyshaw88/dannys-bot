@@ -772,7 +772,7 @@ export function ProfileDetailsPage() {
                           onClick={() => generateTotp(formData.twoFASecretKey)}
                           className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold bg-muted hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                         >
-                          Generate Code
+                          {totpCopied ? "Copied!" : "Generate Code"}
                         </button>
                         <span className="text-border text-lg select-none">|</span>
                         <button
@@ -803,12 +803,6 @@ export function ProfileDetailsPage() {
                             </span>
                           );
                         })()}
-                        {totpCode && (
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-base font-bold tracking-[0.25em] text-primary select-all">{totpCode}</span>
-                            {totpCopied && <span className="text-xs text-green-600 font-medium">Copied!</span>}
-                          </div>
-                        )}
                         {totpError && <span className="text-xs text-destructive">{totpError}</span>}
                       </div>
                       <p className="text-[11px] text-muted-foreground">Generate a live TOTP code to paste manually if the auto-fill fails.</p>

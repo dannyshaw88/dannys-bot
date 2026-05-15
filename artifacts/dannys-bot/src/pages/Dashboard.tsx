@@ -54,6 +54,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.318",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Export EQX now works with any number of selected accounts — each account downloads as its own .eqx file. Previously only 1-account export worked reliably; multi-select was routed to a ZIP bundle that didn't always trigger correctly in Electron." },
+      { category: "Fix", text: "Accounts created via the Create button no longer have their group set to 'Ungrouped'. New accounts with no group assigned have an empty group tag and appear in the list without any group heading." },
+      { category: "Fix", text: "Accounts with no group tag no longer appear under an 'Ungrouped' section header in group view — they render as flat rows with no heading. Accounts that do have a group still show the collapsible group header." },
+      { category: "UX", text: "Account Settings > Generate Code no longer shows the code on screen. It copies the 6-digit TOTP code to clipboard immediately and the button briefly shows 'Copied!' to confirm." },
+    ],
+  },
+  {
     version: "1.0.317",
     date: "15 May 2026",
     items: [

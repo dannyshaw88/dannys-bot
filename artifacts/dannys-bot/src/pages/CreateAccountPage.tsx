@@ -554,6 +554,7 @@ export function CreateAccountPage() {
                     const allInGroupSelected = groupIds.every(id => selectedIds.includes(id));
                     return (
                       <div key={groupKey}>
+                        {groupKey !== "__ungrouped__" && (
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
                           <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                             {isCollapsed
@@ -573,7 +574,8 @@ export function CreateAccountPage() {
                             {allInGroupSelected ? "None" : "All"}
                           </button>
                         </div>
-                        {!isCollapsed && groupProfiles.map((p, i) => renderRow(p, i))}
+                        )}
+                        {(groupKey === "__ungrouped__" || !isCollapsed) && groupProfiles.map((p, i) => renderRow(p, i))}
                       </div>
                     );
                   });
@@ -684,36 +686,24 @@ export function CreateAccountPage() {
                     toast({ title: "No accounts selected", description: "Select at least one account to export as EQX.", variant: "destructive" });
                     return;
                   }
-                  if (selectedIds.length === 1) {
-                    const id = selectedIds[0];
+                  // Download each selected account as its own .eqx file
+                  let successCount = 0;
+                  for (const id of selectedIds) {
                     const profile = profiles?.find(p => p.id === id);
                     const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                     try {
                       const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); return; }
+                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
                       const blob = await res.blob();
                       const objectUrl = URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = objectUrl; a.download = `${safeUsername}.eqx`;
                       document.body.appendChild(a); a.click(); document.body.removeChild(a);
                       setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                      successCount++;
                     } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
-                    return;
                   }
-                  // Multiple accounts — single ZIP download (one save dialog)
-                  toast({ title: "Preparing export…", description: `Bundling ${selectedIds.length} accounts into a ZIP…` });
-                  try {
-                    const ids = selectedIds.join(",");
-                    const res = await fetch(`/api/profiles/export-eqx-bulk?ids=${ids}`, { credentials: "include" });
-                    if (!res.ok) { toast({ title: "Export failed", description: "Could not generate bulk EQX archive.", variant: "destructive" }); return; }
-                    const blob = await res.blob();
-                    const objectUrl = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = objectUrl; a.download = "equinox-accounts.zip";
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                    toast({ title: "EQX Export Complete", description: `${selectedIds.length} account(s) saved to equinox-accounts.zip` });
-                  } catch { toast({ title: "Export failed", description: "Error generating bulk EQX archive.", variant: "destructive" }); }
+                  if (successCount > 1) toast({ title: "EQX Export Complete", description: `${successCount} accounts exported` });
                 }}
                 disabled={selectedIds.length === 0}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
