@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.321",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Opening multiple browsers at once no longer causes all of them to freeze. The frame rate for each browser now scales down based on how many are open at the same time, keeping the total workload manageable. With 10 open browsers you get a smooth ~2 fps each instead of all of them competing at full speed and crashing." },
+    ],
+  },
+  {
     version: "1.0.320",
     date: "15 May 2026",
     items: [

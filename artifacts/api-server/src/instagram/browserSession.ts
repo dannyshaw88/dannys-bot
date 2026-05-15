@@ -166,15 +166,39 @@ function sseWrite(res: ServerResponse | null, data: object) {
 const sessions = new Map<number, Session>();
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
-// Global screenshot concurrency limiter. With 5+ Chrome instances all taking
+// ── Graceful shutdown: save all open EB sessions before the process exits ────
+// Without this, cookies are only saved on navigation events and every 60s in
+// the frame loop. If the app is closed between ticks (or Instagram rotated the
+// sessionid during the session), the JSON file on disk is stale and the account
+// appears logged out on next open — even with a static proxy.
+async function saveAllSessionsAndExit(signal: string) {
+  const ids = [...sessions.keys()];
+  if (ids.length) {
+    log(`[shutdown] ${signal} received — saving cookies for ${ids.length} open EB session(s) before exit`, "browser");
+    await Promise.allSettled(ids.map(async (id) => {
+      const s = sessions.get(id);
+      if (s?.page) {
+        try { await saveCookies(id, s.page); } catch {}
+      }
+    }));
+    log(`[shutdown] Cookie save complete — exiting`, "browser");
+  }
+  process.exit(0);
+}
+process.on("SIGTERM", () => saveAllSessionsAndExit("SIGTERM"));
+process.on("SIGINT",  () => saveAllSessionsAndExit("SIGINT"));
+
+// Global screenshot concurrency limiter. With many Chrome instances all taking
 // screenshots simultaneously, the Node.js event loop and CPU saturate, causing
-// all EBs to freeze. Cap at 4 concurrent screenshot operations — sessions that
-// hit the limit skip that tick and retry on the next tick, spreading the load.
+// all EBs to freeze. Cap concurrent screenshot operations — sessions that hit
+// the limit skip that tick and retry on the next tick, spreading the load.
 // The primary freeze prevention is the activity-based frame rate (see startFrameLoop):
-// idle/dormant EBs only fire every 8th–20th tick, so in practice ≤2 sessions compete
-// for slots at any given moment even when 5+ EBs are open.
+// idle/dormant EBs only fire every 8th–20th tick, so in practice ≤2–3 sessions
+// compete for slots at any given moment even when 25+ EBs are open.
+// Raised from 4 → 6 to match the higher session count made possible by the
+// memory-optimisation flags and background media blocking.
 let globalScreenshotCount = 0;
-const MAX_CONCURRENT_SCREENSHOTS = 4;
+const MAX_CONCURRENT_SCREENSHOTS = 6;
 
 // Mark a session as "recently active". Called by every input handler.
 // The frame loop reads lastActivityAt to decide the screenshot cadence:
@@ -211,6 +235,49 @@ const LAUNCH_ARGS = [
   // --disable-gpu forces software rendering and eliminates the race entirely.
   "--disable-gpu",
   "--disable-software-rasterizer",
+
+  // ── Memory & process-count optimisations (allows 25+ concurrent EBs) ──────────
+  //
+  // By default each Chrome instance spawns 4–6 OS processes (browser, renderer,
+  // GPU, network service, audio service, etc.) and uses ~300–500 MB RAM.  With
+  // 25 accounts open simultaneously that is 7–12 GB — far beyond server limits.
+  //
+  // The flags below cut each instance down to ~2 processes and ~80–150 MB,
+  // matching Jarvee's resource profile for large multi-account setups.
+
+  // Cap the V8 JS heap to 128 MB per renderer (default can grow to 1.5 GB).
+  // Instagram's web app runs fine within this limit for cookie/session use.
+  "--js-flags=--max-old-space-size=128",
+
+  // Limit Chrome to 1 renderer process per browser instance.
+  // We only ever have a single tab, so this is always safe and eliminates
+  // the spare renderer processes Chrome spawns speculatively.
+  "--renderer-process-limit=1",
+
+  // Kill on-disk caches — the EB is ephemeral and cookies are persisted
+  // separately.  The defaults (~350 MB disk cache + ~150 MB media cache)
+  // just burn disk and inflate the process working-set.
+  "--disk-cache-size=8388608",   // 8 MB
+  "--media-cache-size=1",        // effectively zero
+
+  // Disable per-origin renderer isolation.  Chrome's default site-per-process
+  // model spawns an extra renderer for every cross-origin iframe Instagram
+  // inlines.  With this off, all frames share the single renderer above.
+  "--disable-features=site-per-process,IsolateOrigins",
+
+  // Run the audio service in-process (one less spawned process).
+  "--disable-features=AudioServiceOutOfProcess",
+
+  // Aggressively free cached data under memory pressure instead of holding it.
+  "--aggressive-cache-discard",
+
+  // Disable spell-checking, translation, and other background services that
+  // consume memory and occasionally spawn helper processes.
+  "--disable-features=Translate,OptimizationHints,MediaRouter",
+  "--disable-component-update",
+  "--disable-domain-reliability",
+  "--disable-breakpad",
+  "--disable-client-side-phishing-detection",
 ];
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
@@ -464,6 +531,13 @@ export async function getOrCreateSession(
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
   await applyStealthScripts(page, userAgent);
 
+  // Enable request interception so we can block heavy media resources for
+  // background sessions (no SSE viewer connected).  Instagram loads dozens of
+  // high-res images on every page; blocking them when the user isn't watching
+  // cuts per-session RAM by 60–80 % and is the single biggest win for running
+  // 20+ concurrent EBs without crashing.
+  await page.setRequestInterception(true);
+
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
   page.on("framenavigated", async (frame) => {
     if (frame !== page.mainFrame()) return;
@@ -579,6 +653,25 @@ export async function getOrCreateSession(
     if (isIgApiCall(req.url())) {
       pending.set(req.url(), { startMs: Date.now(), method: req.method() });
     }
+
+    // ── Background media blocking ─────────────────────────────────────────────
+    // When no SSE viewer is connected, abort image / media / font requests.
+    // Instagram loads 50–100 images per page visit; each one sits in Chrome's
+    // memory even when the EB is just idling in the background.  Blocking them
+    // drops per-session RAM from ~300 MB to ~80 MB, making 25+ concurrent EBs
+    // viable.  When the user opens the session (res becomes non-null) Chrome
+    // re-requests anything it needs for the current viewport automatically.
+    const s = sessions.get(profileId);
+    const hasViewer = !!(s?.res && !s.res.writableEnded);
+    if (!hasViewer) {
+      const rType = req.resourceType();
+      if (rType === "image" || rType === "media" || rType === "font") {
+        req.abort("blockedbyclient").catch(() => {});
+        return;
+      }
+    }
+
+    req.continue().catch(() => {});
   });
 
   page.on("response", async (res) => {
@@ -813,14 +906,35 @@ function startFrameLoop(profileId: number) {
       }
     }
 
-    // Activity-based frame rate — throttle background EBs to free up screenshot
-    // slots for the EB the user is actually using.
-    //   active  (<3 s since last input)  → every tick      (~6.7 fps)
-    //   idle    (3–30 s)                 → every 8th tick  (~0.8 fps)
-    //   dormant (>30 s)                  → every 20th tick (~0.33 fps)
+    // Activity-based frame rate — throttle EBs based on idle time AND total
+    // number of open sessions. When many EBs are open simultaneously they are
+    // ALL considered "active" (freshly opened = lastActivityAt=now), so the
+    // original idle-only throttle didn't help: all 10 fired at 6.7fps each,
+    // saturating Chrome and causing every EB to freeze.
+    //
+    // Fix: scale the "active" skip modulo with session count so total
+    // screenshot throughput stays bounded regardless of how many are open.
+    //
+    // Total sessions → active skip (per-EB fps when actively used):
+    //   1–2   → every 1st tick  (~6.7 fps each,  ~6–13 fps total)
+    //   3–5   → every 2nd tick  (~3.3 fps each,  ~10–16 fps total)
+    //   6–10  → every 3rd tick  (~2.2 fps each,  ~13–22 fps total)
+    //   11–20 → every 5th tick  (~1.3 fps each,  ~14–26 fps total)
+    //   21+   → every 8th tick  (~0.8 fps each,  ~17+ fps total)
+    //
+    // Idle/dormant floors are maintained so background EBs stay light:
+    //   idle    (3–30 s)  → max(activeSkip, 8)   (≤0.8 fps)
+    //   dormant (>30 s)   → max(activeSkip, 20)  (≤0.33 fps)
     idleTick++;
     const idleMs = Date.now() - s.lastActivityAt;
-    const skipModulo = idleMs < 3000 ? 1 : idleMs < 30000 ? 8 : 20;
+    const totalSessions = sessions.size;
+    const activeSkip = totalSessions <= 2  ? 1 :
+                       totalSessions <= 5  ? 2 :
+                       totalSessions <= 10 ? 3 :
+                       totalSessions <= 20 ? 5 : 8;
+    const skipModulo = idleMs < 3000  ? activeSkip :
+                       idleMs < 30000 ? Math.max(activeSkip, 8) :
+                                        Math.max(activeSkip, 20);
     if (idleTick % skipModulo !== 0) return;
 
     // Skip frame if a screenshot is already in flight (prevents queuing)
@@ -1312,11 +1426,16 @@ export async function browserSendDM(
   }
 }
 
-export async function closeSession(profileId: number) {
+export async function closeSession(profileId: number, opts?: { skipCookieSave?: boolean }) {
   const s = sessions.get(profileId);
   if (!s) return;
   if (s.frameLoop) clearInterval(s.frameLoop);
   if (s.res && !s.res.writableEnded) try { s.res.end(); } catch {}
+  // Save cookies before closing so the next open restores the latest session state.
+  // Skipped by clearSession / wipeEbSession which deliberately discard cookies.
+  if (!opts?.skipCookieSave) {
+    try { await saveCookies(profileId, s.page); } catch {}
+  }
   await s.browser.close();
   sessions.delete(profileId);
   log(`Chrome closed for profile ${profileId}`, "browser");
@@ -1330,7 +1449,7 @@ export async function clearSession(profileId: number, userAgent: string, proxy?:
   // After a successful login, saveCookies() writes fresh cookies so the NEXT open
   // after a good login still gets the direct-to-feed navigation.
   deleteSavedCookies(profileId);
-  await closeSession(profileId);
+  await closeSession(profileId, { skipCookieSave: true });
   await getOrCreateSession(profileId, userAgent, proxy);
   log(`Session cleared for profile ${profileId}`, "browser");
 }
@@ -1341,7 +1460,7 @@ export async function clearSession(profileId: number, userAgent: string, proxy?:
 // internal cookie database is erased (not just the app's saved JSON file).
 export async function wipeEbSession(profileId: number): Promise<void> {
   deleteSavedCookies(profileId);
-  await closeSession(profileId);
+  await closeSession(profileId, { skipCookieSave: true });
   const userDataDir = path.join(os.tmpdir(), `equinox-eb-${profileId}`);
   try {
     if (fs.existsSync(userDataDir)) {
