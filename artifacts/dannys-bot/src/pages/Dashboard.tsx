@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.305",
+    date: "15 May 2026",
+    items: [
+      { category: "Login", text: "Fixed: After clicking Log In, the app was giving up after only 5 seconds and reporting failure — even though Instagram had actually accepted the credentials. The root cause was a text-matching bug in the post-submit wait: the code was watching for Instagram's old UI copy ('email or mobile number') which no longer exists, so the wait resolved instantly. Replaced with a DOM-based check that detects when the login form disappears or when Instagram enters the redirect loop, with the timeout extended to 20 seconds to handle slow proxy responses." },
+    ],
+  },
+  {
     version: "1.0.304",
     date: "15 May 2026",
     items: [

@@ -1604,14 +1604,23 @@ export async function browserAutoLogin(
     // ── Step 5: Wait for Instagram to respond ────────────────────────────────
     sendStatus(profileId, "Login submitted — waiting for Instagram…");
 
-    // Wait up to 10 s for the login form to disappear from the page
+    // Wait up to 20 s for the login form to be replaced by something else.
+    // IMPORTANT: do NOT use Instagram's UI copy strings here — they change over
+    // time and across locales.  Use a DOM check instead so this is resilient.
+    // Also detect chrome-error:// (ERR_TOO_MANY_REDIRECTS): that IS a successful
+    // login — Instagram's post-login redirect chain collides with proxy cookies
+    // and Chrome shows the error page instead of the feed.  On slow proxies this
+    // can take 10-15 s after the button click, so the timeout must be long enough.
     await Promise.race([
-      s.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => null),
+      s.page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
       s.page.waitForFunction(() => {
-        const t = document.body?.innerText || "";
-        // The login form always contains this phrase — once it's gone, we've moved on
-        return !t.includes("Username, email or mobile number");
-      }, { timeout: 10000 }).catch(() => null),
+        const url = window.location.href;
+        // ERR_TOO_MANY_REDIRECTS = successful login via proxy (handled below)
+        if (url.startsWith("chrome-error://")) return true;
+        // Login form gone from DOM = Instagram processed the credentials
+        if (!document.querySelector('input[name="username"]')) return true;
+        return false;
+      }, { timeout: 20000 }).catch(() => null),
     ]);
 
     // Wait for the new page content to actually render (2FA page loads after form goes)
@@ -1619,14 +1628,16 @@ export async function browserAutoLogin(
       (document.body?.innerText || "").length > 80, { timeout: 6000 }
     ).catch(() => null);
 
-    // Give Instagram's SPA up to 5 s to either navigate away from the login page
+    // Give Instagram's SPA up to 8 s to either navigate away from the login page
     // (logged in) OR mount the 2FA overlay (which renders asynchronously on top of
     // the login form). Without this wait, is2FAByDom evaluates before the 2FA input
     // appears in the DOM and returns false — causing step 7 to be skipped entirely.
     await s.page.waitForFunction(() => {
       const url = window.location.href;
-      // If we've navigated away from login entirely, we're done waiting
+      // Navigated away from login entirely — done waiting
       if (!url.includes("/accounts/login") && !url.includes("challenge")) return true;
+      // ERR_TOO_MANY_REDIRECTS — treat as success (handled in step 6)
+      if (url.startsWith("chrome-error://")) return true;
       // Still on login page — wait for a visible non-login input (the 2FA code field)
       const SKIP_N = new Set(["username", "email", "pass", "password", "search", "q"]);
       const SKIP_T = new Set(["password", "submit", "button", "hidden", "checkbox", "radio", "file"]);
@@ -1637,7 +1648,7 @@ export async function browserAutoLogin(
         const r = el.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
       });
-    }, { timeout: 5000 }).catch(() => null);
+    }, { timeout: 8000 }).catch(() => null);
 
     await delay(300);
     await dismissCookieBanner(s.page);
