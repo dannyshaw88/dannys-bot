@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.309",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "EB panel stuck on ERR_TOO_MANY_REDIRECTS after login — two root causes fixed: (1) the recovery goto to instagram.com now retries up to 3×  with backoff if Chrome's renderer is still processing the error page, rather than giving up silently and leaving the panel frozen; (2) the frame-loop no longer clears session cookies and navigates back to the login page when a successful login completed within the last 90 s — it now navigates to instagram.com instead, so the cookies that were just saved are preserved rather than wiped out." },
+    ],
+  },
+  {
     version: "1.0.308",
     date: "15 May 2026",
     items: [

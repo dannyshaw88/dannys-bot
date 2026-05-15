@@ -126,6 +126,10 @@ interface Session {
   // True while browserAutoLogin is executing — suppresses the screenshot-timeout
   // kill so the page isn't destroyed mid-login causing a false ok:false result.
   autoLoginInProgress?: boolean;
+  // ms timestamp of the most recent successful autoLogin. The frameLoop uses this
+  // to avoid clearing valid session cookies when the page is still on chrome-error://
+  // right after a redirect-loop recovery that already saved good cookies.
+  lastLoginSuccessAt?: number;
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -784,19 +788,31 @@ function startFrameLoop(profileId: number) {
           const errTitle: string = (s as any)._lastErrorPageTitle ?? "";
           const isProxyError = /ERR_PROXY|ERR_TUNNEL|ERR_SOCKS|TIMEOUT/i.test(errTitle);
           const isRedirectLoop = /ERR_TOO_MANY_REDIRECTS|ERR_FAILED/i.test(errTitle) || !isProxyError;
-          log(`[frameLoop:${profileId}] error page for ${Math.round(errorRetryTick * 200 / 1000)}s — ${isProxyError ? "proxy error (keeping cookies)" : "redirect/cookie error (clearing cookies)"} — navigating to login`, "browser");
-          if (isRedirectLoop) {
-            // Clear cookies — they caused the redirect loop and would trigger it again.
-            try {
-              const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
-              if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
-            } catch {}
-            deleteSavedCookies(profileId);
+          // If autoLogin just succeeded (within 90 s) the cookies are valid — the
+          // redirect loop was already resolved and saveCookies already ran. Do NOT
+          // clear the cookies. Just navigate to instagram.com to unstick the panel.
+          const msSinceLogin = s.lastLoginSuccessAt ? Date.now() - s.lastLoginSuccessAt : Infinity;
+          if (isRedirectLoop && msSinceLogin < 90000) {
+            log(`[frameLoop:${profileId}] error page post-login (${Math.round(msSinceLogin / 1000)}s ago) — skipping cookie-clear, navigating to instagram.com`, "browser");
+            s.navProtectedUntil = Date.now() + 20000;
+            s.page.goto("https://www.instagram.com/", {
+              waitUntil: "domcontentloaded", timeout: 25000,
+            }).catch(() => null);
+          } else {
+            log(`[frameLoop:${profileId}] error page for ${Math.round(errorRetryTick * 200 / 1000)}s — ${isProxyError ? "proxy error (keeping cookies)" : "redirect/cookie error (clearing cookies)"} — navigating to login`, "browser");
+            if (isRedirectLoop) {
+              // Clear cookies — they caused the redirect loop and would trigger it again.
+              try {
+                const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
+                if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
+              } catch {}
+              deleteSavedCookies(profileId);
+            }
+            s.navProtectedUntil = Date.now() + 20000;
+            s.page.goto("https://www.instagram.com/accounts/login/", {
+              waitUntil: "domcontentloaded", timeout: 25000,
+            }).catch(() => null);
           }
-          s.navProtectedUntil = Date.now() + 20000;
-          s.page.goto("https://www.instagram.com/accounts/login/", {
-            waitUntil: "domcontentloaded", timeout: 25000,
-          }).catch(() => null);
         }
       } else {
         errorRetryTick = 0;
@@ -1979,10 +1995,17 @@ export async function browserAutoLogin(
             // also ensures the EB panel displays something useful to the user.
             if (s.page.url().startsWith("chrome-error://")) {
               sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
-              await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-              await delay(1500);
+              // Retry up to 3 times — the first goto sometimes fails if Chrome is still
+              // processing the error-page renderer. A short delay before each retry helps.
+              for (let attempt = 0; attempt < 3; attempt++) {
+                if (attempt > 0) await delay(2000);
+                await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+                await delay(800);
+                if (!s.page.url().startsWith("chrome-error://")) break;
+              }
             }
             await saveCookies(profileId, s.page);
+            s.lastLoginSuccessAt = Date.now();
             sendStatus(profileId, "✓ 2FA accepted — logged in successfully!");
             return { ok: true, message: "Login successful" };
           }
@@ -2010,10 +2033,17 @@ export async function browserAutoLogin(
       // Same ERR_TOO_MANY_REDIRECTS recovery as the 2FA path — navigate back if on error page.
       if (currentUrl.startsWith("chrome-error://")) {
         sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
-        await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-        await delay(1500);
+        // Retry up to 3 times — the first goto sometimes fails if Chrome is still
+        // processing the error-page renderer. A short delay before each retry helps.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await delay(2000);
+          await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+          await delay(800);
+          if (!s.page.url().startsWith("chrome-error://")) break;
+        }
       }
       await saveCookies(profileId, s.page);
+      s.lastLoginSuccessAt = Date.now();
       sendStatus(profileId, "✓ Logged in — browser is showing your Instagram.");
       return { ok: true, message: "Login successful" };
     }
