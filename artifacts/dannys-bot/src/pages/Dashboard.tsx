@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.308",
+    date: "15 May 2026",
+    items: [
+      { category: "Docs", text: "Internal documentation updated to reflect the Jarvee two-stage login flow introduced in v1.0.307 — no user-facing changes." },
+    ],
+  },
+  {
     version: "1.0.307",
     date: "15 May 2026",
     items: [

@@ -44,51 +44,52 @@ An Instagram automation platform for managing multiple accounts with tools for f
 
 **Every account session must originate from the embedded browser (EB). No Instagram API call may ever be made without a browser-originated cookie. This is the Jarvee model and must never be bypassed.**
 
-### The only valid session establishment flow:
+### The only valid session establishment flow (Jarvee two-stage handshake — v1.0.307+):
 27. Embedded browser (Chrome/Puppeteer) logs in via `instagram.com/accounts/login/`
 28. App extracts `sessionid`, `csrftoken`, `ds_user_id`, `mid` from Chrome's cookie jar
-29. Those cookies are saved to `igApiCookies` in the DB and to `browser-data/cookies-{profileId}.json`
-30. The mobile API (`i.instagram.com`) is bootstrapped from those EB cookies via `mobileBootstrapFromWebCookies()`
+29. Those cookies are **immediately saved** to `igApiCookies` in the DB (status stays `verifying`) and to `browser-data/cookies-{profileId}.json`
+30. `verifyInstagramCredentials(profileWithCookies)` is called with the fresh cookies — it takes **Path 2 (cookie restore)** because `igApiCookies` now has a sessionid. It runs the Jarvee cold-start sequence: `tokens/keyed → launcher/sync → users/{id}/info`
+31. The result of the mobile API call sets the final `accountStatus` — `valid` only if the API confirms the session. The EB alone is never sufficient to mark an account valid.
 
 ### What is FORBIDDEN:
-31. Calling `client.mobileLogin(username, password)` directly from the automation engine — this is a cold mobile API login that bypasses the EB entirely. Instagram treats it as a new-device takeover and risks account locks.
-32. Calling `verifyInstagramCredentials()` (in `instagramLogin.ts`) from any verify route — this function does a direct mobile API password login. It must NOT be called from `/api/profiles/:id/verify` or `/api/profiles/verify-all`. Those routes use the EB-first flow exclusively.
-33. Returning a usable API client from `ensureClient()` that has no session from an EB login (either `browserOk=true` via fresh EB cookies, or `isMobileLoggedIn()=true` from previously-verified igApiCookies that originated from an EB login).
+32. Calling `client.mobileLogin(username, password)` directly from the automation engine — this is a cold mobile API login that bypasses the EB entirely. Instagram treats it as a new-device takeover and risks account locks.
+33. Calling `verifyInstagramCredentials()` with a profile that has **no** `igApiCookies` from an EB login — this causes Path 1 (direct mobile password login) which bypasses the EB. The function is safe to call ONLY AFTER the EB has logged in and `igApiCookies` has been saved to the profile, which forces Path 2 (cookie restore).
+34. Returning a usable API client from `ensureClient()` that has no session from an EB login (either `browserOk=true` via fresh EB cookies, or `isMobileLoggedIn()=true` from previously-verified igApiCookies that originated from an EB login).
 
 ### Where this is enforced:
-34. `/api/profiles/:id/verify` → `getOrCreateSession` → `browserAutoLogin` → `getSessionPageCookies` → save to DB
-35. `/api/profiles/verify-all` → same EB-first flow, sequential with delay
-36. `ensureClient()` in `automationEngine.ts`: if no EB session AND no stored igApiCookies → returns null, skips run
-37. If EB session exists but `mobileBootstrapFromWebCookies()` fails → logs warning, skips mobile-API tools, does NOT fall back to `mobileLogin()`
+35. `/api/profiles/:id/verify` → `getOrCreateSession` → `browserAutoLogin` → `getSessionPageCookies` → save `igApiCookies` to DB → `verifyInstagramCredentials(profileWithCookies)` [Path 2 only] → set final status
+36. `/api/profiles/verify-all` → same two-stage flow, sequential with delay
+37. `ensureClient()` in `automationEngine.ts`: if no EB session AND no stored igApiCookies → returns null, skips run
+38. If EB session exists but `mobileBootstrapFromWebCookies()` fails → logs warning, skips mobile-API tools, does NOT fall back to `mobileLogin()`
 
 ### Legacy dead code — do not use:
-38. `artifacts/api-server/src/src/` — duplicate directory, NOT imported by any active code, NOT bundled. It still references the old `verifyInstagramCredentials` mobile-API path. Ignore it; it is dead. Active code lives exclusively in `artifacts/api-server/src/` (without the nested `src/src`).
-39. `verifyInstagramCredentials()` in `artifacts/api-server/src/instagram/instagramLogin.ts` — the mobile-API direct login function. Still present for historical reference but must not be called from any verify or automation path.
+39. `artifacts/api-server/src/src/` — duplicate directory, NOT imported by any active code, NOT bundled. It still references older patterns. Ignore it; it is dead. Active code lives exclusively in `artifacts/api-server/src/` (without the nested `src/src`).
+40. Path 1 inside `verifyInstagramCredentials()` (direct mobile password login) — never triggered by the verify routes because they always supply `igApiCookies` before calling the function. If `igApiCookies` is absent from the profile passed in, Path 1 would fire — that is a bug, not the intended path.
 
 ## Product
 
-40. Multi-account Instagram manager
-41. Follow/Unfollow tools with proxy support
-42. DM and contact messaging tools
-43. Human session (embedded browser) for cookie/session management
-44. Auto-reply tool
-45. Proxy manager with ping/auto-link
-46. Activity dashboard and stats
+41. Multi-account Instagram manager
+42. Follow/Unfollow tools with proxy support
+43. DM and contact messaging tools
+44. Human session (embedded browser) for cookie/session management
+45. Auto-reply tool
+46. Proxy manager with ping/auto-link
+47. Activity dashboard and stats
 
 ## User preferences
 
-47. Do not skip any file during imports — every file matters for git
+48. Do not skip any file during imports — every file matters for git
 
 ## Gotchas
 
-48. The DB path resolves from `process.cwd()` — when running via pnpm filter from `artifacts/api-server/`, the DB will be at `artifacts/api-server/database.db`; when run from workspace root it'll be at `database.db`
-49. `pnpm approve-builds` needed for puppeteer/sharp/esbuild after fresh installs
-50. The `server/` directory at the root is an older standalone server iteration — the active server is in `artifacts/api-server/`
-51. Always run `pnpm install --no-frozen-lockfile` when package.json changes don't match lockfile
+49. The DB path resolves from `process.cwd()` — when running via pnpm filter from `artifacts/api-server/`, the DB will be at `artifacts/api-server/database.db`; when run from workspace root it'll be at `database.db`
+50. `pnpm approve-builds` needed for puppeteer/sharp/esbuild after fresh installs
+51. The `server/` directory at the root is an older standalone server iteration — the active server is in `artifacts/api-server/`
+52. Always run `pnpm install --no-frozen-lockfile` when package.json changes don't match lockfile
 
 ## Pointers
 
-52. See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+53. See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
 
 ## CI / GitHub Actions — Critical Knowledge
 
@@ -148,7 +149,7 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-68. Current version: **v1.0.307**
+68. Current version: **v1.0.308**
 69. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.291` → `1.0.292`
 70. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 71. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
