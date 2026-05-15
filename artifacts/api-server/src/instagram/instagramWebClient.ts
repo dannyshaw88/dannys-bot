@@ -1797,9 +1797,12 @@ export class InstagramWebClient {
   // Fetches the reels explore/home feed and marks up to `count` reels as seen,
   // simulating a user scrolling through the Reels tab.
   async viewTimelineReels(count: number = 5): Promise<number> {
-    // Returns: >=0 reels watched, -1 if no mobile session (igApiCookies missing).
+    // Returns: >=0 reels watched, -1 no mobile session, -5 session rejected by API.
     return this.timed("ViewTimelineReels", async () => {
-      if (!this.mobileCookieJar.some(c => c.startsWith("sessionid="))) {
+      const sessionPresent =
+        this.mobileCookieJar.some(c => c.startsWith("sessionid=")) ||
+        !!this._deviceAuthorization;
+      if (!sessionPresent) {
         console.warn(`[webClient] viewTimelineReels: no mobile session — run Verify Credentials to establish igApiCookies`);
         return -1;
       }
@@ -1822,8 +1825,8 @@ export class InstagramWebClient {
         const body = new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString();
         const tj = await this.mobileSessionPost(`/api/v1/feed/timeline/`, body);
         if (!tj) {
-          console.warn(`[webClient] viewTimelineReels: feed/timeline also returned null — session expired`);
-          return -1;
+          console.warn(`[webClient] viewTimelineReels: feed/timeline also returned null — session expired/rejected`);
+          return -5;
         }
         // Build a synthetic clips/home-like response using only the reel items
         const allItems: any[] = tj?.feed_items ?? tj?.items ?? [];
@@ -1878,11 +1881,23 @@ export class InstagramWebClient {
     return this.timed("ViewTimelineStories", async () => {
       // surface=2 is required — without it Instagram returns an empty tray even
       // when followed accounts have active stories (Jarvee always includes this param).
+
+      // Check up-front so we can return distinct sentinel values:
+      //   -1 = no mobile session at all (mobileCookieJar has no sessionid)
+      //   -5 = session existed but the mobile API rejected it (HTTP 4xx / expired)
+      const sessionPresent =
+        this.mobileCookieJar.some(c => c.startsWith("sessionid=")) ||
+        !!this._deviceAuthorization;
+      if (!sessionPresent) {
+        return -1;
+      }
+
       const j = await this.mobileSessionGet(`/api/v1/feed/reels_tray/?surface=2`);
       if (j === null) {
-        // mobileSessionGet returns null when mobileCookieJar has no sessionid OR
-        // when Instagram returns HTTP 4xx (expired/invalid session).
-        return -1;
+        // mobileSessionGet returned null — the session was present but Instagram
+        // rejected it (HTTP 4xx / expired / checkpoint).  Return -5 so the caller
+        // can show a more accurate "session expired" message instead of "no session".
+        return -5;
       }
       const tray: any[] = Array.isArray(j?.tray) ? j.tray : [];
       if (!tray.length) {

@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.319",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Watch Stories in the Human Session tool no longer shows 'no mobile session' for accounts that have already been verified. The verified session is now preserved during automation runs instead of being replaced by the embedded browser session." },
+      { category: "Fix", text: "The dashboard now shows a more accurate message when Watch Stories is skipped: 'session expired or rejected — re-run Verify Credentials to refresh' instead of the generic 'no mobile session' message." },
+    ],
+  },
+  {
     version: "1.0.318",
     date: "15 May 2026",
     items: [

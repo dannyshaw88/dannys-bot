@@ -1550,21 +1550,27 @@ class AutomationEngine {
     const browserOk = client.loadBrowserCookies();
     if (browserOk) {
       console.log(`[engine] @${profile.username}: using EB browser session (cookies synced)`);
-      // Bootstrap the mobile session from fresh EB web cookies so Watch Stories /
-      // Watch Reels have a valid i.instagram.com session.
-      // EB-FIRST RULE: mobileBootstrapFromWebCookies is the ONLY way the mobile
-      // session is seeded here. A cold mobileLogin() is never called — the mobile
-      // API must always be bootstrapped from an EB-originated cookie, never via a
-      // direct password login that bypasses the embedded browser.
-      const mobileBootOk = client.mobileBootstrapFromWebCookies();
-      if (mobileBootOk) {
-        console.log(`[engine] @${profile.username}: mobile session synced from fresh EB cookies`);
+      // EB-FIRST RULE: seed the mobile session from fresh EB web cookies only if
+      // there is no existing verified mobile session (igApiCookies from a Verify
+      // Credentials run).  Verified sessions have gone through the cold-start
+      // device registration sequence and are accepted by i.instagram.com.
+      // EB-bootstrapped cookies lack that registration so they are rejected by the
+      // mobile API.  Preserving the verified session here prevents the EB bootstrap
+      // from clobbering valid igApiCookies on every engine cycle.
+      const alreadyVerified = client.isMobileLoggedIn();
+      if (alreadyVerified) {
+        console.log(`[engine] @${profile.username}: verified igApiCookies mobile session preserved (EB bootstrap skipped)`);
       } else {
-        // EB cookie file exists but has no sessionid — EB is not properly logged in.
-        // Do NOT fall back to a cold mobile API login. Mobile-API tools (Watch Reels,
-        // Watch Stories) will be skipped this session. The account needs to be
-        // re-verified via the Verify button so the EB logs in and saves a sessionid.
-        console.warn(`[engine] @${profile.username}: EB cookie file has no sessionid — mobile-API tools skipped this session. Re-verify the account via the Verify button.`);
+        const mobileBootOk = client.mobileBootstrapFromWebCookies();
+        if (mobileBootOk) {
+          console.log(`[engine] @${profile.username}: mobile session seeded from EB cookies (account not yet verified — Watch Stories/Reels may be skipped until Verify Credentials is run)`);
+        } else {
+          // EB cookie file exists but has no sessionid — EB is not properly logged in.
+          // Do NOT fall back to a cold mobile API login. Mobile-API tools (Watch Reels,
+          // Watch Stories) will be skipped this session. The account needs to be
+          // re-verified via the Verify button so the EB logs in and saves a sessionid.
+          console.warn(`[engine] @${profile.username}: EB cookie file has no sessionid — mobile-API tools skipped this session. Re-verify the account via the Verify button.`);
+        }
       }
       return client;
     }
@@ -2391,6 +2397,9 @@ class AutomationEngine {
           if (watched === -1) {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — no mobile session (run Verify Credentials to fix)`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no mobile session — run Verify Credentials to establish igApiCookies");
+          } else if (watched === -5) {
+            console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — mobile session rejected by Instagram (session expired or not device-verified)`);
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: mobile session expired or rejected — re-run Verify Credentials to refresh the session");
           } else if (watched === -2) {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories: tray was empty (0 stories in feed) — see server log for response keys`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "0 stories in feed — tray empty (Instagram returned no stories for this account's following list)");
