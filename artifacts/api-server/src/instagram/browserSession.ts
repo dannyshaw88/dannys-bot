@@ -1460,6 +1460,27 @@ export async function browserAutoLogin(
     await dismissCookieBanner(s.page);
     await delay(400);
 
+    // ── Clear stale session cookies before login form fill ────────────────────
+    // If Chrome has a stale sessionid (loaded from our saved-cookie DB or left
+    // over from a previous failed login attempt), Instagram's login POST silently
+    // bounces the form back to the login page with NO error message — because
+    // Instagram sees an existing session cookie and refuses to create a new one.
+    // Delete session-identity cookies now; leave device-fingerprint cookies
+    // (datr, ig_did, mid) and the CSRF token so the form POST still works.
+    try {
+      const allCookies: any[] = await (s.page as any).cookies(
+        "https://www.instagram.com",
+        "https://i.instagram.com",
+      ).catch(() => []);
+      const SESSION_ONLY = new Set(["sessionid", "ds_user_id", "rur", "ps_l", "ps_n"]);
+      const staleSessions = allCookies.filter((c: any) => SESSION_ONLY.has(c.name));
+      if (staleSessions.length) {
+        await (s.page as any).deleteCookie(...staleSessions).catch(() => null);
+        const names = staleSessions.map((c: any) => c.name).join(", ");
+        log(`[autoLogin:${profileId}] Cleared ${staleSessions.length} stale session cookie(s) before login: ${names}`, "browser");
+      }
+    } catch {}
+
     // ── Step 2: Check for login form ─────────────────────────────────────────
     sendStatus(profileId, "Looking for login form…");
 

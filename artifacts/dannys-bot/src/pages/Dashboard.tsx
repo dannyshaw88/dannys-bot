@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.304",
+    date: "15 May 2026",
+    items: [
+      { category: "Login", text: "Fixed: Silent login failure in the embedded browser — if Chrome had a stale sessionid cookie loaded from a previous session, Instagram's login endpoint would silently bounce the form back to the login page with no error message. The app now clears session-identity cookies (sessionid, ds_user_id, rur, ps_l, ps_n) immediately before every login attempt, while keeping device fingerprint cookies (datr, ig_did, mid) and the CSRF token. First-login attempts now succeed on the first try instead of requiring a full session delete and Chrome restart." },
+      { category: "Logs", text: "Fixed: HTTP log entries now show the account label (the friendly name assigned in account settings) instead of the raw Instagram username. If no label is set, the username is used as a fallback. e.g. 'POST /api/browser/1209 [Cecilia Main] 200 5ms'." },
+    ],
+  },
+  {
     version: "1.0.303",
     date: "15 May 2026",
     items: [
