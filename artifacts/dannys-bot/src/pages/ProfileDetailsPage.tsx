@@ -1117,6 +1117,32 @@ export function ProfileDetailsPage() {
                     data-testid="input-notes"
                   />
                 </div>
+                {/* EB → API session handshake indicator */}
+                {(() => {
+                  const cookies: string = (profile as any).igApiCookies ?? "";
+                  const hasSession = cookies.split(";").some(s => {
+                    const [k, v] = s.trim().split("=");
+                    return k?.toLowerCase() === "sessionid" && (v?.length ?? 0) > 5;
+                  });
+                  return (
+                    <div className="flex items-center justify-between pt-1">
+                      <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        <Cookie className="w-3.5 h-3.5" /> Session Cookie
+                      </Label>
+                      {hasSession ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                          Passed to API
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                          Not set — run Verify
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 

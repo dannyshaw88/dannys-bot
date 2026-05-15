@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.306",
+    date: "15 May 2026",
+    items: [
+      { category: "Account Settings", text: "Added: Session Cookie indicator in the Account Details card. Shows a green 'Passed to API' badge if the EB login successfully handed a sessionid cookie to the automation engine, or an amber 'Not set — run Verify' badge if no session has been established yet. The indicator updates live whenever the account page is open." },
+    ],
+  },
+  {
     version: "1.0.305",
     date: "15 May 2026",
     items: [
