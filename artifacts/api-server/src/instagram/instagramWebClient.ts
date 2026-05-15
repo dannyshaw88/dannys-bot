@@ -52,6 +52,7 @@
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import * as https from "https";
 import * as fs from "fs";
+import * as path from "path";
 import * as zlib from "zlib";
 import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes, constants as cryptoConstants } from "crypto";
 import { generateSync as totpGenerate } from "otplib";
@@ -382,11 +383,30 @@ export class InstagramWebClient {
     this.igDeviceState = igDeviceState ?? undefined;
     this.userAgentApi  = userAgentApi  ?? undefined;
     this.igApiCookies  = igApiCookies  ?? undefined;
+    // Eagerly seed stable device IDs from stored state so every code path
+    // (mobileBootstrap, restoreFromAuth, postLogin extraction) reuses the same
+    // values rather than generating fresh random IDs on each session start.
+    if (!this._mobileIgDid) { const v = this._savedIgDidFromDeviceState(); if (v) this._mobileIgDid = v; }
+    if (!this._mobileMid)   { const v = this._savedMidFromApiCookies();   if (v) this._mobileMid   = v; }
     // Eagerly restore mobile session so isMobileLoggedIn() returns true immediately.
     // Fast path 1: igApiCookies has a sessionid (Jarvee-imported or prior login).
     // Fast path 2: igDeviceState has a Bearer authorization token saved from verify
     //              (used when proxy strips all Set-Cookie so sessionid is unavailable).
     this._restoreMobileFromApiCookies() || this._restoreMobileFromAuthorization();
+  }
+
+  // Returns the saved ig_did from igDeviceState (most authoritative source — written by
+  // Verify Credentials and preserved until the user explicitly resets device IDs).
+  private _savedIgDidFromDeviceState(): string | undefined {
+    if (!this.igDeviceState) return undefined;
+    try { return (JSON.parse(this.igDeviceState) as any).igDid ?? undefined; } catch { return undefined; }
+  }
+
+  // Returns the saved mid from igApiCookies (written by Verify Credentials alongside sessionid).
+  private _savedMidFromApiCookies(): string | undefined {
+    if (!this.igApiCookies) return undefined;
+    const pair = this.igApiCookies.split(";").find(s => s.trim().startsWith("mid="));
+    return pair ? pair.split("=").slice(1).join("=") : undefined;
   }
 
   // Parse igApiCookies (Jarvee-style "key=value;key=value" with URL-encoded values)
@@ -406,10 +426,14 @@ export class InstagramWebClient {
     }
     if (!cookies.some(c => c.startsWith("sessionid="))) return false;
     // Ensure device-identity cookies are present
-    if (!cookies.some(c => c.startsWith("ig_did="))) cookies.push(`ig_did=${randomUUID()}`);
+    // Device-identity cookies — use stored values first, never generate fresh random IDs.
+    if (!cookies.some(c => c.startsWith("ig_did="))) {
+      if (!this._mobileIgDid) this._mobileIgDid = this._savedIgDidFromDeviceState() ?? randomUUID();
+      cookies.push(`ig_did=${this._mobileIgDid}`);
+    }
     if (!cookies.some(c => c.startsWith("mid="))) {
-      const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
-      cookies.push(`mid=${mid}`);
+      if (!this._mobileMid) this._mobileMid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      cookies.push(`mid=${this._mobileMid}`);
     }
     // igApiCookies never contains a csrftoken (Jarvee doesn't store it).
     // Seed with "missing" as a placeholder; _bootstrapMobileCsrf() will replace
@@ -437,8 +461,9 @@ export class InstagramWebClient {
     try {
       const saved = JSON.parse(this.igDeviceState);
       if (!saved.authorization) return false;
-      const igDid = saved.igDid ?? randomUUID();
-      const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      // Device-identity continuity — use stored IDs, never generate fresh random values.
+      if (!this._mobileIgDid) this._mobileIgDid = saved.igDid ?? randomUUID();
+      if (!this._mobileMid)   this._mobileMid   = this._savedMidFromApiCookies() ?? Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
       // Use saved csrftoken from igApiCookies if available, otherwise synthetic
       let csrf: string | undefined;
       if (this.igApiCookies) {
@@ -446,7 +471,7 @@ export class InstagramWebClient {
         if (csrfPair) csrf = csrfPair.split("=").slice(1).join("=");
       }
       if (!csrf) csrf = randomBytes(16).toString("hex");
-      this.mobileCookieJar = [`ig_did=${igDid}`, `mid=${mid}`, `csrftoken=${csrf}`];
+      this.mobileCookieJar = [`ig_did=${this._mobileIgDid}`, `mid=${this._mobileMid}`, `csrftoken=${csrf}`];
       this.mobileCsrf = csrf;
       this.mobileSessionReady = true;
       console.log(`[webClient] mobile session restored from authorization token (Bearer IGT:2:... in igDeviceState)`);
@@ -482,7 +507,9 @@ export class InstagramWebClient {
   // Returns true if a valid sessionid was found.
   loadBrowserCookies(): boolean {
     if (!this.profileId) return false;
-    const filePath = `${process.cwd()}/server/browser-data/cookies-${this.profileId}.json`;
+    const filePath = process.env.DATABASE_PATH
+      ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data", `cookies-${this.profileId}.json`)
+      : path.join(process.cwd(), "server", "browser-data", `cookies-${this.profileId}.json`);
     try {
       if (!fs.existsSync(filePath)) return false;
       const raw = fs.readFileSync(filePath, "utf8");
@@ -745,12 +772,15 @@ export class InstagramWebClient {
     // Reuse stable device IDs — NEVER generate new ones per call.
     // Generating a fresh ig_did/mid on every ensureClient() cycle (~every 10 min)
     // presents Instagram with a brand-new device fingerprint each run, which is
-    // a strong account-locking signal. We generate once and keep them for the
-    // lifetime of this client instance (i.e. the automation session).
+    // a strong account-locking signal. Prefer stored IDs from igDeviceState /
+    // igApiCookies (set by Verify Credentials), fall back to generating once
+    // per client instance and keeping them for the session lifetime.
     const isFirstBoot = !this._mobileIgDid;
     if (!this._mobileIgDid) {
-      this._mobileIgDid = randomUUID();
-      this._mobileMid   = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+      this._mobileIgDid = this._savedIgDidFromDeviceState() ?? randomUUID();
+    }
+    if (!this._mobileMid) {
+      this._mobileMid = this._savedMidFromApiCookies() ?? Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
     }
 
     // Seed mobile jar: keep sessionid + csrf from web session; add stable device ids
@@ -932,14 +962,14 @@ export class InstagramWebClient {
         .filter((c: any) => WANTED.has(c.key))
         .map((c: any) => `${c.key}=${c.value}`);
 
-      // Ensure ig_did and mid are present (may not be in jar — add from device state)
+      // Ensure ig_did and mid are present — use stored IDs, never generate fresh random values.
       if (!extracted.some(c => c.startsWith("ig_did="))) {
-        const igDid = randomUUID();
-        extracted.push(`ig_did=${igDid}`);
+        if (!this._mobileIgDid) this._mobileIgDid = this._savedIgDidFromDeviceState() ?? ig.state.deviceId ?? randomUUID();
+        extracted.push(`ig_did=${this._mobileIgDid}`);
       }
       if (!extracted.some(c => c.startsWith("mid="))) {
-        const mid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
-        extracted.push(`mid=${mid}`);
+        if (!this._mobileMid) this._mobileMid = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+        extracted.push(`mid=${this._mobileMid}`);
       }
 
       if (!extracted.some(c => c.startsWith("sessionid="))) {

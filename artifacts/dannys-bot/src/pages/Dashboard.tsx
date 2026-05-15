@@ -54,6 +54,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.325",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed 'Unrecognized device' security alerts from Instagram — the login process was accidentally wiping the device identity cookies (Machine ID, Device ID) before logging in, making Instagram think it was a brand new device every time. These are now always preserved." },
+      { category: "Fix", text: "Fixed the API tools (follow, unfollow, DM, etc.) not reading the embedded browser's live session in the installed app — they were looking in the wrong folder for the session cookies and silently falling back to stale or missing sessions." },
+      { category: "Fix", text: "Device fingerprints (Machine ID, Device ID, Phone ID, Advertising ID) are now strictly preserved across all code paths and never randomly regenerated mid-session — they only reset when you explicitly press Reset Device IDs." },
+      { category: "Fix", text: "Chrome's browser profile folder is now stored in a permanent location next to the database instead of the Windows temp folder, so it survives OS restarts and temp-folder cleanups." },
+    ],
+  },
+  {
     version: "1.0.324",
     date: "15 May 2026",
     items: [

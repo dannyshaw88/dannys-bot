@@ -39,57 +39,104 @@ An Instagram automation platform for managing multiple accounts with tools for f
 24. Instagram routes are registered directly on the Express app (not via the router), via `registerInstagramRoutes(httpServer, app)`
 25. Puppeteer-based embedded browser for session management and cookie creation
 26. The server also statically serves the built frontend from `artifacts/dannys-bot/dist/public` when it exists
+27. Browser frame streaming uses WebSocket (not SSE) so the frame stream does not consume one of Chromium's 6 HTTP connections per origin — keeps all connections free for clicks and API calls regardless of how many embedded browsers are open
 
 ## EB-FIRST AUTHENTICATION RULE (non-negotiable, do not break)
 
 **Every account session must originate from the embedded browser (EB). No Instagram API call may ever be made without a browser-originated cookie. This is the Jarvee model and must never be bypassed.**
 
 ### The only valid session establishment flow (Jarvee two-stage handshake — v1.0.307+):
-27. Embedded browser (Chrome/Puppeteer) logs in via `instagram.com/accounts/login/`
-28. App extracts `sessionid`, `csrftoken`, `ds_user_id`, `mid` from Chrome's cookie jar
-29. Those cookies are **immediately saved** to `igApiCookies` in the DB (status stays `verifying`) and to `browser-data/cookies-{profileId}.json`
-30. `verifyInstagramCredentials(profileWithCookies)` is called with the fresh cookies — it takes **Path 2 (cookie restore)** because `igApiCookies` now has a sessionid. It runs the Jarvee cold-start sequence: `tokens/keyed → launcher/sync → users/{id}/info`
-31. The result of the mobile API call sets the final `accountStatus` — `valid` only if the API confirms the session. The EB alone is never sufficient to mark an account valid.
+28. Embedded browser (Chrome/Puppeteer) logs in via `instagram.com/accounts/login/`
+29. App extracts `sessionid`, `csrftoken`, `ds_user_id`, `mid` from Chrome's cookie jar
+30. Those cookies are **immediately saved** to `igApiCookies` in the DB (status stays `verifying`) and to `browser-data/cookies-{profileId}.json`
+31. `verifyInstagramCredentials(profileWithCookies)` is called with the fresh cookies — it takes **Path 2 (cookie restore)** because `igApiCookies` now has a sessionid. It runs the Jarvee cold-start sequence: `tokens/keyed → launcher/sync → users/{id}/info`
+32. The result of the mobile API call sets the final `accountStatus` — `valid` only if the API confirms the session. The EB alone is never sufficient to mark an account valid.
 
 ### What is FORBIDDEN:
-32. Calling `client.mobileLogin(username, password)` directly from the automation engine — this is a cold mobile API login that bypasses the EB entirely. Instagram treats it as a new-device takeover and risks account locks.
-33. Calling `verifyInstagramCredentials()` with a profile that has **no** `igApiCookies` from an EB login — this causes Path 1 (direct mobile password login) which bypasses the EB. The function is safe to call ONLY AFTER the EB has logged in and `igApiCookies` has been saved to the profile, which forces Path 2 (cookie restore).
-34. Returning a usable API client from `ensureClient()` that has no session from an EB login (either `browserOk=true` via fresh EB cookies, or `isMobileLoggedIn()=true` from previously-verified igApiCookies that originated from an EB login).
+33. Calling `client.mobileLogin(username, password)` directly from the automation engine — this is a cold mobile API login that bypasses the EB entirely. Instagram treats it as a new-device takeover and risks account locks.
+34. Calling `verifyInstagramCredentials()` with a profile that has **no** `igApiCookies` from an EB login — this causes Path 1 (direct mobile password login) which bypasses the EB. The function is safe to call ONLY AFTER the EB has logged in and `igApiCookies` has been saved to the profile, which forces Path 2 (cookie restore).
+35. Returning a usable API client from `ensureClient()` that has no session from an EB login (either `browserOk=true` via fresh EB cookies, or `isMobileLoggedIn()=true` from previously-verified igApiCookies that originated from an EB login).
 
 ### Where this is enforced:
-35. `/api/profiles/:id/verify` → `getOrCreateSession` → `browserAutoLogin` → `getSessionPageCookies` → save `igApiCookies` to DB → `verifyInstagramCredentials(profileWithCookies)` [Path 2 only] → set final status
-36. `/api/profiles/verify-all` → same two-stage flow, sequential with delay
-37. `ensureClient()` in `automationEngine.ts`: if no EB session AND no stored igApiCookies → returns null, skips run
-38. If EB session exists but `mobileBootstrapFromWebCookies()` fails → logs warning, skips mobile-API tools, does NOT fall back to `mobileLogin()`
+36. `/api/profiles/:id/verify` → `getOrCreateSession` → `browserAutoLogin` → `getSessionPageCookies` → save `igApiCookies` to DB → `verifyInstagramCredentials(profileWithCookies)` [Path 2 only] → set final status
+37. `/api/profiles/verify-all` → same two-stage flow, sequential with delay
+38. `ensureClient()` in `automationEngine.ts`: if no EB session AND no stored igApiCookies → returns null, skips run
+39. If EB session exists but `mobileBootstrapFromWebCookies()` fails → logs warning, skips mobile-API tools, does NOT fall back to `mobileLogin()`
 
 ### Legacy dead code — do not use:
-39. `artifacts/api-server/src/src/` — duplicate directory, NOT imported by any active code, NOT bundled. It still references older patterns. Ignore it; it is dead. Active code lives exclusively in `artifacts/api-server/src/` (without the nested `src/src`).
-40. Path 1 inside `verifyInstagramCredentials()` (direct mobile password login) — never triggered by the verify routes because they always supply `igApiCookies` before calling the function. If `igApiCookies` is absent from the profile passed in, Path 1 would fire — that is a bug, not the intended path.
+40. `artifacts/api-server/src/src/` — duplicate directory, NOT imported by any active code, NOT bundled. It still references older patterns. Ignore it; it is dead. Active code lives exclusively in `artifacts/api-server/src/` (without the nested `src/src`).
+41. Path 1 inside `verifyInstagramCredentials()` (direct mobile password login) — never triggered by the verify routes because they always supply `igApiCookies` before calling the function. If `igApiCookies` is absent from the profile passed in, Path 1 would fire — that is a bug, not the intended path.
+
+## DEVICE FINGERPRINT CONTINUITY RULE (non-negotiable, do not break)
+
+**Every account has a permanent device identity. These identifiers must never be changed, regenerated, or cleared by any code path — for any reason — unless the user explicitly presses "Reset Device IDs". Violating this causes Instagram to fire "Unrecognized device" security alerts and flags the account.**
+
+### What the device identity consists of:
+
+**Browser-level (Chrome cookies, preserved across all EB sessions):**
+- `mid` — Machine ID. Instagram's primary persistent device token. Set once when a device first contacts Instagram and never changes for that device.
+- `ig_did` — Instagram Device ID. Paired with `mid` to uniquely identify the device.
+- `ig_nrcb` — Non-removable cookie backup. A secondary device persistence token.
+
+**Mobile API level (stored in `igDeviceState` JSON in the DB):**
+- `uuid` — Device session UUID
+- `deviceId` — Android device ID
+- `phoneId` — Phone identifier
+- `adid` — Advertising ID
+- `igDid` — ig_did value used by the mobile API client
+
+### Where these are stored:
+- `igDeviceState` (DB column) — JSON containing `uuid`, `deviceId`, `phoneId`, `adid`, `igDid`, and optionally `authorization` / `igWWWClaim`
+- `igApiCookies` (DB column) — semicolon-separated string: `sessionid=X;csrftoken=Y;ds_user_id=Z;mid=W;ig_did=V`
+- `browser-data/cookies-{profileId}.json` — full Chrome cookie export including `mid`, `ig_did`, `ig_nrcb`
+- `browser-data/userdata-{profileId}/` — Chrome's persistent user data directory (survives app restarts, never stored in temp)
+
+### The priority order for restoring device IDs (always follow this, never skip to random):
+1. `igDeviceState.igDid` / stored UUIDs — written by Verify Credentials, most authoritative
+2. `igApiCookies` mid — extracted from the mobile API cookie jar during verify
+3. `_mobileIgDid` / `_mobileMid` class fields — once generated for a session, reused for its lifetime
+4. Generate new random value — **ONLY** if absolutely nothing is stored anywhere (brand-new account, never verified)
+
+### The only legitimate way to reset device IDs:
+The user explicitly presses **Reset Device IDs** in the UI → calls `wipeEbSession()` → deletes `cookies-{profileId}.json` and `userdata-{profileId}/` directory → clears `igDeviceState` and `igApiCookies` from the DB. This is the only intentional reset path.
+
+### What is FORBIDDEN:
+42. Calling `randomUUID()` to generate `ig_did`, `mid`, `device_id`, `phone_id`, `uuid`, or `adid` when a stored value exists anywhere in `igDeviceState` or `igApiCookies`.
+43. Deleting `mid`, `ig_did`, or `ig_nrcb` from Chrome's cookie jar for any reason other than a user-initiated reset. When clearing stale session cookies before login, always split cookies into device tokens (preserve) and session cookies (clear).
+44. Storing Chrome's `userDataDir` in `os.tmpdir()` or any path that can be purged by the OS. It must live in `COOKIES_DIR` (next to the database) so Chrome's full profile persists across app restarts.
+45. Allowing `loadBrowserCookies()` in `instagramWebClient.ts` to read from any path other than the one derived from `DATABASE_PATH` (Electron production) or `process.cwd()/server/browser-data/` (dev). A hardcoded path will silently read nothing in production and the engine will fall back to stale or missing API cookies.
+
+### How this is enforced in code (as of v1.0.324+):
+- `setDeviceInfo()` in `instagramWebClient.ts` eagerly seeds `_mobileIgDid` from `igDeviceState.igDid` and `_mobileMid` from `igApiCookies` mid the moment device info is loaded from the DB — before any code path can generate a random fallback.
+- `_restoreMobileFromApiCookies()`, `_restoreMobileFromAuthorization()`, `mobileBootstrapFromWebCookies()`, and the post-login cookie extraction all check `_mobileIgDid` / `_mobileMid` before calling `randomUUID()`.
+- Both cookie purge sites in `browserSession.ts` (session startup and `browserAutoLogin`) split cookies into device tokens and session cookies and only wipe the session cookies, restoring device tokens immediately.
+- Chrome's `userDataDir` lives in `COOKIES_DIR` (persistent, next to the database file), not in `os.tmpdir()`.
+- `loadBrowserCookies()` uses the `DATABASE_PATH`-aware path so Electron production and dev both read from the same location the EB wrote to.
 
 ## Product
 
-41. Multi-account Instagram manager
-42. Follow/Unfollow tools with proxy support
-43. DM and contact messaging tools
-44. Human session (embedded browser) for cookie/session management
-45. Auto-reply tool
-46. Proxy manager with ping/auto-link
-47. Activity dashboard and stats
+46. Multi-account Instagram manager
+47. Follow/Unfollow tools with proxy support
+48. DM and contact messaging tools
+49. Human session (embedded browser) for cookie/session management
+50. Auto-reply tool
+51. Proxy manager with ping/auto-link
+52. Activity dashboard and stats
 
 ## User preferences
 
-48. Do not skip any file during imports — every file matters for git
+53. Do not skip any file during imports — every file matters for git
 
 ## Gotchas
 
-49. The DB path resolves from `process.cwd()` — when running via pnpm filter from `artifacts/api-server/`, the DB will be at `artifacts/api-server/database.db`; when run from workspace root it'll be at `database.db`
-50. `pnpm approve-builds` needed for puppeteer/sharp/esbuild after fresh installs
-51. The `server/` directory at the root is an older standalone server iteration — the active server is in `artifacts/api-server/`
-52. Always run `pnpm install --no-frozen-lockfile` when package.json changes don't match lockfile
+54. The DB path resolves from `process.cwd()` — when running via pnpm filter from `artifacts/api-server/`, the DB will be at `artifacts/api-server/database.db`; when run from workspace root it'll be at `database.db`
+55. `pnpm approve-builds` needed for puppeteer/sharp/esbuild after fresh installs
+56. The `server/` directory at the root is an older standalone server iteration — the active server is in `artifacts/api-server/`
+57. Always run `pnpm install --no-frozen-lockfile` when package.json changes don't match lockfile
 
 ## Pointers
 
-53. See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+58. See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
 
 ## CI / GitHub Actions — Critical Knowledge
 
@@ -97,25 +144,25 @@ An Instagram automation platform for managing multiple accounts with tools for f
 
 Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
-53. **`build-web`** (ubuntu-latest) — installs workspace deps, builds the API server and React frontend, uploads them as an intermediate Actions artifact called `web-builds` (4MB). This is NOT the installer.
-54. **`package-windows`** (windows-latest) — downloads `web-builds`, installs Electron deps, runs `build.mjs` to bundle the app, then runs `electron-builder` to produce the Windows installer. It publishes to GitHub Releases AND uploads the installer as an Actions artifact called `Equinox-Windows-Installer` (88MB).
+59. **`build-web`** (ubuntu-latest) — installs workspace deps, builds the API server and React frontend, uploads them as an intermediate Actions artifact called `web-builds` (4MB). This is NOT the installer.
+60. **`package-windows`** (windows-latest) — downloads `web-builds`, installs Electron deps, runs `build.mjs` to bundle the app, then runs `electron-builder` to produce the Windows installer. It publishes to GitHub Releases AND uploads the installer as an Actions artifact called `Equinox-Windows-Installer` (88MB).
 
 ### How the user gets the installer
 
-55. Go to `github.com/dannyshaw88/dannys-bot/actions`
-56. Click the latest successful run
-57. Scroll to the Artifacts section at the bottom
-58. Download **`Equinox-Windows-Installer`** (88MB) — this is the real installer
+61. Go to `github.com/dannyshaw88/dannys-bot/actions`
+62. Click the latest successful run
+63. Scroll to the Artifacts section at the bottom
+64. Download **`Equinox-Windows-Installer`** (88MB) — this is the real installer
 
 **Do NOT tell the user to go to the Releases tab.** They have always used the Actions tab. The `web-builds` artifact (4MB) in the same run is just an intermediate build output — not the installer.
 
 ### If the user says "the download is only 4MB"
 
-59. They are downloading `web-builds` instead of `Equinox-Windows-Installer`. Both appear in the Actions artifacts list. Point them to the correct one. Do NOT suggest the Releases page.
+65. They are downloading `web-builds` instead of `Equinox-Windows-Installer`. Both appear in the Actions artifacts list. Point them to the correct one. Do NOT suggest the Releases page.
 
 ### If the Equinox-Windows-Installer artifact is missing from the Actions tab
 
-60. The upload step at the end of `package-windows` in `build.yml` is missing or broken. It should look like:
+66. The upload step at the end of `package-windows` in `build.yml` is missing or broken. It should look like:
 
 ```yaml
 - name: Upload installer to Actions artifacts
@@ -128,41 +175,41 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 ### Auto-updater (for the installed app checking for updates)
 
-61. The installed app uses `electron-updater` with `setFeedURL` pointing to this private GitHub repo. It requires a GitHub token (`UPDATER_TOKEN` secret) baked in at build time via `DANNY_BOT_UPDATER_TOKEN` env var → `build.mjs` esbuild define → `__UPDATER_TOKEN__` in `main.ts`. Without this token the updater gets 404 on private repo release assets.
-62. The `package-windows` job also sets `GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}` so `electron-builder --publish always` can create/update GitHub Releases (which the auto-updater reads from).
+67. The installed app uses `electron-updater` with `setFeedURL` pointing to this private GitHub repo. It requires a GitHub token (`UPDATER_TOKEN` secret) baked in at build time via `DANNY_BOT_UPDATER_TOKEN` env var → `build.mjs` esbuild define → `__UPDATER_TOKEN__` in `main.ts`. Without this token the updater gets 404 on private repo release assets.
+68. The `package-windows` job also sets `GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}` so `electron-builder --publish always` can create/update GitHub Releases (which the auto-updater reads from).
 
 ### Key secrets required
 
-63. `UPDATER_TOKEN` — GitHub personal access token with `repo` scope. Used for: publishing releases (`GH_TOKEN`) and baking into the app for auto-update auth (`DANNY_BOT_UPDATER_TOKEN`).
+69. `UPDATER_TOKEN` — GitHub personal access token with `repo` scope. Used for: publishing releases (`GH_TOKEN`) and baking into the app for auto-update auth (`DANNY_BOT_UPDATER_TOKEN`).
 
 ### pnpm install quirks in CI
 
-64. Ubuntu CI must use `pnpm install --no-frozen-lockfile --ignore-scripts` (pnpm v11 requires `--ignore-scripts` to avoid build script failures in CI)
-65. Windows CI uses plain `npm install` inside `artifacts/electron/` (not pnpm)
-66. Vite frontend build requires `REPL_ID: ci` env var to output to `artifacts/dannys-bot/dist/public` (the path electron-builder expects)
+70. Ubuntu CI must use `pnpm install --no-frozen-lockfile --ignore-scripts` (pnpm v11 requires `--ignore-scripts` to avoid build script failures in CI)
+71. Windows CI uses plain `npm install` inside `artifacts/electron/` (not pnpm)
+72. Vite frontend build requires `REPL_ID: ci` env var to output to `artifacts/dannys-bot/dist/public` (the path electron-builder expects)
 
 ### Always push workflow changes as a single commit
 
-66. **NEVER push to GitHub unless the user explicitly instructs it.** Make all code changes locally first. Only run the Git push script when the user says to push / ship / release.
+73. **NEVER push to GitHub unless the user explicitly instructs it.** Make all code changes locally first. Only run the Git push script when the user says to push / ship / release.
 
-67. Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents API (or Git Trees API) to batch all file changes into one commit. The user explicitly cares about this.
+74. Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents API (or Git Trees API) to batch all file changes into one commit. The user explicitly cares about this.
 
 ### Version bumping — REQUIRED on every push
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-68. Current version: **v1.0.318**
-69. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.291` → `1.0.292`
-70. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
-71. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
-72. Do NOT skip the version bump even for small/doc-only changes
+75. Current version: **v1.0.324**
+76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.324` → `1.0.325`
+77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
+78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
+79. Do NOT skip the version bump even for small/doc-only changes
 
 ### What's New changelog — REQUIRED on every push
 
 Every push **must** also include a new entry at the top of the `CHANGELOG` array in `artifacts/dannys-bot/src/pages/Dashboard.tsx`.
 
-73. The `version` field must match the new version number in `artifacts/electron/package.json` (e.g. `"1.0.236"`)
-74. The `date` field should be today's date in plain format (e.g. `"12 May 2026"`)
-75. Write `items` in plain English — no technical jargon, no variable names, no internal references. Describe what changed from the user's perspective.
-76. One item per visible change. Keep each `text` to a single concise sentence.
-77. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
+80. The `version` field must match the new version number in `artifacts/electron/package.json` (e.g. `"1.0.325"`)
+81. The `date` field should be today's date in plain format (e.g. `"15 May 2026"`)
+82. Write `items` in plain English — no technical jargon, no variable names, no internal references. Describe what changed from the user's perspective.
+83. One item per visible change. Keep each `text` to a single concise sentence.
+84. Include `artifacts/dannys-bot/src/pages/Dashboard.tsx` in every batch push alongside the other changed files.
