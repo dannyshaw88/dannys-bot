@@ -177,6 +177,12 @@ const LAUNCH_ARGS = [
   "--mute-audio",
   "--hide-scrollbars",
   "--window-size=1280,760",
+  // Prevent Chrome from caching redirect chains. After ERR_TOO_MANY_REDIRECTS,
+  // Chrome caches the "this URL loops" result and instantly re-fires the error on
+  // every retry without making fresh network requests. Disabling the HTTP cache
+  // forces each navigation attempt to make real requests so a recovered sessionid
+  // can actually reach the Instagram feed.
+  "--disable-http-cache",
   // On Windows, headless Chrome still tries to spin up a GPU process.
   // When multiple EB instances launch simultaneously they race for GPU
   // resources — whichever loses gets a frozen renderer (screenshot timeouts,
@@ -187,12 +193,26 @@ const LAUNCH_ARGS = [
 ];
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
-// findChromiumPath which locates Chrome/Edge/Brave) or Nix store (Linux dev).
+// findChromiumPath which locates Chrome/Edge/Brave) or puppeteer's bundled Chrome (Linux dev).
 // The browser runs headless (completely invisible) with an isolated --user-data-dir
 // so it never touches the user's personal browser profile.
+function resolvePuppeteerChromePath(): string {
+  try {
+    // puppeteer (full package) ships with its own downloaded Chrome — use it directly.
+    // This avoids depending on a Nix store path that changes with every Chromium update.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pup = require("puppeteer");
+    if (typeof pup.executablePath === "function") {
+      const p = pup.executablePath();
+      if (p) return p;
+    }
+  } catch {}
+  return "";
+}
+
 const CHROMIUM_PATH =
   process.env.CHROMIUM_PATH ||
-  "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+  resolvePuppeteerChromePath();
 
 // Detect whether a UA string represents a mobile Chrome Android browser.
 // Used to decide which fingerprint values to spoof — mobile and desktop
@@ -780,51 +800,6 @@ function startFrameLoop(profileId: number) {
       const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
       if (isErrorPage) {
         errorRetryTick++;
-        // Read the error code from the page title on the first tick so we can
-        // decide whether to delete cookies.
-        if (errorRetryTick === 1) {
-          try {
-            const title: string = await s.page.title().catch(() => "");
-            (s as any)._lastErrorPageTitle = title;
-            log(`[frameLoop:${profileId}] error page detected — title: "${title}"`, "browser");
-          } catch {}
-        }
-        // Fire at tick 15 (3 s) and then every 150 ticks (30 s) after that.
-        // Skip entirely while autoLogin is running — browserAutoLogin handles the
-        // chrome-error:// recovery itself (navigate back + save cookies). If the
-        // frameLoop fires here concurrently it clears the just-set sessionid cookie
-        // and navigates away, sabotaging the login that already succeeded.
-        const shouldRecover = errorRetryTick === 15 || (errorRetryTick > 15 && (errorRetryTick - 15) % 150 === 0);
-        if (shouldRecover && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
-          const errTitle: string = (s as any)._lastErrorPageTitle ?? "";
-          const isProxyError = /ERR_PROXY|ERR_TUNNEL|ERR_SOCKS|TIMEOUT/i.test(errTitle);
-          const isRedirectLoop = /ERR_TOO_MANY_REDIRECTS|ERR_FAILED/i.test(errTitle) || !isProxyError;
-          // If autoLogin just succeeded (within 90 s) the cookies are valid — the
-          // redirect loop was already resolved and saveCookies already ran. Do NOT
-          // clear the cookies. Just navigate to instagram.com to unstick the panel.
-          const msSinceLogin = s.lastLoginSuccessAt ? Date.now() - s.lastLoginSuccessAt : Infinity;
-          if (isRedirectLoop && msSinceLogin < 90000) {
-            log(`[frameLoop:${profileId}] error page post-login (${Math.round(msSinceLogin / 1000)}s ago) — skipping cookie-clear, navigating to instagram.com`, "browser");
-            s.navProtectedUntil = Date.now() + 20000;
-            s.page.goto("https://www.instagram.com/", {
-              waitUntil: "domcontentloaded", timeout: 25000,
-            }).catch(() => null);
-          } else {
-            log(`[frameLoop:${profileId}] error page for ${Math.round(errorRetryTick * 200 / 1000)}s — ${isProxyError ? "proxy error (keeping cookies)" : "redirect/cookie error (clearing cookies)"} — navigating to login`, "browser");
-            if (isRedirectLoop) {
-              // Clear cookies — they caused the redirect loop and would trigger it again.
-              try {
-                const igCookies = await s.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
-                if (igCookies.length) await (s.page as any).deleteCookie(...igCookies).catch(() => null);
-              } catch {}
-              deleteSavedCookies(profileId);
-            }
-            s.navProtectedUntil = Date.now() + 20000;
-            s.page.goto("https://www.instagram.com/accounts/login/", {
-              waitUntil: "domcontentloaded", timeout: 25000,
-            }).catch(() => null);
-          }
-        }
       } else {
         errorRetryTick = 0;
         (s as any)._lastErrorPageTitle = undefined;
@@ -2016,53 +1991,8 @@ export async function browserAutoLogin(
             return { ok: false, message: "Account disabled by Instagram" };
           }
           if (twoFaAccepted) {
-            // If the post-login redirect chain caused ERR_TOO_MANY_REDIRECTS the page
-            // will be on chrome-error://. The sessionid cookie was already set by
-            // Instagram before the loop. Navigate back to instagram.com so the EB
-            // shows a real page and the frame loop runs normally after login.
-            if (s.page.url().startsWith("chrome-error://")) {
-              sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
-              // The redirect loop is caused by conflicting cookies in Chrome's jar.
-              // Clear ALL instagram.com cookies from Chrome, then re-inject only
-              // the sessionid. This breaks the redirect chain so the recovery goto
-              // lands on the feed instead of looping back to chrome-error://.
-              try {
-                const allIgCookies = await s.page.cookies(
-                  "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com"
-                ).catch(() => [] as any[]);
-                const sessionCookie = allIgCookies.find((c: any) => c.name === "sessionid" && (c.value?.length ?? 0) > 5);
-                if (allIgCookies.length) await (s.page as any).deleteCookie(...allIgCookies).catch(() => null);
-                if (sessionCookie) {
-                  await s.page.setCookie({ name: "sessionid", value: sessionCookie.value, domain: ".instagram.com", path: "/", httpOnly: true, secure: true }).catch(() => null);
-                }
-              } catch { /* non-fatal */ }
-              await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-              await delay(800);
-              if (s.page.url().startsWith("chrome-error://")) {
-                await delay(2000);
-                await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-                await delay(800);
-              }
-            }
             await saveCookies(profileId, s.page);
-            // If BOTH recovery gotos also hit chrome-error://, the redirect loop is
-            // account-level (Instagram is refusing to serve the feed for this sessionid).
-            // Delete the saved cookie JSON so the next EB open shows the login form
-            // instead of immediately looping again.  Navigate Chrome to the login page
-            // (no cookies = no redirect = stable page) and report failure honestly.
-            if (s.page.url().startsWith("chrome-error://")) {
-              sendStatus(profileId, "⚠ Redirect loop persists — Instagram will not serve the feed for this account. Clearing browser session and returning to login page.");
-              deleteSavedCookies(profileId);
-              try {
-                const leftover = await s.page.cookies("https://www.instagram.com", "https://i.instagram.com", "https://instagram.com").catch(() => [] as any[]);
-                if (leftover.length) await (s.page as any).deleteCookie(...leftover).catch(() => null);
-              } catch { /* non-fatal */ }
-              s.navProtectedUntil = Date.now() + 20000;
-              s.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null);
-              return { ok: false, message: "Instagram redirect loop persists — the account may need manual verification on instagram.com." };
-            }
             s.lastLoginSuccessAt = Date.now();
-            // Abort if the session was replaced (user pressed Clear while this login ran).
             if (sessions.get(profileId)?.sessionToken !== mySessionToken) {
               log(`[autoLogin:${profileId}] session replaced during 2FA login — suppressing loginDone to avoid phantom success on new session`, "browser");
               return { ok: false, message: "session replaced" };
@@ -2091,50 +2021,8 @@ export async function browserAutoLogin(
         sendStatus(profileId, `⚠ Account is disabled by Instagram (URL: ${currentUrl.slice(0, 80)})`);
         return { ok: false, message: "Account disabled by Instagram" };
       }
-      // Same ERR_TOO_MANY_REDIRECTS recovery as the 2FA path — navigate back if on error page.
-      if (currentUrl.startsWith("chrome-error://")) {
-        sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
-        // The redirect loop is caused by conflicting cookies in Chrome's jar.
-        // Clear ALL instagram.com cookies from Chrome, then re-inject only
-        // the sessionid. This breaks the redirect chain so the recovery goto
-        // lands on the feed instead of looping back to chrome-error://.
-        try {
-          const allIgCookies = await s.page.cookies(
-            "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com"
-          ).catch(() => [] as any[]);
-          const sessionCookie = allIgCookies.find((c: any) => c.name === "sessionid" && (c.value?.length ?? 0) > 5);
-          if (allIgCookies.length) await (s.page as any).deleteCookie(...allIgCookies).catch(() => null);
-          if (sessionCookie) {
-            await s.page.setCookie({ name: "sessionid", value: sessionCookie.value, domain: ".instagram.com", path: "/", httpOnly: true, secure: true }).catch(() => null);
-          }
-        } catch { /* non-fatal */ }
-        await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-        await delay(800);
-        if (s.page.url().startsWith("chrome-error://")) {
-          await delay(2000);
-          await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-          await delay(800);
-        }
-      }
       await saveCookies(profileId, s.page);
-      // If BOTH recovery gotos also hit chrome-error://, the redirect loop is
-      // account-level (Instagram is refusing to serve the feed for this sessionid).
-      // Delete the saved cookie JSON so the next EB open shows the login form
-      // instead of immediately looping again.  Navigate Chrome to the login page
-      // (no cookies = no redirect = stable page) and report failure honestly.
-      if (s.page.url().startsWith("chrome-error://")) {
-        sendStatus(profileId, "⚠ Redirect loop persists — Instagram will not serve the feed for this account. Clearing browser session and returning to login page.");
-        deleteSavedCookies(profileId);
-        try {
-          const leftover = await s.page.cookies("https://www.instagram.com", "https://i.instagram.com", "https://instagram.com").catch(() => [] as any[]);
-          if (leftover.length) await (s.page as any).deleteCookie(...leftover).catch(() => null);
-        } catch { /* non-fatal */ }
-        s.navProtectedUntil = Date.now() + 20000;
-        s.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null);
-        return { ok: false, message: "Instagram redirect loop persists — the account may need manual verification on instagram.com." };
-      }
       s.lastLoginSuccessAt = Date.now();
-      // Abort if the session was replaced (user pressed Clear while this login ran).
       if (sessions.get(profileId)?.sessionToken !== mySessionToken) {
         log(`[autoLogin:${profileId}] session replaced during login — suppressing loginDone to avoid phantom success on new session`, "browser");
         return { ok: false, message: "session replaced" };

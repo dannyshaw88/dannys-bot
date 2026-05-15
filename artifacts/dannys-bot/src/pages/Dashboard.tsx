@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.314",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Removed all redirect-recovery logic from the login flow. Login now succeeds and shows Instagram, or fails cleanly — no cookie clearing, no retry navigation, no frame loop auto-navigation on error pages." },
+    ],
+  },
+  {
     version: "1.0.313",
     date: "15 May 2026",
     items: [

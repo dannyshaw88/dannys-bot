@@ -95,9 +95,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [waitingFirstFrame, setWaitingFirstFrame] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [fileChooserPending, setFileChooserPending] = useState(false);
-  // True while the server's post-login redirect-loop recovery is running.
-  // Shown as a warning overlay so the user doesn't press Clear and abort it.
-  const [recoveryInProgress, setRecoveryInProgress] = useState(false);
 
   // F12 on the canvas toggles the log panel
   useEffect(() => {
@@ -304,14 +301,9 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             const text = msg.message ?? "";
             const isErr = text.startsWith("⚠") || text.startsWith("Error");
             appendLog(text, isErr ? "error" : "step");
-            // Show the recovery overlay so the user doesn't press Clear mid-recovery.
-            if (text.includes("recovering to instagram.com") || text.includes("ERR_TOO_MANY_REDIRECTS")) {
-              setRecoveryInProgress(true);
-            }
             break;
           }
           case "loginDone":
-            setRecoveryInProgress(false);
             if (msg.ok) {
               setLoginState("ok");
               appendLog(msg.message || "Done", "ok");
@@ -932,13 +924,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
             <WifiOff className="w-10 h-10 text-red-400" />
             <p className="text-sm font-medium text-foreground">Browser failed to start</p>
-            <p className="text-xs text-red-500 max-w-xs text-center font-medium">{errorMsg}</p>
-            <button
-              onClick={() => navigator.clipboard?.writeText(errorMsg ?? "").catch(() => {})}
-              className="text-[10px] text-slate-400 hover:text-slate-600 underline"
-            >
-              Copy error
-            </button>
             <Button onClick={connect} variant="outline" size="sm">Retry</Button>
           </div>
         )}
@@ -966,19 +951,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onContextMenu={onContextMenu}
         />
 
-        {/* Recovery overlay — shown while post-login redirect-loop recovery is running.
-            Warns the user NOT to press Clear, which would abort the recovery and wipe
-            the just-saved sessionid, restarting the entire login cycle. */}
-        {recoveryInProgress && connected && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-amber-50/95 z-15 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-3 max-w-xs text-center px-4">
-              <div className="w-10 h-10 rounded-full bg-amber-100 border-2 border-amber-400 flex items-center justify-center text-xl">⚠</div>
-              <p className="text-sm font-semibold text-amber-900">Login Detected — Recovery In Progress</p>
-              <p className="text-xs text-amber-800 leading-relaxed">Instagram redirected after login. The app is recovering your session automatically — this takes up to 15 seconds.</p>
-              <p className="text-xs font-medium text-red-700">Do NOT press Clear. It will wipe your session and restart the login from scratch.</p>
-            </div>
-          </div>
-        )}
 
         {/* First-frame overlay — connected but Chrome hasn't rendered anything yet */}
         {connected && waitingFirstFrame && !isFrozen && (
