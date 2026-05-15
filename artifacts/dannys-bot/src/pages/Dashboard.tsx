@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.315",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser now detects Instagram account security locks and shows a clear message explaining what to do, instead of showing a blank error page. Chrome returns to the login screen automatically after the lock is detected." },
+      { category: "Fix", text: "Confirmed the embedded browser always uses the account's assigned proxy — the direct connection flag is ignored when a proxy is configured." },
+    ],
+  },
+  {
     version: "1.0.314",
     date: "15 May 2026",
     items: [

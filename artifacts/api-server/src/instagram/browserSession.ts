@@ -177,12 +177,6 @@ const LAUNCH_ARGS = [
   "--mute-audio",
   "--hide-scrollbars",
   "--window-size=1280,760",
-  // Prevent Chrome from caching redirect chains. After ERR_TOO_MANY_REDIRECTS,
-  // Chrome caches the "this URL loops" result and instantly re-fires the error on
-  // every retry without making fresh network requests. Disabling the HTTP cache
-  // forces each navigation attempt to make real requests so a recovered sessionid
-  // can actually reach the Instagram feed.
-  "--disable-http-cache",
   // On Windows, headless Chrome still tries to spin up a GPU process.
   // When multiple EB instances launch simultaneously they race for GPU
   // resources — whichever loses gets a frozen renderer (screenshot timeouts,
@@ -453,6 +447,7 @@ export async function getOrCreateSession(
     // tick-15 window, leaving the browser permanently stuck on the error screen.
     const sNav = sessions.get(profileId);
     const navUrl = frame.url();
+    log(`[nav:${profileId}] framenavigated → ${navUrl}`, "browser");
     if (sNav && !navUrl.startsWith("chrome-error://")) {
       sNav.navProtectedUntil = Math.max(sNav.navProtectedUntil ?? 0, Date.now() + 12000);
     } else if (sNav && navUrl.startsWith("chrome-error://")) {
@@ -509,6 +504,54 @@ export async function getOrCreateSession(
 
   // Track pending requests: url → { startMs, method }
   const pending = new Map<string, { startMs: number; method: string }>();
+
+  // ── Redirect-chain debug + Instagram challenge detection ─────────────────
+  // framenavigated only fires on committed navigations. This catches every 3xx
+  // so we can see the full chain and detect security challenges before the loop.
+  let lastChallengeUrl: string | null = null;
+  page.on("response", (res) => {
+    const status = res.status();
+    if (status >= 300 && status < 400) {
+      const loc = res.headers()["location"] ?? "(no location)";
+      log(`[redirect:${profileId}] ${status} ${res.url().slice(0, 120)} → ${loc.slice(0, 120)}`, "browser");
+      // Capture Instagram security-challenge URLs (update_risky_contactpoint,
+      // checkpoint, challenge) so we can navigate directly if the chain loops.
+      if (loc.includes("update_risky_contactpoint") || loc.includes("/challenge/") || loc.includes("/accounts/suspended")) {
+        if (!lastChallengeUrl) {
+          lastChallengeUrl = loc.startsWith("http") ? loc : `https://www.instagram.com${loc}`;
+          log(`[challenge:${profileId}] Security challenge detected → ${lastChallengeUrl.slice(0, 120)}`, "browser");
+          sendStatus(profileId, `⚠ Instagram security check required — navigating to challenge page…`);
+        }
+      }
+    }
+  });
+  page.on("requestfailed", (req) => {
+    const err = req.failure()?.errorText ?? "unknown";
+    const url = req.url();
+    if (url.includes("instagram.com") || url.startsWith("chrome-error")) {
+      log(`[reqfail:${profileId}] ${err} — ${url.slice(0, 120)}`, "browser");
+    }
+    // When ERR_TOO_MANY_REDIRECTS fires and we detected a challenge URL earlier,
+    // navigate directly to the challenge page (fresh goto, not following the
+    // redirect chain from instagram.com) so the user can complete verification.
+    if (err === "net::ERR_TOO_MANY_REDIRECTS" && lastChallengeUrl) {
+      lastChallengeUrl = null;
+      // Instagram's /accounts/update_risky_contactpoint/ loops infinitely in
+      // headless Chrome via proxy — the server regenerates the challenge_context
+      // token on every request because the proxy IP is flagged. There is no way
+      // to navigate to this page programmatically. Instead, tell the user clearly
+      // what to do and put Chrome back on a usable login screen.
+      log(`[challenge:${profileId}] Account security lock — cannot resolve in EB. User must verify manually on instagram.com.`, "browser");
+      sendStatus(profileId, `🔒 Account security lock: Instagram requires verification for @${profileId}. Open instagram.com in a regular browser, log in, and complete any security check shown. Then click Clear here and try again.`);
+      const s = sessions.get(profileId);
+      if (s) {
+        s.navProtectedUntil = Date.now() + 5000;
+        setTimeout(() => {
+          s.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+        }, 1500);
+      }
+    }
+  });
 
   page.on("request", (req) => {
     if (isIgApiCall(req.url())) {
@@ -1217,12 +1260,13 @@ export async function closeSession(profileId: number) {
 }
 
 export async function clearSession(profileId: number, userAgent: string, proxy?: ProxyConfig) {
-  // NOTE: we intentionally do NOT call deleteSavedCookies() here. The cookies JSON
-  // contains the valid sessionid from the last successful login. Preserving it means
-  // the freshly-launched Chrome can skip the login form entirely and navigate straight
-  // to instagram.com — which prevents the "press Clear → new login → same redirect
-  // loop" cycle. Stale per-profile Chrome cookies are already scrubbed by the
-  // "Purge stale Chrome-profile cookies before load" block inside getOrCreateSession.
+  // Delete the saved cookies file so the new Chrome session starts on the login
+  // page with a clean jar. If cookies were valid the user wouldn't be pressing
+  // Clear — preserving stale cookies creates an unbreakable ERR_TOO_MANY_REDIRECTS
+  // loop because every new session loads them and immediately hits chrome-error://.
+  // After a successful login, saveCookies() writes fresh cookies so the NEXT open
+  // after a good login still gets the direct-to-feed navigation.
+  deleteSavedCookies(profileId);
   await closeSession(profileId);
   await getOrCreateSession(profileId, userAgent, proxy);
   log(`Session cleared for profile ${profileId}`, "browser");
@@ -1468,6 +1512,25 @@ export async function browserAutoLogin(
       sendStatus(profileId, "Login form detected — filling credentials…");
     }
     if (!onLoginPage && !onInstagram) {
+      // Wipe ALL Instagram cookies from Chrome's jar BEFORE navigating to the
+      // login page. Stale or expired cookies (loaded from the saved-cookie file
+      // on session start) cause ERR_TOO_MANY_REDIRECTS when Chrome tries to load
+      // accounts/login/ — Instagram redirects to home, home bounces back to login,
+      // and the loop never breaks. A clean jar guarantees the login page loads.
+      // Also delete the saved-cookie file so Chrome doesn't reload stale cookies
+      // on the next session start.
+      try {
+        const allIgCookies: any[] = await (s.page as any).cookies(
+          "https://www.instagram.com",
+          "https://i.instagram.com",
+          "https://instagram.com",
+        ).catch(() => []);
+        if (allIgCookies.length) {
+          await (s.page as any).deleteCookie(...allIgCookies).catch(() => null);
+          log(`[autoLogin:${profileId}] Cleared ${allIgCookies.length} Instagram cookies from Chrome jar before login`, "browser");
+        }
+      } catch {}
+      deleteSavedCookies(profileId);
       sendStatus(profileId, "Navigating to Instagram login…");
       s.navProtectedUntil = Date.now() + 35000;
       await s.page.goto("https://www.instagram.com/accounts/login/", {
@@ -1480,27 +1543,6 @@ export async function browserAutoLogin(
     await delay(1500);
     await dismissCookieBanner(s.page);
     await delay(400);
-
-    // ── Clear stale session cookies before login form fill ────────────────────
-    // If Chrome has a stale sessionid (loaded from our saved-cookie DB or left
-    // over from a previous failed login attempt), Instagram's login POST silently
-    // bounces the form back to the login page with NO error message — because
-    // Instagram sees an existing session cookie and refuses to create a new one.
-    // Delete session-identity cookies now; leave device-fingerprint cookies
-    // (datr, ig_did, mid) and the CSRF token so the form POST still works.
-    try {
-      const allCookies: any[] = await (s.page as any).cookies(
-        "https://www.instagram.com",
-        "https://i.instagram.com",
-      ).catch(() => []);
-      const SESSION_ONLY = new Set(["sessionid", "ds_user_id", "rur", "ps_l", "ps_n"]);
-      const staleSessions = allCookies.filter((c: any) => SESSION_ONLY.has(c.name));
-      if (staleSessions.length) {
-        await (s.page as any).deleteCookie(...staleSessions).catch(() => null);
-        const names = staleSessions.map((c: any) => c.name).join(", ");
-        log(`[autoLogin:${profileId}] Cleared ${staleSessions.length} stale session cookie(s) before login: ${names}`, "browser");
-      }
-    } catch {}
 
     // ── Step 2: Check for login form ─────────────────────────────────────────
     sendStatus(profileId, "Looking for login form…");
