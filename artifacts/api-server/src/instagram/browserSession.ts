@@ -130,6 +130,12 @@ interface Session {
   // to avoid clearing valid session cookies when the page is still on chrome-error://
   // right after a redirect-loop recovery that already saved good cookies.
   lastLoginSuccessAt?: number;
+  // Unique token per session instance. autoLogin captures this at start and checks
+  // it before returning ok:true — if the session was replaced (clearSession pressed
+  // while login was in progress) the token will differ and the stale loginDone
+  // event is suppressed, preventing a false-positive "✅ Login successful" on the
+  // newly-launched Chrome session.
+  sessionToken: symbol;
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -515,7 +521,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent };
+  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol() };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -1236,7 +1242,12 @@ export async function closeSession(profileId: number) {
 }
 
 export async function clearSession(profileId: number, userAgent: string, proxy?: ProxyConfig) {
-  deleteSavedCookies(profileId);
+  // NOTE: we intentionally do NOT call deleteSavedCookies() here. The cookies JSON
+  // contains the valid sessionid from the last successful login. Preserving it means
+  // the freshly-launched Chrome can skip the login form entirely and navigate straight
+  // to instagram.com — which prevents the "press Clear → new login → same redirect
+  // loop" cycle. Stale per-profile Chrome cookies are already scrubbed by the
+  // "Purge stale Chrome-profile cookies before load" block inside getOrCreateSession.
   await closeSession(profileId);
   await getOrCreateSession(profileId, userAgent, proxy);
   log(`Session cleared for profile ${profileId}`, "browser");
@@ -1447,6 +1458,13 @@ export async function browserAutoLogin(
 ): Promise<{ ok: boolean; message: string }> {
   const s = sessions.get(profileId);
   if (!s) return { ok: false, message: "No active browser session" };
+
+  // Capture the session's unique token. If the user presses Clear while this
+  // login is running, clearSession replaces the entry in the sessions map with a
+  // brand-new Session (new token). We check below before returning ok:true so a
+  // stale autoLogin from the dead session never fires a phantom "✅ Login
+  // successful" event on the newly-launched Chrome session.
+  const mySessionToken = s.sessionToken;
 
   // Guard: suppress screenshot-timeout kills while login is running so the page
   // isn't destroyed mid-flow (which would produce a spurious ok:false result).
@@ -2028,6 +2046,11 @@ export async function browserAutoLogin(
             }
             await saveCookies(profileId, s.page);
             s.lastLoginSuccessAt = Date.now();
+            // Abort if the session was replaced (user pressed Clear while this login ran).
+            if (sessions.get(profileId)?.sessionToken !== mySessionToken) {
+              log(`[autoLogin:${profileId}] session replaced during 2FA login — suppressing loginDone to avoid phantom success on new session`, "browser");
+              return { ok: false, message: "session replaced" };
+            }
             sendStatus(profileId, "✓ 2FA accepted — logged in successfully!");
             return { ok: true, message: "Login successful" };
           }
@@ -2079,6 +2102,11 @@ export async function browserAutoLogin(
       }
       await saveCookies(profileId, s.page);
       s.lastLoginSuccessAt = Date.now();
+      // Abort if the session was replaced (user pressed Clear while this login ran).
+      if (sessions.get(profileId)?.sessionToken !== mySessionToken) {
+        log(`[autoLogin:${profileId}] session replaced during login — suppressing loginDone to avoid phantom success on new session`, "browser");
+        return { ok: false, message: "session replaced" };
+      }
       sendStatus(profileId, "✓ Logged in — browser is showing your Instagram.");
       return { ok: true, message: "Login successful" };
     }

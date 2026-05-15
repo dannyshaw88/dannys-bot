@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.312",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Eliminated the infinite ERR_TOO_MANY_REDIRECTS crash loop caused by three compounding bugs: (1) phantom loginDone — stale autoLogin running on a killed Chrome session fired a false 'Login successful' event on the newly-launched Chrome; fixed by capturing a session token at autoLogin start and aborting silently if the session was replaced before return. (2) clearSession wiped the saved sessionid — pressing Clear deleted the cookies JSON so the next Chrome had to log in fresh and hit the same redirect loop again; fixed by removing deleteSavedCookies from clearSession (Chrome-profile stale cookies are already purged by getOrCreateSession on launch). (3) No UI warning — user pressed Clear mid-recovery not knowing login had already succeeded; fixed by a new amber warning overlay 'Recovery In Progress — Do NOT press Clear' that appears as soon as the redirect loop is detected and disappears when loginDone fires." },
+    ],
+  },
+  {
     version: "1.0.311",
     date: "15 May 2026",
     items: [
