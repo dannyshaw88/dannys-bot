@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.307",
+    date: "15 May 2026",
+    items: [
+      { category: "Verify", text: "Fixed: Accounts were being marked 'Valid' the moment a sessionid cookie was found in the embedded browser — before confirming that cookie actually works at the mobile API layer. Jarvee's real flow is: EB login → grab cookies → hand to API → API makes cold-start calls (tokens/keyed, launcher/sync, users/info) → ONLY THEN mark valid. The EB cookies are now saved immediately after extraction (so they survive even a transient API failure), then the mobile API validation runs, and the final account status is set by the API result, not the EB result. Both the single-account Verify and bulk verify paths have been updated." },
+    ],
+  },
+  {
     version: "1.0.306",
     date: "15 May 2026",
     items: [

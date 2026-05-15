@@ -503,16 +503,31 @@ export async function registerInstagramRoutes(
           message: `@${profile.username} — browser login appeared to succeed but no sessionid cookie was found. Try again.`,
         };
       } else {
-        // Step 4: Format cookies for the API client (handed over exactly like Jarvee)
+        // Step 4: Build cookie string from EB session and persist it immediately
         const cookieParts = [`sessionid=${sessionid}`];
         if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
         if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
         if (mid)       cookieParts.push(`mid=${mid}`);
+        const freshCookies = cookieParts.join("; ");
+
+        // Persist the EB cookies before the API validation so they survive even if
+        // the mobile API call temporarily fails (network hiccup, proxy lag, etc.)
+        await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
+
+        // Step 5: Mobile API confirmation — the Jarvee step we were missing.
+        // EB login proves the web session is alive.  This step confirms the same
+        // cookies work at the mobile API layer before the account is marked valid.
+        // verifyInstagramCredentials will take Path 2 (cookie restore) because
+        // igApiCookies now has a sessionid — it runs the full cold-start sequence
+        // (tokens/keyed → launcher/sync → users/{id}/info) and returns the
+        // authoritative result.
+        const profileWithCookies = { ...effectiveProfile, igApiCookies: freshCookies } as typeof effectiveProfile;
+        const apiResult = await verifyInstagramCredentials(profileWithCookies);
         result = {
-          ok: true,
-          accountStatus: "valid",
-          message: `@${profile.username} — logged in via browser. Session handed to API.`,
-          igApiCookies: cookieParts.join("; "),
+          ...apiResult,
+          // Always carry the fresh EB cookies forward regardless of API result —
+          // they're needed for the next attempt if the API call transiently failed.
+          igApiCookies: freshCookies,
         };
       }
     } else {
@@ -1459,12 +1474,11 @@ export async function registerInstagramRoutes(
               if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
               if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
               if (mid)       cookieParts.push(`mid=${mid}`);
-              result = {
-                ok: true,
-                accountStatus: "valid",
-                message: `@${profile.username} — logged in via browser. Session handed to API.`,
-                igApiCookies: cookieParts.join("; "),
-              };
+              const freshCookies = cookieParts.join("; ");
+              await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
+              const profileWithCookies = { ...effectiveP, igApiCookies: freshCookies } as typeof effectiveP;
+              const apiResult = await verifyInstagramCredentials(profileWithCookies);
+              result = { ...apiResult, igApiCookies: freshCookies };
             }
           } else {
             const msg = bulkLoginResult.message ?? "";
