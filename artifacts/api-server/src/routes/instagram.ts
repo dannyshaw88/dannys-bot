@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
+import { WebSocketServer } from "ws";
 import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
 import { storage } from "../storage";
@@ -11,8 +12,8 @@ import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { IgApiClient } from "instagram-private-api";
 import {
   getOrCreateSession,
-  attachSSE,
-  detachSSE,
+  attachWS,
+  detachWS,
   browserNavigate,
   browserClick,
   browserMouseMove,
@@ -1157,49 +1158,49 @@ export async function registerInstagramRoutes(
     res.json(info);
   });
 
-  // SSE stream for real-time browser frames (proxy-friendly, no upgrade required)
-  app.get("/api/browser/:profileId/stream", async (req, res) => {
-    const profileId = Number(req.params.profileId);
-    const profile = await storage.getProfile(profileId);
-    if (!profile) { res.status(404).end(); return; }
-    // Block EB stream when no proxy is assigned.
+  // WebSocket stream for real-time browser frames.
+  // WebSocket connections use a separate socket pool in Chromium and do NOT count
+  // against the 6-connection-per-origin HTTP/1.1 limit, so 10+ EBs can be open
+  // simultaneously without blocking click/input POST requests.
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", async (request, socket, head) => {
+    const url = new URL(request.url ?? "", `http://localhost`);
+    const match = url.pathname.match(/^\/api\/browser\/(\d+)\/stream$/);
+    if (!match) {
+      socket.destroy();
+      return;
+    }
+    const profileId = Number(match[1]);
+
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    if (!profile) { socket.destroy(); return; }
+
     const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
     if (!hasProxy) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.flushHeaders();
-      res.write(`data: ${JSON.stringify({ type: "error", message: "No proxy assigned — assign a proxy to this account before using the embedded browser." })}\n\n`);
-      res.end();
+      // Send a WS close with an error message then destroy the socket
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        ws.send(JSON.stringify({ type: "error", message: "No proxy assigned — assign a proxy to this account before using the embedded browser." }));
+        ws.close();
+      });
       return;
     }
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no"); // disable nginx/proxy response buffering
-    res.flushHeaders();
+    wss.handleUpgrade(request, socket, head, async (ws) => {
+      try {
+        const proxy = await resolveProxyConfig(profile);
+        const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+        await getOrCreateSession(profileId, ua, proxy);
+        attachWS(profileId, ws);
+      } catch (err: any) {
+        ws.send(JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" }));
+        ws.close();
+        return;
+      }
 
-    // Send SSE keepalive comments every 20 s while the browser is starting up.
-    // Prevents proxy/connection timeouts during Chrome launch.
-    const keepalive = setInterval(() => {
-      if (!res.writableEnded) res.write(": keepalive\n\n");
-    }, 20_000);
-
-    try {
-      const proxy = await resolveProxyConfig(profile);
-      const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
-      await getOrCreateSession(profileId, ua, proxy);
-      clearInterval(keepalive);
-      attachSSE(profileId, res);
-    } catch (err: any) {
-      clearInterval(keepalive);
-      res.write(`data: ${JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" })}\n\n`);
-      res.end();
-      return;
-    }
-
-    req.on("close", () => {
-      detachSSE(profileId, res);
+      ws.on("close", () => {
+        detachWS(profileId, ws);
+      });
     });
   });
 

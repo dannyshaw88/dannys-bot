@@ -1,5 +1,6 @@
 import type { Browser, Page } from "puppeteer";
 import type { ServerResponse } from "http";
+import WebSocket from "ws";
 import { generateTotp } from "./totp";
 import fs from "fs";
 import path from "path";
@@ -119,7 +120,7 @@ interface Session {
   page: Page;          // always === pages[activePage] — kept in sync on tab switch
   pages: Page[];
   activePage: number;
-  res: ServerResponse | null; // SSE response — null when no client is connected
+  ws: WebSocket | null; // WebSocket client — null when no client is connected
   frameLoop: ReturnType<typeof setInterval> | null;
   lastUrl: string;
   proxyKey: string; // "direct" or "host:port" — used to detect proxy changes
@@ -163,9 +164,9 @@ export function setCheckpointUrl(profileId: number, mobileOrWebUrl: string) {
   checkpointUrlCache.set(profileId, webUrl);
 }
 
-function sseWrite(res: ServerResponse | null, data: object) {
-  if (!res || res.writableEnded) return;
-  try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
+function wsWrite(ws: WebSocket | null, data: object) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  try { ws.send(JSON.stringify(data)); } catch {}
 }
 
 const sessions = new Map<number, Session>();
@@ -667,7 +668,7 @@ export async function getOrCreateSession(
     // viable.  When the user opens the session (res becomes non-null) Chrome
     // re-requests anything it needs for the current viewport automatically.
     const s = sessions.get(profileId);
-    const hasViewer = !!(s?.res && !s.res.writableEnded);
+    const hasViewer = !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
     if (!hasViewer) {
       const rType = req.resourceType();
       if (rType === "image" || rType === "media" || rType === "font") {
@@ -704,7 +705,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
+  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -725,19 +726,19 @@ export async function getOrCreateSession(
       (newPage as any).on("filechooser", (chooser: any) => {
         pendingFileChoosers.set(profileId, chooser);
         const s = sessions.get(profileId);
-        if (s) sseWrite(s.res, { type: "fileChooserNeeded" });
+        if (s) wsWrite(s.ws, { type: "fileChooserNeeded" });
       });
     } catch { /* never crash on target creation */ }
   });
 
   // ── File chooser interception ─────────────────────────────────────────────
   // Puppeteer v24: 'filechooser' event fires whenever the page opens a file dialog.
-  // We store the chooser and relay a "fileChooserNeeded" SSE event to the frontend,
+  // We store the chooser and relay a "fileChooserNeeded" WS event to the frontend,
   // which shows a native <input type="file"> so the user can pick from their machine.
   (page as any).on("filechooser", (chooser: any) => {
     pendingFileChoosers.set(profileId, chooser);
     const s = sessions.get(profileId);
-    if (s) sseWrite(s.res, { type: "fileChooserNeeded" });
+    if (s) wsWrite(s.ws, { type: "fileChooserNeeded" });
   });
 
   // ── Browser console log streaming ─────────────────────────────────────────
@@ -747,7 +748,7 @@ export async function getOrCreateSession(
     const level: string = msg.type();
     const text: string = msg.text();
     if (!text || text.startsWith("[DOM]")) return; // skip noisy internal Chrome messages
-    sseWrite(s.res, { type: "consoleLog", level, text });
+    wsWrite(s.ws, { type: "consoleLog", level, text });
   });
 
   // ── Purge stale Chrome-profile cookies BEFORE loading our saved state ────────
@@ -795,22 +796,22 @@ export async function getOrCreateSession(
   return session;
 }
 
-export function detachSSE(profileId: number, res: ServerResponse) {
+export function detachWS(profileId: number, ws: WebSocket) {
   const session = sessions.get(profileId);
-  if (!session || session.res !== res) return;
-  session.res = null;
+  if (!session || session.ws !== ws) return;
+  session.ws = null;
   if (session.frameLoop) { clearInterval(session.frameLoop); session.frameLoop = null; }
 }
 
-export function attachSSE(profileId: number, res: ServerResponse) {
+export function attachWS(profileId: number, ws: WebSocket) {
   const session = sessions.get(profileId);
   if (!session) return;
 
-  // End any existing SSE connection for this profile
-  if (session.res && !session.res.writableEnded) {
-    try { session.res.end(); } catch {}
+  // Close any existing WebSocket connection for this profile
+  if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+    try { session.ws.close(); } catch {}
   }
-  session.res = res;
+  session.ws = ws;
 
   // ── Initial / recovery navigation ─────────────────────────────────────────
   // This is the ONLY place that fires page.goto() after a session is created or
@@ -882,7 +883,7 @@ function startFrameLoop(profileId: number) {
   const startLoop = () => {
   session.frameLoop = setInterval(async () => {
     const s = sessions.get(profileId);
-    if (!s || !s.res || s.res.writableEnded) {
+    if (!s || !s.ws || s.ws.readyState !== WebSocket.OPEN) {
       if (s?.frameLoop) clearInterval(s.frameLoop);
       return;
     }
@@ -900,7 +901,7 @@ function startFrameLoop(profileId: number) {
     keepAliveTick++;
     if (keepAliveTick >= 100) {
       keepAliveTick = 0;
-      try { s.res.write(": keepalive\n\n"); } catch {}
+      try { if (s.ws?.readyState === WebSocket.OPEN) s.ws.ping(); } catch {}
 
       // ── Server-side freeze diagnostic ─────────────────────────────────────
       const silentMs = Date.now() - lastFrameSentAt;
@@ -997,12 +998,12 @@ function startFrameLoop(profileId: number) {
         log(`[frameLoop:${profileId}] slow screenshot: ${screenshotMs}ms url=${currentUrl.slice(0, 80)}`, "browser");
       }
 
-      sseWrite(s.res, { type: "frame", data: screenshot, url: currentUrl });
+      wsWrite(s.ws, { type: "frame", data: screenshot, url: currentUrl });
       lastFrameSentAt = Date.now();
 
       if (currentUrl !== s.lastUrl) {
         s.lastUrl = currentUrl;
-        sseWrite(s.res, { type: "urlChange", url: currentUrl });
+        wsWrite(s.ws, { type: "urlChange", url: currentUrl });
       }
 
       screenshotTimeoutCount = 0; // successful screenshot — reset crash counter
@@ -1087,9 +1088,9 @@ function startFrameLoop(profileId: number) {
           } else {
             const crashUrl = (() => { try { return s.page.url(); } catch { return "unknown"; } })();
             log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts on "${crashUrl}" — closing Chrome entirely (cookies preserved)`, "browser");
-            sseWrite(s.res, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
-            try { s.res.end(); } catch {}
-            s.res = null;
+            wsWrite(s.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
+            try { s.ws?.close(); } catch {}
+            s.ws = null;
             if (s.frameLoop) { clearInterval(s.frameLoop); s.frameLoop = null; }
             // Close the Chrome process entirely so the next open gets a fresh start.
             // Screenshot timeouts = proxy freeze (renderer stuck on TCP tunnel),
@@ -1122,24 +1123,24 @@ export async function browserNavigate(profileId: number, url: string) {
   const s = sessions.get(profileId);
   if (!s) return;
   try {
-    sseWrite(s.res, { type: "loading", loading: true });
+    wsWrite(s.ws, { type: "loading", loading: true });
     s.navProtectedUntil = Date.now() + 35000;
     await s.page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-    sseWrite(s.res, { type: "loading", loading: false });
+    wsWrite(s.ws, { type: "loading", loading: false });
   } catch {
-    sseWrite(s.res, { type: "loading", loading: false });
+    wsWrite(s.ws, { type: "loading", loading: false });
   }
 }
 
 async function kickFrame(profileId: number) {
   const s = sessions.get(profileId);
-  if (!s || !s.res || s.res.writableEnded) return;
+  if (!s || !s.ws || s.ws.readyState !== WebSocket.OPEN) return;
   try {
     const [screenshot, url] = await Promise.all([
       s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
       Promise.resolve(s.page.url()),
     ]);
-    sseWrite(s.res, { type: "frame", data: screenshot, url });
+    wsWrite(s.ws, { type: "frame", data: screenshot, url });
   } catch { /* page may be navigating */ }
 }
 
@@ -1151,7 +1152,7 @@ function sendTabsUpdate(profileId: number) {
     try { url = p.url(); } catch {}
     return { url };
   });
-  sseWrite(s.res, { type: "tabsUpdate", tabs, active: s.activePage });
+  wsWrite(s.ws, { type: "tabsUpdate", tabs, active: s.activePage });
 }
 
 export async function browserClick(profileId: number, x: number, y: number) {
@@ -1259,25 +1260,25 @@ export async function browserGetSelectedText(profileId: number): Promise<string>
 export async function browserBack(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
-  sseWrite(s.res, { type: "loading", loading: true });
+  wsWrite(s.ws, { type: "loading", loading: true });
   try { await s.page.goBack({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
-  sseWrite(s.res, { type: "loading", loading: false });
+  wsWrite(s.ws, { type: "loading", loading: false });
 }
 
 export async function browserForward(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
-  sseWrite(s.res, { type: "loading", loading: true });
+  wsWrite(s.ws, { type: "loading", loading: true });
   try { await s.page.goForward({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
-  sseWrite(s.res, { type: "loading", loading: false });
+  wsWrite(s.ws, { type: "loading", loading: false });
 }
 
 export async function browserReload(profileId: number) {
   const s = sessions.get(profileId);
   if (!s) return;
-  sseWrite(s.res, { type: "loading", loading: true });
+  wsWrite(s.ws, { type: "loading", loading: true });
   try { await s.page.reload({ waitUntil: "domcontentloaded", timeout: 10000 }); } catch {}
-  sseWrite(s.res, { type: "loading", loading: false });
+  wsWrite(s.ws, { type: "loading", loading: false });
 }
 
 // ── File upload: accept files chosen by the user in the frontend ─────────────
@@ -1320,14 +1321,14 @@ export async function browserNewTab(profileId: number) {
     (newPage as any).on("filechooser", (chooser: any) => {
       pendingFileChoosers.set(profileId, chooser);
       const sess = sessions.get(profileId);
-      if (sess) sseWrite(sess.res, { type: "fileChooserNeeded" });
+      if (sess) wsWrite(sess.ws, { type: "fileChooserNeeded" });
     });
     newPage.on("console", (msg: any) => {
       const sess = sessions.get(profileId);
       if (!sess) return;
       const text: string = msg.text();
       if (!text || text.startsWith("[DOM]")) return;
-      sseWrite(sess.res, { type: "consoleLog", level: msg.type(), text });
+      wsWrite(sess.ws, { type: "consoleLog", level: msg.type(), text });
     });
     s.pages.push(newPage);
     s.activePage = s.pages.length - 1;
@@ -1444,7 +1445,7 @@ export async function closeSession(profileId: number, opts?: { skipCookieSave?: 
   const s = sessions.get(profileId);
   if (!s) return;
   if (s.frameLoop) clearInterval(s.frameLoop);
-  if (s.res && !s.res.writableEnded) try { s.res.end(); } catch {}
+  if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}
   // Save cookies before closing so the next open restores the latest session state.
   // Skipped by clearSession / wipeEbSession which deliberately discard cookies.
   if (!opts?.skipCookieSave) {
@@ -1613,13 +1614,13 @@ async function dismissInstagramPopups(page: Page): Promise<void> {
 
 function sendStatus(profileId: number, message: string) {
   const s = sessions.get(profileId);
-  sseWrite(s?.res ?? null, { type: "loginStatus", message });
+  wsWrite(s?.ws ?? null, { type: "loginStatus", message });
   log(`[autoLogin:${profileId}] ${message}`, "browser");
 }
 
 export function sendLoginDone(profileId: number, ok: boolean, message: string) {
   const s = sessions.get(profileId);
-  sseWrite(s?.res ?? null, { type: "loginDone", ok, message });
+  wsWrite(s?.ws ?? null, { type: "loginDone", ok, message });
   log(`[loginDone:${profileId}] ${ok ? "✅" : "❌"} ${message}`, "browser");
 }
 

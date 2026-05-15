@@ -57,7 +57,7 @@ function nowTs() {
 export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelProps) {
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const esRef = useRef<EventSource | null>(null);
+  const esRef = useRef<WebSocket | null>(null);
   const addressFocusedRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -213,14 +213,19 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     };
   }, [send]);
 
-  // ── SSE connection lifecycle ──────────────────────────────────────────────
+  // ── WebSocket connection lifecycle ────────────────────────────────────────
+  // WebSocket connections use a separate socket pool in Chromium and do NOT count
+  // against the 6-connection-per-origin HTTP/1.1 limit. This means 10+ EBs can
+  // be open simultaneously without the click POST requests (sent via HTTP) being
+  // queued behind the frame streams. With SSE, 5+ EBs saturated the pool and
+  // clicks never reached the server — hence the "login button does nothing" bug.
   const connect = useCallback(() => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
     if (esRef.current) {
-      esRef.current.close();
+      (esRef.current as WebSocket).close();
       esRef.current = null;
     }
     if (firstFrameFallbackRef.current) {
@@ -243,15 +248,16 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       }
     }, 45000);
 
-    const es = new EventSource(`/api/browser/${profileId}/stream`);
-    esRef.current = es;
+    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${wsProto}//${window.location.host}/api/browser/${profileId}/stream`);
+    esRef.current = ws as any;
 
-    es.onopen = () => {
+    ws.onopen = () => {
       setStatusSafe("connected");
-      setIsLoading(false); // clear the loading flag set during connect()
+      setIsLoading(false);
     };
 
-    es.onmessage = (evt) => {
+    ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data as string);
         switch (msg.type) {
@@ -294,7 +300,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             setErrorMsg(msg.message ?? "Unknown error");
             setStatusSafe("error");
             setIsLoading(false);
-            es.close();
+            ws.close();
             esRef.current = null;
             break;
           case "loginStatus": {
@@ -348,8 +354,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       } catch {}
     };
 
-    es.onerror = () => {
-      es.close();
+    ws.onclose = () => {
       esRef.current = null;
       setIsLoading(false);
       if (statusRef.current !== "error") {
@@ -358,6 +363,10 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           if (statusRef.current === "idle") connect();
         }, 3000);
       }
+    };
+
+    ws.onerror = () => {
+      ws.close();
     };
   }, [profileId, setStatusSafe, appendLog]);
 

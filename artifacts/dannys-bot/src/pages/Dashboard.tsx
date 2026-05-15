@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.324",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed a critical bug where clicking anything in the embedded browser (including the Instagram login button) did nothing when 5 or more browsers were open at the same time. The browser frame stream now uses WebSocket instead of a plain HTTP connection, so it no longer takes up one of the browser's limited connection slots — leaving those slots free for clicks and other actions regardless of how many browsers are open." },
+    ],
+  },
+  {
     version: "1.0.321",
     date: "15 May 2026",
     items: [
