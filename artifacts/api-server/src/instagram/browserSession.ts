@@ -136,6 +136,12 @@ interface Session {
   // event is suppressed, preventing a false-positive "✅ Login successful" on the
   // newly-launched Chrome session.
   sessionToken: symbol;
+  // Set when a security-challenge redirect (update_risky_contactpoint, /challenge/,
+  // /suspended) is detected by the response interceptor. autoLogin reads this before
+  // attempting a fresh credential submission — if set it returns an error immediately
+  // without clearing cookies or re-submitting credentials, preventing the hammering
+  // loop that causes Instagram to deepen the security lock on every retry.
+  challengeUrl?: string;
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -508,18 +514,20 @@ export async function getOrCreateSession(
   // ── Redirect-chain debug + Instagram challenge detection ─────────────────
   // framenavigated only fires on committed navigations. This catches every 3xx
   // so we can see the full chain and detect security challenges before the loop.
-  let lastChallengeUrl: string | null = null;
+  // Stored on the session object (not a local) so autoLogin can read it and bail
+  // out immediately instead of clearing cookies and re-submitting credentials.
   page.on("response", (res) => {
     const status = res.status();
     if (status >= 300 && status < 400) {
       const loc = res.headers()["location"] ?? "(no location)";
       log(`[redirect:${profileId}] ${status} ${res.url().slice(0, 120)} → ${loc.slice(0, 120)}`, "browser");
       // Capture Instagram security-challenge URLs (update_risky_contactpoint,
-      // checkpoint, challenge) so we can navigate directly if the chain loops.
+      // checkpoint, challenge) so autoLogin can bail without re-submitting creds.
       if (loc.includes("update_risky_contactpoint") || loc.includes("/challenge/") || loc.includes("/accounts/suspended")) {
-        if (!lastChallengeUrl) {
-          lastChallengeUrl = loc.startsWith("http") ? loc : `https://www.instagram.com${loc}`;
-          log(`[challenge:${profileId}] Security challenge detected → ${lastChallengeUrl.slice(0, 120)}`, "browser");
+        const s = sessions.get(profileId);
+        if (s && !s.challengeUrl) {
+          s.challengeUrl = loc.startsWith("http") ? loc : `https://www.instagram.com${loc}`;
+          log(`[challenge:${profileId}] Security challenge detected → ${s.challengeUrl.slice(0, 120)}`, "browser");
           sendStatus(profileId, `⚠ Instagram security check required — navigating to challenge page…`);
         }
       }
@@ -532,24 +540,17 @@ export async function getOrCreateSession(
       log(`[reqfail:${profileId}] ${err} — ${url.slice(0, 120)}`, "browser");
     }
     // When ERR_TOO_MANY_REDIRECTS fires and we detected a challenge URL earlier,
-    // navigate directly to the challenge page (fresh goto, not following the
-    // redirect chain from instagram.com) so the user can complete verification.
-    if (err === "net::ERR_TOO_MANY_REDIRECTS" && lastChallengeUrl) {
-      lastChallengeUrl = null;
-      // Instagram's /accounts/update_risky_contactpoint/ loops infinitely in
-      // headless Chrome via proxy — the server regenerates the challenge_context
-      // token on every request because the proxy IP is flagged. There is no way
-      // to navigate to this page programmatically. Instead, tell the user clearly
-      // what to do and put Chrome back on a usable login screen.
+    // tell the user clearly what happened and put Chrome back on the login page.
+    // Do NOT clear challengeUrl — autoLogin needs to read it on the next Verify
+    // attempt to prevent re-submitting credentials and deepening the security lock.
+    const sc = sessions.get(profileId);
+    if (err === "net::ERR_TOO_MANY_REDIRECTS" && sc?.challengeUrl) {
       log(`[challenge:${profileId}] Account security lock — cannot resolve in EB. User must verify manually on instagram.com.`, "browser");
-      sendStatus(profileId, `🔒 Account security lock: Instagram requires verification for @${profileId}. Open instagram.com in a regular browser, log in, and complete any security check shown. Then click Clear here and try again.`);
-      const s = sessions.get(profileId);
-      if (s) {
-        s.navProtectedUntil = Date.now() + 5000;
-        setTimeout(() => {
-          s.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-        }, 1500);
-      }
+      sendStatus(profileId, `🔒 Account security lock: Instagram requires you to verify this account on instagram.com in a regular browser. Log in there and complete the security check shown. Once done, come back and click Clear to start fresh.`);
+      sc.navProtectedUntil = Date.now() + 5000;
+      setTimeout(() => {
+        sc.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+      }, 1500);
     }
   });
 
@@ -1494,6 +1495,20 @@ export async function browserAutoLogin(
     // ── Step 1: Check if already logged in; navigate to login only if needed ──
     const currentUrl = s.page.url();
     sendStatus(profileId, `Current URL: ${currentUrl.slice(0, 80)}`);
+
+    // ── STOP: Security challenge already detected for this session ────────────
+    // The response interceptor sets session.challengeUrl the moment Instagram
+    // issues a redirect to update_risky_contactpoint / /challenge/ / /suspended.
+    // If that flag is set we must NOT clear cookies and re-submit credentials —
+    // that is exactly the hammering loop that caused Instagram to lock the account
+    // in the first place. Return a hard error so the verify route marks the account
+    // as locked/captcha and stops retrying automatically.
+    if (s.challengeUrl) {
+      const chalMsg = `Instagram has placed a security lock on this account. You must log in from a regular browser at instagram.com and complete the verification check shown there. Once done, click Clear in the embedded browser to start a fresh session.`;
+      sendStatus(profileId, `🔒 ${chalMsg}`);
+      return { ok: false, message: chalMsg };
+    }
+
     // If the browser is already on Instagram and NOT on the login page,
     // the session is valid — save cookies and return immediately.
     const onInstagram = currentUrl.includes("instagram.com") && !currentUrl.startsWith("chrome-error://");
@@ -1786,7 +1801,14 @@ export async function browserAutoLogin(
                   /authentication.app|6.digit|two.factor|security.code|confirmation.code|backup.code|enter.the.code/i.test(allText) ||
                   pageUrl.includes("/two_factor");
 
-    const isLoggedIn = !pageText.includes("Username, email or mobile number") &&
+    // chrome-error:// (ERR_TOO_MANY_REDIRECTS) must NEVER be treated as a successful
+    // login — it means Instagram's security redirect chain looped. The old code
+    // treated this as ok:true, which caused the verify flow to call the mobile API
+    // which returned login_required, which caused the user to retry, which cleared
+    // cookies and submitted credentials again — the hammering loop that deepened the lock.
+    const isErrorPage = pageUrl.startsWith("chrome-error://");
+    const isLoggedIn = !isErrorPage &&
+                       !pageText.includes("Username, email or mobile number") &&
                        !pageText.includes("Create new account") &&
                        !pageUrl.includes("/accounts/login");
 
@@ -2055,6 +2077,25 @@ export async function browserAutoLogin(
         sendStatus(profileId, "⚠ 2FA screen — no TOTP secret stored for this account. Go to Account Details and paste the 16-character TOTP secret key from your authenticator app, then try Fill Credentials again. You can also type the code manually in the browser window.");
         return { ok: false, message: "2FA screen — no TOTP key stored. Add the TOTP secret in Account Details and retry." };
       }
+    }
+
+    // ── Chrome error page after credential submit ─────────────────────────────
+    // ERR_TOO_MANY_REDIRECTS immediately after submitting credentials means
+    // Instagram's post-login redirect chain hit a security challenge loop.
+    // The session.challengeUrl check at the top of this function covers the case
+    // where the challenge was already known before submit. This branch covers the
+    // case where the first-ever login just triggered the challenge (challengeUrl
+    // was set by the response interceptor during this very submit attempt).
+    if (isErrorPage) {
+      const knownChallenge = sessions.get(profileId)?.challengeUrl;
+      if (knownChallenge) {
+        const chalMsg = `Instagram has placed a security lock on this account. Log in at instagram.com in a regular browser and complete the verification check shown. Then click Clear here to start a fresh session.`;
+        sendStatus(profileId, `🔒 ${chalMsg}`);
+        return { ok: false, message: chalMsg };
+      }
+      const errMsg = `Chrome hit an error page after login (likely ERR_TOO_MANY_REDIRECTS). This usually means Instagram requires a security check. Visit instagram.com in a regular browser to resolve it, then click Clear here.`;
+      sendStatus(profileId, `⚠ ${errMsg}`);
+      return { ok: false, message: errMsg };
     }
 
     if (isLoggedIn) {

@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.316",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Root cause fix for accounts getting hammered into Instagram security locks. The embedded browser now tracks security challenge redirects on the session object. If a challenge is detected, any subsequent Verify attempt returns an error immediately without clearing cookies or re-submitting credentials — stopping the re-login loop that caused Instagram to deepen the lock. Previously, each retry would wipe cookies and submit credentials again (from headless Chrome) which Instagram counted as repeated suspicious logins." },
+      { category: "Fix", text: "chrome-error:// pages (ERR_TOO_MANY_REDIRECTS) are no longer mis-classified as a successful login. Previously, the post-submit check treated any page that wasn't the login form as 'logged in', which caused the verify route to call the mobile API, which returned login_required, which caused the user to retry, which started the cookie-clear-and-resubmit loop again." },
+    ],
+  },
+  {
     version: "1.0.315",
     date: "15 May 2026",
     items: [
