@@ -355,6 +355,26 @@ export async function getOrCreateSession(
     throw new Error(msg);
   }
 
+  // ── Purge Chrome singleton lock files from a previous crashed session ────────
+  // When Chrome is force-killed (timeout, Electron restart, OS kill) it does NOT
+  // clean up SingletonLock / SingletonSocket / SingletonCookie in its userDataDir.
+  // The next launch then fails with "The browser is already running for <path>".
+  // We delete those three files unconditionally before every launch — if Chrome
+  // is genuinely running they will be recreated immediately; if it crashed they
+  // are stale orphans and must be removed.
+  const CHROME_LOCK_FILES = ["SingletonLock", "SingletonSocket", "SingletonCookie"];
+  for (const lockFile of CHROME_LOCK_FILES) {
+    const lockPath = path.join(userDataDir, lockFile);
+    try {
+      if (fs.existsSync(lockPath)) {
+        fs.rmSync(lockPath, { force: true });
+        console.log(`[EB-DEBUG][browserSession] Removed stale lock file: ${lockPath}`);
+      }
+    } catch (e: any) {
+      console.warn(`[EB-DEBUG][browserSession] Could not remove lock file ${lockPath} (non-fatal): ${e?.message}`);
+    }
+  }
+
   const fullArgs = [...LAUNCH_ARGS, ...userDataArg, ...proxyArg];
   console.log(`[EB-DEBUG][browserSession] launching via ${puppeteerSource}, executablePath="${CHROMIUM_PATH}"`);
   console.log(`[EB-DEBUG][browserSession] launch args: ${fullArgs.join(" ")}`);

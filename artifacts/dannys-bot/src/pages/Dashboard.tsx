@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.302",
+    date: "15 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: Chrome lock files (SingletonLock, SingletonSocket, SingletonCookie) left behind by a previously crashed or force-killed EB were preventing new Chrome instances from launching ('The browser is already running for <path>'). These files are now deleted unconditionally before every launch — harmless if Chrome was not running, essential if it was killed without cleanup." },
+    ],
+  },
+  {
     version: "1.0.301",
     date: "14 May 2026",
     items: [
