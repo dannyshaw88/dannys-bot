@@ -27,6 +27,7 @@ import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
 import { applyStealthScripts, getExistingBrowser, viewportForUA } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
+import { profileUsernameCache } from "../lib/profileUsernameCache";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 
@@ -221,6 +222,10 @@ class AutomationEngine {
   private contactForceRun      = new Set<number>();               // profileIds to run contact send immediately
   private followForceRun       = new Set<number>();               // profileIds to skip the inter-session wait immediately
   private initialized          = false;                          // false until first reconcile completes
+  // Tracks runners that exited due to an unhandled crash (not a clean stop).
+  // On reconcile, these profiles get a fresh X-Y random delay before re-launch
+  // (same as cold startup) rather than firing immediately.
+  private runnerCrashedIds     = new Set<number>();
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
   start() {
@@ -242,6 +247,10 @@ class AutomationEngine {
       const runImmediately = this.initialized;
 
       const profiles = (await storage.getProfiles()).filter((p: any) => !p.creatorMode);
+
+      // Keep the username cache current so the HTTP logger can resolve IDs → names.
+      profileUsernameCache.setMany(profiles);
+
       const activeFollow        = new Set<number>();
       const activeUnfollow      = new Set<number>();
       const activeDM            = new Set<number>();
@@ -257,22 +266,33 @@ class AutomationEngine {
           : !!(profile.proxyHost && profile.proxyPort);
         if (!hasProxy) continue;
 
+        // Per-profile runImmediately flag:
+        //   • App startup (initialized=false)     → always wait X-Y (runImmediately=false)
+        //   • Manual tool toggle (initialized=true, no crash) → run now (runImmediately=true)
+        //   • Crash recovery (initialized=true, crashed) → wait X-Y again (runImmediately=false)
+        // This ensures a crashed runner never fires instantly after recovery —
+        // it gets the same random startup delay as a cold boot, protecting the
+        // account from being hammered if a runner is in a crash/restart loop.
+        const wasCrashed = this.runnerCrashedIds.has(profile.id);
+        if (wasCrashed) this.runnerCrashedIds.delete(profile.id);
+        const profileRunImmediately = runImmediately && !wasCrashed;
+
         const followTool = tools.find(t => t.type === "follow" && t.enabled);
         if (followTool && profile.accountStatus === "valid") {
           activeFollow.add(profile.id);
-          if (!this.states.has(profile.id)) this.launch(profile, followTool, runImmediately);
+          if (!this.states.has(profile.id)) this.launch(profile, followTool, profileRunImmediately);
         }
 
         const unfollowTool = tools.find(t => t.type === "unfollow" && t.enabled);
         if (unfollowTool && profile.accountStatus === "valid") {
           activeUnfollow.add(profile.id);
-          if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool, runImmediately);
+          if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool, profileRunImmediately);
         }
 
         const dmTool = tools.find(t => t.type === "dm" && t.enabled);
         if (dmTool && profile.accountStatus === "valid") {
           activeDM.add(profile.id);
-          if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, runImmediately);
+          if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, profileRunImmediately);
         }
 
         // Contact tool is "effectively enabled" if the top-level flag OR either
@@ -286,14 +306,14 @@ class AutomationEngine {
         );
         if (contactEffective && profile.accountStatus === "valid") {
           activeContact.add(profile.id);
-          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!, runImmediately);
+          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!, profileRunImmediately);
         }
 
         // Human session runner has its own tool record — completely independent of all other tools
         const humanSessionTool = tools.find(t => t.type === "human_sessions" && t.enabled);
         if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
-          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool, runImmediately);
+          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool, profileRunImmediately);
         }
       }
 
@@ -627,6 +647,7 @@ class AutomationEngine {
     };
 
     loop().catch(err => {
+      this.runnerCrashedIds.add(profile.id);
       this.states.delete(profile.id);
       engineLog("ERROR", `@${profile.username}: FATAL follow runner crash: ${err?.message ?? err}\n${err?.stack ?? ""}`);
     });
@@ -715,6 +736,7 @@ class AutomationEngine {
     };
 
     loop().catch(err => {
+      this.runnerCrashedIds.add(profile.id);
       this.humanSessionStates.delete(profile.id);
       console.error(`[engine] Fatal human session error for @${profile.username}:`, err?.message);
     });
@@ -821,6 +843,7 @@ class AutomationEngine {
     };
 
     loop().catch(err => {
+      this.runnerCrashedIds.add(profile.id);
       this.unfollowStates.delete(profile.id);
       console.error(`[engine] Fatal unfollow error for @${profile.username}:`, err?.message);
     });
@@ -894,6 +917,7 @@ class AutomationEngine {
     };
 
     loop().catch(err => {
+      this.runnerCrashedIds.add(profile.id);
       this.dmStates.delete(profile.id);
       console.error(`[engine] Fatal DM error for @${profile.username}:`, err?.message);
     });
@@ -1050,6 +1074,7 @@ class AutomationEngine {
     };
 
     loop().catch(err => {
+      this.runnerCrashedIds.add(profile.id);
       this.contactStates.delete(profile.id);
       console.error(`[engine] Fatal contact error for @${profile.username}:`, err?.message);
     });

@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.303",
+    date: "15 May 2026",
+    items: [
+      { category: "Engine", text: "Fixed: When a runner (follow, unfollow, DM, contact, human session) crashed mid-session, the engine's 10-second reconcile loop was re-launching it immediately with no delay — the same as a user manually enabling a tool. The crashed runner now receives the same random X-Y startup delay as a cold app launch, preventing crash/restart loops from hammering Instagram." },
+      { category: "Logs", text: "Improved: HTTP request logs now show the account username alongside the profile ID for all browser and profile endpoints. e.g. 'POST /api/browser/1209 [@CeciliaCelineLumas] 200 12ms'. If the username is not yet in cache, the numeric ID is shown as [#1209] until the engine's next reconcile populates it." },
+    ],
+  },
+  {
     version: "1.0.302",
     date: "15 May 2026",
     items: [
