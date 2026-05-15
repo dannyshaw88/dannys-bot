@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.310",
+    date: "15 May 2026",
+    items: [
+      { category: "UI", text: "Session Cookie indicator moved inline — now sits directly next to the Reset Device IDs button (Session Cookie: Passed / Not set) instead of in a separate row at the bottom of the Account Details card." },
+    ],
+  },
+  {
     version: "1.0.309",
     date: "15 May 2026",
     items: [

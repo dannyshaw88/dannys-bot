@@ -143,13 +143,15 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 ### Always push workflow changes as a single commit
 
+66. **NEVER push to GitHub unless the user explicitly instructs it.** Make all code changes locally first. Only run the Git push script when the user says to push / ship / release.
+
 67. Multiple file pushes to GitHub trigger multiple CI runs. Use the GitHub Contents API (or Git Trees API) to batch all file changes into one commit. The user explicitly cares about this.
 
 ### Version bumping — REQUIRED on every push
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-68. Current version: **v1.0.309**
+68. Current version: **v1.0.310**
 69. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.291` → `1.0.292`
 70. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 71. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
