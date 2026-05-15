@@ -505,6 +505,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.323",
+    date: "15 May 2026",
+    items: [
+      { category: "Embedded Browser", text: "Fixed: Embedded browser sessions now survive app restarts and updates. Cookie files are stored in the same stable user data folder as the database, so logging in once is permanent — no more being logged out after installing a new version." },
+    ],
+  },
+  {
     version: "1.0.322",
     date: "15 May 2026",
     items: [

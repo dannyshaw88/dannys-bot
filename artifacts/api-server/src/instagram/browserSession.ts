@@ -39,7 +39,12 @@ function testProxyReachable(host: string, port: number, timeoutMs = 6000): Promi
 }
 
 // ── Cookie persistence ───────────────────────────────────────────────────────
-const COOKIES_DIR = path.join(process.cwd(), "server", "browser-data");
+// When DATABASE_PATH is set (Electron production), store cookies next to the
+// database in userData so they survive app updates and reinstalls.
+// In dev (no DATABASE_PATH) fall back to the old process.cwd()-relative path.
+const COOKIES_DIR = process.env.DATABASE_PATH
+  ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data")
+  : path.join(process.cwd(), "server", "browser-data");
 
 function cookiePath(profileId: number) {
   return path.join(COOKIES_DIR, `cookies-${profileId}.json`);
@@ -936,6 +941,15 @@ function startFrameLoop(profileId: number) {
                        idleMs < 30000 ? Math.max(activeSkip, 8) :
                                         Math.max(activeSkip, 20);
     if (idleTick % skipModulo !== 0) return;
+
+    // Pause screenshots while auto-login is running on this session. CDP is a
+    // serial message protocol per Chrome instance — screenshot commands and
+    // page.type() keystrokes share the same connection. If a screenshot is
+    // in-flight when a keystroke needs to be sent, the keystroke is queued
+    // behind the screenshot, causing the form to fill slowly or not at all.
+    // Skipping screenshots during auto-login lets Chrome process every
+    // keystroke immediately without competing with the screenshot loop.
+    if (s.autoLoginInProgress) return;
 
     // Skip frame if a screenshot is already in flight (prevents queuing)
     if (busy) return;
