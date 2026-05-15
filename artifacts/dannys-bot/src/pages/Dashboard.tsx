@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.317",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "Multi-EB freeze — three root causes fixed: (1) Activity-based frame rate: each EB now tracks the last time the user sent input (click, scroll, key, navigate). The active EB runs at full ~6.7 fps; an EB idle for 3–30 s drops to ~0.8 fps; dormant EBs (>30 s no input) drop to ~0.33 fps. Background EBs therefore stop competing for screenshot slots, leaving full capacity for the one being used. (2) Thundering herd: frame loops now start at a small deterministic offset per profile (0–400 ms) so all EBs don't fire simultaneously on the same tick and saturate the global limiter in lockstep. (3) Adaptive JPEG quality: encoding cost scales down from 70 → 60 → 45 as the number of open sessions increases, reducing CPU pressure when many EBs are open." },
+      { category: "Fix", text: "Keep-alive SSE comment is now always written every ~15 s regardless of idle state — previously it was gated behind the idle-skip check, which would have caused proxy disconnects on dormant EBs." },
+    ],
+  },
+  {
     version: "1.0.316",
     date: "15 May 2026",
     items: [

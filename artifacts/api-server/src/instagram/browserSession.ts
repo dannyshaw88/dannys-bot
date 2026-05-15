@@ -142,6 +142,12 @@ interface Session {
   // without clearing cookies or re-submitting credentials, preventing the hammering
   // loop that causes Instagram to deepen the security lock on every retry.
   challengeUrl?: string;
+  // ms timestamp of the last user input (click, scroll, key, mousemove, navigate).
+  // The frame loop uses this to throttle screenshot rate when the user is not actively
+  // interacting with this EB — idle sessions drop to ~0.8fps, dormant sessions to ~0.3fps.
+  // This is the primary fix for multi-EB freeze: background EBs stop consuming
+  // screenshot slots and Node.js event-loop time, leaving capacity for active ones.
+  lastActivityAt: number;
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -162,10 +168,25 @@ const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
 // Global screenshot concurrency limiter. With 5+ Chrome instances all taking
 // screenshots simultaneously, the Node.js event loop and CPU saturate, causing
-// all EBs to freeze. Cap at 3 concurrent screenshot operations — sessions that
-// hit the limit skip that tick and retry 150 ms later, spreading the load evenly.
+// all EBs to freeze. Cap at 4 concurrent screenshot operations — sessions that
+// hit the limit skip that tick and retry on the next tick, spreading the load.
+// The primary freeze prevention is the activity-based frame rate (see startFrameLoop):
+// idle/dormant EBs only fire every 8th–20th tick, so in practice ≤2 sessions compete
+// for slots at any given moment even when 5+ EBs are open.
 let globalScreenshotCount = 0;
-const MAX_CONCURRENT_SCREENSHOTS = 3;
+const MAX_CONCURRENT_SCREENSHOTS = 4;
+
+// Mark a session as "recently active". Called by every input handler.
+// The frame loop reads lastActivityAt to decide the screenshot cadence:
+//   active  (<3 s since input) → every tick    (~6.7 fps)
+//   idle    (3–30 s)           → every 8th tick (~0.8 fps)
+//   dormant (>30 s)            → every 20th tick (~0.33 fps)
+// Background EBs therefore consume almost no screenshot slots, leaving the
+// active one to run at full speed regardless of how many EBs are open.
+function touchActivity(profileId: number) {
+  const s = sessions.get(profileId);
+  if (s) s.lastActivityAt = Date.now();
+}
 
 // --no-sandbox is required in all environments.
 // --no-zygote is intentionally EXCLUDED — it crashes Chrome silently on Windows
@@ -585,7 +606,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol() };
+  const session: Session = { browser, page, pages: [page], activePage: 0, res: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -749,10 +770,18 @@ function startFrameLoop(profileId: number) {
   let errorRetryTick = 0;     // counts frames while on chrome-error:// (429 / net::ERR_*)
   let errorRetryCount = 0;    // how many times we've auto-retried this session
   let screenshotTimeoutCount = 0; // consecutive screenshot timeouts → detect crashed renderer
+  let idleTick = 0;           // incremented every tick; used for idle skip modulo
   let busy = false;
   let lastFrameSentAt = Date.now();   // track when we last successfully pushed a frame
   let noFrameWarnedAt = 0;           // avoid spamming the no-frame warning
 
+  // Stagger frame loop start times to prevent thundering-herd: when several EBs are
+  // opened at once they all call startFrameLoop at the same millisecond, causing them
+  // to fire together on every tick and saturate the global concurrency limiter in
+  // lockstep. A small deterministic offset (based on profileId) spreads them out.
+  const staggerMs = (profileId * 97) % 400; // 0–399 ms spread; deterministic per profile
+
+  const startLoop = () => {
   session.frameLoop = setInterval(async () => {
     const s = sessions.get(profileId);
     if (!s || !s.res || s.res.writableEnded) {
@@ -760,34 +789,56 @@ function startFrameLoop(profileId: number) {
       return;
     }
 
-    // Keep-alive SSE comment every ~15 seconds to prevent proxy timeouts
+    // ── Activity-based frame rate ──────────────────────────────────────────
+    // The primary fix for multi-EB freeze. Background EBs that the user isn't
+    // touching take far fewer screenshots, leaving the global concurrency slots
+    // and Node.js event-loop time for the actively-used EB.
+    //   active  (<3 s since last input)  → every tick      (~6.7 fps)
+    //   idle    (3–30 s)                 → every 8th tick  (~0.8 fps)
+    //   dormant (>30 s)                  → every 20th tick (~0.33 fps)
+    // Keep-alive runs every tick regardless of idle state — it must fire on schedule
+    // even when the EB is dormant, because the SSE proxy will close a connection that
+    // goes silent for more than ~30 s. 100 ticks × 150 ms = 15 s between keep-alives.
     keepAliveTick++;
-    if (keepAliveTick >= 75) { // 75 * 200ms = 15s
+    if (keepAliveTick >= 100) {
       keepAliveTick = 0;
       try { s.res.write(": keepalive\n\n"); } catch {}
 
       // ── Server-side freeze diagnostic ─────────────────────────────────────
-      // If we have a live SSE client but haven't successfully sent a frame in
-      // 30 s, log it so the server log captures the freeze even when the
-      // frontend overlay doesn't fire or the user can't see it.
       const silentMs = Date.now() - lastFrameSentAt;
       if (silentMs > 30000 && Date.now() - noFrameWarnedAt > 30000) {
         noFrameWarnedAt = Date.now();
-        log(`[frameLoop:${profileId}] ⚠ no frame sent for ${Math.round(silentMs / 1000)}s — busy=${busy} screenshotTimeouts=${screenshotTimeoutCount} url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
+        const curIdleMs = Date.now() - s.lastActivityAt;
+        log(`[frameLoop:${profileId}] ⚠ no frame sent for ${Math.round(silentMs / 1000)}s — busy=${busy} screenshotTimeouts=${screenshotTimeoutCount} idleMs=${curIdleMs} url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
       }
     }
+
+    // Activity-based frame rate — throttle background EBs to free up screenshot
+    // slots for the EB the user is actually using.
+    //   active  (<3 s since last input)  → every tick      (~6.7 fps)
+    //   idle    (3–30 s)                 → every 8th tick  (~0.8 fps)
+    //   dormant (>30 s)                  → every 20th tick (~0.33 fps)
+    idleTick++;
+    const idleMs = Date.now() - s.lastActivityAt;
+    const skipModulo = idleMs < 3000 ? 1 : idleMs < 30000 ? 8 : 20;
+    if (idleTick % skipModulo !== 0) return;
 
     // Skip frame if a screenshot is already in flight (prevents queuing)
     if (busy) return;
     busy = true;
 
     // Global concurrency guard — skip this tick if too many Chrome instances
-    // are already mid-screenshot. They'll retry on the next 150 ms tick.
+    // are already mid-screenshot. They'll retry on the next eligible tick.
     if (globalScreenshotCount >= MAX_CONCURRENT_SCREENSHOTS) {
       busy = false;
       return;
     }
     globalScreenshotCount++;
+
+    // Adaptive JPEG quality: reduce encoding cost when multiple sessions are
+    // actively competing for screenshot slots.
+    const activeSessions = sessions.size;
+    const jpegQuality = activeSessions <= 1 ? 70 : activeSessions <= 2 ? 60 : 45;
 
     const frameStart = Date.now();
     try {
@@ -805,7 +856,7 @@ function startFrameLoop(profileId: number) {
       // Relying solely on the outer Promise.race deadline fixes this.
       const [screenshot, currentUrl] = await Promise.race([
         Promise.all([
-          s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" } as any),
+          s.page.screenshot({ type: "jpeg", quality: jpegQuality, encoding: "base64" } as any),
           s.page.url(),
         ]),
         new Promise<never>((_, reject) =>
@@ -933,9 +984,13 @@ function startFrameLoop(profileId: number) {
       busy = false;
     }
   }, 150); // ~6 fps — fast enough for responsive CAPTCHA solving
+  }; // end startLoop
+
+  setTimeout(startLoop, staggerMs);
 }
 
 export async function browserNavigate(profileId: number, url: string) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   try {
@@ -972,6 +1027,7 @@ function sendTabsUpdate(profileId: number) {
 }
 
 export async function browserClick(profileId: number, x: number, y: number) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   // Fire raw mouse events first (gives visual hover/active feedback in the screenshot)
@@ -1000,12 +1056,14 @@ export async function browserClick(profileId: number, x: number, y: number) {
 }
 
 export async function browserMouseMove(profileId: number, x: number, y: number) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   await s.page.mouse.move(x, y);
 }
 
 export async function browserScroll(profileId: number, x: number, y: number, deltaX: number, deltaY: number) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   // Fire the wheel event directly — mouse.move is unnecessary for page-level
@@ -1014,6 +1072,7 @@ export async function browserScroll(profileId: number, x: number, y: number, del
 }
 
 export async function browserKeyDown(profileId: number, key: string) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   // Map "Space" back to the actual key name Puppeteer expects
@@ -1022,6 +1081,7 @@ export async function browserKeyDown(profileId: number, key: string) {
 }
 
 export async function browserKeyUp(profileId: number, key: string) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   const k = key === "Space" ? " " : key;
@@ -1029,12 +1089,14 @@ export async function browserKeyUp(profileId: number, key: string) {
 }
 
 export async function browserType(profileId: number, text: string) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   await s.page.keyboard.type(text, { delay: 30 });
 }
 
 export async function browserKeyCombo(profileId: number, modifier: string, key: string) {
+  touchActivity(profileId);
   const s = sessions.get(profileId);
   if (!s) return;
   try {
