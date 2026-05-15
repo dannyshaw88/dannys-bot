@@ -537,6 +537,29 @@ export async function getOrCreateSession(
     sseWrite(s.res, { type: "consoleLog", level, text });
   });
 
+  // ── Purge stale Chrome-profile cookies BEFORE loading our saved state ────────
+  // Chrome's userDataDir persists between launches. It carries instagram.com
+  // cookies from the previous session (expired sessionid, challenge tokens, etc.)
+  // that conflict with our clean saved-cookie file and cause ERR_TOO_MANY_REDIRECTS
+  // on the very first navigation. We use CDP to delete them now — before loadCookies
+  // writes our known-good cookies — so Chrome starts from a clean slate.
+  try {
+    const staleCookies: any[] = await (page as any).cookies(
+      "https://www.instagram.com",
+      "https://i.instagram.com",
+      "https://instagram.com",
+    ).catch(() => []);
+    if (staleCookies.length) {
+      await (page as any).deleteCookie(...staleCookies).catch(() => null);
+      const names = staleCookies.map((c: any) => c.name).join(", ");
+      log(`[cookies:${profileId}] Purged ${staleCookies.length} stale Chrome-profile cookies before load: ${names}`, "browser");
+    } else {
+      log(`[cookies:${profileId}] No stale Chrome-profile cookies found — clean start`, "browser");
+    }
+  } catch (e: any) {
+    log(`[cookies:${profileId}] Stale-cookie purge failed (non-fatal): ${e?.message}`, "browser");
+  }
+
   // Determine the initial URL for this session.
   // We do NOT fire page.goto() here — that would race with attachSSE which is
   // called immediately after in the stream route, causing two concurrent gotos

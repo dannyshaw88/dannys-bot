@@ -323,6 +323,13 @@ export class InstagramWebClient {
   private mobileCookieJar: string[] = [];
   private mobileCsrf = "";
   private mobileSessionReady = false;
+  // Persistent device identifiers for the mobile session.
+  // Generated ONCE per client instance and reused on every mobileBootstrapFromWebCookies
+  // call. Regenerating them each cycle (every ~10 min) makes the account look like it
+  // is logging in from a brand-new device on every automation run — a strong trust-score
+  // signal that causes Instagram to flag and lock the account.
+  private _mobileIgDid: string = "";
+  private _mobileMid: string = "";
   // Set by _mobileLogin when the failure is definitively bad credentials so
   // ensureClient can propagate the status to the DB without guessing.
   lastMobileLoginFailureReason: "bad_password" | null = null;
@@ -497,10 +504,11 @@ export class InstagramWebClient {
       if (csrf) this.csrfToken = csrf.value;
 
       const hasSession = igCookies.some(c => c.name === "sessionid");
-      console.log(`[webClient] loadBrowserCookies: synced ${igCookies.length} cookies, sessionid=${hasSession}, csrf=${!!csrf}`);
+      const names = igCookies.map(c => c.name).join(", ");
+      console.log(`[webClient:${this.profileId}] loadBrowserCookies: synced ${igCookies.length} cookies (${names}), sessionid=${hasSession}, csrf=${!!csrf}`);
       return hasSession;
     } catch (err: any) {
-      console.warn("[webClient] loadBrowserCookies failed:", err?.message);
+      console.warn(`[webClient:${this.profileId}] loadBrowserCookies failed:`, err?.message);
       return false;
     }
   }
@@ -729,15 +737,26 @@ export class InstagramWebClient {
   mobileBootstrapFromWebCookies(): boolean {
     const sessionCookie = this.cookieJar.find(c => c.startsWith("sessionid="));
     const csrfCookie    = this.cookieJar.find(c => c.startsWith("csrftoken="));
-    if (!sessionCookie) return false;
+    if (!sessionCookie) {
+      console.warn(`[webClient:${this.profileId}] mobileBootstrapFromWebCookies: FAILED — no sessionid in cookieJar (jar has ${this.cookieJar.length} entries: ${this.cookieJar.map(c => c.split("=")[0]).join(", ")})`);
+      return false;
+    }
 
-    const igDid = randomUUID();
-    const mid   = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+    // Reuse stable device IDs — NEVER generate new ones per call.
+    // Generating a fresh ig_did/mid on every ensureClient() cycle (~every 10 min)
+    // presents Instagram with a brand-new device fingerprint each run, which is
+    // a strong account-locking signal. We generate once and keep them for the
+    // lifetime of this client instance (i.e. the automation session).
+    const isFirstBoot = !this._mobileIgDid;
+    if (!this._mobileIgDid) {
+      this._mobileIgDid = randomUUID();
+      this._mobileMid   = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+    }
 
-    // Seed mobile jar: keep sessionid + csrf from web session; add fresh device ids
+    // Seed mobile jar: keep sessionid + csrf from web session; add stable device ids
     const seeds: string[] = [
-      `ig_did=${igDid}`,
-      `mid=${mid}`,
+      `ig_did=${this._mobileIgDid}`,
+      `mid=${this._mobileMid}`,
       sessionCookie,
     ];
     if (csrfCookie) seeds.push(csrfCookie);
@@ -750,7 +769,8 @@ export class InstagramWebClient {
     this.mobileCookieJar = mergeCookies([], seeds);
     if (csrfCookie) this.mobileCsrf = csrfCookie.split("=").slice(1).join("=");
     this.mobileSessionReady = true;
-    console.log(`[webClient] mobileBootstrapFromWebCookies: seeded mobile jar with ${this.mobileCookieJar.length} cookies (sessionid=true, csrf=${!!csrfCookie})`);
+    const sessionSnip = sessionCookie.split("=")[1]?.slice(0, 8) ?? "?";
+    console.log(`[webClient:${this.profileId}] mobileBootstrapFromWebCookies: ${isFirstBoot ? "FIRST BOOT" : "REFRESH"} — jar=${this.mobileCookieJar.length} cookies, sessionid=...${sessionSnip}, csrf=${!!csrfCookie}, ig_did=${this._mobileIgDid.slice(0, 8)}... (${isFirstBoot ? "new device IDs generated" : "existing device IDs reused"})`);
     return true;
   }
 

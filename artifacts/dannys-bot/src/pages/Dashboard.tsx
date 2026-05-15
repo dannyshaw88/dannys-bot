@@ -54,6 +54,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.301",
+    date: "14 May 2026",
+    items: [
+      { category: "Browser", text: "Fixed: Stale Instagram cookies left in Chrome's persistent profile directory were causing ERR_TOO_MANY_REDIRECTS on every EB open, before any credentials were entered. Chrome now purges all instagram.com cookies at launch before applying the saved clean session, so the initial navigation always starts from a known-good state." },
+      { category: "Automation", text: "Fixed: The mobile API device ID (ig_did) and machine ID (mid) were being regenerated on every automation cycle (~every 10 minutes). Instagram uses these to identify the device — changing them constantly looks like a new device login every run, which is a primary cause of account locking. These IDs are now generated once and reused for the entire session." },
+      { category: "Debugging", text: "Improved: loadBrowserCookies and mobileBootstrapFromWebCookies now log the full list of cookie names synced, whether sessionid was found, and whether device IDs are new or reused — visible in server logs to help trace cookie passover failures." },
+    ],
+  },
+  {
     version: "1.0.300",
     date: "14 May 2026",
     items: [
