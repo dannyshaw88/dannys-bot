@@ -47,6 +47,12 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
       { key: "ct_arRules",   label: "Reply rules",  settingKeys: ["autoReplies"] },
     ]},
   ]},
+  { label: "Stop if Blocked", options: [
+    { key: "ct_stopOnBlock", label: "Stop if Blocked", description: "Pause the tool for a set time when Instagram blocks a contact action", subOptions: [
+      { key: "ct_stopOnBlockEnabled", label: "Enabled",              settingKeys: ["stopOnBlockEnabled"] },
+      { key: "ct_stopOnBlockMinutes", label: "Stop duration (mins)", settingKeys: ["stopOnBlockMinutes"] },
+    ]},
+  ]},
 ];
 
 export function ContactToolPanel({ tool, profile }: Props) {

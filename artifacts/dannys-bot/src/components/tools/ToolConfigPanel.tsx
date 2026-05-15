@@ -172,6 +172,8 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
       checkDmMax: 15,
       checkDmOrderMin: 0,
       checkDmOrderMax: 0,
+      stopOnBlockEnabled: false,
+      stopOnBlockMinutes: 60,
       checkDmNotUsedMin: 0,
       checkDmNotUsedMax: 0,
       contextualActionsEnabled: false,
@@ -205,9 +207,9 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
   const { data: followedUsersList, isLoading: followedUsersLoading } = useQuery<FollowedUser[]>({
     queryKey: [`/api/profiles/${tool.profileId}/followed-users`],
-    refetchInterval: 5000,
+    refetchInterval: showFollowedUsers ? 5000 : 30000,
     staleTime: 0,
-    enabled: showFollowedUsers,
+    enabled: true,
   });
 
   const { data: sessionActions } = useQuery<SessionAction[]>({
@@ -291,6 +293,12 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         { key: "ft_hlBefore",          label: "Highlights Before follow % (min / max)",         settingKeys: ["viewHighlightsBeforeMin","viewHighlightsBeforeMax"] },
         { key: "ft_hlMaxDay",          label: "Highlights Max per day (min / max)",             settingKeys: ["viewHighlightsMaxPerDayMin","viewHighlightsMaxPerDayMax"] },
         { key: "ft_hlDelay",           label: "Highlights Delay (min / max secs)",              settingKeys: ["viewHighlightsDelayMin","viewHighlightsDelayMax"] },
+      ]},
+    ]},
+    { label: "Stop if Blocked", options: [
+      { key: "ft_stopOnBlock", label: "Stop if Blocked", description: "Pause the tool for a set time when Instagram blocks a follow action", subOptions: [
+        { key: "ft_stopOnBlockEnabled", label: "Enabled",              settingKeys: ["stopOnBlockEnabled"] },
+        { key: "ft_stopOnBlockMinutes", label: "Stop duration (mins)", settingKeys: ["stopOnBlockMinutes"] },
       ]},
     ]},
     { label: "Sources", options: [
@@ -685,10 +693,10 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
         
         {/* Settings Column */}
         <div className={`${tool.type === 'follow' ? 'col-span-1' : 'lg:col-span-1'} space-y-6`}>
-          <div className="desktop-card p-6 space-y-4">
+          <div className={`desktop-card ${tool.type === 'follow' ? 'px-6 pb-6 pt-3' : 'p-6'} space-y-4`}>
             {tool.type === 'follow' && (
               <div className="flex items-center gap-2 flex-wrap mb-4 pb-3 border-b border-border">
-                <h2 className="text-xl font-bold w-full">Follow Tool</h2>
+                <h2 className="text-xl font-bold">Follow Tool</h2>
                 <Switch
                   checked={tool.enabled}
                   onCheckedChange={handleToggleEnable}
@@ -719,6 +727,9 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 >
                   <UserPlus className="w-3.5 h-3.5 text-primary" />
                   Followed Users
+                  <span className="ml-0.5 text-[10px] text-muted-foreground">
+                    ({followedUsersLoading && !followedUsersList ? '…' : followedUsersList?.length ?? 0})
+                  </span>
                 </button>
                 {nextRunStatus && (
                   <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
@@ -868,6 +879,36 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
               {tool.type === 'follow' && (
                 <div className="pt-4 border-t border-border space-y-3">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="stopOnBlockEnabled"
+                        checked={!!(settings as any).stopOnBlockEnabled}
+                        onChange={(e) => setSettings({ ...settings, stopOnBlockEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                      />
+                      <label htmlFor="stopOnBlockEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap">
+                        Stop tool if blocked for
+                      </label>
+                    </div>
+                    <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).stopOnBlockEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="1440"
+                        className="w-16 h-7 text-xs"
+                        value={(settings as any).stopOnBlockMinutes ?? 60}
+                        onChange={(e) => setSettings({ ...settings, stopOnBlockMinutes: Math.max(1, Number(e.target.value)) } as any)}
+                      />
+                      <span className="text-xs text-muted-foreground">minutes</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {tool.type === 'follow' && (
+                <div className="pt-4 border-t border-border space-y-3">
                   <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Injection Settings</h4>
                   <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
                     <div className="space-y-2">
@@ -1005,6 +1046,31 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                           onChange={(e) => setSettings({ ...settings, delayAfterUnfollowMax: Number(e.target.value) } as any)}
                         />
                       </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-border/50">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="unfollowStopOnBlockEnabled"
+                        checked={!!(settings as any).stopOnBlockEnabled}
+                        onChange={(e) => setSettings({ ...settings, stopOnBlockEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                      />
+                      <label htmlFor="unfollowStopOnBlockEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap">
+                        Stop tool if blocked for
+                      </label>
+                    </div>
+                    <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).stopOnBlockEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="1440"
+                        className="w-16 h-7 text-xs"
+                        value={(settings as any).stopOnBlockMinutes ?? 60}
+                        onChange={(e) => setSettings({ ...settings, stopOnBlockMinutes: Math.max(1, Number(e.target.value)) } as any)}
+                      />
+                      <span className="text-xs text-muted-foreground">minutes</span>
                     </div>
                   </div>
                 </div>

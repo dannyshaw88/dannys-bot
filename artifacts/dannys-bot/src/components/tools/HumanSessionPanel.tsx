@@ -440,10 +440,8 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
         </p>
       </div>
 
-      {/* ── Check Stories · DMs — one row each ─────────────────── */}
-      <div className="border border-border rounded-xl p-4 space-y-2">
-
-        {/* Check Stories from Timeline */}
+      {/* ── Check Stories from Timeline ─────────────────── */}
+      <div className="border border-border rounded-xl p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 flex-wrap">
             <input type="checkbox" id="checkTimelineStoriesEnabled"
@@ -480,10 +478,10 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="border-t border-border/50" />
-
-        {/* Check Direct Messages */}
+      {/* ── Check Direct Messages ─────────────────── */}
+      <div className="border border-border rounded-xl p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 flex-wrap">
             <input type="checkbox" id="checkDmEnabled"
@@ -520,7 +518,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
             </div>
           </div>
         </div>
-
       </div>
 
 

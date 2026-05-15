@@ -505,6 +505,18 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.322",
+    date: "15 May 2026",
+    items: [
+      { category: "UI", text: "The Copy Settings link in the page header now only appears when you are on the Account Settings tab. It is hidden on all other tabs since each tool has its own Copy Settings button." },
+      { category: "Follow Tool", text: "Stop Tool if Blocked for X minutes is now included as a copy setting in the Follow Tool." },
+      { category: "Unfollow Tool", text: "Stop Tool if Blocked for X minutes is now included as a copy setting in the Unfollow Tool." },
+      { category: "Contact Tool", text: "Stop Tool if Blocked for X minutes is now included as a copy setting in the Contact Tool." },
+      { category: "Human Sessions", text: "Check Stories from Timeline and Check Direct Messages now each appear in their own separate settings box instead of being combined into one." },
+      { category: "Hashtag Scraping", text: "Fixed: Multiple accounts scraping the same hashtag no longer see the same users. Scraped users are now always tracked and filtered out at the point of scraping — independent of any global setting — so each account picks up fresh users when it runs." },
+    ],
+  },
+  {
     version: "1.0.262",
     date: "13 May 2026, 04:00",
     items: [

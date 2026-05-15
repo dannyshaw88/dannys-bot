@@ -1224,6 +1224,16 @@ class AutomationEngine {
   private async runContactUsersSession(profile: Profile, tool: Tool, state: ProfileState): Promise<number> {
     const s = tool.settings as any;
 
+    // Stop-on-block gate
+    if (s.stopOnBlockEnabled && s.toolBlockedUntil && Date.now() < s.toolBlockedUntil) {
+      const remMs = s.toolBlockedUntil - Date.now();
+      const remH = Math.floor(remMs / 3_600_000);
+      const remM = Math.floor((remMs % 3_600_000) / 60_000);
+      const remStr = remH > 0 ? `${remH}h ${remM}m` : `${remM}m`;
+      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused — blocked by Instagram. ${remStr} remaining`);
+      return 0;
+    }
+
     const pending = await storage.getContactPendingMessages(profile.id, "pending");
     if (!pending.length) {
       console.log(`[engine] @${profile.username}: no pending contact messages to send`);
@@ -1254,6 +1264,12 @@ class AutomationEngine {
         if (result === "blocked") {
           this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "skipped", "Instagram action-blocked contact DM");
           await storage.updateContactPendingMessage(msg.id, { status: "failed" });
+          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+            const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
+            const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+            await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
+            this.logAction(profile.id, tool.id, "action_suspended", msg.instagramUsername, "", "", "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
+          }
           break;
         }
         if (result) {
@@ -1899,6 +1915,17 @@ class AutomationEngine {
   // ── Unfollow session ──────────────────────────────────────────────────────
   private async runUnfollowSession(profile: Profile, tool: Tool, state: ProfileState): Promise<{ unfollowed: number }> {
     const s = tool.settings as any;
+
+    // Stop-on-block gate
+    if (s.stopOnBlockEnabled && s.toolBlockedUntil && Date.now() < s.toolBlockedUntil) {
+      const remMs = s.toolBlockedUntil - Date.now();
+      const remH = Math.floor(remMs / 3_600_000);
+      const remM = Math.floor((remMs % 3_600_000) / 60_000);
+      const remStr = remH > 0 ? `${remH}h ${remM}m` : `${remM}m`;
+      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused — blocked by Instagram. ${remStr} remaining`);
+      return { unfollowed: 0 };
+    }
+
     const minAgeDays   = s.minFollowAgeDays  ?? 3;
     const processCount = randInt(s.processMin ?? 5, s.processMax ?? 15);
     const delayMin     = (s.delayAfterUnfollowMin ?? 5)  * 1000;
@@ -2000,6 +2027,12 @@ class AutomationEngine {
         const result = await client.unfollowUser(userId, fu.instagramUsername);
         if (result === "blocked") {
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "skipped", "Instagram action-blocked unfollow");
+          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+            const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
+            const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+            await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
+            this.logAction(profile.id, tool.id, "action_suspended", fu.instagramUsername, "", "", "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
+          }
           break;
         }
         if (result) {
@@ -2395,11 +2428,11 @@ class AutomationEngine {
         try {
           const watched = await client.viewTimelineStories(storyCount);
           if (watched === -1) {
-            console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — no mobile session (run Verify Credentials to fix)`);
-            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no mobile session — run Verify Credentials to establish igApiCookies");
+            console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — no igApiCookies session (account not yet verified — run Verify Credentials first)`);
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no igApiCookies session — run Verify Credentials to establish one");
           } else if (watched === -5) {
-            console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — mobile session rejected by Instagram (session expired or not device-verified)`);
-            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: mobile session expired or rejected — re-run Verify Credentials to refresh the session");
+            console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — Instagram rejected the reels_tray request (soft checkpoint or rate limit — other actions may still work fine)`);
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: Instagram rejected reels_tray — may be a soft checkpoint or rate limit (other tools unaffected)");
           } else if (watched === -2) {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories: tray was empty (0 stories in feed) — see server log for response keys`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "0 stories in feed — tray empty (Instagram returned no stories for this account's following list)");
@@ -2719,6 +2752,17 @@ class AutomationEngine {
   // ── Follow session ────────────────────────────────────────────────────────
   private async runSession(profile: Profile, tool: Tool, state: ProfileState): Promise<{ followed: number; scraped: number; dedupSkipped: number; filterSkipped: number; blocked: number; skipped: number }> {
     const s = tool.settings as any;
+
+    // Stop-on-block gate: skip session while the tool is in a user-configured cooldown
+    if (s.stopOnBlockEnabled && s.toolBlockedUntil && Date.now() < s.toolBlockedUntil) {
+      const remMs = s.toolBlockedUntil - Date.now();
+      const remH = Math.floor(remMs / 3_600_000);
+      const remM = Math.floor((remMs % 3_600_000) / 60_000);
+      const remStr = remH > 0 ? `${remH}h ${remM}m` : `${remM}m`;
+      this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused — blocked by Instagram. ${remStr} remaining`);
+      return { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
+    }
+
     const maxPerDay    = randInt(s.maxPerDayMin  ?? 150, s.maxPerDayMax  ?? 200);
     const maxPerHour   = randInt(s.maxPerHourMin ?? 5,   s.maxPerHourMax ?? 15);
     const processCount = randInt(s.processMin    ?? 5,   s.processMax    ?? 15);
@@ -2795,14 +2839,22 @@ class AutomationEngine {
           if (result.nextCursor) {
             await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
           } else if (globalCursor) {
+            // End of hashtag feed — reset so next cycle starts from the top
             await storage.setHashtagCursor(source.value, "").catch(() => {});
           }
-          if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
-            const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+          // Always deduplicate hashtag candidates against the scraped-users list.
+          // This prevents multiple accounts from processing the same page of users even when
+          // the cursor fails to advance (e.g. HikerAPI returns no next_max_id on the first page).
+          if (candidates.length > 0) {
+            const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "30", 10);
             const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);
+            const beforeDedup = candidates.length;
             const fresh = candidates.filter(c => !alreadyScraped.has(c.pk));
             await storage.addScrapedUsers(fresh).catch(() => {});
             candidates = fresh;
+            if (beforeDedup !== candidates.length) {
+              engineLog("INFO", `@${profile.username}: hashtag dedup — ${beforeDedup - candidates.length} already-scraped users removed from #${source.value} candidates`);
+            }
           }
           logHiker("HashtagScrape", `Scraped #${source.value} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
         } else {
@@ -3019,6 +3071,12 @@ class AutomationEngine {
         const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong");
         if (isLegitBlock) {
           this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
+          if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+            const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
+            const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+            await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
+            this.logAction(profile.id, tool.id, "action_suspended", user.username, source.value, source.type, "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
+          }
           hitHardLimit = true; break; // Abort session immediately when legitimately blocked
         }
 
@@ -3094,12 +3152,16 @@ class AutomationEngine {
             } else if (globalCursor) {
               await storage.setHashtagCursor(rescrapeSource.value, "").catch(() => {});
             }
-            if (globalSettings.skipScrapedUsers === "true" && moreCandidates.length > 0) {
-              const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+            if (moreCandidates.length > 0) {
+              const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "30", 10);
               const alreadyScraped = await storage.getScrapedUserIds(moreCandidates.map(c => c.pk), ignoreDays);
+              const beforeDedup = moreCandidates.length;
               const fresh = moreCandidates.filter(c => !alreadyScraped.has(c.pk));
               await storage.addScrapedUsers(fresh).catch(() => {});
               moreCandidates = fresh;
+              if (beforeDedup !== moreCandidates.length) {
+                engineLog("INFO", `@${profile.username}: hashtag dedup (rescrape round ${extraRound}) — ${beforeDedup - moreCandidates.length} already-scraped removed from #${rescrapeSource.value}`);
+              }
             }
             logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${rescrapeSource.value} via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
           } else if (rescrapeSource.type === "target_followers" && hikerClient && rescrapeSource.targetUserId) {

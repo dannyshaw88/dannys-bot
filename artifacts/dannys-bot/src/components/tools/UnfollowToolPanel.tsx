@@ -38,6 +38,12 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
       { key: "uf_autoStartAfter", label: "Start follow after (min / max mins)",           settingKeys: ["autoStartFollowAfterMin","autoStartFollowAfterMax"] },
     ]},
   ]},
+  { label: "Stop if Blocked", options: [
+    { key: "uf_stopOnBlock", label: "Stop if Blocked", description: "Pause the tool for a set time when Instagram blocks an unfollow action", subOptions: [
+      { key: "uf_stopOnBlockEnabled", label: "Enabled",              settingKeys: ["stopOnBlockEnabled"] },
+      { key: "uf_stopOnBlockMinutes", label: "Stop duration (mins)", settingKeys: ["stopOnBlockMinutes"] },
+    ]},
+  ]},
 ];
 
 export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {

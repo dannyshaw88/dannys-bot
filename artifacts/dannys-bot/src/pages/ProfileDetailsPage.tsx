@@ -544,13 +544,17 @@ export function ProfileDetailsPage() {
                     >
                       Account Settings
                     </Link>
-                    <span className="text-border mx-1 select-none">|</span>
-                    <button
-                      className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
-                      onClick={() => setCopyDialogOpen(true)}
-                    >
-                      <Copy className="w-3 h-3" /> Copy Settings
-                    </button>
+                    {activeTab === "settings" && (
+                      <>
+                        <span className="text-border mx-1 select-none">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
+                          onClick={() => setCopyDialogOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
               </div>
