@@ -512,7 +512,49 @@ export function ProfileDetailsPage() {
       <Tabs.Root value={activeTab} onValueChange={(tab) => navigate(`/profiles/${profileId}?tab=${tab}`)} className="w-full">
         <div className="w-full">
           <div className="flex items-center gap-4 mb-3">
-            <div className="flex-1">
+            <div className="flex-1 space-y-1">
+              {/* Row 1 — navigation links */}
+              <div className="flex items-center gap-1 flex-wrap">
+                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium transition-colors">
+                  <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
+                  <span className="text-blue-500 hover:text-blue-600 uppercase">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
+                </Link>
+                {!profile?.creatorMode && (
+                  <>
+                    <span className="text-border mx-1 select-none">|</span>
+                    <Link
+                      href="/"
+                      onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
+                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
+                    >
+                      Dash
+                    </Link>
+                    <span className="text-border mx-1 select-none">|</span>
+                    <button
+                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
+                    >
+                      <Monitor className="w-3 h-3" />
+                      Browser
+                    </button>
+                    <span className="text-border mx-1 select-none">|</span>
+                    <Link
+                      href={`/profiles/${profileId}?tab=settings`}
+                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
+                    >
+                      Account Settings
+                    </Link>
+                    <span className="text-border mx-1 select-none">|</span>
+                    <button
+                      className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
+                      onClick={() => setCopyDialogOpen(true)}
+                    >
+                      <Copy className="w-3 h-3" /> Copy Settings
+                    </button>
+                  </>
+                )}
+              </div>
+              {/* Row 2 — account status pill + profile picker */}
               <div className="flex items-center gap-1 flex-wrap">
                 {(() => {
                   const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
@@ -608,38 +650,6 @@ export function ProfileDetailsPage() {
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
-                <span className="text-border mx-1 select-none">|</span>
-                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium transition-colors">
-                  <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
-                  <span className="text-blue-500 hover:text-blue-600 uppercase">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
-                </Link>
-                {!profile?.creatorMode && (
-                  <>
-                    <span className="text-border mx-1 select-none">|</span>
-                    <Link
-                      href="/"
-                      onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
-                    >
-                      Dash
-                    </Link>
-                    <span className="text-border mx-1 select-none">|</span>
-                    <button
-                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
-                    >
-                      <Monitor className="w-3 h-3" />
-                      Browser
-                    </button>
-                    <span className="text-border mx-1 select-none">|</span>
-                    <Link
-                      href={`/profiles/${profileId}?tab=settings`}
-                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
-                    >
-                      Account Settings
-                    </Link>
-                  </>
-                )}
               </div>
             </div>
           </div>
@@ -659,12 +669,6 @@ export function ProfileDetailsPage() {
           <div className="space-y-1 pb-2">
             <div className="flex items-center gap-3">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
-              <button
-                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer"
-                onClick={() => setCopyDialogOpen(true)}
-              >
-                <Copy className="w-3 h-3" /> COPY SETTINGS
-              </button>
             </div>
             <GroupCombobox
               value={formData.tags || ""}

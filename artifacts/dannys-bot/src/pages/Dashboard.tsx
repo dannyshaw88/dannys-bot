@@ -54,6 +54,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.311",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "ERR_TOO_MANY_REDIRECTS crash loop fully resolved — root cause was conflicting cookies remaining in Chrome's jar after login. Recovery now reads the sessionid value, wipes ALL instagram.com cookies from Chrome via CDP, re-injects only sessionid, then navigates to instagram.com — breaking the redirect chain at the source. Applies to both the 2FA and non-2FA login paths." },
+      { category: "Fix", text: "attachSSE session-check now uses explicit domain fetch (page.cookies('https://www.instagram.com')) instead of the no-arg form which returns empty on chrome-error:// pages. Also checks lastLoginSuccessAt so a fresh login is not treated as a missing session." },
+      { category: "Fix", text: "Screenshot timeout #3 early-recovery goto now stands down for 90 s after a successful login, preventing a competing navigation that could race with and crash the autoLogin recovery flow." },
+      { category: "UI", text: "Account Settings page nav links (Back to Accounts, Dash, Browser, Account Settings, Copy Settings) moved to their own row above the account status pill and profile picker." },
+    ],
+  },
+  {
     version: "1.0.310",
     date: "15 May 2026",
     items: [

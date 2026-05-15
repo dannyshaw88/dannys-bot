@@ -645,10 +645,15 @@ export function attachSSE(profileId: number, res: ServerResponse) {
         log(`[attachSSE:${profileId}] initial navigation → ${target}`, "browser");
         session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
       } else if (isBlankOrError) {
-        // Reconnect after crash/error — recover by checking cookies
-        const cookies = await session.page.cookies().catch(() => [] as any[]);
-        const hasCookies = cookies.some((c: any) => c.name === "sessionid");
-        const target = hasCookies
+        // Reconnect after crash/error — recover by checking cookies.
+        // IMPORTANT: page.cookies() with no args returns cookies for the CURRENT
+        // page domain only. On chrome-error:// that returns nothing, which would
+        // incorrectly send a just-logged-in account back to the login page.
+        // Use explicit domain fetch instead, and also honour lastLoginSuccessAt.
+        const igCookies = await session.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
+        const hasCookies = igCookies.some((c: any) => c.name === "sessionid");
+        const recentLogin = session.lastLoginSuccessAt ? (Date.now() - session.lastLoginSuccessAt) < 90000 : false;
+        const target = (hasCookies || recentLogin)
           ? "https://www.instagram.com/"
           : "https://www.instagram.com/accounts/login/";
         session.navProtectedUntil = Date.now() + 15000;
@@ -849,7 +854,12 @@ function startFrameLoop(profileId: number) {
           const frozenUrl = (() => { try { return s.page.url(); } catch { return ""; } })();
           const isFrozenOnError = frozenUrl.startsWith("chrome-error://") || frozenUrl === "about:blank";
           const navOk = !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0);
-          if (isFrozenOnError && navOk) {
+          // If a login just succeeded, do NOT fire the recovery goto — autoLogin
+          // already handled the redirect loop and is still in the middle of the
+          // recovery navigate. Firing a competing goto here crashes the renderer.
+          const msSinceLogin = s.lastLoginSuccessAt ? Date.now() - s.lastLoginSuccessAt : Infinity;
+          const loginJustDone = msSinceLogin < 90000;
+          if (isFrozenOnError && navOk && !loginJustDone) {
             // Screenshot timeouts on chrome-error:// almost always mean the proxy
             // is dead/hanging — NOT a cookie/redirect issue. The Instagram cookies
             // are still valid. Do NOT delete them here.
@@ -860,6 +870,8 @@ function startFrameLoop(profileId: number) {
             s.page.goto("https://www.instagram.com/accounts/login/", {
               waitUntil: "domcontentloaded", timeout: 25000,
             }).catch(() => null);
+          } else if (isFrozenOnError && navOk && loginJustDone) {
+            log(`[frameLoop:${profileId}] screenshot timeout #3 on error page — login completed ${Math.round(msSinceLogin / 1000)}s ago, skipping recovery goto to avoid racing with autoLogin`, "browser");
           }
         }
 
@@ -1990,18 +2002,28 @@ export async function browserAutoLogin(
             // will be on chrome-error://. The sessionid cookie was already set by
             // Instagram before the loop. Navigate back to instagram.com so the EB
             // shows a real page and the frame loop runs normally after login.
-            // saveCookies/getSessionPageCookies already use explicit domain fetching
-            // so cookies are readable even before this navigation, but navigating back
-            // also ensures the EB panel displays something useful to the user.
             if (s.page.url().startsWith("chrome-error://")) {
               sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
-              // Retry up to 3 times — the first goto sometimes fails if Chrome is still
-              // processing the error-page renderer. A short delay before each retry helps.
-              for (let attempt = 0; attempt < 3; attempt++) {
-                if (attempt > 0) await delay(2000);
+              // The redirect loop is caused by conflicting cookies in Chrome's jar.
+              // Clear ALL instagram.com cookies from Chrome, then re-inject only
+              // the sessionid. This breaks the redirect chain so the recovery goto
+              // lands on the feed instead of looping back to chrome-error://.
+              try {
+                const allIgCookies = await s.page.cookies(
+                  "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com"
+                ).catch(() => [] as any[]);
+                const sessionCookie = allIgCookies.find((c: any) => c.name === "sessionid" && (c.value?.length ?? 0) > 5);
+                if (allIgCookies.length) await (s.page as any).deleteCookie(...allIgCookies).catch(() => null);
+                if (sessionCookie) {
+                  await s.page.setCookie({ name: "sessionid", value: sessionCookie.value, domain: ".instagram.com", path: "/", httpOnly: true, secure: true }).catch(() => null);
+                }
+              } catch { /* non-fatal */ }
+              await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+              await delay(800);
+              if (s.page.url().startsWith("chrome-error://")) {
+                await delay(2000);
                 await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
                 await delay(800);
-                if (!s.page.url().startsWith("chrome-error://")) break;
               }
             }
             await saveCookies(profileId, s.page);
@@ -2033,13 +2055,26 @@ export async function browserAutoLogin(
       // Same ERR_TOO_MANY_REDIRECTS recovery as the 2FA path — navigate back if on error page.
       if (currentUrl.startsWith("chrome-error://")) {
         sendStatus(profileId, "Post-login redirect loop (ERR_TOO_MANY_REDIRECTS) — recovering to instagram.com…");
-        // Retry up to 3 times — the first goto sometimes fails if Chrome is still
-        // processing the error-page renderer. A short delay before each retry helps.
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) await delay(2000);
+        // The redirect loop is caused by conflicting cookies in Chrome's jar.
+        // Clear ALL instagram.com cookies from Chrome, then re-inject only
+        // the sessionid. This breaks the redirect chain so the recovery goto
+        // lands on the feed instead of looping back to chrome-error://.
+        try {
+          const allIgCookies = await s.page.cookies(
+            "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com"
+          ).catch(() => [] as any[]);
+          const sessionCookie = allIgCookies.find((c: any) => c.name === "sessionid" && (c.value?.length ?? 0) > 5);
+          if (allIgCookies.length) await (s.page as any).deleteCookie(...allIgCookies).catch(() => null);
+          if (sessionCookie) {
+            await s.page.setCookie({ name: "sessionid", value: sessionCookie.value, domain: ".instagram.com", path: "/", httpOnly: true, secure: true }).catch(() => null);
+          }
+        } catch { /* non-fatal */ }
+        await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+        await delay(800);
+        if (s.page.url().startsWith("chrome-error://")) {
+          await delay(2000);
           await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
           await delay(800);
-          if (!s.page.url().startsWith("chrome-error://")) break;
         }
       }
       await saveCookies(profileId, s.page);
