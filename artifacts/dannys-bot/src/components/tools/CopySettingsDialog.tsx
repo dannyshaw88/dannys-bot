@@ -39,12 +39,13 @@ interface Props {
 type SortBy = "name" | "status" | "group";
 
 function statusBadgeClass(status: string) {
-  const s = (status ?? "").toLowerCase();
-  if (s === "active")                          return "bg-green-500/15 text-green-400 border-green-500/30";
-  if (s === "warming")                         return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
-  if (s === "disabled" || s === "inactive")    return "bg-zinc-500/15 text-zinc-400 border-zinc-500/30";
-  if (s === "banned" || s === "restricted")    return "bg-red-500/15 text-red-400 border-red-500/30";
-  if (s === "suspended")                       return "bg-orange-500/15 text-orange-400 border-orange-500/30";
+  const s = (status ?? "").toLowerCase().replace(/_/g, " ");
+  if (s === "valid")                                        return "bg-green-500/15 text-green-700 border-green-500/30";
+  if (s === "pending" || s === "verifying")                 return "bg-yellow-500/15 text-yellow-700 border-yellow-500/30";
+  if (s === "locked" || s === "account disabled")           return "bg-red-500/15 text-red-700 border-red-500/30";
+  if (s === "captcha" || s === "2fa verification" || s === "email confirmation") return "bg-orange-500/15 text-orange-700 border-orange-500/30";
+  if (s === "stopped" || s === "disabled" || s === "inactive") return "bg-zinc-500/15 text-zinc-500 border-zinc-500/30";
+  if (s === "banned" || s === "restricted" || s === "suspended") return "bg-red-500/15 text-red-700 border-red-500/30";
   return "bg-muted/60 text-muted-foreground border-border";
 }
 
@@ -98,8 +99,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const profileGroups = useMemo(() => {
     const map = new Map<string, Profile[]>();
     for (const p of profiles) {
-      const key = (p.tags ?? "").trim();
-      if (!key) continue;
+      const key = (p.tags ?? "").trim() || "No Group Assigned";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(p);
     }
@@ -120,11 +120,15 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
     return [...base].sort((a, b) => {
       if (sortBy === "status") {
-        const sc = (a.status ?? "").localeCompare(b.status ?? "");
+        const sa = ((a as any).accountStatus ?? "").replace(/_/g, " ");
+        const sb = ((b as any).accountStatus ?? "").replace(/_/g, " ");
+        const sc = sa.localeCompare(sb);
         if (sc !== 0) return sc;
       }
       if (sortBy === "group") {
-        const gc = (a.tags ?? "").localeCompare(b.tags ?? "");
+        const ga = (a.tags ?? "").trim() || "No Group Assigned";
+        const gb = (b.tags ?? "").trim() || "No Group Assigned";
+        const gc = ga.localeCompare(gb);
         if (gc !== 0) return gc;
       }
       return (a.accountLabel || a.username).localeCompare(b.accountLabel || b.username);
@@ -196,12 +200,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   const canCopy = targets.size > 0 && selected.size > 0 && status === "idle";
 
-  const sortButtons: { key: SortBy; label: string }[] = [
-    { key: "name",   label: "Name"   },
-    { key: "status", label: "Status" },
-    { key: "group",  label: "Group"  },
-  ];
-
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) setStatus("idle"); onOpenChange(v); }}>
       <DialogContent className="max-w-[1160px] p-0 overflow-hidden">
@@ -226,25 +224,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   {allFilteredSelected ? "None" : "ALL"}
                 </button>
               )}
-            </div>
-
-            {/* Sort controls */}
-            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-muted/10">
-              <ArrowUpDown className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="text-[11px] text-muted-foreground mr-0.5">Sort:</span>
-              {sortButtons.map(b => (
-                <button
-                  key={b.key}
-                  onClick={() => setSortBy(b.key)}
-                  className={`text-[11px] px-2 py-0.5 rounded font-medium transition-colors ${
-                    sortBy === b.key
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {b.label}
-                </button>
-              ))}
             </div>
 
             {/* Group quick-select */}
@@ -288,34 +267,61 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               </div>
             </div>
 
+            {/* Column headers */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/20 select-none">
+              <div className="w-4 shrink-0" />
+              {([ ["name", "Name", "flex-1"], ["status", "Status", "w-[72px]"], ["group", "Group", "w-[88px]"] ] as [SortBy, string, string][]).map(([key, label, cls]) => (
+                <button
+                  key={key}
+                  onClick={() => setSortBy(key)}
+                  className={`${cls} flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    sortBy === key ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                  <ArrowUpDown className={`w-2.5 h-2.5 shrink-0 ${sortBy === key ? "opacity-100" : "opacity-40"}`} />
+                </button>
+              ))}
+            </div>
+
             {/* Account rows */}
             <div className="overflow-y-auto flex-1 divide-y divide-border/40">
               {filteredProfiles.length === 0 && (
                 <p className="px-4 py-3 text-xs text-muted-foreground text-center">No profiles match.</p>
               )}
-              {filteredProfiles.map(p => (
-                <label
-                  key={p.id}
-                  className="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer select-none hover:bg-muted/30 transition-colors"
-                >
-                  <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} className="shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium tracking-tight truncate block">
-                      {p.accountLabel || p.username}
-                    </span>
-                    {p.tags && (
-                      <span className="text-[10px] text-muted-foreground truncate block leading-tight mt-0.5">
-                        {p.tags}
+              {filteredProfiles.map(p => {
+                const acctStatus = ((p as any).accountStatus as string | undefined) ?? "";
+                const displayStatus = acctStatus.replace(/_/g, " ").trim();
+                const groupLabel = (p.tags ?? "").trim() || "No Group Assigned";
+                return (
+                  <label
+                    key={p.id}
+                    className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-muted/30 transition-colors"
+                  >
+                    <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} className="shrink-0 w-4 h-4" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-semibold truncate block leading-tight">
+                        {p.accountLabel || p.username}
                       </span>
-                    )}
-                  </div>
-                  {p.status && (
-                    <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border capitalize ${statusBadgeClass(p.status)}`}>
-                      {p.status}
-                    </span>
-                  )}
-                </label>
-              ))}
+                      {p.accountLabel && (
+                        <span className="text-[10px] text-muted-foreground truncate block leading-tight">
+                          @{p.username}
+                        </span>
+                      )}
+                    </div>
+                    <div className="w-[72px] shrink-0">
+                      {displayStatus && (
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border capitalize ${statusBadgeClass(displayStatus)}`}>
+                          {displayStatus}
+                        </span>
+                      )}
+                    </div>
+                    <div className="w-[88px] shrink-0 truncate text-[10px] text-muted-foreground">
+                      {groupLabel}
+                    </div>
+                  </label>
+                );
+              })}
             </div>
 
             {targets.size > 0 && (

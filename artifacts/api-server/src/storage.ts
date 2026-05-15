@@ -156,7 +156,7 @@ export class DatabaseStorage implements IStorage {
       // Only fall back to random UA if the caller did not supply one
       userAgentApi: profile.userAgentApi || randomUA.api,
       userAgentEmbedded: profile.userAgentEmbedded || randomUA.embedded,
-      tags: profile.tags || "",
+      tags: profile.tags || "No Group Assigned",
     }).returning();
     await this.initializeToolsForProfile(created.id);
     return created;

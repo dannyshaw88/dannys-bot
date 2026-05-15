@@ -54,6 +54,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.320",
+    date: "15 May 2026",
+    items: [
+      { category: "UX", text: "Accounts added via Add Profile or Bulk Import with no group are now automatically placed into a group called 'No Group Assigned' instead of having no group at all." },
+      { category: "UX", text: "The Copy Settings account list now shows Account Name, Label, Status, and Group in aligned columns — click any column header to sort by that field." },
+      { category: "UX", text: "The Copy Settings group selector now includes 'No Group Assigned' so you can select all ungrouped accounts in one click." },
+      { category: "UX", text: "Removed the 'Idle' status badge from the account cards — only Running and Error states are shown as badges now." },
+    ],
+  },
+  {
     version: "1.0.319",
     date: "15 May 2026",
     items: [

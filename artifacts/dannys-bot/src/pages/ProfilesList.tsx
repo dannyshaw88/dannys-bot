@@ -132,8 +132,6 @@ export default function ProfilesList() {
                         <Badge className="bg-green-100 text-green-700 hover:bg-green-200 font-medium">Running</Badge>
                       ) : profile.status === 'error' ? (
                         <Badge variant="destructive" className="font-medium">Error</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-medium">Idle</Badge>
                       )}
                     </div>
                   </div>
