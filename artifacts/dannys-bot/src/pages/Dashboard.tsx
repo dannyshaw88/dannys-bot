@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.313",
+    date: "15 May 2026",
+    items: [
+      { category: "Fix", text: "ERR_TOO_MANY_REDIRECTS — when both recovery gotos ALSO hit chrome-error:// (i.e. the redirect loop is account-level and persists even with just the sessionid re-injected), the app no longer falsely reports 'Login successful' while Chrome is stuck on the error page. Instead: the saved cookie JSON is deleted (so the next EB open shows the login form rather than immediately looping again), Chrome's cookie jar is cleared, Chrome navigates to the login page (which never redirect-loops with no cookies), and the log reports failure honestly. Previously the recovery could leave Chrome permanently stuck on chrome-error:// while the log showed a green success tick." },
+    ],
+  },
+  {
     version: "1.0.312",
     date: "15 May 2026",
     items: [

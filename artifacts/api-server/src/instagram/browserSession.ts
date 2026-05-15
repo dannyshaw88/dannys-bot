@@ -2045,6 +2045,22 @@ export async function browserAutoLogin(
               }
             }
             await saveCookies(profileId, s.page);
+            // If BOTH recovery gotos also hit chrome-error://, the redirect loop is
+            // account-level (Instagram is refusing to serve the feed for this sessionid).
+            // Delete the saved cookie JSON so the next EB open shows the login form
+            // instead of immediately looping again.  Navigate Chrome to the login page
+            // (no cookies = no redirect = stable page) and report failure honestly.
+            if (s.page.url().startsWith("chrome-error://")) {
+              sendStatus(profileId, "⚠ Redirect loop persists — Instagram will not serve the feed for this account. Clearing browser session and returning to login page.");
+              deleteSavedCookies(profileId);
+              try {
+                const leftover = await s.page.cookies("https://www.instagram.com", "https://i.instagram.com", "https://instagram.com").catch(() => [] as any[]);
+                if (leftover.length) await (s.page as any).deleteCookie(...leftover).catch(() => null);
+              } catch { /* non-fatal */ }
+              s.navProtectedUntil = Date.now() + 20000;
+              s.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null);
+              return { ok: false, message: "Instagram redirect loop persists — the account may need manual verification on instagram.com." };
+            }
             s.lastLoginSuccessAt = Date.now();
             // Abort if the session was replaced (user pressed Clear while this login ran).
             if (sessions.get(profileId)?.sessionToken !== mySessionToken) {
@@ -2101,6 +2117,22 @@ export async function browserAutoLogin(
         }
       }
       await saveCookies(profileId, s.page);
+      // If BOTH recovery gotos also hit chrome-error://, the redirect loop is
+      // account-level (Instagram is refusing to serve the feed for this sessionid).
+      // Delete the saved cookie JSON so the next EB open shows the login form
+      // instead of immediately looping again.  Navigate Chrome to the login page
+      // (no cookies = no redirect = stable page) and report failure honestly.
+      if (s.page.url().startsWith("chrome-error://")) {
+        sendStatus(profileId, "⚠ Redirect loop persists — Instagram will not serve the feed for this account. Clearing browser session and returning to login page.");
+        deleteSavedCookies(profileId);
+        try {
+          const leftover = await s.page.cookies("https://www.instagram.com", "https://i.instagram.com", "https://instagram.com").catch(() => [] as any[]);
+          if (leftover.length) await (s.page as any).deleteCookie(...leftover).catch(() => null);
+        } catch { /* non-fatal */ }
+        s.navProtectedUntil = Date.now() + 20000;
+        s.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null);
+        return { ok: false, message: "Instagram redirect loop persists — the account may need manual verification on instagram.com." };
+      }
       s.lastLoginSuccessAt = Date.now();
       // Abort if the session was replaced (user pressed Clear while this login ran).
       if (sessions.get(profileId)?.sessionToken !== mySessionToken) {
