@@ -115,9 +115,14 @@ export function LiveActivityTicker() {
   const label = buildLabel(latest, profiles);
   if (!label) return null;
 
+  const ERROR_ACTIONS = new Set([
+    "follow_blocked",
+    "contact_dm_blocked",
+    "unfollow_blocked",
+    "verification_failed",
+  ]);
   const isError = latest && (
-    latest.action.includes("blocked") ||
-    latest.action.includes("failed") ||
+    ERROR_ACTIONS.has(latest.action) ||
     latest.result === "error" ||
     latest.result === "blocked"
   );

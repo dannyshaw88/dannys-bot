@@ -54,6 +54,21 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.328",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "The activity bar at the top of the screen no longer shows red text when a DM check comes back with zero messages — red is now reserved for genuine errors such as a blocked follow, a blocked DM, or a failed verification." },
+    ],
+  },
+  {
+    version: "1.0.327",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed embedded browsers becoming unresponsive when 4 or more are open at the same time — the root cause was that frame streaming and click handling shared the same Chrome communication channel, so a slow frame would block every click for up to 8 seconds. Frame delivery is now handled on a completely separate channel, so clicks and typing are always instant regardless of how many browsers are open." },
+      { category: "Improvement", text: "The embedded browser now uses Chrome's built-in screen-sharing API to push frames instead of taking periodic screenshots — this removes the need for a screenshot queue entirely and makes the session feel much more responsive." },
+    ],
+  },
+  {
     version: "1.0.326",
     date: "16 May 2026",
     items: [

@@ -37,6 +37,7 @@ import {
   sendLoginDone,
   setCheckpointUrl,
   getSessionPageCookies,
+  harvestSignupCookiesFromEB,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -2170,7 +2171,61 @@ export async function registerInstagramRoutes(
       });
 
       const parsedApiLimits = apiLimits as { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | undefined;
-      let result = await createInstagramAccountViaApi({ username, password, email, firstName, day: Number(day), month: Number(month), year: Number(year), proxyUrl, bio: bio || undefined, userAgent: userAgentApi || undefined, apiLimits: parsedApiLimits });
+
+      // ── EB-FIRST: harvest real Chrome cookies — REQUIRED, no fallback ────────
+      // The EB-FIRST rule is non-negotiable: every Instagram API call must originate
+      // from a real browser session.  If the EB harvest fails, the signup is aborted.
+      // There is no fallback to randomly generated device IDs.
+      const harvestSteps: string[] = [];
+      harvestSteps.push("EB: launching temporary Chrome to harvest Instagram cookies (mid, ig_did, csrftoken)...");
+      req.log.info({ username }, "signup: starting EB cookie harvest");
+      let ebCookies: Awaited<ReturnType<typeof harvestSignupCookiesFromEB>>;
+      try {
+        ebCookies = await harvestSignupCookiesFromEB({
+          proxyHost:     proxyHost,
+          proxyPort:     proxyPort ? Number(proxyPort) : undefined,
+          proxyUsername: proxyUsername,
+          proxyPassword: proxyPassword,
+        });
+      } catch (e: any) {
+        const msg = `EB cookie harvest failed: ${e?.message}`;
+        req.log.error({ username, err: e?.message }, `signup: ${msg}`);
+        harvestSteps.push(`EB: ${msg}`);
+        harvestSteps.push("Signup aborted — cannot create account without browser-originated cookies.");
+        await storage.updateApiCreatedAccount(dbRecord.id, {
+          status: "error",
+          instagramUserId: null,
+          sessionCookies: null,
+          errorMessage: msg,
+          steps: JSON.stringify(harvestSteps),
+        });
+        return res.json({ status: "error", message: msg, steps: harvestSteps, dbId: dbRecord.id });
+      }
+
+      if (!ebCookies?.ig_did) {
+        const msg = "EB cookie harvest returned no device cookies (mid/ig_did missing) — Chrome may be blocked by the proxy or Instagram's CDN did not set cookies. Signup aborted.";
+        req.log.error({ username }, `signup: ${msg}`);
+        harvestSteps.push(`EB: ${msg}`);
+        await storage.updateApiCreatedAccount(dbRecord.id, {
+          status: "error",
+          instagramUserId: null,
+          sessionCookies: null,
+          errorMessage: msg,
+          steps: JSON.stringify(harvestSteps),
+        });
+        return res.json({ status: "error", message: msg, steps: harvestSteps, dbId: dbRecord.id });
+      }
+
+      harvestSteps.push(
+        `EB: harvested mid=${ebCookies.mid.slice(0, 8)}... ig_did=${ebCookies.ig_did.slice(0, 8)}...` +
+        ` csrftoken=${ebCookies.csrftoken ? ebCookies.csrftoken.slice(0, 8) + "..." : "(none)"}` +
+        ` (${ebCookies.cookieStrings.length} cookies total) ✓`
+      );
+      req.log.info({ username, mid: ebCookies.mid.slice(0, 8), ig_did: ebCookies.ig_did.slice(0, 8) }, "signup: EB cookie harvest succeeded");
+
+      let result = await createInstagramAccountViaApi({ username, password, email, firstName, day: Number(day), month: Number(month), year: Number(year), proxyUrl, bio: bio || undefined, userAgent: userAgentApi || undefined, apiLimits: parsedApiLimits, ebCookies });
+      // Prepend the EB harvest log lines so they appear first in the step log
+      result = { ...result, steps: [...harvestSteps, ...result.steps] };
 
       // Auto-fetch verification code via IMAP if credentials supplied
       if (result.status === "email_verification" && imapHost && imapUser && imapPass && result.sessionId) {
