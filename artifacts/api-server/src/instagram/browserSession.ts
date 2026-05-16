@@ -1041,6 +1041,32 @@ export function attachWS(profileId: number, ws: WebSocket) {
   startHousekeepLoop(profileId);
 }
 
+// ── Auto-login trigger ─────────────────────────────────────────────────────────
+// Called by the WS route immediately after attachWS. Waits 3.5 s for the initial
+// navigation to settle, then checks if Chrome is sitting on the login page. If so,
+// fires browserAutoLogin automatically so the user never has to click the toolbar
+// button — the form is filled and submitted without any manual action.
+// Guards: session must still exist, no login already in progress, page must be on
+// the login URL (not just any Instagram page).
+export function scheduleAutoLogin(
+  profileId: number,
+  username: string,
+  password: string,
+  twoFAKey: string,
+): void {
+  setTimeout(() => {
+    const s = sessions.get(profileId);
+    if (!s || s.autoLoginInProgress) return;
+    let url = "";
+    try { url = s.page.url(); } catch { return; }
+    if (!url.includes("accounts/login") && !url.includes("/login")) return;
+    log(`[autoLogin:${profileId}] auto-trigger: login page detected after initial navigation`, "browser");
+    browserAutoLogin(profileId, username, password, twoFAKey)
+      .then(result => sendLoginDone(profileId, result.ok, result.message))
+      .catch(err  => sendLoginDone(profileId, false, String(err)));
+  }, 3500);
+}
+
 // ── CDP Screencast frame delivery ─────────────────────────────────────────────
 // Chrome's Page.startScreencast API pushes JPEG frames from the compositor
 // thread via a DEDICATED CDP session that is completely independent from the
@@ -1121,12 +1147,19 @@ async function startScreencast(profileId: number): Promise<void> {
   });
 
   try {
+    // Send fewer frames per second as session count grows — each frame is a JPEG
+    // encode + CDP round-trip on Chromium's compositor thread. Sending every frame
+    // (everyNthFrame=1, ~30 fps) across 10+ simultaneous EBs saturates the CPU and
+    // causes the compositor to stall, which stops frame delivery entirely.
+    // Throttle to ~15 fps at 6-10 sessions, ~10 fps at 11-20, ~7 fps at 21+.
+    const nthFrame = nSessions <= 5 ? 1 : nSessions <= 10 ? 2 : nSessions <= 20 ? 3 : 4;
+
     await cdp.send("Page.startScreencast", {
       format: "jpeg",
       quality,
       maxWidth: 1280,
       maxHeight: 760,
-      everyNthFrame: 1,
+      everyNthFrame: nthFrame,
     });
     log(`[screencast:${profileId}] started (quality=${quality} sessions=${nSessions})`, "browser");
   } catch (e: any) {

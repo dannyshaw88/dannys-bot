@@ -297,9 +297,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             }
             break;
           case "screencast_started":
-            // Server confirmed the CDP screencast pipeline is active.
-            // Clear the "Loading…" overlay immediately — we know Chrome is
-            // running and frames are on their way regardless of their size.
+            // Server confirmed the CDP screencast pipeline is active (either
+            // initial start or a silent-stream restart). Clear both the
+            // "Loading…" overlay and the "Browser appears frozen" overlay —
+            // Chrome is alive and frames will arrive shortly.
+            // Also reset the stale-frame timer so the frozen detector doesn't
+            // fire again immediately after the restart.
+            lastFrameTimeRef.current = Date.now();
+            setIsFrozen(false);
             if (!hasReceivedFirstFrameRef.current) {
               hasReceivedFirstFrameRef.current = true;
               setWaitingFirstFrame(false);
@@ -896,15 +901,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         </div>
       )}
 
-      {/* Collapsed log toggle */}
-      {!showLog && (loginLog.length > 0 || consoleLogs.length > 0) && (
-        <button
-          onClick={() => setShowLog(true)}
-          className="shrink-0 px-4 py-1 text-[11px] text-slate-500 bg-slate-950 border-b border-slate-800 hover:text-slate-300 text-left"
-        >
-          Debug panel ({loginLog.length} login steps · {consoleLogs.length} console) F12
-        </button>
-      )}
 
       {/* Loading bar */}
       {isLoading && connected && (

@@ -54,6 +54,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.336",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browsers now automatically fill and submit login credentials as soon as the login page is detected after opening — no manual button press required. The browser opens, detects it is on the Instagram login form, and starts typing within a few seconds." },
+      { category: "Fix", text: "The 'Debug panel … F12' bar no longer appears at the bottom of each embedded browser window. The debug panel is still accessible via F12 if needed but no longer shows automatically." },
+      { category: "Fix", text: "When the server detects a stalled screen stream and restarts it, the 'Browser appears frozen' overlay now correctly clears itself as soon as the restart is confirmed — instead of requiring the user to click 'Keep Waiting'. The frozen timer is also reset so it does not fire again immediately after the restart." },
+      { category: "Fix", text: "With many embedded browsers open simultaneously, Chrome's compositor was being overwhelmed sending too many video frames at once and would stall completely. The frame rate is now reduced automatically as more browsers open: full speed for up to 5, halved for 6–10, one-third speed for 11–20, and one-quarter for 21 or more. This should allow 25+ browsers to run without freezing." },
+    ],
+  },
+  {
     version: "1.0.335",
     date: "16 May 2026",
     items: [

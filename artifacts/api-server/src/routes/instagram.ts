@@ -38,6 +38,7 @@ import {
   setCheckpointUrl,
   getSessionPageCookies,
   harvestSignupCookiesFromEB,
+  scheduleAutoLogin,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -1245,6 +1246,18 @@ export async function registerInstagramRoutes(
         const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
         await getOrCreateSession(profileId, ua, proxy);
         attachWS(profileId, ws);
+        // Auto-login: if the page settles on the login form, fill credentials
+        // without any manual button press. scheduleAutoLogin waits 3.5 s for the
+        // initial navigation to complete, then checks the URL and fires only if
+        // Chrome is on the login page AND credentials exist.
+        if (profile.username && profile.password) {
+          scheduleAutoLogin(
+            profileId,
+            profile.username,
+            profile.password,
+            (profile.twoFASecretKey as string | null) || "",
+          );
+        }
       } catch (err: any) {
         ws.send(JSON.stringify({ type: "error", message: err?.message || "Failed to start browser" }));
         ws.close();
