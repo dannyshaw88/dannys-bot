@@ -852,37 +852,17 @@ export async function getOrCreateSession(
       log(`[reqfail:${profileId}] ${err} — ${url.slice(0, 120)}`, "browser");
     }
     // When ERR_TOO_MANY_REDIRECTS fires and we detected a challenge URL earlier,
-    // navigate directly to the captured challenge URL so the user sees Instagram's
-    // actual challenge page and can interact with it.
-    // Do NOT navigate back to accounts/login — that immediately triggers another
-    // redirect to the challenge, creating an infinite loop of ERR_TOO_MANY_REDIRECTS.
-    // Do NOT clear challengeUrl — autoLogin needs it on the next Verify attempt.
+    // tell the user clearly what happened and put Chrome back on the login page.
+    // Do NOT clear challengeUrl — autoLogin needs to read it on the next Verify
+    // attempt to prevent re-submitting credentials and deepening the security lock.
     const sc = sessions.get(profileId);
     if (err === "net::ERR_TOO_MANY_REDIRECTS" && sc?.challengeUrl) {
-      const dest = sc.challengeUrl;
-      log(`[challenge:${profileId}] ERR_TOO_MANY_REDIRECTS — clearing session cookies then navigating to: ${dest.slice(0, 120)}`, "browser");
-      sendStatus(profileId, `⚠ Instagram is asking you to verify this account. The challenge page is now loading — complete the check shown in the browser window.`);
-      sc.navProtectedUntil = Date.now() + 30000;
-      // Run async — clear session cookies (keep device tokens) BEFORE navigating to
-      // the challenge URL. The stale sessionid in Chrome's jar is what causes the
-      // challenge page itself to redirect in a loop. Removing it lets Instagram serve
-      // the challenge fresh, exactly as it would for a clean mobile browser.
-      (async () => {
-        const sNow = sessions.get(profileId);
-        if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
-        const DEVICE = new Set(["mid", "ig_did", "ig_nrcb"]);
-        try {
-          const all: any[] = await (sNow.page as any).cookies(
-            "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com",
-          ).catch(() => []);
-          const device = all.filter(c => DEVICE.has(c.name));
-          const session = all.filter(c => !DEVICE.has(c.name));
-          if (session.length) await (sNow.page as any).deleteCookie(...session).catch(() => null);
-          if (device.length) await (sNow.page as any).setCookie(...device).catch(() => null);
-          log(`[challenge:${profileId}] Cleared ${session.length} session cookies before challenge nav (kept: ${device.map((c: any) => c.name).join(", ") || "none"})`, "browser");
-        } catch {}
-        await sNow.page.goto(dest, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null);
-      })();
+      log(`[challenge:${profileId}] Account security lock — cannot resolve in EB. User must verify manually on instagram.com.`, "browser");
+      sendStatus(profileId, `🔒 Account security lock: Instagram requires you to verify this account on instagram.com in a regular browser. Log in there and complete the security check shown. Once done, come back and click Clear to start fresh.`);
+      sc.navProtectedUntil = Date.now() + 5000;
+      setTimeout(() => {
+        sc.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
+      }, 1500);
     }
   });
 
@@ -1392,38 +1372,11 @@ function startHousekeepLoop(profileId: number): void {
         if (isErrorPage) {
           const msSinceLogin = s.lastLoginSuccessAt ? Date.now() - s.lastLoginSuccessAt : Infinity;
           if (msSinceLogin > 90000) {
-            if (s.challengeUrl) {
-              // chrome-error:// here is ERR_TOO_MANY_REDIRECTS caused by the
-              // challenge redirect loop. Clear session cookies (keep device tokens)
-              // then navigate directly to the challenge page.
-              // The stale sessionid is what makes the challenge URL itself loop —
-              // removing it lets Instagram serve the challenge fresh.
-              const dest = s.challengeUrl;
-              log(`[housekeep:${profileId}] chrome-error on challenge account — clearing session cookies then navigating to challenge page`, "browser");
-              s.navProtectedUntil = Date.now() + 30000;
-              (async () => {
-                const sNow = sessions.get(profileId);
-                if (!sNow) return;
-                const DEVICE = new Set(["mid", "ig_did", "ig_nrcb"]);
-                try {
-                  const all: any[] = await (sNow.page as any).cookies(
-                    "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com",
-                  ).catch(() => []);
-                  const device = all.filter(c => DEVICE.has(c.name));
-                  const session = all.filter(c => !DEVICE.has(c.name));
-                  if (session.length) await (sNow.page as any).deleteCookie(...session).catch(() => null);
-                  if (device.length) await (sNow.page as any).setCookie(...device).catch(() => null);
-                  log(`[housekeep:${profileId}] Cleared ${session.length} session cookies before challenge nav (kept: ${device.map((c: any) => c.name).join(", ") || "none"})`, "browser");
-                } catch {}
-                await sNow.page.goto(dest, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null);
-              })();
-            } else {
-              log(`[housekeep:${profileId}] error page detected (${url.slice(0, 60)}) — recovering to login (cookies preserved)`, "browser");
-              s.navProtectedUntil = Date.now() + 20000;
-              s.page.goto("https://www.instagram.com/accounts/login/", {
-                waitUntil: "domcontentloaded", timeout: 25000,
-              }).catch(() => null);
-            }
+            log(`[housekeep:${profileId}] error page detected (${url.slice(0, 60)}) — recovering to login (cookies preserved)`, "browser");
+            s.navProtectedUntil = Date.now() + 20000;
+            s.page.goto("https://www.instagram.com/accounts/login/", {
+              waitUntil: "domcontentloaded", timeout: 25000,
+            }).catch(() => null);
           }
         } else if (url && !s.challengeUrl) {
           // Scan for challenge pages that were reached without a redirect

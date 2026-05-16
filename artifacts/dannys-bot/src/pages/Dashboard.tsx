@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.347",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Reverted browser session changes to restore working verification — account verify is back to the stable 1.0.343 behaviour." },
+      { category: "Fix", text: "Importing a profile (.eqx file) now works correctly — large exports were being silently rejected before reaching the import step." },
+    ],
+  },
+  {
     version: "1.0.346",
     date: "16 May 2026",
     items: [
