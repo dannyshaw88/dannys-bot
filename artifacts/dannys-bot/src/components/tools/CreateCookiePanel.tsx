@@ -173,15 +173,13 @@ export function CreateCookiePanel({ profile }: Props) {
   };
 
   const handleCopy = async (targetIds: number[], expandedKeys: string[]) => {
+    // expandedKeys contains the actual setting key names after the dialog expands
+    // sub-option settingKeys — e.g. ["enabled", "execIntervalMin", "execIntervalMax"].
+    // Build the patch by picking those keys directly from local state.
     const patch: Partial<CookieBakerSettings> = {};
-    if (expandedKeys.includes("cb_enabled"))  patch.enabled = local.enabled;
-    if (expandedKeys.includes("cb_interval")) { patch.execIntervalMin = local.execIntervalMin; patch.execIntervalMax = local.execIntervalMax; }
-    if (expandedKeys.includes("cb_sites"))    { patch.sitesMin = local.sitesMin; patch.sitesMax = local.sitesMax; }
-    if (expandedKeys.includes("cb_scroll"))   { patch.scrollDelayMin = local.scrollDelayMin; patch.scrollDelayMax = local.scrollDelayMax; }
-    if (expandedKeys.includes("cb_links"))    { patch.internalLinksMin = local.internalLinksMin; patch.internalLinksMax = local.internalLinksMax; }
-    if (expandedKeys.includes("cb_iscroll"))  { patch.internalScrollDelayMin = local.internalScrollDelayMin; patch.internalScrollDelayMax = local.internalScrollDelayMax; }
-    if (expandedKeys.includes("cb_random"))   patch.visitRandom = local.visitRandom;
-    if (expandedKeys.includes("cb_siteList")) patch.sites = local.sites;
+    for (const key of expandedKeys) {
+      if (key in local) (patch as any)[key] = (local as any)[key];
+    }
 
     if (!Object.keys(patch).length) return;
 

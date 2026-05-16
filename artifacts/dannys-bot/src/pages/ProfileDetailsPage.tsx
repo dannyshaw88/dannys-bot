@@ -85,14 +85,17 @@ function parseActiveTimerSlots(start: string | null | undefined, end: string | n
 
 function GroupCombobox({ value, groups, onChange }: { value: string; groups: string[]; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [filterText, setFilterText] = useState("");
   const ref = useRef<HTMLDivElement>(null);
-  const inputVal = value || "";
-  const filtered = inputVal
-    ? groups.filter(g => g.toLowerCase().includes(inputVal.toLowerCase()))
+
+  // Show all groups when the dropdown first opens; only filter as the user types.
+  const filtered = filterText
+    ? groups.filter(g => g.toLowerCase().includes(filterText.toLowerCase()))
     : groups;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setFilterText(""); return; }
+    setFilterText("");
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -105,9 +108,9 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
       <Input
         className="h-8 text-xs pr-7"
         placeholder="No group"
-        value={inputVal}
+        value={value || ""}
         onFocus={() => setOpen(true)}
-        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onChange={e => { onChange(e.target.value); setFilterText(e.target.value); setOpen(true); }}
         onKeyDown={e => { if (e.key === "Escape") setOpen(false); }}
       />
       <button
@@ -118,17 +121,17 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
       >
         <ChevronDown className="w-3.5 h-3.5" />
       </button>
-      {open && (filtered.length > 0 || !inputVal) && (
+      {open && (filtered.length > 0 || !filterText) && (
         <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-popover border border-border rounded-md shadow-md overflow-hidden">
-          {filtered.length === 0 && !inputVal ? (
+          {filtered.length === 0 && !filterText ? (
             <div className="px-3 py-2 text-xs text-muted-foreground">No groups yet — type to create one</div>
           ) : (
             <>
-              {inputVal && (
+              {value && (
                 <button
                   type="button"
                   className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 italic"
-                  onMouseDown={e => { e.preventDefault(); onChange(""); setOpen(false); }}
+                  onMouseDown={e => { e.preventDefault(); onChange(""); setFilterText(""); setOpen(false); }}
                 >
                   Clear (no group)
                 </button>
@@ -137,8 +140,8 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
                 <button
                   key={group}
                   type="button"
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 ${group === inputVal ? "font-semibold" : ""} text-foreground`}
-                  onMouseDown={e => { e.preventDefault(); onChange(group); setOpen(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 ${group === value ? "font-semibold" : ""} text-foreground`}
+                  onMouseDown={e => { e.preventDefault(); onChange(group); setFilterText(""); setOpen(false); }}
                 >
                   {group}
                 </button>

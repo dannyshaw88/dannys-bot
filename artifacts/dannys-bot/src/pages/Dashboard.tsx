@@ -54,6 +54,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.329",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "When the DM check actually fails (no session cookies, network error, or Instagram returned an error), the activity bar now says 'DM check failed' in red — previously it said 'Checked 0 direct messages' which looked like a normal empty inbox." },
+      { category: "Fix", text: "Group dropdown in account settings now shows all existing groups when you open it, regardless of which group is currently assigned — previously it only showed groups matching the current value, hiding everything else." },
+      { category: "Fix", text: "Cookie Baker copy settings was silently copying nothing to target accounts. It now correctly copies whichever settings you select (interval, sites, scroll delay, etc.)." },
+    ],
+  },
+  {
     version: "1.0.328",
     date: "16 May 2026",
     items: [

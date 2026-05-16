@@ -2481,7 +2481,12 @@ class AutomationEngine {
           console.warn(`[engine] @${profile.username}: auto-reply scan error: ${e?.message}`);
         }
         // Log combined result — appends auto-reply count only when triggers were found.
-        const dmLabel = `Checked ${dmCount} direct message${dmCount === 1 ? "" : "s"}`;
+        // When dmOk is false the API call itself failed (no cookies, network error,
+        // or Instagram returned an error code) — use a clear failure label so the
+        // activity ticker's red colour makes sense to the user.
+        const dmLabel = dmOk
+          ? `Checked ${dmCount} direct message${dmCount === 1 ? "" : "s"}`
+          : "DM check failed";
         const detail = autoReplied > 0
           ? `${dmLabel}, ${autoReplied} scheduled for auto-reply`
           : dmLabel;
