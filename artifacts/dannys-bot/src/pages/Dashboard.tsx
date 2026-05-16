@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.343",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browsers no longer freeze permanently when 5 or more are open at the same time — the previous release introduced a frame-rate reduction that stopped Chrome from ever sending the first image, this is now corrected." },
+      { category: "Improve", text: "When opening multiple browsers simultaneously each one now starts its live view in sequence with a short gap between them, keeping the connection responsive without any visible delay to the user." },
+    ],
+  },
+  {
     version: "1.0.342",
     date: "16 May 2026",
     items: [

@@ -1178,15 +1178,18 @@ async function startScreencast(profileId: number): Promise<void> {
   }
   session.screencastCdp = cdp;
 
-  // Adaptive JPEG quality + frame rate: scale both down as session count grows.
-  // everyNthFrame starts at 2 for 2+ sessions — Chrome only needs to send ~15 fps
-  // to look smooth, and halving the frame rate at session 2 keeps the Node.js
-  // event loop from being flooded with ACK cycles when multiple EBs are active.
-  const quality  = nSessions <= 1 ? 65 : nSessions <= 2 ? 60 : nSessions <= 4 ? 55 : 45;
-  // nth=1 → every frame (max ~30 fps). nth=2 → ~15 fps. nth=3 → ~10 fps, etc.
-  // Scale aggressively: at 5 sessions each Chrome only fires every 5th compositor
-  // frame, keeping combined event-loop load roughly constant regardless of count.
-  const nthFrame = Math.min(Math.max(nSessions, 1), 6);
+  // Adaptive JPEG quality: reduce as session count grows to save bandwidth.
+  const quality  = nSessions <= 2 ? 65 : nSessions <= 5 ? 55 : 45;
+  // everyNthFrame MUST stay at 1.
+  // Chrome uses software compositing (--disable-gpu). In software mode Chrome
+  // only generates compositor frames when page content changes — a static page
+  // may produce just 1 frame at startup. If nth>1, Chrome must accumulate N
+  // frames before sending the first screencast frame; on an idle page it never
+  // reaches N → no frame ever arrives → watchdog loops forever.
+  // Steady-state load is controlled by the serialization queue below and the
+  // back-pressure protocol (Chrome only sends the next frame after Node ACKs
+  // the previous one — so there is at most 1 in-flight frame per session).
+  const nthFrame = 1;
 
   // CRITICAL: Register the frame handler BEFORE sending Page.startScreencast.
   // Chrome's screencast uses a back-pressure protocol — it sends the first frame
@@ -1240,6 +1243,12 @@ async function startScreencast(profileId: number): Promise<void> {
   const prevQueue = _screencastStartQueue;
   _screencastStartQueue = (async () => {
     await prevQueue;
+    // Brief pause between consecutive starts: gives the Node.js event loop a
+    // chance to drain any pending CDP callbacks (e.g. ACKs from a previously
+    // started screencast) before we issue the next Page.startScreencast.
+    // 150 ms is imperceptible to the user but enough for one full event-loop
+    // cycle plus the first frame ACK round-trip.
+    if (sessions.size > 1) await new Promise(r => setTimeout(r, 150));
     // Re-check session is still alive after waiting in queue
     const sNow = sessions.get(profileId);
     if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
