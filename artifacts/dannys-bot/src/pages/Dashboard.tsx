@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.344",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "When Instagram detects an unrecognised browser and requires account verification, the embedded browser now shows Instagram's actual verification page instead of a blank 'This page isn't working' error." },
+    ],
+  },
+  {
     version: "1.0.343",
     date: "16 May 2026",
     items: [

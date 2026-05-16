@@ -852,17 +852,22 @@ export async function getOrCreateSession(
       log(`[reqfail:${profileId}] ${err} — ${url.slice(0, 120)}`, "browser");
     }
     // When ERR_TOO_MANY_REDIRECTS fires and we detected a challenge URL earlier,
-    // tell the user clearly what happened and put Chrome back on the login page.
-    // Do NOT clear challengeUrl — autoLogin needs to read it on the next Verify
-    // attempt to prevent re-submitting credentials and deepening the security lock.
+    // navigate directly to the captured challenge URL so the user sees Instagram's
+    // actual challenge page and can interact with it.
+    // Do NOT navigate back to accounts/login — that immediately triggers another
+    // redirect to the challenge, creating an infinite loop of ERR_TOO_MANY_REDIRECTS.
+    // Do NOT clear challengeUrl — autoLogin needs it on the next Verify attempt.
     const sc = sessions.get(profileId);
     if (err === "net::ERR_TOO_MANY_REDIRECTS" && sc?.challengeUrl) {
-      log(`[challenge:${profileId}] Account security lock — cannot resolve in EB. User must verify manually on instagram.com.`, "browser");
-      sendStatus(profileId, `🔒 Account security lock: Instagram requires you to verify this account on instagram.com in a regular browser. Log in there and complete the security check shown. Once done, come back and click Clear to start fresh.`);
-      sc.navProtectedUntil = Date.now() + 5000;
+      const dest = sc.challengeUrl;
+      log(`[challenge:${profileId}] ERR_TOO_MANY_REDIRECTS — navigating directly to challenge page: ${dest.slice(0, 120)}`, "browser");
+      sendStatus(profileId, `⚠ Instagram is asking you to verify this account. The challenge page is now loading — complete the check shown in the browser window.`);
+      sc.navProtectedUntil = Date.now() + 30000;
       setTimeout(() => {
-        sc.page.goto("https://www.instagram.com/accounts/login/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null);
-      }, 1500);
+        const sNow = sessions.get(profileId);
+        if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
+        sNow.page.goto(dest, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null);
+      }, 800);
     }
   });
 
@@ -1372,11 +1377,21 @@ function startHousekeepLoop(profileId: number): void {
         if (isErrorPage) {
           const msSinceLogin = s.lastLoginSuccessAt ? Date.now() - s.lastLoginSuccessAt : Infinity;
           if (msSinceLogin > 90000) {
-            log(`[housekeep:${profileId}] error page detected (${url.slice(0, 60)}) — recovering to login (cookies preserved)`, "browser");
-            s.navProtectedUntil = Date.now() + 20000;
-            s.page.goto("https://www.instagram.com/accounts/login/", {
-              waitUntil: "domcontentloaded", timeout: 25000,
-            }).catch(() => null);
+            if (s.challengeUrl) {
+              // chrome-error:// here is ERR_TOO_MANY_REDIRECTS caused by the
+              // challenge redirect loop. Navigate directly to the challenge page
+              // so the user can see and interact with it — NOT back to login,
+              // which immediately re-enters the same redirect loop.
+              log(`[housekeep:${profileId}] chrome-error on challenge account — navigating to challenge page: ${s.challengeUrl.slice(0, 80)}`, "browser");
+              s.navProtectedUntil = Date.now() + 30000;
+              s.page.goto(s.challengeUrl, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null);
+            } else {
+              log(`[housekeep:${profileId}] error page detected (${url.slice(0, 60)}) — recovering to login (cookies preserved)`, "browser");
+              s.navProtectedUntil = Date.now() + 20000;
+              s.page.goto("https://www.instagram.com/accounts/login/", {
+                waitUntil: "domcontentloaded", timeout: 25000,
+              }).catch(() => null);
+            }
           }
         } else if (url && !s.challengeUrl) {
           // Scan for challenge pages that were reached without a redirect
