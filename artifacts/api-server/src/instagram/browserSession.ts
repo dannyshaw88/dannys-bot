@@ -23,7 +23,8 @@ function classifyEbChallengeUrl(url: string): string | null {
   if (!url || !url.includes("instagram.com")) return null;
   if (/confirm_email|email.*verif|verif.*email|email_confirmation/i.test(url)) return "email_confirmation";
   if (/update_risky_contactpoint|\/challenge\//i.test(url))                     return "captcha";
-  if (/accounts\/suspended/i.test(url))                                         return "suspended";
+  if (/accounts\/disabled/i.test(url))                                          return "account_disabled";
+  if (/accounts\/suspended/i.test(url))                                         return "confirm_human";
   if (/phone.*verif|verif.*phone|phone_required|confirm.*phone/i.test(url))     return "phone_verification";
   return null;
 }
@@ -2532,9 +2533,15 @@ export async function browserAutoLogin(
           sendStatus(profileId, `2FA result: url=${urlAccepted} dom=${domAccepted} cookie=${hasCookieSession}`);
           // Check for disabled/suspended BEFORE declaring success — a disabled account
           // can still pass 2FA and get a sessionid, but Instagram redirects to /accounts/disabled/
-          if (afterUrl.includes("/accounts/disabled") || afterUrl.includes("/disabled/") || afterUrl.includes("/suspended")) {
-            sendStatus(profileId, `⚠ Account is disabled by Instagram (URL: ${afterUrl.slice(0, 80)})`);
-            return { ok: false, message: "Account disabled by Instagram" };
+          if (afterUrl.includes("/accounts/disabled") || afterUrl.includes("/disabled/")) {
+            sendStatus(profileId, `⚠ Account has been permanently disabled by Instagram (URL: ${afterUrl.slice(0, 80)})`);
+            storage.updateProfile(profileId, { accountStatus: "account_disabled" }).catch(() => {});
+            return { ok: false, message: "Account permanently disabled by Instagram" };
+          }
+          if (afterUrl.includes("/accounts/suspended") || afterUrl.includes("/suspended")) {
+            sendStatus(profileId, `⚠ Instagram is asking this account to confirm it is human (URL: ${afterUrl.slice(0, 80)})`);
+            storage.updateProfile(profileId, { accountStatus: "confirm_human" }).catch(() => {});
+            return { ok: false, message: "Account requires human verification on Instagram" };
           }
           if (twoFaAccepted) {
             await saveCookies(profileId, s.page);
@@ -2582,9 +2589,15 @@ export async function browserAutoLogin(
 
     if (isLoggedIn) {
       const currentUrl = s.page.url();
-      if (currentUrl.includes("/accounts/disabled") || currentUrl.includes("/disabled/") || currentUrl.includes("/suspended")) {
-        sendStatus(profileId, `⚠ Account is disabled by Instagram (URL: ${currentUrl.slice(0, 80)})`);
-        return { ok: false, message: "Account disabled by Instagram" };
+      if (currentUrl.includes("/accounts/disabled") || currentUrl.includes("/disabled/")) {
+        sendStatus(profileId, `⚠ Account has been permanently disabled by Instagram`);
+        storage.updateProfile(profileId, { accountStatus: "account_disabled" }).catch(() => {});
+        return { ok: false, message: "Account permanently disabled by Instagram" };
+      }
+      if (currentUrl.includes("/accounts/suspended") || currentUrl.includes("/suspended")) {
+        sendStatus(profileId, `⚠ Instagram is asking this account to confirm it is human`);
+        storage.updateProfile(profileId, { accountStatus: "confirm_human" }).catch(() => {});
+        return { ok: false, message: "Account requires human verification on Instagram" };
       }
       await saveCookies(profileId, s.page);
       s.lastLoginSuccessAt = Date.now();

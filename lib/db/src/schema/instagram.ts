@@ -39,6 +39,7 @@ export const ACCOUNT_STATUSES = [
   'temporary_locked',
   'scrape_warning',
   'suspended',
+  'confirm_human',
   'selfie_verification',
   'own_phone_verification',
   'email_connection',

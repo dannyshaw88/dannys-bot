@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.337",
+    date: "16 May 2026",
+    items: [
+      { category: "New", text: "When an account's embedded browser lands on Instagram's 'We've disabled your account' page, the account status now immediately updates to 'Account Disabled' — previously the status stayed unchanged and gave no indication the account was gone." },
+      { category: "Change", text: "The 'Suspended' status has been renamed to 'Confirm Human'. This status appears when Instagram is asking the account to complete a human verification challenge, not when it has been suspended in the traditional sense." },
+    ],
+  },
+  {
     version: "1.0.336",
     date: "16 May 2026",
     items: [
