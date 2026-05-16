@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.346",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Importing a profile (.eqx file) now works correctly — large exports were being silently rejected before reaching the import step." },
+    ],
+  },
+  {
     version: "1.0.345",
     date: "16 May 2026",
     items: [
