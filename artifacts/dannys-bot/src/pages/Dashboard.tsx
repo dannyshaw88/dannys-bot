@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.341",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Accounts that get a challenge or suspension response from Instagram while running timeline likes, timeline feed, or story views now correctly stop and update their status — previously they silently logged 0 actions and kept running." },
+      { category: "Fix", text: "Embedded browser no longer shows 'Retry' after around 60 seconds on a static page — the health check now waits longer before deciding the browser is unresponsive, and gives it a second chance before closing." },
+      { category: "Fix", text: "Fifth or more embedded browsers opening at the same time no longer freeze permanently — a timeout was added so a stuck session setup fails fast and retries instead of hanging indefinitely." },
+      { category: "New", text: "Dashboard activity feed now has a 'Show only errors' button that filters the list to just error entries, making it quicker to spot problem accounts." },
+    ],
+  },
+  {
     version: "1.0.340",
     date: "16 May 2026",
     items: [
@@ -1078,6 +1088,7 @@ export function Dashboard() {
     const stored = localStorage.getItem("dashboard_errors_cleared_at");
     return stored ? Number(stored) : 0;
   });
+  const [showOnlyErrors, setShowOnlyErrors] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const lastApiIdRef = useRef<number>(0);
   const lastSessionIdRef = useRef<number>(0);
@@ -1195,6 +1206,7 @@ export function Dashboard() {
       if (errorsCleared === 0 || item.ts > errorsCleared) return true;
       return !(item.kind === "session" && item.action && ERROR_ACTIONS.has(item.action));
     })
+    .filter((item) => !showOnlyErrors || (item.kind === "session" && item.action && ERROR_ACTIONS.has(item.action)))
     .filter((item) => selectedProfileId == null || item.profileId === selectedProfileId)
     .filter((item) => {
       if (!apiLogSearch.trim()) return true;
@@ -1403,6 +1415,12 @@ export function Dashboard() {
                 )}
               </div>
             )}
+            <button
+              onClick={() => setShowOnlyErrors(v => !v)}
+              className={`text-xs transition-colors py-2.5 px-2 ${showOnlyErrors ? "text-destructive font-medium" : "text-muted-foreground hover:text-destructive"}`}
+            >
+              {showOnlyErrors ? "Show all" : "Show only errors"}
+            </button>
             <button
               onClick={() => { const t = Date.now(); localStorage.setItem("dashboard_errors_cleared_at", String(t)); setErrorsCleared(t); }}
               className="text-xs text-muted-foreground hover:text-destructive transition-colors py-2.5 px-2"

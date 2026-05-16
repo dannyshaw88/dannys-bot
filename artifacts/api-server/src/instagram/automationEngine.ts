@@ -2447,8 +2447,9 @@ class AutomationEngine {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — no igApiCookies session (account not yet verified — run Verify Credentials first)`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: no igApiCookies session — run Verify Credentials to establish one");
           } else if (watched === -5) {
-            console.warn(`[engine] @${profile.username}: ⚠️ View Stories skipped — Instagram rejected the reels_tray request (soft checkpoint or rate limit — other actions may still work fine)`);
-            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "Skipped: Instagram rejected reels_tray — may be a soft checkpoint or rate limit (other tools unaffected)");
+            console.warn(`[engine] @${profile.username}: ⚠️ View Stories — Instagram rejected reels_tray (challenge/session error) — marking account`);
+            const acctStatus = await this.applyAccountLevelError(profile.id, "challenge_required", state, tool.id);
+            this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "error", `Instagram rejected reels_tray: challenge_required${acctStatus ? ` — account marked ${acctStatus}` : ""}`);
           } else if (watched === -2) {
             console.warn(`[engine] @${profile.username}: ⚠️ View Stories: tray was empty (0 stories in feed) — see server log for response keys`);
             this.logAction(profile.id, tool.id, "check_timeline_stories", "", "", "", "warn", "0 stories in feed — tray empty (Instagram returned no stories for this account's following list)");

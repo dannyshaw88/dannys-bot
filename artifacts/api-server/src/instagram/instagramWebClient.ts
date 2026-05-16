@@ -1791,7 +1791,11 @@ export class InstagramWebClient {
       return { viewed: 0, sessionExpired: true, reason };
     }
     if (j?.status === "fail") {
-      console.warn(`[webClient] viewTimelineFeed: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
+      const failMsg = j?.message ?? "unknown";
+      console.warn(`[webClient] viewTimelineFeed: timeline fetch failed — status="${j?.status}" message="${failMsg}"`);
+      if (/challenge_required|checkpoint_required|checkpoint required|login_required|not authorized|session expired|logged.?out|suspended|disabled/i.test(failMsg)) {
+        throw new Error(failMsg);
+      }
       return { viewed: 0 };
     }
     const rawItems: any[] = j?.feed_items ?? j?.items ?? [];
@@ -2228,7 +2232,11 @@ export class InstagramWebClient {
       return { liked: 0, watched: 0, likedPosts: [], sessionExpired: true, sessionExpiredReason };
     }
     if (j?.status === "fail") {
-      console.warn(`[webClient] likeTimelinePosts: timeline fetch failed — status="${j?.status}" message="${j?.message}"`);
+      const failMsg = j?.message ?? "unknown";
+      console.warn(`[webClient] likeTimelinePosts: timeline fetch failed — status="${j?.status}" message="${failMsg}"`);
+      if (/challenge_required|checkpoint_required|checkpoint required|login_required|not authorized|session expired|logged.?out|suspended|disabled/i.test(failMsg)) {
+        throw new Error(failMsg);
+      }
       return { liked: 0, watched: 0, likedPosts: [] };
     }
     const rawItems: any[] = j?.feed_items ?? j?.items ?? [];

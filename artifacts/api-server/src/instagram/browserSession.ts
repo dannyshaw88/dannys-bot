@@ -356,6 +356,23 @@ async function saveAllSessionsAndExit(signal: string) {
 process.on("SIGTERM", () => saveAllSessionsAndExit("SIGTERM"));
 process.on("SIGINT",  () => saveAllSessionsAndExit("SIGINT"));
 
+// ── Global EB health log — fires every 30 s whenever any session is open ──────
+// Logs: session count, per-session frame age, WS state, screencast state.
+// This is the primary diagnostic for freeze issues — shows exactly which
+// sessions are delivering frames and which are stuck.
+setInterval(() => {
+  if (!sessions.size) return;
+  const now = Date.now();
+  const lines = [...sessions.entries()].map(([id, s]) => {
+    const frameAgeSec = s.lastScreencastFrameAt ? ((now - s.lastScreencastFrameAt) / 1000).toFixed(1) : "never";
+    const wsState = s.ws ? ["CONNECTING","OPEN","CLOSING","CLOSED"][s.ws.readyState] ?? s.ws.readyState : "none";
+    const hasScreencast = !!s.screencastCdp;
+    const idleSec = ((now - s.lastActivityAt) / 1000).toFixed(0);
+    return `  id=${id} ws=${wsState} screencast=${hasScreencast} frameAge=${frameAgeSec}s idle=${idleSec}s`;
+  });
+  log(`[EB-HEALTH] open=${sessions.size}\n${lines.join("\n")}`, "browser");
+}, 30000);
+
 // Global screenshot concurrency limiter. With many Chrome instances all taking
 // screenshots simultaneously, the Node.js event loop and CPU saturate, causing
 // all EBs to freeze. Cap concurrent screenshot operations — sessions that hit
@@ -1069,6 +1086,8 @@ export function attachWS(profileId: number, ws: WebSocket) {
     } catch { /* page may be closing — ignore */ }
   })();
 
+  const nOpen = sessions.size;
+  log(`[attachWS:${profileId}] WS attached — total open sessions=${nOpen}`, "browser");
   startScreencast(profileId).catch(() => {});
   startHousekeepLoop(profileId);
 }
@@ -1118,24 +1137,37 @@ async function startScreencast(profileId: number): Promise<void> {
   const session = sessions.get(profileId);
   if (!session || !session.ws || session.ws.readyState !== WebSocket.OPEN) return;
 
+  const nSessions = sessions.size;
+  log(`[screencast:${profileId}] startScreencast called — sessions=${nSessions}`, "browser");
+
   // Stop any previously running screencast session first
   await stopScreencast(profileId);
 
   // Re-check WS after the async stopScreencast — it may have closed during the await.
-  if (!session.ws || session.ws.readyState !== WebSocket.OPEN) return;
+  if (!session.ws || session.ws.readyState !== WebSocket.OPEN) {
+    log(`[screencast:${profileId}] WS closed during stopScreencast — aborting`, "browser");
+    return;
+  }
 
   let cdp: any;
+  const t0 = Date.now();
   try {
-    cdp = await (session.page as any).createCDPSession();
+    // 8 s timeout: with 4+ Chrome instances the Puppeteer protocol queue can back
+    // up, making createCDPSession hang for the full 30 s default. Failing fast
+    // lets the 8 s watchdog retry sooner instead of stacking up hung calls.
+    cdp = await Promise.race([
+      (session.page as any).createCDPSession(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("createCDPSession timeout (8 s)")), 8000)),
+    ]);
+    log(`[screencast:${profileId}] createCDPSession OK (${Date.now() - t0}ms) — sessions=${nSessions}`, "browser");
   } catch (e: any) {
-    log(`[screencast:${profileId}] createCDPSession failed: ${e?.message}`, "browser");
+    log(`[screencast:${profileId}] createCDPSession FAILED after ${Date.now() - t0}ms: ${e?.message}`, "browser");
     return;
   }
   session.screencastCdp = cdp;
 
   // Adaptive JPEG quality: reduce quality (and therefore frame size / encoding
   // cost) as more sessions compete for CPU and bandwidth.
-  const nSessions = sessions.size;
   const quality = nSessions <= 2 ? 65 : nSessions <= 5 ? 55 : 45;
 
   // CRITICAL: Register the frame handler BEFORE sending Page.startScreencast.
@@ -1186,6 +1218,7 @@ async function startScreencast(profileId: number): Promise<void> {
     // Throttle to ~15 fps at 6-10 sessions, ~10 fps at 11-20, ~7 fps at 21+.
     const nthFrame = nSessions <= 5 ? 1 : nSessions <= 10 ? 2 : nSessions <= 20 ? 3 : 4;
 
+    const t1 = Date.now();
     await cdp.send("Page.startScreencast", {
       format: "jpeg",
       quality,
@@ -1193,9 +1226,9 @@ async function startScreencast(profileId: number): Promise<void> {
       maxHeight: 760,
       everyNthFrame: nthFrame,
     });
-    log(`[screencast:${profileId}] started (quality=${quality} sessions=${nSessions})`, "browser");
+    log(`[screencast:${profileId}] Page.startScreencast ACKed in ${Date.now() - t1}ms (quality=${quality} nth=${nthFrame} sessions=${nSessions})`, "browser");
   } catch (e: any) {
-    log(`[screencast:${profileId}] startScreencast failed: ${e?.message}`, "browser");
+    log(`[screencast:${profileId}] Page.startScreencast FAILED: ${e?.message}`, "browser");
     try { await cdp.detach(); } catch {}
     session.screencastCdp = null;
     return;
@@ -1351,27 +1384,52 @@ function startHousekeepLoop(profileId: number): void {
       if (idleMs > 30000 && idleMs < 120000 && silentMs > 60000
           && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
         (s as any)._crashPingInProgress = true;
-        // Ping via the main page session — completely independent of screencastCdp
+        // Ping via the main page session — completely independent of screencastCdp.
+        // Use 15 s timeout: with 4+ Chrome instances the Node.js event loop is busy
+        // processing ~100+ CDP frames/s, so page.evaluate() can wait >5 s for a
+        // slot even when Chrome itself is perfectly healthy. 5 s caused frequent
+        // false-positive "Retry" triggers on otherwise fine sessions.
+        const pingStart = Date.now();
+        const nAtPing = sessions.size;
+        log(`[housekeep:${profileId}] crash-ping starting (idleMs=${idleMs} silentMs=${silentMs} sessions=${nAtPing})`, "browser");
         Promise.race([
           s.page.evaluate(() => 1).then(() => true),
-          new Promise<boolean>(r => setTimeout(() => r(false), 5000)),
+          new Promise<boolean>(r => setTimeout(() => r(false), 15000)),
         ]).then(alive => {
+          const pingMs = Date.now() - pingStart;
           (s as any)._crashPingInProgress = false;
           const sNow = sessions.get(profileId);
           if (!sNow || !sNow.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
           if (!alive) {
-            // Chrome itself is dead (renderer crash, proxy tunnel broken, etc.)
-            const crashUrl = (() => { try { return sNow.page.url(); } catch { return "unknown"; } })();
-            log(`[housekeep:${profileId}] page.evaluate ping timed out on "${crashUrl.slice(0, 80)}" — Chrome is unresponsive, closing session`, "browser");
-            wsWrite(sNow.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
-            try { sNow.ws.close(); } catch {}
-            sNow.ws = null;
-            if (sNow.housekeepLoop) { clearInterval(sNow.housekeepLoop); sNow.housekeepLoop = null; }
-            closeSession(profileId).catch(() => {});
+            // Ping timed out. Before killing, check if this could be an event-loop
+            // backlog false-positive (4+ sessions open). On first timeout, restart
+            // the screencast CDPSession rather than killing Chrome outright — a
+            // stalled CDPSession under load is far more common than a Chrome crash.
+            const consecutiveTimeouts = ((sNow as any)._pingTimeouts ?? 0) + 1;
+            (sNow as any)._pingTimeouts = consecutiveTimeouts;
+            log(`[housekeep:${profileId}] crash-ping timed out in ${pingMs}ms (attempt ${consecutiveTimeouts}, sessions=${nAtPing})`, "browser");
+            if (consecutiveTimeouts < 2) {
+              // First timeout — restart screencast and give Chrome another chance.
+              log(`[housekeep:${profileId}] first timeout — restarting screencast before giving up`, "browser");
+              stopScreencast(profileId).catch(() => {}).finally(() => {
+                startScreencast(profileId).catch(() => {});
+              });
+            } else {
+              // Second consecutive timeout — Chrome is genuinely unresponsive.
+              (sNow as any)._pingTimeouts = 0;
+              const crashUrl = (() => { try { return sNow.page.url(); } catch { return "unknown"; } })();
+              log(`[housekeep:${profileId}] second consecutive ping timeout on "${crashUrl.slice(0, 80)}" — closing session`, "browser");
+              wsWrite(sNow.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
+              try { sNow.ws.close(); } catch {}
+              sNow.ws = null;
+              if (sNow.housekeepLoop) { clearInterval(sNow.housekeepLoop); sNow.housekeepLoop = null; }
+              closeSession(profileId).catch(() => {});
+            }
           } else {
-            // Chrome is alive. Check whether the screencast CDPSession has stalled.
-            // If frames are still silent after the ping, the CDPSession itself is
-            // the problem — restart just the screencast, leave the browser running.
+            // Chrome is alive — reset consecutive timeout counter.
+            (sNow as any)._pingTimeouts = 0;
+            log(`[housekeep:${profileId}] crash-ping OK in ${pingMs}ms (sessions=${nAtPing})`, "browser");
+            // Check whether the screencast CDPSession has stalled.
             const stillSilent = (Date.now() - sNow.lastScreencastFrameAt) > 20000;
             if (stillSilent && sNow.screencastCdp) {
               log(`[housekeep:${profileId}] Chrome alive but screencast silent — restarting screencast CDPSession`, "browser");
