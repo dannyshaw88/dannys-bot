@@ -10,15 +10,15 @@ import { useEffect } from "react";
 import { useProfile } from "@/hooks/use-profiles";
 
 const PROFILE_TABS = (creatorMode: boolean) => [
-  { value: "settings",      label: "Account Settings",    icon: Settings,      shortcut: "1" },
+  { value: "settings",      label: "Account Settings",    icon: Settings,      spacerAfter: true },
   ...(!creatorMode ? [
-    { value: "human-session", label: "Human Session Tools", icon: User,          shortcut: "2" },
-    { value: "follow",        label: "Follow Tool",         icon: UserPlus,      shortcut: "3" },
-    { value: "unfollow",      label: "Unfollow Tool",       icon: UserMinus,     shortcut: "4" },
-    { value: "contact",       label: "Contact Tool",        icon: MessageSquare, shortcut: "5" },
-    { value: "session-log",   label: "Session Log",         icon: Activity,      shortcut: "6" },
+    { value: "follow",        label: "Follow Tool",         icon: UserPlus      },
+    { value: "unfollow",      label: "Unfollow Tool",       icon: UserMinus     },
+    { value: "contact",       label: "Contact Tool",        icon: MessageSquare },
+    { value: "human-session", label: "Human Session Tools", icon: User          },
+    { value: "session-log",   label: "Session Log",         icon: Activity      },
   ] : []),
-  { value: "create-cookie", label: "Create a Cookie",     icon: Cookie,        shortcut: creatorMode ? "2" : "7" },
+  { value: "create-cookie", label: "Create a Cookie",     icon: Cookie        },
 ];
 
 export function Sidebar() {
@@ -122,25 +122,24 @@ export function Sidebar() {
               {/* Sub-tabs — only shown when on a profile details page under Accounts */}
               {item.path === "/profiles" && profileId > 0 && (
                 <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">
-                  {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label, shortcut }) => {
+                  {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label, spacerAfter }) => {
                     const isSubActive = activeTab === value;
                     return (
-                      <button
-                        key={value}
-                        onClick={() => setLocation(`/profiles/${profileId}?tab=${value}`)}
-                        className={cn(
-                          "flex items-center w-full px-4 py-1.5 text-xs font-bold transition-all duration-150 text-left rounded-md",
-                          isSubActive
-                            ? "text-primary"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <ChevronRight className="w-3 h-3 text-muted-foreground mr-1 shrink-0" />
-                        {label}
-                        {shortcut && (
-                          <span style={{ fontSize: '50%' }} className="ml-auto text-muted-foreground/50 font-normal shrink-0">{shortcut}</span>
-                        )}
-                      </button>
+                      <div key={value}>
+                        <button
+                          onClick={() => setLocation(`/profiles/${profileId}?tab=${value}`)}
+                          className={cn(
+                            "flex items-center w-full px-4 py-1.5 text-xs font-bold transition-all duration-150 text-left rounded-md",
+                            isSubActive
+                              ? "text-primary"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <ChevronRight className="w-3 h-3 text-black dark:text-white mr-1 shrink-0" />
+                          {label}
+                        </button>
+                        {spacerAfter && <div className="h-2" />}
+                      </div>
                     );
                   })}
                 </div>

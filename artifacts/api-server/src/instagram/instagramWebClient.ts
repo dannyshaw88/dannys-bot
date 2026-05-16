@@ -2079,7 +2079,15 @@ export class InstagramWebClient {
       console.log(`[webClient] getDirectMessagesInternal: inbox OK — ${inboxThreads.length} thread(s), will open ${Math.min(count, inboxThreads.length)}`);
     } catch (e: any) {
       const code = e?.response?.body?.content?.error_code ?? e?.response?.body?.error_code;
-      console.warn(`[webClient] getDirectMessagesInternal: inbox error code=${code} — ${e?.message}`);
+      const msg  = String(e?.message ?? "");
+      console.warn(`[webClient] getDirectMessagesInternal: inbox error code=${code} — ${msg}`);
+      // Re-throw account-level errors (checkpoint, email confirmation, session
+      // expired, etc.) so the engine's checkSessionErr can classify them and
+      // write the correct accountStatus to the DB.  Transient errors (network
+      // timeouts, rate-limits) stay swallowed and just produce ok:false.
+      if (/checkpoint|challenge_required|login_required|not authorized|session expired|logged.?out|email.*confirm|confirm.*email|email.*verif|verify.*email|phone.*verif|verify.*phone|suspended|disabled/i.test(msg)) {
+        throw e;
+      }
       return { count: 0, ok: false, threads: [] };
     }
 

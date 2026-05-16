@@ -9,10 +9,23 @@ import net from "net";
 
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
+import { storage } from "../storage";
 
 function log(msg: string, _category?: string) {
   const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
   console.log(`[${ts}] [browser] ${msg}`);
+}
+
+// ── EB challenge classifier ───────────────────────────────────────────────────
+// Maps an Instagram URL (redirect target or current page) to an accountStatus
+// value so the DB always reflects what the embedded browser is actually showing.
+function classifyEbChallengeUrl(url: string): string | null {
+  if (!url || !url.includes("instagram.com")) return null;
+  if (/confirm_email|email.*verif|verif.*email|email_confirmation/i.test(url)) return "email_confirmation";
+  if (/update_risky_contactpoint|\/challenge\//i.test(url))                     return "captcha";
+  if (/accounts\/suspended/i.test(url))                                         return "suspended";
+  if (/phone.*verif|verif.*phone|phone_required|confirm.*phone/i.test(url))     return "phone_verification";
+  return null;
 }
 
 // ── Proxy health check ────────────────────────────────────────────────────────
@@ -769,12 +782,17 @@ export async function getOrCreateSession(
       log(`[redirect:${profileId}] ${status} ${res.url().slice(0, 120)} → ${loc.slice(0, 120)}`, "browser");
       // Capture Instagram security-challenge URLs (update_risky_contactpoint,
       // checkpoint, challenge) so autoLogin can bail without re-submitting creds.
-      if (loc.includes("update_risky_contactpoint") || loc.includes("/challenge/") || loc.includes("/accounts/suspended")) {
+      const fullLoc = loc.startsWith("http") ? loc : `https://www.instagram.com${loc}`;
+      const challengeStatus = classifyEbChallengeUrl(fullLoc);
+      if (challengeStatus) {
         const s = sessions.get(profileId);
         if (s && !s.challengeUrl) {
-          s.challengeUrl = loc.startsWith("http") ? loc : `https://www.instagram.com${loc}`;
-          log(`[challenge:${profileId}] Security challenge detected → ${s.challengeUrl.slice(0, 120)}`, "browser");
+          s.challengeUrl = fullLoc;
+          log(`[challenge:${profileId}] Security challenge detected (${challengeStatus}) → ${fullLoc.slice(0, 120)}`, "browser");
           sendStatus(profileId, `⚠ Instagram security check required — navigating to challenge page…`);
+          // Write the real status to DB immediately so the account card reflects
+          // what the EB is actually showing — don't wait for the user to click Verify.
+          storage.updateProfile(profileId, { accountStatus: challengeStatus }).catch(() => {});
         }
       }
     }
@@ -1152,9 +1170,12 @@ function startHousekeepLoop(profileId: number): void {
       saveCookies(profileId, s.page).catch(() => {});
     }
 
-    // ── Error-page recovery ────────────────────────────────────────────────
-    // If Chrome lands on chrome-error:// (proxy dead, redirect loop, etc.)
-    // and is not mid-navigation or mid-login, navigate back to the login page.
+    // ── Error-page recovery + challenge URL scan ───────────────────────────
+    // Checks the current page URL on every other tick (every 10 s).
+    // 1. If Chrome landed on chrome-error:// / about:blank, navigate back to login.
+    // 2. If Chrome is on an Instagram challenge page that arrived via a 200 (not
+    //    a 3xx redirect) — e.g. the user manually navigated to confirm_email —
+    //    classify it and write the accountStatus to DB so the account card updates.
     errorRecoveryTick++;
     if (errorRecoveryTick >= 2) {
       errorRecoveryTick = 0;
@@ -1171,37 +1192,66 @@ function startHousekeepLoop(profileId: number): void {
               waitUntil: "domcontentloaded", timeout: 25000,
             }).catch(() => null);
           }
+        } else if (url && !s.challengeUrl) {
+          // Scan for challenge pages that were reached without a redirect
+          // (e.g. confirm_email arriving as a 200, or the user pasting a URL).
+          const detectedStatus = classifyEbChallengeUrl(url);
+          if (detectedStatus) {
+            s.challengeUrl = url;
+            log(`[housekeep:${profileId}] challenge page detected via URL scan (${detectedStatus}): ${url.slice(0, 100)}`, "browser");
+            sendStatus(profileId, `⚠ Instagram security check required on this account.`);
+            storage.updateProfile(profileId, { accountStatus: detectedStatus }).catch(() => {});
+          }
         }
       }
     }
 
     // ── Crash detector ─────────────────────────────────────────────────────
-    // If the screencast session is open but Chrome hasn't sent any frame
-    // for 30+ seconds while the user has been active, the renderer has
-    // likely crashed or the proxy has frozen the TCP tunnel.
+    // Frame-silence heuristics are unreliable — Chrome stops pushing frames
+    // the moment a page is fully static (nothing changed on screen), so any
+    // threshold based on frame silence alone will fire whenever the user is
+    // reading a static page.
     //
-    // IMPORTANT: we only fire if the user was active between 10 s and 60 s
-    // ago — NOT within the last 10 s.  When a page is static Chrome does not
-    // push frames (nothing changed on screen), so lastScreencastFrameAt goes
-    // stale.  The moment the user clicks, touchActivity() resets lastActivityAt
-    // to now (idleMs → 0).  Without the 10 s lower-bound the detector would
-    // fire on the very next 5 s housekeep tick — before Chrome has had any
-    // chance to push a new frame in response to the click — killing a perfectly
-    // healthy session.
-    if (s.screencastCdp) {
-      const idleMs = Date.now() - s.lastActivityAt;
-      if (idleMs > 10000 && idleMs < 60000) {
-        const silentMs = Date.now() - s.lastScreencastFrameAt;
-        if (silentMs > 30000 && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
-          const crashUrl = (() => { try { return s.page.url(); } catch { return "unknown"; } })();
-          log(`[housekeep:${profileId}] 30s without screencast frames while active on "${crashUrl.slice(0, 80)}" — closing Chrome (cookies preserved)`, "browser");
-          wsWrite(s.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
-          try { s.ws.close(); } catch {}
-          s.ws = null;
-          if (s.housekeepLoop) { clearInterval(s.housekeepLoop); s.housekeepLoop = null; }
-          closeSession(profileId).catch(() => {});
-          return;
-        }
+    // Instead we use an active CDP ping: send Runtime.evaluate("1") with a
+    // 5 s timeout.  If Chrome responds → it is alive, leave the session alone.
+    // If it times out or the CDP channel throws → Chrome is genuinely frozen
+    // or the proxy has broken the tunnel.
+    //
+    // We only run the ping when ALL of these hold:
+    //   • The screencast CDP session is open (so we have a channel to test)
+    //   • The user was active 30–120 s ago (short enough to care, long enough
+    //     that Chrome has had time to settle after the last click)
+    //   • 60+ s have passed since the last screencast frame (clearly no activity)
+    //   • Not mid-login and not mid-nav-protected window
+    //   • No concurrent ping already in progress
+    if (s.screencastCdp && !(s as any)._crashPingInProgress) {
+      const idleMs   = Date.now() - s.lastActivityAt;
+      const silentMs = Date.now() - s.lastScreencastFrameAt;
+      if (idleMs > 30000 && idleMs < 120000 && silentMs > 60000
+          && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
+        (s as any)._crashPingInProgress = true;
+        const cdp = s.screencastCdp;
+        Promise.race([
+          cdp.send("Runtime.evaluate", { expression: "1" }).then(() => true),
+          new Promise<boolean>(r => setTimeout(() => r(false), 5000)),
+        ]).then(alive => {
+          (s as any)._crashPingInProgress = false;
+          const sNow = sessions.get(profileId);
+          if (!sNow || !sNow.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
+          if (!alive) {
+            const crashUrl = (() => { try { return sNow.page.url(); } catch { return "unknown"; } })();
+            log(`[housekeep:${profileId}] CDP ping timed out on "${crashUrl.slice(0, 80)}" — Chrome is unresponsive, closing session`, "browser");
+            wsWrite(sNow.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
+            try { sNow.ws.close(); } catch {}
+            sNow.ws = null;
+            if (sNow.housekeepLoop) { clearInterval(sNow.housekeepLoop); sNow.housekeepLoop = null; }
+            closeSession(profileId).catch(() => {});
+          } else {
+            // Chrome is alive — reset the frame clock so the next ping window
+            // starts fresh from now.
+            sNow.lastScreencastFrameAt = Date.now();
+          }
+        }).catch(() => { (s as any)._crashPingInProgress = false; });
       }
     }
   }, 5000);

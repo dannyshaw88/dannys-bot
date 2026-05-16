@@ -54,6 +54,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.331",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser crash detector no longer misfires on static pages. It now sends a real ping to Chrome and only closes the session if Chrome genuinely fails to respond — previously any page that stopped updating frames (such as a loaded login page) would trigger a false crash after 60 seconds." },
+      { category: "Fix", text: "When Instagram returns a checkpoint, email confirmation, or session-expired error during a DM check or other tool run, the account status now updates immediately in the database instead of staying unchanged." },
+      { category: "UI", text: "Account submenu order changed: Account Settings stays first, then Follow Tool, Unfollow Tool, Contact Tool, Human Session Tools, Session Log, Create a Cookie. A small gap separates Account Settings from the tools below it." },
+      { category: "UI", text: "Shortcut numbers removed from the account submenu." },
+      { category: "UI", text: "Submenu chevrons are now solid black (white in dark mode)." },
+      { category: "UI", text: "Sorting the Accounts list by clicking a column header now toggles between A-Z and Z-A only — the third 'reset sort' state has been removed." },
+    ],
+  },
+  {
     version: "1.0.330",
     date: "16 May 2026",
     items: [

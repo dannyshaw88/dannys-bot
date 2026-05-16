@@ -273,13 +273,10 @@ export function ProfilesPage() {
       setSortField(field); setSortDir("asc");
       sessionStorage.setItem("profiles:sortField", field);
       sessionStorage.setItem("profiles:sortDir", "asc");
-    } else if (sortDir === "asc") {
-      setSortDir("desc");
-      sessionStorage.setItem("profiles:sortDir", "desc");
     } else {
-      setSortField(null); setSortDir("asc");
-      sessionStorage.removeItem("profiles:sortField");
-      sessionStorage.setItem("profiles:sortDir", "asc");
+      const next = sortDir === "asc" ? "desc" : "asc";
+      setSortDir(next);
+      sessionStorage.setItem("profiles:sortDir", next);
     }
   };
 
