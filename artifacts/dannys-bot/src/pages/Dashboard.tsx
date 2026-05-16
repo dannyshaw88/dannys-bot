@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.333",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browsers that were previously stuck on 'Loading Instagram, please wait' even after the screen stream started will now automatically recover within 8 seconds. If Chrome does not deliver a single video frame within 8 seconds of the stream starting (which can happen when 5 or more browsers are opened at once and the CPU is under heavy load), the stream is stopped and immediately restarted without any user action required." },
+      { category: "Diagnostic", text: "The log now shows the exact moment Chrome delivers its first video frame to each embedded browser, and confirms when the 'stream ready' signal is sent to the panel — making it much easier to pinpoint which browser is stalling and why." },
+    ],
+  },
+  {
     version: "1.0.332",
     date: "16 May 2026",
     items: [

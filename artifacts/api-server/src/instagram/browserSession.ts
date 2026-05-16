@@ -286,6 +286,9 @@ interface Session {
   // Epoch ms of the last frame received from the screencast session.
   // The housekeep crash detector uses this to identify a frozen renderer.
   lastScreencastFrameAt: number;
+  // Epoch ms when the most recent Page.startScreencast command succeeded.
+  // Used by the watchdog to decide whether a frame has arrived since start.
+  screencastStartedAt?: number;
   lastUrl: string;
   proxyKey: string; // "direct" or "host:port" — used to detect proxy changes
   userAgent: string; // profile's userAgentEmbedded — applied to every page/popup
@@ -1085,6 +1088,7 @@ async function startScreencast(profileId: number): Promise<void> {
   // never sent, and Chrome stalls permanently. This is the root cause of the
   // 4th+ EB "Loading…" hang — system load delays event-loop execution just long
   // enough for Chrome's first frame to slip through before cdp.on() runs.
+  let firstFrameLogged = false;
   cdp.on("Page.screencastFrame", (params: any) => {
     // ACK IMMEDIATELY (synchronously, no await) — Chrome back-pressures and
     // stops sending new frames until it receives the ack. Delaying the ack
@@ -1095,6 +1099,11 @@ async function startScreencast(profileId: number): Promise<void> {
     // Always update the timestamp even when no WS client — the crash detector
     // uses this to know Chrome is alive.
     if (s) s.lastScreencastFrameAt = Date.now();
+
+    if (!firstFrameLogged) {
+      firstFrameLogged = true;
+      log(`[screencast:${profileId}] first frame received (${params.data.length} chars)`, "browser");
+    }
 
     if (!s?.ws || s.ws.readyState !== WebSocket.OPEN) return;
 
@@ -1127,13 +1136,37 @@ async function startScreencast(profileId: number): Promise<void> {
     return;
   }
 
+  // Record when this screencast started — the watchdog below uses this to detect
+  // a stalled compositor (Chrome acknowledged startScreencast but never sent a frame).
+  session.screencastStartedAt = Date.now();
+
   // Notify the client that the screencast pipeline is confirmed active.
   // This lets the frontend clear its "Loading…" overlay immediately rather than
   // waiting up to 45 s for the first real-content frame to arrive.
   const sAfter = sessions.get(profileId);
   if (sAfter?.ws && sAfter.ws.readyState === WebSocket.OPEN) {
+    log(`[screencast:${profileId}] sending screencast_started to client`, "browser");
     wsWrite(sAfter.ws, { type: "screencast_started" });
+  } else {
+    log(`[screencast:${profileId}] WARNING: WS not open when sending screencast_started (ws=${!!sAfter?.ws} state=${sAfter?.ws?.readyState ?? "none"})`, "browser");
   }
+
+  // ── Watchdog: auto-restart if Chrome never delivers a first frame ────────────
+  // Under heavy CPU load (5+ simultaneous EBs), Chrome's software compositor can
+  // stall and not produce any screencast frames even though Page.startScreencast
+  // was acknowledged. The watchdog fires 8 s after start; if no frame has arrived
+  // since the screencast started, it stops and restarts the screencast.
+  const watchdogStartedAt = session.screencastStartedAt;
+  setTimeout(() => {
+    const s = sessions.get(profileId);
+    // Only act if this is still the same screencast (not replaced by a later call)
+    if (!s || s.screencastCdp !== cdp) return;
+    if (s.lastScreencastFrameAt >= watchdogStartedAt) return; // frame arrived — all good
+    log(`[screencast:${profileId}] watchdog: no frame in 8 s — restarting screencast`, "browser");
+    stopScreencast(profileId).catch(() => {}).finally(() => {
+      startScreencast(profileId).catch(() => {});
+    });
+  }, 8000);
 }
 
 async function stopScreencast(profileId: number): Promise<void> {
