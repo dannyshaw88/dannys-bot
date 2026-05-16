@@ -1262,13 +1262,19 @@ function startHousekeepLoop(profileId: number): void {
     // threshold based on frame silence alone will fire whenever the user is
     // reading a static page.
     //
-    // Instead we use an active CDP ping: send Runtime.evaluate("1") with a
-    // 5 s timeout.  If Chrome responds → it is alive, leave the session alone.
-    // If it times out or the CDP channel throws → Chrome is genuinely frozen
-    // or the proxy has broken the tunnel.
+    // We use an active ping via the MAIN Puppeteer page session (page.evaluate).
+    // IMPORTANT: do NOT ping via screencastCdp — under heavy load, queued
+    // screencastFrameAck calls back up in that CDP session, making it appear
+    // unresponsive even when Chrome itself is perfectly fine. Using the main
+    // page session gives a true health check that is fully independent of the
+    // screencast pipeline.
+    //
+    // If the ping confirms Chrome is alive but frames are still silent, that
+    // means the screencast CDPSession has stalled — restart only the screencast,
+    // not the whole browser. Only kill the session if Chrome itself is dead.
     //
     // We only run the ping when ALL of these hold:
-    //   • The screencast CDP session is open (so we have a channel to test)
+    //   • The screencast CDP session is open (screencast was started)
     //   • The user was active 30–120 s ago (short enough to care, long enough
     //     that Chrome has had time to settle after the last click)
     //   • 60+ s have passed since the last screencast frame (clearly no activity)
@@ -1280,26 +1286,38 @@ function startHousekeepLoop(profileId: number): void {
       if (idleMs > 30000 && idleMs < 120000 && silentMs > 60000
           && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
         (s as any)._crashPingInProgress = true;
-        const cdp = s.screencastCdp;
+        // Ping via the main page session — completely independent of screencastCdp
         Promise.race([
-          cdp.send("Runtime.evaluate", { expression: "1" }).then(() => true),
+          s.page.evaluate(() => 1).then(() => true),
           new Promise<boolean>(r => setTimeout(() => r(false), 5000)),
         ]).then(alive => {
           (s as any)._crashPingInProgress = false;
           const sNow = sessions.get(profileId);
           if (!sNow || !sNow.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
           if (!alive) {
+            // Chrome itself is dead (renderer crash, proxy tunnel broken, etc.)
             const crashUrl = (() => { try { return sNow.page.url(); } catch { return "unknown"; } })();
-            log(`[housekeep:${profileId}] CDP ping timed out on "${crashUrl.slice(0, 80)}" — Chrome is unresponsive, closing session`, "browser");
+            log(`[housekeep:${profileId}] page.evaluate ping timed out on "${crashUrl.slice(0, 80)}" — Chrome is unresponsive, closing session`, "browser");
             wsWrite(sNow.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
             try { sNow.ws.close(); } catch {}
             sNow.ws = null;
             if (sNow.housekeepLoop) { clearInterval(sNow.housekeepLoop); sNow.housekeepLoop = null; }
             closeSession(profileId).catch(() => {});
           } else {
-            // Chrome is alive — reset the frame clock so the next ping window
-            // starts fresh from now.
-            sNow.lastScreencastFrameAt = Date.now();
+            // Chrome is alive. Check whether the screencast CDPSession has stalled.
+            // If frames are still silent after the ping, the CDPSession itself is
+            // the problem — restart just the screencast, leave the browser running.
+            const stillSilent = (Date.now() - sNow.lastScreencastFrameAt) > 20000;
+            if (stillSilent && sNow.screencastCdp) {
+              log(`[housekeep:${profileId}] Chrome alive but screencast silent — restarting screencast CDPSession`, "browser");
+              stopScreencast(profileId).catch(() => {}).finally(() => {
+                startScreencast(profileId).catch(() => {});
+              });
+            } else {
+              // Chrome is alive and frames are flowing — reset the frame clock so
+              // the next ping window starts fresh from now.
+              sNow.lastScreencastFrameAt = Date.now();
+            }
           }
         }).catch(() => { (s as any)._crashPingInProgress = false; });
       }
@@ -1897,15 +1915,29 @@ export async function browserAutoLogin(
       // Check for a username input to detect that case before declaring "already logged in".
       const hasLoginForm = await s.page.$('input[name="username"], input[autocomplete="username"]').catch(() => null);
       if (!hasLoginForm) {
-        // Check for the Instagram mobile splash page ("Open Instagram / Log In or Sign Up").
-        // This page appears at instagram.com/ but is NOT a logged-in state — it has a
-        // "Log In or Sign Up" link that must be clicked before the login form appears.
+        // Check for the Instagram splash page ("Log In / Sign Up") that appears at
+        // instagram.com/ before the login form — this is NOT a logged-in state.
+        // Instagram has changed the splash DOM several times:
+        //   v1: <a href="/accounts/login/"> link → use $() querySelector
+        //   v2: <button> or [role="button"] with "Log in" text → need evaluate()
+        // Check both forms so the click-through works regardless of DOM version.
         const splashLoginLink = await s.page.$('a[href*="accounts/login"], a[href*="/login"]').catch(() => null);
-        if (splashLoginLink) {
-          sendStatus(profileId, "Instagram splash page detected — clicking Log In…");
-          await splashLoginLink.click().catch(() => null);
-          await delay(2000);
-          // Fall through to the login form detection below
+        const splashBtnClicked = !splashLoginLink && await s.page.evaluate(() => {
+          const candidates = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"], a'));
+          const btn = candidates.find(el => {
+            const txt = (el.textContent || '').trim().toLowerCase();
+            return txt === 'log in' || txt === 'login' || txt === 'log in or sign up';
+          });
+          if (btn) { btn.click(); return true; }
+          return false;
+        }).catch(() => false);
+
+        if (splashLoginLink || splashBtnClicked) {
+          sendStatus(profileId, "Instagram splash page detected — clicking Log In, waiting for login form…");
+          if (splashLoginLink) await splashLoginLink.click().catch(() => null);
+          await delay(2500);
+          // Fall through to the login form detection below — credentials will be
+          // filled automatically, no manual button click required.
         } else {
           // Clear any stale challenge flag — the account is visibly logged in so
           // whatever challenge existed has been resolved in the browser.

@@ -1200,22 +1200,22 @@ export function ProfilesPage() {
                 Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Open Browsers
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Open Browsers</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+O</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /> Login Embedded Browsers
+                <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Login Embedded Browsers</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+L</span>
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""}
+                <span className="flex-1">Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""}</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+R</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                Fix Captcha
+                <span className="flex-1">Fix Captcha</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+F</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /> Remove Proxies
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Remove Proxies</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+P</span>
               </button>
               <button onClick={() => { setActionsOpen(false); setResetDeviceConfirmOpen(true); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
@@ -1241,7 +1241,7 @@ export function ProfilesPage() {
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
-                Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+                <span className="flex-1">Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+C</span>
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button
@@ -1260,7 +1260,7 @@ export function ProfilesPage() {
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <Trash2 className="w-4 h-4 shrink-0" /> Delete Selected
+                <Trash2 className="w-4 h-4 shrink-0" /><span className="flex-1">Delete Selected</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+D</span>
               </button>
             </div>
           </div>

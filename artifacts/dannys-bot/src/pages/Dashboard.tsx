@@ -54,6 +54,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.335",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Active embedded browsers no longer show 'Browser page is unresponsive — Click Retry to restart' incorrectly. The health check was being routed through the screen-streaming connection, which backs up under heavy load and falsely appeared frozen even when Chrome was perfectly fine. The check now uses a completely separate connection to Chrome so a congested screen stream can never trigger a false alarm." },
+      { category: "Fix", text: "When the screen stream stalls mid-session on an active browser (frames stop arriving while Chrome is running fine), the app now silently restarts just the stream connection and continues — the browser, its cookies, and the current page are all preserved. Previously this would incorrectly kill the entire browser session and show a Retry error." },
+      { category: "Fix", text: "Auto-login now correctly handles Instagram's current splash page, which shows 'Log in' as a button rather than a link. Previously the app failed to detect the splash and assumed the account was already logged in. It now detects both button and link versions of the splash and clicks through automatically so credentials are filled without any manual interaction." },
+      { category: "Fix", text: "The F12 developer tools panel no longer appears in the installed app. It is still available in development but is now hidden in the packaged build." },
+      { category: "Fix", text: "Exported API call history is no longer lost when the app is restarted. The previous limit of 5000 rows was too low — a single Verify All run on 100 accounts inserts around 1000 rows, meaning just a few restarts erased the entire history. The limit is now 1,000,000 rows, which is effectively unlimited for real-world usage." },
+      { category: "Improvement", text: "The Actions menu on the Accounts page now shows the keyboard shortcut next to each option that has one: Open Browsers (Ctrl+O), Login Embedded Browsers (Ctrl+L), Verify Accounts (Ctrl+R), Fix Captcha (Ctrl+F), Remove Proxies (Ctrl+P), Ungroup Accounts (Ctrl+C), Delete Selected (Ctrl+D)." },
+    ],
+  },
+  {
     version: "1.0.333",
     date: "16 May 2026",
     items: [

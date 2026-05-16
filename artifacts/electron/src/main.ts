@@ -721,6 +721,7 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
+      devTools: !app.isPackaged,
     },
   });
 

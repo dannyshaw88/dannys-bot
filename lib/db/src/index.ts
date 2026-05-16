@@ -311,10 +311,14 @@ if (!igApiCallsColNames.has("username")) {
   }
 }
 
-// Cap to newest 5000 rows per account to prevent unbounded growth
+// Cap to newest 1,000,000 rows — effectively unlimited for any real-world usage
+// so that exported API call history is never silently discarded on restart.
+// The previous 5000-row global cap was far too low: a single Verify All run on
+// 100 accounts inserts ~1000 rows, so the history was being erased after just
+// a few restarts.
 sqlite.exec(`
   DELETE FROM instagram_api_calls WHERE id NOT IN (
-    SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 5000
+    SELECT id FROM instagram_api_calls ORDER BY id DESC LIMIT 1000000
   );
 `);
 
