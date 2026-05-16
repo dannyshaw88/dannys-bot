@@ -3168,8 +3168,9 @@ export async function createInstagramAccountViaApi(params: {
   bio?: string;
   userAgent?: string;
   apiLimits?: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number };
+  ebCookies?: { mid: string; ig_did: string; csrftoken: string; cookieStrings: string[] } | null;
 }): Promise<SignupResult> {
-  const { username, password, email, firstName = "", day, month, year, proxyUrl, bio, userAgent, apiLimits } = params;
+  const { username, password, email, firstName = "", day, month, year, proxyUrl, bio, userAgent, apiLimits, ebCookies } = params;
 
   // Delay helper: respects the API limits by sleeping (everySecondsMin/reqMax … everySecondsMax/reqMin) seconds
   const stepDelay = apiLimits
@@ -3188,13 +3189,30 @@ export async function createInstagramAccountViaApi(params: {
   const steps: string[] = [];
   const step = (msg: string) => { steps.push(msg); console.log(`[accountCreator] ${msg}`); };
 
-  const ig_did     = randomUUID();
-  const phone_id   = randomUUID();
+  // ── EB-FIRST: device identifiers MUST come from Chrome-harvested cookies ──────
+  // The caller (route handler) is required to run harvestSignupCookiesFromEB()
+  // and pass the result here.  No fallback to randomly generated values exists —
+  // using random UUIDs bypasses the EB entirely and violates the EB-FIRST rule.
+  if (!ebCookies?.ig_did || !ebCookies?.mid) {
+    throw new Error(
+      "EB cookie harvest is required before calling createInstagramAccountViaApi. " +
+      "Call harvestSignupCookiesFromEB() first and pass the result as ebCookies."
+    );
+  }
+
+  const ig_did       = ebCookies.ig_did;
+  const mid          = ebCookies.mid;
+  const phone_id     = randomUUID();
   const waterfall_id = randomUUID();
-  const android_id = `android-${ig_did.replace(/-/g, "").slice(0, 16)}`;
-  const guid       = ig_did;
-  const mid        = Buffer.from(randomUUID()).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
-  let cookieJar: string[] = [`ig_did=${ig_did}`, `mid=${mid}`];
+  const android_id   = `android-${ig_did.replace(/-/g, "").slice(0, 16)}`;
+  const guid         = ig_did;
+
+  // Seed the cookie jar from the full EB cookie set
+  let cookieJar: string[] = ebCookies.cookieStrings.length
+    ? ebCookies.cookieStrings
+    : [`ig_did=${ig_did}`, `mid=${mid}`];
+
+  step(`EB cookies seeded: mid=${mid.slice(0, 8)}... ig_did=${ig_did.slice(0, 8)}... jar=[${cookieJar.map(c => c.split("=")[0]).join(", ")}]`);
 
   // Headers restored to match the EXACT state of the one successful HTTP 200
   // (commit 57e5f68 / 44b34a0 — before gzip fix, before X-FB-Client-IP was added).

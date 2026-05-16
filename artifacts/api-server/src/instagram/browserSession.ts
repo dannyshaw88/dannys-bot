@@ -100,6 +100,144 @@ export function deleteSavedCookies(profileId: number): void {
   } catch {}
 }
 
+// ── EB signup cookie harvester ────────────────────────────────────────────────
+// Spins up a temporary headless Chrome, navigates to instagram.com/accounts/emailsignup/,
+// and collects the browser-originated cookies (mid, ig_did, csrftoken) that Instagram's
+// CDN sets on first contact.  These are then passed to createInstagramAccountViaApi so
+// the mobile API handshake uses real EB cookies instead of randomly generated device IDs.
+//
+// This mirrors the Jarvee two-stage handshake used for the login flow:
+//   1. EB visits instagram.com → Instagram CDN sets mid, ig_did, csrftoken
+//   2. Those cookies seed the mobile API signup call → Instagram sees a real device
+//
+// The session is throwaway (no persistent user-data-dir) — we only need fresh cookies,
+// not a long-lived device identity.  The browser is closed as soon as cookies are collected.
+export async function harvestSignupCookiesFromEB(opts?: {
+  proxyHost?: string;
+  proxyPort?: number;
+  proxyUsername?: string;
+  proxyPassword?: string;
+}): Promise<{ mid: string; ig_did: string; csrftoken: string; cookieStrings: string[] } | null> {
+  const logPfx = "[harvestSignupCookies]";
+  log(`${logPfx} Starting EB cookie harvest for signup...`);
+
+  // Throwaway data dir — deleted after harvest.  Using COOKIES_DIR (not os.tmpdir)
+  // keeps it on the same volume as the rest of browser-data and avoids tmpfs limits.
+  const tmpDataDir = path.join(
+    COOKIES_DIR,
+    `signup-harvest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  fs.mkdirSync(tmpDataDir, { recursive: true });
+
+  // We need puppeteer loaded before CHROMIUM_PATH is used
+  let puppeteerLib: any;
+  try {
+    puppeteerLib = (await import("puppeteer-core")).default;
+  } catch {
+    try {
+      puppeteerLib = (await import("puppeteer")).default;
+    } catch (e: any) {
+      log(`${logPfx} Cannot load puppeteer: ${e?.message}`);
+      try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+      return null;
+    }
+  }
+
+  if (!CHROMIUM_PATH) {
+    log(`${logPfx} No CHROMIUM_PATH — cannot harvest cookies`);
+    try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+    return null;
+  }
+
+  const proxyArg = opts?.proxyHost
+    ? [`--proxy-server=${opts.proxyHost}:${opts.proxyPort ?? 80}`]
+    : [];
+
+  let browser: any;
+  try {
+    browser = await puppeteerLib.launch({
+      headless: true,
+      executablePath: CHROMIUM_PATH,
+      args: [...LAUNCH_ARGS, `--user-data-dir=${tmpDataDir}`, ...proxyArg],
+      ignoreHTTPSErrors: true,
+    });
+    log(`${logPfx} Temporary Chrome launched`);
+  } catch (e: any) {
+    log(`${logPfx} Browser launch failed: ${e?.message}`);
+    try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+    return null;
+  }
+
+  const DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  try {
+    const [page] = await browser.pages();
+    await page.setUserAgent(DESKTOP_UA);
+    await page.setViewport({ width: 1280, height: 760 });
+
+    if (opts?.proxyUsername) {
+      await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
+    }
+
+    await applyStealthScripts(page, DESKTOP_UA);
+
+    log(`${logPfx} Navigating to instagram.com/accounts/emailsignup/...`);
+    try {
+      await page.goto("https://www.instagram.com/accounts/emailsignup/", {
+        waitUntil: "domcontentloaded",
+        timeout: 30000,
+      });
+    } catch (e: any) {
+      log(`${logPfx} Navigation warning (still checking cookies): ${e?.message}`);
+    }
+
+    // Poll for the key cookies — Instagram sets them during page load, sometimes after JS executes
+    let mid = "";
+    let ig_did = "";
+    let csrftoken = "";
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      const cookies = await page.cookies(
+        "https://www.instagram.com",
+        "https://i.instagram.com",
+        "https://instagram.com",
+      );
+      for (const c of cookies as Array<{ name: string; value: string }>) {
+        if (c.name === "mid"       && c.value) mid       = c.value;
+        if (c.name === "ig_did"    && c.value) ig_did    = c.value;
+        if (c.name === "csrftoken" && c.value) csrftoken = c.value;
+      }
+      if (mid && ig_did && csrftoken) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // Build a clean cookie string array from whatever Instagram set
+    const allCookies = await page.cookies(
+      "https://www.instagram.com",
+      "https://i.instagram.com",
+      "https://instagram.com",
+    ) as Array<{ name: string; value: string }>;
+    const cookieStrings = allCookies.map(c => `${c.name}=${c.value}`);
+
+    log(
+      `${logPfx} Harvest result: mid=${mid ? mid.slice(0, 8) + "..." : "(none)"}` +
+      ` ig_did=${ig_did ? ig_did.slice(0, 8) + "..." : "(none)"}` +
+      ` csrftoken=${csrftoken ? csrftoken.slice(0, 8) + "..." : "(none)"}` +
+      ` total_cookies=${cookieStrings.length}`
+    );
+
+    if (!mid && !ig_did) {
+      log(`${logPfx} No IG device cookies harvested — harvest failed`);
+      return null;
+    }
+
+    return { mid, ig_did, csrftoken, cookieStrings };
+  } finally {
+    try { await browser.close(); } catch {}
+    try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+    log(`${logPfx} Temporary Chrome closed and data dir cleaned up`);
+  }
+}
+
 // Returns the existing Puppeteer Browser for a profile if an EB session is
 // already running, or null if the EB has never been opened for this profile.
 // The cookie baker uses this to open a new background tab instead of spawning
@@ -121,20 +259,31 @@ interface Session {
   pages: Page[];
   activePage: number;
   ws: WebSocket | null; // WebSocket client — null when no client is connected
-  frameLoop: ReturnType<typeof setInterval> | null;
+  frameLoop: ReturnType<typeof setInterval> | null; // kept for backward compat — always null now
+  // Dedicated CDP session used exclusively for Page.startScreencast so that
+  // screencast frames are pushed on a separate CDP message queue from the one
+  // used for user input (clicks, typing, navigate). Chrome serialises commands
+  // within a single session, so keeping frame delivery on its own session means
+  // a slow or large JPEG frame can never delay a click command.
+  screencastCdp: any | null;
+  // Lightweight housekeeping interval — cookie save, popup dismiss, keep-alive
+  // ping and error-page recovery. No screenshots taken here; all frame delivery
+  // is handled by the screencast session above.
+  housekeepLoop: ReturnType<typeof setInterval> | null;
+  // Epoch ms of the last frame received from the screencast session.
+  // The housekeep crash detector uses this to identify a frozen renderer.
+  lastScreencastFrameAt: number;
   lastUrl: string;
   proxyKey: string; // "direct" or "host:port" — used to detect proxy changes
   userAgent: string; // profile's userAgentEmbedded — applied to every page/popup
   pendingInitUrl?: string; // set by getOrCreateSession, consumed by attachSSE on first connect
-  // Timestamp (ms) until which the frame-loop error-page auto-retry is suppressed.
+  // Timestamp (ms) until which the housekeep error-page auto-retry is suppressed.
   // Set whenever an intentional goto() is fired so the loop doesn't race against it.
   navProtectedUntil?: number;
-  // True while browserAutoLogin is executing — suppresses the screenshot-timeout
-  // kill so the page isn't destroyed mid-login causing a false ok:false result.
+  // True while browserAutoLogin is executing — suppresses the crash detector so
+  // the page isn't destroyed mid-login causing a false ok:false result.
   autoLoginInProgress?: boolean;
-  // ms timestamp of the most recent successful autoLogin. The frameLoop uses this
-  // to avoid clearing valid session cookies when the page is still on chrome-error://
-  // right after a redirect-loop recovery that already saved good cookies.
+  // ms timestamp of the most recent successful autoLogin.
   lastLoginSuccessAt?: number;
   // Unique token per session instance. autoLogin captures this at start and checks
   // it before returning ok:true — if the session was replaced (clearSession pressed
@@ -149,10 +298,6 @@ interface Session {
   // loop that causes Instagram to deepen the security lock on every retry.
   challengeUrl?: string;
   // ms timestamp of the last user input (click, scroll, key, mousemove, navigate).
-  // The frame loop uses this to throttle screenshot rate when the user is not actively
-  // interacting with this EB — idle sessions drop to ~0.8fps, dormant sessions to ~0.3fps.
-  // This is the primary fix for multi-EB freeze: background EBs stop consuming
-  // screenshot slots and Node.js event-loop time, leaving capacity for active ones.
   lastActivityAt: number;
 }
 
@@ -705,7 +850,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
+  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -816,6 +961,8 @@ export function detachWS(profileId: number, ws: WebSocket) {
   if (!session || session.ws !== ws) return;
   session.ws = null;
   if (session.frameLoop) { clearInterval(session.frameLoop); session.frameLoop = null; }
+  if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
+  stopScreencast(profileId).catch(() => {});
 }
 
 export function attachWS(profileId: number, ws: WebSocket) {
@@ -869,268 +1016,187 @@ export function attachWS(profileId: number, ws: WebSocket) {
     } catch { /* page may be closing — ignore */ }
   })();
 
-  startFrameLoop(profileId);
+  startScreencast(profileId).catch(() => {});
+  startHousekeepLoop(profileId);
 }
 
-function startFrameLoop(profileId: number) {
+// ── CDP Screencast frame delivery ─────────────────────────────────────────────
+// Chrome's Page.startScreencast API pushes JPEG frames from the compositor
+// thread via a DEDICATED CDP session that is completely independent from the
+// main page session used for user input (mouse.click, keyboard.type, evaluate).
+//
+// The old setInterval + page.screenshot() approach shared the main CDP session
+// for both frames AND input. Because CDP is a serial message queue within a
+// session, an in-flight screenshot (0–8 s when proxied) blocked every click and
+// keystroke behind it. This was the root cause of browsers appearing "frozen"
+// with 4+ EBs open: each had a screenshot in-flight, making every click wait
+// up to 8 s for it to complete.
+//
+// With separate sessions Chrome processes them truly in parallel — a slow or
+// large JPEG frame on the screencast session never delays an input command on
+// the main session.
+async function startScreencast(profileId: number): Promise<void> {
+  const session = sessions.get(profileId);
+  if (!session || !session.ws || session.ws.readyState !== WebSocket.OPEN) return;
+
+  // Stop any previously running screencast session first
+  await stopScreencast(profileId);
+
+  let cdp: any;
+  try {
+    cdp = await (session.page as any).createCDPSession();
+  } catch (e: any) {
+    log(`[screencast:${profileId}] createCDPSession failed: ${e?.message}`, "browser");
+    return;
+  }
+  session.screencastCdp = cdp;
+
+  // Adaptive JPEG quality: reduce quality (and therefore frame size / encoding
+  // cost) as more sessions compete for CPU and bandwidth.
+  const nSessions = sessions.size;
+  const quality = nSessions <= 2 ? 65 : nSessions <= 5 ? 55 : 45;
+
+  try {
+    await cdp.send("Page.startScreencast", {
+      format: "jpeg",
+      quality,
+      maxWidth: 1280,
+      maxHeight: 760,
+      everyNthFrame: 1,
+    });
+    log(`[screencast:${profileId}] started (quality=${quality} sessions=${nSessions})`, "browser");
+  } catch (e: any) {
+    log(`[screencast:${profileId}] startScreencast failed: ${e?.message}`, "browser");
+    try { await cdp.detach(); } catch {}
+    session.screencastCdp = null;
+    return;
+  }
+
+  // Handle incoming frames — Chrome pushes these from its compositor thread
+  // whenever the visible page content changes.
+  cdp.on("Page.screencastFrame", (params: any) => {
+    // ACK IMMEDIATELY (synchronously, no await) — Chrome back-pressures and
+    // stops sending new frames until it receives the ack. Delaying the ack
+    // would stall frame delivery.
+    cdp.send("Page.screencastFrameAck", { sessionId: params.sessionId }).catch(() => {});
+
+    const s = sessions.get(profileId);
+    // Always update the timestamp even when no WS client — the crash detector
+    // uses this to know Chrome is alive.
+    if (s) s.lastScreencastFrameAt = Date.now();
+
+    if (!s?.ws || s.ws.readyState !== WebSocket.OPEN) return;
+
+    // page.url() is sync in Puppeteer — it reads from an internal frame cache,
+    // no CDP round-trip.
+    let currentUrl = s.lastUrl;
+    try { currentUrl = s.page.url(); } catch {}
+
+    wsWrite(s.ws, { type: "frame", data: params.data, url: currentUrl });
+
+    if (currentUrl && currentUrl !== "about:blank" && currentUrl !== s.lastUrl) {
+      s.lastUrl = currentUrl;
+      wsWrite(s.ws, { type: "urlChange", url: currentUrl });
+    }
+  });
+}
+
+async function stopScreencast(profileId: number): Promise<void> {
+  const session = sessions.get(profileId);
+  if (!session?.screencastCdp) return;
+  const cdp = session.screencastCdp;
+  session.screencastCdp = null;
+  try { await cdp.send("Page.stopScreencast"); } catch {}
+  try { await cdp.detach(); } catch {}
+}
+
+// ── Lightweight housekeeping loop ─────────────────────────────────────────────
+// Handles cookie save, popup dismissal, WS keep-alive ping, and error-page
+// recovery — all on a slow 5-second tick. No screenshots taken here.
+function startHousekeepLoop(profileId: number): void {
   const session = sessions.get(profileId);
   if (!session) return;
 
-  if (session.frameLoop) clearInterval(session.frameLoop);
+  if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
 
-  let cookieSaveTick = 0;
-  let popupCheckTick = 0;
-  let keepAliveTick = 0;
-  let errorRetryTick = 0;     // counts frames while on chrome-error:// (429 / net::ERR_*)
-  let errorRetryCount = 0;    // how many times we've auto-retried this session
-  let screenshotTimeoutCount = 0; // consecutive screenshot timeouts → detect crashed renderer
-  let idleTick = 0;           // incremented every tick; used for idle skip modulo
-  let busy = false;
-  let lastFrameSentAt = Date.now();   // track when we last successfully pushed a frame
-  let noFrameWarnedAt = 0;           // avoid spamming the no-frame warning
+  let cookieSaveTick  = 0; // increments every 5s; save at 12 (=60s)
+  let popupCheckTick  = 0; // increments every 5s; dismiss at 2 (=10s)
+  let keepAliveTick   = 0; // increments every 5s; ping at 3 (=15s)
+  let errorRecoveryTick = 0; // increments every 5s; check at 2 (=10s)
 
-  // Stagger frame loop start times to prevent thundering-herd: when several EBs are
-  // opened at once they all call startFrameLoop at the same millisecond, causing them
-  // to fire together on every tick and saturate the global concurrency limiter in
-  // lockstep. A small deterministic offset (based on profileId) spreads them out.
-  const staggerMs = (profileId * 97) % 400; // 0–399 ms spread; deterministic per profile
-
-  const startLoop = () => {
-  session.frameLoop = setInterval(async () => {
+  session.housekeepLoop = setInterval(async () => {
     const s = sessions.get(profileId);
     if (!s || !s.ws || s.ws.readyState !== WebSocket.OPEN) {
-      if (s?.frameLoop) clearInterval(s.frameLoop);
+      if (s?.housekeepLoop) { clearInterval(s.housekeepLoop); s.housekeepLoop = null; }
       return;
     }
 
-    // ── Activity-based frame rate ──────────────────────────────────────────
-    // The primary fix for multi-EB freeze. Background EBs that the user isn't
-    // touching take far fewer screenshots, leaving the global concurrency slots
-    // and Node.js event-loop time for the actively-used EB.
-    //   active  (<3 s since last input)  → every tick      (~6.7 fps)
-    //   idle    (3–30 s)                 → every 8th tick  (~0.8 fps)
-    //   dormant (>30 s)                  → every 20th tick (~0.33 fps)
-    // Keep-alive runs every tick regardless of idle state — it must fire on schedule
-    // even when the EB is dormant, because the SSE proxy will close a connection that
-    // goes silent for more than ~30 s. 100 ticks × 150 ms = 15 s between keep-alives.
+    // ── WS keep-alive ──────────────────────────────────────────────────────
     keepAliveTick++;
-    if (keepAliveTick >= 100) {
+    if (keepAliveTick >= 3) {
       keepAliveTick = 0;
-      try { if (s.ws?.readyState === WebSocket.OPEN) s.ws.ping(); } catch {}
-
-      // ── Server-side freeze diagnostic ─────────────────────────────────────
-      const silentMs = Date.now() - lastFrameSentAt;
-      if (silentMs > 30000 && Date.now() - noFrameWarnedAt > 30000) {
-        noFrameWarnedAt = Date.now();
-        const curIdleMs = Date.now() - s.lastActivityAt;
-        log(`[frameLoop:${profileId}] ⚠ no frame sent for ${Math.round(silentMs / 1000)}s — busy=${busy} screenshotTimeouts=${screenshotTimeoutCount} idleMs=${curIdleMs} url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
-      }
+      try { s.ws.ping(); } catch {}
     }
 
-    // Activity-based frame rate — throttle EBs based on idle time AND total
-    // number of open sessions. When many EBs are open simultaneously they are
-    // ALL considered "active" (freshly opened = lastActivityAt=now), so the
-    // original idle-only throttle didn't help: all 10 fired at 6.7fps each,
-    // saturating Chrome and causing every EB to freeze.
-    //
-    // Fix: scale the "active" skip modulo with session count so total
-    // screenshot throughput stays bounded regardless of how many are open.
-    //
-    // Total sessions → active skip (per-EB fps when actively used):
-    //   1–2   → every 1st tick  (~6.7 fps each,  ~6–13 fps total)
-    //   3–5   → every 2nd tick  (~3.3 fps each,  ~10–16 fps total)
-    //   6–10  → every 3rd tick  (~2.2 fps each,  ~13–22 fps total)
-    //   11–20 → every 5th tick  (~1.3 fps each,  ~14–26 fps total)
-    //   21+   → every 8th tick  (~0.8 fps each,  ~17+ fps total)
-    //
-    // Idle/dormant floors are maintained so background EBs stay light:
-    //   idle    (3–30 s)  → max(activeSkip, 8)   (≤0.8 fps)
-    //   dormant (>30 s)   → max(activeSkip, 20)  (≤0.33 fps)
-    idleTick++;
-    const idleMs = Date.now() - s.lastActivityAt;
-    const totalSessions = sessions.size;
-    const activeSkip = totalSessions <= 2  ? 1 :
-                       totalSessions <= 5  ? 2 :
-                       totalSessions <= 10 ? 3 :
-                       totalSessions <= 20 ? 5 : 8;
-    const skipModulo = idleMs < 3000  ? activeSkip :
-                       idleMs < 30000 ? Math.max(activeSkip, 8) :
-                                        Math.max(activeSkip, 20);
-    if (idleTick % skipModulo !== 0) return;
-
-    // Pause screenshots while auto-login is running on this session. CDP is a
-    // serial message protocol per Chrome instance — screenshot commands and
-    // page.type() keystrokes share the same connection. If a screenshot is
-    // in-flight when a keystroke needs to be sent, the keystroke is queued
-    // behind the screenshot, causing the form to fill slowly or not at all.
-    // Skipping screenshots during auto-login lets Chrome process every
-    // keystroke immediately without competing with the screenshot loop.
-    if (s.autoLoginInProgress) return;
-
-    // Skip frame if a screenshot is already in flight (prevents queuing)
-    if (busy) return;
-    busy = true;
-
-    // Global concurrency guard — skip this tick if too many Chrome instances
-    // are already mid-screenshot. They'll retry on the next eligible tick.
-    if (globalScreenshotCount >= MAX_CONCURRENT_SCREENSHOTS) {
-      busy = false;
-      return;
+    // ── Popup dismissal ────────────────────────────────────────────────────
+    popupCheckTick++;
+    if (popupCheckTick >= 2) {
+      popupCheckTick = 0;
+      dismissInstagramPopups(s.page).catch(() => {});
     }
-    globalScreenshotCount++;
 
-    // Adaptive JPEG quality: reduce encoding cost when multiple sessions are
-    // actively competing for screenshot slots.
-    const activeSessions = sessions.size;
-    const jpegQuality = activeSessions <= 1 ? 70 : activeSessions <= 2 ? 60 : 45;
+    // ── Cookie save ────────────────────────────────────────────────────────
+    cookieSaveTick++;
+    if (cookieSaveTick >= 12) {
+      cookieSaveTick = 0;
+      saveCookies(profileId, s.page).catch(() => {});
+    }
 
-    const frameStart = Date.now();
-    try {
-      // Wrap in an external hard deadline so that if Chrome's CDP connection
-      // freezes entirely (e.g. renderer OOM, suspended-account page crash),
-      // our outer timer always rejects after 8 s — which is 2 s longer than
-      // Puppeteer's internal 6 s timeout. This guarantees busy=false is
-      // always reset via the finally block, and screenshotTimeoutCount
-      // increments properly so the crash detector eventually fires.
-      //
-      // IMPORTANT: Do NOT pass `timeout` to page.screenshot(). If Puppeteer throws
-      // its own TimeoutError (before our 8 s outer deadline), the catch block's
-      // `err.message === "screenshot timeout"` check fails, screenshotTimeoutCount
-      // is reset to 0, and the crash detector never fires — the EB freezes silently.
-      // Relying solely on the outer Promise.race deadline fixes this.
-      const [screenshot, currentUrl] = await Promise.race([
-        Promise.all([
-          s.page.screenshot({ type: "jpeg", quality: jpegQuality, encoding: "base64" } as any),
-          s.page.url(),
-        ]),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("screenshot timeout")), 8000)
-        ),
-      ]);
-
-      const screenshotMs = Date.now() - frameStart;
-      if (screenshotMs > 2000) {
-        log(`[frameLoop:${profileId}] slow screenshot: ${screenshotMs}ms url=${currentUrl.slice(0, 80)}`, "browser");
-      }
-
-      wsWrite(s.ws, { type: "frame", data: screenshot, url: currentUrl });
-      lastFrameSentAt = Date.now();
-
-      if (currentUrl !== s.lastUrl) {
-        s.lastUrl = currentUrl;
-        wsWrite(s.ws, { type: "urlChange", url: currentUrl });
-      }
-
-      screenshotTimeoutCount = 0; // successful screenshot — reset crash counter
-
-      // ── Error-page recovery ──────────────────────────────────────────────
-      // When the browser lands on chrome-error:// or a blank page, wait 3 s
-      // then navigate to the login page.
-      //
-      // Cookie handling depends on the error type:
-      //   ERR_TOO_MANY_REDIRECTS / ERR_FAILED  →  stale cookies caused the
-      //     loop; clear cookies so the next navigation doesn't loop again.
-      //   ERR_PROXY_* / ERR_TUNNEL_* / TIMEOUT →  proxy failure; the
-      //     Instagram cookies are valid. Do NOT clear them — deleting good
-      //     session cookies forces a fresh login and risks account flags.
-      //
-      // Chrome's error page title contains the error code (e.g.
-      // "ERR_TOO_MANY_REDIRECTS"), so we read it here on success and cache it.
-      const isErrorPage = currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank" || currentUrl === "about:newtab";
-      if (isErrorPage) {
-        errorRetryTick++;
-      } else {
-        errorRetryTick = 0;
-        (s as any)._lastErrorPageTitle = undefined;
-      }
-      // ─────────────────────────────────────────────────────────────────────
-
-      // Check for post-login popups every ~10 seconds
-      popupCheckTick++;
-      if (popupCheckTick >= 50) { // 50 * 200ms = 10s
-        popupCheckTick = 0;
-        dismissInstagramPopups(s.page);
-      }
-
-      // Save cookies every ~60 seconds to persist any session refreshes
-      cookieSaveTick++;
-      if (cookieSaveTick >= 300) { // 300 * 200ms = 60s
-        cookieSaveTick = 0;
-        saveCookies(profileId, s.page);
-      }
-    } catch (err: any) {
-      const elapsedMs = Date.now() - frameStart;
-      if (err?.message === "screenshot timeout") {
-        // Chrome renderer may have crashed — count consecutive failures.
-        screenshotTimeoutCount++;
-        log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} (${elapsedMs}ms elapsed) url=${(() => { try { return s.page.url().slice(0, 80); } catch { return "?"; } })()}`, "browser");
-        // Raise threshold to 5 (750 ms) — navigations routinely cause 1-3 consecutive
-        // screenshot failures as Chrome tears down the old renderer and builds the new one.
-        // Also respect navProtectedUntil which is extended on every framenavigated event.
-        // At timeout #3: if frozen on an error page and not nav-protected,
-        // fire a recovery goto() — this sometimes unblocks a stuck renderer
-        // before the crash detector fires at #5.
-        if (screenshotTimeoutCount === 3) {
-          const frozenUrl = (() => { try { return s.page.url(); } catch { return ""; } })();
-          const isFrozenOnError = frozenUrl.startsWith("chrome-error://") || frozenUrl === "about:blank";
-          const navOk = !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0);
-          // If a login just succeeded, do NOT fire the recovery goto — autoLogin
-          // already handled the redirect loop and is still in the middle of the
-          // recovery navigate. Firing a competing goto here crashes the renderer.
+    // ── Error-page recovery ────────────────────────────────────────────────
+    // If Chrome lands on chrome-error:// (proxy dead, redirect loop, etc.)
+    // and is not mid-navigation or mid-login, navigate back to the login page.
+    errorRecoveryTick++;
+    if (errorRecoveryTick >= 2) {
+      errorRecoveryTick = 0;
+      if (!s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
+        let url = "";
+        try { url = s.page.url(); } catch {}
+        const isErrorPage = url.startsWith("chrome-error://") || url === "about:blank" || url === "about:newtab";
+        if (isErrorPage) {
           const msSinceLogin = s.lastLoginSuccessAt ? Date.now() - s.lastLoginSuccessAt : Infinity;
-          const loginJustDone = msSinceLogin < 90000;
-          if (isFrozenOnError && navOk && !loginJustDone) {
-            // Screenshot timeouts on chrome-error:// almost always mean the proxy
-            // is dead/hanging — NOT a cookie/redirect issue. The Instagram cookies
-            // are still valid. Do NOT delete them here.
-            // We still attempt a goto() in case the renderer can be unblocked,
-            // but we preserve cookies so the next open restores the session.
-            log(`[frameLoop:${profileId}] screenshot timeout #3 on error page — attempting early recovery goto (cookies preserved)`, "browser");
+          if (msSinceLogin > 90000) {
+            log(`[housekeep:${profileId}] error page detected (${url.slice(0, 60)}) — recovering to login (cookies preserved)`, "browser");
             s.navProtectedUntil = Date.now() + 20000;
             s.page.goto("https://www.instagram.com/accounts/login/", {
               waitUntil: "domcontentloaded", timeout: 25000,
             }).catch(() => null);
-          } else if (isFrozenOnError && navOk && loginJustDone) {
-            log(`[frameLoop:${profileId}] screenshot timeout #3 on error page — login completed ${Math.round(msSinceLogin / 1000)}s ago, skipping recovery goto to avoid racing with autoLogin`, "browser");
           }
-        }
-
-        if (screenshotTimeoutCount >= 5) {
-          const navProtected = Date.now() < (s.navProtectedUntil ?? 0);
-          if (s.autoLoginInProgress || navProtected) {
-            // Suppress: login is running, or a navigation recently started.
-            log(`[frameLoop:${profileId}] screenshot timeout #${screenshotTimeoutCount} — suppressed (login=${!!s.autoLoginInProgress} navProtected=${navProtected})`, "browser");
-          } else {
-            const crashUrl = (() => { try { return s.page.url(); } catch { return "unknown"; } })();
-            log(`[frameLoop:${profileId}] 5 consecutive screenshot timeouts on "${crashUrl}" — closing Chrome entirely (cookies preserved)`, "browser");
-            wsWrite(s.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
-            try { s.ws?.close(); } catch {}
-            s.ws = null;
-            if (s.frameLoop) { clearInterval(s.frameLoop); s.frameLoop = null; }
-            // Close the Chrome process entirely so the next open gets a fresh start.
-            // Screenshot timeouts = proxy freeze (renderer stuck on TCP tunnel),
-            // NOT a cookie/redirect loop — cookies are valid, do NOT delete them.
-            // The pre-flight proxy check on next open will refuse to launch Chrome
-            // again if the proxy is still dead, keeping the session clean.
-            closeSession(profileId).catch(() => {});
-          }
-        }
-      } else {
-        screenshotTimeoutCount = 0; // non-timeout error (navigation busy) — not a crash
-        const errMsg = err?.message ?? String(err);
-        // Skip expected navigation-in-progress noise; log everything else
-        if (!errMsg.includes("Execution context was destroyed") && !errMsg.includes("Target closed") && !errMsg.includes("detached")) {
-          log(`[frameLoop:${profileId}] screenshot error (${elapsedMs}ms): ${errMsg}`, "browser");
         }
       }
-    } finally {
-      globalScreenshotCount--;
-      busy = false;
     }
-  }, 150); // ~6 fps — fast enough for responsive CAPTCHA solving
-  }; // end startLoop
 
-  setTimeout(startLoop, staggerMs);
+    // ── Crash detector ─────────────────────────────────────────────────────
+    // If the screencast session is open but Chrome hasn't sent any frame
+    // for 30+ seconds while the user has been active (interacting in the
+    // last 60 s), the renderer has likely crashed or the proxy has frozen
+    // the TCP tunnel. Close the session so the user can reopen cleanly.
+    if (s.screencastCdp) {
+      const idleMs = Date.now() - s.lastActivityAt;
+      if (idleMs < 60000) {
+        const silentMs = Date.now() - s.lastScreencastFrameAt;
+        if (silentMs > 30000 && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
+          const crashUrl = (() => { try { return s.page.url(); } catch { return "unknown"; } })();
+          log(`[housekeep:${profileId}] 30s without screencast frames while active on "${crashUrl.slice(0, 80)}" — closing Chrome (cookies preserved)`, "browser");
+          wsWrite(s.ws, { type: "error", message: "Browser page is unresponsive — likely a proxy issue. Click Retry to restart." });
+          try { s.ws.close(); } catch {}
+          s.ws = null;
+          if (s.housekeepLoop) { clearInterval(s.housekeepLoop); s.housekeepLoop = null; }
+          closeSession(profileId).catch(() => {});
+          return;
+        }
+      }
+    }
+  }, 5000);
 }
 
 export async function browserNavigate(profileId: number, url: string) {
@@ -1147,16 +1213,12 @@ export async function browserNavigate(profileId: number, url: string) {
   }
 }
 
-async function kickFrame(profileId: number) {
-  const s = sessions.get(profileId);
-  if (!s || !s.ws || s.ws.readyState !== WebSocket.OPEN) return;
-  try {
-    const [screenshot, url] = await Promise.all([
-      s.page.screenshot({ type: "jpeg", quality: 70, encoding: "base64" }),
-      Promise.resolve(s.page.url()),
-    ]);
-    wsWrite(s.ws, { type: "frame", data: screenshot, url });
-  } catch { /* page may be navigating */ }
+// kickFrame is a no-op now that CDP screencast handles all frame delivery.
+// Chrome's compositor automatically sends a new frame after any DOM change
+// triggered by a click, so there's no need to request one explicitly.
+// Kept as a stub so call-sites don't need to be updated.
+function kickFrame(_profileId: number): Promise<void> {
+  return Promise.resolve();
 }
 
 function sendTabsUpdate(profileId: number) {
@@ -1351,6 +1413,9 @@ export async function browserNewTab(profileId: number) {
     s.lastUrl = "";
     await newPage.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
     sendTabsUpdate(profileId);
+    // Screencast is tied to a specific page target — restart on the new tab.
+    await stopScreencast(profileId).catch(() => {});
+    startScreencast(profileId).catch(() => {});
   } catch (e: any) {
     log(`browserNewTab error: ${e?.message}`, "browser");
   }
@@ -1363,7 +1428,9 @@ export async function browserSwitchTab(profileId: number, index: number) {
   s.page = s.pages[index];
   s.lastUrl = "";
   sendTabsUpdate(profileId);
-  kickFrame(profileId).catch(() => {});
+  // Screencast is tied to a specific page target — restart it on the new page.
+  await stopScreencast(profileId).catch(() => {});
+  startScreencast(profileId).catch(() => {});
 }
 
 export async function browserCloseTab(profileId: number, index: number) {
@@ -1460,6 +1527,8 @@ export async function closeSession(profileId: number, opts?: { skipCookieSave?: 
   const s = sessions.get(profileId);
   if (!s) return;
   if (s.frameLoop) clearInterval(s.frameLoop);
+  if (s.housekeepLoop) { clearInterval(s.housekeepLoop); s.housekeepLoop = null; }
+  await stopScreencast(profileId).catch(() => {});
   if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}
   // Save cookies before closing so the next open restores the latest session state.
   // Skipped by clearSession / wipeEbSession which deliberately discard cookies.
