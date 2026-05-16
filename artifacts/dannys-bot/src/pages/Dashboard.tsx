@@ -54,6 +54,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.330",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Clicking Verify Account no longer immediately goes red. If the embedded browser is already logged in, Verify now correctly detects that and proceeds straight to the cookie handover — it no longer falsely reports 'account locked' when a previous challenge flag was left over from an earlier session." },
+      { category: "Fix", text: "Clicking inside the embedded browser (menus, links, etc.) no longer causes a flash followed by the browser crashing and showing a Retry button. The crash detector was firing too eagerly right after a click because a static page sends no screen frames — giving the impression Chrome had frozen. It now waits at least 10 seconds after any interaction before checking, giving Chrome time to respond." },
+    ],
+  },
+  {
     version: "1.0.329",
     date: "16 May 2026",
     items: [

@@ -1177,12 +1177,20 @@ function startHousekeepLoop(profileId: number): void {
 
     // ── Crash detector ─────────────────────────────────────────────────────
     // If the screencast session is open but Chrome hasn't sent any frame
-    // for 30+ seconds while the user has been active (interacting in the
-    // last 60 s), the renderer has likely crashed or the proxy has frozen
-    // the TCP tunnel. Close the session so the user can reopen cleanly.
+    // for 30+ seconds while the user has been active, the renderer has
+    // likely crashed or the proxy has frozen the TCP tunnel.
+    //
+    // IMPORTANT: we only fire if the user was active between 10 s and 60 s
+    // ago — NOT within the last 10 s.  When a page is static Chrome does not
+    // push frames (nothing changed on screen), so lastScreencastFrameAt goes
+    // stale.  The moment the user clicks, touchActivity() resets lastActivityAt
+    // to now (idleMs → 0).  Without the 10 s lower-bound the detector would
+    // fire on the very next 5 s housekeep tick — before Chrome has had any
+    // chance to push a new frame in response to the click — killing a perfectly
+    // healthy session.
     if (s.screencastCdp) {
       const idleMs = Date.now() - s.lastActivityAt;
-      if (idleMs < 60000) {
+      if (idleMs > 10000 && idleMs < 60000) {
         const silentMs = Date.now() - s.lastScreencastFrameAt;
         if (silentMs > 30000 && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
           const crashUrl = (() => { try { return s.page.url(); } catch { return "unknown"; } })();
@@ -1776,21 +1784,11 @@ export async function browserAutoLogin(
     const currentUrl = s.page.url();
     sendStatus(profileId, `Current URL: ${currentUrl.slice(0, 80)}`);
 
-    // ── STOP: Security challenge already detected for this session ────────────
-    // The response interceptor sets session.challengeUrl the moment Instagram
-    // issues a redirect to update_risky_contactpoint / /challenge/ / /suspended.
-    // If that flag is set we must NOT clear cookies and re-submit credentials —
-    // that is exactly the hammering loop that caused Instagram to lock the account
-    // in the first place. Return a hard error so the verify route marks the account
-    // as locked/captcha and stops retrying automatically.
-    if (s.challengeUrl) {
-      const chalMsg = `Instagram has placed a security lock on this account. You must log in from a regular browser at instagram.com and complete the verification check shown there. Once done, click Clear in the embedded browser to start a fresh session.`;
-      sendStatus(profileId, `🔒 ${chalMsg}`);
-      return { ok: false, message: chalMsg };
-    }
-
     // If the browser is already on Instagram and NOT on the login page,
     // the session is valid — save cookies and return immediately.
+    // IMPORTANT: this check comes BEFORE the challengeUrl check so that a stale
+    // challengeUrl from a previous challenge (that the user already resolved in the
+    // EB) does not cause a false "account locked" when the account is in fact live.
     const onInstagram = currentUrl.includes("instagram.com") && !currentUrl.startsWith("chrome-error://");
     const onLoginPage = currentUrl.includes("accounts/login");
     if (onInstagram && !onLoginPage) {
@@ -1799,12 +1797,29 @@ export async function browserAutoLogin(
       // Check for a username input to detect that case before declaring "already logged in".
       const hasLoginForm = await s.page.$('input[name="username"], input[autocomplete="username"]').catch(() => null);
       if (!hasLoginForm) {
+        // Clear any stale challenge flag — the account is visibly logged in so
+        // whatever challenge existed has been resolved in the browser.
+        s.challengeUrl = undefined;
         await saveCookies(profileId, s.page);
         sendStatus(profileId, "✓ Already logged in — browser shows your account.");
         return { ok: true, message: "Already logged in" };
       }
       // Login form is visible at the home URL — treat as not logged in, fall through to fill it.
       sendStatus(profileId, "Login form detected — filling credentials…");
+    }
+
+    // ── STOP: Security challenge already detected for this session ────────────
+    // The response interceptor sets session.challengeUrl the moment Instagram
+    // issues a redirect to update_risky_contactpoint / /challenge/ / /suspended.
+    // If that flag is set we must NOT clear cookies and re-submit credentials —
+    // that is exactly the hammering loop that caused Instagram to lock the account
+    // in the first place. Return a hard error so the verify route marks the account
+    // as locked/captcha and stops retrying automatically.
+    // (Only reached here if the account is NOT already logged in — see check above.)
+    if (s.challengeUrl) {
+      const chalMsg = `Instagram has placed a security lock on this account. You must log in from a regular browser at instagram.com and complete the verification check shown there. Once done, click Clear in the embedded browser to start a fresh session.`;
+      sendStatus(profileId, `🔒 ${chalMsg}`);
+      return { ok: false, message: chalMsg };
     }
     if (!onLoginPage && !onInstagram) {
       // Wipe session/auth cookies from Chrome's jar BEFORE navigating to the
