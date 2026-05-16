@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile } from "@/hooks/use-profiles";
@@ -148,6 +149,8 @@ export function ProfilesPage() {
   };
   const [manageProfileColsOpen, setManageProfileColsOpen] = useState(false);
   const manageProfileColsRef = useRef<HTMLDivElement>(null);
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
+  useScrollRestore("profiles", scrollBodyRef);
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const isDragSelecting = useRef(false);
@@ -798,7 +801,7 @@ export function ProfilesPage() {
           </div>
 
           {/* ── Scrollable body conditional content ────────────────────── */}
-          <div className="overflow-y-auto flex-1 min-h-0">
+          <div ref={scrollBodyRef} className="overflow-y-auto flex-1 min-h-0">
           {isLoading ? (
             <div className="divide-y divide-border/40">
               {[1,2,3,4,5].map(i => <div key={i} className="h-8 animate-pulse bg-muted/30" />)}

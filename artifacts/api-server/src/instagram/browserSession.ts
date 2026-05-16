@@ -985,6 +985,10 @@ export function detachWS(profileId: number, ws: WebSocket) {
   if (session.frameLoop) { clearInterval(session.frameLoop); session.frameLoop = null; }
   if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
   stopScreencast(profileId).catch(() => {});
+  // Kill Chrome when the panel disconnects — prevents zombie Chrome processes
+  // building up when the user opens many EBs then closes the panels without
+  // clicking the Close button. Re-opening the panel relaunches Chrome fresh.
+  closeSession(profileId).catch(() => {});
 }
 
 export function attachWS(profileId: number, ws: WebSocket) {

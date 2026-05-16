@@ -1116,13 +1116,68 @@ export async function registerInstagramRoutes(
       profile.password,
       profile.twoFASecretKey || "",
     )
-      .then(async result => {
-        sendLoginDone(profileId, result.ok, result.message);
-        // This standalone browser-login route is for MANUAL browser use.
-        // Account status is set by the /verify route (EB-first flow) which
-        // also extracts and hands cookies to the API after login succeeds.
+      .then(async loginResult => {
+        if (!loginResult.ok) {
+          sendLoginDone(profileId, false, loginResult.message);
+          // Classify the failure and persist status
+          const msg = loginResult.message ?? "";
+          let accountStatus = "locked";
+          if (/2fa|two.factor|two_factor/i.test(msg))  accountStatus = "2fa_verification";
+          else if (/challenge|checkpoint/i.test(msg))   accountStatus = "captcha";
+          else if (/disabled/i.test(msg))               accountStatus = "account_disabled";
+          else if (/suspended/i.test(msg))              accountStatus = "suspended";
+          await storage.updateProfile(profileId, { accountStatus }).catch(() => {});
+          return;
+        }
+
+        // Jarvee two-stage handshake: extract EB cookies, run mobile API verify
+        const rawCookies = await getSessionPageCookies(profileId);
+        const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
+        const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
+        const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;
+        const mid       = rawCookies.find(c => c.name === "mid")?.value;
+        const igDid     = rawCookies.find(c => c.name === "ig_did")?.value;
+
+        if (!sessionid) {
+          sendLoginDone(profileId, false, `@${profile.username} — login appeared to succeed but no sessionid cookie was found. Try again.`);
+          await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
+          return;
+        }
+
+        const cookieParts = [`sessionid=${sessionid}`];
+        if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
+        if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
+        if (mid)       cookieParts.push(`mid=${mid}`);
+        if (igDid)     cookieParts.push(`ig_did=${igDid}`);
+        const freshCookies = cookieParts.join("; ");
+
+        await storage.updateProfile(profileId, { igApiCookies: freshCookies }).catch(() => {});
+
+        const freshProfile = await storage.getProfile(profileId);
+        if (!freshProfile) {
+          sendLoginDone(profileId, false, "Profile not found after login");
+          return;
+        }
+        const profileWithCookies = { ...freshProfile, igApiCookies: freshCookies } as typeof freshProfile;
+
+        let apiResult: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
+        try {
+          apiResult = await verifyInstagramCredentials(profileWithCookies);
+        } catch (err: any) {
+          sendLoginDone(profileId, false, `@${profile.username} — mobile API check failed: ${err?.message ?? "unknown error"}`);
+          await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
+          return;
+        }
+
+        sendLoginDone(profileId, apiResult.ok, apiResult.message);
+        await storage.updateProfile(profileId, {
+          accountStatus: apiResult.accountStatus,
+          ...(apiResult.ok ? { credentialsDirty: false } : {}),
+          ...(apiResult.igDeviceState ? { igDeviceState: apiResult.igDeviceState } : {}),
+          ...("igApiCookies" in apiResult && apiResult.igApiCookies ? { igApiCookies: apiResult.igApiCookies } : {}),
+        }).catch(() => {});
       })
-      .catch(err  => sendLoginDone(profileId, false, String(err)));
+      .catch(err => sendLoginDone(profileId, false, String(err)));
   });
 
   // Close Chrome without wiping cookies — called when user dismisses the browser window

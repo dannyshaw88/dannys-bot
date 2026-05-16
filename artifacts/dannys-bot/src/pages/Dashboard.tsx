@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, X, RefreshCw, Settings2, Upload,
+  Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, X, RefreshCw, Settings2, Upload, Download,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
@@ -53,6 +54,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.339",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Opening a browser for an account that already has one open now brings that window to focus instead of launching a second one — one browser window per account at a time." },
+      { category: "Fix", text: "After logging in via the embedded browser, the account status now immediately updates to its real value (Valid, Captcha, 2FA, etc.) without needing to also click Verify Account." },
+      { category: "Fix", text: "The debug log panel no longer pops open automatically when you click the Login button inside the embedded browser — it stays hidden unless you press F12." },
+      { category: "Fix", text: "Chrome processes left running in the background after closing an embedded browser panel are now properly shut down, preventing phantom Chrome instances from accumulating in Task Manager." },
+      { category: "New", text: "Activity log on the Dashboard now has an Export CSV button so you can download a copy of the filtered log." },
+      { category: "New", text: "Accounts, Dashboard, and Statistics pages now restore your scroll position when you navigate back to them." },
+    ],
+  },
   {
     version: "1.0.338",
     date: "16 May 2026",
@@ -987,6 +1000,7 @@ type FeedItem = {
 type LastImport = { ts: number; fileName: string; created: number; updated: number; failed: number; total: number };
 
 export function Dashboard() {
+  useScrollRestore("dashboard");
   const [lastImport, setLastImport] = useState<LastImport | null>(() => {
     try { return JSON.parse(localStorage.getItem("equinox_last_import") ?? "null"); } catch { return null; }
   });
@@ -1210,6 +1224,45 @@ export function Dashboard() {
     };
     return [...filteredFeed, importItem].sort((a, b) => b.ts - a.ts);
   })();
+
+  const exportCsv = useCallback(() => {
+    const headers = colOrder.map(k => COL_LABELS[k]);
+    const rows = displayFeed.map(item => {
+      if (item.kind === "import") {
+        const imp = item.importData!;
+        return colOrder.map(col => {
+          if (col === "account") return "Import";
+          if (col === "event") return "Profile Import";
+          if (col === "target") return imp.fileName;
+          if (col === "detail") return `${imp.created} created, ${imp.updated} updated, ${imp.failed} failed`;
+          return format(new Date(imp.ts), "yyyy-MM-dd HH:mm:ss");
+        });
+      }
+      const label = getUsername(item.profileId, item.profileLabel);
+      return colOrder.map(col => {
+        if (col === "account") return label;
+        if (col === "event") {
+          if (item.kind === "api") return (item.operationName ?? "").replace(/_/g, " ");
+          const style = ACTION_STYLES[item.action ?? ""];
+          return style ? style.label : (item.action ?? "").replace(/_/g, " ");
+        }
+        if (col === "target") return item.targetUsername ? `@${item.targetUsername}` : "";
+        if (col === "detail") return item.kind === "api" ? (item.message ?? "") : (item.detail ?? "");
+        return format(new Date(item.ts), "yyyy-MM-dd HH:mm:ss");
+      });
+    });
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [headers.map(escape).join(","), ...rows.map(r => r.map(escape).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const ts = format(new Date(), "yyyy-MM-dd_HH-mm");
+    const suffix = selectedProfileId != null ? `_${selectedProfile?.username ?? selectedProfileId}` : "";
+    a.download = `equinox-activity${suffix}_${ts}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [displayFeed, colOrder, getUsername, selectedProfileId, selectedProfile]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1569,6 +1622,23 @@ export function Dashboard() {
             </div>
           )}
         </CardContent>
+
+        {activeTab === "api-log" && (
+          <div className="flex items-center justify-between px-4 py-2 border-t border-border/40 bg-muted/20 rounded-b-xl">
+            <span className="text-xs text-muted-foreground">
+              {displayFeed.length.toLocaleString()} {displayFeed.length === 1 ? "row" : "rows"}
+              {(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}
+            </span>
+            <button
+              onClick={exportCsv}
+              disabled={displayFeed.length === 0}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-accent/30 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+          </div>
+        )}
       </Card>
     </AppLayout>
   );

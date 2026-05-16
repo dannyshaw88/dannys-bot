@@ -16,6 +16,7 @@ let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let splashWin: BrowserWindow | null = null;
+const ebWindows = new Map<number, BrowserWindow>();
 let splashIconDataUrl = "";
 
 function findFreePort(): Promise<number> {
@@ -685,6 +686,15 @@ function setupBackupHandlers() {
   // Also called by current builds as a fallback — whichever path fires first wins.
   ipcMain.handle("open-browser-window", (_event, { profileId, username }: any) => {
     if (!serverPort || !profileId) return;
+
+    // Enforce 1 EB window per account — focus the existing window if already open
+    const existing = ebWindows.get(profileId);
+    if (existing && !existing.isDestroyed()) {
+      if (existing.isMinimized()) existing.restore();
+      existing.focus();
+      return;
+    }
+
     const child = new BrowserWindow({
       width: 1280,
       height: 800,
@@ -698,6 +708,8 @@ function setupBackupHandlers() {
         preload: path.join(__dirname, "preload.js"),
       },
     });
+    ebWindows.set(profileId, child);
+    child.on("closed", () => ebWindows.delete(profileId));
     child.loadURL(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
     child.once("ready-to-show", () => {
       child.maximize();

@@ -217,6 +217,7 @@ class AutomationEngine {
   private cookieBakerStates    = new Map<number, CookieBakerState>(); // cookie baker runners
   private cookieBakerForceRun  = new Set<number>();               // trigger immediate run
   private cookieBakerActivity  = new Map<number, CookieBakerSessionActivity[]>(); // last sessions per profile
+  private cookieBakerRunning   = 0; // count of headless Chrome instances currently active
   private syncTimers           = new Map<number, number>();       // profileId → nextSyncAt (ms)
   private ownUserIdCache       = new Map<number, string>();       // profileId → Instagram pk (HikerAPI, resolved once)
   private contactForceRun      = new Set<number>();               // profileIds to run contact send immediately
@@ -3527,9 +3528,12 @@ class AutomationEngine {
 
   // ── Cookie baker: launch background loop ─────────────────────────────────
   private launchCookieBaker(profile: Profile) {
-    const state: CookieBakerState = { stop: { stopped: false }, nextRunAt: 0 };
+    // Stagger first run: spread accounts over the first 15 minutes so they
+    // don't all spawn Chrome simultaneously right after startup.
+    const staggerMs = Math.floor(Math.random() * 15 * 60_000);
+    const state: CookieBakerState = { stop: { stopped: false }, nextRunAt: Date.now() + staggerMs };
     this.cookieBakerStates.set(profile.id, state);
-    console.log(`[cookie-baker] Launching baker for @${profile.username}`);
+    console.log(`[cookie-baker] Scheduling baker for @${profile.username} (first run in ${Math.round(staggerMs / 60000)}min)`);
 
     const loop = async () => {
       while (!state.stop.stopped) {
@@ -3640,6 +3644,16 @@ class AutomationEngine {
 
     // ── Strategy 2: launch a dedicated headless browser ──────────────────────
     if (!bakePage) {
+      // Concurrency gate: cap simultaneous headless Chrome instances at 3.
+      // Without this, all N accounts fire at startup and spawn N Chrome processes.
+      const MAX_CONCURRENT = 3;
+      while (this.cookieBakerRunning >= MAX_CONCURRENT) {
+        if (state.stop.stopped) return;
+        await new Promise(r => setTimeout(r, 10_000));
+      }
+      if (state.stop.stopped) return;
+      this.cookieBakerRunning++;
+
       let puppeteerLib: any;
       try {
         puppeteerLib = (await import("puppeteer-core")).default;
@@ -3685,6 +3699,7 @@ class AutomationEngine {
         const errMsg = `Browser failed to launch: ${launchErr?.message ?? "unknown error"}`;
         console.error(`[cookie-baker] @${profile.username}: ${errMsg}`);
         if (headlessBrowser) await headlessBrowser.close().catch(() => {});
+        this.cookieBakerRunning = Math.max(0, this.cookieBakerRunning - 1);
         await this._saveCookieBakerActivity(profile.id, { sessionAt: Date.now(), sites: [], error: errMsg });
         return;
       }
@@ -3765,6 +3780,7 @@ class AutomationEngine {
         await bakePage.close().catch(() => {});
       } else if (headlessBrowser) {
         await headlessBrowser.close().catch(() => {});
+        this.cookieBakerRunning = Math.max(0, this.cookieBakerRunning - 1);
       }
     }
     console.log(`[cookie-baker] @${profile.username}: session complete`);

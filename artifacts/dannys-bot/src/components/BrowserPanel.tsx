@@ -608,7 +608,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     }
     setLoginLog([]);
     setLoginState("running");
-    setShowLog(true);
     setLogTab("login");
     appendLog("Starting auto-login…", "step");
     fetch(`/api/browser/${profileId}/login`, { method: "POST" }).catch(() => {

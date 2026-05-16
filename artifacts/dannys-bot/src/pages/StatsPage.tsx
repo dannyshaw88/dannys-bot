@@ -1,4 +1,5 @@
 import { useRef, useState, useMemo, useEffect } from "react";
+import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -125,6 +126,7 @@ function ProfileStatsRow({
 }
 
 export function StatsPage() {
+  useScrollRestore("stats");
   const { data: profiles, isLoading } = useProfiles();
   const [, setLocation] = useLocation();
   const { openWindow } = useBrowserWindows();
