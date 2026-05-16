@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.348",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Accounts stuck on the 'This page isn't working' error now show Instagram's actual verification page in the embedded browser so you can complete the check directly." },
+      { category: "Fix", text: "Account verification no longer breaks when re-verifying an account that previously had a challenge — the stale challenge state is now cleared at the start of each new attempt." },
+    ],
+  },
+  {
     version: "1.0.347",
     date: "16 May 2026",
     items: [
