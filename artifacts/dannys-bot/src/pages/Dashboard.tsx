@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.349",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser no longer constantly disconnects and shows 'Browser Disconnected — Reconnecting' every few seconds — Chrome now stays alive across brief connection drops and reconnects instantly." },
+    ],
+  },
+  {
     version: "1.0.348",
     date: "16 May 2026",
     items: [

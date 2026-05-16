@@ -1,5 +1,6 @@
 import type { Browser, Page } from "puppeteer";
 import type { ServerResponse } from "http";
+import https from "https";
 import WebSocket from "ws";
 import { generateTotp } from "./totp";
 import fs from "fs";
@@ -314,6 +315,8 @@ interface Session {
   // without clearing cookies or re-submitting credentials, preventing the hammering
   // loop that causes Instagram to deepen the security lock on every retry.
   challengeUrl?: string;
+  // Set to true after one manual CDP redirect-follow attempt so we don't loop.
+  challengeManualFollowAttempted?: boolean;
   // ms timestamp of the last user input (click, scroll, key, mousemove, navigate).
   lastActivityAt: number;
 }
@@ -851,35 +854,44 @@ export async function getOrCreateSession(
     if (url.includes("instagram.com") || url.startsWith("chrome-error")) {
       log(`[reqfail:${profileId}] ${err} — ${url.slice(0, 120)}`, "browser");
     }
-    // When ERR_TOO_MANY_REDIRECTS fires and we have a captured challenge URL,
-    // navigate directly to it AFTER clearing session cookies. The stale sessionid
-    // in Chrome's jar is what causes the challenge page itself to loop — removing it
-    // lets Instagram serve the challenge fresh (exactly like a clean mobile browser).
-    // Do NOT navigate to accounts/login — that immediately re-triggers the challenge
-    // redirect, looping forever.
-    // Do NOT clear challengeUrl — autoLogin reads it at start of next verify attempt.
+    // When ERR_TOO_MANY_REDIRECTS fires for a challenge account, Chrome hit its
+    // 20-redirect hard limit.  The challenge URL (update_risky_contactpoint) keeps
+    // redirecting to itself with a fresh challenge_context token on every hop.
+    // Fix: use CDP Fetch interception to follow each hop as an independent goto(),
+    // resetting Chrome's internal counter on every hop so we can follow as many
+    // hops as needed.  Only attempt this once per session; if it fails, park.
     const sc = sessions.get(profileId);
     if (err === "net::ERR_TOO_MANY_REDIRECTS" && sc?.challengeUrl) {
-      const dest = sc.challengeUrl;
-      log(`[challenge:${profileId}] ERR_TOO_MANY_REDIRECTS — clearing session cookies then loading challenge page`, "browser");
-      sendStatus(profileId, `⚠ Instagram is asking you to verify this account. Loading the verification page now — complete the check shown in the browser window.`);
-      sc.navProtectedUntil = Date.now() + 30000;
-      (async () => {
-        const sNow = sessions.get(profileId);
-        if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
-        const DEVICE = new Set(["mid", "ig_did", "ig_nrcb"]);
-        try {
-          const all: any[] = await (sNow.page as any).cookies(
-            "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com",
-          ).catch(() => []);
-          const device = all.filter(c => DEVICE.has(c.name));
-          const session = all.filter(c => !DEVICE.has(c.name));
-          if (session.length) await (sNow.page as any).deleteCookie(...session).catch(() => null);
-          if (device.length) await (sNow.page as any).setCookie(...device).catch(() => null);
-          log(`[challenge:${profileId}] Cleared ${session.length} session cookies before challenge nav (kept: ${device.map((c: any) => c.name).join(", ") || "none"})`, "browser");
-        } catch {}
-        await sNow.page.goto(dest, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null);
-      })();
+      if (sc.challengeManualFollowAttempted) {
+        // Already tried — leave Chrome on chrome-error; the housekeep keepalive
+        // will restart the screencast every 50 s so the frozen overlay never fires.
+        sc.navProtectedUntil = Date.now() + 3600_000;
+        log(`[challenge:${profileId}] manual redirect-follow already attempted, leaving parked on chrome-error.`, "browser");
+        sendStatus(profileId, `⚠ Instagram verification page could not load. Open this link in your own browser: ${sc.challengeUrl}`);
+        return;
+      }
+      sc.challengeManualFollowAttempted = true;
+      sc.navProtectedUntil = Date.now() + 120_000; // block other handlers while we work
+      log(`[challenge:${profileId}] ERR_TOO_MANY_REDIRECTS — starting manual CDP redirect-follow from: ${sc.challengeUrl.slice(0, 100)}`, "browser");
+      sendStatus(profileId, `⚠ Instagram verification required. Attempting to load the challenge page…`);
+      followChallengeRedirects(profileId, page, sc.challengeUrl).then(ok => {
+        const s2 = sessions.get(profileId);
+        if (!s2) return;
+        if (ok) {
+          s2.navProtectedUntil = Date.now() + 30_000;
+          log(`[challenge:${profileId}] challenge page loaded successfully via manual redirect-follow`, "browser");
+          sendStatus(profileId, `⚠ Instagram verification required. Complete the check shown in the browser window.`);
+        } else {
+          s2.navProtectedUntil = Date.now() + 3600_000;
+          log(`[challenge:${profileId}] manual redirect-follow failed — leaving parked on chrome-error (keepalive will restart screencast)`, "browser");
+          sendStatus(profileId, `⚠ Instagram requires verification for this account. Open this link in your browser to complete it: ${s2.challengeUrl} — After finishing the check, click Clear EB Session here to reset and log back in.`);
+        }
+      }).catch(() => {
+        const s2 = sessions.get(profileId);
+        if (s2) {
+          s2.navProtectedUntil = Date.now() + 3600_000;
+        }
+      });
     }
   });
 
@@ -986,13 +998,16 @@ export async function getOrCreateSession(
   // on the very first navigation. We use CDP to delete them now — before loadCookies
   // writes our known-good cookies — so Chrome starts from a clean slate.
   //
-  // CRITICAL — preserve device-identity cookies (mid, ig_did, ig_nrcb).
+  // CRITICAL — preserve device-identity cookies (mid, ig_did, ig_nrcb, datr).
   // These are Instagram's persistent Machine ID / Device ID tokens. Deleting them
   // causes Instagram to assign new device IDs on the next request and fire
   // "Unrecognized device" security alerts. loadCookies() will restore them from
   // the saved JSON file immediately after, but we preserve them here as
   // defence-in-depth in case the JSON is absent or stale.
-  const DEVICE_COOKIE_NAMES_SET = new Set(["mid", "ig_did", "ig_nrcb"]);
+  // datr = Facebook/Instagram "device attribute token" — purging it causes the
+  // update_risky_contactpoint challenge to redirect in an infinite loop because
+  // Instagram cannot associate the challenge session with a known device.
+  const DEVICE_COOKIE_NAMES_SET = new Set(["mid", "ig_did", "ig_nrcb", "datr"]);
   try {
     const staleCookies: any[] = await (page as any).cookies(
       "https://www.instagram.com",
@@ -1046,15 +1061,29 @@ export function detachWS(profileId: number, ws: WebSocket) {
   if (session.frameLoop) { clearInterval(session.frameLoop); session.frameLoop = null; }
   if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
   stopScreencast(profileId).catch(() => {});
-  // Kill Chrome when the panel disconnects — prevents zombie Chrome processes
-  // building up when the user opens many EBs then closes the panels without
-  // clicking the Close button. Re-opening the panel relaunches Chrome fresh.
-  closeSession(profileId).catch(() => {});
+  // Grace period: give the client 10 s to reconnect before killing Chrome.
+  // Normal drops (network blips, Replit proxy resets, HMR updates) reconnect
+  // within 3 s and reuse the live Chrome session — no relaunch needed.
+  // If nothing reconnects after 10 s the user has closed the panel, so we
+  // kill Chrome then to prevent zombie processes.
+  if ((session as any)._detachTimer) clearTimeout((session as any)._detachTimer);
+  (session as any)._detachTimer = setTimeout(() => {
+    const s = sessions.get(profileId);
+    if (!s || s.ws) return; // new WS connected — leave Chrome alive
+    closeSession(profileId).catch(() => {});
+  }, 10000);
 }
 
 export function attachWS(profileId: number, ws: WebSocket) {
   const session = sessions.get(profileId);
   if (!session) return;
+
+  // Cancel any pending Chrome-kill timer from a previous detachWS — the client
+  // reconnected within the grace window, so Chrome stays alive.
+  if ((session as any)._detachTimer) {
+    clearTimeout((session as any)._detachTimer);
+    (session as any)._detachTimer = null;
+  }
 
   // Close any existing WebSocket connection for this profile
   if (session.ws && session.ws.readyState === WebSocket.OPEN) {
@@ -1084,20 +1113,29 @@ export function attachWS(profileId: number, ws: WebSocket) {
         log(`[attachSSE:${profileId}] initial navigation → ${target}`, "browser");
         session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
       } else if (isBlankOrError) {
-        // Reconnect after crash/error — recover by checking cookies.
-        // IMPORTANT: page.cookies() with no args returns cookies for the CURRENT
-        // page domain only. On chrome-error:// that returns nothing, which would
-        // incorrectly send a just-logged-in account back to the login page.
-        // Use explicit domain fetch instead, and also honour lastLoginSuccessAt.
-        const igCookies = await session.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
-        const hasCookies = igCookies.some((c: any) => c.name === "sessionid");
-        const recentLogin = session.lastLoginSuccessAt ? (Date.now() - session.lastLoginSuccessAt) < 90000 : false;
-        const target = (hasCookies || recentLogin)
-          ? "https://www.instagram.com/"
-          : "https://www.instagram.com/accounts/login/";
-        session.navProtectedUntil = Date.now() + 15000;
-        log(`[attachSSE:${profileId}] page is "${currentUrl}" (error/blank) — recovering → ${target}`, "browser");
-        session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+        // If this account has an active Instagram challenge, do NOT navigate anywhere.
+        // Navigating to instagram.com/ triggers the challenge redirect loop again
+        // (ERR_TOO_MANY_REDIRECTS → chrome-error → attachWS → navigate → loop).
+        // Leave the browser parked on chrome-error; the status bar already shows
+        // the challenge URL for the user to open in their own browser.
+        if (session.challengeUrl) {
+          log(`[attachSSE:${profileId}] page is chrome-error but account has challenge — leaving parked, not navigating`, "browser");
+        } else {
+          // Reconnect after crash/error — recover by checking cookies.
+          // IMPORTANT: page.cookies() with no args returns cookies for the CURRENT
+          // page domain only. On chrome-error:// that returns nothing, which would
+          // incorrectly send a just-logged-in account back to the login page.
+          // Use explicit domain fetch instead, and also honour lastLoginSuccessAt.
+          const igCookies = await session.page.cookies("https://www.instagram.com").catch(() => [] as any[]);
+          const hasCookies = igCookies.some((c: any) => c.name === "sessionid");
+          const recentLogin = session.lastLoginSuccessAt ? (Date.now() - session.lastLoginSuccessAt) < 90000 : false;
+          const target = (hasCookies || recentLogin)
+            ? "https://www.instagram.com/"
+            : "https://www.instagram.com/accounts/login/";
+          session.navProtectedUntil = Date.now() + 15000;
+          log(`[attachSSE:${profileId}] page is "${currentUrl}" (error/blank) — recovering → ${target}`, "browser");
+          session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+        }
       }
       // else: user is actively browsing — leave them alone
     } catch { /* page may be closing — ignore */ }
@@ -1157,6 +1195,155 @@ export function scheduleAutoLogin(
 // if Node's event loop is saturated processing 5+ simultaneous startScreencast
 // round-trips, the ACKs for later frames arrive late → Chrome stalls → EB
 // appears frozen until the user closes one and the loop drains.
+// ── Manual challenge redirect follower ────────────────────────────────────────
+// Chrome enforces a hard 20-redirect limit per navigation.  Instagram's
+// update_risky_contactpoint challenge URL redirects to itself with a fresh
+// challenge_context token on every hop — more than 20 times before resolving.
+//
+// Approach: follow the redirect chain entirely on the Node.js side (server-side
+// HTTPS requests, no Chrome involvement) using the account's current IG cookies.
+// Once we find the terminal URL (200 response), navigate Chrome directly to it
+// with a single goto() — no redirect chain for Chrome to follow.
+//
+// Why server-side instead of CDP Fetch interception: after ERR_TOO_MANY_REDIRECTS,
+// Chrome's internal state makes createCDPSession() hang indefinitely on the same
+// page target, deadlocking the entire function.  Server-side HTTPS has no such
+// issue.
+function _httpGetOneHop(
+  url: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; location?: string; setCookies: string[] }> {
+  return new Promise((resolve, reject) => {
+    let urlObj: URL;
+    try { urlObj = new URL(url); } catch (e) { return reject(e); }
+
+    const req = https.request(
+      {
+        method: "GET",
+        hostname: urlObj.hostname,
+        port: 443,
+        path: urlObj.pathname + urlObj.search,
+        headers,
+        rejectUnauthorized: false,
+        // Instagram accumulates large Set-Cookie chains across many redirect
+        // hops; 16 KB default overflows around hop 24.  128 KB gives plenty
+        // of room for 80+ hops.
+        maxHeaderSize: 131072,
+      },
+      (res) => {
+        // Drain the body so the socket is released
+        res.resume();
+        const loc = Array.isArray(res.headers.location)
+          ? res.headers.location[0]
+          : res.headers.location;
+        resolve({
+          status: res.statusCode ?? 0,
+          location: loc,
+          setCookies: (res.headers["set-cookie"] as string[] | undefined) ?? [],
+        });
+      },
+    );
+    req.on("error", reject);
+    req.setTimeout(12_000, () => {
+      req.destroy(new Error("_httpGetOneHop timed out"));
+    });
+    req.end();
+  });
+}
+
+
+async function followChallengeRedirects(
+  profileId: number,
+  page: Page,
+  startUrl: string,
+): Promise<boolean> {
+  const MAX_HOPS = 80;
+
+  try {
+    // Grab all current IG cookies from Chrome for this account
+    const rawCookies = await page
+      .cookies("https://www.instagram.com")
+      .catch(() => [] as any[]);
+
+    // Build cookie string and a mutable cookie map so Set-Cookie headers
+    // from each hop are accumulated and forwarded to the next hop.
+    const cookieMap = new Map<string, string>();
+    for (const c of rawCookies as any[]) {
+      cookieMap.set(c.name, c.value);
+    }
+
+    const makeHeaders = (): Record<string, string> => ({
+      Cookie: [...cookieMap.entries()].map(([k, v]) => `${k}=${v}`).join("; "),
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+      "X-IG-App-ID": "936619743392459",
+    });
+
+    let currentUrl = startUrl;
+
+    for (let hop = 1; hop <= MAX_HOPS; hop++) {
+      const result = await _httpGetOneHop(currentUrl, makeHeaders());
+
+      // Accumulate any Set-Cookie headers for subsequent hops
+      for (const sc of result.setCookies) {
+        const eqIdx = sc.indexOf("=");
+        if (eqIdx === -1) continue;
+        const name = sc.slice(0, eqIdx).trim();
+        const rest = sc.slice(eqIdx + 1);
+        const val = rest.split(";")[0].trim();
+        if (name) cookieMap.set(name, val);
+      }
+
+      log(
+        `[challenge:${profileId}] server hop ${hop}: HTTP ${result.status} → ${(result.location ?? "").slice(0, 100)}`,
+        "browser",
+      );
+
+      if (result.status >= 200 && result.status < 300) {
+        // Found the final page.  Navigate Chrome to it directly — no redirect
+        // chain for Chrome, so it won't hit the 20-hop limit.
+        log(
+          `[challenge:${profileId}] chain resolved in ${hop} hops — navigating Chrome to: ${currentUrl.slice(0, 100)}`,
+          "browser",
+        );
+        await page
+          .goto(currentUrl, { waitUntil: "domcontentloaded", timeout: 20_000 })
+          .catch(() => {});
+        return true;
+      }
+
+      if (result.status >= 300 && result.status < 400 && result.location) {
+        currentUrl = result.location.startsWith("http")
+          ? result.location
+          : `https://www.instagram.com${result.location}`;
+        continue;
+      }
+
+      log(
+        `[challenge:${profileId}] unexpected status ${result.status} on hop ${hop} — giving up`,
+        "browser",
+      );
+      return false;
+    }
+
+    log(
+      `[challenge:${profileId}] chain did not resolve in ${MAX_HOPS} hops — may be truly infinite`,
+      "browser",
+    );
+    return false;
+  } catch (err) {
+    log(`[challenge:${profileId}] followChallengeRedirects error: ${err}`, "browser");
+    return false;
+  }
+}
+
 // Serializing startScreencast calls (one at a time, with the event loop free
 // between them) prevents this starvation without any user-visible delay
 // (each startScreencast takes ~10–50 ms in practice).
@@ -1390,28 +1577,14 @@ function startHousekeepLoop(profileId: number): void {
           const msSinceLogin = s.lastLoginSuccessAt ? Date.now() - s.lastLoginSuccessAt : Infinity;
           if (msSinceLogin > 90000) {
             if (s.challengeUrl) {
-              // chrome-error:// is ERR_TOO_MANY_REDIRECTS from the challenge redirect
-              // loop. Clear session cookies (keep device tokens) then navigate to the
-              // actual challenge page so the user can complete the verification.
-              const dest = s.challengeUrl;
-              log(`[housekeep:${profileId}] chrome-error on challenge account — clearing session cookies then loading challenge page`, "browser");
-              s.navProtectedUntil = Date.now() + 30000;
-              (async () => {
-                const sNow = sessions.get(profileId);
-                if (!sNow) return;
-                const DEVICE = new Set(["mid", "ig_did", "ig_nrcb"]);
-                try {
-                  const all: any[] = await (sNow.page as any).cookies(
-                    "https://www.instagram.com", "https://i.instagram.com", "https://instagram.com",
-                  ).catch(() => []);
-                  const device = all.filter(c => DEVICE.has(c.name));
-                  const session = all.filter(c => !DEVICE.has(c.name));
-                  if (session.length) await (sNow.page as any).deleteCookie(...session).catch(() => null);
-                  if (device.length) await (sNow.page as any).setCookie(...device).catch(() => null);
-                  log(`[housekeep:${profileId}] Cleared ${session.length} session cookies before challenge nav (kept: ${device.map((c: any) => c.name).join(", ") || "none"})`, "browser");
-                } catch {}
-                await sNow.page.goto(dest, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null);
-              })();
+              // The challenge URL loops indefinitely in Chrome — never navigate back
+              // to Instagram.  BUT chrome-error:// sends no screencast frames after
+              // the first one, which triggers the "Browser appears frozen" overlay.
+              // Parking on about:blank keeps the screencast alive without triggering
+              // the challenge redirect loop again.
+              // Chrome stays on chrome-error; the keepalive block below restarts
+              // the screencast every 50 s so the frozen overlay never fires.
+              log(`[housekeep:${profileId}] challenge account on error/blank page — leaving parked`, "browser");
             } else {
               log(`[housekeep:${profileId}] error page detected (${url.slice(0, 60)}) — recovering to login (cookies preserved)`, "browser");
               s.navProtectedUntil = Date.now() + 20000;
@@ -1431,6 +1604,22 @@ function startHousekeepLoop(profileId: number): void {
             storage.updateProfile(profileId, { accountStatus: detectedStatus }).catch(() => {});
           }
         }
+      }
+    }
+
+    // ── Challenge-account screencast keepalive ─────────────────────────────
+    // chrome-error:// sends one frame on startup then goes silent.  For accounts
+    // parked there because of an Instagram challenge, we restart the screencast
+    // every 50 s so Chrome delivers a fresh frame.  This resets the client's
+    // stale-frame timer (60 s threshold) before it can fire the "Browser appears
+    // frozen" overlay — no navigation needed, WS stays stable.
+    if (s.challengeUrl && s.screencastCdp) {
+      const silentMsKeepalive = Date.now() - s.lastScreencastFrameAt;
+      if (silentMsKeepalive > 50000) {
+        log(`[housekeep:${profileId}] challenge keepalive — restarting screencast (silent ${Math.round(silentMsKeepalive / 1000)}s)`, "browser");
+        stopScreencast(profileId).catch(() => {}).finally(() => {
+          startScreencast(profileId).catch(() => {});
+        });
       }
     }
 
@@ -1458,11 +1647,13 @@ function startHousekeepLoop(profileId: number): void {
     //   • 60+ s have passed since the last screencast frame (clearly no activity)
     //   • Not mid-login and not mid-nav-protected window
     //   • No concurrent ping already in progress
+    //   • Account is NOT in a parked challenge state (keepalive handles those)
     if (s.screencastCdp && !(s as any)._crashPingInProgress) {
       const idleMs   = Date.now() - s.lastActivityAt;
       const silentMs = Date.now() - s.lastScreencastFrameAt;
       if (idleMs > 30000 && idleMs < 120000 && silentMs > 60000
-          && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)) {
+          && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)
+          && !s.challengeUrl) {
         (s as any)._crashPingInProgress = true;
         // Ping via the main page session — completely independent of screencastCdp.
         // Use 15 s timeout: with 4+ Chrome instances the Node.js event loop is busy
@@ -2087,11 +2278,16 @@ export async function browserAutoLogin(
 ): Promise<{ ok: boolean; message: string }> {
   const s = sessions.get(profileId);
   if (!s) return { ok: false, message: "No active browser session" };
-  // Clear any stale challengeUrl from a previous attempt BEFORE doing anything else.
-  // If this is left set, the requestfailed + housekeep handlers misidentify any
-  // ERR_TOO_MANY_REDIRECTS during normal login (stale cookies) as a challenge loop,
-  // clear the fresh cookies they just wrote, and navigate away — breaking verify.
-  s.challengeUrl = undefined;
+  // If a challenge was detected in THIS session, bail immediately — do not
+  // navigate anywhere or retry credentials. The update_risky_contactpoint URL
+  // cannot be loaded in the embedded browser (20-redirect loop). Further attempts
+  // only deepen the account lock. The user must resolve the challenge in their
+  // own browser, then press Clear to start a fresh session.
+  if (s.challengeUrl) {
+    const chalMsg = `Instagram has placed a security lock on this account. Open this link in your own browser to complete the verification: ${s.challengeUrl}`;
+    sendStatus(profileId, `🔒 ${chalMsg}`);
+    return { ok: false, message: chalMsg };
+  }
 
   // Capture the session's unique token. If the user presses Clear while this
   // login is running, clearSession replaces the entry in the sessions map with a
@@ -2179,12 +2375,15 @@ export async function browserAutoLogin(
       // accounts/login/ — Instagram redirects to home, home bounces back to login,
       // and the loop never breaks.
       //
-      // CRITICAL — preserve device-identity cookies (mid, ig_did, ig_nrcb).
+      // CRITICAL — preserve device-identity cookies (mid, ig_did, ig_nrcb, datr).
       // These are Instagram's persistent Machine ID / Device ID tokens. If we
       // delete them, Instagram generates brand-new ones during login and fires an
       // "Unrecognized device" security notification to the account owner. Only
       // clear the session/auth cookies; keep the device tokens intact.
-      const DEVICE_COOKIE_NAMES = new Set(["mid", "ig_did", "ig_nrcb"]);
+      // datr = Facebook/Instagram "device attribute token" — purging it causes
+      // update_risky_contactpoint to infinite-redirect (Instagram can't match the
+      // challenge session to a known device without it).
+      const DEVICE_COOKIE_NAMES = new Set(["mid", "ig_did", "ig_nrcb", "datr"]);
       try {
         const allIgCookies: any[] = await (s.page as any).cookies(
           "https://www.instagram.com",
