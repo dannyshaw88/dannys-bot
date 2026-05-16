@@ -1133,6 +1133,18 @@ export function scheduleAutoLogin(
 // With separate sessions Chrome processes them truly in parallel — a slow or
 // large JPEG frame on the screencast session never delays an input command on
 // the main session.
+// Global serialization queue for Page.startScreencast calls.
+// When multiple EBs open simultaneously, all their startScreencast calls would
+// race to send CDP messages to Chrome at the same instant. Chrome uses a
+// back-pressure protocol (sends frame → waits for ACK before next frame), so
+// if Node's event loop is saturated processing 5+ simultaneous startScreencast
+// round-trips, the ACKs for later frames arrive late → Chrome stalls → EB
+// appears frozen until the user closes one and the loop drains.
+// Serializing startScreencast calls (one at a time, with the event loop free
+// between them) prevents this starvation without any user-visible delay
+// (each startScreencast takes ~10–50 ms in practice).
+let _screencastStartQueue: Promise<void> = Promise.resolve();
+
 async function startScreencast(profileId: number): Promise<void> {
   const session = sessions.get(profileId);
   if (!session || !session.ws || session.ws.readyState !== WebSocket.OPEN) return;
@@ -1166,9 +1178,15 @@ async function startScreencast(profileId: number): Promise<void> {
   }
   session.screencastCdp = cdp;
 
-  // Adaptive JPEG quality: reduce quality (and therefore frame size / encoding
-  // cost) as more sessions compete for CPU and bandwidth.
-  const quality = nSessions <= 2 ? 65 : nSessions <= 5 ? 55 : 45;
+  // Adaptive JPEG quality + frame rate: scale both down as session count grows.
+  // everyNthFrame starts at 2 for 2+ sessions — Chrome only needs to send ~15 fps
+  // to look smooth, and halving the frame rate at session 2 keeps the Node.js
+  // event loop from being flooded with ACK cycles when multiple EBs are active.
+  const quality  = nSessions <= 1 ? 65 : nSessions <= 2 ? 60 : nSessions <= 4 ? 55 : 45;
+  // nth=1 → every frame (max ~30 fps). nth=2 → ~15 fps. nth=3 → ~10 fps, etc.
+  // Scale aggressively: at 5 sessions each Chrome only fires every 5th compositor
+  // frame, keeping combined event-loop load roughly constant regardless of count.
+  const nthFrame = Math.min(Math.max(nSessions, 1), 6);
 
   // CRITICAL: Register the frame handler BEFORE sending Page.startScreencast.
   // Chrome's screencast uses a back-pressure protocol — it sends the first frame
@@ -1210,29 +1228,40 @@ async function startScreencast(profileId: number): Promise<void> {
     }
   });
 
-  try {
-    // Send fewer frames per second as session count grows — each frame is a JPEG
-    // encode + CDP round-trip on Chromium's compositor thread. Sending every frame
-    // (everyNthFrame=1, ~30 fps) across 10+ simultaneous EBs saturates the CPU and
-    // causes the compositor to stall, which stops frame delivery entirely.
-    // Throttle to ~15 fps at 6-10 sessions, ~10 fps at 11-20, ~7 fps at 21+.
-    const nthFrame = nSessions <= 5 ? 1 : nSessions <= 10 ? 2 : nSessions <= 20 ? 3 : 4;
-
+  // Serialize the Page.startScreencast CDP call through a global queue.
+  // Without this, opening 5+ EBs simultaneously fires all startScreencast
+  // calls at once. Chrome's back-pressure ACK protocol means Node must process
+  // each ACK before Chrome sends the next frame — but if the event loop is
+  // saturated servicing 5 simultaneous startScreencast round-trips, ACKs are
+  // delayed, Chrome stalls on frame delivery, and the EB appears frozen.
+  // Processing one startScreencast at a time (each takes ~10–50 ms) keeps the
+  // event loop free between calls so ACKs are processed promptly.
+  let startOk = true;
+  const prevQueue = _screencastStartQueue;
+  _screencastStartQueue = (async () => {
+    await prevQueue;
+    // Re-check session is still alive after waiting in queue
+    const sNow = sessions.get(profileId);
+    if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
     const t1 = Date.now();
-    await cdp.send("Page.startScreencast", {
-      format: "jpeg",
-      quality,
-      maxWidth: 1280,
-      maxHeight: 760,
-      everyNthFrame: nthFrame,
-    });
-    log(`[screencast:${profileId}] Page.startScreencast ACKed in ${Date.now() - t1}ms (quality=${quality} nth=${nthFrame} sessions=${nSessions})`, "browser");
-  } catch (e: any) {
-    log(`[screencast:${profileId}] Page.startScreencast FAILED: ${e?.message}`, "browser");
-    try { await cdp.detach(); } catch {}
-    session.screencastCdp = null;
-    return;
-  }
+    try {
+      await cdp.send("Page.startScreencast", {
+        format: "jpeg",
+        quality,
+        maxWidth: 1280,
+        maxHeight: 760,
+        everyNthFrame: nthFrame,
+      });
+      log(`[screencast:${profileId}] Page.startScreencast ACKed in ${Date.now() - t1}ms (quality=${quality} nth=${nthFrame} sessions=${nSessions})`, "browser");
+    } catch (e: any) {
+      log(`[screencast:${profileId}] Page.startScreencast FAILED: ${e?.message}`, "browser");
+      try { await cdp.detach(); } catch {}
+      sNow.screencastCdp = null;
+      startOk = false;
+    }
+  })();
+  await _screencastStartQueue;
+  if (!startOk) return;
 
   // Record when this screencast started — the watchdog below uses this to detect
   // a stalled compositor (Chrome acknowledged startScreencast but never sent a frame).

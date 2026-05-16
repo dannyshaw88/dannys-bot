@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.342",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Opening multiple embedded browsers at the same time no longer causes them to freeze — each browser now starts its live view in sequence instead of all competing for the same connection at once." },
+      { category: "Fix", text: "With 5 or more browsers open simultaneously, the frame rate per browser now scales down proportionally so the total load on the connection stays constant, keeping all browsers responsive." },
+    ],
+  },
+  {
     version: "1.0.341",
     date: "16 May 2026",
     items: [
