@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.345",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "When Instagram requires account verification, the embedded browser now clears the stale session before loading the challenge page — fixing the 'This page isn't working' / ERR_TOO_MANY_REDIRECTS loop that prevented the challenge from appearing." },
+    ],
+  },
+  {
     version: "1.0.344",
     date: "16 May 2026",
     items: [
