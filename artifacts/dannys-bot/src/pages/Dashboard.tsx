@@ -54,6 +54,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.338",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Status label corrected to 'Confirm Your Human' (was 'Confirm Human')." },
+    ],
+  },
+  {
     version: "1.0.337",
     date: "16 May 2026",
     items: [
