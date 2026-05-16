@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.340",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "The follow tool no longer keeps running if an account has a genuine error status (such as phone verification required, email confirmation, or session expired) — it now pauses correctly until the account is resolved." },
+      { category: "Fix", text: "Human session, unfollow, and DM tools now all correctly detect account-level errors (checkpoint, session expired, etc.) that bubble up from a session and update the account status immediately, stopping further runs." },
+      { category: "Fix", text: "Security challenge detected in the embedded browser no longer overwrites an account that has been manually stopped." },
+    ],
+  },
+  {
     version: "1.0.339",
     date: "16 May 2026",
     items: [

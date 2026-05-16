@@ -368,6 +368,30 @@ process.on("SIGINT",  () => saveAllSessionsAndExit("SIGINT"));
 let globalScreenshotCount = 0;
 const MAX_CONCURRENT_SCREENSHOTS = 6;
 
+// ── EB launch concurrency limiter ──────────────────────────────────────────
+// Launching Chrome is expensive: each instance peaks at ~80–150 MB and spikes
+// the CPU for 2–4 s during V8 JIT warmup.  When 10+ EBs are opened at once
+// they all race through puppeteer.launch() simultaneously, saturating the CPU
+// and causing some instances to never complete their init → frozen EBs.
+// Limit concurrent Chrome launches to 3; extras queue up and launch one at a
+// time after the previous one has finished starting up.
+let ebLaunchCount = 0;
+const MAX_CONCURRENT_EB_LAUNCHES = 3;
+
+function waitForEbLaunchSlot(): Promise<void> {
+  return new Promise(resolve => {
+    const tryAcquire = () => {
+      if (ebLaunchCount < MAX_CONCURRENT_EB_LAUNCHES) {
+        ebLaunchCount++;
+        resolve();
+      } else {
+        setTimeout(tryAcquire, 500);
+      }
+    };
+    tryAcquire();
+  });
+}
+
 // Mark a session as "recently active". Called by every input handler.
 // The frame loop reads lastActivityAt to decide the screenshot cadence:
 //   active  (<3 s since input) → every tick    (~6.7 fps)
@@ -396,13 +420,10 @@ const LAUNCH_ARGS = [
   "--mute-audio",
   "--hide-scrollbars",
   "--window-size=1280,760",
-  // On Windows, headless Chrome still tries to spin up a GPU process.
-  // When multiple EB instances launch simultaneously they race for GPU
-  // resources — whichever loses gets a frozen renderer (screenshot timeouts,
-  // chrome-error://) with no rhyme or reason as to which account is affected.
-  // --disable-gpu forces software rendering and eliminates the race entirely.
+  // Disable GPU hardware acceleration — forces software rendering instead.
+  // Do NOT also add --disable-software-rasterizer: that kills the software
+  // fallback too, leaving Chrome with no rendering path and causing freezes.
   "--disable-gpu",
-  "--disable-software-rasterizer",
 
   // ── Memory & process-count optimisations (allows 25+ concurrent EBs) ──────────
   //
@@ -428,12 +449,9 @@ const LAUNCH_ARGS = [
   "--disk-cache-size=8388608",   // 8 MB
   "--media-cache-size=1",        // effectively zero
 
-  // Disable per-origin renderer isolation.  Chrome's default site-per-process
-  // model spawns an extra renderer for every cross-origin iframe Instagram
-  // inlines.  With this off, all frames share the single renderer above.
-  "--disable-features=site-per-process,IsolateOrigins",
-
   // Run the audio service in-process (one less spawned process).
+  // NOTE: site-per-process and IsolateOrigins are intentionally NOT disabled —
+  // removing those flags causes renderer crashes in Chrome 120+ on Windows.
   "--disable-features=AudioServiceOutOfProcess",
 
   // Aggressively free cached data under memory pressure instead of holding it.
@@ -665,6 +683,8 @@ export async function getOrCreateSession(
   console.log(`[EB-DEBUG][browserSession] launching via ${puppeteerSource}, executablePath="${CHROMIUM_PATH}"`);
   console.log(`[EB-DEBUG][browserSession] launch args: ${fullArgs.join(" ")}`);
 
+  // Throttle concurrent Chrome launches to avoid CPU saturation.
+  await waitForEbLaunchSlot();
   let browser: Browser;
   try {
     browser = await puppeteerLib.launch({
@@ -679,6 +699,8 @@ export async function getOrCreateSession(
     console.error(`[EB-DEBUG][browserSession] LAUNCH ERROR: ${msg}`);
     if (err?.stack) console.error(`[EB-DEBUG][browserSession] stack: ${err.stack}`);
     throw new Error(msg);
+  } finally {
+    ebLaunchCount--;
   }
 
   const [page] = await browser.pages();
@@ -796,7 +818,12 @@ export async function getOrCreateSession(
           sendStatus(profileId, `⚠ Instagram security check required — navigating to challenge page…`);
           // Write the real status to DB immediately so the account card reflects
           // what the EB is actually showing — don't wait for the user to click Verify.
-          storage.updateProfile(profileId, { accountStatus: challengeStatus }).catch(() => {});
+          // Never overwrite a manually-stopped account via the EB challenge detector.
+          storage.getProfile(profileId).then(p => {
+            if (p?.accountStatus !== "stopped") {
+              storage.updateProfile(profileId, { accountStatus: challengeStatus }).catch(() => {});
+            }
+          }).catch(() => {});
         }
       }
     }

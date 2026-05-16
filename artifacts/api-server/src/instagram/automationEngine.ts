@@ -555,6 +555,13 @@ class AutomationEngine {
           await sleep(5 * 60_000);
           continue;
         }
+        // Catch-all: any other non-valid status (phone_verification, email_confirmation,
+        // stopped, verifying, action_blocked, etc.) — pause and re-check, do not run sessions.
+        if (freshProfile.accountStatus !== "valid") {
+          engineLog("WARN", `@${freshProfile.username}: account status is "${freshProfile.accountStatus}" — pausing 5min before re-check`);
+          await sleep(5 * 60_000);
+          continue;
+        }
         // ── Active timer gate ─────────────────────────────────────────────────
         if (
           freshProfile.activeTimerEnabled &&
@@ -592,8 +599,10 @@ class AutomationEngine {
           const summary = parts.length ? parts.join(", ") : "nothing to do";
           this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete ${summary}`);
         } catch (err: any) {
+          const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, followTool.id);
           this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
+          if (acctStatus) break;
         }
 
         if (state.stop.stopped) break;
@@ -719,8 +728,10 @@ class AutomationEngine {
             await storage.incrementStat(freshProfile.id, "human_session");
             this.logAction(freshProfile.id, hsTool.id, "tool_complete", "", "", "", "ok", "Human Session complete");
           } catch (err: any) {
+            const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, hsTool.id);
             this.logAction(freshProfile.id, hsTool.id, "tool_complete", "", "", "", "error", `Human Session error: ${err?.message ?? "unknown"}`);
             console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
+            if (acctStatus) break;
           }
           const waitMs = randInt(
             (s.delayMin ?? 30) * 60_000,
@@ -798,8 +809,10 @@ class AutomationEngine {
           await this.runUnfollowSession(freshProfile, unfollowTool, state);
           this.logAction(freshProfile.id, unfollowTool.id, "tool_complete", "", "", "", "ok", "Unfollow Tool session complete");
         } catch (err: any) {
+          const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, unfollowTool.id);
           this.logAction(freshProfile.id, unfollowTool.id, "tool_complete", "", "", "", "error", `Unfollow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unfollow session error: ${err?.message}`);
+          if (acctStatus) break;
         }
 
         if (state.stop.stopped) break;
@@ -903,8 +916,10 @@ class AutomationEngine {
           await this.runDMSession(freshProfile, dmTool, state);
           this.logAction(freshProfile.id, dmTool.id, "tool_complete", "", "", "", "ok", "DM Tool session complete");
         } catch (err: any) {
+          const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, dmTool.id);
           this.logAction(freshProfile.id, dmTool.id, "tool_complete", "", "", "", "error", `DM Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: DM session error: ${err?.message}`);
+          if (acctStatus) break;
         }
 
         if (state.stop.stopped) break;
