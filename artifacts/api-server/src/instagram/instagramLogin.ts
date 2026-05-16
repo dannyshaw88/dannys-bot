@@ -536,8 +536,18 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
     if (saved?.igDid) {
       igDid = saved.igDid;
     } else {
-      // Derive from phoneId (same pattern real Instagram uses: ig_did ≈ phoneId)
-      igDid = ig.state.phoneId;
+      // Check igApiCookies for the Chrome-issued ig_did before falling back to
+      // the UA-seeded phoneId.  On a first-time verify, igDeviceState is empty
+      // but the verify route includes ig_did in the cookie string extracted from
+      // Chrome.  Using the same ig_did that Chrome presented to Instagram keeps
+      // the mobile API on the same device identity as the embedded browser.
+      const igDidFromCookies = profile.igApiCookies
+        ?.split(";")
+        .map(s => s.trim())
+        .find(s => s.startsWith("ig_did="))
+        ?.slice("ig_did=".length)
+        .trim();
+      igDid = igDidFromCookies || ig.state.phoneId;
     }
     const innerJar = (ig.state as any).cookieJar?._jar;
     if (innerJar?.setCookieSync) {

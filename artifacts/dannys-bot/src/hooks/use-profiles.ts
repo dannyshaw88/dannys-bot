@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertProfile } from "@shared/routes";
 
@@ -194,4 +195,21 @@ export function useStopProfile() {
       queryClient.invalidateQueries({ queryKey: [api.profiles.get.path, id] });
     },
   });
+}
+
+export function useStatusEvents() {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const es = new EventSource("/api/events/status");
+    es.onmessage = (e) => {
+      try {
+        const { profileId } = JSON.parse(e.data) as { profileId: number; accountStatus: string };
+        queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
+        if (profileId) {
+          queryClient.invalidateQueries({ queryKey: [api.profiles.get.path, profileId] });
+        }
+      } catch {}
+    };
+    return () => es.close();
+  }, [queryClient]);
 }

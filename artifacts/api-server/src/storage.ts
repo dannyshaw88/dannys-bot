@@ -1,5 +1,12 @@
+import { EventEmitter } from "events";
 import { db } from "@workspace/db";
 import { userAgents } from "./shared/userAgents";
+
+// Real-time event bus — fires whenever any profile's accountStatus changes in the DB.
+// The SSE endpoint in instagram.ts subscribes to this and pushes updates to connected
+// browser clients so the status pill reflects changes immediately.
+export const statusEvents = new EventEmitter();
+statusEvents.setMaxListeners(200);
 import {
   proxies, profiles, tools, sources, stats, instagramApiCalls, followedUsers, sessionActions,
   globalSettings, skippedUsers, repostedPosts, contactDmSent, contactPendingMessages,
@@ -173,6 +180,9 @@ export class DatabaseStorage implements IStorage {
       console.log(`[status-audit] profile=${id} accountStatus="${updates.accountStatus}" caller=${caller}`);
     }
     const [updated] = await db.update(profiles).set(updates).where(eq(profiles.id, id)).returning();
+    if ("accountStatus" in updates) {
+      statusEvents.emit("change", { profileId: id, accountStatus: updates.accountStatus });
+    }
     return updated;
   }
 

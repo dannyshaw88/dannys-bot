@@ -54,6 +54,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.326",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Account status pills now update instantly when the automation engine changes an account's status — no more waiting up to 5 seconds to see the result." },
+      { category: "Fix", text: "The embedded browser login progress log is now always visible as soon as a login attempt starts." },
+      { category: "Fix", text: "Verify no longer gets stuck on 'Verifying' if an unexpected error occurs mid-flow — it now always resolves to a final status." },
+      { category: "Fix", text: "Added 'Locked' as a recognised account status with its own badge, so accounts reported as locked by Instagram display correctly instead of falling through to an unknown state." },
+      { category: "UX", text: "Keyboard shortcuts on the account page: press 1–7 (without modifier keys, when not typing in a field) to jump directly to any tab. The shortcut number is shown next to each action in the sidebar." },
+    ],
+  },
+  {
     version: "1.0.325",
     date: "15 May 2026",
     items: [

@@ -36,6 +36,7 @@ const STATUS_META: Record<AccountStatus, {
   banned:               { label: "Banned",               icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200"    },
   captcha:              { label: "Captcha",              icon: ScanFace,    pill: "bg-amber-50  text-amber-700  border-amber-200"  },
   locked:               { label: "Account Locked",       icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200"    },
+  email_confirmation:   { label: "Email Confirm",        icon: Mail,        pill: "bg-blue-50   text-blue-700   border-blue-200"   },
   phone_verification:   { label: "Phone Verify",         icon: Phone,       pill: "bg-blue-50   text-blue-700   border-blue-200"   },
   "2fa_verification":   { label: "2FA Verify",           icon: KeyRound,    pill: "bg-purple-50 text-purple-700 border-purple-200" },
   stopped:              { label: "Stopped",              icon: PowerOff,    pill: "bg-slate-100 text-slate-600  border-slate-200"  },
@@ -842,8 +843,9 @@ export function ProfilesPage() {
                   }`}
                   onMouseDown={e => {
                     if (e.button !== 0) return;
-                    // Let the Checkbox handle its own click don't double-toggle
+                    // Let the Checkbox and Switch handle their own clicks — don't double-toggle
                     if ((e.target as HTMLElement).closest('[role="checkbox"]')) return;
+                    if ((e.target as HTMLElement).closest('[role="switch"]')) return;
                     e.preventDefault();
                     const isSelected = selectedProfileIds.includes(profile.id);
                     dragAddMode.current = !isSelected;
@@ -889,12 +891,12 @@ export function ProfilesPage() {
                       </div>
                     );
                     if (key === "active") return (
-                      <div key={key} style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0">
+                      <div key={key} style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0" onMouseDown={e => e.stopPropagation()}>
                         <Switch checked={!isStopped} onCheckedChange={() => toggleStopped(profile.id, acctStatus)} data-testid={`switch-active-${profile.id}`} className="data-[state=checked]:bg-green-500" />
                       </div>
                     );
                     if (key === "actions") return (
-                      <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden">
+                      <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden" onMouseDown={e => e.stopPropagation()}>
                         <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title="Open embedded browser" data-testid={`btn-open-browser-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-primary transition-colors">Browser</button>
                         <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
                         <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>

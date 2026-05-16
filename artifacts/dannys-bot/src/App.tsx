@@ -21,6 +21,7 @@ import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { BrowserWindow } from "@/components/BrowserWindow";
 import { BrowserTaskbar } from "@/components/BrowserTaskbar";
 import { queryClient } from "@/lib/queryClient";
+import { useStatusEvents } from "@/hooks/use-profiles";
 
 function Router() {
   return (
@@ -54,6 +55,16 @@ function BrowserLayer() {
   );
 }
 
+function AppInner() {
+  useStatusEvents();
+  return (
+    <>
+      <Router />
+      <BrowserLayer />
+    </>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -61,8 +72,7 @@ function App() {
         <NavigationHistoryProvider>
           <SidebarSlotProvider>
             <BrowserWindowsProvider>
-              <Router />
-              <BrowserLayer />
+              <AppInner />
             </BrowserWindowsProvider>
           </SidebarSlotProvider>
         </NavigationHistoryProvider>

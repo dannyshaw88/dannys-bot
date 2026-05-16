@@ -6,6 +6,7 @@ export const ACCOUNT_STATUSES = [
   'valid',
   'banned',
   'captcha',
+  'locked',
   'email_confirmation',
   'phone_verification',
   'phone_validation',

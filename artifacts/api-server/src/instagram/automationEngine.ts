@@ -2936,6 +2936,18 @@ class AutomationEngine {
       if (maxPerDay > 0 && this.daily(state) >= maxPerDay) { console.log(`[engine] @${profile.username}: daily cap hit mid-session`); hitHardLimit = true; break; }
       if (maxPerHour > 0 && this.hourly(state) >= maxPerHour) { console.log(`[engine] @${profile.username}: hourly cap hit mid-session`); hitHardLimit = true; await sleep(3_600_000); break; }
 
+      // Re-read accountStatus from DB before each user — catches mid-session
+      // status changes (from previous-action errors or external updates) so the
+      // engine never attempts an API call on a non-valid account.
+      {
+        const liveStatus = (await storage.getProfile(profile.id))?.accountStatus;
+        if (liveStatus && liveStatus !== "valid") {
+          engineLog("WARN", `@${profile.username}: accountStatus changed to "${liveStatus}" mid-session — aborting follow session`);
+          hitHardLimit = true;
+          break;
+        }
+      }
+
       // Dedup check (per-profile)
       if (await this.alreadyFollowed(profile.id, user.username)) {
         this.logAction(profile.id, tool.id, "dedup_skip", user.username, source.value, source.type, "skipped", "Already followed previously");

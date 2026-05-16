@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { WebSocketServer } from "ws";
 import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
-import { storage } from "../storage";
+import { storage, statusEvents } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
@@ -504,11 +504,15 @@ export async function registerInstagramRoutes(
           message: `@${profile.username} — browser login appeared to succeed but no sessionid cookie was found. Try again.`,
         };
       } else {
-        // Step 4: Build cookie string from EB session and persist it immediately
+        // Step 4: Build cookie string from EB session and persist it immediately.
+        // Include ig_did so buildIgClient can restore the exact device identity
+        // that Chrome presented to Instagram — prevents "Unrecognized device" SMS.
+        const igDid = rawCookies.find(c => c.name === "ig_did")?.value;
         const cookieParts = [`sessionid=${sessionid}`];
         if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
         if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
         if (mid)       cookieParts.push(`mid=${mid}`);
+        if (igDid)     cookieParts.push(`ig_did=${igDid}`);
         const freshCookies = cookieParts.join("; ");
 
         // Persist the EB cookies before the API validation so they survive even if
@@ -523,7 +527,22 @@ export async function registerInstagramRoutes(
         // (tokens/keyed → launcher/sync → users/{id}/info) and returns the
         // authoritative result.
         const profileWithCookies = { ...effectiveProfile, igApiCookies: freshCookies } as typeof effectiveProfile;
-        const apiResult = await verifyInstagramCredentials(profileWithCookies);
+        let apiResult: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
+        try {
+          apiResult = await verifyInstagramCredentials(profileWithCookies);
+        } catch (verifyErr: any) {
+          // Unexpected throw from the mobile API layer — reset to pending so the
+          // account doesn't stay stuck at "verifying" forever.
+          console.error(`[verify] verifyInstagramCredentials threw for @${profile.username}:`, verifyErr);
+          result = {
+            ok: false,
+            accountStatus: "pending",
+            message: `@${profile.username} — mobile API check failed unexpectedly: ${verifyErr?.message ?? "unknown error"}. Try verifying again.`,
+          };
+          sendLoginDone(profileId, false, result.message ?? "");
+          await storage.updateProfile(profile.id, { accountStatus: "pending" });
+          return res.status(200).json(result);
+        }
         result = {
           ...apiResult,
           // Always carry the fresh EB cookies forward regardless of API result —
@@ -1129,6 +1148,30 @@ export async function registerInstagramRoutes(
 
   // ── EB diagnostic endpoint — hit this from the app to get a full debug report ──
   // Returns JSON: CHROMIUM_PATH, whether it exists, Node.js version, platform, etc.
+  // Real-time account status stream — frontend subscribes here and immediately
+  // invalidates its React Query cache when the engine (or any route) changes
+  // an account's accountStatus in the DB, so the status pill updates without
+  // waiting for the 5-second poll.
+  app.get("/api/events/status", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const onChange = (data: { profileId: number; accountStatus: string }) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    statusEvents.on("change", onChange);
+
+    const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 25_000);
+
+    req.on("close", () => {
+      statusEvents.off("change", onChange);
+      clearInterval(heartbeat);
+    });
+  });
+
   app.get("/api/browser/debug", async (_req, res) => {
     const fs = await import("fs");
     const chromiumPath = process.env.CHROMIUM_PATH || "";

@@ -44,6 +44,7 @@ const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementTyp
   valid:              { label: "Valid",             icon: ShieldCheck, pill: "bg-green-50  text-green-700  border-green-200",  dot: "bg-green-500"  },
   banned:             { label: "Banned",            icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
   captcha:            { label: "Captcha",           icon: ScanFace,    pill: "bg-amber-50  text-amber-700  border-amber-200",  dot: "bg-amber-500"  },
+  locked:             { label: "Account Locked",    icon: Ban,         pill: "bg-red-50    text-red-700    border-red-200",    dot: "bg-red-500"    },
   email_confirmation: { label: "Email Confirm",     icon: Mail,        pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   phone_verification: { label: "Phone Verify",      icon: Phone,       pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   "2fa_verification": { label: "2FA Verify",        icon: KeyRound,    pill: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-500" },
@@ -221,6 +222,26 @@ export function ProfileDetailsPage() {
   const [location, navigate] = useLocation();
   const search = useSearch();
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
+
+  // Keyboard shortcuts — number keys 1-7 switch tabs (blocked when typing in inputs)
+  useEffect(() => {
+    const creatorMode = !!profile?.creatorMode;
+    const tabMap: Record<string, string> = creatorMode
+      ? { "1": "settings", "2": "create-cookie" }
+      : { "1": "settings", "2": "human-session", "3": "follow", "4": "unfollow", "5": "contact", "6": "session-log", "7": "create-cookie" };
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const tab = tabMap[e.key];
+      if (tab) {
+        e.preventDefault();
+        navigate(`/profiles/${profileId}?tab=${tab}`);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [profileId, navigate, profile?.creatorMode]);
 
   const ACCOUNT_COPY_GROUPS: CopyOptionGroup[] = [
     {

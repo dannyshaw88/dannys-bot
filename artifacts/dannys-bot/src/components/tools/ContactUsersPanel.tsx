@@ -91,6 +91,8 @@ export function ContactUsersPanel({ tool, profile }: Props) {
       contactUsersUnsendEnabled: false,
       contactUsersUnsendMin: 30,
       contactUsersUnsendMax: 60,
+      stopOnBlockEnabled: false,
+      stopOnBlockMinutes: 60,
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -256,6 +258,33 @@ export function ContactUsersPanel({ tool, profile }: Props) {
             </div>
           </div>
         )}
+
+        {/* Stop on block */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-border/50">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="contactStopOnBlockEnabled"
+              checked={!!settings.stopOnBlockEnabled}
+              onChange={(e) => setSettings({ ...settings, stopOnBlockEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer"
+            />
+            <label htmlFor="contactStopOnBlockEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap">
+              Stop tool if blocked for
+            </label>
+          </div>
+          <div className={`flex items-center gap-1.5 transition-opacity ${!settings.stopOnBlockEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <Input
+              type="number"
+              min="1"
+              max="1440"
+              className="w-16 h-7 text-xs"
+              value={settings.stopOnBlockMinutes ?? 60}
+              onChange={(e) => setSettings({ ...settings, stopOnBlockMinutes: Math.max(1, Number(e.target.value)) })}
+            />
+            <span className="text-xs text-muted-foreground">minutes</span>
+          </div>
+        </div>
       </div>
 
       {/* ── Pending Messages ──────────────────────────────────── */}
