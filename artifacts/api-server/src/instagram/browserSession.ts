@@ -1060,6 +1060,9 @@ async function startScreencast(profileId: number): Promise<void> {
   // Stop any previously running screencast session first
   await stopScreencast(profileId);
 
+  // Re-check WS after the async stopScreencast — it may have closed during the await.
+  if (!session.ws || session.ws.readyState !== WebSocket.OPEN) return;
+
   let cdp: any;
   try {
     cdp = await (session.page as any).createCDPSession();
@@ -1074,24 +1077,14 @@ async function startScreencast(profileId: number): Promise<void> {
   const nSessions = sessions.size;
   const quality = nSessions <= 2 ? 65 : nSessions <= 5 ? 55 : 45;
 
-  try {
-    await cdp.send("Page.startScreencast", {
-      format: "jpeg",
-      quality,
-      maxWidth: 1280,
-      maxHeight: 760,
-      everyNthFrame: 1,
-    });
-    log(`[screencast:${profileId}] started (quality=${quality} sessions=${nSessions})`, "browser");
-  } catch (e: any) {
-    log(`[screencast:${profileId}] startScreencast failed: ${e?.message}`, "browser");
-    try { await cdp.detach(); } catch {}
-    session.screencastCdp = null;
-    return;
-  }
-
-  // Handle incoming frames — Chrome pushes these from its compositor thread
-  // whenever the visible page content changes.
+  // CRITICAL: Register the frame handler BEFORE sending Page.startScreencast.
+  // Chrome's screencast uses a back-pressure protocol — it sends the first frame
+  // immediately upon receiving startScreencast and will NOT send another until it
+  // receives a Page.screencastFrameAck. If the handler is registered AFTER the
+  // await, the very first frame arrives before the listener is active, the ACK is
+  // never sent, and Chrome stalls permanently. This is the root cause of the
+  // 4th+ EB "Loading…" hang — system load delays event-loop execution just long
+  // enough for Chrome's first frame to slip through before cdp.on() runs.
   cdp.on("Page.screencastFrame", (params: any) => {
     // ACK IMMEDIATELY (synchronously, no await) — Chrome back-pressures and
     // stops sending new frames until it receives the ack. Delaying the ack
@@ -1117,6 +1110,30 @@ async function startScreencast(profileId: number): Promise<void> {
       wsWrite(s.ws, { type: "urlChange", url: currentUrl });
     }
   });
+
+  try {
+    await cdp.send("Page.startScreencast", {
+      format: "jpeg",
+      quality,
+      maxWidth: 1280,
+      maxHeight: 760,
+      everyNthFrame: 1,
+    });
+    log(`[screencast:${profileId}] started (quality=${quality} sessions=${nSessions})`, "browser");
+  } catch (e: any) {
+    log(`[screencast:${profileId}] startScreencast failed: ${e?.message}`, "browser");
+    try { await cdp.detach(); } catch {}
+    session.screencastCdp = null;
+    return;
+  }
+
+  // Notify the client that the screencast pipeline is confirmed active.
+  // This lets the frontend clear its "Loading…" overlay immediately rather than
+  // waiting up to 45 s for the first real-content frame to arrive.
+  const sAfter = sessions.get(profileId);
+  if (sAfter?.ws && sAfter.ws.readyState === WebSocket.OPEN) {
+    wsWrite(sAfter.ws, { type: "screencast_started" });
+  }
 }
 
 async function stopScreencast(profileId: number): Promise<void> {
@@ -1847,12 +1864,23 @@ export async function browserAutoLogin(
       // Check for a username input to detect that case before declaring "already logged in".
       const hasLoginForm = await s.page.$('input[name="username"], input[autocomplete="username"]').catch(() => null);
       if (!hasLoginForm) {
-        // Clear any stale challenge flag — the account is visibly logged in so
-        // whatever challenge existed has been resolved in the browser.
-        s.challengeUrl = undefined;
-        await saveCookies(profileId, s.page);
-        sendStatus(profileId, "✓ Already logged in — browser shows your account.");
-        return { ok: true, message: "Already logged in" };
+        // Check for the Instagram mobile splash page ("Open Instagram / Log In or Sign Up").
+        // This page appears at instagram.com/ but is NOT a logged-in state — it has a
+        // "Log In or Sign Up" link that must be clicked before the login form appears.
+        const splashLoginLink = await s.page.$('a[href*="accounts/login"], a[href*="/login"]').catch(() => null);
+        if (splashLoginLink) {
+          sendStatus(profileId, "Instagram splash page detected — clicking Log In…");
+          await splashLoginLink.click().catch(() => null);
+          await delay(2000);
+          // Fall through to the login form detection below
+        } else {
+          // Clear any stale challenge flag — the account is visibly logged in so
+          // whatever challenge existed has been resolved in the browser.
+          s.challengeUrl = undefined;
+          await saveCookies(profileId, s.page);
+          sendStatus(profileId, "✓ Already logged in — browser shows your account.");
+          return { ok: true, message: "Already logged in" };
+        }
       }
       // Login form is visible at the home URL — treat as not logged in, fall through to fill it.
       sendStatus(profileId, "Login form detected — filling credentials…");

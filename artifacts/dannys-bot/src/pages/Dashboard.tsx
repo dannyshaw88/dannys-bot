@@ -54,6 +54,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.332",
+    date: "16 May 2026",
+    items: [
+      { category: "Fix", text: "Opening 4 or more embedded browsers at the same time no longer leaves some of them stuck on 'Loading Instagram, please wait' forever. The root cause was a timing race in Chrome's screen-streaming protocol: Chrome sends the very first screen frame the instant it receives the start command, but the old code registered the frame handler a moment too late, causing the frame to be silently dropped. Chrome then waits indefinitely for an acknowledgement that never comes and stops sending any further frames. The fix registers the handler before sending the start command, so no frame can ever be missed." },
+      { category: "Fix", text: "When the embedded browser screen pipeline is confirmed active the 'Loading…' overlay now clears immediately instead of waiting up to 45 seconds for the first large content frame." },
+      { category: "Fix", text: "If the browser window is closed while Chrome is still starting up, the cleanup handler now fires correctly so the session is not left pointing at a dead connection." },
+    ],
+  },
+  {
     version: "1.0.331",
     date: "16 May 2026",
     items: [

@@ -296,6 +296,19 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
               setLoginState(prev => prev === "ok" ? "idle" : prev);
             }
             break;
+          case "screencast_started":
+            // Server confirmed the CDP screencast pipeline is active.
+            // Clear the "Loading…" overlay immediately — we know Chrome is
+            // running and frames are on their way regardless of their size.
+            if (!hasReceivedFirstFrameRef.current) {
+              hasReceivedFirstFrameRef.current = true;
+              setWaitingFirstFrame(false);
+              if (firstFrameFallbackRef.current) {
+                clearTimeout(firstFrameFallbackRef.current);
+                firstFrameFallbackRef.current = null;
+              }
+            }
+            break;
           case "error":
             setErrorMsg(msg.message ?? "Unknown error");
             setStatusSafe("error");

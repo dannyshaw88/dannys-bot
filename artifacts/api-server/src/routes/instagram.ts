@@ -1231,6 +1231,15 @@ export async function registerInstagramRoutes(
     }
 
     wss.handleUpgrade(request, socket, head, async (ws) => {
+      // Register the close handler IMMEDIATELY — before any async work.
+      // If the socket closes while Chrome is still launching (which can take
+      // 20-30 s), detachWS must still fire so the session is not left pointing
+      // at a dead WebSocket.  Registering it after the await would miss any
+      // close event that fires during the await.
+      ws.on("close", () => {
+        detachWS(profileId, ws);
+      });
+
       try {
         const proxy = await resolveProxyConfig(profile);
         const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
@@ -1241,10 +1250,6 @@ export async function registerInstagramRoutes(
         ws.close();
         return;
       }
-
-      ws.on("close", () => {
-        detachWS(profileId, ws);
-      });
     });
   });
 
