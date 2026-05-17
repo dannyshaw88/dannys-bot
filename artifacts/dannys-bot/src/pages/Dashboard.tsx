@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.353",
+    date: "17 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie injection now correctly decodes URL-encoded values (e.g. %3A → :) so the sessionid and other tokens are stored as the real value Instagram expects." },
+      { category: "Fix", text: "Account creation no longer fails with 'EB cookie harvest returned no device cookies' — the browser now visits the Instagram homepage first to reliably seed mid and ig_did before proceeding to signup." },
+    ],
+  },
+  {
     version: "1.0.352",
     date: "17 May 2026",
     items: [

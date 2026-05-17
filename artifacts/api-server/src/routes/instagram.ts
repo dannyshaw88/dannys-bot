@@ -386,13 +386,17 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
 
-    // Parse the semicolon-separated cookie string into name=value pairs
+    // Parse the semicolon-separated cookie string into name=value pairs.
+    // Values may be URL-encoded (e.g. %3A → :) when copied from a browser devtools
+    // cookie inspector — decode them so the real token value is stored.
     const parsed: Record<string, string> = {};
     for (const part of rawCookies.split(";")) {
       const eqIdx = part.indexOf("=");
       if (eqIdx < 1) continue;
       const name = part.slice(0, eqIdx).trim();
-      const value = part.slice(eqIdx + 1).trim();
+      const rawValue = part.slice(eqIdx + 1).trim();
+      let value = rawValue;
+      try { value = decodeURIComponent(rawValue); } catch { value = rawValue; }
       if (name) parsed[name] = value;
     }
 

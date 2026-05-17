@@ -241,21 +241,48 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
     await applyStealthScripts(page, DESKTOP_UA);
 
-    log(`${logPfx} Navigating to instagram.com/accounts/emailsignup/...`);
+    // ── Step 1: Visit the homepage first ─────────────────────────────────────
+    // Instagram's CDN sets mid and ig_did on the *first* request to any IG page.
+    // Navigating directly to the signup page sometimes skips the CDN cookie
+    // injection because Instagram detects it as a deep-link and defers the
+    // fingerprinting JS.  Hitting the homepage first guarantees the device tokens
+    // are set before we proceed to the signup page.
+    log(`${logPfx} Navigating to instagram.com (homepage) to seed device cookies...`);
     try {
-      await page.goto("https://www.instagram.com/accounts/emailsignup/", {
-        waitUntil: "domcontentloaded",
+      await page.goto("https://www.instagram.com/", {
+        waitUntil: "networkidle2",
         timeout: 30000,
       });
     } catch (e: any) {
-      log(`${logPfx} Navigation warning (still checking cookies): ${e?.message}`);
+      log(`${logPfx} Homepage navigation warning (continuing): ${e?.message}`);
     }
 
-    // Poll for the key cookies — Instagram sets them during page load, sometimes after JS executes
-    let mid = "";
-    let ig_did = "";
-    let csrftoken = "";
-    const deadline = Date.now() + 15000;
+    // Quick check after homepage load
+    const homepageCookies = await page.cookies(
+      "https://www.instagram.com",
+      "https://i.instagram.com",
+      "https://instagram.com",
+    ) as Array<{ name: string; value: string }>;
+    let mid = homepageCookies.find(c => c.name === "mid")?.value ?? "";
+    let ig_did = homepageCookies.find(c => c.name === "ig_did")?.value ?? "";
+    let csrftoken = homepageCookies.find(c => c.name === "csrftoken")?.value ?? "";
+    log(`${logPfx} After homepage: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
+
+    // ── Step 2: Navigate to signup page if device cookies still missing ───────
+    if (!mid || !ig_did) {
+      log(`${logPfx} Navigating to instagram.com/accounts/emailsignup/ to get remaining cookies...`);
+      try {
+        await page.goto("https://www.instagram.com/accounts/emailsignup/", {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        });
+      } catch (e: any) {
+        log(`${logPfx} Signup page navigation warning (still checking cookies): ${e?.message}`);
+      }
+    }
+
+    // ── Step 3: Poll until all three cookies appear (up to 20 s) ─────────────
+    const deadline = Date.now() + 20000;
     while (Date.now() < deadline) {
       const cookies = await page.cookies(
         "https://www.instagram.com",
