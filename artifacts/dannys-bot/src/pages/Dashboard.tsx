@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.351",
+    date: "17 May 2026",
+    items: [
+      { category: "Fix", text: "Account ordering on the Accounts page no longer jumps around when a status changes — the list only re-sorts when you click a column header." },
+      { category: "Improve", text: "Exporting multiple accounts as EQX files now shows a single folder picker and saves all files at once, instead of opening a separate save dialog for each account." },
+      { category: "New", text: "Account settings now has an Inject Session Cookies section — paste a raw cookie string (sessionid, ds_user_id, mid) and click Inject to restore a saved session without going through the embedded browser." },
+    ],
+  },
+  {
     version: "1.0.350",
     date: "17 May 2026",
     items: [

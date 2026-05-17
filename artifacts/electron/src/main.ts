@@ -821,6 +821,20 @@ async function createWindow() {
     if (err) throw new Error(err);
   });
 
+  ipcMain.handle("export-eqx-folder", async (_e, files: Array<{ filename: string; data: string }>) => {
+    const result = await dialog.showOpenDialog(win!, {
+      title: "Choose folder to save EQX files",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || !result.filePaths.length) return { canceled: true };
+    const folder = result.filePaths[0];
+    for (const { filename, data } of files) {
+      const buffer = Buffer.from(data, "base64");
+      fs.writeFileSync(path.join(folder, filename), buffer);
+    }
+    return { canceled: false, folder, count: files.length };
+  });
+
   ipcMain.handle("check-for-updates", async () => {
     if (!app.isPackaged) {
       dialog.showMessageBox(win!, {

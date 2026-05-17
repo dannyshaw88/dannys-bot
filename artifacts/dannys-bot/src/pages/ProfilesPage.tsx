@@ -175,6 +175,9 @@ export function ProfilesPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (sessionStorage.getItem("profiles:sortDir") as "asc" | "desc") ?? "asc"
   );
+  // Stable order: IDs in the order frozen when user last clicked a column header.
+  // Data refreshes update account data in-place but never reorder the list.
+  const [stableOrder, setStableOrder] = useState<number[]>([]);
 
   // ── Group Profiles state ──────────────────────────────────────────────────
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("profiles:groupMode") === "true");
@@ -227,29 +230,42 @@ export function ProfilesPage() {
           );
         })
       : (profiles ?? []);
-    return sortField
-      ? [...base].sort((a, b) => {
-          if (sortField === "ip") {
-            const na = ipToNum(a.proxyHost);
-            const nb = ipToNum(b.proxyHost);
-            const diff = na - nb;
-            if (diff !== 0) return sortDir === "asc" ? diff : -diff;
-            const pa = a.proxyPort ?? 0;
-            const pb = b.proxyPort ?? 0;
-            return sortDir === "asc" ? pa - pb : pb - pa;
-          }
-          let va = "", vb = "";
-          if (sortField === "account") {
-            va = (a.accountLabel || a.username || "").toLowerCase();
-            vb = (b.accountLabel || b.username || "").toLowerCase();
-          } else {
-            va = (STATUS_META[a.accountStatus as AccountStatus]?.label ?? a.accountStatus ?? "").toLowerCase();
-            vb = (STATUS_META[b.accountStatus as AccountStatus]?.label ?? b.accountStatus ?? "").toLowerCase();
-          }
-          return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
-        })
-      : base;
-  }, [profiles, filterTokens, sortField, sortDir]);
+
+    if (!sortField) return base;
+
+    // If we have a stable order snapshot (set when user clicked a header), use it.
+    // This freezes the row positions so live data refreshes never reorder accounts.
+    if (stableOrder.length > 0) {
+      const orderMap = new Map(stableOrder.map((id, idx) => [id, idx]));
+      return [...base].sort((a, b) => {
+        const ia = orderMap.has(a.id) ? orderMap.get(a.id)! : Infinity;
+        const ib = orderMap.has(b.id) ? orderMap.get(b.id)! : Infinity;
+        return ia - ib;
+      });
+    }
+
+    // No stable order yet — sort live as a one-time fallback (before first click)
+    return [...base].sort((a, b) => {
+      if (sortField === "ip") {
+        const na = ipToNum(a.proxyHost);
+        const nb = ipToNum(b.proxyHost);
+        const diff = na - nb;
+        if (diff !== 0) return sortDir === "asc" ? diff : -diff;
+        const pa = a.proxyPort ?? 0;
+        const pb = b.proxyPort ?? 0;
+        return sortDir === "asc" ? pa - pb : pb - pa;
+      }
+      let va = "", vb = "";
+      if (sortField === "account") {
+        va = (a.accountLabel || a.username || "").toLowerCase();
+        vb = (b.accountLabel || b.username || "").toLowerCase();
+      } else {
+        va = (STATUS_META[a.accountStatus as AccountStatus]?.label ?? a.accountStatus ?? "").toLowerCase();
+        vb = (STATUS_META[b.accountStatus as AccountStatus]?.label ?? b.accountStatus ?? "").toLowerCase();
+      }
+      return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+  }, [profiles, filterTokens, sortField, sortDir, stableOrder]);
 
   // ── Grouped view (groupMode) ──────────────────────────────────────────────
   const groupedProfiles = useMemo(() => {
@@ -273,15 +289,54 @@ export function ProfilesPage() {
   };
 
   const cycleSort = (field: "account" | "status" | "ip") => {
+    let newDir: "asc" | "desc";
     if (sortField !== field) {
       setSortField(field); setSortDir("asc");
+      newDir = "asc";
       sessionStorage.setItem("profiles:sortField", field);
       sessionStorage.setItem("profiles:sortDir", "asc");
     } else {
-      const next = sortDir === "asc" ? "desc" : "asc";
-      setSortDir(next);
-      sessionStorage.setItem("profiles:sortDir", next);
+      newDir = sortDir === "asc" ? "desc" : "asc";
+      setSortDir(newDir);
+      sessionStorage.setItem("profiles:sortDir", newDir);
     }
+
+    // Snapshot the current sort order so data refreshes won't reorder accounts.
+    // Only the user clicking a header (this function) changes the arrangement.
+    const base = filterTokens.length > 0
+      ? (profiles ?? []).filter(p => {
+          const status      = (p.accountStatus ?? "pending").toLowerCase();
+          const statusLabel = (STATUS_META[p.accountStatus as AccountStatus]?.label ?? "").toLowerCase();
+          const username    = (p.username ?? "").toLowerCase();
+          const label       = (p.accountLabel ?? "").toLowerCase();
+          return filterTokens.some(token =>
+            status.includes(token) || statusLabel.includes(token) ||
+            username.includes(token) || label.includes(token)
+          );
+        })
+      : (profiles ?? []);
+
+    const sorted = [...base].sort((a, b) => {
+      if (newField === "ip") {
+        const na = ipToNum(a.proxyHost);
+        const nb = ipToNum(b.proxyHost);
+        const diff = na - nb;
+        if (diff !== 0) return newDir === "asc" ? diff : -diff;
+        const pa = a.proxyPort ?? 0;
+        const pb = b.proxyPort ?? 0;
+        return newDir === "asc" ? pa - pb : pb - pa;
+      }
+      let va = "", vb = "";
+      if (newField === "account") {
+        va = (a.accountLabel || a.username || "").toLowerCase();
+        vb = (b.accountLabel || b.username || "").toLowerCase();
+      } else {
+        va = (STATUS_META[a.accountStatus as AccountStatus]?.label ?? a.accountStatus ?? "").toLowerCase();
+        vb = (STATUS_META[b.accountStatus as AccountStatus]?.label ?? b.accountStatus ?? "").toLowerCase();
+      }
+      return newDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+    setStableOrder(sorted.map(p => p.id));
   };
 
   const getNextAccountNum = () => {
@@ -1149,24 +1204,52 @@ export function ProfilesPage() {
                     return;
                   }
 
-                  // Download each selected account as its own .eqx file
-                  let successCount = 0;
-                  for (const id of selectedProfileIds) {
-                    const profile = profiles?.find(p => p.id === id);
-                    const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
-                    try {
-                      const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
-                      if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
-                      const blob = await res.blob();
-                      const objectUrl = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = objectUrl; a.download = `${safeUsername}.eqx`;
-                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-                      successCount++;
-                    } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
+                  const eApi = (window as any).electronAPI;
+
+                  if (eApi?.exportEqxToFolder) {
+                    // Electron path: fetch all blobs first, then show ONE folder picker and write all files at once
+                    const files: Array<{ filename: string; data: string }> = [];
+                    const fetchErrors: string[] = [];
+                    for (const id of selectedProfileIds) {
+                      const profile = profiles?.find(p => p.id === id);
+                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                      try {
+                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        if (!res.ok) { fetchErrors.push(safeUsername); continue; }
+                        const arrayBuf = await res.arrayBuffer();
+                        const bytes = new Uint8Array(arrayBuf);
+                        let binary = "";
+                        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                        files.push({ filename: `${safeUsername}.eqx`, data: btoa(binary) });
+                      } catch { fetchErrors.push(safeUsername); }
+                    }
+                    if (fetchErrors.length > 0) {
+                      toast({ title: "Export failed", description: `Could not fetch: ${fetchErrors.join(", ")}`, variant: "destructive" });
+                    }
+                    if (files.length === 0) return;
+                    const result = await eApi.exportEqxToFolder(files);
+                    if (result.canceled) return;
+                    toast({ title: "EQX Export Complete", description: `${result.count} file(s) saved to ${result.folder}` });
+                  } else {
+                    // Browser/web fallback: individual downloads
+                    let successCount = 0;
+                    for (const id of selectedProfileIds) {
+                      const profile = profiles?.find(p => p.id === id);
+                      const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
+                      try {
+                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
+                        const blob = await res.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = objectUrl; a.download = `${safeUsername}.eqx`;
+                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+                        successCount++;
+                      } catch { toast({ title: "Export failed", description: `Error exporting ${safeUsername}`, variant: "destructive" }); }
+                    }
+                    if (successCount > 1) toast({ title: "EQX Export Complete", description: `${successCount} accounts exported` });
                   }
-                  if (successCount > 1) toast({ title: "EQX Export Complete", description: `${successCount} accounts exported` });
                 }}
                 disabled={selectedProfileIds.length === 0}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"

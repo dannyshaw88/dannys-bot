@@ -192,6 +192,39 @@ export function ProfileDetailsPage() {
   const [totpError, setTotpError] = useState<string | null>(null);
   const [totpCopied, setTotpCopied] = useState(false);
 
+  const [cookieInput, setCookieInput] = useState("");
+  const [cookieInjectStatus, setCookieInjectStatus] = useState<"idle" | "injecting" | "ok" | "error">("idle");
+
+  const handleInjectCookies = async () => {
+    const raw = cookieInput.trim();
+    if (!raw) return;
+    // Validate: must contain a sessionid
+    if (!raw.includes("sessionid=")) {
+      toast({ title: "Invalid cookies", description: "Cookie string must contain sessionid.", variant: "destructive" });
+      return;
+    }
+    setCookieInjectStatus("injecting");
+    try {
+      const res = await fetch(`/api/profiles/${profileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ igApiCookies: raw }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      setCookieInjectStatus("ok");
+      setCookieInput("");
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      toast({ title: "Cookies injected", description: "Session cookies saved. Run Verify Credentials to confirm the session." });
+      setTimeout(() => setCookieInjectStatus("idle"), 4000);
+    } catch {
+      setCookieInjectStatus("error");
+      toast({ title: "Injection failed", description: "Could not save cookies.", variant: "destructive" });
+      setTimeout(() => setCookieInjectStatus("idle"), 3000);
+    }
+  };
+
   const generateTotp = async (secret: string) => {
     setTotpCode(null); setTotpError(null);
     try {
@@ -1190,6 +1223,44 @@ export function ProfileDetailsPage() {
                     onChange={e => updateField({ backupCodes: e.target.value })}
                     data-testid="input-backup-codes"
                   />
+                </div>
+
+                {/* ── Cookie Injection ── */}
+                <div className="pt-3 border-t border-border space-y-2">
+                  <Label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    <Cookie className="w-3.5 h-3.5" /> Inject Session Cookies
+                  </Label>
+                  <textarea
+                    className="flex min-h-[72px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-[11px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none font-mono"
+                    placeholder="sessionid=...;ds_user_id=...;mid=..."
+                    value={cookieInput}
+                    onChange={e => { setCookieInput(e.target.value); if (cookieInjectStatus !== "idle") setCookieInjectStatus("idle"); }}
+                    spellCheck={false}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!cookieInput.trim() || cookieInjectStatus === "injecting"}
+                      onClick={handleInjectCookies}
+                      className="h-7 text-xs px-3"
+                    >
+                      {cookieInjectStatus === "injecting"
+                        ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Injecting…</>
+                        : <><Cookie className="w-3 h-3 mr-1.5" />Inject Cookies</>}
+                    </Button>
+                    {cookieInjectStatus === "ok" && (
+                      <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Injected
+                      </span>
+                    )}
+                    {cookieInjectStatus === "error" && (
+                      <span className="flex items-center gap-1 text-xs text-destructive font-medium">
+                        <XCircle className="w-3.5 h-3.5" /> Failed
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Paste a raw cookie string. Must include <code className="font-mono">sessionid</code>. After injecting, run Verify Credentials to confirm the session.</p>
                 </div>
               </CardContent>
             </Card>
