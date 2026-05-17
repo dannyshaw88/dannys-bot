@@ -81,6 +81,52 @@ async function saveCookies(profileId: number, page: Page): Promise<void> {
     fs.mkdirSync(COOKIES_DIR, { recursive: true });
     fs.writeFileSync(cookiePath(profileId), JSON.stringify(cookies, null, 2), "utf8");
     log(`[cookies:${profileId}] Saved ${cookies.length} cookies (explicit IG domain fetch)`, "browser");
+
+    // ── Sync device fingerprint tokens back to the DB ─────────────────────────
+    // Chrome is the source of truth for mid, ig_did, datr, csrftoken, and
+    // sessionid.  Whenever Chrome updates any of these (e.g. Instagram rotates
+    // mid after a challenge, or issues a fresh sessionid after login), the DB
+    // copy must match — otherwise the mobile API presents a different device
+    // fingerprint and Instagram fires "Unrecognised device" on the next request.
+    const get = (name: string) => cookies.find(c => c.name === name)?.value ?? "";
+    const sessionid  = get("sessionid");
+    const csrftoken  = get("csrftoken");
+    const dsUserId   = get("ds_user_id");
+    const mid        = get("mid");
+    const igDid      = get("ig_did");
+
+    // Only write ig_api_cookies if we have the two essential device tokens.
+    if (sessionid && mid) {
+      const parts = [
+        `sessionid=${sessionid}`,
+        csrftoken  ? `csrftoken=${csrftoken}`    : "",
+        dsUserId   ? `ds_user_id=${dsUserId}`    : "",
+        `mid=${mid}`,
+        igDid      ? `ig_did=${igDid}`           : "",
+      ].filter(Boolean);
+      const newApiCookies = parts.join(";");
+
+      // Also keep ig_device_state.igDid in sync so the mobile API client never
+      // falls back to a random ig_did.
+      let deviceStateUpdate: Record<string, unknown> | null = null;
+      if (igDid) {
+        try {
+          const profile = await storage.getProfile(profileId);
+          if (profile) {
+            const ds = JSON.parse((profile.igDeviceState as string | null) ?? "{}");
+            if (ds.igDid !== igDid) {
+              ds.igDid = igDid;
+              deviceStateUpdate = ds;
+            }
+          }
+        } catch { /* non-fatal */ }
+      }
+
+      const dbUpdate: Record<string, unknown> = { igApiCookies: newApiCookies };
+      if (deviceStateUpdate) dbUpdate.igDeviceState = JSON.stringify(deviceStateUpdate);
+      await storage.updateProfile(profileId, dbUpdate as any).catch(() => {});
+      log(`[cookies:${profileId}] DB ig_api_cookies synced (mid=${mid.slice(0, 10)}… ig_did=${igDid ? igDid.slice(0, 8) + "…" : "none"})`, "browser");
+    }
   } catch (e: any) {
     log(`[cookies:${profileId}] Save error: ${e?.message}`, "browser");
   }
@@ -484,6 +530,19 @@ const LAUNCH_ARGS = [
   "--disable-domain-reliability",
   "--disable-breakpad",
   "--disable-client-side-phishing-detection",
+
+  // ── WebRTC IP-leak prevention ───────────────────────────────────────────────
+  // Without these flags Chrome's WebRTC stack sends UDP STUN requests directly
+  // to Google's STUN servers (bypassing the HTTP proxy) and includes the real
+  // host IP in ICE candidates.  Instagram's login JS can call
+  //   new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]})
+  // and harvest local/server IPs from onicecandidate events, exposing the Replit
+  // server address instead of the proxy IP — a hard fingerprint mismatch.
+  // "disable_non_proxied_udp" blocks all UDP unless it flows through a
+  // configured proxy (which HTTP/SOCKS proxies don't forward UDP through, so in
+  // practice WebRTC gets no ICE candidates and reveals nothing).
+  "--webrtc-ip-handling-policy=disable_non_proxied_udp",
+  "--force-webrtc-ip-handling-policy",
 ];
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
@@ -515,6 +574,43 @@ function isMobileUA(ua: string): boolean {
   return /Android/i.test(ua) && /Mobile Safari/i.test(ua);
 }
 
+// Build the User-Agent Client Hints metadata object for Puppeteer's setUserAgent().
+// This overrides the Sec-CH-UA-* HTTP request headers that Chrome automatically
+// sends based on the REAL OS — without this, Chrome sends Sec-CH-UA-Platform: "Linux"
+// and Sec-CH-UA-Mobile: ?0 even when the UA string says Android/mobile, which is
+// the primary signal Instagram uses to detect non-mobile browsers.
+function buildUAMetadata(ua: string): object | undefined {
+  if (!isMobileUA(ua)) return undefined;
+
+  const chromeFull = ua.match(/Chrome\/([\d.]+)/)?.[1] ?? "120.0.0.0";
+  const chromeMajor = chromeFull.split(".")[0];
+  // Android section: "Android 13; XT2343-1" → version="13", model="XT2343-1"
+  const androidMatch = ua.match(/Android\s+([\d.]+);\s*([^)]+)\)/);
+  const androidVersion = androidMatch?.[1] ?? "13";
+  // Strip "Build/XXXX" suffix some Samsung / OEM UAs include in the model field
+  const model = (androidMatch?.[2]?.replace(/\s+Build\/\S+$/, "").trim()) ?? "";
+
+  return {
+    brands: [
+      { brand: "Not/A)Brand",   version: "8"          },
+      { brand: "Chromium",      version: chromeMajor  },
+      { brand: "Google Chrome", version: chromeMajor  },
+    ],
+    fullVersionList: [
+      { brand: "Not/A)Brand",   version: "8.0.0.0"   },
+      { brand: "Chromium",      version: chromeFull   },
+      { brand: "Google Chrome", version: chromeFull   },
+    ],
+    platform:        "Android",
+    platformVersion: androidVersion.includes(".") ? `${androidVersion}.0` : `${androidVersion}.0.0`,
+    architecture:    "",
+    model,
+    mobile:          true,
+    bitness:         "",
+    wow64:           false,
+  };
+}
+
 // Return Puppeteer viewport options consistent with the UA.
 // Puppeteer's isMobile+hasTouch flags also wire up Chromium's internal touch
 // emulation so navigator.maxTouchPoints is already > 0 at the C++ layer —
@@ -530,8 +626,35 @@ export function viewportForUA(ua: string): { width: number; height: number; devi
 
 export async function applyStealthScripts(page: Page, userAgent: string): Promise<void> {
   const mobile = isMobileUA(userAgent);
-  await page.evaluateOnNewDocument((mobile: boolean) => {
+  const meta = buildUAMetadata(userAgent) as any;
+
+  await page.evaluateOnNewDocument((mobile: boolean, meta: any) => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+
+    // ── WebRTC IP-leak prevention (JS layer) ────────────────────────────────
+    // Belt-and-suspenders on top of the --webrtc-ip-handling-policy Chrome flag.
+    // Overriding RTCPeerConnection in JS ensures no page script can enumerate
+    // ICE candidates that would expose the real server IP address.
+    // We replace it with a constructor that silently produces an unusable peer
+    // connection — enough that the API exists (avoiding TypeError detection) but
+    // that never fires onicecandidate with a local address.
+    try {
+      const _RTCPeerConnection = (window as any).RTCPeerConnection;
+      if (_RTCPeerConnection) {
+        (window as any).RTCPeerConnection = function (this: any, ...args: any[]) {
+          const pc = new _RTCPeerConnection(...args);
+          const origCreateOffer = pc.createOffer.bind(pc);
+          pc.createOffer = (...offerArgs: any[]) => {
+            // createOffer without an onicecandidate handler set to avoid leaks;
+            // swallow ICE candidates before they reach userland.
+            pc.onicecandidate = null;
+            return origCreateOffer(...offerArgs);
+          };
+          return pc;
+        } as any;
+        (window as any).RTCPeerConnection.prototype = _RTCPeerConnection.prototype;
+      }
+    } catch { /* non-fatal */ }
 
     if (mobile) {
       // Mobile Chrome has no exposed plugin list
@@ -585,6 +708,34 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       Object.defineProperty(navigator, "platform",            { get: () => "Linux armv8l" });
       Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
       Object.defineProperty(navigator, "deviceMemory",        { get: () => 4 });
+      // devicePixelRatio for a 420 dpi phone = 420/160 = 2.625
+      Object.defineProperty(window, "devicePixelRatio",       { get: () => 2.625 });
+
+      // Spoof navigator.userAgentData (JS-accessible User-Agent Client Hints API).
+      // CDP setUserAgent with metadata fixes HTTP headers; this fixes JS queries.
+      if (meta && "userAgentData" in navigator) {
+        try {
+          const uaData = {
+            brands:   meta.brands,
+            mobile:   true,
+            platform: "Android",
+            getHighEntropyValues: (hints: string[]) => Promise.resolve({
+              brands:          meta.brands,
+              fullVersionList: meta.fullVersionList,
+              mobile:          true,
+              platform:        "Android",
+              platformVersion: meta.platformVersion,
+              architecture:    meta.architecture,
+              bitness:         meta.bitness,
+              model:           meta.model,
+              uaFullVersion:   (meta.fullVersionList?.[2]?.version) ?? "",
+              wow64:           false,
+            }),
+            toJSON: () => ({ brands: meta.brands, mobile: true, platform: "Android" }),
+          };
+          Object.defineProperty(navigator, "userAgentData", { get: () => uaData });
+        } catch { /* non-fatal — some pages may freeze the property */ }
+      }
     } else {
       Object.defineProperty(screen, "width",       { get: () => 1920 });
       Object.defineProperty(screen, "height",      { get: () => 1080 });
@@ -596,7 +747,7 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
       Object.defineProperty(navigator, "deviceMemory",        { get: () => 8 });
     }
-  }, mobile);
+  }, mobile, meta);
 }
 
 export async function getOrCreateSession(
@@ -724,7 +875,8 @@ export async function getOrCreateSession(
   }
 
   const [page] = await browser.pages();
-  await page.setUserAgent(userAgent);
+  const uaMeta = buildUAMetadata(userAgent);
+  await (uaMeta ? page.setUserAgent(userAgent, uaMeta as any) : page.setUserAgent(userAgent));
   // The EB canvas is always 1280×760.  Using viewportForUA() for mobile UAs would
   // produce screenshots at ~1082×2402 (412×915 @ 2.625x scale) which, when drawn
   // onto the 1280×760 canvas, cause severe stretching.  Force desktop dimensions so
@@ -959,7 +1111,8 @@ export async function getOrCreateSession(
       if (target.type() !== "page") return;
       const newPage = await target.page();
       if (!newPage) return;
-      await newPage.setUserAgent(userAgent);
+      const tMeta = buildUAMetadata(userAgent);
+      await (tMeta ? newPage.setUserAgent(userAgent, tMeta as any) : newPage.setUserAgent(userAgent));
       await newPage.setViewport(viewportForUA(userAgent));
       await applyStealthScripts(newPage, userAgent);
       // Also intercept file choosers on any popup page
@@ -1008,6 +1161,17 @@ export async function getOrCreateSession(
   // update_risky_contactpoint challenge to redirect in an infinite loop because
   // Instagram cannot associate the challenge session with a known device.
   const DEVICE_COOKIE_NAMES_SET = new Set(["mid", "ig_did", "ig_nrcb", "datr"]);
+  // ── Capture Chrome's own device tokens BEFORE loading the JSON file ─────────
+  // Chrome writes device tokens to its userDataDir SQLite database in real-time
+  // as Instagram issues Set-Cookie responses.  The JSON file is written by our
+  // saveCookies() on a 60-second heartbeat — so in the window between ticks
+  // (or after an ungraceful shutdown) the userDataDir copy is MORE CURRENT than
+  // the JSON copy.  We save the userDataDir device tokens here and re-apply them
+  // AFTER loadCookies() so they always override any potentially-stale JSON values.
+  // Without this, loadCookies() would silently stamp a 60-second-old mid/datr
+  // back in, and Instagram would see a device fingerprint mismatch on the next
+  // login → "Unrecognised device" security text.
+  let udirDeviceTokens: any[] = [];
   try {
     const staleCookies: any[] = await (page as any).cookies(
       "https://www.instagram.com",
@@ -1015,16 +1179,16 @@ export async function getOrCreateSession(
       "https://instagram.com",
     ).catch(() => []);
     if (staleCookies.length) {
-      const deviceCookies = staleCookies.filter((c: any) => DEVICE_COOKIE_NAMES_SET.has(c.name));
+      udirDeviceTokens = staleCookies.filter((c: any) => DEVICE_COOKIE_NAMES_SET.has(c.name));
       const sessionCookies = staleCookies.filter((c: any) => !DEVICE_COOKIE_NAMES_SET.has(c.name));
       if (sessionCookies.length) {
         await (page as any).deleteCookie(...sessionCookies).catch(() => null);
       }
-      if (deviceCookies.length) {
-        await (page as any).setCookie(...deviceCookies).catch(() => null);
+      if (udirDeviceTokens.length) {
+        await (page as any).setCookie(...udirDeviceTokens).catch(() => null);
       }
       const names = sessionCookies.map((c: any) => c.name).join(", ");
-      log(`[cookies:${profileId}] Purged ${sessionCookies.length} stale session cookies before load (preserved device tokens: ${deviceCookies.map((c: any) => c.name).join(", ") || "none"}): ${names}`, "browser");
+      log(`[cookies:${profileId}] Purged ${sessionCookies.length} stale session cookies before load (preserved device tokens: ${udirDeviceTokens.map((c: any) => c.name).join(", ") || "none"}): ${names}`, "browser");
     } else {
       log(`[cookies:${profileId}] No stale Chrome-profile cookies found — clean start`, "browser");
     }
@@ -1039,6 +1203,26 @@ export async function getOrCreateSession(
   // about:blank in some cases). Instead we store the target in session.pendingInitUrl
   // so attachSSE is the single source of truth for the initial navigation.
   const cookiesLoaded = await loadCookies(profileId, page);
+
+  // ── Re-apply Chrome's userDataDir device tokens on top of the JSON load ─────
+  // loadCookies() just called page.setCookie() for every cookie in the JSON file,
+  // including device tokens.  If those JSON values were stale (the JSON was
+  // written before Chrome last received a Set-Cookie for mid/datr), they would
+  // overwrite Chrome's current values.  Stamping udirDeviceTokens back in now
+  // ensures Chrome's OWN real-time values always take priority.
+  if (udirDeviceTokens.length && cookiesLoaded) {
+    try {
+      await (page as any).setCookie(...udirDeviceTokens).catch(() => null);
+      // Log any divergence so it's visible in the browser logs
+      const jsonRaw = (() => { try { const p = cookiePath(profileId); return require("fs").existsSync(p) ? JSON.parse(require("fs").readFileSync(p, "utf8")) : []; } catch { return []; } })();
+      for (const uc of udirDeviceTokens) {
+        const jc = jsonRaw.find((c: any) => c.name === uc.name);
+        if (jc && jc.value !== uc.value) {
+          log(`[cookies:${profileId}] ⚠ Device token divergence — ${uc.name}: JSON had ${jc.value.slice(0, 10)}… userDataDir has ${uc.value.slice(0, 10)}… (using userDataDir)`, "browser");
+        }
+      }
+    } catch { /* non-fatal */ }
+  }
   const cachedCheckpointUrl = checkpointUrlCache.get(profileId);
   if (cachedCheckpointUrl) {
     checkpointUrlCache.delete(profileId);
@@ -1911,7 +2095,8 @@ export async function browserNewTab(profileId: number) {
     const newPage = await s.browser.newPage();
     // Use the profile's stored UA — same as the main page, so Instagram sees
     // a consistent device across all tabs (not "HeadlessChrome" on new tabs).
-    await newPage.setUserAgent(s.userAgent);
+    const tabMeta = buildUAMetadata(s.userAgent);
+    await (tabMeta ? newPage.setUserAgent(s.userAgent, tabMeta as any) : newPage.setUserAgent(s.userAgent));
     await newPage.setViewport(viewportForUA(s.userAgent));
     await applyStealthScripts(newPage, s.userAgent);
     // File chooser interception for new tab

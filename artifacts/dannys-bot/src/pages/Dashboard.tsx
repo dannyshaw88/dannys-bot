@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.350",
+    date: "17 May 2026",
+    items: [
+      { category: "Fix", text: "Accounts no longer trigger 'Unrecognised device' security texts on subsequent logins — Chrome's own real-time device fingerprint (mid, datr) now always takes priority over the saved cookie file, preventing stale values from being silently restored at session startup." },
+      { category: "Fix", text: "Embedded browser User-Agent and device metadata now fully match a real Android device, preventing Instagram from detecting automation via browser fingerprinting." },
+      { category: "Fix", text: "Embedded browser no longer leaks the server's real IP address via WebRTC — all WebRTC connections are now routed through the assigned proxy." },
+    ],
+  },
+  {
     version: "1.0.349",
     date: "16 May 2026",
     items: [
