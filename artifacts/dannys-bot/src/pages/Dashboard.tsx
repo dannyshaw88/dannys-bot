@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.354",
+    date: "17 May 2026",
+    items: [
+      { category: "Fix", text: "Build pipeline no longer fails when the GitHub release token expires — the installer is always packaged and uploaded for download, and the release publish is retried as a separate best-effort step." },
+    ],
+  },
+  {
     version: "1.0.353",
     date: "17 May 2026",
     items: [

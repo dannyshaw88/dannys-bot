@@ -70,9 +70,7 @@ jobs:
 
       - name: Package Windows installer
         working-directory: artifacts/electron
-        env:
-          GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-        run: npx electron-builder --win --publish always
+        run: npx electron-builder --win --publish never
 
       - name: Upload installer to Actions artifacts
         uses: actions/upload-artifact@v4
@@ -80,3 +78,10 @@ jobs:
           name: Equinox-Windows-Installer
           path: artifacts/electron/release/*.exe
           if-no-files-found: error
+
+      - name: Publish to GitHub Releases (auto-updater feed)
+        working-directory: artifacts/electron
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+        run: npx electron-builder --win --publish always
