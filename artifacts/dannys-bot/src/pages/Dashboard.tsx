@@ -55,10 +55,11 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.354",
+    version: "1.0.355",
     date: "17 May 2026",
     items: [
-      { category: "Fix", text: "Build pipeline no longer fails when the GitHub release token expires — the installer is always packaged and uploaded for download, and the release publish is retried as a separate best-effort step." },
+      { category: "Fix", text: "The 'Update Check Failed' error dialog no longer pops up on every app launch — background update checks now fail silently. The dialog only appears when you manually check for updates." },
+      { category: "Fix", text: "Build pipeline no longer fails when the GitHub release token expires — the installer is always packaged and uploaded for download." },
     ],
   },
   {

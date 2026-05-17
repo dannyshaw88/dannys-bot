@@ -425,6 +425,9 @@ function createTray(): void {
 
 declare const __UPDATER_TOKEN__: string;
 
+// true while a user-initiated check is in progress — background checks are silent
+let _updaterManualCheck = false;
+
 function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -438,6 +441,8 @@ function setupAutoUpdater(): void {
     token: __UPDATER_TOKEN__,
   } as any);
 
+  // Always show the "restart to apply" dialog — an update being ready is
+  // important regardless of whether the check was automatic or manual.
   autoUpdater.on("update-downloaded", () => {
     if (!win) return;
     dialog.showMessageBox(win, {
@@ -451,8 +456,10 @@ function setupAutoUpdater(): void {
     });
   });
 
+  // Only tell the user they are up-to-date when they explicitly asked.
   autoUpdater.on("update-not-available", () => {
-    if (!win) return;
+    if (!_updaterManualCheck || !win) return;
+    _updaterManualCheck = false;
     dialog.showMessageBox(win, {
       type: "info",
       title: "Up to Date",
@@ -461,17 +468,28 @@ function setupAutoUpdater(): void {
     });
   });
 
+  // Background check errors (e.g. expired token, no internet) are logged
+  // silently.  Only surface a dialog when the user manually triggered the check.
   autoUpdater.on("error", (err) => {
-    if (!win) return;
+    const msg = String(err?.message || err);
+    console.warn("[updater] error:", msg);
+    if (!_updaterManualCheck || !win) return;
+    _updaterManualCheck = false;
     dialog.showMessageBox(win, {
       type: "error",
       title: "Update Check Failed",
-      message: String(err?.message || err),
+      message: msg,
       buttons: ["OK"],
     });
   });
 
-  setTimeout(() => autoUpdater.checkForUpdates(), 5000);
+  // Background check — silent, runs once shortly after startup.
+  setTimeout(() => {
+    _updaterManualCheck = false;
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.warn("[updater] background check failed:", err?.message ?? err);
+    });
+  }, 5000);
 }
 
 // ── Backup helpers ────────────────────────────────────────────────────────────
@@ -846,8 +864,10 @@ async function createWindow() {
       return;
     }
     try {
+      _updaterManualCheck = true;
       await autoUpdater.checkForUpdates();
     } catch (err) {
+      _updaterManualCheck = false;
       dialog.showMessageBox(win!, {
         type: "error",
         title: "Update Check Failed",
