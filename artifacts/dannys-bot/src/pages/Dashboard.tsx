@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.352",
+    date: "17 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie injection now works correctly — pasted cookies are written to both the database and the browser cookie file, so the embedded browser automatically picks up the session on its next start without needing to clear anything first." },
+      { category: "Fix", text: "Injecting cookies that include mid or ig_did now also updates the saved device fingerprint, so the mobile API and embedded browser both present the same device identity to Instagram." },
+    ],
+  },
+  {
     version: "1.0.351",
     date: "17 May 2026",
     items: [

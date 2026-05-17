@@ -198,29 +198,34 @@ export function ProfileDetailsPage() {
   const handleInjectCookies = async () => {
     const raw = cookieInput.trim();
     if (!raw) return;
-    // Validate: must contain a sessionid
     if (!raw.includes("sessionid=")) {
       toast({ title: "Invalid cookies", description: "Cookie string must contain sessionid.", variant: "destructive" });
       return;
     }
     setCookieInjectStatus("injecting");
     try {
-      const res = await fetch(`/api/profiles/${profileId}`, {
-        method: "PATCH",
+      const res = await fetch(`/api/profiles/${profileId}/inject-cookies`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ igApiCookies: raw }),
+        body: JSON.stringify({ cookies: raw }),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).message ?? "Failed");
+      }
       setCookieInjectStatus("ok");
       setCookieInput("");
       queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
       queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
-      toast({ title: "Cookies injected", description: "Session cookies saved. Run Verify Credentials to confirm the session." });
+      toast({
+        title: "Cookies injected",
+        description: "Session cookies saved to database and browser cookie file. Open the embedded browser or run Verify Credentials to activate the session.",
+      });
       setTimeout(() => setCookieInjectStatus("idle"), 4000);
-    } catch {
+    } catch (err: any) {
       setCookieInjectStatus("error");
-      toast({ title: "Injection failed", description: "Could not save cookies.", variant: "destructive" });
+      toast({ title: "Injection failed", description: err?.message ?? "Could not save cookies.", variant: "destructive" });
       setTimeout(() => setCookieInjectStatus("idle"), 3000);
     }
   };
@@ -1260,7 +1265,7 @@ export function ProfileDetailsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">Paste a raw cookie string. Must include <code className="font-mono">sessionid</code>. After injecting, run Verify Credentials to confirm the session.</p>
+                  <p className="text-[11px] text-muted-foreground">Paste a raw cookie string (e.g. from a Chrome export). Must include <code className="font-mono">sessionid</code>. Injection writes cookies to both the database and the browser cookie file — the embedded browser will pick them up automatically on its next session without you needing to clear anything. Run Verify Credentials afterwards to confirm the session is active.</p>
                 </div>
               </CardContent>
             </Card>

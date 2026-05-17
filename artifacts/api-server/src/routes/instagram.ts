@@ -3,6 +3,8 @@ import type { Server } from "http";
 import { WebSocketServer } from "ws";
 import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
+import fs from "fs";
+import path from "path";
 import { storage, statusEvents } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
@@ -370,6 +372,96 @@ export async function registerInstagramRoutes(
       }).catch(() => {});
     }
     res.status(204).end();
+  });
+
+  // ── Cookie Injection ─────────────────────────────────────────────────────
+  // Writes cookies both to igApiCookies (DB) AND to the Puppeteer cookie file
+  // so the embedded browser picks them up on its next session start.
+  app.post("/api/profiles/:id/inject-cookies", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const { cookies: rawCookies } = req.body ?? {};
+    if (!rawCookies || typeof rawCookies !== "string") {
+      return res.status(400).json({ ok: false, message: "cookies string is required" });
+    }
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+
+    // Parse the semicolon-separated cookie string into name=value pairs
+    const parsed: Record<string, string> = {};
+    for (const part of rawCookies.split(";")) {
+      const eqIdx = part.indexOf("=");
+      if (eqIdx < 1) continue;
+      const name = part.slice(0, eqIdx).trim();
+      const value = part.slice(eqIdx + 1).trim();
+      if (name) parsed[name] = value;
+    }
+
+    if (!parsed["sessionid"]) {
+      return res.status(400).json({ ok: false, message: "Cookie string must contain sessionid" });
+    }
+
+    // Build the canonical igApiCookies string (same format as saveCookies() in browserSession.ts)
+    const cookieParts = [
+      `sessionid=${parsed["sessionid"]}`,
+      parsed["csrftoken"]  ? `csrftoken=${parsed["csrftoken"]}`     : "",
+      parsed["ds_user_id"] ? `ds_user_id=${parsed["ds_user_id"]}`   : "",
+      parsed["mid"]        ? `mid=${parsed["mid"]}`                 : "",
+      parsed["ig_did"]     ? `ig_did=${parsed["ig_did"]}`           : "",
+    ].filter(Boolean);
+    const igApiCookies = cookieParts.join(";");
+
+    // Write Puppeteer-format cookie JSON so the EB loads them on next session start
+    const cookiesDir = process.env.DATABASE_PATH
+      ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data")
+      : path.join(process.cwd(), "server", "browser-data");
+    const cookieFilePath = path.join(cookiesDir, `cookies-${profileId}.json`);
+
+    // Known cookie attributes for instagram.com
+    const COOKIE_META: Record<string, { httpOnly: boolean; sameSite: string }> = {
+      sessionid:  { httpOnly: true,  sameSite: "Lax" },
+      csrftoken:  { httpOnly: false, sameSite: "Lax" },
+      ds_user_id: { httpOnly: true,  sameSite: "Lax" },
+      mid:        { httpOnly: false, sameSite: "Lax" },
+      ig_did:     { httpOnly: false, sameSite: "Lax" },
+      ig_nrcb:    { httpOnly: false, sameSite: "Lax" },
+    };
+
+    const puppeteerCookies = Object.entries(parsed).map(([name, value]) => {
+      const meta = COOKIE_META[name] ?? { httpOnly: false, sameSite: "Lax" };
+      return {
+        name,
+        value,
+        domain: ".instagram.com",
+        path: "/",
+        expires: -1,
+        httpOnly: meta.httpOnly,
+        secure: true,
+        sameSite: meta.sameSite,
+        session: false,
+      };
+    });
+
+    try {
+      fs.mkdirSync(cookiesDir, { recursive: true });
+      fs.writeFileSync(cookieFilePath, JSON.stringify(puppeteerCookies, null, 2), "utf8");
+    } catch (err: any) {
+      console.error(`[inject-cookies:${profileId}] Failed to write cookie file:`, err?.message);
+      return res.status(500).json({ ok: false, message: "Failed to write browser cookie file" });
+    }
+
+    // Update igApiCookies in DB, and optionally sync igDeviceState with igDid/mid
+    const dbUpdate: Record<string, unknown> = { igApiCookies };
+    if (parsed["ig_did"] || parsed["mid"]) {
+      try {
+        const existing = JSON.parse((profile.igDeviceState as string | null) ?? "{}");
+        if (parsed["ig_did"]) existing.igDid = parsed["ig_did"];
+        dbUpdate.igDeviceState = JSON.stringify(existing);
+      } catch { /* non-fatal */ }
+    }
+
+    await storage.updateProfile(profileId, dbUpdate as any);
+    console.log(`[inject-cookies:${profileId}] Wrote ${puppeteerCookies.length} cookies to file and DB (mid=${parsed["mid"]?.slice(0,10) ?? "n/a"}…)`);
+    res.json({ ok: true, cookieCount: puppeteerCookies.length });
   });
 
   // ── Profile Sync — fetch latest follower/following/posts counts ───────────
