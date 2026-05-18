@@ -113,6 +113,9 @@ export function ProfilesPage() {
     try {
       const res  = await fetch(`/api/profiles/${id}/verify`, { method: "POST", credentials: "include" });
       const data = await res.json() as { ok: boolean; message: string };
+      if (!res.ok || !data.ok) {
+        updateAccountStatus.mutate({ id, accountStatus: "pending" });
+      }
       toast({
         title: data.ok ? "Verified" : "Verification Failed",
         description: data.message,
@@ -185,9 +188,24 @@ export function ProfilesPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (sessionStorage.getItem("profiles:sortDir") as "asc" | "desc") ?? "asc"
   );
-  // Stable order: IDs in the order frozen when user last clicked a column header.
-  // Data refreshes update account data in-place but never reorder the list.
+  // Stable order: IDs in the order frozen when user last clicked a column header,
+  // or seeded from the first data load. Data refreshes update account data in-place
+  // but never reorder the list.
   const [stableOrder, setStableOrder] = useState<number[]>([]);
+
+  // Seed stableOrder on first profiles load; keep it current as accounts are
+  // added/removed, but never change existing positions.
+  useEffect(() => {
+    if (!profiles || profiles.length === 0) return;
+    setStableOrder(prev => {
+      const prevSet    = new Set(prev);
+      const activeIds  = new Set(profiles.map(p => p.id));
+      const kept       = prev.filter(id => activeIds.has(id));
+      const newIds     = profiles.filter(p => !prevSet.has(p.id)).map(p => p.id);
+      if (kept.length === prev.length && newIds.length === 0) return prev;
+      return [...kept, ...newIds];
+    });
+  }, [profiles]);
 
   // ── Group Profiles state ──────────────────────────────────────────────────
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("profiles:groupMode") === "true");
@@ -241,10 +259,9 @@ export function ProfilesPage() {
         })
       : (profiles ?? []);
 
-    if (!sortField) return base;
-
-    // If we have a stable order snapshot (set when user clicked a header), use it.
-    // This freezes the row positions so live data refreshes never reorder accounts.
+    // Always use stableOrder when available — this freezes row positions so live
+    // data refreshes (e.g. status changes) never reorder accounts. stableOrder is
+    // seeded on first load and re-snapshotted only when the user clicks a column header.
     if (stableOrder.length > 0) {
       const orderMap = new Map(stableOrder.map((id, idx) => [id, idx]));
       return [...base].sort((a, b) => {
@@ -254,7 +271,9 @@ export function ProfilesPage() {
       });
     }
 
-    // No stable order yet — sort live as a one-time fallback (before first click)
+    if (!sortField) return base;
+
+    // No stable order yet — sort live as a one-time fallback (before first load)
     return [...base].sort((a, b) => {
       if (sortField === "ip") {
         const na = ipToNum(a.proxyHost);

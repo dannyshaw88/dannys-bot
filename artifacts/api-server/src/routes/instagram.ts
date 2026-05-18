@@ -506,11 +506,6 @@ export async function registerInstagramRoutes(
       return fail(400, "Username and password are required before verifying.");
     }
 
-    // Mark as "verifying" in the DB immediately — this way the dashboard still
-    // shows the correct in-progress state if the user navigates away before the
-    // long-running verify call completes.
-    await storage.updateProfile(profile.id, { accountStatus: "verifying" });
-
     let effectiveProfile = { ...profile };
     if (profile.proxyId) {
       const proxies = await storage.getProxies();
@@ -527,9 +522,15 @@ export async function registerInstagramRoutes(
     }
 
     // Block verify if no proxy is configured — never connect via bare server IP
+    // NOTE: this check must happen BEFORE setting accountStatus="verifying" so a
+    // 400 response never leaves the button stuck on "Verifying".
     if (!effectiveProfile.proxyHost || !effectiveProfile.proxyPort) {
       return fail(400, "No proxy assigned. Assign a proxy to this account before verifying.");
     }
+
+    // Mark as "verifying" in the DB — only reached once proxy is confirmed present.
+    // This way the dashboard shows the in-progress state if the user navigates away.
+    await storage.updateProfile(profile.id, { accountStatus: "verifying" });
 
 
     // Log "Initiating" BEFORE the verify call so it gets a genuinely earlier
@@ -583,9 +584,12 @@ export async function registerInstagramRoutes(
       );
     } catch (loginErr: any) {
       loginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
-    } finally {
-      verifyInFlight.delete(profileId);
     }
+    // NOTE: verifyInFlight lock is intentionally NOT released here.
+    // It covers the full verify flow — including getSessionPageCookies and the mobile
+    // API cold-start — to prevent a second concurrent verify from starting a second
+    // IgApiClient session with the same sessionid before the first one completes.
+    // The lock is released at every exit point below (early returns + final response).
 
     // Step 3: Extract cookies and build result
     if (loginResult.ok) {
@@ -639,6 +643,7 @@ export async function registerInstagramRoutes(
           };
           sendLoginDone(profileId, false, result.message ?? "");
           await storage.updateProfile(profile.id, { accountStatus: "pending" });
+          verifyInFlight.delete(profileId);
           return res.status(200).json(result);
         }
         result = {
@@ -704,6 +709,7 @@ export async function registerInstagramRoutes(
       setCheckpointUrl(profile.id, result.checkpointUrl);
     }
 
+    verifyInFlight.delete(profileId);
     res.json(result);
   });
 
@@ -2197,7 +2203,25 @@ export async function registerInstagramRoutes(
       const { profile: profileData, tools: toolsData, followedUsers: fuData, stats: statsData } = payload;
 
       const { id: _id, ...cleanProfile } = profileData;
-      cleanProfile.accountStatus = "pending";
+      // Preserve the exported accountStatus — if an account was valid with cookies,
+      // it should import as valid.  Only reset transient states that can't survive
+      // being written to a file (e.g. "verifying" means a live in-progress check).
+      if (cleanProfile.accountStatus === "verifying") {
+        cleanProfile.accountStatus = "pending";
+      }
+
+      // When an account was exported from a Proxy Manager-linked profile, the
+      // profile's own proxyHost is null and the proxy lives in resolvedProxy*
+      // fields added by buildEqxPayload.  Map those back to the direct columns
+      // so the proxy survives the import.  Also clear proxyId — it's a local DB
+      // reference that means nothing on the importing machine.
+      if (!cleanProfile.proxyHost && (cleanProfile as any).resolvedProxyHost) {
+        cleanProfile.proxyHost     = (cleanProfile as any).resolvedProxyHost  ?? null;
+        cleanProfile.proxyPort     = Number((cleanProfile as any).resolvedProxyPort) || null;
+        cleanProfile.proxyUsername = (cleanProfile as any).resolvedProxyUsername ?? null;
+        cleanProfile.proxyPassword = (cleanProfile as any).resolvedProxyPassword ?? null;
+      }
+      cleanProfile.proxyId = null;
 
       const created = await storage.createProfile(cleanProfile);
 

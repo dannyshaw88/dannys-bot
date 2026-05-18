@@ -81,12 +81,26 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
 }
 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
-  const [targets, setTargets]   = useState<Set<number>>(new Set());
+  const storageKey = `copyDialog:targets:${title}`;
+
+  const [targets, setTargets]   = useState<Set<number>>(() => {
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      return stored ? new Set(JSON.parse(stored) as number[]) : new Set();
+    } catch { return new Set(); }
+  });
   const [search, setSearch]     = useState("");
   const [sortBy, setSortBy]     = useState<SortBy>("name");
   const [sortDir, setSortDir]   = useState<SortDir>("asc");
   const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
   const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
+
+  // Persist targets to sessionStorage whenever they change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify([...targets]));
+    } catch {}
+  }, [targets, storageKey]);
 
   useEffect(() => {
     if (open) {

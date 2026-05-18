@@ -55,6 +55,31 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.367",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "EQX import now preserves the account status exactly as it was when exported — a verified account imports as verified, not as pending." },
+      { category: "Fix", text: "EQX export/import now carries across all cookies and device state so nothing is lost when moving accounts between machines." },
+    ],
+  },
+  {
+    version: "1.0.366",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "EQX export/import now correctly preserves the assigned proxy — accounts linked via the Proxy Manager restore their proxy on import instead of losing it." },
+      { category: "Fix", text: "Clicking Verify on an account with no proxy no longer leaves the button stuck on Verifying — it immediately returns to Verify Account." },
+      { category: "Fix", text: "Browser login no longer reports a false success when the proxy blocked the redirect mid-login — you now get a clear message to open the embedded browser and complete any challenge shown." },
+    ],
+  },
+  {
+    version: "1.0.365",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Account order on the Accounts page no longer changes when a status updates — the list stays in its current order until you click a column header." },
+      { category: "Fix", text: "Copy Settings now remembers which accounts were selected the last time you opened it — selections are only cleared when you press NONE." },
+    ],
+  },
+  {
     version: "1.0.364",
     date: "18 May 2026",
     items: [

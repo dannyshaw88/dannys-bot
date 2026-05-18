@@ -1670,7 +1670,11 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
   let startOk = true;
   const prevQueue = _screencastStartQueue;
   _screencastStartQueue = (async () => {
-    await prevQueue;
+    // Wait for the previous queue entry but cap at 20 s.
+    // Without a timeout a single hung cdp.send() in a previous entry would
+    // permanently jam this promise chain, causing every subsequent EB to wait
+    // forever and appear stuck on "Loading…".
+    await Promise.race([prevQueue, new Promise(r => setTimeout(r, 20000))]);
     // Brief pause between consecutive starts: gives the Node.js event loop a
     // chance to drain any pending CDP callbacks (e.g. ACKs from a previously
     // started screencast) before we issue the next Page.startScreencast.
@@ -1682,17 +1686,25 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
     if (!sNow?.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
     const t1 = Date.now();
     try {
-      await cdp.send("Page.startScreencast", {
-        format: "jpeg",
-        quality,
-        maxWidth: 1280,
-        maxHeight: 760,
-        everyNthFrame: nthFrame,
-      });
+      // 10 s timeout on Page.startScreencast: under heavy load Chrome can
+      // fail to ACK this command indefinitely, jamming the global queue and
+      // preventing all subsequent EBs from ever receiving frames.
+      await Promise.race([
+        cdp.send("Page.startScreencast", {
+          format: "jpeg",
+          quality,
+          maxWidth: 1280,
+          maxHeight: 760,
+          everyNthFrame: nthFrame,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Page.startScreencast timeout (10 s)")), 10000)
+        ),
+      ]);
       log(`[screencast:${profileId}] Page.startScreencast ACKed in ${Date.now() - t1}ms (quality=${quality} nth=${nthFrame} sessions=${nSessions})`, "browser");
     } catch (e: any) {
       log(`[screencast:${profileId}] Page.startScreencast FAILED: ${e?.message}`, "browser");
-      try { await cdp.detach(); } catch {}
+      try { await Promise.race([cdp.detach(), new Promise(r => setTimeout(r, 3000))]); } catch {}
       sNow.screencastCdp = null;
       startOk = false;
     }
@@ -1738,8 +1750,13 @@ async function stopScreencast(profileId: number): Promise<void> {
   if (!session?.screencastCdp) return;
   const cdp = session.screencastCdp;
   session.screencastCdp = null;
-  try { await cdp.send("Page.stopScreencast"); } catch {}
-  try { await cdp.detach(); } catch {}
+  // Both CDP calls must have explicit timeouts — without them, a hung Chrome
+  // process (dead proxy, crashed renderer) causes stopScreencast to hang forever,
+  // which blocks startScreencast (called first) and then the global queue.
+  const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T | undefined> =>
+    Promise.race([p, new Promise<undefined>(r => setTimeout(r, ms))]);
+  try { await withTimeout(cdp.send("Page.stopScreencast"), 5000); } catch {}
+  try { await withTimeout(cdp.detach(), 5000); } catch {}
 }
 
 // ── Lightweight housekeeping loop ─────────────────────────────────────────────
@@ -2577,6 +2594,19 @@ export async function browserAutoLogin(
           // Clear any stale challenge flag — the account is visibly logged in so
           // whatever challenge existed has been resolved in the browser.
           s.challengeUrl = undefined;
+          // Ground-truth: verify a real sessionid cookie exists before declaring success.
+          // The page may be on a challenge/error URL that has no login form but also
+          // has no session (e.g. instagram.com/challenge/).
+          const earlyCheck = await s.page.cookies(
+            "https://www.instagram.com",
+            "https://i.instagram.com",
+            "https://instagram.com",
+          ).catch(() => [] as { name: string; value: string }[]);
+          if (!earlyCheck.some(c => c.name === "sessionid" && c.value.length > 5)) {
+            const msg = `Browser is on ${currentUrl.slice(0, 80)} but no sessionid cookie found — Instagram may be showing a challenge. Open the embedded browser and complete any verification shown, then try Verify again.`;
+            sendStatus(profileId, `⚠ ${msg}`);
+            return { ok: false, message: msg };
+          }
           await saveCookies(profileId, s.page);
           sendStatus(profileId, "✓ Already logged in — browser shows your account.");
           return { ok: true, message: "Already logged in" };
@@ -2639,6 +2669,18 @@ export async function browserAutoLogin(
         waitUntil: "domcontentloaded",
         timeout: 30000,
       }).catch(() => null);
+
+      // Immediately check if Chrome hit an error page — no point waiting 12 seconds
+      // for a login form that will never appear on chrome-error://.
+      // ERR_HTTP_RESPONSE_CODE_FAILURE means an HTTP 4xx/5xx was returned — this
+      // can come from the proxy (407 auth), Instagram's CDN (403/429), or the
+      // network path.  The browser window will show exactly what error occurred.
+      const afterGotoUrl = s.page.url();
+      if (afterGotoUrl.startsWith("chrome-error://") || afterGotoUrl.startsWith("chrome-error:")) {
+        const errMsg = `Chrome hit an error page loading Instagram (ERR_HTTP_RESPONSE_CODE_FAILURE). Open the embedded browser for this account to see the exact error — it may be a proxy authentication issue, an Instagram block on this IP, or a network problem. Resolve it and try Verify again.`;
+        sendStatus(profileId, `⚠ ${errMsg}`);
+        return { ok: false, message: errMsg };
+      }
     }
 
     // Dismiss cookie banner if present
@@ -2665,11 +2707,32 @@ export async function browserAutoLogin(
     }
 
     if (!usernameInput) {
-      const currentUrl = s.page.url();
-      if (!currentUrl.includes("accounts/login")) {
-        await saveCookies(profileId, s.page);
-        sendStatus(profileId, "✓ Already logged in — browser shows your account.");
-        return { ok: true, message: "Already logged in" };
+      const postWaitUrl = s.page.url();
+      // chrome-error:// means the proxy returned an HTTP error when the browser
+      // tried to load Instagram.  No login form exists on an error page, but that
+      // does NOT mean the account is logged in.  Return a clear proxy error message.
+      if (postWaitUrl.startsWith("chrome-error://") || postWaitUrl.startsWith("chrome-error:")) {
+        const errMsg = `Chrome hit an error page loading Instagram (ERR_HTTP_RESPONSE_CODE_FAILURE). Open the embedded browser for this account to see the exact error — it may be a proxy authentication issue, an Instagram block on this IP, or a network problem. Resolve it and try Verify again.`;
+        sendStatus(profileId, `⚠ ${errMsg}`);
+        return { ok: false, message: errMsg };
+      }
+      if (!postWaitUrl.includes("accounts/login")) {
+        // Not on login page and not on chrome-error — might be logged in already
+        // (e.g. trusted-device auto-login fired mid-wait).  Guard with sessionid check.
+        const afterWaitCheck = await s.page.cookies(
+          "https://www.instagram.com",
+          "https://i.instagram.com",
+          "https://instagram.com",
+        ).catch(() => [] as { name: string; value: string }[]);
+        if (afterWaitCheck.some(c => c.name === "sessionid" && c.value.length > 5)) {
+          await saveCookies(profileId, s.page);
+          sendStatus(profileId, "✓ Already logged in — browser shows your account.");
+          return { ok: true, message: "Already logged in" };
+        }
+        // No sessionid — probably a challenge or unsupported page
+        const msg = `Login form not found and browser is on ${postWaitUrl.slice(0, 80)} — Instagram may be showing a challenge. Open the embedded browser and complete any verification shown, then try Verify again.`;
+        sendStatus(profileId, `⚠ ${msg}`);
+        return { ok: false, message: msg };
       }
       // Can't find the form — leave browser open showing whatever Instagram has
       sendStatus(profileId, "⚠ Login form not found — check the browser window for what Instagram is showing.");
@@ -2818,6 +2881,29 @@ export async function browserAutoLogin(
     await delay(300);
     await dismissCookieBanner(s.page);
 
+    // Dismiss post-login popups BEFORE evaluating page state — new accounts often
+    // see "Save your login info", "Turn on notifications", or other overlays that
+    // can obscure the real page state and trigger false 2FA / checkpoint detection.
+    await dismissInstagramPopups(s.page);
+    await delay(600);
+
+    // ── New-account onboarding page bypass ───────────────────────────────────
+    // Freshly bought accounts frequently land on full-page interstitials after
+    // login: "Add your phone number" (/accounts/phone-add/), "Onetap save login"
+    // (/accounts/onetap/), "Add birthday" (/accounts/birthday/), etc.
+    // These pages have numeric/tel inputs that the 2FA detector flags as TOTP
+    // code fields, causing verify to fail with "2FA screen — no TOTP key stored".
+    // The sessionid cookie is already set at this point — navigate to the feed.
+    const postLoginUrl = s.page.url();
+    const isOnboardingPage =
+      /\/accounts\/(phone-add|email-add|manage-account|onetap|birthday|nametag|avatar)/i.test(postLoginUrl);
+    if (isOnboardingPage) {
+      sendStatus(profileId, `Post-login setup page detected (${postLoginUrl.slice(0, 70)}) — navigating to home feed…`);
+      await s.page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null);
+      await delay(2000);
+      await dismissInstagramPopups(s.page);
+    }
+
     // ── Step 6: Detect what's on screen by content, not URL ──────────────────
     // The 2FA hash-route URL still contains "/accounts/login" — can't use URL alone.
     // Also check dialogs/modals separately — Instagram renders "Incorrect password"
@@ -2873,9 +2959,14 @@ export async function browserAutoLogin(
         if (["password","submit","button","hidden","checkbox","radio","file","image"].includes(type)) return false;
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) return false;
+        // imode === "numeric" alone is NOT enough — phone-number inputs on Instagram's
+        // "Add your phone number" onboarding page also use inputmode="numeric" with no
+        // maxlength. Only treat it as a code input when combined with a short maxlength
+        // (6-8) or an explicit OTP autocomplete attribute.
+        const isNumericOtp = imode === "numeric" && (ml >= 6 && ml <= 8);
         return CODE_NAMES.has(name) ||
                ac === "one-time-code" ||
-               imode === "numeric" ||
+               isNumericOtp ||
                (ml >= 6 && ml <= 8) ||
                ph.includes("code") || ph.includes("digit") || ph.includes("otp");
       });
@@ -3129,9 +3220,14 @@ export async function browserAutoLogin(
             });
             return !hasLoginForm && !has2FAInput;
           }).catch(() => false);
-          // Use sessionid cookie as ground-truth override — if it exists, we're logged in
-          const hasCookieSession = await s.page.cookies()
-            .then(cs => cs.some(c => c.name === "sessionid" && c.value.length > 5))
+          // Use sessionid cookie as ground-truth override — if it exists, we're logged in.
+          // Must use explicit IG domain URLs; page.cookies() without args returns only
+          // cookies for the current page domain (returns nothing on chrome-error://).
+          const hasCookieSession = await s.page.cookies(
+            "https://www.instagram.com",
+            "https://i.instagram.com",
+            "https://instagram.com",
+          ).then(cs => cs.some(c => c.name === "sessionid" && c.value.length > 5))
             .catch(() => false);
           const twoFaAccepted = urlAccepted || domAccepted || hasCookieSession;
           sendStatus(profileId, `2FA result: url=${urlAccepted} dom=${domAccepted} cookie=${hasCookieSession}`);
@@ -3202,6 +3298,24 @@ export async function browserAutoLogin(
         sendStatus(profileId, `⚠ Instagram is asking this account to confirm it is human`);
         storage.updateProfile(profileId, { accountStatus: "confirm_human" }).catch(() => {});
         return { ok: false, message: "Account requires human verification on Instagram" };
+      }
+      // Ground-truth guard: confirm a real sessionid cookie exists before declaring
+      // success.  isLoggedIn can go true when the page navigated away from
+      // /accounts/login (e.g. proxy returned an HTTP error mid-redirect, leaving
+      // the browser on chrome-error without ever setting a session cookie).
+      // Using explicit IG domain URLs mirrors what getSessionPageCookies does so
+      // the two checks are always in agreement.
+      const sessionCheck = await s.page.cookies(
+        "https://www.instagram.com",
+        "https://i.instagram.com",
+        "https://instagram.com",
+      ).catch(() => [] as { name: string; value: string }[]);
+      const hasSessionId = sessionCheck.some(c => c.name === "sessionid" && c.value.length > 5);
+      if (!hasSessionId) {
+        const msg = `Browser navigated away from the login page but no sessionid cookie was issued — Instagram may have shown a challenge or the proxy blocked the redirect. Open the embedded browser for this account, complete any challenge shown, then try Verify again.`;
+        sendStatus(profileId, `⚠ ${msg}`);
+        log(`[autoLogin:${profileId}] isLoggedIn=true but no sessionid cookie — proxy/challenge false-positive`, "browser");
+        return { ok: false, message: msg };
       }
       await saveCookies(profileId, s.page);
       s.lastLoginSuccessAt = Date.now();
