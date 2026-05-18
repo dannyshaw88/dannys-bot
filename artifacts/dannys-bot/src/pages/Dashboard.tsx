@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.370",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "EQX import now reliably preserves account status — verified accounts import as verified, banned as banned, etc. The previous fix wasn't working due to a database default overriding the imported value; this version forces the correct status with an explicit write after the account is created." },
+    ],
+  },
+  {
     version: "1.0.369",
     date: "18 May 2026",
     items: [

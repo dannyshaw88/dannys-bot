@@ -2223,7 +2223,21 @@ export async function registerInstagramRoutes(
       }
       cleanProfile.proxyId = null;
 
+      // Save the intended status BEFORE createProfile, because Drizzle's SQLite
+      // dialect can silently fall back to the column's SQL DEFAULT ('pending') when
+      // the value arrives via an object spread rather than an explicit named key.
+      // The updateProfile call below is the authoritative write that bypasses that.
+      const intendedStatus: string = cleanProfile.accountStatus ?? "pending";
+
       const created = await storage.createProfile(cleanProfile);
+
+      // Force the correct accountStatus — createProfile may have inserted 'pending'
+      // due to Drizzle's default-column handling.  Only issue the UPDATE when the
+      // status actually needs correcting to avoid an unnecessary write.
+      if (created.accountStatus !== intendedStatus) {
+        await storage.updateProfile(created.id, { accountStatus: intendedStatus });
+        (created as any).accountStatus = intendedStatus;
+      }
 
       // Update auto-created tools with saved settings/enabled state, and insert sources.
       // Each tool is restored independently — a failure on one tool never blocks the others.
