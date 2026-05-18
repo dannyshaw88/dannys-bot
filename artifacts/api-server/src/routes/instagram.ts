@@ -41,6 +41,7 @@ import {
   getSessionPageCookies,
   harvestSignupCookiesFromEB,
   scheduleAutoLogin,
+  getSessionChallengeUrl,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -712,9 +713,24 @@ export async function registerInstagramRoutes(
     // Signal the browser panel SSE (if the user has it open) that login is done
     sendLoginDone(profileId, result.ok, result.message);
 
+    // If the mobile API returned "valid" but the EB detected a challenge DURING
+    // this same verify flow, the challenge is the ground truth for what the user
+    // will see in the browser — don't overwrite it with "valid".  The race is:
+    // (1) EB navigates → challenge detected → DB set to "captcha"
+    // (2) mobile API confirms session works → DB set to "valid"  ← silently wrong
+    // Checking the in-memory session challengeUrl here lets (2) yield to (1).
+    let finalStatus = result.accountStatus;
+    if (result.accountStatus === "valid") {
+      const ebChallengeUrl = getSessionChallengeUrl(profile.id);
+      if (ebChallengeUrl) {
+        finalStatus = "captcha";
+        console.log(`[verify:${profile.id}] mobile API=valid but EB challenge active (${ebChallengeUrl.slice(0, 80)}…) — keeping status=captcha`);
+      }
+    }
+
     await storage.updateProfile(profile.id, {
-      accountStatus: result.accountStatus,
-      ...(result.ok ? { credentialsDirty: false } : {}),
+      accountStatus: finalStatus,
+      ...(finalStatus === "valid" ? { credentialsDirty: false } : {}),
       ...(result.igDeviceState ? { igDeviceState: result.igDeviceState } : {}),
       // Save session cookies captured from the fresh login so follow/DM tools
       // can restore the session on Path 2 without re-logging in.
@@ -757,8 +773,37 @@ export async function registerInstagramRoutes(
     res.json(result);
   });
 
-  function resolveImportStatus(_raw: string | undefined): string {
-    return "pending";
+  function resolveImportStatus(raw: string | undefined): string {
+    const s = (raw ?? "").trim().toLowerCase().replace(/[\s-]/g, "_");
+    // Map every known status value (including Jarvee labels) to an internal status.
+    // Anything unrecognised stays "pending" so the account is safe to re-verify.
+    const MAP: Record<string, string> = {
+      valid:            "valid",
+      active:           "valid",
+      good:             "valid",
+      ok:               "valid",
+      pending:          "pending",
+      unverified:       "pending",
+      new:              "pending",
+      verifying:        "pending",    // don't preserve in-flight states
+      stopped:          "stopped",
+      disabled:         "stopped",
+      paused:           "stopped",
+      captcha:          "captcha",
+      challenge:        "captcha",
+      checkpoint:       "captcha",
+      locked:           "locked",
+      account_locked:   "locked",
+      "2fa":            "2fa_verification",
+      "2fa_required":   "2fa_verification",
+      "2fa_verification":"2fa_verification",
+      "two_factor":     "2fa_verification",
+      account_disabled: "account_disabled",
+      banned:           "account_disabled",
+      suspended:        "suspended",
+      confirm_human:    "confirm_human",
+    };
+    return MAP[s] ?? "pending";
   }
 
   app.post("/api/profiles/import", async (req, res) => {
@@ -1324,9 +1369,20 @@ export async function registerInstagramRoutes(
         }
 
         sendLoginDone(profileId, apiResult.ok, apiResult.message);
+        // Same race-condition guard as single-verify: if the mobile API says
+        // "valid" but the EB detected a challenge during this very session,
+        // keep the challenge status so the account card reflects reality.
+        let finalStatusAll = apiResult.accountStatus;
+        if (apiResult.accountStatus === "valid") {
+          const ebChallengeUrl = getSessionChallengeUrl(profileId);
+          if (ebChallengeUrl) {
+            finalStatusAll = "captcha";
+            console.log(`[verify-all:${profileId}] mobile API=valid but EB challenge active (${ebChallengeUrl.slice(0, 80)}…) — keeping status=captcha`);
+          }
+        }
         await storage.updateProfile(profileId, {
-          accountStatus: apiResult.accountStatus,
-          ...(apiResult.ok ? { credentialsDirty: false } : {}),
+          accountStatus: finalStatusAll,
+          ...(finalStatusAll === "valid" ? { credentialsDirty: false } : {}),
           ...(apiResult.igDeviceState ? { igDeviceState: apiResult.igDeviceState } : {}),
           ...("igApiCookies" in apiResult && apiResult.igApiCookies ? { igApiCookies: apiResult.igApiCookies } : {}),
         }).catch(() => {});
@@ -2281,10 +2337,14 @@ export async function registerInstagramRoutes(
 
       const created = await storage.createProfile(cleanProfile);
 
-      // Force the correct accountStatus — createProfile may have inserted 'pending'
-      // due to Drizzle's default-column handling.  Only issue the UPDATE when the
-      // status actually needs correcting to avoid an unnecessary write.
-      if (created.accountStatus !== intendedStatus) {
+      // Force the correct accountStatus with an unconditional UPDATE whenever the
+      // exported status is anything other than "pending".  We cannot rely on the
+      // RETURNING value from the INSERT — Drizzle's SQLite dialect may report the
+      // column default ("pending") even when an explicit value was provided via
+      // object spread, meaning the conditional guard in earlier versions never fired.
+      // Always writing the intended status here guarantees the imported account
+      // shows the correct status regardless of what createProfile returned.
+      if (intendedStatus !== "pending") {
         await storage.updateProfile(created.id, { accountStatus: intendedStatus });
         (created as any).accountStatus = intendedStatus;
       }
