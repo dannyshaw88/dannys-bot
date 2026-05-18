@@ -2626,4 +2626,31 @@ export async function registerInstagramRoutes(
       return res.status(500).json({ error: e?.message });
     }
   });
+
+  // ── One-time startup migration: seed missing browser cookie files ─────────
+  // Accounts imported before v1.0.372 have igApiCookies in the DB but no
+  // browser-data/cookies-{id}.json on disk.  Chrome starts blank for these
+  // accounts and Instagram fires update_risky_contactpoint on first launch.
+  // Run a silent pass at startup to backfill any missing files.
+  (async () => {
+    try {
+      const allProfiles = await storage.getProfiles();
+      let seeded = 0;
+      const cookiesDir = process.env.DATABASE_PATH
+        ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data")
+        : path.join(process.cwd(), "server", "browser-data");
+      for (const p of allProfiles) {
+        if (!p.igApiCookies) continue;
+        const filePath = path.join(cookiesDir, `cookies-${p.id}.json`);
+        if (fs.existsSync(filePath)) continue; // already seeded — skip
+        seedBrowserCookieFile(p.id, p.igApiCookies as string);
+        seeded++;
+      }
+      if (seeded > 0) {
+        console.log(`[startup] Seeded browser cookie files for ${seeded} account(s) that were missing them`);
+      }
+    } catch (e) {
+      console.warn("[startup] Cookie file backfill failed (non-fatal):", e);
+    }
+  })();
 }

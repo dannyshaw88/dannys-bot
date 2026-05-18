@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.375",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "On startup, the app now automatically backfills the browser cookie file for any account that was imported before this fix — so accounts like terina_1967.pryor that were already in the database get the correct device identity without needing to be re-imported." },
+    ],
+  },
+  {
     version: "1.0.374",
     date: "18 May 2026",
     items: [
