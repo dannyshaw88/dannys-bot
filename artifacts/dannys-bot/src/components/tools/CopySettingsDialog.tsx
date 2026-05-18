@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Copy, CheckCircle2, Loader2, Search, ArrowUpDown } from "lucide-react";
+import { Copy, CheckCircle2, Loader2, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,7 +36,8 @@ interface Props {
   onCopy: (targetIds: number[], expandedKeys: string[]) => Promise<void>;
 }
 
-type SortBy = "name" | "status" | "group";
+type SortBy  = "name" | "status" | "group";
+type SortDir = "asc" | "desc";
 
 function statusBadgeClass(status: string) {
   const s = (status ?? "").toLowerCase().replace(/_/g, " ");
@@ -83,14 +84,16 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [targets, setTargets]   = useState<Set<number>>(new Set());
   const [search, setSearch]     = useState("");
   const [sortBy, setSortBy]     = useState<SortBy>("name");
+  const [sortDir, setSortDir]   = useState<SortDir>("asc");
   const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
   const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
 
   useEffect(() => {
     if (open) {
-      setTargets(new Set());
+      // Preserve targets across re-opens — only NONE clears them
       setSearch("");
       setSortBy("name");
+      setSortDir("asc");
       setStatus("idle");
       setSelected(buildInitialSelected(optionGroups));
     }
@@ -118,22 +121,32 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       )
     );
 
+    const dir = sortDir === "asc" ? 1 : -1;
     return [...base].sort((a, b) => {
       if (sortBy === "status") {
         const sa = ((a as any).accountStatus ?? "").replace(/_/g, " ");
         const sb = ((b as any).accountStatus ?? "").replace(/_/g, " ");
         const sc = sa.localeCompare(sb);
-        if (sc !== 0) return sc;
+        if (sc !== 0) return sc * dir;
       }
       if (sortBy === "group") {
         const ga = (a.tags ?? "").trim() || "No Group Assigned";
         const gb = (b.tags ?? "").trim() || "No Group Assigned";
         const gc = ga.localeCompare(gb);
-        if (gc !== 0) return gc;
+        if (gc !== 0) return gc * dir;
       }
-      return (a.accountLabel || a.username).localeCompare(b.accountLabel || b.username);
+      return (a.accountLabel || a.username).localeCompare(b.accountLabel || b.username) * dir;
     });
-  }, [profiles, search, sortBy]);
+  }, [profiles, search, sortBy, sortDir]);
+
+  const cycleSort = (key: SortBy) => {
+    if (sortBy === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+  };
 
   const toggleTarget = (id: number) => setTargets(prev => {
     const next = new Set(prev);
@@ -176,14 +189,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     else             setSelected(buildInitialSelected(optionGroups));
   };
 
-  const allFilteredSelected = filteredProfiles.length > 0 && filteredProfiles.every(p => targets.has(p.id));
+  const handleSelectAllFiltered = () => {
+    setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.add(p.id)); return n; });
+  };
 
-  const handleToggleAllFiltered = () => {
-    if (allFilteredSelected) {
-      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.delete(p.id)); return n; });
-    } else {
-      setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.add(p.id)); return n; });
-    }
+  const handleSelectNoneFiltered = () => {
+    setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.delete(p.id)); return n; });
   };
 
   const handleCopy = async () => {
@@ -210,20 +221,24 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         </DialogHeader>
 
         <div className="flex min-h-0" style={{ maxHeight: "calc(81vh - 140px)" }}>
-          {/* LEFT profile list — wider to show status + group */}
-          <div className="w-[420px] shrink-0 border-r border-border flex flex-col">
+          {/* LEFT profile list — wider name column */}
+          <div className="w-[483px] shrink-0 border-r border-border flex flex-col">
 
             {/* Header row */}
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Copy To</span>
-              {filteredProfiles.length > 1 && (
-                <button
-                  className="text-[11px] text-primary hover:underline font-medium"
-                  onClick={handleToggleAllFiltered}
-                >
-                  {allFilteredSelected ? "None" : "ALL"}
-                </button>
-              )}
+              <button
+                className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide"
+                onClick={handleSelectAllFiltered}
+              >
+                ALL
+              </button>
+              <button
+                className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide"
+                onClick={handleSelectNoneFiltered}
+              >
+                NONE
+              </button>
             </div>
 
             {/* Group quick-select */}
@@ -270,18 +285,22 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
             {/* Column headers */}
             <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/20 select-none">
               <div className="w-4 shrink-0" />
-              {([ ["name", "Name", "flex-1"], ["status", "Status", "w-[72px]"], ["group", "Group", "w-[88px]"] ] as [SortBy, string, string][]).map(([key, label, cls]) => (
-                <button
-                  key={key}
-                  onClick={() => setSortBy(key)}
-                  className={`${cls} flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                    sortBy === key ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                  <ArrowUpDown className={`w-2.5 h-2.5 shrink-0 ${sortBy === key ? "opacity-100" : "opacity-40"}`} />
-                </button>
-              ))}
+              {([ ["name", "Name", "flex-1"], ["status", "Status", "w-[72px]"], ["group", "Group", "w-[88px]"] ] as [SortBy, string, string][]).map(([key, label, cls]) => {
+                const active = sortBy === key;
+                const Icon = active ? (sortDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => cycleSort(key)}
+                    className={`${cls} flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                    <Icon className={`w-2.5 h-2.5 shrink-0 ${active ? "opacity-100" : "opacity-40"}`} />
+                  </button>
+                );
+              })}
             </div>
 
             {/* Account rows */}

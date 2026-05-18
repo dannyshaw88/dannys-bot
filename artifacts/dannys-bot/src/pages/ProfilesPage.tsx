@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile } from "@/hooks/use-profiles";
+import { useProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useUpdateProfile } from "@/hooks/use-profiles";
 import { useProxies } from "@/hooks/use-proxies";
 import { userAgents } from "@/shared/userAgents";
 import { Button } from "@/components/ui/button";
@@ -93,29 +94,38 @@ export function ProfilesPage() {
   const createProfileMutation = useCreateProfile();
   const deleteProfileMutation = useDeleteProfile();
   const updateAccountStatus   = useUpdateAccountStatus();
-  const verifyMutation        = useVerifyProfile();
   const updateProfileMutation = useUpdateProfile();
+  const queryClient           = useQueryClient();
   const { toast } = useToast();
   const { openWindow, closeWindow } = useBrowserWindows();
   const { data: proxies } = useProxies();
 
-  const handleVerify = (id: number) => {
+  // Per-account in-flight tracking — avoids the React Query single-mutation
+  // callback-replacement bug where calling verifyMutation.mutate() a second time
+  // before the first resolves silently replaces the onError closure, causing the
+  // wrong account to be reset to "pending" on failure.
+  const [verifyingIds, setVerifyingIds] = useState<Set<number>>(new Set());
+
+  const handleVerify = useCallback(async (id: number) => {
+    if (verifyingIds.has(id)) return;
+    setVerifyingIds(prev => { const n = new Set(prev); n.add(id); return n; });
     updateAccountStatus.mutate({ id, accountStatus: "verifying" });
-    verifyMutation.mutate(id, {
-      onSuccess: (data) => {
-        toast({
-          title: data.ok ? "Verified" : "Verification Failed",
-          description: data.message,
-          variant: data.ok ? "default" : "destructive",
-        });
-      },
-      onError: () => {
-        // Reset to pending so the account isn't stuck in "verifying"
-        updateAccountStatus.mutate({ id, accountStatus: "pending" });
-        toast({ title: "Error", description: "Could not reach Instagram.", variant: "destructive" });
-      },
-    });
-  };
+    try {
+      const res  = await fetch(`/api/profiles/${id}/verify`, { method: "POST", credentials: "include" });
+      const data = await res.json() as { ok: boolean; message: string };
+      toast({
+        title: data.ok ? "Verified" : "Verification Failed",
+        description: data.message,
+        variant: data.ok ? "default" : "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+    } catch {
+      updateAccountStatus.mutate({ id, accountStatus: "pending" });
+      toast({ title: "Error", description: "Could not reach Instagram.", variant: "destructive" });
+    } finally {
+      setVerifyingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }
+  }, [verifyingIds, updateAccountStatus, toast, queryClient]);
 
   const [profColWidths, setProfColWidths] = useState<typeof DEFAULT_PROFILES_COL_WIDTHS>(() => {
     try {
@@ -266,6 +276,20 @@ export function ProfilesPage() {
       return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
   }, [profiles, filterTokens, sortField, sortDir, stableOrder]);
+
+  // ── Duplicate Instagram username detection ────────────────────────────────
+  // Scans ALL profiles (not just the filtered view) so a duplicate is flagged
+  // even when the other copy is scrolled off-screen or hidden by the filter.
+  const duplicateUsernames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of profiles ?? []) {
+      const u = (p.username ?? "").trim().toLowerCase();
+      if (u) counts.set(u, (counts.get(u) ?? 0) + 1);
+    }
+    const dupes = new Set<string>();
+    for (const [u, n] of counts) if (n > 1) dupes.add(u);
+    return dupes;
+  }, [profiles]);
 
   // ── Grouped view (groupMode) ──────────────────────────────────────────────
   const groupedProfiles = useMemo(() => {
@@ -885,6 +909,7 @@ export function ProfilesPage() {
               const isStopped  = acctStatus === "stopped";
               const isEven     = idx % 2 === 1;
               const hasProxy   = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+              const isDupUsername = !!(profile.username && duplicateUsernames.has((profile.username ?? "").trim().toLowerCase()));
               return (
                 <div
                   key={profile.id}
@@ -893,6 +918,8 @@ export function ProfilesPage() {
                       ? "bg-primary/8 border-primary/20"
                       : isStopped
                       ? "opacity-50 bg-slate-50/80"
+                      : isDupUsername
+                      ? "bg-purple-50 hover:bg-purple-100/70 border-l-2 border-l-purple-400"
                       : isEven
                       ? "bg-slate-50/70 hover:bg-slate-100/60"
                       : "bg-white hover:bg-slate-50/60"
@@ -926,9 +953,11 @@ export function ProfilesPage() {
                       <span
                         className={`text-xs font-semibold truncate hover:text-primary cursor-pointer flex items-center gap-1 ${isStopped ? "text-muted-foreground" : acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
                         data-testid={`text-username-${profile.id}`}
+                        title={isDupUsername ? `Duplicate username: @${profile.username}` : undefined}
                       >
                         {profile.accountLabel || profile.username}
                         {profile.locked && <span title="Locked — excluded from copy targets"><Lock className="w-3 h-3 text-amber-500 shrink-0" /></span>}
+                        {isDupUsername && <span title={`Duplicate username: @${profile.username}`} className="text-purple-500 font-bold text-[9px] shrink-0 border border-purple-300 rounded px-0.5 bg-purple-100">DUP</span>}
                       </span>
                     </Link>
                   </div>
@@ -942,7 +971,7 @@ export function ProfilesPage() {
                             </span>
                         }
                         {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && acctStatus !== "verifying" && (
-                          <button onClick={() => handleVerify(profile.id)} disabled={verifyMutation.isPending && verifyMutation.variables === profile.id} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors">Verify</button>
+                          <button onClick={() => handleVerify(profile.id)} disabled={verifyingIds.has(profile.id)} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors">Verify</button>
                         )}
                       </div>
                     );

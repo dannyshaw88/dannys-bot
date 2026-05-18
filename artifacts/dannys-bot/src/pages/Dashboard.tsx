@@ -55,6 +55,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.363",
+    date: "18 May 2026",
+    items: [
+      { category: "New", text: "Accounts with the same Instagram username are now highlighted in purple with a DUP badge so duplicates are immediately obvious." },
+      { category: "Fix", text: "Copy Settings: selected accounts are now remembered when you close and reopen the dialog — only pressing NONE clears the selection." },
+      { category: "New", text: "Copy Settings: ALL and NONE buttons are now always visible side by side so you can select or clear accounts in one click without toggling." },
+      { category: "Fix", text: "Copy Settings: sorting by Name, Status, and Group now toggles between A→Z and Z→A each time you click the column header." },
+      { category: "Fix", text: "Copy Settings account name column is now 15% wider so long usernames are less likely to be cut off." },
+      { category: "Fix", text: "Account Settings username switcher dropdown is now 25% wider." },
+      { category: "Fix", text: "Proxy IP field in Account Settings now uses a monospace font to match the IP column on the Accounts page." },
+    ],
+  },
+  {
     version: "1.0.359",
     date: "18 May 2026",
     items: [

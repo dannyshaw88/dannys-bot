@@ -676,7 +676,7 @@ export function ProfileDetailsPage() {
                       <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-80 p-0">
+                  <DropdownMenuContent align="start" className="w-[400px] p-0">
                     <div className="flex items-center gap-2 px-3 py-2 border-b">
                       <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <input
@@ -1015,7 +1015,7 @@ export function ProfileDetailsPage() {
                               onBlur={saveManualProxyField}
                               onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
                               placeholder="host:port"
-                              className="text-sm h-8 w-48 shrink-0"
+                              className="text-sm h-8 w-48 shrink-0 font-mono"
                             />
                             <Input
                               value={formData.proxyUsername}
