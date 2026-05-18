@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.381",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed the real cause of the whole-app freeze when 4+ browser panels are open. The renderer was spending all its time parsing large JSON text frames and decoding base64 JPEGs on the main thread, causing garbage-collection pauses that blocked all UI interaction. Browser panels now stream raw JPEG binary frames — decoded off the main thread — so the rest of the app stays fully responsive no matter how many panels are open." },
+    ],
+  },
+  {
     version: "1.0.380",
     date: "18 May 2026",
     items: [

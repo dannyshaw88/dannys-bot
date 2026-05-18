@@ -1696,20 +1696,27 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
     const now = Date.now();
     if (s) s.lastScreencastFrameAt = now;
 
-    if (!firstFrameLogged) {
-      firstFrameLogged = true;
-      log(`[screencast:${profileId}] first frame received (${params.data.length} chars)`, "browser");
-    }
-
     if (!s?.ws || s.ws.readyState !== WebSocket.OPEN) return;
 
-    // page.url() is sync in Puppeteer — it reads from an internal frame cache,
-    // no CDP round-trip.
+    // Decode base64 JPEG once on the server and send as a raw binary WebSocket
+    // frame instead of JSON+base64.  This eliminates:
+    //   • JSON.stringify on the server side (~200 KB string allocation per frame)
+    //   • JSON.parse on the client side (synchronous, blocks renderer main thread)
+    //   • base64 decode in the browser (synchronous, ~33% wasted bytes)
+    // The client sets ws.binaryType = "blob" and handles binary frames with
+    // createImageBitmap() (off-thread JPEG decode) + requestAnimationFrame.
+    const jpegBuf = Buffer.from(params.data, "base64");
+
+    if (!firstFrameLogged) {
+      firstFrameLogged = true;
+      log(`[screencast:${profileId}] first frame received (${jpegBuf.length} bytes)`, "browser");
+    }
+
+    s.ws.send(jpegBuf);
+
+    // URL changes are still sent as a small JSON text frame (rare, cheap).
     let currentUrl = s.lastUrl;
     try { currentUrl = s.page.url(); } catch {}
-
-    wsWrite(s.ws, { type: "frame", data: params.data, url: currentUrl });
-
     if (currentUrl && currentUrl !== "about:blank" && currentUrl !== s.lastUrl) {
       s.lastUrl = currentUrl;
       wsWrite(s.ws, { type: "urlChange", url: currentUrl });

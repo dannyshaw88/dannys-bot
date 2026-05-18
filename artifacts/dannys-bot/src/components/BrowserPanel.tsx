@@ -68,6 +68,13 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const lastFrameTimeRef = useRef<number>(0);
   const hasReceivedFirstFrameRef = useRef(false);
   const [isFrozen, setIsFrozen] = useState(false);
+  // Ref mirror of isFrozen — lets the onmessage handler skip calling setIsFrozen(false)
+  // when it's already false, avoiding 80+ redundant React state updates per second.
+  const isFrozenRef = useRef(false);
+  // Binary frame pipeline: JPEG arrives → createImageBitmap (off-thread) → RAF draw.
+  // pendingBitmapRef holds the latest decoded bitmap; RAF drains it once per paint.
+  const pendingBitmapRef = useRef<ImageBitmap | null>(null);
+  const rafIdRef = useRef<number | null>(null);
 
   const setStatusSafe = useCallback((s: SSEStatus) => {
     statusRef.current = s;
@@ -250,6 +257,9 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
     const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${wsProto}//${window.location.host}/api/browser/${profileId}/stream`);
+    // Binary frames carry raw JPEG bytes (no base64/JSON wrapping).
+    // All other messages are still JSON text frames.
+    ws.binaryType = "blob";
     esRef.current = ws as any;
 
     ws.onopen = () => {
@@ -258,35 +268,52 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     };
 
     ws.onmessage = (evt) => {
+      // ── Binary frame = raw JPEG from screencast ──────────────────────────
+      // The server sends Buffer (raw JPEG) for every screencast frame.
+      // Receiving it as a Blob and piping through createImageBitmap() keeps
+      // JPEG decode off the renderer main thread entirely.  A requestAnimationFrame
+      // gate then batches all draws to one per paint cycle, dropping intermediate
+      // frames if they arrive faster than the display refreshes.
+      if (evt.data instanceof Blob) {
+        lastFrameTimeRef.current = Date.now();
+        // Only flip state (→ React re-render) when actually transitioning out of frozen.
+        if (isFrozenRef.current) { isFrozenRef.current = false; setIsFrozen(false); }
+        // Blank-white JPEG at quality 70 is ~5–8 KB. Real Instagram content is >10 KB.
+        if (!hasReceivedFirstFrameRef.current && evt.data.size > 10000) {
+          hasReceivedFirstFrameRef.current = true;
+          setWaitingFirstFrame(false);
+          if (firstFrameFallbackRef.current) {
+            clearTimeout(firstFrameFallbackRef.current);
+            firstFrameFallbackRef.current = null;
+          }
+        }
+        createImageBitmap(evt.data).then(bitmap => {
+          // Keep only the latest bitmap; discard any not-yet-drawn older one.
+          pendingBitmapRef.current?.close();
+          pendingBitmapRef.current = bitmap;
+          // Schedule one canvas draw per animation frame — skip if already scheduled.
+          if (rafIdRef.current === null) {
+            rafIdRef.current = requestAnimationFrame(() => {
+              rafIdRef.current = null;
+              const bmp = pendingBitmapRef.current;
+              if (!bmp) return;
+              pendingBitmapRef.current = null;
+              const canvas = canvasRef.current;
+              if (!canvas) { bmp.close(); return; }
+              const ctx = canvas.getContext("2d");
+              if (!ctx) { bmp.close(); return; }
+              ctx.drawImage(bmp, 0, 0, BROWSER_W, BROWSER_H);
+              bmp.close();
+            });
+          }
+        }).catch(() => {});
+        return;
+      }
+
+      // ── Text frame = JSON for all other message types ────────────────────
       try {
         const msg = JSON.parse(evt.data as string);
         switch (msg.type) {
-          case "frame":
-            drawFrame(msg.data);
-            lastFrameTimeRef.current = Date.now();
-            if (!hasReceivedFirstFrameRef.current) {
-              // Only dismiss the "Starting browser…" overlay once a frame with
-              // actual content arrives. A blank-white JPEG at quality 70 is
-              // ~2–8 KB (base64 len < 12000). Real Instagram pages are always
-              // >15 KB. This prevents the overlay clearing prematurely on a
-              // blank frame while Chrome is still warming up through the proxy.
-              if (msg.data.length > 15000) {
-                hasReceivedFirstFrameRef.current = true;
-                setWaitingFirstFrame(false);
-                if (firstFrameFallbackRef.current) {
-                  clearTimeout(firstFrameFallbackRef.current);
-                  firstFrameFallbackRef.current = null;
-                }
-              }
-            }
-            setIsFrozen(false);
-            if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) {
-              setAddressBar(msg.url);
-              if (msg.url.includes("instagram.com/accounts/login") || msg.url.includes("instagram.com/login")) {
-                setLoginState(prev => prev === "ok" ? "idle" : prev);
-              }
-            }
-            break;
           case "loading":
             setIsLoading(msg.loading);
             break;
@@ -304,6 +331,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             // Also reset the stale-frame timer so the frozen detector doesn't
             // fire again immediately after the restart.
             lastFrameTimeRef.current = Date.now();
+            isFrozenRef.current = false;
             setIsFrozen(false);
             if (!hasReceivedFirstFrameRef.current) {
               hasReceivedFirstFrameRef.current = true;
@@ -391,6 +419,10 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    // Cancel any in-flight RAF and release the pending ImageBitmap GPU resource.
+    if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
+    pendingBitmapRef.current?.close();
+    pendingBitmapRef.current = null;
   }, []);
 
   useEffect(() => { connect(); }, [connect]);
@@ -427,7 +459,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   // hasReceivedFirstFrameRef prevents false "frozen" during Chrome's startup window
   // (the SSE stream opens before Chrome has launched, so there's a gap before first frame).
   useEffect(() => {
-    if (status !== "connected") { setIsFrozen(false); return; }
+    if (status !== "connected") { isFrozenRef.current = false; setIsFrozen(false); return; }
     lastFrameTimeRef.current = Date.now();
     const timer = setInterval(() => {
       if (
@@ -435,6 +467,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         hasReceivedFirstFrameRef.current &&
         Date.now() - lastFrameTimeRef.current > 60000
       ) {
+        isFrozenRef.current = true;
         setIsFrozen(true);
       }
     }, 3000);
@@ -465,15 +498,8 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   }, [status, pendingNavUrl, send]);
 
   // ── Canvas rendering ──────────────────────────────────────────────────────
-  const drawFrame = (base64: string) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const img = new Image();
-    img.onload = () => ctx.drawImage(img, 0, 0, BROWSER_W, BROWSER_H);
-    img.src = `data:image/jpeg;base64,${base64}`;
-  };
+  // Frame drawing is handled by the binary ws.onmessage path above:
+  // Blob → createImageBitmap (off-thread) → requestAnimationFrame → drawImage.
 
   const scale = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const r = canvasRef.current!.getBoundingClientRect();
