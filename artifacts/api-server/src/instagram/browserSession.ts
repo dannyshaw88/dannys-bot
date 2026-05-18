@@ -178,6 +178,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
   proxyPort?: number;
   proxyUsername?: string;
   proxyPassword?: string;
+  userAgent?: string;
 }): Promise<{ mid: string; ig_did: string; csrftoken: string; cookieStrings: string[]; ebUserAgent: string } | null> {
   const logPfx = "[harvestSignupCookies]";
   log(`${logPfx} Starting EB cookie harvest for signup...`);
@@ -229,17 +230,18 @@ export async function harvestSignupCookiesFromEB(opts?: {
     return null;
   }
 
-  const DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  const FALLBACK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  const effectiveUA = opts?.userAgent ?? FALLBACK_UA;
   try {
     const [page] = await browser.pages();
-    await page.setUserAgent(DESKTOP_UA);
+    await page.setUserAgent(effectiveUA);
     await page.setViewport({ width: 1280, height: 760 });
 
     if (opts?.proxyUsername) {
       await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
     }
 
-    await applyStealthScripts(page, DESKTOP_UA);
+    await applyStealthScripts(page, effectiveUA);
 
     // ── Step 1: Visit the homepage first ─────────────────────────────────────
     // Instagram's CDN sets mid and ig_did on the *first* request to any IG page.
@@ -318,7 +320,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
       return null;
     }
 
-    return { mid, ig_did, csrftoken, cookieStrings, ebUserAgent: DESKTOP_UA };
+    return { mid, ig_did, csrftoken, cookieStrings, ebUserAgent: effectiveUA };
   } finally {
     try { await browser.close(); } catch {}
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}

@@ -57,6 +57,23 @@ function randomUA(): string {
   return UA_POOL[Math.floor(Math.random() * UA_POOL.length)].api;
 }
 
+// Derives a matching Chrome for Android user agent from a mobile API device descriptor.
+// e.g. "31/12; 420dpi; 1080x2260; Samsung; SM-A525F; a52q; qcom; en_US"
+//   → "Mozilla/5.0 (Linux; Android 12; SM-A525F) AppleWebKit/537.36 ..."
+// The EB Chrome must identify as the same device model so Instagram sees a consistent fingerprint.
+function deriveEbUA(descriptor: string): string {
+  const parts    = descriptor.split(";").map(s => s.trim());
+  const apiLevel = parseInt((parts[0] ?? "").split("/")[0] ?? "0", 10);
+  const model    = parts[4] ?? "";
+  const vmap: Record<number, string> = {
+    21: "5.0", 22: "5.1", 23: "6.0", 24: "7.0", 25: "7.1.1",
+    26: "8.0", 27: "8.1", 28: "9",   29: "10",  30: "11",
+    31: "12",  32: "12",  33: "13",  34: "14",  35: "15",
+  };
+  const av = vmap[apiLevel] ?? (apiLevel >= 35 ? "15" : "12");
+  return `Mozilla/5.0 (Linux; Android ${av}; ${model}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36`;
+}
+
 // Steps shown in the progress tracker while the API call is in flight
 const PROGRESS_STEPS = [
   { label: "Fetching CSRF token (si/fetch_headers)", ms: 0 },
@@ -417,6 +434,7 @@ const SS_KEY_EMAIL_PASS = "equinox_api_email_pass";
 const SS_KEY_DOB        = "equinox_api_dob";
 const SS_KEY_PROXY_ID   = "equinox_api_proxy_id";
 const SS_KEY_UA_API     = "equinox_api_ua_api";
+const SS_KEY_UA_EB      = "equinox_api_ua_eb";
 const SS_KEY_TAB        = "equinox_api_tab";
 const SS_KEY_RESULT     = "equinox_api_result";
 const SS_KEY_VERIFY     = "equinox_api_verify_code";
@@ -435,8 +453,8 @@ function ssSetJson(key: string, v: unknown) { sessionStorage.setItem(key, JSON.s
 // Per-attempt fields only — username/bio spin are templates kept in localStorage
 const SS_ALL_KEYS = [
   SS_KEY_PASSWORD, SS_KEY_FIRSTNAME, SS_KEY_EMAIL,
-  SS_KEY_EMAIL_PASS, SS_KEY_DOB, SS_KEY_PROXY_ID, SS_KEY_UA_API, SS_KEY_TAB,
-  SS_KEY_RESULT, SS_KEY_VERIFY,
+  SS_KEY_EMAIL_PASS, SS_KEY_DOB, SS_KEY_PROXY_ID, SS_KEY_UA_API, SS_KEY_UA_EB,
+  SS_KEY_TAB, SS_KEY_RESULT, SS_KEY_VERIFY,
 ];
 function ssClearAll() { SS_ALL_KEYS.forEach(k => sessionStorage.removeItem(k)); }
 
@@ -506,6 +524,8 @@ export function CreateAccountApiPage() {
   };
   const [userAgentApi, setUserAgentApiRaw] = useState(() => ssGet(SS_KEY_UA_API) || UA_POOL[0].api);
   const setUserAgentApi = (v: string) => { setUserAgentApiRaw(v); ssSet(SS_KEY_UA_API, v); };
+  const [userAgentEb, setUserAgentEbRaw]   = useState(() => ssGet(SS_KEY_UA_EB) || deriveEbUA(ssGet(SS_KEY_UA_API) || UA_POOL[0].api));
+  const setUserAgentEb  = (v: string) => { setUserAgentEbRaw(v);  ssSet(SS_KEY_UA_EB,  v); };
 
   // Email / IMAP — server+port persisted to localStorage
   const [emailPass, setEmailPassRaw] = useState(() => ssGet(SS_KEY_EMAIL_PASS));
@@ -566,6 +586,7 @@ export function CreateAccountApiPage() {
         year: dob.year,
         bio: spunBio,
         userAgentApi,
+        userAgentEb,
         apiLimits,
         imapHost: imapServer.trim() || undefined,
         imapPort: imapServer.trim() ? imapPort : undefined,
@@ -616,7 +637,7 @@ export function CreateAccountApiPage() {
     setVerifyCode("");
     setPassword(generatePassword());
     setDob(randomDob());
-    setUserAgentApi(randomUA());
+    const ua = randomUA(); setUserAgentApi(ua); setUserAgentEb(deriveEbUA(ua));
     setEmail("");
     setFirstName("");
     setEmailPass("");
@@ -848,7 +869,7 @@ export function CreateAccountApiPage() {
                   <Button
                     variant="ghost" size="sm" className="h-6 px-2 text-[10px]"
                     disabled={locked}
-                    onClick={() => setUserAgentApi(randomUA())}
+                    onClick={() => { const ua = randomUA(); setUserAgentApi(ua); setUserAgentEb(deriveEbUA(ua)); }}
                   >
                     Randomise
                   </Button>
@@ -862,9 +883,9 @@ export function CreateAccountApiPage() {
                   <Globe className="w-3 h-3" />EB User Agent — Cookie Harvest (Chrome)
                 </Label>
                 <div className="h-8 px-3 flex items-center rounded-md border border-border bg-muted/40 text-[10px] font-mono text-muted-foreground truncate select-all">
-                  Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+                  {userAgentEb}
                 </div>
-                <p className="text-[10px] text-muted-foreground">Chrome desktop UA used by the embedded browser to harvest <code className="font-mono">mid</code>, <code className="font-mono">ig_did</code> and <code className="font-mono">csrftoken</code> before signup.</p>
+                <p className="text-[10px] text-muted-foreground">Chrome for Android UA derived from the API agent above — the EB Chrome presents as the same device model. Updates automatically when you randomise the API agent.</p>
               </div>
             </div>
 

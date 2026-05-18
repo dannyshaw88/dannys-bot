@@ -55,10 +55,11 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.357",
+    version: "1.0.358",
     date: "18 May 2026",
     items: [
       { category: "Fix", text: "Account creator now uses the real browser CSRF token when creating accounts, matching the same cookie handover used by the login flow — fixes false 'email already taken' errors on clean proxies." },
+      { category: "Fix", text: "Randomising the API agent in the account creator now also updates the EB (Chrome) user agent to the matching device model — both agents stay in sync." },
       { category: "New", text: "Account creator now shows the Chrome browser user agent used for the cookie harvest step, both in the config panel and in the step log." },
       { category: "Fix", text: "Going back to the Accounts page after viewing an account now restores your scroll position instead of jumping back to the top." },
       { category: "New", text: "Account picker dropdown in account settings now shows the group each account belongs to." },

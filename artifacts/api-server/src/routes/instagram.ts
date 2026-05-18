@@ -2313,7 +2313,7 @@ export async function registerInstagramRoutes(
         proxyUrl = `http://${auth}${proxyHost}${proxyPort ? `:${proxyPort}` : ""}`;
       }
       const dobStr = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-      const { userAgentApi, apiLimits } = req.body as { userAgentApi?: string; apiLimits?: object };
+      const { userAgentApi, userAgentEb, apiLimits } = req.body as { userAgentApi?: string; userAgentEb?: string; apiLimits?: object };
 
       // Save attempt to DB
       const dbRecord = await storage.saveApiCreatedAccount({
@@ -2355,6 +2355,7 @@ export async function registerInstagramRoutes(
           proxyPort:     proxyPort ? Number(proxyPort) : undefined,
           proxyUsername: proxyUsername,
           proxyPassword: proxyPassword,
+          userAgent:     userAgentEb || undefined,
         });
       } catch (e: any) {
         const msg = `EB cookie harvest failed: ${e?.message}`;
