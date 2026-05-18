@@ -374,6 +374,44 @@ export async function registerInstagramRoutes(
     res.status(204).end();
   });
 
+  // ── Shared helper: seed browser cookie JSON from igApiCookies string ────────
+  // Called by both the bulk import and EQX import routes immediately after a
+  // profile is created/updated with igApiCookies.  Without this file Chrome
+  // starts with ZERO cookies on first launch — Instagram sees a brand-new device
+  // (no mid, no ig_did) and immediately fires update_risky_contactpoint.
+  const COOKIE_META: Record<string, { httpOnly: boolean; sameSite: string }> = {
+    sessionid:  { httpOnly: true,  sameSite: "Lax" },
+    csrftoken:  { httpOnly: false, sameSite: "Lax" },
+    ds_user_id: { httpOnly: true,  sameSite: "Lax" },
+    mid:        { httpOnly: false, sameSite: "Lax" },
+    ig_did:     { httpOnly: false, sameSite: "Lax" },
+    ig_nrcb:    { httpOnly: false, sameSite: "Lax" },
+  };
+  function seedBrowserCookieFile(profileId: number, igApiCookies: string): void {
+    try {
+      const cookiesDir = process.env.DATABASE_PATH
+        ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data")
+        : path.join(process.cwd(), "server", "browser-data");
+      const cookieFilePath = path.join(cookiesDir, `cookies-${profileId}.json`);
+      const parsed: Record<string, string> = {};
+      for (const part of igApiCookies.split(";")) {
+        const eqIdx = part.indexOf("=");
+        if (eqIdx < 1) continue;
+        const name  = part.slice(0, eqIdx).trim();
+        const value = part.slice(eqIdx + 1).trim();
+        if (name) parsed[name] = value;
+      }
+      if (!parsed["sessionid"]) return; // nothing useful to seed
+      const puppeteerCookies = Object.entries(parsed).map(([name, value]) => {
+        const meta = COOKIE_META[name] ?? { httpOnly: false, sameSite: "Lax" };
+        return { name, value, domain: ".instagram.com", path: "/", expires: -1,
+                 httpOnly: meta.httpOnly, secure: true, sameSite: meta.sameSite, session: false };
+      });
+      fs.mkdirSync(cookiesDir, { recursive: true });
+      fs.writeFileSync(cookieFilePath, JSON.stringify(puppeteerCookies, null, 2), "utf8");
+    } catch { /* non-fatal — import succeeds even if file write fails */ }
+  }
+
   // ── Cookie Injection ─────────────────────────────────────────────────────
   // Writes cookies both to igApiCookies (DB) AND to the Puppeteer cookie file
   // so the embedded browser picks them up on its next session start.
@@ -864,9 +902,15 @@ export async function registerInstagramRoutes(
               delete updates.proxyId;
             }
             await storage.updateProfile(existing.id, updates);
+            // Seed/refresh the browser cookie file if the import provided cookies
+            if (igApiCookies) seedBrowserCookieFile(existing.id, igApiCookies);
             results.push({ success: true, username: profileData.username, action: "updated" });
           } else {
             const created = await storage.createProfile(profileData);
+            // Seed the browser cookie file so Chrome starts with the correct device
+            // identity (mid, ig_did, sessionid) on its very first launch. Without this
+            // Chrome starts blank, Instagram sees a new device, and fires challenges.
+            if (igApiCookies) seedBrowserCookieFile(created.id, igApiCookies);
             results.push({ success: true, username: created.username, action: "created" });
           }
         } catch (err: any) {
@@ -2239,50 +2283,10 @@ export async function registerInstagramRoutes(
         (created as any).accountStatus = intendedStatus;
       }
 
-      // ── Seed the browser cookie file from igApiCookies ─────────────────────
-      // This is the most critical step for imported accounts.  Without it, Chrome
-      // starts with ZERO cookies on the very first launch — Instagram sees a brand
-      // new device (no mid, no ig_did) and immediately fires update_risky_contactpoint
-      // before the account can even log in.  By writing the Puppeteer cookie JSON
-      // from igApiCookies here, Chrome loads the account's real device identity on
-      // first start and Instagram recognises the device as known.
+      // Seed the browser cookie file so Chrome starts with the correct device
+      // identity (mid, ig_did, sessionid) on its very first launch.
       if (cleanProfile.igApiCookies && typeof cleanProfile.igApiCookies === "string") {
-        try {
-          const cookiesDir = process.env.DATABASE_PATH
-            ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data")
-            : path.join(process.cwd(), "server", "browser-data");
-          const cookieFilePath = path.join(cookiesDir, `cookies-${created.id}.json`);
-
-          const parsed: Record<string, string> = {};
-          for (const part of cleanProfile.igApiCookies.split(";")) {
-            const eqIdx = part.indexOf("=");
-            if (eqIdx < 1) continue;
-            const name  = part.slice(0, eqIdx).trim();
-            const value = part.slice(eqIdx + 1).trim();
-            if (name) parsed[name] = value;
-          }
-
-          if (parsed["sessionid"]) {
-            const COOKIE_META: Record<string, { httpOnly: boolean; sameSite: string }> = {
-              sessionid:  { httpOnly: true,  sameSite: "Lax" },
-              csrftoken:  { httpOnly: false, sameSite: "Lax" },
-              ds_user_id: { httpOnly: true,  sameSite: "Lax" },
-              mid:        { httpOnly: false, sameSite: "Lax" },
-              ig_did:     { httpOnly: false, sameSite: "Lax" },
-              ig_nrcb:    { httpOnly: false, sameSite: "Lax" },
-            };
-            const puppeteerCookies = Object.entries(parsed).map(([name, value]) => {
-              const meta = COOKIE_META[name] ?? { httpOnly: false, sameSite: "Lax" };
-              return { name, value, domain: ".instagram.com", path: "/", expires: -1,
-                       httpOnly: meta.httpOnly, secure: true, sameSite: meta.sameSite, session: false };
-            });
-            fs.mkdirSync(cookiesDir, { recursive: true });
-            fs.writeFileSync(cookieFilePath, JSON.stringify(puppeteerCookies, null, 2), "utf8");
-            req.log.info(`import-eqx: seeded browser cookie file for profile ${created.id} (${puppeteerCookies.length} cookies)`);
-          }
-        } catch (e: any) {
-          req.log.warn({ err: e }, "import-eqx: failed to seed browser cookie file (non-fatal)");
-        }
+        seedBrowserCookieFile(created.id, cleanProfile.igApiCookies);
       }
 
       // Update auto-created tools with saved settings/enabled state, and insert sources.

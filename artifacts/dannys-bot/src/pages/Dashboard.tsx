@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.373",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Bulk import now also seeds the browser cookie file from the account's stored cookies — the same fix applied to EQX import in 1.0.372, so all import paths correctly pre-load device identity on first launch." },
+    ],
+  },
+  {
     version: "1.0.372",
     date: "18 May 2026",
     items: [
