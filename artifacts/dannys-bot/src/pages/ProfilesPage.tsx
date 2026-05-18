@@ -360,7 +360,7 @@ export function ProfilesPage() {
       : (profiles ?? []);
 
     const sorted = [...base].sort((a, b) => {
-      if (newField === "ip") {
+      if (field === "ip") {
         const na = ipToNum(a.proxyHost);
         const nb = ipToNum(b.proxyHost);
         const diff = na - nb;
@@ -370,7 +370,7 @@ export function ProfilesPage() {
         return newDir === "asc" ? pa - pb : pb - pa;
       }
       let va = "", vb = "";
-      if (newField === "account") {
+      if (field === "account") {
         va = (a.accountLabel || a.username || "").toLowerCase();
         vb = (b.accountLabel || b.username || "").toLowerCase();
       } else {

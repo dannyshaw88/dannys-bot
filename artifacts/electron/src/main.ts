@@ -373,6 +373,7 @@ function createTray(): void {
   // IPC handlers for tray menu actions
   ipcMain.on("tray-open", () => {
     trayPopup?.hide();
+    if (win?.isMinimized()) win?.restore();
     win?.show();
     win?.focus();
   });
@@ -388,11 +389,15 @@ function createTray(): void {
     app.quit();
   });
 
-  // Left-click: toggle main window
+  // Left-click: toggle main window (minimize/restore — never hide, to keep
+  // the taskbar button anchored in its original leftmost position)
   tray.on("click", () => {
     trayPopup?.hide();
-    if (win?.isVisible()) {
-      win.hide();
+    if (win?.isMinimized()) {
+      win.restore();
+      win.focus();
+    } else if (win?.isVisible()) {
+      win.minimize();
     } else {
       win?.show();
       win?.focus();
@@ -471,14 +476,29 @@ function setupAutoUpdater(): void {
   // Background check errors (e.g. expired token, no internet) are logged
   // silently.  Only surface a dialog when the user manually triggered the check.
   autoUpdater.on("error", (err) => {
-    const msg = String(err?.message || err);
-    console.warn("[updater] error:", msg);
+    const raw = String(err?.message || err);
+    console.warn("[updater] error:", raw);
     if (!_updaterManualCheck || !win) return;
     _updaterManualCheck = false;
+
+    // Translate common API errors into plain-English messages instead of
+    // dumping the raw GitHub API response at the user.
+    let message: string;
+    if (/401|bad credentials|unauthorized/i.test(raw)) {
+      message = "The update token has expired. To fix this:\n\n1. Generate a new GitHub personal access token with "repo" scope at github.com/settings/tokens\n2. Set it as the UPDATER_TOKEN secret in your GitHub repository (Settings → Secrets → Actions)\n3. Rebuild and install the new version\n\nUpdates will work normally in the new build.";
+    } else if (/404|not found|no releases/i.test(raw)) {
+      message = "No release has been published yet on GitHub. The update feed will become available after the first successful build publishes a release.";
+    } else if (/ENOTFOUND|ECONNREFUSED|network|timeout|socket/i.test(raw)) {
+      message = "Could not reach GitHub — check your internet connection and try again.";
+    } else {
+      // Trim the raw message to the first sentence/line so it stays readable
+      message = raw.split(/\n/)[0].slice(0, 200);
+    }
+
     dialog.showMessageBox(win, {
       type: "error",
       title: "Update Check Failed",
-      message: msg,
+      message,
       buttons: ["OK"],
     });
   });
@@ -755,11 +775,16 @@ async function createWindow() {
     },
   });
 
-  // Minimise to tray on close instead of quitting
+  // Minimise to taskbar on close instead of quitting.
+  // We use minimize() rather than hide() so the main window's taskbar button
+  // stays anchored in its original leftmost position — hide() removes the button
+  // and when show() is called later Windows inserts it at the right of any EB
+  // windows that are open, giving the wrong order (EB-EB-EQUINOX instead of
+  // EQUINOX-EB-EB).
   win.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      win?.hide();
+      win?.minimize();
     }
   });
 
@@ -898,6 +923,13 @@ async function createWindow() {
   });
 }
 
+// Pin a stable App User Model ID so all Electron windows (main + EB) are
+// grouped under the same Equinox taskbar entry and the main window — created
+// first — always appears to the LEFT of any EB windows on the Windows taskbar.
+if (process.platform === "win32") {
+  app.setAppUserModelId("Equinox");
+}
+
 app.whenReady().then(() => {
   createSplash("Starting…");
   createWindow();
@@ -931,6 +963,8 @@ app.on("activate", () => {
   if (win === null) {
     createWindow();
   } else {
+    if (win.isMinimized()) win.restore();
     win.show();
+    win.focus();
   }
 });

@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.368",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Equinox now always appears first on the Windows taskbar — before any open browser windows. The main window minimises to the taskbar when closed instead of hiding, so its position never moves." },
+      { category: "Fix", text: "Clicking the column headers on the Accounts page no longer crashes the app." },
+    ],
+  },
+  {
     version: "1.0.367",
     date: "18 May 2026",
     items: [
