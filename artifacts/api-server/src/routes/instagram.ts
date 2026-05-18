@@ -301,6 +301,8 @@ export async function registerInstagramRoutes(
       });
       const input = inputSchema.parse(req.body);
       const created = await storage.createProfile(input);
+      // Seed browser cookie file if cookies were provided — same as bulk/EQX import
+      if (created.igApiCookies) seedBrowserCookieFile(created.id, created.igApiCookies);
       res.status(201).json(created);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -333,6 +335,10 @@ export async function registerInstagramRoutes(
         }
       }
       const updated = await storage.updateProfile(id, body);
+      // If cookies were changed via the edit form, refresh the browser cookie file
+      if (body.igApiCookies && typeof body.igApiCookies === "string") {
+        seedBrowserCookieFile(id, body.igApiCookies);
+      }
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to update profile" });

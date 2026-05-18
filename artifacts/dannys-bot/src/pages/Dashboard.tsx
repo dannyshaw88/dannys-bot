@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.374",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Adding a profile manually from the Accounts page now seeds the browser cookie file if cookies are provided — same protection applied to bulk import, EQX import, and editing an existing account." },
+    ],
+  },
+  {
     version: "1.0.373",
     date: "18 May 2026",
     items: [
