@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.364",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Opening the embedded browser no longer blocks the toggle button or account settings in the same window." },
+      { category: "Fix", text: "Copy Settings for the Contact tool now immediately applies the Start / Stop state to the target accounts — the tool stops or stays stopped straight away instead of waiting for the next cycle." },
+    ],
+  },
+  {
     version: "1.0.363",
     date: "18 May 2026",
     items: [

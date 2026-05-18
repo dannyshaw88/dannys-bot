@@ -63,6 +63,8 @@ export function ContactToolPanel({ tool, profile }: Props) {
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
   const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
+  const START_STOP_KEYS = ["contactNewFollowersEnabled", "contactUsersEnabled", "autoReplyEnabled"];
+
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const src = (tool.settings as Record<string, unknown>) ?? {};
     // "__randomiseTiming__" is a sentinel — filter it out before passing real setting keys
@@ -83,6 +85,27 @@ export function ContactToolPanel({ tool, profile }: Props) {
       undefined,
       staggerOffsets,
     );
+    // If any start/stop toggles were included in the copy, send a cold restart to
+    // each target tool so the runner immediately picks up the new enabled/disabled
+    // state rather than waiting for its next natural cycle.
+    const hasStartStop = realKeys.some(k => START_STOP_KEYS.includes(k));
+    if (hasStartStop) {
+      await Promise.all(targetIds.map(async (targetProfileId) => {
+        try {
+          const res = await fetch(`/api/profiles/${targetProfileId}/tools`, { credentials: "include" });
+          if (!res.ok) return;
+          const tools: Array<{ id: number; type: string; enabled: boolean }> = await res.json();
+          const targetTool = tools.find(t => t.type === tool.type);
+          if (!targetTool) return;
+          await fetch(`/api/tools/${targetTool.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: targetTool.enabled, cold: true }),
+            credentials: "include",
+          });
+        } catch { /* best-effort restart */ }
+      }));
+    }
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 
