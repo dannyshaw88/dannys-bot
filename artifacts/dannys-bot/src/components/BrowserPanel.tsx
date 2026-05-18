@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound,
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
@@ -700,96 +700,124 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
                                       "Login"}
         </Button>
 
-        <button
-          type="button"
-          onClick={() => generateTotp((code) => send({ type: "type", text: code }))}
-          disabled={!connected}
-          title="Generate a live 2FA/TOTP code, copy to clipboard, and paste into the browser"
-          className={`h-8 px-3 rounded-md border text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
-            totpCopied  ? "border-green-400 text-green-700 bg-green-50" :
-            totpNoKey   ? "border-red-300 text-red-700 bg-red-50" :
-            "border-border bg-muted hover:bg-accent"
-          }`}
-        >
-          {totpCopied ? `✓ ${totpCode}` : totpNoKey ? "No 2FA key" : "2FA Code"}
-        </button>
+        {/* On the first (Instagram) tab show the usual tools.
+            On any additional tab show email provider quick-nav buttons instead. */}
+        {activeTab === 0 ? (
+          <>
+            <button
+              type="button"
+              onClick={() => generateTotp((code) => send({ type: "type", text: code }))}
+              disabled={!connected}
+              title="Generate a live 2FA/TOTP code, copy to clipboard, and paste into the browser"
+              className={`h-8 px-3 rounded-md border text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
+                totpCopied  ? "border-green-400 text-green-700 bg-green-50" :
+                totpNoKey   ? "border-red-300 text-red-700 bg-red-50" :
+                "border-border bg-muted hover:bg-accent"
+              }`}
+            >
+              {totpCopied ? `✓ ${totpCode}` : totpNoKey ? "No 2FA key" : "2FA Code"}
+            </button>
 
-        <Button
-          variant="ghost" size="sm"
-          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-          disabled={!connected}
-          title="Type the pre-filled phone number from Settings"
-          onClick={async () => {
-            try {
-              const res = await fetch("/api/settings");
-              const s = await res.json();
-              const num = (s.preFilledPhoneNumber ?? "").trim();
-              if (num) send({ type: "type", text: num });
-            } catch {}
-          }}
-        >
-          <Phone className="w-3.5 h-3.5" /> Phone Number
-        </Button>
-        <Button
-          variant="ghost" size="sm"
-          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-          disabled={!connected}
-          title="Type the email validation username into the focused field"
-          onClick={async () => {
-            try {
-              const res = await fetch(`/api/profiles/${profileId}`);
-              const p = await res.json();
-              const val = (p.emailValidationUsername ?? "").trim();
-              if (val) send({ type: "type", text: val });
-            } catch {}
-          }}
-        >
-          <Mail className="w-3.5 h-3.5" /> Email Account
-        </Button>
-        <Button
-          variant="ghost" size="sm"
-          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
-          disabled={!connected}
-          title="Type the email validation password into the focused field"
-          onClick={async () => {
-            try {
-              const res = await fetch(`/api/profiles/${profileId}`);
-              const p = await res.json();
-              const val = (p.emailValidationPassword ?? "").trim();
-              if (val) send({ type: "type", text: val });
-            } catch {}
-          }}
-        >
-          <KeyRound className="w-3.5 h-3.5" /> Email Password
-        </Button>
-        <label
-          className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}
-          title="Upload a file to the browser"
-        >
-          <Upload className="w-3.5 h-3.5" /> Upload
-          <input
-            type="file"
-            accept="image/*,video/*,*/*"
-            className="sr-only"
-            disabled={!connected}
-            onChange={async e => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              e.target.value = "";
-              const reader = new FileReader();
-              reader.onload = async ev => {
-                const base64 = (ev.target?.result as string)?.split(",")[1];
-                if (!base64) return;
-                await fetch(`/api/browser/${profileId}/files`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ fileName: file.name, data: base64 }),
-                }).catch(() => {});
-              };
-              reader.readAsDataURL(file);
-            }}
-          />
-        </label>
+            <Button
+              variant="ghost" size="sm"
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
+              disabled={!connected}
+              title="Type the pre-filled phone number from Settings"
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/settings");
+                  const s = await res.json();
+                  const num = (s.preFilledPhoneNumber ?? "").trim();
+                  if (num) send({ type: "type", text: num });
+                } catch {}
+              }}
+            >
+              <Phone className="w-3.5 h-3.5" /> Phone Number
+            </Button>
+            <Button
+              variant="ghost" size="sm"
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
+              disabled={!connected}
+              title="Type the email validation username into the focused field"
+              onClick={async () => {
+                try {
+                  const res = await fetch(`/api/profiles/${profileId}`);
+                  const p = await res.json();
+                  const val = (p.emailValidationUsername ?? "").trim();
+                  if (val) send({ type: "type", text: val });
+                } catch {}
+              }}
+            >
+              <Mail className="w-3.5 h-3.5" /> Email Account
+            </Button>
+            <Button
+              variant="ghost" size="sm"
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 shrink-0"
+              disabled={!connected}
+              title="Type the email validation password into the focused field"
+              onClick={async () => {
+                try {
+                  const res = await fetch(`/api/profiles/${profileId}`);
+                  const p = await res.json();
+                  const val = (p.emailValidationPassword ?? "").trim();
+                  if (val) send({ type: "type", text: val });
+                } catch {}
+              }}
+            >
+              <KeyRound className="w-3.5 h-3.5" /> Email Password
+            </Button>
+            <label
+              className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}
+              title="Upload a file to the browser"
+            >
+              <Upload className="w-3.5 h-3.5" /> Upload
+              <input
+                type="file"
+                accept="image/*,video/*,*/*"
+                className="sr-only"
+                disabled={!connected}
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.target.value = "";
+                  const reader = new FileReader();
+                  reader.onload = async ev => {
+                    const base64 = (ev.target?.result as string)?.split(",")[1];
+                    if (!base64) return;
+                    await fetch(`/api/browser/${profileId}/files`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ fileName: file.name, data: base64 }),
+                    }).catch(() => {});
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+          </>
+        ) : (
+          /* Extra-tab toolbar: email provider shortcuts */
+          <>
+            {[
+              { label: "Hotmail", url: "https://www.hotmail.com" },
+              { label: "OP.pl",   url: "https://www.op.pl"      },
+              { label: "GMX",     url: "https://www.gmx.com"    },
+            ].map(({ label, url }) => (
+              <Button
+                key={label}
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-xs font-semibold shrink-0 gap-1"
+                disabled={!connected}
+                title={`Go to ${url}`}
+                onClick={() => { setAddressBar(url); setIsLoading(true); send({ type: "navigate", url }); }}
+              >
+                <Mail className="w-3.5 h-3.5" />
+                {label}
+              </Button>
+            ))}
+          </>
+        )}
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
           onClick={clearSession} disabled={!connected} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
@@ -804,8 +832,8 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
         </div>
       </div>
 
-      {/* Tab strip visible when 2+ tabs are open */}
-      {tabs.length > 1 && (
+      {/* Tab strip — always visible once browser is running */}
+      {(connected || tabs.length > 0) && (
         <div className="flex items-center gap-0.5 px-2 pt-1 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
           {tabs.map((tab, i) => (
             <div
@@ -818,7 +846,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
               onClick={() => send({ type: "switchTab", index: i })}
             >
               <span className="truncate flex-1">
-                {tab.url ? new URL(tab.url).hostname.replace("www.", "") || `Tab ${i + 1}` : `Tab ${i + 1}`}
+                {tab.url ? (() => { try { return new URL(tab.url).hostname.replace("www.", "") || `Tab ${i + 1}`; } catch { return `Tab ${i + 1}`; } })() : `Tab ${i + 1}`}
               </span>
               {tabs.length > 1 && (
                 <button
@@ -831,6 +859,15 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
               )}
             </div>
           ))}
+          {/* New tab button */}
+          <button
+            onClick={() => send({ type: "newTab" })}
+            disabled={!connected}
+            className="flex items-center justify-center h-6 w-6 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0 ml-0.5"
+            title="Open new tab"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.356",
+    date: "17 May 2026",
+    items: [
+      { category: "New", text: "Embedded browser now has a + button to open a new tab, just like a real browser — you can browse freely in the new tab while keeping Instagram open on the first tab." },
+      { category: "New", text: "On any tab after the first, the toolbar swaps to email shortcuts: Hotmail, OP.pl, and GMX buttons that navigate directly to those sites in one click." },
+    ],
+  },
+  {
     version: "1.0.355",
     date: "17 May 2026",
     items: [
