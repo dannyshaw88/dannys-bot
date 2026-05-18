@@ -11,13 +11,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import {
   Plus, Trash2, Shield, User, X, Wifi, WifiOff, Loader2,
   Upload, Download, Trash, Search,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, Settings2, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Proxy, Profile } from "@shared/schema";
 
 type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
+
+type ProxyCol = "proxy" | "username" | "password" | "accounts" | "status";
+const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "username", "password", "accounts", "status"];
+const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, username: 120, password: 120, accounts: 76, status: 88 };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", username: "Username", password: "Password", accounts: "Accounts", status: "Status" };
 
 function parseJarveeFile(buffer: ArrayBuffer): Array<{ host: string; port: number; username: string | null; password: string | null }> {
   const text = new TextDecoder("utf-16le").decode(buffer).replace(/^\ufeff/, "");
@@ -65,10 +70,12 @@ interface ProxyRowProps {
   pinging: boolean;
   onPing: (proxyId: number) => void;
   even: boolean;
+  colOrder: ProxyCol[];
+  colWidths: Record<ProxyCol, number>;
 }
 
 function ProxyRow({
-  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing, even,
+  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing, even, colOrder, colWidths,
 }: ProxyRowProps) {
   const deleteProxyMutation = useDeleteProxy();
   const updateProxyMutation = useUpdateProxy();
@@ -122,96 +129,46 @@ function ProxyRow({
   return (
     <>
       <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
-        {/* host:port */}
-        <div className="shrink-0" style={{ width: 210 }}>
-          <Input
-            value={hostPort}
-            onChange={e => setHostPort(e.target.value)}
-            onBlur={() => saveField("hostPort")}
-            onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-            className="text-xs h-7 w-full"
-            placeholder="host:port"
-          />
-        </div>
-        {/* username */}
-        <div className="shrink-0" style={{ width: 120 }}>
-          <Input
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            onBlur={() => saveField("username")}
-            onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-            placeholder="username"
-            className="text-xs h-7 w-full"
-          />
-        </div>
-        {/* password */}
-        <div className="shrink-0" style={{ width: 120 }}>
-          <Input
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onBlur={() => saveField("password")}
-            onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
-            placeholder="password"
-            className="text-xs h-7 w-full"
-          />
-        </div>
-        {/* accounts badge */}
-        <div className="shrink-0 flex justify-center" style={{ width: 76 }}>
-          <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-              totalCount === 0
-                ? "bg-slate-100 text-slate-400"
-                : validCount === totalCount
-                ? "bg-emerald-50 text-emerald-700"
-                : validCount === 0
-                ? "bg-slate-100 text-slate-500"
-                : "bg-yellow-50 text-yellow-700"
-            }`}
-          >
-            <User className="w-3 h-3" />
-            {totalCount === 0 ? "0" : `${validCount}/${totalCount}`}
-          </span>
-        </div>
-        {/* ping status */}
-        <div className="shrink-0" style={{ width: 88 }}>
-          {pingResult ? (
-            <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${
-              pingResult.alive
-                ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600"
-                  : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600"
-                  : "bg-orange-50 text-orange-600"
-                : "bg-red-50 text-red-500"
-            }`}>
-              {pingResult.alive
-                ? <><Wifi className="w-3 h-3" />{pingResult.latencyMs}ms</>
-                : <><WifiOff className="w-3 h-3" />Dead</>
-              }
-            </span>
-          ) : (
-            <span className="text-[11px] text-muted-foreground/40">—</span>
-          )}
-        </div>
-        {/* actions */}
+        {colOrder.map(col => {
+          if (col === "proxy") return (
+            <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
+              <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full" placeholder="host:port" />
+            </div>
+          );
+          if (col === "username") return (
+            <div key={col} className="shrink-0" style={{ width: colWidths.username }}>
+              <Input value={username} onChange={e => setUsername(e.target.value)} onBlur={() => saveField("username")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="username" className="text-xs h-7 w-full" />
+            </div>
+          );
+          if (col === "password") return (
+            <div key={col} className="shrink-0" style={{ width: colWidths.password }}>
+              <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full" />
+            </div>
+          );
+          if (col === "accounts") return (
+            <div key={col} className="shrink-0 flex justify-center" style={{ width: colWidths.accounts }}>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${totalCount === 0 ? "bg-slate-100 text-slate-400" : validCount === totalCount ? "bg-emerald-50 text-emerald-700" : validCount === 0 ? "bg-slate-100 text-slate-500" : "bg-yellow-50 text-yellow-700"}`}>
+                <User className="w-3 h-3" />{totalCount === 0 ? "0" : `${validCount}/${totalCount}`}
+              </span>
+            </div>
+          );
+          if (col === "status") return (
+            <div key={col} className="shrink-0" style={{ width: colWidths.status }}>
+              {pingResult ? (
+                <span className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded ${pingResult.alive ? pingResult.latencyMs < 300 ? "bg-emerald-50 text-emerald-600" : pingResult.latencyMs < 800 ? "bg-yellow-50 text-yellow-600" : "bg-orange-50 text-orange-600" : "bg-red-50 text-red-500"}`}>
+                  {pingResult.alive ? <><Wifi className="w-3 h-3" />{pingResult.latencyMs}ms</> : <><WifiOff className="w-3 h-3" />Dead</>}
+                </span>
+              ) : <span className="text-[11px] text-muted-foreground/40">—</span>}
+            </div>
+          );
+          return null;
+        })}
+        {/* Actions — always last */}
         <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost" size="icon"
-            className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
-            onClick={() => onPing(proxy.id)}
-            disabled={pinging}
-            title="Ping proxy"
-          >
+          <Button variant="ghost" size="icon" className={`h-7 w-7 ${pinging ? "text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`} onClick={() => onPing(proxy.id)} disabled={pinging} title="Ping proxy">
             {pinging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
           </Button>
-          <Button
-            variant="ghost" size="icon"
-            className="h-7 w-7 text-white bg-red-500 hover:bg-red-600"
-            onClick={() => {
-              if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) {
-                deleteProxyMutation.mutate(proxy.id);
-              }
-            }}
-            title="Delete proxy"
-          >
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-white bg-red-500 hover:bg-red-600" onClick={() => { if (confirm(`Delete proxy ${proxy.host}:${proxy.port}? Profiles using it will be unassigned.`)) { deleteProxyMutation.mutate(proxy.id); } }} title="Delete proxy">
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -288,6 +245,40 @@ export function ProxiesPage() {
   type SortDir = "asc" | "desc";
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const [proxyColOrder, setProxyColOrder] = useState<ProxyCol[]>(() => {
+    try {
+      const s = localStorage.getItem("proxies_col_order");
+      if (!s) return DEFAULT_PROXY_COL_ORDER;
+      const stored: ProxyCol[] = JSON.parse(s);
+      const storedSet = new Set(stored);
+      const newKeys = DEFAULT_PROXY_COL_ORDER.filter(k => !storedSet.has(k));
+      return [...stored, ...newKeys];
+    } catch { return DEFAULT_PROXY_COL_ORDER; }
+  });
+
+  const [proxyColWidths, setProxyColWidths] = useState<Record<ProxyCol, number>>(() => {
+    try {
+      const s = localStorage.getItem("proxies_col_widths_px");
+      return s ? { ...DEFAULT_PROXY_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_PROXY_COL_WIDTHS;
+    } catch { return DEFAULT_PROXY_COL_WIDTHS; }
+  });
+
+  const moveProxyCol = (key: ProxyCol, dir: -1 | 1) => {
+    const idx = proxyColOrder.indexOf(key);
+    if (idx === -1) return;
+    const next = [...proxyColOrder];
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= next.length) return;
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    setProxyColOrder(next);
+    localStorage.setItem("proxies_col_order", JSON.stringify(next));
+  };
+
+  const proxyDragColRef = useRef<string | null>(null);
+  const [proxyDragOverCol, setProxyDragOverCol] = useState<string | null>(null);
+  const [manageProxyColsOpen, setManageProxyColsOpen] = useState(false);
+  const manageProxyColsRef = useRef<HTMLDivElement>(null);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -426,6 +417,16 @@ export function ProxiesPage() {
       setPingingAll(false);
     }
   };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (manageProxyColsRef.current && !manageProxyColsRef.current.contains(e.target as Node)) {
+        setManageProxyColsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     if (proxiesLoading || proxies.length === 0 || autoPingedRef.current) return;
@@ -628,20 +629,75 @@ export function ProxiesPage() {
 
         {/* Column header */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
-          <button onClick={() => handleSort("proxy")} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors ${sortKey === "proxy" ? "text-primary" : ""}`} style={{ width: 210 }}>
-            Proxy<SortIcon col="proxy" />
-          </button>
-          <button onClick={() => handleSort("username")} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors ${sortKey === "username" ? "text-primary" : ""}`} style={{ width: 120 }}>
-            Username<SortIcon col="username" />
-          </button>
-          <div className="shrink-0" style={{ width: 120 }}>Password</div>
-          <button onClick={() => handleSort("accounts")} className={`shrink-0 flex items-center justify-center gap-0.5 hover:text-primary transition-colors ${sortKey === "accounts" ? "text-primary" : ""}`} style={{ width: 76 }}>
-            Accounts<SortIcon col="accounts" />
-          </button>
-          <button onClick={() => handleSort("status")} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors ${sortKey === "status" ? "text-primary" : ""}`} style={{ width: 88 }}>
-            Status<SortIcon col="status" />
-          </button>
+          {proxyColOrder.map(col => {
+            const isDragTarget = proxyDragOverCol === col;
+            const dragProps = {
+              draggable: true as const,
+              onDragStart: (e: React.DragEvent) => { proxyDragColRef.current = col; e.dataTransfer.effectAllowed = "move"; },
+              onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (proxyDragColRef.current && proxyDragColRef.current !== col) setProxyDragOverCol(col); },
+              onDrop: (e: React.DragEvent) => {
+                e.preventDefault();
+                const from = proxyDragColRef.current as ProxyCol | null;
+                proxyDragColRef.current = null;
+                setProxyDragOverCol(null);
+                if (!from || from === col) return;
+                const fromIdx = proxyColOrder.indexOf(from);
+                const toIdx = proxyColOrder.indexOf(col);
+                if (fromIdx === -1 || toIdx === -1) return;
+                const next = [...proxyColOrder];
+                next.splice(fromIdx, 1);
+                next.splice(toIdx, 0, from);
+                setProxyColOrder(next);
+                localStorage.setItem("proxies_col_order", JSON.stringify(next));
+              },
+              onDragEnd: () => { proxyDragColRef.current = null; setProxyDragOverCol(null); },
+            };
+            const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
+            const sortable = col === "proxy" || col === "username" || col === "accounts" || col === "status";
+            if (sortable) return (
+              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-grab active:cursor-grabbing ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
+                {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
+              </button>
+            );
+            return (
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-grab active:cursor-grabbing ${dragStyle}`}>
+                {PROXY_COL_LABELS[col]}
+              </div>
+            );
+          })}
           <div className="shrink-0">Actions</div>
+          <div className="flex-1" />
+          <div ref={manageProxyColsRef} className="relative">
+            <button onClick={() => setManageProxyColsOpen(o => !o)} className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-foreground hover:text-primary transition-colors">
+              <Settings2 className="w-3 h-3" /> Columns
+            </button>
+            {manageProxyColsOpen && (
+              <div className="absolute right-0 top-full mt-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-3 text-muted-foreground">Columns</p>
+                {proxyColOrder.map((key, ordIdx) => {
+                  const updateWidth = (delta: number) => {
+                    const v = Math.max(40, Math.min(400, proxyColWidths[key] + delta));
+                    const next = { ...proxyColWidths, [key]: v };
+                    setProxyColWidths(next);
+                    localStorage.setItem("proxies_col_widths_px", JSON.stringify(next));
+                  };
+                  return (
+                    <div key={key} className="flex items-center gap-1 mb-2">
+                      <div className="flex flex-col mr-0.5">
+                        <button onClick={() => moveProxyCol(key, -1)} disabled={ordIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
+                        <button onClick={() => moveProxyCol(key, 1)} disabled={ordIdx === proxyColOrder.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
+                      </div>
+                      <label className="text-xs w-20 text-muted-foreground shrink-0">{PROXY_COL_LABELS[key]}</label>
+                      <button onClick={() => updateWidth(-10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronDown className="w-3 h-3" /></button>
+                      <input type="number" min={40} max={400} value={proxyColWidths[key]} onChange={e => { const v = Math.max(40, Math.min(400, Number(e.target.value))); const next = { ...proxyColWidths, [key]: v }; setProxyColWidths(next); localStorage.setItem("proxies_col_widths_px", JSON.stringify(next)); }} className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center" />
+                      <button onClick={() => updateWidth(10)} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronUp className="w-3 h-3" /></button>
+                    </div>
+                  );
+                })}
+                <button onClick={() => { setProxyColWidths(DEFAULT_PROXY_COL_WIDTHS); localStorage.removeItem("proxies_col_widths_px"); setProxyColOrder(DEFAULT_PROXY_COL_ORDER); localStorage.removeItem("proxies_col_order"); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1">Reset to defaults</button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Scrollable body */}
@@ -673,6 +729,8 @@ export function ProxiesPage() {
                 pinging={pingingIds.has(proxy.id)}
                 onPing={pingOne}
                 even={idx % 2 === 1}
+                colOrder={proxyColOrder}
+                colWidths={proxyColWidths}
               />
             ))
           )}

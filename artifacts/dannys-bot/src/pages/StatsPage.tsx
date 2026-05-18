@@ -39,9 +39,12 @@ const DEFAULT_VISIBLE: Record<StatKey, boolean> = {
   comment: true, story: true, human_session: true,
 };
 
+const DEFAULT_STAT_COL_ORDER: StatKey[] = ["follow", "unfollow", "dm", "like", "comment", "story", "human_session"];
+
 function ProfileStatsRow({
   profile,
   visibleCols,
+  statColOrder,
   colWidths,
   statsData,
   onOpenBrowser,
@@ -49,6 +52,7 @@ function ProfileStatsRow({
 }: {
   profile: Profile;
   visibleCols: Record<StatKey, boolean>;
+  statColOrder: StatKey[];
   colWidths: Record<StatKey | "account" | "open_eb", number>;
   statsData: any[];
   onOpenBrowser: () => void;
@@ -67,7 +71,6 @@ function ProfileStatsRow({
     });
   };
 
-  const visibleTypes = ALL_STAT_TYPES.filter(({ key }) => visibleCols[key]);
   const displayName = profile.accountLabel || profile.username;
 
   return (
@@ -98,8 +101,10 @@ function ProfileStatsRow({
         </button>
       </td>
 
-      {/* Stat columns */}
-      {visibleTypes.map(({ key, isTool }) => {
+      {/* Stat columns — in user-defined order */}
+      {statColOrder.filter(key => visibleCols[key]).map(key => {
+        const statType = ALL_STAT_TYPES.find(s => s.key === key)!;
+        const isTool = statType.isTool;
         const tool = isTool ? tools?.find((t: Tool) => t.type === key) : undefined;
         const todayCount = getStat(key, today);
         const lifetime = getStat(key, "lifetime");
@@ -144,6 +149,31 @@ export function StatsPage() {
       return s ? { ...DEFAULT_VISIBLE, ...JSON.parse(s) } : DEFAULT_VISIBLE;
     } catch { return DEFAULT_VISIBLE; }
   });
+
+  const [statColOrder, setStatColOrder] = useState<StatKey[]>(() => {
+    try {
+      const s = localStorage.getItem("stats_col_order");
+      if (!s) return DEFAULT_STAT_COL_ORDER;
+      const stored: StatKey[] = JSON.parse(s);
+      const storedSet = new Set(stored);
+      const newKeys = DEFAULT_STAT_COL_ORDER.filter(k => !storedSet.has(k));
+      return [...stored, ...newKeys];
+    } catch { return DEFAULT_STAT_COL_ORDER; }
+  });
+
+  const moveStatCol = (key: StatKey, dir: -1 | 1) => {
+    const idx = statColOrder.indexOf(key);
+    if (idx === -1) return;
+    const next = [...statColOrder];
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= next.length) return;
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    setStatColOrder(next);
+    localStorage.setItem("stats_col_order", JSON.stringify(next));
+  };
+
+  const statDragColRef = useRef<string | null>(null);
+  const [statDragOverCol, setStatDragOverCol] = useState<string | null>(null);
 
   const [manageColsOpen, setManageColsOpen] = useState(false);
   const manageColsRef = useRef<HTMLDivElement>(null);
@@ -293,18 +323,21 @@ export function StatsPage() {
                   <div className="absolute right-0 top-full mt-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
                     <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Show / Hide Columns</p>
                     <div className="space-y-1.5 mb-3">
-                      {ALL_STAT_TYPES.map(({ key, label, icon, color }) => (
-                        <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                          <Checkbox
-                            checked={visibleCols[key]}
-                            onCheckedChange={(val) => toggleVisible(key, !!val)}
-                            className="h-3.5 w-3.5 shrink-0"
-                          />
-                          <span className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide ${color}`}>
-                            {icon} {label}
-                          </span>
-                        </label>
-                      ))}
+                      {statColOrder.map((key, ordIdx) => {
+                        const st = ALL_STAT_TYPES.find(s => s.key === key)!;
+                        return (
+                          <div key={key} className="flex items-center gap-1.5 select-none">
+                            <div className="flex flex-col mr-0.5">
+                              <button onClick={() => moveStatCol(key, -1)} disabled={ordIdx === 0} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronUp className="w-2.5 h-2.5" /></button>
+                              <button onClick={() => moveStatCol(key, 1)} disabled={ordIdx === statColOrder.length - 1} className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"><ChevronDown className="w-2.5 h-2.5" /></button>
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer flex-1">
+                              <Checkbox checked={visibleCols[key]} onCheckedChange={(val) => toggleVisible(key, !!val)} className="h-3.5 w-3.5 shrink-0" />
+                              <span className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide ${st.color}`}>{st.icon} {st.label}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <div className="border-t border-border/50 my-3" />
@@ -339,7 +372,7 @@ export function StatsPage() {
                       </div>
                     ))}
                     <button
-                      onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("stats_col_widths_px"); }}
+                      onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("stats_col_widths_px"); setStatColOrder(DEFAULT_STAT_COL_ORDER); localStorage.removeItem("stats_col_order"); }}
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
                     >
                       Reset to defaults
@@ -355,8 +388,8 @@ export function StatsPage() {
             <table className="text-sm text-left" style={{ tableLayout: "fixed", width: "100%" }}>
               <colgroup>
                 <col style={{ width: colWidths.account }} />
-                <col />
-                {visibleTypes.map(({ key }) => <col key={key} style={{ width: colWidths[key] }} />)}
+                <col style={{ width: colWidths.open_eb }} />
+                {statColOrder.filter(key => visibleCols[key]).map(key => <col key={key} style={{ width: colWidths[key] }} />)}
               </colgroup>
               <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
                 <tr>
@@ -374,18 +407,39 @@ export function StatsPage() {
                       <span className="text-[10px]">Open EB</span>
                     </span>
                   </th>
-                  {visibleTypes.map(({ key, label, icon, color }) => (
-                    <th key={key} className="px-4 py-3 font-bold">
-                      <button
-                        onClick={() => cycleSort(key)}
-                        className={`flex items-center gap-1 hover:opacity-90 transition-opacity ${color} ${sortKey === key ? "opacity-100" : "opacity-60"}`}
+                  {statColOrder.filter(key => visibleCols[key]).map(key => {
+                    const st = ALL_STAT_TYPES.find(s => s.key === key)!;
+                    const isDragTarget = statDragOverCol === key;
+                    return (
+                      <th
+                        key={key}
+                        draggable
+                        onDragStart={e => { statDragColRef.current = key; e.dataTransfer.effectAllowed = "move"; }}
+                        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (statDragColRef.current && statDragColRef.current !== key) setStatDragOverCol(key); }}
+                        onDrop={e => {
+                          e.preventDefault();
+                          const from = statDragColRef.current as StatKey | null;
+                          statDragColRef.current = null;
+                          setStatDragOverCol(null);
+                          if (!from || from === key) return;
+                          const fromIdx = statColOrder.indexOf(from);
+                          const toIdx = statColOrder.indexOf(key);
+                          if (fromIdx === -1 || toIdx === -1) return;
+                          const next = [...statColOrder];
+                          next.splice(fromIdx, 1);
+                          next.splice(toIdx, 0, from);
+                          setStatColOrder(next);
+                          localStorage.setItem("stats_col_order", JSON.stringify(next));
+                        }}
+                        onDragEnd={() => { statDragColRef.current = null; setStatDragOverCol(null); }}
+                        className={`px-4 py-3 font-bold cursor-grab active:cursor-grabbing select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                       >
-                        {icon}
-                        <span className="uppercase tracking-wide text-[10px]">{label}</span>
-                        {sortIcon(key)}
-                      </button>
-                    </th>
-                  ))}
+                        <button onClick={() => cycleSort(key)} className={`flex items-center gap-1 hover:opacity-90 transition-opacity ${st.color} ${sortKey === key ? "opacity-100" : "opacity-60"}`}>
+                          {st.icon}<span className="uppercase tracking-wide text-[10px]">{st.label}</span>{sortIcon(key)}
+                        </button>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
@@ -419,6 +473,7 @@ export function StatsPage() {
                           key={profile.id}
                           profile={profile}
                           visibleCols={visibleCols}
+                          statColOrder={statColOrder}
                           colWidths={colWidths}
                           statsData={statsMap.get(profile.id) ?? []}
                           {...makeRowProps(profile)}
@@ -432,6 +487,7 @@ export function StatsPage() {
                       key={profile.id}
                       profile={profile}
                       visibleCols={visibleCols}
+                      statColOrder={statColOrder}
                       colWidths={colWidths}
                       statsData={statsMap.get(profile.id) ?? []}
                       {...makeRowProps(profile)}

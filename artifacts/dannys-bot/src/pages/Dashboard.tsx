@@ -55,6 +55,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.377",
+    date: "18 May 2026",
+    items: [
+      { category: "New", text: "Drag-and-drop column reordering is now available on the Dashboard activity log — grab any column header and drop it into position." },
+      { category: "New", text: "Statistics page columns can now be reordered by dragging headers or using the up/down arrows in the Columns popup." },
+      { category: "New", text: "Proxy Manager columns can now be reordered by dragging headers, and a new Columns popup lets you adjust their widths and order." },
+    ],
+  },
+  {
+    version: "1.0.376",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Accounts that hit an Instagram security check during verify no longer falsely show as valid — the account card now correctly stays on the challenge status so you know it needs attention, even when the underlying API session is working." },
+      { category: "Fix", text: "Verifying an account without the browser panel open no longer forces a fresh login — the app now navigates to Instagram first with your saved session before deciding if a re-login is needed, preventing unnecessary challenge triggers." },
+      { category: "Fix", text: "Exporting accounts now includes the account status column so status (valid, stopped, captcha, etc.) is preserved exactly when you re-import the file." },
+      { category: "Fix", text: "Importing accounts from an Equinox export now correctly restores each account's status instead of always resetting everything to pending." },
+    ],
+  },
+  {
     version: "1.0.375",
     date: "18 May 2026",
     items: [
@@ -1293,6 +1312,8 @@ export function Dashboard() {
     setColOrder(next);
     localStorage.setItem("dashboard_col_order", JSON.stringify(next));
   };
+  const dashDragColRef = useRef<string | null>(null);
+  const [dashDragOverCol, setDashDragOverCol] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const manageColsRef = useRef<HTMLDivElement>(null);
 
@@ -1767,9 +1788,36 @@ export function Dashboard() {
                 </colgroup>
                 <thead className="text-xs uppercase bg-muted/80 text-muted-foreground font-bold border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
-                    {colOrder.map(key => (
-                      <th key={key} className="px-3 py-4 font-bold">{COL_LABELS[key]}</th>
-                    ))}
+                    {colOrder.map(key => {
+                      const isDragTarget = dashDragOverCol === key;
+                      return (
+                        <th
+                          key={key}
+                          draggable
+                          onDragStart={e => { dashDragColRef.current = key; e.dataTransfer.effectAllowed = "move"; }}
+                          onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dashDragColRef.current && dashDragColRef.current !== key) setDashDragOverCol(key); }}
+                          onDrop={e => {
+                            e.preventDefault();
+                            const from = dashDragColRef.current;
+                            dashDragColRef.current = null;
+                            setDashDragOverCol(null);
+                            if (!from || from === key) return;
+                            const fromIdx = colOrder.indexOf(from as keyof typeof DEFAULT_COL_WIDTHS);
+                            const toIdx = colOrder.indexOf(key);
+                            if (fromIdx === -1 || toIdx === -1) return;
+                            const next = [...colOrder];
+                            next.splice(fromIdx, 1);
+                            next.splice(toIdx, 0, from as keyof typeof DEFAULT_COL_WIDTHS);
+                            setColOrder(next);
+                            localStorage.setItem("dashboard_col_order", JSON.stringify(next));
+                          }}
+                          onDragEnd={() => { dashDragColRef.current = null; setDashDragOverCol(null); }}
+                          className={`px-3 py-4 font-bold cursor-grab active:cursor-grabbing select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                        >
+                          {COL_LABELS[key]}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
