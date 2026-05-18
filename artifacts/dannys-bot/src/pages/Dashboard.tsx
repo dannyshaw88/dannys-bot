@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.379",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Opening 4 or more embedded browsers no longer freezes the entire app — each browser panel now streams frames at a rate that scales with how many are open, so clicking and all other controls stay responsive regardless of how many accounts have their browser running." },
+    ],
+  },
+  {
     version: "1.0.378",
     date: "18 May 2026",
     items: [

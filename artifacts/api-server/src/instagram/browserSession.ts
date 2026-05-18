@@ -1664,6 +1664,10 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
   // 4th+ EB "Loading…" hang — system load delays event-loop execution just long
   // enough for Chrome's first frame to slip through before cdp.on() runs.
   let firstFrameLogged = false;
+  // Per-session timestamp of the last frame we actually forwarded to the WS.
+  // Used by the throttle below — we always ACK every frame (Chrome needs that)
+  // but only call wsWrite when the interval has elapsed.
+  let lastForwardedMs = 0;
   cdp.on("Page.screencastFrame", (params: any) => {
     // ACK IMMEDIATELY (synchronously, no await) — Chrome back-pressures and
     // stops sending new frames until it receives the ack. Delaying the ack
@@ -1673,7 +1677,8 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
     const s = sessions.get(profileId);
     // Always update the timestamp even when no WS client — the crash detector
     // uses this to know Chrome is alive.
-    if (s) s.lastScreencastFrameAt = Date.now();
+    const now = Date.now();
+    if (s) s.lastScreencastFrameAt = now;
 
     if (!firstFrameLogged) {
       firstFrameLogged = true;
@@ -1681,6 +1686,27 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
     }
 
     if (!s?.ws || s.ws.readyState !== WebSocket.OPEN) return;
+
+    // Frame-forwarding throttle — keeps the main-process event loop responsive.
+    //
+    // Problem: wsWrite() JSON-serialises a 50–150 KB base64 JPEG on every
+    // frame.  With 4+ EBs each streaming at compositor speed the event loop
+    // fills up with these large allocations, delaying HTTP handlers (clicks,
+    // API calls) and making the entire UI appear frozen.
+    //
+    // Solution: scale the per-session forwarding interval with session count so
+    // total WS writes stay ~20 fps regardless of how many EBs are open:
+    //   1 EB  → 50 ms/frame  (20 fps)
+    //   2 EBs → 100 ms/frame (10 fps each, 20 fps total)
+    //   3 EBs → 150 ms/frame (6.7 fps each, 20 fps total)
+    //   4 EBs → 200 ms/frame (5 fps each,  20 fps total)
+    //   5 EBs → 250 ms/frame (4 fps each,  20 fps total)
+    //
+    // The ACK above is always sent, so Chrome never stalls — we just skip
+    // the expensive JSON.stringify + WS send on skipped frames.
+    const frameIntervalMs = Math.max(50, sessions.size * 50);
+    if (now - lastForwardedMs < frameIntervalMs) return;
+    lastForwardedMs = now;
 
     // page.url() is sync in Puppeteer — it reads from an internal frame cache,
     // no CDP round-trip.
