@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.382",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed a build error that prevented the app from packaging — an unescaped quote in the update error message was causing the bundler to fail on Windows." },
+    ],
+  },
+  {
     version: "1.0.381",
     date: "18 May 2026",
     items: [

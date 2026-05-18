@@ -485,7 +485,7 @@ function setupAutoUpdater(): void {
     // dumping the raw GitHub API response at the user.
     let message: string;
     if (/401|bad credentials|unauthorized/i.test(raw)) {
-      message = "The update token has expired. To fix this:\n\n1. Generate a new GitHub personal access token with "repo" scope at github.com/settings/tokens\n2. Set it as the UPDATER_TOKEN secret in your GitHub repository (Settings → Secrets → Actions)\n3. Rebuild and install the new version\n\nUpdates will work normally in the new build.";
+      message = "The update token has expired. To fix this:\n\n1. Generate a new GitHub personal access token with \"repo\" scope at github.com/settings/tokens\n2. Set it as the UPDATER_TOKEN secret in your GitHub repository (Settings → Secrets → Actions)\n3. Rebuild and install the new version\n\nUpdates will work normally in the new build.";
     } else if (/404|not found|no releases/i.test(raw)) {
       message = "No release has been published yet on GitHub. The update feed will become available after the first successful build publishes a release.";
     } else if (/ENOTFOUND|ECONNREFUSED|network|timeout|socket/i.test(raw)) {
