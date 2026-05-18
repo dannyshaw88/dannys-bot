@@ -252,7 +252,7 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
     if (!lastAction && !(engineStatus?.nextHumanSessionAt)) return null;
     const nextAt = engineStatus?.nextHumanSessionAt ?? 0;
     if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
-    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
+    return { label: format(new Date(nextAt), "d MMM, HH:mm:ss"), executing: false };
   })();
 
   return (

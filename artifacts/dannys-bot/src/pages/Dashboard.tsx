@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.384",
+    date: "18 May 2026",
+    items: [
+      { category: "Feature", text: "Added a search box to the Target Sources list — type any part of a hashtag or account name to instantly filter the list. The search box appears automatically once you have at least one source added, and an X button clears it." },
+      { category: "Feature", text: "The scheduled run timestamp on every tool now shows the date alongside the time (e.g. \"18 May, 14:30:00\") so you can tell at a glance whether the next run is today, tomorrow, or further out." },
+    ],
+  },
+  {
     version: "1.0.382",
     date: "18 May 2026",
     items: [

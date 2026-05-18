@@ -165,7 +165,7 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
     const nextAt = engineStatus?.nextUnfollowAt ?? 0;
     if (!nextAt) return null;
     if (nextAt <= Date.now()) return { label: "Executing", executing: true };
-    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
+    return { label: format(new Date(nextAt), "d MMM, HH:mm:ss"), executing: false };
   })();
 
   return (

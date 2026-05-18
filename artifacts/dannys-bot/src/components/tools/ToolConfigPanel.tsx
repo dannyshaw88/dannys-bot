@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign, TrendingUp } from "lucide-react";
+import { Plus, Trash2, Hash, Users, ChevronRight, ArrowLeft, Copy, X, Upload, Download, ListFilter, UserPlus, Clock, ExternalLink, Activity, Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings, Repeat2, Image, AtSign, TrendingUp, Search } from "lucide-react";
 import { useRef } from "react";
 import { type Tool, type Profile, type FollowedUser, type SessionAction } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -202,6 +202,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
 
   const [newSourceType, setNewSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newSourceValue, setNewSourceValue] = useState("");
+  const [sourceSearch, setSourceSearch] = useState("");
   const [showSources, setShowSources] = useState(false);
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
 
@@ -224,7 +225,7 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     if (!lastAction && !engineStatus) return null;
     const nextAt = engineStatus?.nextFollowAt ?? 0;
     if (!nextAt || nextAt <= Date.now()) return { label: "Executing", executing: true };
-    return { label: format(new Date(nextAt), "HH:mm:ss"), executing: false };
+    return { label: format(new Date(nextAt), "d MMM, HH:mm:ss"), executing: false };
   })();
 
   const [showCopyModal, setShowCopyModal] = useState(false);
@@ -495,6 +496,22 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
               <Download className="w-4 h-4 mr-2" /> Export
             </Button>
           </div>
+          {(sources?.length ?? 0) > 0 && (
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search sources…"
+                value={sourceSearch}
+                onChange={e => setSourceSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+              {sourceSearch && (
+                <button onClick={() => setSourceSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             {sourcesLoading ? (
               <div className="text-center py-10 text-muted-foreground text-sm">Loading sources...</div>
@@ -504,41 +521,48 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 <p className="text-muted-foreground text-sm font-medium">No sources added yet</p>
                 <p className="text-xs text-muted-foreground mt-1">Add a hashtag or account above to start targeting followers.</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {sources?.map(source => (
-                  <div key={source.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background hover:bg-accent/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                        {source.type === 'hashtag' ? <Hash className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate max-w-[150px]">#{source.value}</p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {source.rank != null && (
-                            <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">Rank {source.rank}/1000</span>
-                          )}
-                          {source.nrPosts != null && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {source.nrPosts >= 1_000_000 ? `${(source.nrPosts/1_000_000).toFixed(1)}M`
-                                : source.nrPosts >= 1_000 ? `${(source.nrPosts/1_000).toFixed(0)}K`
-                                : source.nrPosts} posts
-                            </span>
-                          )}
-                          {source.rank == null && source.nrPosts == null && (
-                            <span className="text-xs text-muted-foreground capitalize">{source.type.replace('_', ' ')}</span>
-                          )}
+            ) : (() => {
+              const q = sourceSearch.trim().toLowerCase().replace(/^[#@]/, "");
+              const filtered = q ? sources!.filter(s => s.value.toLowerCase().includes(q)) : sources!;
+              if (filtered.length === 0) return (
+                <div className="text-center py-8 text-muted-foreground text-sm">No sources match "{sourceSearch}"</div>
+              );
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {filtered.map(source => (
+                    <div key={source.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background hover:bg-accent/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                          {source.type === 'hashtag' ? <Hash className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate max-w-[150px]">#{source.value}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {source.rank != null && (
+                              <span className="text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">Rank {source.rank}/1000</span>
+                            )}
+                            {source.nrPosts != null && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {source.nrPosts >= 1_000_000 ? `${(source.nrPosts/1_000_000).toFixed(1)}M`
+                                  : source.nrPosts >= 1_000 ? `${(source.nrPosts/1_000).toFixed(0)}K`
+                                  : source.nrPosts} posts
+                              </span>
+                            )}
+                            {source.rank == null && source.nrPosts == null && (
+                              <span className="text-xs text-muted-foreground capitalize">{source.type.replace('_', ' ')}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })} disabled={deleteSourceMutation.isPending}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                      onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })} disabled={deleteSourceMutation.isPending}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1266,6 +1290,22 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
               </Button>
             </div>
 
+            {(sources?.length ?? 0) > 0 && (
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Search sources…"
+                  value={sourceSearch}
+                  onChange={e => setSourceSearch(e.target.value)}
+                  className="pl-9 h-9 text-sm"
+                />
+                {sourceSearch && (
+                  <button onClick={() => setSourceSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               {sourcesLoading ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">Loading sources...</div>
@@ -1274,8 +1314,13 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                   <p className="text-muted-foreground text-sm">No sources added yet.</p>
                   <p className="text-xs text-muted-foreground mt-1">Add targets above to start automating.</p>
                 </div>
-              ) : (
-                sources?.map(source => (
+              ) : (() => {
+                const q = sourceSearch.trim().toLowerCase().replace(/^[#@]/, "");
+                const filtered = q ? sources!.filter(s => s.value.toLowerCase().includes(q)) : sources!;
+                if (filtered.length === 0) return (
+                  <div className="text-center py-8 text-muted-foreground text-sm">No sources match "{sourceSearch}"</div>
+                );
+                return filtered.map(source => (
                   <div key={source.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-background hover:bg-accent/30 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary shrink-0">
@@ -1304,9 +1349,9 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                         </div>
                       </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       onClick={() => deleteSourceMutation.mutate({ id: source.id, toolId: tool.id })}
                       disabled={deleteSourceMutation.isPending}
@@ -1314,8 +1359,8 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
-                ))
-              )}
+                ));
+              })()}
             </div>
           </div>
         </div>

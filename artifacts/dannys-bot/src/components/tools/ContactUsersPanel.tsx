@@ -154,7 +154,7 @@ export function ContactUsersPanel({ tool, profile }: Props) {
               const nextAt = engineStatus?.nextContactAt ?? 0;
               if (!nextAt) return null;
               const executing = nextAt <= Date.now();
-              const label = executing ? null : format(new Date(nextAt), "HH:mm:ss");
+              const label = executing ? null : format(new Date(nextAt), "d MMM, HH:mm:ss");
               return (
                 <span className="flex items-center gap-1 text-[11px] font-bold" style={{ color: executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
                   <Clock className="w-3 h-3 shrink-0" />
