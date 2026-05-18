@@ -839,6 +839,26 @@ async function createWindow() {
     if (err) throw new Error(err);
   });
 
+  // Step 1 of the new two-phase EQX export flow: ask where to save BEFORE fetching data.
+  ipcMain.handle("pick-eqx-folder", async () => {
+    const result = await dialog.showOpenDialog(win!, {
+      title: "Choose folder to save EQX files",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || !result.filePaths.length) return { canceled: true };
+    return { canceled: false, folder: result.filePaths[0] };
+  });
+
+  // Step 2: write the already-fetched files into the chosen folder.
+  ipcMain.handle("write-eqx-files", async (_e, { folder, files }: { folder: string; files: Array<{ filename: string; data: string }> }) => {
+    for (const { filename, data } of files) {
+      const buffer = Buffer.from(data, "base64");
+      fs.writeFileSync(path.join(folder, filename), buffer);
+    }
+    return { count: files.length };
+  });
+
+  // Legacy handler kept for backward compatibility (single call, shows dialog internally).
   ipcMain.handle("export-eqx-folder", async (_e, files: Array<{ filename: string; data: string }>) => {
     const result = await dialog.showOpenDialog(win!, {
       title: "Choose folder to save EQX files",

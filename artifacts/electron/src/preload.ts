@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("open-browser-window", { profileId, username, userAgent }),
   openCsvTemp: (args: { content: string; filename: string }) =>
     ipcRenderer.invoke("open-csv-temp", args),
+  pickEqxFolder: () =>
+    ipcRenderer.invoke("pick-eqx-folder"),
+  writeEqxFiles: (args: { folder: string; files: Array<{ filename: string; data: string }> }) =>
+    ipcRenderer.invoke("write-eqx-files", args),
   exportEqxToFolder: (files: Array<{ filename: string; data: string }>) =>
     ipcRenderer.invoke("export-eqx-folder", files),
 });

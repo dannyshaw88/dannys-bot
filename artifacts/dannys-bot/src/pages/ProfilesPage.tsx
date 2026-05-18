@@ -1206,8 +1206,12 @@ export function ProfilesPage() {
 
                   const eApi = (window as any).electronAPI;
 
-                  if (eApi?.exportEqxToFolder) {
-                    // Electron path: fetch all blobs first, then show ONE folder picker and write all files at once
+                  if (eApi?.pickEqxFolder) {
+                    // Electron path (two-phase): ask where to save FIRST, then fetch and write.
+                    const pick = await eApi.pickEqxFolder();
+                    if (pick.canceled) return;
+                    const folder: string = pick.folder;
+
                     const files: Array<{ filename: string; data: string }> = [];
                     const fetchErrors: string[] = [];
                     for (const id of selectedProfileIds) {
@@ -1227,9 +1231,8 @@ export function ProfilesPage() {
                       toast({ title: "Export failed", description: `Could not fetch: ${fetchErrors.join(", ")}`, variant: "destructive" });
                     }
                     if (files.length === 0) return;
-                    const result = await eApi.exportEqxToFolder(files);
-                    if (result.canceled) return;
-                    toast({ title: "EQX Export Complete", description: `${result.count} file(s) saved to ${result.folder}` });
+                    const writeResult = await eApi.writeEqxFiles({ folder, files });
+                    toast({ title: "EQX Export Complete", description: `${writeResult.count} file(s) saved to ${folder}` });
                   } else {
                     // Browser/web fallback: individual downloads
                     let successCount = 0;
