@@ -1277,6 +1277,7 @@ export function detachWS(profileId: number, ws: WebSocket) {
   session.ws = null;
   if (session.frameLoop) { clearInterval(session.frameLoop); session.frameLoop = null; }
   if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
+  if ((session as any)._challengeKeepalive) { clearInterval((session as any)._challengeKeepalive); (session as any)._challengeKeepalive = null; }
   stopScreencast(profileId).catch(() => {});
   // Grace period: give the client 10 s to reconnect before killing Chrome.
   // Normal drops (network blips, Replit proxy resets, HMR updates) reconnect
@@ -1337,6 +1338,13 @@ export function attachWS(profileId: number, ws: WebSocket) {
         // the challenge URL for the user to open in their own browser.
         if (session.challengeUrl) {
           log(`[attachSSE:${profileId}] page is chrome-error but account has challenge — leaving parked, not navigating`, "browser");
+          // Re-send the challenge URL message to the newly connected client so the
+          // user sees it even after a WS reconnect (the original message is not buffered).
+          const challengeMsg = `⚠ Instagram requires verification for this account. Open this link in your browser to complete it: ${session.challengeUrl} — After finishing the check, click Clear EB Session here to reset and log back in.`;
+          setTimeout(() => {
+            const s = sessions.get(profileId);
+            if (s?.ws && s.ws.readyState === WebSocket.OPEN) wsWrite(s.ws, { type: "loginStatus", message: challengeMsg });
+          }, 600);
         } else {
           // Reconnect after crash/error — recover by checking cookies.
           // IMPORTANT: page.cookies() with no args returns cookies for the CURRENT
@@ -1362,6 +1370,24 @@ export function attachWS(profileId: number, ws: WebSocket) {
   log(`[attachWS:${profileId}] WS attached — total open sessions=${nOpen}`, "browser");
   startScreencast(profileId).catch(() => {});
   startHousekeepLoop(profileId);
+
+  // Challenge-parked accounts: the chrome-error page sends only ONE screencast frame
+  // and then goes completely silent. The Replit proxy closes WebSocket connections
+  // that carry no application data for ~4 s, causing a constant 4-second reconnect
+  // loop. Fix: send a lightweight keepalive text message every 2.5 s so the proxy
+  // never sees the WS as idle. The client silently ignores "keepalive" messages.
+  if (session.challengeUrl) {
+    if ((session as any)._challengeKeepalive) clearInterval((session as any)._challengeKeepalive);
+    (session as any)._challengeKeepalive = setInterval(() => {
+      const s = sessions.get(profileId);
+      if (!s?.ws || s.ws.readyState !== WebSocket.OPEN) {
+        clearInterval((session as any)._challengeKeepalive);
+        (session as any)._challengeKeepalive = null;
+        return;
+      }
+      wsWrite(s.ws, { type: "keepalive" });
+    }, 2500);
+  }
 }
 
 // ── Auto-login trigger ─────────────────────────────────────────────────────────

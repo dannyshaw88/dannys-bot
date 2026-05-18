@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.371",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser for challenge accounts no longer constantly reconnects every 4 seconds — a keepalive message now prevents the connection from being dropped while the account is parked waiting for verification." },
+      { category: "Fix", text: "The Instagram verification link is now re-sent every time the browser panel reconnects, so the link stays visible and can be copied even after brief disconnects." },
+    ],
+  },
+  {
     version: "1.0.370",
     date: "18 May 2026",
     items: [
