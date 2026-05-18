@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.380",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Having 4 or more browser panels open no longer freezes the entire app (profiles not loading, dashboard not loading, tools stopping). The root cause was Chrome generating frames at full compositor speed for every open panel — the fix now delays the frame acknowledgement so Chrome itself slows down, cutting the event flood that was blocking the server from responding to anything." },
+    ],
+  },
+  {
     version: "1.0.379",
     date: "18 May 2026",
     items: [
