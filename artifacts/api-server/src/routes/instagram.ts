@@ -652,10 +652,11 @@ export async function registerInstagramRoutes(
       // Classify the failure
       const msg = loginResult.message ?? "";
       let accountStatus = "locked";
-      if (/2fa|two.factor|two_factor/i.test(msg))   accountStatus = "2fa_verification";
-      else if (/challenge|checkpoint/i.test(msg))    accountStatus = "captcha";
-      else if (/disabled/i.test(msg))                accountStatus = "account_disabled";
-      else if (/suspended/i.test(msg))               accountStatus = "suspended";
+      if (/2fa|two.factor|two_factor/i.test(msg))                       accountStatus = "2fa_verification";
+      else if (/challenge|checkpoint/i.test(msg))                        accountStatus = "captcha";
+      else if (/disabled/i.test(msg))                                    accountStatus = "account_disabled";
+      else if (/suspended/i.test(msg))                                   accountStatus = "suspended";
+      else if (/human.*verif|confirm.*human|human verification/i.test(msg)) accountStatus = "confirm_human";
       result = { ok: false, accountStatus, message: `@${profile.username} — ${msg}` };
     }
 
@@ -1218,10 +1219,11 @@ export async function registerInstagramRoutes(
           // Classify the failure and persist status
           const msg = loginResult.message ?? "";
           let accountStatus = "locked";
-          if (/2fa|two.factor|two_factor/i.test(msg))  accountStatus = "2fa_verification";
-          else if (/challenge|checkpoint/i.test(msg))   accountStatus = "captcha";
-          else if (/disabled/i.test(msg))               accountStatus = "account_disabled";
-          else if (/suspended/i.test(msg))              accountStatus = "suspended";
+          if (/2fa|two.factor|two_factor/i.test(msg))                       accountStatus = "2fa_verification";
+          else if (/challenge|checkpoint/i.test(msg))                        accountStatus = "captcha";
+          else if (/disabled/i.test(msg))                                    accountStatus = "account_disabled";
+          else if (/suspended/i.test(msg))                                   accountStatus = "suspended";
+          else if (/human.*verif|confirm.*human|human verification/i.test(msg)) accountStatus = "confirm_human";
           await storage.updateProfile(profileId, { accountStatus }).catch(() => {});
           return;
         }
