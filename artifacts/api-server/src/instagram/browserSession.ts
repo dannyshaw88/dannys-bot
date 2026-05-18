@@ -943,9 +943,13 @@ export async function getOrCreateSession(
     if (sNav && !navUrl.startsWith("chrome-error://")) {
       sNav.navProtectedUntil = Math.max(sNav.navProtectedUntil ?? 0, Date.now() + 12000);
     } else if (sNav && navUrl.startsWith("chrome-error://")) {
-      // Clear nav protection so the frame-loop error recovery fires promptly at tick 15
-      // instead of waiting for the initial 15-second navProtectedUntil to expire.
-      sNav.navProtectedUntil = 0;
+      // Set a 30-second cooldown instead of clearing to 0.
+      // Setting navProtectedUntil = 0 was designed to make error recovery fire
+      // quickly after chrome-error, but it caused a tight refresh loop for banned
+      // accounts: error recovery navigates to login → ban redirect → chrome-error →
+      // navProtectedUntil = 0 → error recovery fires again in 5 s → repeat.
+      // A 30-second cooldown still allows recovery but breaks the spin loop.
+      sNav.navProtectedUntil = Date.now() + 30000;
     }
     const url = frame.url();
     // Small delay so banners/dialogs have time to render
@@ -2979,12 +2983,29 @@ export async function browserAutoLogin(
                   /authentication.app|6.digit|two.factor|security.code|confirmation.code|backup.code|enter.the.code/i.test(allText) ||
                   pageUrl.includes("/two_factor");
 
-    // chrome-error:// (ERR_TOO_MANY_REDIRECTS) must NEVER be treated as a successful
-    // login — it means Instagram's security redirect chain looped. The old code
-    // treated this as ok:true, which caused the verify flow to call the mobile API
-    // which returned login_required, which caused the user to retry, which cleared
-    // cookies and submitted credentials again — the hammering loop that deepened the lock.
+    // chrome-error:// after submit — check for sessionid FIRST.
+    // A banned or restricted account: Instagram accepts the credentials, sets the
+    // sessionid cookie, then immediately redirects the browser to a restriction/ban
+    // page that returns HTTP 4xx → ERR_HTTP_RESPONSE_CODE_FAILURE → chrome-error://.
+    // The login DID succeed.  We must extract the cookie and return ok:true so the
+    // verify flow can proceed to the mobile API and set the correct final status
+    // (banned / checkpoint / valid).  The old "never ok on chrome-error" rule was
+    // correct when there were no cookies, but wrong when there IS a sessionid.
     const isErrorPage = pageUrl.startsWith("chrome-error://");
+    if (isErrorPage) {
+      const postSubmitCookies = await s.page.cookies(
+        "https://www.instagram.com",
+        "https://i.instagram.com",
+        "https://instagram.com",
+      ).catch(() => [] as { name: string; value: string }[]);
+      if (postSubmitCookies.some(c => c.name === "sessionid" && c.value.length > 5)) {
+        await saveCookies(profileId, s.page);
+        sendStatus(profileId, "✓ Logged in — Instagram accepted credentials (browser was redirected to a restriction page after login; this is normal for accounts with active bans or challenges).");
+        return { ok: true, message: "Logged in" };
+      }
+      // No sessionid — chrome-error without a session means a genuine proxy/network
+      // or rate-limit error.  Fall through so isLoggedIn remains false.
+    }
     const isLoggedIn = !isErrorPage &&
                        !pageText.includes("Username, email or mobile number") &&
                        !pageText.includes("Create new account") &&

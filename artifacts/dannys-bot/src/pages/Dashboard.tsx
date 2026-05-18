@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.369",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Banned or restricted accounts now verify correctly — if Instagram accepted the login and set the session cookie, the account is marked verified even if the browser was redirected to an error page afterwards." },
+      { category: "Fix", text: "Embedded browser no longer refreshes every 5 seconds for accounts on a restricted or ban page — the recovery loop now waits 30 seconds between retries instead of hammering constantly." },
+    ],
+  },
+  {
     version: "1.0.368",
     date: "18 May 2026",
     items: [
