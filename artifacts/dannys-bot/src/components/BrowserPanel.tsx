@@ -642,6 +642,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
       {/* Toolbar */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-background shrink-0">
+        <button
+          onClick={() => send({ type: "newTab" })}
+          disabled={!connected}
+          className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          title="Open new tab"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => send({ type: "back" })}    disabled={!connected} title="Back">
           <ArrowLeft className="w-4 h-4" />
         </Button>
@@ -859,15 +867,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
               )}
             </div>
           ))}
-          {/* New tab button */}
-          <button
-            onClick={() => send({ type: "newTab" })}
-            disabled={!connected}
-            className="flex items-center justify-center h-6 w-6 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0 ml-0.5"
-            title="Open new tab"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
         </div>
       )}
 

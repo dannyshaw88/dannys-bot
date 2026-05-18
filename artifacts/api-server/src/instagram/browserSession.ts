@@ -1562,7 +1562,7 @@ async function followChallengeRedirects(
 // (each startScreencast takes ~10–50 ms in practice).
 let _screencastStartQueue: Promise<void> = Promise.resolve();
 
-async function startScreencast(profileId: number): Promise<void> {
+async function startScreencast(profileId: number, _retry = 0): Promise<void> {
   const session = sessions.get(profileId);
   if (!session || !session.ws || session.ws.readyState !== WebSocket.OPEN) return;
 
@@ -1581,16 +1581,27 @@ async function startScreencast(profileId: number): Promise<void> {
   let cdp: any;
   const t0 = Date.now();
   try {
-    // 8 s timeout: with 4+ Chrome instances the Puppeteer protocol queue can back
+    // 20 s timeout: with 5+ Chrome instances the Puppeteer protocol queue can back
     // up, making createCDPSession hang for the full 30 s default. Failing fast
-    // lets the 8 s watchdog retry sooner instead of stacking up hung calls.
+    // lets the retry path kick in sooner instead of stacking up hung calls.
     cdp = await Promise.race([
       (session.page as any).createCDPSession(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("createCDPSession timeout (8 s)")), 8000)),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("createCDPSession timeout (20 s)")), 20000)),
     ]);
     log(`[screencast:${profileId}] createCDPSession OK (${Date.now() - t0}ms) — sessions=${nSessions}`, "browser");
   } catch (e: any) {
-    log(`[screencast:${profileId}] createCDPSession FAILED after ${Date.now() - t0}ms: ${e?.message}`, "browser");
+    log(`[screencast:${profileId}] createCDPSession FAILED after ${Date.now() - t0}ms (attempt ${_retry + 1}/4): ${e?.message}`, "browser");
+    // Schedule a retry so the 5th+ EB doesn't get permanently stuck on "Loading…".
+    // Without a retry there is no watchdog (screencastStartedAt was never set) and
+    // waitingFirstFrame stays true until the 45 s fallback timeout fires.
+    if (_retry < 3) {
+      const retryDelay = [4000, 7000, 12000][_retry] ?? 12000;
+      const sRetry = sessions.get(profileId);
+      if (sRetry?.ws && sRetry.ws.readyState === WebSocket.OPEN) {
+        log(`[screencast:${profileId}] scheduling retry #${_retry + 2} in ${retryDelay}ms`, "browser");
+        setTimeout(() => startScreencast(profileId, _retry + 1).catch(() => {}), retryDelay);
+      }
+    }
     return;
   }
   session.screencastCdp = cdp;
@@ -2126,7 +2137,10 @@ export async function browserNewTab(profileId: number) {
     // a consistent device across all tabs (not "HeadlessChrome" on new tabs).
     const tabMeta = buildUAMetadata(s.userAgent);
     await (tabMeta ? newPage.setUserAgent(s.userAgent, tabMeta as any) : newPage.setUserAgent(s.userAgent));
-    await newPage.setViewport(viewportForUA(s.userAgent));
+    // New tabs must use the same fixed 1280×760 canvas dimensions as the main page.
+    // viewportForUA() returns mobile dimensions (e.g. 412×915 @ 2.625x scale) for
+    // mobile UAs, which causes severe stretching when drawn onto the 1280×760 canvas.
+    await newPage.setViewport({ width: 1280, height: 760 });
     await applyStealthScripts(newPage, s.userAgent);
     // File chooser interception for new tab
     (newPage as any).on("filechooser", (chooser: any) => {
@@ -2145,7 +2159,10 @@ export async function browserNewTab(profileId: number) {
     s.activePage = s.pages.length - 1;
     s.page = newPage;
     s.lastUrl = "";
-    await newPage.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+    // Open blank — the user navigates via the address bar or the email shortcuts.
+    // Previously this navigated to instagram.com which is wrong for extra tabs
+    // (used to check email) and caused a stretched mobile-UA render on the desktop canvas.
+    await newPage.goto("about:blank", { waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => {});
     sendTabsUpdate(profileId);
     // Screencast is tied to a specific page target — restart on the new tab.
     await stopScreencast(profileId).catch(() => {});
