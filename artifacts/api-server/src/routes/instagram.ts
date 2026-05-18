@@ -2390,6 +2390,7 @@ export async function registerInstagramRoutes(
         ` csrftoken=${ebCookies.csrftoken ? ebCookies.csrftoken.slice(0, 8) + "..." : "(none)"}` +
         ` (${ebCookies.cookieStrings.length} cookies total) ✓`
       );
+      harvestSteps.push(`EB agent: ${ebCookies.ebUserAgent}`);
       req.log.info({ username, mid: ebCookies.mid.slice(0, 8), ig_did: ebCookies.ig_did.slice(0, 8) }, "signup: EB cookie harvest succeeded");
 
       let result = await createInstagramAccountViaApi({ username, password, email, firstName, day: Number(day), month: Number(month), year: Number(year), proxyUrl, bio: bio || undefined, userAgent: userAgentApi || undefined, apiLimits: parsedApiLimits, ebCookies });

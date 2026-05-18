@@ -857,6 +857,15 @@ export function CreateAccountApiPage() {
                 <Input value={userAgentApi} onChange={e => setUserAgentApi(e.target.value)} className="h-8 text-xs font-mono" disabled={locked} placeholder="API/ver; dpi; res; Brand; Model; codename; soc; en_US" />
                 <p className="text-[10px] text-muted-foreground">The device descriptor — the Instagram prefix is added automatically by the server. Each account gets a unique device from a pool of {UA_POOL.length}.</p>
               </div>
+              <div className="space-y-1.5 pt-1 border-t border-border/60">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Globe className="w-3 h-3" />EB User Agent — Cookie Harvest (Chrome)
+                </Label>
+                <div className="h-8 px-3 flex items-center rounded-md border border-border bg-muted/40 text-[10px] font-mono text-muted-foreground truncate select-all">
+                  Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+                </div>
+                <p className="text-[10px] text-muted-foreground">Chrome desktop UA used by the embedded browser to harvest <code className="font-mono">mid</code>, <code className="font-mono">ig_did</code> and <code className="font-mono">csrftoken</code> before signup.</p>
+              </div>
             </div>
 
             {/* Submit */}

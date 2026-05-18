@@ -178,7 +178,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
   proxyPort?: number;
   proxyUsername?: string;
   proxyPassword?: string;
-}): Promise<{ mid: string; ig_did: string; csrftoken: string; cookieStrings: string[] } | null> {
+}): Promise<{ mid: string; ig_did: string; csrftoken: string; cookieStrings: string[]; ebUserAgent: string } | null> {
   const logPfx = "[harvestSignupCookies]";
   log(`${logPfx} Starting EB cookie harvest for signup...`);
 
@@ -318,7 +318,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
       return null;
     }
 
-    return { mid, ig_did, csrftoken, cookieStrings };
+    return { mid, ig_did, csrftoken, cookieStrings, ebUserAgent: DESKTOP_UA };
   } finally {
     try { await browser.close(); } catch {}
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}

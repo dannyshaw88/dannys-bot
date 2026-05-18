@@ -3257,21 +3257,24 @@ export async function createInstagramAccountViaApi(params: {
     "X-IG-WWW-Claim": "0",
   };
 
-  // CSRF strategy: use "missing" throughout the entire signup flow.
+  // CSRF strategy: use the real csrftoken the EB harvested from instagram.com if one
+  // was returned, otherwise fall back to "missing".
   //
-  // The one successful HTTP 200 from accounts/create/ was obtained when
-  // fetch_headers (the old Step 1) returned no cookie for our datacenter IP,
-  // leaving csrfToken = "missing" for ALL calls: launcher/sync, qe/sync, username
-  // check, and accounts/create/.  Bootstrapping a real token from www.instagram.com
-  // and then switching back to "missing" only for accounts/create/ creates an
-  // inconsistency that Instagram's backend appears to use as a rejection signal —
-  // every attempt with that mixed state produced the generic "There was an error" 400.
+  // The EB visits instagram.com and gets a genuine browser-set csrftoken cookie.
+  // Using that real token mirrors the login flow (where EB cookies flow straight into
+  // the API client) and avoids the "inconsistent CSRF state" rejection that Instagram
+  // triggers when a real token is mixed with "missing".
   //
-  // instagram-private-api itself uses "missing" for all pre-login calls, confirming
-  // this is the correct/expected value for unauthenticated signup sessions.
-  let csrfToken = "missing";
-  cookieJar = mergeCookies(cookieJar, [`csrftoken=missing`]);
-  step(`CSRF set to "missing" (unauthenticated signup — consistent across all calls)`);
+  // instagram-private-api uses "missing" only because it never has a real browser
+  // session to draw from; we do, so we use the real one when available.
+  const ebCsrf = (ebCookies.csrftoken ?? "").trim();
+  let csrfToken = (ebCsrf && ebCsrf !== "missing") ? ebCsrf : "missing";
+  // cookieJar already contains the EB csrftoken from ebCookies.cookieStrings.
+  // Only inject "missing" if the EB returned nothing.
+  if (!ebCsrf || ebCsrf === "missing") {
+    cookieJar = mergeCookies(cookieJar, [`csrftoken=missing`]);
+  }
+  step(`CSRF ${csrfToken !== "missing" ? `seeded from EB harvest (${csrfToken.slice(0, 8)}...)` : 'set to "missing" (EB returned no real token)'}`);
 
   await stepDelay();
 

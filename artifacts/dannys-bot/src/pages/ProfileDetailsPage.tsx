@@ -105,9 +105,9 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
   }, [open]);
 
   return (
-    <div className="max-w-[40%] relative" ref={ref}>
+    <div className="max-w-[20%] relative" ref={ref}>
       <Input
-        className="h-8 text-xs pr-7"
+        className="h-8 text-xs pr-7 border-black"
         placeholder="No group"
         value={value || ""}
         onFocus={() => setOpen(true)}
@@ -671,7 +671,7 @@ export function ProfileDetailsPage() {
                     <button className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent transition-colors max-w-md">
                       <Instagram className="w-4 h-4 text-primary shrink-0" />
                       <span className="text-2xl font-bold tracking-tight text-foreground truncate">
-                        {profile.accountLabel || `@${profile.username}`}
+                        {profile.accountLabel || profile.username}
                       </span>
                       <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                     </button>
@@ -699,10 +699,12 @@ export function ProfileDetailsPage() {
                         <DropdownMenuItem
                           key={p.id}
                           onClick={() => navigate(`/profiles/${p.id}?tab=${activeTab}`)}
-                          className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 text-sm ${p.id === profileId ? "bg-accent font-semibold" : ""}`}
+                          className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 ${p.id === profileId ? "bg-accent" : ""}`}
                         >
                           <Instagram className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <span className="truncate">{p.accountLabel || `@${p.username}`}</span>
+                          <span className={`flex-1 truncate text-sm ${p.id === profileId ? "font-semibold" : ""}`}>
+                            {p.accountLabel || p.username}{(p.tags ?? "").trim() ? ` - ${(p.tags ?? "").trim()}` : ""}
+                          </span>
                           {p.id === profileId && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
                         </DropdownMenuItem>
                       ))}

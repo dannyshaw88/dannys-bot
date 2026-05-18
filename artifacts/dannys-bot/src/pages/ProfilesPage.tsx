@@ -150,7 +150,7 @@ export function ProfilesPage() {
   const [manageProfileColsOpen, setManageProfileColsOpen] = useState(false);
   const manageProfileColsRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
-  useScrollRestore("profiles", scrollBodyRef);
+  useScrollRestore("profiles", scrollBodyRef, !isLoading);
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
   const isDragSelecting = useRef(false);
