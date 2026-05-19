@@ -55,6 +55,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.390",
+    date: "19 May 2026",
+    items: [
+      { category: "New", text: "Each website in the Website List now has its own % weight in the Visit Order randomiser — you can control how likely each individual URL is to be visited first, rather than treating the whole list as one block." },
+      { category: "Improvement", text: "Proxy host and port are now entered as a single 'host:port' field (e.g. 123.45.67.89:8080) in the Account Creator, matching the format used everywhere else in the app." },
+      { category: "Improvement", text: "Renamed 'Create Account via API' button to 'Create Account via EB' to better reflect that account creation goes through the embedded browser." },
+      { category: "Improvement", text: "Moved the Watch EB button to the tab bar next to Created Accounts so it's easier to reach without scrolling." },
+      { category: "Improvement", text: "Added a Clear Cookies button next to Session Cookie in the account details panel for quick cookie removal without opening extra menus." },
+      { category: "Improvement", text: "Minimising the window now sends the app to the system tray instead of closing it, so the app keeps running in the background." },
+    ],
+  },
+  {
     version: "1.0.389",
     date: "19 May 2026",
     items: [

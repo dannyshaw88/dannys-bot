@@ -531,7 +531,7 @@ const LS_KEY_CB_GGL_ITEMS_MIN  = "equinox_signup_cb_ggl_items_min";
 const LS_KEY_CB_GGL_ITEMS_MAX  = "equinox_signup_cb_ggl_items_max";
 const LS_KEY_CB_GGL_DELAY_MIN  = "equinox_signup_cb_ggl_delay_min";
 const LS_KEY_CB_GGL_DELAY_MAX  = "equinox_signup_cb_ggl_delay_max";
-const LS_KEY_CB_PCT_SITES      = "equinox_signup_cb_pct_sites";
+const LS_KEY_CB_PCT_SITE_WEIGHTS = "equinox_signup_cb_pct_site_weights";
 const LS_KEY_CB_PCT_YT         = "equinox_signup_cb_pct_yt";
 const LS_KEY_CB_PCT_GOOGLE     = "equinox_signup_cb_pct_google";
 
@@ -640,7 +640,9 @@ export function CreateAccountApiPage() {
   const [cbGglItemsMax,   setCbGglItemsMaxRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_ITEMS_MAX, 3));
   const [cbGglDelayMin,   setCbGglDelayMinRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_DELAY_MIN, 5));
   const [cbGglDelayMax,   setCbGglDelayMaxRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_DELAY_MAX, 30));
-  const [cbPctSites,      setCbPctSitesRaw]      = useState(() => lsGetNum(LS_KEY_CB_PCT_SITES, 34));
+  const [cbSiteWeights,   setCbSiteWeightsRaw]   = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem(LS_KEY_CB_PCT_SITE_WEIGHTS) ?? "{}"); } catch { return {}; }
+  });
   const [cbPctYt,         setCbPctYtRaw]         = useState(() => lsGetNum(LS_KEY_CB_PCT_YT, 33));
   const [cbPctGoogle,     setCbPctGoogleRaw]     = useState(() => lsGetNum(LS_KEY_CB_PCT_GOOGLE, 33));
   const setCbVisitYoutube  = (v: boolean) => { setCbVisitYoutubeRaw(v);  lsSet(LS_KEY_CB_YOUTUBE, String(v)); };
@@ -653,9 +655,26 @@ export function CreateAccountApiPage() {
   const setCbGglItemsMax   = (v: number)  => { setCbGglItemsMaxRaw(v);   lsSet(LS_KEY_CB_GGL_ITEMS_MAX, String(v)); };
   const setCbGglDelayMin   = (v: number)  => { setCbGglDelayMinRaw(v);   lsSet(LS_KEY_CB_GGL_DELAY_MIN, String(v)); };
   const setCbGglDelayMax   = (v: number)  => { setCbGglDelayMaxRaw(v);   lsSet(LS_KEY_CB_GGL_DELAY_MAX, String(v)); };
-  const setCbPctSites      = (v: number)  => { setCbPctSitesRaw(v);      lsSet(LS_KEY_CB_PCT_SITES, String(v)); };
+  const setCbSiteWeights   = (v: Record<string, number>) => {
+    setCbSiteWeightsRaw(v);
+    try { localStorage.setItem(LS_KEY_CB_PCT_SITE_WEIGHTS, JSON.stringify(v)); } catch {}
+  };
   const setCbPctYt         = (v: number)  => { setCbPctYtRaw(v);         lsSet(LS_KEY_CB_PCT_YT,    String(v)); };
   const setCbPctGoogle     = (v: number)  => { setCbPctGoogleRaw(v);     lsSet(LS_KEY_CB_PCT_GOOGLE,String(v)); };
+
+  // Keep site-weight map in sync when the sites textarea changes
+  useEffect(() => {
+    const urls = cbSites.split("\n").map(s => s.trim()).filter(Boolean);
+    setCbSiteWeightsRaw(prev => {
+      const next: Record<string, number> = {};
+      urls.forEach(url => { next[url] = prev[url] ?? 50; });
+      const changed = JSON.stringify(next) !== JSON.stringify(prev);
+      if (changed) {
+        try { localStorage.setItem(LS_KEY_CB_PCT_SITE_WEIGHTS, JSON.stringify(next)); } catch {}
+      }
+      return changed ? next : prev;
+    });
+  }, [cbSites]);
 
   // ── Signup fields ──────────────────────────────────────────────────────────
   const [usernameSpin, setUsernameSpinRaw] = useState(() => lsGet(LS_KEY_USERNAME_SPIN));
@@ -724,17 +743,18 @@ export function CreateAccountApiPage() {
 
   const createProxy = useCreateProxy();
   const [showAddProxy, setShowAddProxy] = useState(false);
-  const [newProxyHost, setNewProxyHost] = useState("");
-  const [newProxyPort, setNewProxyPort] = useState("");
+  const [newProxyHostPort, setNewProxyHostPort] = useState("");
   const [newProxyUser, setNewProxyUser] = useState("");
   const [newProxyPass, setNewProxyPass] = useState("");
   const [addProxyErr, setAddProxyErr]   = useState("");
 
   const handleAddProxy = async () => {
     setAddProxyErr("");
-    const host = newProxyHost.trim();
-    const port = parseInt(newProxyPort, 10);
-    if (!host) return setAddProxyErr("Host is required");
+    const raw = newProxyHostPort.trim();
+    const lastColon = raw.lastIndexOf(":");
+    const host = lastColon > 0 ? raw.slice(0, lastColon).trim() : raw;
+    const port = lastColon > 0 ? parseInt(raw.slice(lastColon + 1), 10) : NaN;
+    if (!host) return setAddProxyErr("Enter host:port (e.g. 123.45.67.89:8080)");
     if (!port || port < 1 || port > 65535) return setAddProxyErr("Port must be 1–65535");
     try {
       const created = await createProxy.mutateAsync({
@@ -744,7 +764,7 @@ export function CreateAccountApiPage() {
       });
       setSelectedProxyId(created.id);
       setShowAddProxy(false);
-      setNewProxyHost(""); setNewProxyPort(""); setNewProxyUser(""); setNewProxyPass("");
+      setNewProxyHostPort(""); setNewProxyUser(""); setNewProxyPass("");
     } catch (e: any) {
       setAddProxyErr(e?.message ?? "Failed to save proxy");
     }
@@ -808,7 +828,7 @@ export function CreateAccountApiPage() {
         preBakeGglItemsMax: cbGglItemsMax,
         preBakeGglDelayMin: cbGglDelayMin,
         preBakeGglDelayMax: cbGglDelayMax,
-        preBakePctSites: cbPctSites,
+        preBakeSiteWeights: cbSites.trim() ? cbSiteWeights : undefined,
         preBakePctYt: cbPctYt,
         preBakePctGoogle: cbPctGoogle,
       };
@@ -920,18 +940,6 @@ export function CreateAccountApiPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {/* EB activity button — always visible so user can open it at any time */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEbPanelOpen(v => !v)}
-            className={`h-8 text-xs gap-1.5 ${loading ? "border-cyan-500 text-cyan-500" : ""}`}
-          >
-            <Monitor className={`w-3.5 h-3.5 ${loading ? "text-cyan-500" : ""}`} />
-            {loading && <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />}
-            Watch EB
-            <ChevronRight className="w-3 h-3 opacity-50" />
-          </Button>
           {result && tab === "create" && (
             <Button variant="outline" size="sm" onClick={handleReset} className="h-8">
               <RefreshCw className="w-3.5 h-3.5 mr-1.5" />New Attempt
@@ -941,7 +949,7 @@ export function CreateAccountApiPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-3 border-b border-border">
+      <div className="flex items-center gap-1 mb-3 border-b border-border">
         {(["create", "accounts"] as const).map(t => (
           <button
             key={t}
@@ -958,6 +966,18 @@ export function CreateAccountApiPage() {
             }
           </button>
         ))}
+        {/* EB activity button — sits inline after the Created Accounts tab */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setEbPanelOpen(v => !v)}
+          className={`h-7 text-xs gap-1.5 ml-2 mb-1 ${loading ? "border-cyan-500 text-cyan-500" : ""}`}
+        >
+          <Monitor className={`w-3.5 h-3.5 ${loading ? "text-cyan-500" : ""}`} />
+          {loading && <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />}
+          Watch EB
+          <ChevronRight className="w-3 h-3 opacity-50" />
+        </Button>
       </div>
 
       {tab === "accounts" ? (
@@ -1191,17 +1211,19 @@ export function CreateAccountApiPage() {
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Visit Order — % Chance Each Source is First</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      {cbSites.trim() && (
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Website List %</Label>
+                      {cbSites.trim() && cbSites.split("\n").map(s => s.trim()).filter(Boolean).map(url => (
+                        <div key={url} className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground truncate block" title={url}>
+                            {url.replace(/^https?:\/\//, "").replace(/^www\./, "")}
+                          </Label>
                           <Input
                             type="number" min={0} max={100}
-                            value={cbPctSites}
-                            onChange={e => setCbPctSites(Math.min(100, Math.max(0, +e.target.value)))}
+                            value={cbSiteWeights[url] ?? 50}
+                            onChange={e => setCbSiteWeights({ ...cbSiteWeights, [url]: Math.min(100, Math.max(0, +e.target.value)) })}
                             className="h-7 text-xs text-center px-1" disabled={locked}
                           />
                         </div>
-                      )}
+                      ))}
                       {cbVisitYoutube && (
                         <div className="space-y-1">
                           <Label className="text-[10px] text-muted-foreground">YouTube %</Label>
@@ -1332,18 +1354,11 @@ export function CreateAccountApiPage() {
               )}
               {showAddProxy && (
                 <div className="rounded-md border border-sky-200 bg-sky-50/40 dark:bg-sky-950/20 p-3 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">New Proxy</p>
-                  <div className="flex gap-2">
-                    <div className="flex-1 space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Host</Label>
-                      <Input value={newProxyHost} onChange={e => setNewProxyHost(e.target.value)} placeholder="123.45.67.89" className="h-7 text-xs font-mono" disabled={createProxy.isPending} />
+                  <div className="flex items-end gap-2">
+                    <div className="flex-[2] space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Host:Port</Label>
+                      <Input value={newProxyHostPort} onChange={e => setNewProxyHostPort(e.target.value)} placeholder="123.45.67.89:8080" className="h-7 text-xs font-mono" disabled={createProxy.isPending} />
                     </div>
-                    <div className="w-20 space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Port</Label>
-                      <Input value={newProxyPort} onChange={e => setNewProxyPort(e.target.value)} placeholder="8080" className="h-7 text-xs font-mono" disabled={createProxy.isPending} />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
                     <div className="flex-1 space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Username <span className="font-normal">(optional)</span></Label>
                       <Input value={newProxyUser} onChange={e => setNewProxyUser(e.target.value)} placeholder="user" className="h-7 text-xs" disabled={createProxy.isPending} />
@@ -1352,11 +1367,11 @@ export function CreateAccountApiPage() {
                       <Label className="text-[10px] text-muted-foreground">Password <span className="font-normal">(optional)</span></Label>
                       <Input type="password" value={newProxyPass} onChange={e => setNewProxyPass(e.target.value)} placeholder="••••••" className="h-7 text-xs" disabled={createProxy.isPending} />
                     </div>
+                    <Button size="sm" className="h-7 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0 shrink-0" onClick={handleAddProxy} disabled={createProxy.isPending || !newProxyHostPort.trim()}>
+                      {createProxy.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Plus className="w-3 h-3 mr-1" />Save</>}
+                    </Button>
                   </div>
                   {addProxyErr && <p className="text-[10px] text-red-600 flex items-center gap-1"><XCircle className="w-3 h-3 shrink-0" />{addProxyErr}</p>}
-                  <Button size="sm" className="h-7 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0 w-full" onClick={handleAddProxy} disabled={createProxy.isPending || !newProxyHost.trim() || !newProxyPort.trim()}>
-                    {createProxy.isPending ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Saving…</> : <><Plus className="w-3 h-3 mr-1.5" />Save &amp; Select Proxy</>}
-                  </Button>
                 </div>
               )}
             </div>
@@ -1438,7 +1453,7 @@ export function CreateAccountApiPage() {
                 {loading ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating Account…</>
                 ) : (
-                  <><Cookie className="w-4 h-4 mr-2" />{cbSites.trim() ? "Bake Cookies + Create Account" : "Create Account via API"}</>
+                  <><Cookie className="w-4 h-4 mr-2" />{cbSites.trim() ? "Bake Cookies + Create Account" : "Create Account via EB"}</>
                 )}
               </Button>
             )}
