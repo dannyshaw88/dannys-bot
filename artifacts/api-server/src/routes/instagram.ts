@@ -50,6 +50,23 @@ import {
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
+import { userAgents as UA_POOL } from "../shared/userAgents";
+
+// ── Deterministic UA picker ─────────────────────────────────────────────────
+// Picks a paired { api, embedded } UA from the pool based on the account's
+// username so the same username always gets the same device profile (stable
+// across re-imports, re-creates, etc.). Falls back to index 0 for empty names.
+// NEVER call randomUUID or Math.random here — determinism is required by the
+// DEVICE FINGERPRINT CONTINUITY RULE.
+function pickUAForAccount(username: string): { api: string; embedded: string } {
+  if (!username || UA_POOL.length === 0) return UA_POOL[0];
+  let hash = 5381;
+  for (let i = 0; i < username.length; i++) {
+    hash = ((hash << 5) + hash) ^ username.charCodeAt(i);
+    hash = hash >>> 0; // keep unsigned 32-bit
+  }
+  return UA_POOL[hash % UA_POOL.length];
+}
 
 // Last-resort desktop Chrome UA — used ONLY for the Clear EB Session cleanup path when
 // no per-account UA is stored (so the session can still be wiped even if UA is unset).
@@ -304,7 +321,13 @@ export async function registerInstagramRoutes(
       const inputSchema = api.profiles.create.input.extend({
         proxyId: z.coerce.number().optional().nullable(),
       });
-      const input = inputSchema.parse(req.body);
+      const input = inputSchema.parse(req.body) as any;
+      // Auto-assign paired UAs when the user leaves them blank on manual add
+      if (!input.userAgentEmbedded || !input.userAgentApi) {
+        const autoUA = pickUAForAccount(input.username || "");
+        if (!input.userAgentEmbedded) input.userAgentEmbedded = autoUA.embedded;
+        if (!input.userAgentApi)      input.userAgentApi      = autoUA.api;
+      }
       const created = await storage.createProfile(input);
       // Seed browser cookie file if cookies were provided — same as bulk/EQX import
       if (created.igApiCookies) seedBrowserCookieFile(created.id, created.igApiCookies);
@@ -986,8 +1009,11 @@ export async function registerInstagramRoutes(
             proxyPort: impPort || null,
             proxyUsername: (p.proxyUsername || null) as string | null,
             proxyPassword: (p.proxyPassword || null) as string | null,
-            userAgentApi: p.userAgentApi || null,
-            userAgentEmbedded: p.userAgentEmbedded || null,
+            // Auto-assign a paired UA when the import source (Jarvee CSV, manual entry, etc.)
+            // doesn't supply one. Deterministic so the same username always gets the same
+            // device profile — stable across re-imports.
+            userAgentApi: p.userAgentApi || pickUAForAccount(p.username || "").api,
+            userAgentEmbedded: p.userAgentEmbedded || pickUAForAccount(p.username || "").embedded,
             tags: p.tags || "",
             dateOfBirth: p.dateOfBirth || null,
             notes: p.notes || null,
@@ -2430,6 +2456,14 @@ export async function registerInstagramRoutes(
       // the value arrives via an object spread rather than an explicit named key.
       // The updateProfile call below is the authoritative write that bypasses that.
       const intendedStatus: string = cleanProfile.accountStatus ?? "pending";
+
+      // Auto-assign UAs if the EQX file was exported before UAs were tracked
+      // (older exports) or if the account never had one assigned.
+      if (!cleanProfile.userAgentEmbedded || !cleanProfile.userAgentApi) {
+        const autoUA = pickUAForAccount(cleanProfile.username || "");
+        if (!cleanProfile.userAgentEmbedded) cleanProfile.userAgentEmbedded = autoUA.embedded;
+        if (!cleanProfile.userAgentApi)      cleanProfile.userAgentApi      = autoUA.api;
+      }
 
       const created = await storage.createProfile(cleanProfile);
 

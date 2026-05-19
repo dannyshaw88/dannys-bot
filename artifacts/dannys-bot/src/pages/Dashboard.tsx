@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.401",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Accounts added manually, imported from CSV, or restored from an EQX file are now automatically assigned a unique paired device User-Agent if one is not already present — imported accounts will no longer arrive with a blank User-Agent." },
+      { category: "Fix", text: "The assigned User-Agent is deterministic per username, so re-importing the same account always gives it the same device profile rather than a different random one each time." },
+    ],
+  },
+  {
     version: "1.0.400",
     date: "19 May 2026",
     items: [
