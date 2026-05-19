@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.386",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed account creation failing with \"EB cookie harvest returned no device cookies\" — Chrome was launching with flags that blocked Instagram's background requests (the mechanism it uses to write the mid and ig_did device cookies). The harvest now uses a separate, lighter set of Chrome flags that allow those requests through, waits for Instagram's scripts to fully run after page load, and polls more reliably before giving up." },
+    ],
+  },
+  {
     version: "1.0.385",
     date: "18 May 2026",
     items: [

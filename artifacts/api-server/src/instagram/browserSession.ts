@@ -161,6 +161,38 @@ export function deleteSavedCookies(profileId: number): void {
   } catch {}
 }
 
+// ── Minimal Chrome args for the throwaway harvest session ─────────────────────
+// LAUNCH_ARGS is optimised for long-running EBs: it includes
+// --disable-background-networking and --js-flags=--max-old-space-size=128 to
+// cut RAM usage.  For the short-lived harvest session those flags are harmful:
+//   • --disable-background-networking stops Chrome's background service worker
+//     and CDN pre-fetch requests — Instagram piggybacks device-ID cookie setting
+//     on these requests, so blocking them prevents mid/ig_did from being written.
+//   • 128 MB JS heap is too small for Instagram's web bundle; V8 GCs aggressively
+//     and sometimes aborts the fingerprinting scripts before cookies are written.
+// The harvest runs for ~10–20 s then the browser is destroyed, so memory
+// optimisation is irrelevant here.
+const HARVEST_ARGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--disable-dev-shm-usage",
+  "--no-first-run",
+  "--disable-extensions",
+  "--disable-sync",
+  "--mute-audio",
+  "--hide-scrollbars",
+  "--window-size=1280,760",
+  "--disable-gpu",
+  "--disk-cache-size=8388608",
+  "--media-cache-size=1",
+  "--disable-features=AudioServiceOutOfProcess,Translate",
+  "--disable-component-update",
+  "--disable-breakpad",
+  "--disable-client-side-phishing-detection",
+  "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+  "--enforce-webrtc-ip-permission-check",
+];
+
 // ── EB signup cookie harvester ────────────────────────────────────────────────
 // Spins up a temporary headless Chrome, navigates to instagram.com/accounts/emailsignup/,
 // and collects the browser-originated cookies (mid, ig_did, csrftoken) that Instagram's
@@ -220,7 +252,12 @@ export async function harvestSignupCookiesFromEB(opts?: {
     browser = await puppeteerLib.launch({
       headless: true,
       executablePath: CHROMIUM_PATH,
-      args: [...LAUNCH_ARGS, `--user-data-dir=${tmpDataDir}`, ...proxyArg],
+      // Use HARVEST_ARGS (not LAUNCH_ARGS): the harvest session is throwaway so
+      // memory optimisation is irrelevant.  LAUNCH_ARGS includes
+      // --disable-background-networking which stops the CDN background requests
+      // that Instagram uses to write mid/ig_did, and caps the JS heap at 128 MB
+      // which can abort Instagram's fingerprinting scripts under GC pressure.
+      args: [...HARVEST_ARGS, `--user-data-dir=${tmpDataDir}`, ...proxyArg],
       ignoreHTTPSErrors: true,
     });
     log(`${logPfx} Temporary Chrome launched`);
@@ -243,61 +280,76 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
     await applyStealthScripts(page, effectiveUA);
 
-    // ── Step 1: Visit the homepage first ─────────────────────────────────────
-    // Instagram's CDN sets mid and ig_did on the *first* request to any IG page.
-    // Navigating directly to the signup page sometimes skips the CDN cookie
-    // injection because Instagram detects it as a deep-link and defers the
-    // fingerprinting JS.  Hitting the homepage first guarantees the device tokens
-    // are set before we proceed to the signup page.
+    // Helper: scrape all three target cookies from Chrome's cookie jar.
+    // Checks all three instagram.com origins so root-domain cookies (.instagram.com)
+    // are captured regardless of which subdomain set them.
+    const IG_ORIGINS = [
+      "https://www.instagram.com",
+      "https://i.instagram.com",
+      "https://instagram.com",
+    ];
+    const readIgCookies = async () => {
+      const all = await page.cookies(...IG_ORIGINS) as Array<{ name: string; value: string }>;
+      return {
+        mid:       all.find(c => c.name === "mid")?.value       ?? "",
+        ig_did:    all.find(c => c.name === "ig_did")?.value    ?? "",
+        csrftoken: all.find(c => c.name === "csrftoken")?.value ?? "",
+        all,
+      };
+    };
+
+    // ── Step 1: Visit the homepage ────────────────────────────────────────────
+    // Use waitUntil:"load" (not "networkidle2") — Instagram keeps background
+    // long-poll connections open, so networkidle2 almost always hits the 30 s
+    // timeout before settling.  After the DOM is loaded we wait an explicit 6 s
+    // to let Instagram's fingerprinting JS execute and write mid/ig_did.
     log(`${logPfx} Navigating to instagram.com (homepage) to seed device cookies...`);
     try {
       await page.goto("https://www.instagram.com/", {
-        waitUntil: "networkidle2",
+        waitUntil: "load",
         timeout: 30000,
       });
     } catch (e: any) {
       log(`${logPfx} Homepage navigation warning (continuing): ${e?.message}`);
     }
+    // Give Instagram's fingerprinting scripts time to run and write cookies.
+    await new Promise(r => setTimeout(r, 6000));
 
-    // Quick check after homepage load
-    const homepageCookies = await page.cookies(
-      "https://www.instagram.com",
-      "https://i.instagram.com",
-      "https://instagram.com",
-    ) as Array<{ name: string; value: string }>;
-    let mid = homepageCookies.find(c => c.name === "mid")?.value ?? "";
-    let ig_did = homepageCookies.find(c => c.name === "ig_did")?.value ?? "";
-    let csrftoken = homepageCookies.find(c => c.name === "csrftoken")?.value ?? "";
-    log(`${logPfx} After homepage: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
+    let { mid, ig_did, csrftoken } = await readIgCookies();
+    log(`${logPfx} After homepage+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
 
     // ── Step 2: Navigate to signup page if device cookies still missing ───────
     if (!mid || !ig_did) {
       log(`${logPfx} Navigating to instagram.com/accounts/emailsignup/ to get remaining cookies...`);
       try {
         await page.goto("https://www.instagram.com/accounts/emailsignup/", {
-          waitUntil: "networkidle2",
+          waitUntil: "load",
           timeout: 30000,
         });
       } catch (e: any) {
         log(`${logPfx} Signup page navigation warning (still checking cookies): ${e?.message}`);
       }
+      await new Promise(r => setTimeout(r, 6000));
+      const after = await readIgCookies();
+      if (after.mid)       mid       = after.mid;
+      if (after.ig_did)    ig_did    = after.ig_did;
+      if (after.csrftoken) csrftoken = after.csrftoken;
+      log(`${logPfx} After signup page+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
     }
 
-    // ── Step 3: Poll until all three cookies appear (up to 20 s) ─────────────
-    const deadline = Date.now() + 20000;
-    while (Date.now() < deadline) {
-      const cookies = await page.cookies(
-        "https://www.instagram.com",
-        "https://i.instagram.com",
-        "https://instagram.com",
-      );
-      for (const c of cookies as Array<{ name: string; value: string }>) {
-        if (c.name === "mid"       && c.value) mid       = c.value;
-        if (c.name === "ig_did"    && c.value) ig_did    = c.value;
-        if (c.name === "csrftoken" && c.value) csrftoken = c.value;
-      }
-      if (mid && ig_did && csrftoken) break;
-      await new Promise(r => setTimeout(r, 500));
+    // ── Step 3: Poll until all three cookies appear (up to 15 s more) ─────────
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline && (!mid || !ig_did)) {
+      await new Promise(r => setTimeout(r, 1000));
+      const poll = await readIgCookies();
+      if (poll.mid)       mid       = poll.mid;
+      if (poll.ig_did)    ig_did    = poll.ig_did;
+      if (poll.csrftoken) csrftoken = poll.csrftoken;
+    }
+    if (!csrftoken) {
+      // One final poll — csrftoken can arrive later than the device IDs.
+      const poll = await readIgCookies();
+      if (poll.csrftoken) csrftoken = poll.csrftoken;
     }
 
     // Build a clean cookie string array from whatever Instagram set
