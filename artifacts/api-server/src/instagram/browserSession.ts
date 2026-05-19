@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import net from "net";
+import tls from "tls";
 
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
@@ -2002,18 +2003,24 @@ export async function getOrCreateSession(
       const challengeStatus = classifyEbChallengeUrl(fullLoc);
       if (challengeStatus) {
         const s = sessions.get(profileId);
-        if (s && !s.challengeUrl) {
-          s.challengeUrl = fullLoc;
-          log(`[challenge:${profileId}] Security challenge detected (${challengeStatus}) → ${fullLoc.slice(0, 120)}`, "browser");
-          sendStatus(profileId, `⚠ Instagram security check required — navigating to challenge page…`);
-          // Write the real status to DB immediately so the account card reflects
-          // what the EB is actually showing — don't wait for the user to click Verify.
-          // Never overwrite a manually-stopped account via the EB challenge detector.
-          storage.getProfile(profileId).then(p => {
-            if (p?.accountStatus !== "stopped") {
-              storage.updateProfile(profileId, { accountStatus: challengeStatus }).catch(() => {});
+        if (s) {
+          const isUrc = fullLoc.includes("update_risky_contactpoint");
+          // For URC, always update to the latest redirect token so the polling
+          // loop advances 20 hops per iteration instead of replaying TOKEN1.
+          // For other challenge types, only capture once (the URL is stable).
+          if (isUrc || !s.challengeUrl) {
+            const firstDetection = !s.challengeUrl;
+            s.challengeUrl = fullLoc;
+            if (firstDetection) {
+              log(`[challenge:${profileId}] Security challenge detected (${challengeStatus}) → ${fullLoc.slice(0, 120)}`, "browser");
+              sendStatus(profileId, `⚠ Instagram security check required — navigating to challenge page…`);
+              storage.getProfile(profileId).then(p => {
+                if (p?.accountStatus !== "stopped") {
+                  storage.updateProfile(profileId, { accountStatus: challengeStatus }).catch(() => {});
+                }
+              }).catch(() => {});
             }
-          }).catch(() => {});
+          }
         }
       }
     }
@@ -2046,20 +2053,59 @@ export async function getOrCreateSession(
       // handler capture the newest token, then repeat.  When the phone approves,
       // Instagram returns 200 and Chrome lands on instagram.com.
       if (url.includes("update_risky_contactpoint")) {
-        // Always refresh the stored URL so the next poll uses the freshest token.
-        sc.challengeUrl = url;
+        // sc.challengeUrl is already the latest Location token, updated by the
+        // response handler on every 302 hop.  Do NOT overwrite it here — request.url()
+        // is the original navigation URL (TOKEN1), not where Chrome stopped.
         if (!(sc as any)._approvalPolling) {
           (sc as any)._approvalPolling = true;
           sc.navProtectedUntil = Date.now() + 310_000; // 5 min + buffer
-          if (!(sc as any)._approvalStatusWritten) {
-            (sc as any)._approvalStatusWritten = true;
-            storage.getProfile(profileId).then(p => {
-              if (p?.accountStatus !== "stopped") {
-                storage.updateProfile(profileId, { accountStatus: "captcha" }).catch(() => {});
+
+          Promise.resolve().then(async () => {
+            // Escape chrome-error so Chrome can navigate again.
+            await page.goto("about:blank", { waitUntil: "domcontentloaded", timeout: 5_000 }).catch(() => {});
+            await startScreencast(profileId).catch(() => {});
+            if (!(sc as any)._approvalStatusWritten) {
+              (sc as any)._approvalStatusWritten = true;
+              storage.getProfile(profileId).then(p => {
+                if (p?.accountStatus !== "stopped") {
+                  storage.updateProfile(profileId, { accountStatus: "captcha" }).catch(() => {});
+                }
+              }).catch(() => {});
+            }
+
+            // ── Step 1: in-Chrome hop-by-hop redirect follow ────────────────────
+            // Chrome hard-limits 20 consecutive redirects per navigation.  We
+            // intercept each 302 response via the _challengeRedirectInterceptor
+            // hook, abort it, and re-navigate Chrome fresh — resetting the counter
+            // to 0 on every hop.  Chrome follows the chain using its own HTTP stack
+            // (identical TLS/HTTP2 fingerprint to a real browser), so Instagram
+            // cannot distinguish it from a human clicking through.  When Instagram
+            // finally returns 200, Chrome loads the actual challenge page in the EB.
+            const startChallengeUrl = sessions.get(profileId)?.challengeUrl ?? url;
+            sendStatus(profileId, `⚠ Instagram security check detected — loading challenge page…`);
+
+            const inChromeResolved = await followChallengeRedirectsInChrome(
+              profileId, page, startChallengeUrl, 30,
+            );
+            if (inChromeResolved) {
+              const s2 = sessions.get(profileId);
+              if (s2) {
+                (s2 as any)._approvalPolling = false;
+                s2.navProtectedUntil = Date.now() + 300_000;
               }
-            }).catch(() => {});
-          }
-          startApprovalPolling(profileId, page);
+              log(`[challenge:${profileId}] URC challenge page loaded via in-Chrome hop-follow`, "browser");
+              sendStatus(profileId, `⚠ Instagram verification required — complete the check shown in the browser.`);
+              await startScreencast(profileId).catch(() => {});
+              return;
+            }
+            log(`[challenge:${profileId}] in-Chrome hop-follow did not resolve (chain infinite) — falling back to phone-approval polling`, "browser");
+
+            // ── Step 2 (fallback): phone-approval polling ────────────────────────
+            // Only reached if the chain is genuinely infinite (account is aggressively
+            // flagged and Instagram won't serve the page to any automated client).
+            // The user must dismiss the alert on their phone; polling detects it.
+            await startApprovalPolling(profileId, page);
+          }).catch(() => { startApprovalPolling(profileId, page); });
         }
         return;
       }
@@ -2365,6 +2411,14 @@ export function attachWS(profileId: number, ws: WebSocket) {
   }
   session.ws = ws;
 
+  // Start the screencast BEFORE firing any navigation so Chrome receives the
+  // Page.startScreencast CDP command while it is idle.  If we start it after
+  // page.goto(), Chrome queues the screencast command behind the full redirect
+  // chain (up to 20 hops, ~8 s) and the frontend shows "Starting browser…" for
+  // that entire time.  Starting first means the ACK comes back in <200 ms and
+  // the frontend shows live frames immediately.
+  startScreencast(profileId).catch(() => {});
+
   // ── Initial / recovery navigation ─────────────────────────────────────────
   // This is the ONLY place that fires page.goto() after a session is created or
   // reconnected. getOrCreateSession stores the intended first URL in
@@ -2424,7 +2478,6 @@ export function attachWS(profileId: number, ws: WebSocket) {
 
   const nOpen = sessions.size;
   log(`[attachWS:${profileId}] WS attached — total open sessions=${nOpen}`, "browser");
-  startScreencast(profileId).catch(() => {});
   startHousekeepLoop(profileId);
 
   // The Replit proxy closes WebSocket connections that carry no application data
@@ -2510,10 +2563,97 @@ export function scheduleAutoLogin(
 // Chrome's internal state makes createCDPSession() hang indefinitely on the same
 // page target, deadlocking the entire function.  Server-side HTTPS has no such
 // issue.
+type ProxyCfg = { host: string; port: number; user?: string; pass?: string };
+
+// Proxy-aware HTTPS one-hop via HTTP CONNECT tunnel.
+// Chrome already goes through the account proxy, so server-side hops must too —
+// Instagram serves different (correct) responses when the IP matches the session.
+function _httpGetOneHopViaProxy(
+  url: string,
+  headers: Record<string, string>,
+  proxy: ProxyCfg,
+): Promise<{ status: number; location?: string; setCookies: string[] }> {
+  return new Promise((resolve, reject) => {
+    let urlObj: URL;
+    try { urlObj = new URL(url); } catch (e) { return reject(e); }
+
+    const sock = net.connect(proxy.port, proxy.host);
+    let connectBuf = "";
+    let tunnelReady = false;
+
+    sock.setTimeout(15_000, () => { sock.destroy(new Error("proxy CONNECT timeout")); });
+    sock.on("error", reject);
+
+    sock.on("connect", () => {
+      const auth = proxy.user && proxy.pass
+        ? `\r\nProxy-Authorization: Basic ${Buffer.from(`${proxy.user}:${proxy.pass}`).toString("base64")}`
+        : "";
+      sock.write(`CONNECT ${urlObj.hostname}:443 HTTP/1.1\r\nHost: ${urlObj.hostname}:443${auth}\r\n\r\n`);
+    });
+
+    sock.on("data", (chunk) => {
+      if (tunnelReady) return;
+      connectBuf += chunk.toString("ascii");
+      const eoh = connectBuf.indexOf("\r\n\r\n");
+      if (eoh < 0) return;
+      const connectStatus = parseInt((connectBuf.split("\r\n")[0] ?? "").split(" ")[1] ?? "0");
+      if (connectStatus !== 200) {
+        sock.destroy();
+        return reject(new Error(`proxy CONNECT rejected: ${connectStatus}`));
+      }
+      tunnelReady = true;
+      sock.removeAllListeners("data");
+      sock.removeAllListeners("error");
+
+      const tlsSock = tls.connect({ socket: sock, servername: urlObj.hostname, rejectUnauthorized: false });
+      tlsSock.on("error", reject);
+      tlsSock.on("secureConnect", () => {
+        const reqPath = urlObj.pathname + (urlObj.search || "");
+        tlsSock.write([
+          `GET ${reqPath} HTTP/1.1`,
+          `Host: ${urlObj.hostname}`,
+          ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`),
+          "Accept-Encoding: identity",
+          "Connection: close",
+          "", "",
+        ].join("\r\n"));
+
+        let resBuf = "";
+        let headersDone = false;
+        const result = { status: 0, location: undefined as string | undefined, setCookies: [] as string[] };
+
+        tlsSock.on("data", (c) => {
+          if (headersDone) return;
+          resBuf += c.toString("latin1");
+          const eoh2 = resBuf.indexOf("\r\n\r\n");
+          if (eoh2 < 0) return;
+          headersDone = true;
+          const hLines = resBuf.slice(0, eoh2).split("\r\n");
+          result.status = parseInt((hLines[0] ?? "").split(" ")[1] ?? "0");
+          for (let i = 1; i < hLines.length; i++) {
+            const col = (hLines[i] ?? "").indexOf(":");
+            if (col < 0) continue;
+            const k = hLines[i]!.slice(0, col).toLowerCase().trim();
+            const v = hLines[i]!.slice(col + 1).trim();
+            if (k === "location") result.location = v;
+            else if (k === "set-cookie") result.setCookies.push(v);
+          }
+          tlsSock.destroy();
+          resolve(result);
+        });
+        tlsSock.on("end", () => { if (!headersDone) reject(new Error("TLS ended before headers")); });
+        tlsSock.on("close", () => { if (headersDone) resolve(result); });
+      });
+    });
+  });
+}
+
 function _httpGetOneHop(
   url: string,
   headers: Record<string, string>,
+  proxy?: ProxyCfg,
 ): Promise<{ status: number; location?: string; setCookies: string[] }> {
+  if (proxy) return _httpGetOneHopViaProxy(url, headers, proxy);
   return new Promise((resolve, reject) => {
     let urlObj: URL;
     try { urlObj = new URL(url); } catch (e) { return reject(e); }
@@ -2553,6 +2693,99 @@ function _httpGetOneHop(
 }
 
 
+// ── In-Chrome hop-by-hop redirect follower ───────────────────────────────────
+// Chrome enforces a hard limit of 20 consecutive redirects per navigation.
+// Instagram's update_risky_contactpoint challenge can return chains longer than
+// 20 hops before serving the 200 challenge page.  This function follows each
+// hop AS A SEPARATE CHROME NAVIGATION, resetting the counter on every step:
+//
+//   page.goto(tokenX) → Chrome follows one hop → our _challengeRedirectInterceptor
+//   intercepts the redirect request, aborts it, we page.goto(tokenX+1) → repeat.
+//
+// Because we use Chrome's own HTTP stack for each hop (same TLS fingerprint,
+// same HTTP/2 SETTINGS frames, same sec-fetch-* headers as a real browser),
+// Instagram cannot distinguish us from a human clicking through the chain.
+// When Instagram finally returns 200, Chrome loads the actual challenge page.
+async function followChallengeRedirectsInChrome(
+  profileId: number,
+  page: Page,
+  startUrl: string,
+  maxHops = 120,
+): Promise<boolean> {
+  const sc = sessions.get(profileId);
+  if (!sc) return false;
+
+  let hopCount = 0;
+  let resolved = false;
+  let nextHopUrl: string | null = null;
+
+  // Wire into the existing _challengeRedirectInterceptor hook so the
+  // page.on("request") handler (which is already armed for interception)
+  // notifies us of each redirect URL and aborts the follow automatically.
+  (sc as any)._challengeRedirectInterceptor = (capturedUrl: string) => {
+    nextHopUrl = capturedUrl;
+  };
+
+  try {
+    let currentUrl = startUrl;
+    const deadline = Date.now() + maxHops * 4_000;
+
+    while (hopCount <= maxHops && Date.now() < deadline) {
+      nextHopUrl = null;
+
+      // Navigate Chrome.  If Instagram 302s, the interceptor aborts the redirect
+      // and sets nextHopUrl; goto() then rejects with ERR_ABORTED.
+      // If Instagram 200s, goto() resolves and page.url() is the challenge page.
+      await page
+        .goto(currentUrl, { waitUntil: "domcontentloaded", timeout: 15_000 })
+        .catch(() => {});
+
+      // Brief pause — the interceptor callback fires async; let it settle.
+      await new Promise<void>(r => setTimeout(r, 150));
+
+      const finalUrl = page.url();
+
+      if (
+        !finalUrl.startsWith("chrome-error://") &&
+        !finalUrl.startsWith("about:") &&
+        finalUrl.includes("instagram.com")
+      ) {
+        log(
+          `[challenge:${profileId}] in-Chrome hop ${hopCount}: loaded ${finalUrl.slice(0, 100)}`,
+          "browser",
+        );
+        resolved = true;
+        break;
+      }
+
+      if (!nextHopUrl) {
+        log(
+          `[challenge:${profileId}] in-Chrome hop ${hopCount}: no redirect captured — chain ended unexpectedly`,
+          "browser",
+        );
+        break;
+      }
+
+      hopCount++;
+      log(`[challenge:${profileId}] in-Chrome hop ${hopCount}: → ${nextHopUrl.slice(0, 100)}`, "browser");
+      sc.challengeUrl = nextHopUrl;
+      currentUrl = nextHopUrl;
+    }
+
+    if (hopCount > maxHops) {
+      log(
+        `[challenge:${profileId}] in-Chrome hop-follow: maxHops (${maxHops}) reached — chain is infinite`,
+        "browser",
+      );
+    }
+  } finally {
+    delete (sc as any)._challengeRedirectInterceptor;
+  }
+
+  return resolved;
+}
+
+
 // ── Device-approval challenge handler ────────────────────────────────────────
 // Poll for Instagram device-approval by navigating to the challenge URL every
 // 5 seconds.  Between checks the EB shows a stable waiting page — giving the
@@ -2567,49 +2800,17 @@ function _httpGetOneHop(
 //   contactpoint URL always returns 302 until the user approves on their
 //   phone, so the fast loop made no progress and only created visual chaos.
 async function startApprovalPolling(profileId: number, page: Page): Promise<void> {
-  const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
   const MAX_TIME_MS = 300_000;  // 5 minutes total
-  const CHECK_INTERVAL_MS = 5_000; // pause between approval checks
   const startMs = Date.now();
   let resolved = false;
   let checkCount = 0;
 
-  log(`[challenge:${profileId}] device-approval: waiting for user to approve on phone`, "browser");
-  sendStatus(profileId, `⚠ Open Instagram on your phone and tap Approve — this browser will update automatically once approved.`);
+  log(`[challenge:${profileId}] URC: waiting for phone action (Dismiss or Approve) — polling for resolution`, "browser");
+  sendStatus(profileId, `⚠ Open Instagram on your phone — if you see "We suspect automated behavior", tap Dismiss. If you see a login alert, tap Approve. This browser will update automatically once done.`);
 
-  const waitingHtml =
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0a0a0a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
-    .card{text-align:center;max-width:420px;padding:48px 32px}
-    h2{font-size:19px;font-weight:600;margin-bottom:14px;line-height:1.3}
-    p{font-size:13px;color:#888;line-height:1.7;margin-bottom:8px}
-    .dots{margin:24px 0 0}
-    .dot{width:10px;height:10px;border-radius:50%;background:#0095f6;display:inline-block;margin:0 4px;animation:blink 1.2s ease-in-out infinite}
-    .dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
-    @keyframes blink{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
-    </style></head><body><div class="card">
-    <h2>Waiting for approval…</h2>
-    <p>Open <strong>Instagram</strong> on your phone and tap <strong>Approve</strong>.<br>The browser will update automatically.</p>
-    <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-    </div></body></html>`;
-
-  const timeoutHtml =
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#0a0a0a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
-    .card{text-align:center;max-width:420px;padding:48px 32px}
-    h2{font-size:19px;font-weight:600;margin-bottom:14px;color:#f86969}
-    p{font-size:13px;color:#888;line-height:1.7}
-    </style></head><body><div class="card">
-    <div style="font-size:52px;margin-bottom:24px">⏱</div>
-    <h2>Verification timed out</h2>
-    <p>No approval received within 5 minutes.<br>Press <strong>Clear EB Session</strong> and try logging in again.</p>
-    </div></body></html>`;
-
-  // Show the waiting page once and keep it stable — the CDPSession can now
-  // deliver frames of this static HTML so the EB panel renders correctly.
-  await page.setContent(waitingHtml, { waitUntil: "domcontentloaded" }).catch(() => {});
+  // Stay on about:blank (already navigated there before probing).
+  // No custom HTML pages — Chrome stays blank while waiting for approval.
+  await startScreencast(profileId).catch(() => {});
 
   try {
     while (Date.now() - startMs < MAX_TIME_MS) {
@@ -2619,45 +2820,58 @@ async function startApprovalPolling(profileId: number, page: Page): Promise<void
         break;
       }
 
-      // Wait — waiting page is on screen, screencast is delivering frames.
-      await sleep(CHECK_INTERVAL_MS);
-
       checkCount++;
       const checkUrl = sessions.get(profileId)?.challengeUrl ?? "";
       if (!checkUrl?.includes("instagram.com")) break;
 
-      log(`[challenge:${profileId}] approval check #${checkCount}`, "browser");
+      log(`[challenge:${profileId}] approval check #${checkCount} — navigating Chrome to latest token`, "browser");
 
       // Navigate to the latest challenge URL.
-      //   • Still waiting → Instagram returns 302 chain → ERR_TOO_MANY_REDIRECTS
-      //     → requestfailed handler updates sc.challengeUrl to the freshest token
-      //   • User approved  → Instagram returns 200 → Chrome lands on a real page
+      // Each call lets Chrome follow up to 20 more hops through its proxy:
+      //   • Chain still unresolved → ERR_TOO_MANY_REDIRECTS → requestfailed
+      //     handler updates sc.challengeUrl to the freshest token → retry
+      //   • Chain resolved (ABD page) → Chrome lands on the challenge page
+      //   • Device approved → Chrome lands on instagram.com feed
+      // page.goto() itself blocks for the full navigation (4–6 s per batch),
+      // so no explicit sleep is needed — the loop rate is self-throttled.
       await page
-        .goto(checkUrl, { waitUntil: "domcontentloaded", timeout: 15_000 })
+        .goto(checkUrl, { waitUntil: "domcontentloaded", timeout: 20_000 })
         .catch(() => {});
 
       const finalUrl = page.url();
-      const stillWaiting =
+      // Only chrome-error:// and about: mean Chrome truly couldn't load anything.
+      // Any instagram.com URL (including update_risky_contactpoint with a 200)
+      // means the page rendered — show it immediately.
+      const onChromeError =
         finalUrl.startsWith("chrome-error://") ||
-        finalUrl.startsWith("about:") ||
-        finalUrl.includes("update_risky_contactpoint") ||
-        finalUrl.includes("/challenge/");
+        finalUrl.startsWith("about:");
 
-      if (!stillWaiting && finalUrl.includes("instagram.com")) {
-        log(`[challenge:${profileId}] device-approval confirmed after ${checkCount} checks — Chrome at: ${finalUrl.slice(0, 120)}`, "browser");
-        sendStatus(profileId, `✓ Device approved — browser loading Instagram.`);
+      if (!onChromeError && finalUrl.includes("instagram.com")) {
+        const isChallengePage =
+          finalUrl.includes("update_risky_contactpoint") ||
+          finalUrl.includes("/challenge/");
+        log(
+          `[challenge:${profileId}] Chrome loaded: ${finalUrl.slice(0, 120)} — ${isChallengePage ? "challenge page rendered" : "device-approval confirmed"}`,
+          "browser",
+        );
+        sendStatus(
+          profileId,
+          isChallengePage
+            ? `⚠ Instagram verification required. Complete the check shown in the browser window.`
+            : `✓ Device approved — browser loading Instagram.`,
+        );
         resolved = true;
         const sc2 = sessions.get(profileId);
         if (sc2) {
           (sc2 as any)._approvalPolling = false;
           sc2.navProtectedUntil = Date.now() + 30_000;
         }
+        await startScreencast(profileId).catch(() => {});
         break;
       }
 
-      // Still waiting — restore the stable waiting page so the EB panel
-      // continues showing useful content and frames keep flowing.
-      await page.setContent(waitingHtml, { waitUntil: "domcontentloaded" }).catch(() => {});
+      // Still on chrome-error — keep screencast alive and retry immediately.
+      await startScreencast(profileId).catch(() => {});
     }
   } finally {
     const scFinal = sessions.get(profileId);
@@ -2672,7 +2886,6 @@ async function startApprovalPolling(profileId: number, page: Page): Promise<void
     }
     log(`[challenge:${profileId}] device-approval timed out after ${checkCount} checks`, "browser");
     sendStatus(profileId, `⚠ Verification timed out — no approval in 5 minutes. Press Clear EB Session and try again.`);
-    await page.setContent(timeoutHtml, { waitUntil: "domcontentloaded" }).catch(() => {});
   }
 }
 
@@ -2680,8 +2893,10 @@ async function followChallengeRedirects(
   profileId: number,
   page: Page,
   startUrl: string,
+  proxy?: ProxyCfg,
+  maxHops = 80,
 ): Promise<boolean> {
-  const MAX_HOPS = 80;
+  const MAX_HOPS = maxHops;
 
   try {
     // Grab all current IG cookies from Chrome for this account
@@ -2712,7 +2927,7 @@ async function followChallengeRedirects(
     let currentUrl = startUrl;
 
     for (let hop = 1; hop <= MAX_HOPS; hop++) {
-      const result = await _httpGetOneHop(currentUrl, makeHeaders());
+      const result = await _httpGetOneHop(currentUrl, makeHeaders(), proxy);
 
       // Accumulate any Set-Cookie headers for subsequent hops
       for (const sc of result.setCookies) {
@@ -2760,6 +2975,12 @@ async function followChallengeRedirects(
         await page
           .goto(currentUrl, { waitUntil: "domcontentloaded", timeout: 20_000 })
           .catch(() => {});
+        // If Chrome still landed on chrome-error (synced cookies weren't enough),
+        // treat as unresolved so the caller can fall back to polling.
+        if (page.url().startsWith("chrome-error://")) {
+          log(`[challenge:${profileId}] Chrome still on chrome-error after synced goto — treating as unresolved`, "browser");
+          return false;
+        }
         return true;
       }
 

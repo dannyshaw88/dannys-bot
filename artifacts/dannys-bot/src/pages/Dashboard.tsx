@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.414",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "The 'We suspect automated behavior' security challenge now attempts to load directly in the embedded browser by following each redirect hop as a separate navigation — bypassing Chrome's built-in 20-redirect limit that previously caused a dead error screen." },
+      { category: "Fix", text: "If the challenge page cannot be loaded (account is heavily flagged and Instagram serves an infinite redirect chain), a clear message now appears within 15 seconds telling you to open Instagram on your phone and tap Dismiss or Approve — then the browser updates automatically." },
+    ],
+  },
+  {
     version: "1.0.413",
     date: "19 May 2026",
     items: [
