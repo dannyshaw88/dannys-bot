@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.394",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Visit Order section in Create Account now always shows exactly three inputs — Website List %, YouTube %, and Google % — regardless of how many websites are in the list. Adding more websites no longer creates extra inputs." },
+      { category: "Fix", text: "Account sort order on the Accounts page is now remembered when you switch to another page and come back — the list stays in whatever order you left it." },
+      { category: "Fix", text: "Minimize to system tray on window close is correctly enforced — the window hides completely (no taskbar button) and the tray icon is the only way to restore or quit." },
+    ],
+  },
+  {
     version: "1.0.393",
     date: "19 May 2026",
     items: [

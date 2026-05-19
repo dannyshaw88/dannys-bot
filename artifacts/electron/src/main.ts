@@ -775,16 +775,15 @@ async function createWindow() {
     },
   });
 
-  // Minimise to taskbar on close instead of quitting.
-  // We use minimize() rather than hide() so the main window's taskbar button
-  // stays anchored in its original leftmost position — hide() removes the button
-  // and when show() is called later Windows inserts it at the right of any EB
-  // windows that are open, giving the wrong order (EB-EB-EQUINOX instead of
-  // EQUINOX-EB-EB).
+  // Hide to system tray on close — the app keeps running with no taskbar button;
+  // only the tray icon (created by createTray below) lets the user restore or quit.
+  // We use hide() not minimize() — minimize() only collapses to the taskbar, which
+  // is NOT system-tray behaviour. event.preventDefault() stops Electron from
+  // destroying the window; hide() then removes it from both screen and taskbar.
   win.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      win?.minimize();
+      win?.hide();
     }
   });
 

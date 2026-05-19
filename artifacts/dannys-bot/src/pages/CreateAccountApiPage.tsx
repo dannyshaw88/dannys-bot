@@ -640,9 +640,7 @@ export function CreateAccountApiPage() {
   const [cbGglItemsMax,   setCbGglItemsMaxRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_ITEMS_MAX, 3));
   const [cbGglDelayMin,   setCbGglDelayMinRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_DELAY_MIN, 5));
   const [cbGglDelayMax,   setCbGglDelayMaxRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_DELAY_MAX, 30));
-  const [cbSiteWeights,   setCbSiteWeightsRaw]   = useState<Record<string, number>>(() => {
-    try { return JSON.parse(localStorage.getItem(LS_KEY_CB_PCT_SITE_WEIGHTS) ?? "{}"); } catch { return {}; }
-  });
+  const [cbPctWebsite,    setCbPctWebsiteRaw]    = useState(() => lsGetNum(LS_KEY_CB_PCT_SITE_WEIGHTS, 33));
   const [cbPctYt,         setCbPctYtRaw]         = useState(() => lsGetNum(LS_KEY_CB_PCT_YT, 33));
   const [cbPctGoogle,     setCbPctGoogleRaw]     = useState(() => lsGetNum(LS_KEY_CB_PCT_GOOGLE, 33));
   const setCbVisitYoutube  = (v: boolean) => { setCbVisitYoutubeRaw(v);  lsSet(LS_KEY_CB_YOUTUBE, String(v)); };
@@ -655,26 +653,9 @@ export function CreateAccountApiPage() {
   const setCbGglItemsMax   = (v: number)  => { setCbGglItemsMaxRaw(v);   lsSet(LS_KEY_CB_GGL_ITEMS_MAX, String(v)); };
   const setCbGglDelayMin   = (v: number)  => { setCbGglDelayMinRaw(v);   lsSet(LS_KEY_CB_GGL_DELAY_MIN, String(v)); };
   const setCbGglDelayMax   = (v: number)  => { setCbGglDelayMaxRaw(v);   lsSet(LS_KEY_CB_GGL_DELAY_MAX, String(v)); };
-  const setCbSiteWeights   = (v: Record<string, number>) => {
-    setCbSiteWeightsRaw(v);
-    try { localStorage.setItem(LS_KEY_CB_PCT_SITE_WEIGHTS, JSON.stringify(v)); } catch {}
-  };
+  const setCbPctWebsite    = (v: number)  => { setCbPctWebsiteRaw(v);    lsSet(LS_KEY_CB_PCT_SITE_WEIGHTS, String(v)); };
   const setCbPctYt         = (v: number)  => { setCbPctYtRaw(v);         lsSet(LS_KEY_CB_PCT_YT,    String(v)); };
   const setCbPctGoogle     = (v: number)  => { setCbPctGoogleRaw(v);     lsSet(LS_KEY_CB_PCT_GOOGLE,String(v)); };
-
-  // Keep site-weight map in sync when the sites textarea changes
-  useEffect(() => {
-    const urls = cbSites.split("\n").map(s => s.trim()).filter(Boolean);
-    setCbSiteWeightsRaw(prev => {
-      const next: Record<string, number> = {};
-      urls.forEach(url => { next[url] = prev[url] ?? 50; });
-      const changed = JSON.stringify(next) !== JSON.stringify(prev);
-      if (changed) {
-        try { localStorage.setItem(LS_KEY_CB_PCT_SITE_WEIGHTS, JSON.stringify(next)); } catch {}
-      }
-      return changed ? next : prev;
-    });
-  }, [cbSites]);
 
   // ── Signup fields ──────────────────────────────────────────────────────────
   const [usernameSpin, setUsernameSpinRaw] = useState(() => lsGet(LS_KEY_USERNAME_SPIN));
@@ -828,7 +809,11 @@ export function CreateAccountApiPage() {
         preBakeGglItemsMax: cbGglItemsMax,
         preBakeGglDelayMin: cbGglDelayMin,
         preBakeGglDelayMax: cbGglDelayMax,
-        preBakeSiteWeights: cbSites.trim() ? cbSiteWeights : undefined,
+        preBakeSiteWeights: cbSites.trim()
+          ? Object.fromEntries(
+              cbSites.split("\n").map(s => s.trim()).filter(Boolean).map(url => [url, cbPctWebsite])
+            )
+          : undefined,
         preBakePctYt: cbPctYt,
         preBakePctGoogle: cbPctGoogle,
       };
@@ -1210,27 +1195,15 @@ export function CreateAccountApiPage() {
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Visit Order — % Chance Each Source is First</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      {cbSites.trim()
-                        ? cbSites.split("\n").map(s => s.trim()).filter(Boolean).map(url => (
-                          <div key={url} className="space-y-1">
-                            <Label className="text-[10px] text-muted-foreground truncate block" title={url}>
-                              {url.replace(/^https?:\/\//, "").replace(/^www\./, "")}
-                            </Label>
-                            <Input
-                              type="number" min={0} max={100}
-                              value={cbSiteWeights[url] ?? 50}
-                              onChange={e => setCbSiteWeights({ ...cbSiteWeights, [url]: Math.min(100, Math.max(0, +e.target.value)) })}
-                              className="h-7 text-xs text-center px-1" disabled={locked}
-                            />
-                          </div>
-                        ))
-                        : (
-                          <div className="space-y-1">
-                            <Label className="text-[10px] text-muted-foreground">Website List %</Label>
-                            <Input type="number" min={0} max={100} value={34} disabled className="h-7 text-xs text-center px-1 opacity-40" />
-                          </div>
-                        )
-                      }
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Website List %</Label>
+                        <Input
+                          type="number" min={0} max={100}
+                          value={cbPctWebsite}
+                          onChange={e => setCbPctWebsite(Math.min(100, Math.max(0, +e.target.value)))}
+                          className="h-7 text-xs text-center px-1" disabled={locked}
+                        />
+                      </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] text-muted-foreground">YouTube %</Label>
                         <Input

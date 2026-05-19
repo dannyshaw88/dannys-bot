@@ -191,7 +191,12 @@ export function ProfilesPage() {
   // Stable order: IDs in the order frozen when user last clicked a column header,
   // or seeded from the first data load. Data refreshes update account data in-place
   // but never reorder the list.
-  const [stableOrder, setStableOrder] = useState<number[]>([]);
+  const [stableOrder, setStableOrder] = useState<number[]>(() => {
+    try {
+      const s = sessionStorage.getItem("profiles:stableOrder");
+      return s ? (JSON.parse(s) as number[]) : [];
+    } catch { return []; }
+  });
 
   // Seed stableOrder on first profiles load; keep it current as accounts are
   // added/removed, but never change existing positions.
@@ -203,7 +208,9 @@ export function ProfilesPage() {
       const kept       = prev.filter(id => activeIds.has(id));
       const newIds     = profiles.filter(p => !prevSet.has(p.id)).map(p => p.id);
       if (kept.length === prev.length && newIds.length === 0) return prev;
-      return [...kept, ...newIds];
+      const next = [...kept, ...newIds];
+      try { sessionStorage.setItem("profiles:stableOrder", JSON.stringify(next)); } catch {}
+      return next;
     });
   }, [profiles]);
 
@@ -379,7 +386,9 @@ export function ProfilesPage() {
       }
       return newDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
-    setStableOrder(sorted.map(p => p.id));
+    const newOrder = sorted.map(p => p.id);
+    setStableOrder(newOrder);
+    try { sessionStorage.setItem("profiles:stableOrder", JSON.stringify(newOrder)); } catch {}
   };
 
   const getNextAccountNum = () => {
