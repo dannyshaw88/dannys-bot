@@ -959,6 +959,21 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
     const _CDL   = Math.round(2 + _r() * 98); // 2 – 100 Mbps
     const _CRTT  = _rI(10, 150);              // 10 – 150 ms
 
+    // Timezone — US-weighted pool; offset values are minutes WEST of UTC
+    // (matching Date.prototype.getTimezoneOffset() convention)
+    const _TZ_POOL = [
+      ["America/New_York",    300, 240] as const,  // EST/EDT  — weighted ×2
+      ["America/New_York",    300, 240] as const,
+      ["America/Los_Angeles", 480, 420] as const,  // PST/PDT  — weighted ×2
+      ["America/Los_Angeles", 480, 420] as const,
+      ["America/Chicago",     360, 300] as const,  // CST/CDT
+      ["America/Denver",      420, 360] as const,  // MST/MDT
+      ["America/Phoenix",     420, 420] as const,  // MST (no DST)
+      ["Europe/London",         0, -60] as const,  // GMT/BST
+      ["Europe/Berlin",        -60,-120] as const, // CET/CEST
+    ];
+    const [_TZNAME, _TZSTD, _TZDST] = _rp(_TZ_POOL);
+
     // ── WebRTC IP-leak prevention (JS layer) ────────────────────────────────
     // Belt-and-suspenders on top of the --webrtc-ip-handling-policy Chrome flag.
     // Overriding RTCPeerConnection in JS ensures no page script can enumerate
@@ -1065,6 +1080,8 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       // We stub a plausible 4G/Wi-Fi profile; the values are not checked for
       // precise accuracy — only the object's existence and rough shape matter.
       if (!(navigator as any).connection) {
+        // Base values are per-account seeded; fluctuation uses Math.random() so
+        // each session has unique variation — matching real network behaviour.
         const conn = {
           effectiveType: "4g",
           downlink:      _CDL,
@@ -1076,6 +1093,13 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
           removeEventListener: () => {},
           dispatchEvent:       () => true,
         };
+        // Fluctuate ±25% of the base value every 25–35 seconds — mirrors the
+        // variance you see on a real phone as network load changes.
+        const _connFluctInterval = 25_000 + Math.random() * 10_000;
+        setInterval(() => {
+          conn.downlink = Math.max(1, Math.round(_CDL * (0.75 + Math.random() * 0.5)));
+          conn.rtt      = Math.max(5, Math.round(_CRTT * (0.75 + Math.random() * 0.5)));
+        }, _connFluctInterval);
         try {
           Object.defineProperty(navigator, "connection", { get: () => conn, configurable: true });
         } catch { /* frozen */ }
@@ -1118,26 +1142,43 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       Object.defineProperty(navigator, "deviceMemory",        { get: () => _rp([8, 8, 16, 32] as const) });
     }
 
-    // ── Battery API ──────────────────────────────────────────────────────────
+    // ── Battery API — live draining / charging ───────────────────────────────
     // Real phones have navigator.getBattery().  A headless server has no battery
-    // so Chrome either throws or returns undefined — a reliable bot tell.
-    // We return a stable "plugged in, full charge" reading that matches what many
-    // users see when they have their phone on a charger.  Instagram only checks
-    // that the API exists and returns a valid BatteryManager shape.
+    // so Chrome throws or returns undefined — a reliable bot tell.
+    //
+    // A static level is also suspicious: a phone that reads 78% for the entire
+    // 30-minute EB session has never drained or charged.  We simulate realistic
+    // drift: ~0.08–0.12% change per minute (matching light-usage drain rates).
+    // The object is mutable so the live level is always fresh on read.
+    // Base level/charging are per-account seeded; the drift is real-time random.
     try {
-      (navigator as any).getBattery = () => Promise.resolve({
-        charging:            _BCHG,
-        chargingTime:        _BCTM,
-        dischargingTime:     _BDTM,
-        level:               _BLVL,
-        onchargingchange:    null,
-        onchargingtimechange: null,
-        ondischargingtimechange: null,
-        onlevelchange:       null,
-        addEventListener:    () => {},
-        removeEventListener: () => {},
-        dispatchEvent:       () => true,
-      });
+      const _batt = {
+        charging:             _BCHG,
+        chargingTime:         _BCTM,
+        dischargingTime:      _BDTM,
+        level:                _BLVL,
+        onchargingchange:     null as any,
+        onchargingtimechange: null as any,
+        ondischargingtimechange: null as any,
+        onlevelchange:        null as any,
+        addEventListener:     () => {},
+        removeEventListener:  () => {},
+        dispatchEvent:        () => true,
+      };
+
+      // Drift rate: 0.08–0.12% per minute — charge adds, drain subtracts.
+      // Uses Math.random() (not seeded) so each session has unique drift.
+      const _driftPct = 0.0008 + Math.random() * 0.0004;
+      setInterval(() => {
+        if (_batt.charging) {
+          _batt.level = Math.min(1.0, Math.round((_batt.level + _driftPct) * 10000) / 10000);
+          if (_batt.level >= 1.0) _batt.chargingTime = 0;
+        } else {
+          _batt.level = Math.max(0.05, Math.round((_batt.level - _driftPct) * 10000) / 10000);
+        }
+      }, 60_000); // tick every minute
+
+      (navigator as any).getBattery = () => Promise.resolve(_batt);
     } catch { /* non-fatal */ }
 
     // ── AudioContext fingerprint protection ───────────────────────────────────
@@ -1205,6 +1246,60 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
             ] as MediaDeviceInfo[];
           }
           return real;
+        };
+      }
+    } catch { /* non-fatal */ }
+
+    // ── Timezone spoof ────────────────────────────────────────────────────────
+    // Server Chrome always reports UTC (getTimezoneOffset = 0). A real phone
+    // in the US reports 240–480 minutes west of UTC depending on location and
+    // whether DST is active.  Absence of a real timezone offset is detectable.
+    //
+    // DST detection (US / EU approximation):
+    //   US: 2nd Sunday of March → 1st Sunday of November
+    //   EU: last Sunday of March → last Sunday of October (≈ same window)
+    // Computed at page-load time so the offset is correct for today's date.
+    try {
+      const _isDST = (() => {
+        const n = Date.now();
+        const yr = new Date(n).getUTCFullYear();
+        // 2nd Sunday of March
+        const m = new Date(Date.UTC(yr, 2, 1));
+        m.setUTCDate(1 + (7 - m.getUTCDay()) % 7 + 7);
+        // 1st Sunday of November
+        const v = new Date(Date.UTC(yr, 10, 1));
+        v.setUTCDate(1 + (7 - v.getUTCDay()) % 7);
+        return n >= m.getTime() && n < v.getTime();
+      })();
+      const _TZO = _isDST ? _TZDST : _TZSTD;
+      Date.prototype.getTimezoneOffset = function () { return _TZO; };
+      // Also fix Intl.DateTimeFormat so resolvedOptions().timeZone reflects the
+      // spoofed zone rather than the server's UTC.
+      const _OrigDTF = Intl.DateTimeFormat;
+      (Intl as any).DateTimeFormat = function (locale?: string, opts?: Intl.DateTimeFormatOptions) {
+        const o = opts?.timeZone ? opts : { ...opts, timeZone: _TZNAME };
+        return new _OrigDTF(locale, o);
+      };
+      (Intl as any).DateTimeFormat.prototype        = _OrigDTF.prototype;
+      (Intl as any).DateTimeFormat.supportedLocalesOf = _OrigDTF.supportedLocalesOf.bind(_OrigDTF);
+    } catch { /* non-fatal */ }
+
+    // ── Speech synthesis voices ───────────────────────────────────────────────
+    // Headless Chrome returns an empty voice list from speechSynthesis.getVoices().
+    // Real Android Chrome returns Google voices.  An empty list is a headless tell.
+    try {
+      if (window.speechSynthesis) {
+        const _fakeVoices = [
+          { voiceURI: "Google US English",           name: "Google US English",           lang: "en-US", localService: false, default: true  },
+          { voiceURI: "Google UK English Female",    name: "Google UK English Female",    lang: "en-GB", localService: false, default: false },
+          { voiceURI: "Google UK English Male",      name: "Google UK English Male",      lang: "en-GB", localService: false, default: false },
+          { voiceURI: "Google हिन्दी",               name: "Google हिन्दी",               lang: "hi-IN", localService: false, default: false },
+          { voiceURI: "Google Español",              name: "Google Español",              lang: "es-ES", localService: false, default: false },
+        ];
+        const _origGetVoices = window.speechSynthesis.getVoices.bind(window.speechSynthesis);
+        window.speechSynthesis.getVoices = () => {
+          const real = _origGetVoices();
+          return real.length ? real : (_fakeVoices as any[]);
         };
       }
     } catch { /* non-fatal */ }

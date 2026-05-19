@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.405",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Battery level now slowly drains or charges during the session (0.08–0.12% per minute) instead of staying frozen — a phone that never moves from 78% for 30 minutes is suspicious." },
+      { category: "Fix", text: "Connection speed and RTT now fluctuate naturally every 25–35 seconds (±25% of the base value) to simulate real network variance instead of staying locked at a fixed number." },
+      { category: "Fix", text: "Timezone is now spoofed per account — the server was reporting UTC (offset 0) while real phones report their local US or EU timezone. DST is computed correctly from today's date." },
+      { category: "Fix", text: "Speech synthesis voices are now present — headless Chrome returns an empty list while real Android Chrome has Google voices, which was a detectable gap." },
+    ],
+  },
+  {
     version: "1.0.404",
     date: "19 May 2026",
     items: [
