@@ -64,6 +64,11 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const [status, setStatus] = useState<SSEStatus>("idle");
   const statusRef = useRef<SSEStatus>("idle");
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonically-increasing counter, incremented on every connect() call.
+  // Every ws.onclose and reconnect timer captures its own generation number;
+  // stale callbacks bail out if the counter has moved on, preventing multiple
+  // parallel reconnect loops from fighting each other.
+  const wsGenRef = useRef(0);
   const firstFrameFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
   const hasReceivedFirstFrameRef = useRef(false);
@@ -235,6 +240,13 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       (esRef.current as WebSocket).close();
       esRef.current = null;
     }
+    // Stamp this connection attempt with a unique generation number.
+    // All callbacks created below capture `myGen`; they bail out immediately
+    // if wsGenRef.current has advanced past it, meaning a newer connect() call
+    // already took over.  This prevents stale onclose events (from WSes that
+    // were closed by a later connect()) from scheduling phantom reconnects that
+    // fight the active connection in an infinite loop.
+    const myGen = ++wsGenRef.current;
     if (firstFrameFallbackRef.current) {
       clearTimeout(firstFrameFallbackRef.current);
       firstFrameFallbackRef.current = null;
@@ -396,16 +408,41 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
             setTabs(msg.tabs ?? []);
             setActiveTab(msg.active ?? 0);
             break;
+          case "replaced":
+            // Server is closing this WS because a newer connection has taken
+            // over the same EB session.  Advance wsGenRef so the upcoming
+            // onclose handler sees a generation mismatch and bails instead of
+            // scheduling a phantom reconnect that would fight the new WS.
+            wsGenRef.current++;
+            break;
+          case "already-connected":
+            // Server rejected this WS because the session already has an open
+            // connection from another connect() call.  There is nothing to
+            // reconnect to — bail so we don't keep hammering the server.
+            wsGenRef.current++;
+            break;
         }
       } catch {}
     };
 
     ws.onclose = () => {
+      // Generation guard: bail if a newer connect() call has already taken over.
+      // This handles two failure modes:
+      //   1. connect() closes the old WS and immediately sets esRef to the new one;
+      //      the old onclose fires asynchronously and must not clobber the new ref.
+      //   2. Two stale onclose callbacks from an earlier reconnect loop both fire
+      //      after a server restart; only the one whose generation matches the
+      //      current counter should schedule a reconnect — the others are silently
+      //      dropped, breaking the multi-loop cascade.
+      if (wsGenRef.current !== myGen) return;
       esRef.current = null;
       setIsLoading(false);
       if (statusRef.current !== "error") {
         setStatusSafe("idle");
         reconnectTimerRef.current = setTimeout(() => {
+          // Double-check generation inside the timer too: if connect() was called
+          // from somewhere else before this timer fired, skip the extra reconnect.
+          if (wsGenRef.current !== myGen) return;
           if (statusRef.current === "idle") connect();
         }, 3000);
       }
