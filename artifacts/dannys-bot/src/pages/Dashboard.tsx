@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.392",
+    date: "19 May 2026",
+    items: [
+      { category: "New", text: "Cookie Baker now automatically detects and dismisses cookie consent / privacy banners on any website it visits — covers OneTrust, CookieBot, CookieConsent, and dozens of other frameworks, with a text-based fallback for custom banners." },
+      { category: "Improvement", text: "Banner dismissal runs on both the main site visit and every internal link visit, so banners that appear on sub-pages are handled too." },
+    ],
+  },
+  {
     version: "1.0.391",
     date: "19 May 2026",
     items: [

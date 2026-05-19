@@ -1204,54 +1204,56 @@ export function CreateAccountApiPage() {
                 </div>
 
                 {/* Order percentage randomiser */}
-                {(cbSites.trim() || cbVisitYoutube || cbVisitGoogle) && (
-                  <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
                     <div className="flex items-center gap-1.5">
                       <Shuffle className="w-3 h-3 text-cyan-500" />
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Visit Order — % Chance Each Source is First</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      {cbSites.trim() && cbSites.split("\n").map(s => s.trim()).filter(Boolean).map(url => (
-                        <div key={url} className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground truncate block" title={url}>
-                            {url.replace(/^https?:\/\//, "").replace(/^www\./, "")}
-                          </Label>
-                          <Input
-                            type="number" min={0} max={100}
-                            value={cbSiteWeights[url] ?? 50}
-                            onChange={e => setCbSiteWeights({ ...cbSiteWeights, [url]: Math.min(100, Math.max(0, +e.target.value)) })}
-                            className="h-7 text-xs text-center px-1" disabled={locked}
-                          />
-                        </div>
-                      ))}
-                      {cbVisitYoutube && (
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">YouTube %</Label>
-                          <Input
-                            type="number" min={0} max={100}
-                            value={cbPctYt}
-                            onChange={e => setCbPctYt(Math.min(100, Math.max(0, +e.target.value)))}
-                            className="h-7 text-xs text-center px-1" disabled={locked}
-                          />
-                        </div>
-                      )}
-                      {cbVisitGoogle && (
-                        <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Google %</Label>
-                          <Input
-                            type="number" min={0} max={100}
-                            value={cbPctGoogle}
-                            onChange={e => setCbPctGoogle(Math.min(100, Math.max(0, +e.target.value)))}
-                            className="h-7 text-xs text-center px-1" disabled={locked}
-                          />
-                        </div>
-                      )}
+                      {cbSites.trim()
+                        ? cbSites.split("\n").map(s => s.trim()).filter(Boolean).map(url => (
+                          <div key={url} className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground truncate block" title={url}>
+                              {url.replace(/^https?:\/\//, "").replace(/^www\./, "")}
+                            </Label>
+                            <Input
+                              type="number" min={0} max={100}
+                              value={cbSiteWeights[url] ?? 50}
+                              onChange={e => setCbSiteWeights({ ...cbSiteWeights, [url]: Math.min(100, Math.max(0, +e.target.value)) })}
+                              className="h-7 text-xs text-center px-1" disabled={locked}
+                            />
+                          </div>
+                        ))
+                        : (
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">Website List %</Label>
+                            <Input type="number" min={0} max={100} value={34} disabled className="h-7 text-xs text-center px-1 opacity-40" />
+                          </div>
+                        )
+                      }
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">YouTube %</Label>
+                        <Input
+                          type="number" min={0} max={100}
+                          value={cbPctYt}
+                          onChange={e => setCbPctYt(Math.min(100, Math.max(0, +e.target.value)))}
+                          className="h-7 text-xs text-center px-1" disabled={locked}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Google %</Label>
+                        <Input
+                          type="number" min={0} max={100}
+                          value={cbPctGoogle}
+                          onChange={e => setCbPctGoogle(Math.min(100, Math.max(0, +e.target.value)))}
+                          className="h-7 text-xs text-center px-1" disabled={locked}
+                        />
+                      </div>
                     </div>
                     <p className="text-[10px] text-muted-foreground">
                       Set the probability each source is visited first. Values don't need to sum to 100 — they're treated as weights.
                     </p>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
 

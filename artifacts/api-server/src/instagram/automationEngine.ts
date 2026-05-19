@@ -3732,6 +3732,7 @@ class AutomationEngine {
         try {
           console.log(`[cookie-baker] @${profile.username}: → ${url}`);
           await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+          await dismissCookieBanner(page);
 
           const scrollMs = randInt(
             (settings.scrollDelayMin ?? 5) * 1_000,
@@ -3771,6 +3772,7 @@ class AutomationEngine {
               try {
                 console.log(`[cookie-baker] @${profile.username}:   ↳ ${link}`);
                 await page.goto(link, { waitUntil: "domcontentloaded", timeout: 20_000 });
+                await dismissCookieBanner(page);
                 const innerMs = randInt(
                   (settings.internalScrollDelayMin ?? 3) * 1_000,
                   (settings.internalScrollDelayMax ?? 10) * 1_000,
@@ -3871,6 +3873,88 @@ class AutomationEngine {
 }
 
 // ── Cookie baker scroll helper ────────────────────────────────────────────────
+/**
+ * Attempts to dismiss any cookie consent / privacy banner on the current page.
+ * Tries a broad set of CSS selectors first, then falls back to text-matching
+ * visible buttons. Swallows all errors — never blocks the caller.
+ */
+async function dismissCookieBanner(page: any): Promise<void> {
+  try {
+    await page.evaluate(async () => {
+      const ACCEPT_RE = /^(accept|accept all|accept cookies|accept & close|accept and close|allow all|allow cookies|allow all cookies|i agree|i accept|agree|agree all|ok|okay|got it|continue|proceed|confirm|dismiss|close|yes|yes, i accept|yes, i agree|consent|i consent|save & exit|save and exit|save settings|confirm my choices|that's ok|that's fine|no problem|understood)/i;
+      const SELECTORS = [
+        // Generic accept / agree buttons
+        "[id*='accept']:not([type='text']):not([type='email']):not([type='search'])",
+        "[class*='accept-btn']", "[class*='acceptBtn']", "[class*='accept_btn']",
+        "[id*='consent']:not([type='text'])", "[class*='consent-btn']", "[class*='consentBtn']",
+        "[id*='agree']:not([type='text'])", "[class*='agree-btn']",
+        "[id*='allow']:not([type='text'])", "[class*='allow-btn']",
+        // GDPR / cookie specific
+        "#onetrust-accept-btn-handler",
+        "#onetrust-pc-btn-handler",
+        ".onetrust-accept-btn-handler",
+        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        "#CybotCookiebotDialogBodyButtonAccept",
+        ".cc-accept", ".cc-btn.cc-allow", ".cc-dismiss",
+        "#cookieAccept", "#cookie-accept", "#cookie_accept",
+        "#acceptCookies", "#accept-cookies", "#accept_cookies",
+        "#acceptAllCookies", "#accept-all-cookies", "#accept_all_cookies",
+        ".acceptCookies", ".accept-cookies",
+        "#gdpr-accept", "#gdpr_accept", ".gdpr-accept",
+        "[data-testid*='accept']", "[data-testid*='cookie']", "[data-testid*='consent']",
+        "[aria-label*='Accept']", "[aria-label*='accept']", "[aria-label*='Agree']",
+        "[aria-label*='Allow']", "[aria-label*='Consent']",
+        // Common frameworks
+        ".qc-cmp2-summary-buttons button:last-child",
+        ".fc-button.fc-cta-consent",
+        ".fc-cta-consent",
+        "[class*='cookie-banner'] button",
+        "[class*='cookie-notice'] button",
+        "[class*='cookie-popup'] button",
+        "[class*='cookie-wall'] button",
+        "[class*='cookiebanner'] button",
+        "[class*='cookienotice'] button",
+        "[class*='cookiepopup'] button",
+        "[class*='gdpr-banner'] button",
+        "[class*='consent-banner'] button",
+        "[class*='privacy-banner'] button",
+        "[id*='cookie-banner'] button",
+        "[id*='cookie-notice'] button",
+        "[id*='cookie-popup'] button",
+        "[id*='cookie-wall'] button",
+        "[id*='gdpr'] button",
+        "[id*='consent-banner'] button",
+      ];
+
+      const isVisible = (el: Element) => {
+        const s = window.getComputedStyle(el);
+        if (s.display === "none" || s.visibility === "hidden" || s.opacity === "0") return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+
+      // 1. Try explicit selectors
+      for (const sel of SELECTORS) {
+        try {
+          const els = Array.from(document.querySelectorAll<HTMLElement>(sel));
+          for (const el of els) {
+            if (isVisible(el)) { el.click(); return; }
+          }
+        } catch {}
+      }
+
+      // 2. Fall back: find any visible button/link whose text matches the accept pattern
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a[role='button'], input[type='button'], input[type='submit'], [role='button']"));
+      for (const el of candidates) {
+        const text = (el.textContent ?? "").trim();
+        if (ACCEPT_RE.test(text) && isVisible(el)) { el.click(); return; }
+      }
+    });
+  } catch {}
+  // Give the banner animation a moment to clear
+  await new Promise(r => setTimeout(r, 600));
+}
+
 async function cookieBakerScroll(
   page: any,
   durationMs: number,
