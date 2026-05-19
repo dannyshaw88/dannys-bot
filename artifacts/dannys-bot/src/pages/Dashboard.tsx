@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.400",
+    date: "19 May 2026",
+    items: [
+      { category: "Security", text: "Accounts with no User-Agent assigned are now blocked from verifying or opening the embedded browser — they previously fell through to a shared generic fingerprint that Instagram uses to link accounts together." },
+      { category: "Security", text: "Bulk verify now skips any account with no User-Agent configured rather than running it with the shared fallback, preventing an entire batch from being fingerprint-linked." },
+    ],
+  },
+  {
     version: "1.0.399",
     date: "19 May 2026",
     items: [

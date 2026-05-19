@@ -51,9 +51,9 @@ import {
 import { automationEngine } from "../instagram/automationEngine";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 
-// Fallback desktop Chrome UA — used only when a profile has no userAgentEmbedded stored.
-// We always prefer the profile's own stored UA so Instagram sees a consistent fingerprint.
-// Mobile UAs are NOT used here — they trigger the app-install interstitial instead of the full site.
+// Last-resort desktop Chrome UA — used ONLY for the Clear EB Session cleanup path when
+// no per-account UA is stored (so the session can still be wiped even if UA is unset).
+// NEVER use this for a new login, verify, or WS attach — those must block instead.
 const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 // Per-account verify lock — prevents concurrent logins for the same account.
@@ -662,7 +662,17 @@ export async function registerInstagramRoutes(
       password: effectiveProfile.proxyPassword ?? undefined,
     } : undefined;
 
-    const ebUA = (effectiveProfile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+    // ── UA BLOCK — per USER-AGENT RULE (non-negotiable) ─────────────────────────
+    // A null userAgentEmbedded means every null-UA account uses the same shared
+    // DESKTOP_BROWSER_UA string. Instagram fingerprint-links them, flags the login
+    // as a bot cluster, and fires update_risky_contactpoint in an infinite redirect.
+    // Block here so the user is forced to assign a unique UA before verifying.
+    if (!effectiveProfile.userAgentEmbedded) {
+      verifyInFlight.delete(profileId);
+      await storage.updateProfile(profile.id, { accountStatus: "pending" });
+      return fail(400, "No EB User-Agent configured for this account. Assign a unique User-Agent before verifying — accounts without one share a fingerprint and get flagged by Instagram.");
+    }
+    const ebUA = effectiveProfile.userAgentEmbedded as string;
 
     // Step 1: Get or create the browser session
     let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
@@ -1345,7 +1355,11 @@ export async function registerInstagramRoutes(
     // Block EB access when no proxy is assigned — accounts must have a proxy.
     const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
     if (!hasProxy) return res.status(403).json({ error: "No proxy assigned — assign a proxy to this account before using the embedded browser." });
-    const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+    // ── UA BLOCK — per USER-AGENT RULE ─────────────────────────────────────────
+    if (!profile.userAgentEmbedded) {
+      return res.status(403).json({ error: "No EB User-Agent configured for this account. Assign a unique User-Agent before opening the embedded browser." });
+    }
+    const ua = profile.userAgentEmbedded as string;
     try {
       await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile));
       res.json({ ok: true });
@@ -1464,6 +1478,11 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     const proxy = profile ? await resolveProxyConfig(profile) : undefined;
+    // Clear-session is a cleanup operation — allow it even when UA is unset so
+    // a stuck session can always be wiped.  Log a warning so it is visible.
+    if (profile && !profile.userAgentEmbedded) {
+      console.warn(`[UA-WARN] profile ${profileId} has no userAgentEmbedded — clear-session proceeding with fallback UA (cleanup only, no Instagram connection made here)`);
+    }
     const ua = profile ? ((profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA) : DESKTOP_BROWSER_UA;
     await clearSession(profileId, ua, proxy);
     res.json({ ok: true });
@@ -1574,7 +1593,13 @@ export async function registerInstagramRoutes(
 
       try {
         const proxy = await resolveProxyConfig(profile);
-        const ua = (profile.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+        // ── UA BLOCK — per USER-AGENT RULE ────────────────────────────────────
+        if (!profile.userAgentEmbedded) {
+          ws.send(JSON.stringify({ type: "error", message: "No EB User-Agent configured for this account. Assign a unique User-Agent before opening the embedded browser." }));
+          ws.close();
+          return;
+        }
+        const ua = profile.userAgentEmbedded as string;
         await getOrCreateSession(profileId, ua, proxy);
         attachWS(profileId, ws);
         // Auto-login: if the page settles on the login form, fill credentials
@@ -1831,7 +1856,12 @@ export async function registerInstagramRoutes(
             username: effectiveP.proxyUsername ?? undefined,
             password: effectiveP.proxyPassword ?? undefined,
           } : undefined;
-          const bulkEbUA = (effectiveP.userAgentEmbedded as string | null) || DESKTOP_BROWSER_UA;
+          // ── UA BLOCK — per USER-AGENT RULE ────────────────────────────────────
+          if (!effectiveP.userAgentEmbedded) {
+            bulkResults.push({ id: profile.id, username: profile.username, status: "error", message: "No EB User-Agent configured — skipped to avoid fingerprint leak." });
+            continue;
+          }
+          const bulkEbUA = effectiveP.userAgentEmbedded as string;
 
           // Step 1: Launch EB
           await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig);
