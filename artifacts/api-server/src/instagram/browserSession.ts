@@ -2696,15 +2696,14 @@ async function followChallengeRedirects(
       cookieMap.set(c.name, c.value);
     }
 
+    // Use the account's actual EB user-agent (never a hardcoded generic string).
+    const sessionUA = sessions.get(profileId)?.userAgent ?? "";
     const makeHeaders = (): Record<string, string> => ({
       Cookie: [...cookieMap.entries()].map(([k, v]) => `${k}=${v}`).join("; "),
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "User-Agent": sessionUA,
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "gzip, deflate, br",
       "Cache-Control": "no-cache",
       Pragma: "no-cache",
       "X-IG-App-ID": "936619743392459",
@@ -2731,8 +2730,29 @@ async function followChallengeRedirects(
       );
 
       if (result.status >= 200 && result.status < 300) {
-        // Found the final page.  Navigate Chrome to it directly — no redirect
-        // chain for Chrome, so it won't hit the 20-hop limit.
+        // Found the final page.
+        // CRITICAL: sync all cookies accumulated across server-side hops back into
+        // Chrome.  Instagram issues new Set-Cookie headers on every redirect hop
+        // (fresh challenge_context tokens, updated session state, etc.).  Without
+        // syncing, Chrome navigates with stale cookies → Instagram sees a different
+        // session → issues a brand-new 20-hop chain → ERR_TOO_MANY_REDIRECTS again.
+        // Syncing first gives Chrome the exact same cookie state the server had
+        // when it received the 200, so Chrome also gets a 200 (or far fewer hops).
+        const cookiesToSet = [...cookieMap.entries()]
+          .filter(([, v]) => v !== "")
+          .map(([name, value]) => ({
+            name,
+            value,
+            domain: ".instagram.com",
+            path: "/",
+          }));
+        if (cookiesToSet.length > 0) {
+          await page.setCookie(...(cookiesToSet as any[])).catch(() => {});
+          log(
+            `[challenge:${profileId}] synced ${cookiesToSet.length} accumulated cookies back to Chrome`,
+            "browser",
+          );
+        }
         log(
           `[challenge:${profileId}] chain resolved in ${hop} hops — navigating Chrome to: ${currentUrl.slice(0, 100)}`,
           "browser",
@@ -2817,13 +2837,13 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
   }
   session.screencastCdp = cdp;
 
-  // Adaptive JPEG quality + resolution: reduce as session count grows.
-  // Smaller JPEGs = shorter Puppeteer JSON.parse on the CDP socket (Chrome
-  // sends screencast frames as base64 inside a JSON message) = less event-loop
-  // saturation when multiple EBs are streaming simultaneously.
+  // Adaptive JPEG quality only — resolution always stays at 1280×760.
+  // Dropping maxWidth/maxHeight caused Chrome to send 720×430 frames that were
+  // then stretched back to 1280×760 on the canvas, making the EB look blurry.
+  // Quality reduction is enough to save bandwidth; resolution must stay full.
   const quality  = nSessions <= 1 ? 65 : nSessions <= 2 ? 55 : 45;
-  const maxWidth = nSessions <= 1 ? 1280 : nSessions <= 2 ? 960 : 720;
-  const maxHeight = nSessions <= 1 ? 760 : nSessions <= 2 ? 570 : 430;
+  const maxWidth = 1280;
+  const maxHeight = 760;
   // everyNthFrame MUST stay at 1.
   // Chrome uses software compositing (--disable-gpu). In software mode Chrome
   // only generates compositor frames when page content changes — a static page
@@ -3152,18 +3172,37 @@ function startHousekeepLoop(profileId: number): void {
     // means the screencast CDPSession has stalled — restart only the screencast,
     // not the whole browser. Only kill the session if Chrome itself is dead.
     //
-    // We only run the ping when ALL of these hold:
-    //   • The screencast CDP session is open (screencast was started)
-    //   • The user was active 30–120 s ago (short enough to care, long enough
-    //     that Chrome has had time to settle after the last click)
-    //   • 60+ s have passed since the last screencast frame (clearly no activity)
-    //   • Not mid-login and not mid-nav-protected window
-    //   • No concurrent ping already in progress
-    //   • Account is NOT in a parked challenge state (keepalive handles those)
+    // TWO recovery paths:
+    //
+    //   PATH A — Active-freeze: user has clicked/typed within the last 30 s but
+    //   no frame arrived in 20 s.  A click always triggers a compositor frame,
+    //   so 20 s of silence after activity = screencast CDPSession stalled.
+    //   Restart the screencast immediately, no ping needed.
+    //
+    //   PATH B — Idle crash: user was active 30–120 s ago and no frame for 30 s.
+    //   Ping Chrome to confirm it is alive.  If alive → stalled screencast →
+    //   restart screencast.  If dead → close session.
     if (s.screencastCdp && !(s as any)._crashPingInProgress) {
       const idleMs   = Date.now() - s.lastActivityAt;
       const silentMs = Date.now() - s.lastScreencastFrameAt;
-      if (idleMs > 30000 && idleMs < 120000 && silentMs > 60000
+
+      // PATH A: active-freeze — user is clicking but screencast stalled
+      if (idleMs < 30000 && silentMs > 20000
+          && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)
+          && !s.challengeUrl && !(s as any)._screencastRestartInProgress) {
+        (s as any)._screencastRestartInProgress = true;
+        log(`[housekeep:${profileId}] active-freeze: last input ${idleMs}ms ago, no frame for ${silentMs}ms — restarting screencast`, "browser");
+        stopScreencast(profileId).catch(() => {}).finally(() => {
+          (s as any)._screencastRestartInProgress = false;
+          const sAfter = sessions.get(profileId);
+          if (sAfter?.ws?.readyState === WebSocket.OPEN) {
+            startScreencast(profileId).catch(() => {});
+          }
+        });
+      }
+
+      // PATH B: idle crash check
+      if (idleMs > 30000 && idleMs < 120000 && silentMs > 30000
           && !s.autoLoginInProgress && Date.now() > (s.navProtectedUntil ?? 0)
           && !s.challengeUrl) {
         (s as any)._crashPingInProgress = true;

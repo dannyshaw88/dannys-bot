@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.413",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "The embedded browser screen is now always full resolution regardless of how many accounts are open — previously the image was downscaled to as low as 720×430 with 3 or more browsers open, making everything look blurry." },
+      { category: "Fix", text: "Embedded browsers that stop updating while you are actively using them now recover automatically within 20 seconds instead of staying frozen until you manually reload." },
+      { category: "Fix", text: "Instagram's 'Automatic Behaviour Detected' challenge page now loads correctly in the embedded browser instead of showing a redirect error — the fix syncs all session cookies accumulated during redirect resolution back to Chrome before it navigates." },
+      { category: "Fix", text: "All bottom-right popup notifications have been removed from the app." },
+    ],
+  },
+  {
     version: "1.0.408",
     date: "19 May 2026",
     items: [
