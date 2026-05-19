@@ -448,17 +448,15 @@ export async function registerInstagramRoutes(
       accountStatus: "logged_out",
     } as any);
 
-    // 2. Delete the JSON cookie file so Chrome doesn't seed from it on next open.
-    deleteSavedCookies(profileId);
-
-    // 3. Close the live EB session (if open) without saving cookies, then scrub
-    //    session cookies directly from Chrome's own SQLite cookie database so
-    //    they aren't restored when the EB reopens. Device tokens are preserved.
-    await clearEbSessionCookies(profileId).catch(e =>
+    // 2+3. Close the live EB session, wipe Chrome's entire userdata directory
+    //      (clears cookies, localStorage, IndexedDB, saved logins — everything),
+    //      then write device tokens back to the JSON seed file so Chrome re-seeds
+    //      the fingerprint on next open without touching saved login state.
+    await clearEbSessionCookies(profileId, existing).catch(e =>
       console.warn(`[profiles] clearEbSessionCookies failed for ${profileId}: ${e?.message}`),
     );
 
-    console.log(`[profiles] @${profile.username}: session cookies cleared — DB, JSON file, live session, and Chrome cookie DB all scrubbed (device tokens preserved)`);
+    console.log(`[profiles] @${profile.username}: session fully cleared — Chrome userdata wiped, device tokens preserved in seed file`);
     res.json({ ok: true });
   });
 
@@ -2665,7 +2663,16 @@ export async function registerInstagramRoutes(
         proxyHost, proxyPort, proxyUsername, proxyPassword, bio,
         imapHost, imapPort, imapUser, imapPass,
         userAgentApi, userAgentEb, apiLimits,
+        preBakeSites: _preBakeSitesRaw,
+        preBakeSitesMin, preBakeSitesMax,
+        preBakePctWebsite, preBakePctYt, preBakePctGoogle,
+        preBakeYoutube, preBakeGoogle,
       } = req.body as any;
+
+      // Parse the newline-separated site list sent from the frontend textarea
+      const preBakeSitesList: string[] = _preBakeSitesRaw
+        ? String(_preBakeSitesRaw).split("\n").map((s: string) => s.trim()).filter(Boolean)
+        : [];
 
       if (!username || !password || !email || !day || !month || !year) {
         return sendDone({ status: "error", message: "username, password, email, day, month and year are required", steps: [] });
@@ -2691,13 +2698,26 @@ export async function registerInstagramRoutes(
         dateOfBirth: dobStr, createdAt: new Date().toISOString(),
       });
 
-      // ── EB harvest ─────────────────────────────────────────────────────────
-      sendStep("EB: launching temporary Chrome to harvest Instagram cookies (mid, ig_did, csrftoken)...");
+      // ── EB harvest (+ optional cookie pre-bake) ────────────────────────────
+      const haspreBake = preBakeSitesList.length > 0 || preBakeYoutube || preBakeGoogle;
+      sendStep(haspreBake
+        ? "EB: launching temporary Chrome to bake cookies (visit websites/YouTube/Google), then harvest Instagram cookies..."
+        : "EB: launching temporary Chrome to harvest Instagram cookies (mid, ig_did, csrftoken)...",
+      );
       let ebCookies: Awaited<ReturnType<typeof harvestSignupCookiesFromEB>>;
       try {
         ebCookies = await harvestSignupCookiesFromEB({
           proxyHost, proxyPort: proxyPort ? Number(proxyPort) : undefined,
           proxyUsername, proxyPassword, userAgent: userAgentEb || undefined,
+          preBakeSites:      preBakeSitesList.length ? preBakeSitesList : undefined,
+          preBakeSitesMin:   preBakeSitesMin   ? Number(preBakeSitesMin)   : 1,
+          preBakeSitesMax:   preBakeSitesMax   ? Number(preBakeSitesMax)   : 3,
+          preBakePctWebsite: preBakePctWebsite ? Number(preBakePctWebsite) : 34,
+          preBakePctYt:      preBakePctYt      ? Number(preBakePctYt)      : 33,
+          preBakePctGoogle:  preBakePctGoogle  ? Number(preBakePctGoogle)  : 33,
+          preBakeYoutube:    !!preBakeYoutube,
+          preBakeGoogle:     !!preBakeGoogle,
+          onStep:            sendStep,
         });
       } catch (e: any) {
         const msg = `EB cookie harvest failed: ${e?.message}`;

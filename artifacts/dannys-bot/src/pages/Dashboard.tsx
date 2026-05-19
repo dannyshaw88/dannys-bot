@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.395",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Clear Cookies now wipes everything — Chrome's full profile directory (cookies, localStorage, IndexedDB, saved login details) is deleted, then only the device fingerprint tokens are written back so Instagram does not flag the device as new." },
+      { category: "Fix", text: "Create Account cookie baker now runs before signup — websites, YouTube, and Google are visited first in weighted visit order, then Instagram cookies are harvested, then the account is registered." },
+      { category: "Fix", text: "Instagram's cookie consent banner is now automatically dismissed during the EB cookie harvest step of account creation." },
+      { category: "Fix", text: "The 'Check for Updates' error dialog now shows a plain-English message when the update token has expired, instead of a raw GitHub API response with HTTP headers." },
+    ],
+  },
+  {
     version: "1.0.394",
     date: "19 May 2026",
     items: [

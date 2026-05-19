@@ -211,6 +211,16 @@ export async function harvestSignupCookiesFromEB(opts?: {
   proxyUsername?: string;
   proxyPassword?: string;
   userAgent?: string;
+  /** Sites to visit BEFORE Instagram (cookie baker pre-bake) */
+  preBakeSites?: string[];
+  preBakeSitesMin?: number;
+  preBakeSitesMax?: number;
+  preBakePctWebsite?: number;
+  preBakePctYt?: number;
+  preBakePctGoogle?: number;
+  preBakeYoutube?: boolean;
+  preBakeGoogle?: boolean;
+  onStep?: (msg: string) => void;
 }): Promise<{ mid: string; ig_did: string; csrftoken: string; cookieStrings: string[]; ebUserAgent: string } | null> {
   const logPfx = "[harvestSignupCookies]";
   log(`${logPfx} Starting EB cookie harvest for signup...`);
@@ -284,6 +294,83 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
     await applyStealthScripts(page, effectiveUA);
 
+    // ── Pre-bake: visit websites / YouTube / Google before Instagram ──────────
+    // Builds organic browsing history so Chrome's cookie jar looks natural
+    // when Instagram's fingerprinting scripts run.  Runs only when the caller
+    // passes preBakeSites / preBakeYoutube / preBakeGoogle.
+    {
+      const pbSites   = opts?.preBakeSites ?? [];
+      const hasYt     = !!opts?.preBakeYoutube;
+      const hasGoogle = !!opts?.preBakeGoogle;
+      if (pbSites.length > 0 || hasYt || hasGoogle) {
+        const pctWebsite = opts?.preBakePctWebsite ?? 33;
+        const pctYt      = opts?.preBakePctYt      ?? 33;
+        const pctGoogle  = opts?.preBakePctGoogle  ?? 33;
+
+        // Build source list with weights (only include enabled sources)
+        const sources: Array<{ type: string; weight: number }> = [];
+        if (pbSites.length > 0) sources.push({ type: "website", weight: pctWebsite });
+        if (hasYt)               sources.push({ type: "youtube", weight: pctYt     });
+        if (hasGoogle)           sources.push({ type: "google",  weight: pctGoogle  });
+
+        // Pick first source by weighted random
+        const total = sources.reduce((s, x) => s + x.weight, 0);
+        let rng = Math.random() * total;
+        let firstType = sources[0]?.type ?? "website";
+        for (const src of sources) { rng -= src.weight; if (rng <= 0) { firstType = src.type; break; } }
+
+        // Rotate so chosen first-source is first
+        const ordered = [
+          ...sources.filter(s => s.type === firstType),
+          ...sources.filter(s => s.type !== firstType),
+        ];
+
+        const minS = opts?.preBakeSitesMin ?? 1;
+        const maxS = opts?.preBakeSitesMax ?? 3;
+        const numSites = Math.floor(Math.random() * (maxS - minS + 1)) + minS;
+        const shuffled = [...pbSites].sort(() => Math.random() - 0.5).slice(0, numSites);
+
+        for (const src of ordered) {
+          if (src.type === "website") {
+            for (const rawUrl of shuffled) {
+              const url = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+              try {
+                opts?.onStep?.(`Pre-bake: visiting ${url}...`);
+                log(`${logPfx} Pre-bake → ${url}`);
+                await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+                await dismissCookieBanner(page);
+                await new Promise(r => setTimeout(r, 2500 + Math.random() * 2500));
+              } catch (e: any) {
+                log(`${logPfx} Pre-bake warning (${url}): ${e?.message}`);
+              }
+            }
+          } else if (src.type === "youtube") {
+            try {
+              opts?.onStep?.("Pre-bake: visiting YouTube...");
+              log(`${logPfx} Pre-bake → YouTube`);
+              await page.goto("https://www.youtube.com/", { waitUntil: "domcontentloaded", timeout: 25000 });
+              await dismissCookieBanner(page);
+              await new Promise(r => setTimeout(r, 2500 + Math.random() * 2500));
+            } catch (e: any) {
+              log(`${logPfx} Pre-bake warning (YouTube): ${e?.message}`);
+            }
+          } else if (src.type === "google") {
+            try {
+              opts?.onStep?.("Pre-bake: visiting Google...");
+              log(`${logPfx} Pre-bake → Google`);
+              await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded", timeout: 25000 });
+              await dismissCookieBanner(page);
+              await new Promise(r => setTimeout(r, 2500 + Math.random() * 2500));
+            } catch (e: any) {
+              log(`${logPfx} Pre-bake warning (Google): ${e?.message}`);
+            }
+          }
+        }
+        opts?.onStep?.("Pre-bake complete — now harvesting Instagram cookies...");
+        log(`${logPfx} Pre-bake complete`);
+      }
+    }
+
     // Helper: scrape all three target cookies from Chrome's cookie jar.
     // Checks all three instagram.com origins so root-domain cookies (.instagram.com)
     // are captured regardless of which subdomain set them.
@@ -317,7 +404,10 @@ export async function harvestSignupCookiesFromEB(opts?: {
       log(`${logPfx} Homepage navigation warning (continuing): ${e?.message}`);
     }
     // Give Instagram's fingerprinting scripts time to run and write cookies.
-    await new Promise(r => setTimeout(r, 6000));
+    await new Promise(r => setTimeout(r, 4000));
+    // Dismiss the cookie consent banner if Instagram shows one
+    await dismissCookieBanner(page);
+    await new Promise(r => setTimeout(r, 2000));
 
     let { mid, ig_did, csrftoken } = await readIgCookies();
     log(`${logPfx} After homepage+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
@@ -333,7 +423,9 @@ export async function harvestSignupCookiesFromEB(opts?: {
       } catch (e: any) {
         log(`${logPfx} Signup page navigation warning (still checking cookies): ${e?.message}`);
       }
-      await new Promise(r => setTimeout(r, 6000));
+      await new Promise(r => setTimeout(r, 4000));
+      await dismissCookieBanner(page);
+      await new Promise(r => setTimeout(r, 2000));
       const after = await readIgCookies();
       if (after.mid)       mid       = after.mid;
       if (after.ig_did)    ig_did    = after.ig_did;
@@ -2501,54 +2593,94 @@ export async function wipeEbSession(profileId: number): Promise<void> {
 }
 
 /**
- * Clears only the session cookies for a profile — sessionid, csrftoken,
- * ds_user_id and related auth tokens — from BOTH the live EB session and
- * Chrome's own persistent SQLite cookie database.  Device tokens (mid,
- * ig_did, ig_nrcb) are preserved so the fingerprint stays intact.
+ * Clears ALL Instagram session state for a profile from the embedded browser.
+ *
+ * Wipes Chrome's entire userdata directory so cookies, localStorage, IndexedDB,
+ * and Instagram's "saved login" account data are all removed.  Device tokens
+ * (mid, ig_did, ig_nrcb) are preserved by writing them back to the JSON seed
+ * file so Chrome re-seeds the fingerprint on the next open without any saved
+ * login showing up.
  *
  * Used by the "Clear Cookies" button in account settings.
+ *
+ * @param igApiCookies - The full igApiCookies string from DB (semicolon-separated
+ *   name=value pairs).  Device tokens are extracted from this and written back
+ *   to the JSON seed file.  Pass undefined to skip device-token preservation.
  */
-export async function clearEbSessionCookies(profileId: number): Promise<void> {
+export async function clearEbSessionCookies(profileId: number, igApiCookies?: string): Promise<void> {
   // 1. Close the running EB session without saving cookies back to disk.
-  //    This flushes any in-memory session state so the account no longer
-  //    appears logged-in in the embedded browser.
   await closeSession(profileId, { skipCookieSave: true });
 
-  // 2. Scrub session cookies from Chrome's own persistent SQLite cookie store
-  //    so they are not restored when the EB reopens. We only delete session /
-  //    auth cookies — device tokens (mid, ig_did, ig_nrcb) are left untouched.
-  const SESSION_COOKIE_NAMES = [
-    "sessionid", "csrftoken", "ds_user_id", "rur", "igd_id",
-    "shbid", "shbts", "mid_v2",
-  ];
-  const chromeDbPath = path.join(
-    COOKIES_DIR, `userdata-${profileId}`, "Default", "Cookies",
-  );
-  if (fs.existsSync(chromeDbPath)) {
-    try {
-      // Dynamic require so the ESM-compiled bundle can still load it.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const Database = require("better-sqlite3") as typeof import("better-sqlite3");
-      const db = new (Database as any)(chromeDbPath) as import("better-sqlite3").Database;
-      const placeholders = SESSION_COOKIE_NAMES.map(() => "?").join(",");
-      const deleted = db
-        .prepare(
-          `DELETE FROM cookies WHERE host_key LIKE '%instagram.com' AND name IN (${placeholders})`,
-        )
-        .run(...SESSION_COOKIE_NAMES);
-      db.close();
-      log(
-        `Cleared ${(deleted as any).changes} session cookie(s) from Chrome DB for profile ${profileId}`,
-        "browser",
-      );
-    } catch (e: any) {
-      console.warn(
-        `[browserSession] Could not scrub Chrome cookie DB for profile ${profileId}: ${e?.message}`,
-      );
+  // 2. Delete the ENTIRE Chrome userdata directory so ALL stored Instagram
+  //    state is wiped — cookies, localStorage, IndexedDB, and the "saved login"
+  //    account bubble that Instagram stores in localStorage.
+  //    Surgical per-cookie deletion (deleting only rows from Chrome's SQLite
+  //    Cookies DB) left localStorage/IndexedDB intact, which is how Instagram
+  //    remembers which account was previously logged in.
+  const userDataDir = path.join(COOKIES_DIR, `userdata-${profileId}`);
+  try {
+    if (fs.existsSync(userDataDir)) {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      log(`Wiped Chrome userDataDir for profile ${profileId} (all session state removed)`, "browser");
+    }
+  } catch (e: any) {
+    console.warn(
+      `[browserSession] Could not delete userDataDir for profile ${profileId}: ${e?.message}`,
+    );
+  }
+
+  // 3. Delete the JSON cookie seed file (it contained the old session cookies).
+  deleteSavedCookies(profileId);
+
+  // 4. Write back ONLY the device tokens (mid, ig_did, ig_nrcb) to a fresh
+  //    JSON seed file so Chrome picks them up on next open and the device
+  //    fingerprint is preserved.  Without this Chrome would be assigned a
+  //    brand-new mid/ig_did on first visit, which Instagram treats as a new
+  //    device and can trigger security prompts.
+  if (igApiCookies) {
+    const DEVICE_NAMES = new Set(["mid", "ig_did", "ig_nrcb"]);
+    const deviceCookies = igApiCookies
+      .split(";")
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(s => DEVICE_NAMES.has(s.split("=")[0]?.trim().toLowerCase()))
+      .map(pair => {
+        const eqIdx = pair.indexOf("=");
+        const name  = pair.slice(0, eqIdx).trim();
+        const value = pair.slice(eqIdx + 1);
+        return {
+          name, value,
+          domain: ".instagram.com",
+          path: "/",
+          secure: true,
+          httpOnly: false,
+          sameSite: "Lax" as const,
+          session: false,
+          expires: Math.floor(Date.now() / 1000) + 365 * 24 * 3600,
+        };
+      });
+
+    if (deviceCookies.length > 0) {
+      try {
+        fs.mkdirSync(COOKIES_DIR, { recursive: true });
+        fs.writeFileSync(
+          cookiePath(profileId),
+          JSON.stringify(deviceCookies, null, 2),
+          "utf8",
+        );
+        log(
+          `Wrote ${deviceCookies.length} device token(s) back to cookie seed file for profile ${profileId}`,
+          "browser",
+        );
+      } catch (e: any) {
+        console.warn(
+          `[browserSession] Could not write device cookie seed file for profile ${profileId}: ${e?.message}`,
+        );
+      }
     }
   }
 
-  log(`Session cookies cleared for profile ${profileId} (device tokens preserved)`, "browser");
+  log(`EB session fully cleared for profile ${profileId} — all Chrome state wiped, device tokens preserved in seed file`, "browser");
 }
 
 // ── Auto-login via Puppeteer ─────────────────────────────────────────────────

@@ -911,11 +911,27 @@ async function createWindow() {
       _updaterManualCheck = true;
       await autoUpdater.checkForUpdates();
     } catch (err) {
+      // Only show dialog here if the error event hasn't already reset the flag.
+      // (The autoUpdater 'error' event fires for async failures and resets the
+      // flag itself with a friendly message.  This catch handles synchronous
+      // rejections — e.g. the GitHub API returning 401 before the stream opens.)
+      if (!_updaterManualCheck) return; // error event already handled it
       _updaterManualCheck = false;
+      const raw = String((err as Error)?.message || err);
+      let message: string;
+      if (/401|bad credentials|unauthorized/i.test(raw)) {
+        message = "The update token has expired. To fix this:\n\n1. Generate a new GitHub personal access token with \"repo\" scope at github.com/settings/tokens\n2. Set it as the UPDATER_TOKEN secret in your GitHub repository (Settings → Secrets → Actions)\n3. Rebuild and install the new version\n\nUpdates will work normally in the new build.";
+      } else if (/404|not found|no releases/i.test(raw)) {
+        message = "No release has been published yet on GitHub. The update feed will become available after the first successful build publishes a release.";
+      } else if (/ENOTFOUND|ECONNREFUSED|network|timeout|socket/i.test(raw)) {
+        message = "Could not reach GitHub — check your internet connection and try again.";
+      } else {
+        message = raw.split(/\n/)[0].slice(0, 300);
+      }
       dialog.showMessageBox(win!, {
         type: "error",
         title: "Update Check Failed",
-        message: String((err as Error)?.message || err),
+        message,
         buttons: ["OK"],
       });
     }
