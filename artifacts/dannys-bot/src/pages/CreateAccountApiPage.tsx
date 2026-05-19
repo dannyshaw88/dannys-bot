@@ -3,15 +3,21 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { useProxies, useCreateProxy } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Cpu, CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
+  CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
   User, Mail, KeyRound, Calendar, Globe, ShieldCheck, Server, Lock,
   Zap, List, Trash2, UserPlus, Eye, EyeOff, Plus, X,
+  Cookie, Clock, Link2, Shuffle, Monitor, ChevronRight,
+  Youtube, Search,
 } from "lucide-react";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type SignupResult = {
   status: "success" | "email_verification" | "phone_verification" | "error";
@@ -44,6 +50,8 @@ type CreatedAccount = {
   createdAt: string;
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 const MONTHS = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
@@ -51,16 +59,10 @@ const MONTHS = [
 
 const IG_PREFIX = "Instagram 378.1.0.45.111 Android (";
 
-// Returns just the raw device descriptor — the server wraps the IG prefix at call time.
-// This matches the format used by all existing accounts in the Accounts page.
 function randomUA(): string {
   return UA_POOL[Math.floor(Math.random() * UA_POOL.length)].api;
 }
 
-// Derives a matching Chrome for Android user agent from a mobile API device descriptor.
-// e.g. "31/12; 420dpi; 1080x2260; Samsung; SM-A525F; a52q; qcom; en_US"
-//   → "Mozilla/5.0 (Linux; Android 12; SM-A525F) AppleWebKit/537.36 ..."
-// The EB Chrome must identify as the same device model so Instagram sees a consistent fingerprint.
 function deriveEbUA(descriptor: string): string {
   const parts    = descriptor.split(";").map(s => s.trim());
   const apiLevel = parseInt((parts[0] ?? "").split("/")[0] ?? "0", 10);
@@ -73,7 +75,6 @@ function deriveEbUA(descriptor: string): string {
   const av = vmap[apiLevel] ?? (apiLevel >= 35 ? "15" : "12");
   return `Mozilla/5.0 (Linux; Android ${av}; ${model}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36`;
 }
-
 
 function parseSpin(template: string): string {
   let result = template.trim();
@@ -148,19 +149,21 @@ function fmtTs(ts: number): string {
   return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}.${String(d.getMilliseconds()).padStart(3,"0")}`;
 }
 
+// ── Live Trace ────────────────────────────────────────────────────────────────
+
 function LiveTracePanel({ steps, loading }: { steps: Array<{msg: string; ts: number}>; loading: boolean }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
   return (
-    <div className="rounded-lg bg-[#0d1117] border border-[#30363d] overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#21262d] bg-[#161b22]">
+    <div className="rounded-lg bg-[#0d1117] border border-[#30363d] overflow-hidden h-full flex flex-col">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#21262d] bg-[#161b22] shrink-0">
         {loading
           ? <><span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" /><span className="text-[10px] font-mono text-slate-400">LIVE</span></>
           : <><span className="w-2 h-2 rounded-full bg-slate-600 shrink-0" /><span className="text-[10px] font-mono text-slate-500">COMPLETE</span></>
         }
         <span className="ml-auto text-[10px] font-mono text-slate-600">{steps.length} lines</span>
       </div>
-      <div className="p-2 max-h-[400px] overflow-y-auto font-mono text-[10.5px] leading-relaxed space-y-0.5">
+      <div className="flex-1 overflow-y-auto p-2 font-mono text-[10.5px] leading-relaxed space-y-0.5">
         {steps.length === 0 && (
           <div className="text-slate-600 italic py-2 px-1">
             {loading ? "Waiting for first event…" : "No trace data."}
@@ -183,6 +186,134 @@ function LiveTracePanel({ steps, loading }: { steps: Array<{msg: string; ts: num
   );
 }
 
+// ── Signup Browser Live Panel ──────────────────────────────────────────────────
+
+function SignupBrowserPanel({
+  open, onClose, steps, loading,
+}: {
+  open: boolean;
+  onClose: () => void;
+  steps: Array<{msg: string; ts: number}>;
+  loading: boolean;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const pendingBitmapRef = useRef<ImageBitmap | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const [hasFrame, setHasFrame] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setHasFrame(false);
+    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${wsProto}//${window.location.host}/api/signup/browser/stream`);
+    ws.binaryType = "blob";
+    wsRef.current = ws;
+
+    ws.onmessage = (evt) => {
+      if (evt.data instanceof Blob) {
+        createImageBitmap(evt.data).then(bitmap => {
+          pendingBitmapRef.current?.close();
+          pendingBitmapRef.current = bitmap;
+          if (rafIdRef.current === null) {
+            rafIdRef.current = requestAnimationFrame(() => {
+              rafIdRef.current = null;
+              const bmp = pendingBitmapRef.current;
+              if (!bmp) return;
+              pendingBitmapRef.current = null;
+              const canvas = canvasRef.current;
+              if (!canvas) { bmp.close(); return; }
+              const ctx = canvas.getContext("2d");
+              if (!ctx) { bmp.close(); return; }
+              ctx.drawImage(bmp, 0, 0, 1280, 760);
+              bmp.close();
+              setHasFrame(true);
+            });
+          }
+        }).catch(() => {});
+        return;
+      }
+    };
+
+    return () => {
+      ws.close();
+      wsRef.current = null;
+      if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
+      pendingBitmapRef.current?.close();
+      pendingBitmapRef.current = null;
+    };
+  }, [open]);
+
+  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
+
+  if (!open) return null;
+  return (
+    <>
+      <div className="fixed inset-0 z-40" style={{ background: "transparent" }} onClick={onClose} />
+      <div
+        className="fixed top-0 right-0 z-50 h-full flex flex-col shadow-2xl border-l border-[#30363d]"
+        style={{ width: "min(700px, 52vw)", background: "#0d1117" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#21262d] bg-[#161b22] shrink-0">
+          <Monitor className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="text-sm font-semibold text-slate-200">EB — Live View</span>
+          {loading && (
+            <span className="flex items-center gap-1 text-[10px] font-mono text-cyan-400 ml-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />LIVE
+            </span>
+          )}
+          <span className="ml-auto text-[10px] font-mono text-slate-600">{steps.length} events</span>
+          <button onClick={onClose} className="ml-2 p-1 rounded hover:bg-white/10 text-slate-500 hover:text-slate-200 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Canvas — live browser view */}
+        <div className="relative shrink-0 bg-black" style={{ aspectRatio: "1280/760" }}>
+          <canvas ref={canvasRef} width={1280} height={760} className="w-full h-full" />
+          {!hasFrame && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/85">
+              {loading
+                ? <><Loader2 className="w-6 h-6 text-cyan-400 animate-spin" /><span className="text-[11px] text-slate-400 font-mono">Waiting for browser to start…</span></>
+                : <span className="text-[11px] text-slate-600 font-mono">No active browser session</span>
+              }
+            </div>
+          )}
+        </div>
+
+        {/* Step log */}
+        <div className="flex-1 overflow-y-auto p-3 font-mono text-[10.5px] leading-relaxed space-y-0.5">
+          {steps.length === 0 ? (
+            <div className="text-slate-600 italic py-4 px-1 text-center">
+              {loading ? "Starting…" : "No events yet. Start an account creation to see live activity here."}
+            </div>
+          ) : steps.map((s, i) => (
+            <div key={i} className="flex items-start gap-2 hover:bg-white/[0.02] px-1 py-0.5 rounded">
+              <span className="text-slate-700 shrink-0 select-none">{fmtTs(s.ts)}</span>
+              <span className={`break-all ${stepClass(s.msg)}`}>{s.msg}</span>
+            </div>
+          ))}
+          {loading && steps.length > 0 && (
+            <div className="flex items-center gap-1.5 px-1 pt-1">
+              <span className="inline-block w-2 h-3 bg-slate-400 animate-pulse rounded-sm" />
+            </div>
+          )}
+          <div ref={logEndRef} />
+        </div>
+
+        <div className="px-4 py-2 border-t border-[#21262d] bg-[#161b22] shrink-0 text-[10px] text-slate-600">
+          Close this panel at any time — it won't affect the running process.
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Step Log (restored from session) ─────────────────────────────────────────
+
 function StepLog({ steps }: { steps: string[] }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
@@ -198,6 +329,8 @@ function StepLog({ steps }: { steps: string[] }) {
     </div>
   );
 }
+
+// ── Status badge ──────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, string> = {
   success:            "bg-green-100 text-green-800 border-green-200",
@@ -216,7 +349,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Created Accounts Tab ─────────────────────────────────────────────────────
+// ── Created Accounts Tab ──────────────────────────────────────────────────────
 
 function CreatedAccountsTab() {
   const [accounts, setAccounts]   = useState<CreatedAccount[]>([]);
@@ -232,9 +365,7 @@ function CreatedAccountsTab() {
     try {
       const res = await fetch("/api/signup/created-accounts");
       setAccounts(await res.json());
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
@@ -244,9 +375,7 @@ function CreatedAccountsTab() {
     try {
       await fetch(`/api/signup/created-accounts/${id}`, { method: "DELETE" });
       setAccounts(a => a.filter(x => x.id !== id));
-    } finally {
-      setDeleting(null);
-    }
+    } finally { setDeleting(null); }
   };
 
   const handleAdd = async (id: number) => {
@@ -257,9 +386,7 @@ function CreatedAccountsTab() {
         queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
         setAccounts(a => a.map(x => x.id === id ? { ...x, addedToAccounts: true } : x));
       }
-    } finally {
-      setAdding(null);
-    }
+    } finally { setAdding(null); }
   };
 
   const success = accounts.filter(a => a.status === "success").length;
@@ -268,7 +395,6 @@ function CreatedAccountsTab() {
 
   return (
     <div className="space-y-3">
-      {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "Created", value: success, color: "text-green-600" },
@@ -281,31 +407,26 @@ function CreatedAccountsTab() {
           </div>
         ))}
       </div>
-
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{accounts.length} total attempts</p>
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={load}>
           <RefreshCw className="w-3 h-3 mr-1" />Refresh
         </Button>
       </div>
-
       {loading && (
         <div className="flex items-center justify-center py-8 text-muted-foreground text-sm gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />Loading...
         </div>
       )}
-
       {!loading && accounts.length === 0 && (
         <div className="desktop-card p-8 text-center text-muted-foreground text-sm">
           No accounts created yet. Use the Create tab to make your first account.
         </div>
       )}
-
       <div className="space-y-2">
         {accounts.map(a => (
           <div key={a.id} className="desktop-card overflow-hidden">
             <div className="flex items-center gap-3 p-3">
-              {/* Status icon */}
               <div className="shrink-0">
                 {a.status === "success"
                   ? <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -314,16 +435,12 @@ function CreatedAccountsTab() {
                   : <AlertCircle className="w-4 h-4 text-amber-500" />
                 }
               </div>
-
-              {/* Main info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono font-semibold text-sm">@{a.username}</span>
                   <StatusBadge status={a.status} />
                   {a.addedToAccounts && (
-                    <span className="text-[10px] bg-sky-100 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-semibold">
-                      IN ACCOUNTS
-                    </span>
+                    <span className="text-[10px] bg-sky-100 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-semibold">IN ACCOUNTS</span>
                   )}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
@@ -332,51 +449,22 @@ function CreatedAccountsTab() {
                   <span>{new Date(a.createdAt).toLocaleString()}</span>
                   {a.instagramUserId && <span className="text-green-600 font-medium">UID: {a.instagramUserId}</span>}
                 </div>
-                {a.errorMessage && (
-                  <p className="text-xs text-red-600 mt-0.5 truncate">{a.errorMessage}</p>
-                )}
+                {a.errorMessage && <p className="text-xs text-red-600 mt-0.5 truncate">{a.errorMessage}</p>}
               </div>
-
-              {/* Actions */}
               <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost" size="icon" className="h-7 w-7"
-                  onClick={() => setExpanded(expanded === a.id ? null : a.id)}
-                  title="View log"
-                >
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setExpanded(expanded === a.id ? null : a.id)}>
                   <List className="w-3.5 h-3.5" />
                 </Button>
-
                 {a.status === "success" && !a.addedToAccounts && (
-                  <Button
-                    size="sm"
-                    className="h-7 px-2 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0"
-                    onClick={() => handleAdd(a.id)}
-                    disabled={adding === a.id}
-                    title="Add to Accounts page for automation"
-                  >
-                    {adding === a.id
-                      ? <Loader2 className="w-3 h-3 animate-spin" />
-                      : <><UserPlus className="w-3 h-3 mr-1" />Add to Accounts</>
-                    }
+                  <Button size="sm" className="h-7 px-2 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0" onClick={() => handleAdd(a.id)} disabled={adding === a.id}>
+                    {adding === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><UserPlus className="w-3 h-3 mr-1" />Add to Accounts</>}
                   </Button>
                 )}
-
-                <Button
-                  variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500"
-                  onClick={() => handleDelete(a.id)}
-                  disabled={deleting === a.id}
-                  title="Delete this record"
-                >
-                  {deleting === a.id
-                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                    : <Trash2 className="w-3.5 h-3.5" />
-                  }
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500" onClick={() => handleDelete(a.id)} disabled={deleting === a.id}>
+                  {deleting === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 </Button>
               </div>
             </div>
-
-            {/* Expanded: credentials + log */}
             {expanded === a.id && (
               <div className="border-t border-border px-3 pb-3 pt-2 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
@@ -419,12 +507,34 @@ function CreatedAccountsTab() {
   );
 }
 
-// ── Main Page ────────────────────────────────────────────────────────────────
+// ── LocalStorage / SessionStorage helpers ─────────────────────────────────────
 
-// These two are templates the user re-uses across many sessions — persist to
-// localStorage so they survive page refreshes and are never wiped by New Attempt.
-const LS_KEY_USERNAME_SPIN = "equinox_api_username_spin";
-const LS_KEY_BIO_SPIN      = "equinox_api_bio_spin";
+const LS_KEY_USERNAME_SPIN     = "equinox_api_username_spin";
+const LS_KEY_BIO_SPIN          = "equinox_api_bio_spin";
+const LS_KEY_CB_SITES          = "equinox_signup_cb_sites";
+const LS_KEY_CB_SITES_MIN      = "equinox_signup_cb_sitesMin";
+const LS_KEY_CB_SITES_MAX      = "equinox_signup_cb_sitesMax";
+const LS_KEY_CB_SCROLL_MIN     = "equinox_signup_cb_scrollMin";
+const LS_KEY_CB_SCROLL_MAX     = "equinox_signup_cb_scrollMax";
+const LS_KEY_CB_LINKS_MIN      = "equinox_signup_cb_linksMin";
+const LS_KEY_CB_LINKS_MAX      = "equinox_signup_cb_linksMax";
+const LS_KEY_CB_INT_SCROLL_MIN = "equinox_signup_cb_intScrollMin";
+const LS_KEY_CB_INT_SCROLL_MAX = "equinox_signup_cb_intScrollMax";
+const LS_KEY_CB_RANDOM         = "equinox_signup_cb_random";
+const LS_KEY_CB_YOUTUBE        = "equinox_signup_cb_youtube";
+const LS_KEY_CB_GOOGLE         = "equinox_signup_cb_google";
+const LS_KEY_CB_YT_ITEMS_MIN   = "equinox_signup_cb_yt_items_min";
+const LS_KEY_CB_YT_ITEMS_MAX   = "equinox_signup_cb_yt_items_max";
+const LS_KEY_CB_YT_DELAY_MIN   = "equinox_signup_cb_yt_delay_min";
+const LS_KEY_CB_YT_DELAY_MAX   = "equinox_signup_cb_yt_delay_max";
+const LS_KEY_CB_GGL_ITEMS_MIN  = "equinox_signup_cb_ggl_items_min";
+const LS_KEY_CB_GGL_ITEMS_MAX  = "equinox_signup_cb_ggl_items_max";
+const LS_KEY_CB_GGL_DELAY_MIN  = "equinox_signup_cb_ggl_delay_min";
+const LS_KEY_CB_GGL_DELAY_MAX  = "equinox_signup_cb_ggl_delay_max";
+const LS_KEY_CB_PCT_SITES      = "equinox_signup_cb_pct_sites";
+const LS_KEY_CB_PCT_YT         = "equinox_signup_cb_pct_yt";
+const LS_KEY_CB_PCT_GOOGLE     = "equinox_signup_cb_pct_google";
+
 const SS_KEY_PASSWORD   = "equinox_api_password";
 const SS_KEY_FIRSTNAME  = "equinox_api_firstname";
 const SS_KEY_EMAIL      = "equinox_api_email";
@@ -441,6 +551,12 @@ const LS_KEY_IMAP       = "equinox_api_imap_v1";
 
 function lsGet(key: string): string { return localStorage.getItem(key) ?? ""; }
 function lsSet(key: string, v: string) { localStorage.setItem(key, v); }
+function lsGetNum(key: string, fallback: number): number {
+  const v = localStorage.getItem(key);
+  if (v === null) return fallback;
+  const n = Number(v);
+  return isNaN(n) ? fallback : n;
+}
 function ssGet(key: string): string { return sessionStorage.getItem(key) ?? ""; }
 function ssGetJson<T>(key: string, fallback: T): T {
   try { const r = sessionStorage.getItem(key); if (r) return JSON.parse(r) as T; } catch {}
@@ -448,7 +564,7 @@ function ssGetJson<T>(key: string, fallback: T): T {
 }
 function ssSet(key: string, v: string) { sessionStorage.setItem(key, v); }
 function ssSetJson(key: string, v: unknown) { sessionStorage.setItem(key, JSON.stringify(v)); }
-// Per-attempt fields only — username/bio spin are templates kept in localStorage
+
 const SS_ALL_KEYS = [
   SS_KEY_PASSWORD, SS_KEY_FIRSTNAME, SS_KEY_EMAIL,
   SS_KEY_EMAIL_PASS, SS_KEY_DOB, SS_KEY_PROXY_ID, SS_KEY_UA_API, SS_KEY_UA_EB,
@@ -474,20 +590,74 @@ function loadImap() {
   return { server: "", port: 993 };
 }
 
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
 export function CreateAccountApiPage() {
   const setSlot = useSidebarSetSlot();
   useEffect(() => { setSlot(null); return () => setSlot(null); }, [setSlot]);
 
   const { data: proxies } = useProxies();
 
-  // All form + result state is persisted in sessionStorage so navigating away
-  // and back restores exactly where the user left off.
+  // Tab state
   const [tab, setTabRaw] = useState<"create" | "accounts">(() =>
     (ssGet(SS_KEY_TAB) as "create" | "accounts") || "create"
   );
   const setTab = (v: "create" | "accounts") => { setTabRaw(v); ssSet(SS_KEY_TAB, v); };
 
-  // Account fields — spin templates live in localStorage so they outlive refreshes
+  // ── EB Activity panel ──────────────────────────────────────────────────────
+  const [ebPanelOpen, setEbPanelOpen] = useState(false);
+
+  // ── Cookie Baker template settings ────────────────────────────────────────
+  const [cbSites, setCbSitesRaw]               = useState(() => lsGet(LS_KEY_CB_SITES));
+  const [cbSitesMin, setCbSitesMinRaw]         = useState(() => lsGetNum(LS_KEY_CB_SITES_MIN, 3));
+  const [cbSitesMax, setCbSitesMaxRaw]         = useState(() => lsGetNum(LS_KEY_CB_SITES_MAX, 5));
+  const [cbScrollMin, setCbScrollMinRaw]       = useState(() => lsGetNum(LS_KEY_CB_SCROLL_MIN, 5));
+  const [cbScrollMax, setCbScrollMaxRaw]       = useState(() => lsGetNum(LS_KEY_CB_SCROLL_MAX, 15));
+  const [cbLinksMin, setCbLinksMinRaw]         = useState(() => lsGetNum(LS_KEY_CB_LINKS_MIN, 1));
+  const [cbLinksMax, setCbLinksMaxRaw]         = useState(() => lsGetNum(LS_KEY_CB_LINKS_MAX, 3));
+  const [cbIntScrollMin, setCbIntScrollMinRaw] = useState(() => lsGetNum(LS_KEY_CB_INT_SCROLL_MIN, 5));
+  const [cbIntScrollMax, setCbIntScrollMaxRaw] = useState(() => lsGetNum(LS_KEY_CB_INT_SCROLL_MAX, 10));
+  const [cbRandom, setCbRandomRaw]             = useState(() => localStorage.getItem(LS_KEY_CB_RANDOM) !== "false");
+
+  const setCbSites       = (v: string)  => { setCbSitesRaw(v);          lsSet(LS_KEY_CB_SITES, v); };
+  const setCbSitesMin    = (v: number)  => { setCbSitesMinRaw(v);       lsSet(LS_KEY_CB_SITES_MIN, String(v)); };
+  const setCbSitesMax    = (v: number)  => { setCbSitesMaxRaw(v);       lsSet(LS_KEY_CB_SITES_MAX, String(v)); };
+  const setCbScrollMin   = (v: number)  => { setCbScrollMinRaw(v);      lsSet(LS_KEY_CB_SCROLL_MIN, String(v)); };
+  const setCbScrollMax   = (v: number)  => { setCbScrollMaxRaw(v);      lsSet(LS_KEY_CB_SCROLL_MAX, String(v)); };
+  const setCbLinksMin    = (v: number)  => { setCbLinksMinRaw(v);       lsSet(LS_KEY_CB_LINKS_MIN, String(v)); };
+  const setCbLinksMax    = (v: number)  => { setCbLinksMaxRaw(v);       lsSet(LS_KEY_CB_LINKS_MAX, String(v)); };
+  const setCbIntScrollMin = (v: number) => { setCbIntScrollMinRaw(v);   lsSet(LS_KEY_CB_INT_SCROLL_MIN, String(v)); };
+  const setCbIntScrollMax = (v: number) => { setCbIntScrollMaxRaw(v);   lsSet(LS_KEY_CB_INT_SCROLL_MAX, String(v)); };
+  const setCbRandom      = (v: boolean) => { setCbRandomRaw(v);         lsSet(LS_KEY_CB_RANDOM, String(v)); };
+
+  const [cbVisitYoutube,  setCbVisitYoutubeRaw]  = useState(() => localStorage.getItem(LS_KEY_CB_YOUTUBE) === "true");
+  const [cbVisitGoogle,   setCbVisitGoogleRaw]   = useState(() => localStorage.getItem(LS_KEY_CB_GOOGLE)  === "true");
+  const [cbYtItemsMin,    setCbYtItemsMinRaw]    = useState(() => lsGetNum(LS_KEY_CB_YT_ITEMS_MIN,  1));
+  const [cbYtItemsMax,    setCbYtItemsMaxRaw]    = useState(() => lsGetNum(LS_KEY_CB_YT_ITEMS_MAX,  3));
+  const [cbYtDelayMin,    setCbYtDelayMinRaw]    = useState(() => lsGetNum(LS_KEY_CB_YT_DELAY_MIN,  5));
+  const [cbYtDelayMax,    setCbYtDelayMaxRaw]    = useState(() => lsGetNum(LS_KEY_CB_YT_DELAY_MAX, 30));
+  const [cbGglItemsMin,   setCbGglItemsMinRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_ITEMS_MIN, 1));
+  const [cbGglItemsMax,   setCbGglItemsMaxRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_ITEMS_MAX, 3));
+  const [cbGglDelayMin,   setCbGglDelayMinRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_DELAY_MIN, 5));
+  const [cbGglDelayMax,   setCbGglDelayMaxRaw]   = useState(() => lsGetNum(LS_KEY_CB_GGL_DELAY_MAX, 30));
+  const [cbPctSites,      setCbPctSitesRaw]      = useState(() => lsGetNum(LS_KEY_CB_PCT_SITES, 34));
+  const [cbPctYt,         setCbPctYtRaw]         = useState(() => lsGetNum(LS_KEY_CB_PCT_YT, 33));
+  const [cbPctGoogle,     setCbPctGoogleRaw]     = useState(() => lsGetNum(LS_KEY_CB_PCT_GOOGLE, 33));
+  const setCbVisitYoutube  = (v: boolean) => { setCbVisitYoutubeRaw(v);  lsSet(LS_KEY_CB_YOUTUBE, String(v)); };
+  const setCbVisitGoogle   = (v: boolean) => { setCbVisitGoogleRaw(v);   lsSet(LS_KEY_CB_GOOGLE,  String(v)); };
+  const setCbYtItemsMin    = (v: number)  => { setCbYtItemsMinRaw(v);    lsSet(LS_KEY_CB_YT_ITEMS_MIN,  String(v)); };
+  const setCbYtItemsMax    = (v: number)  => { setCbYtItemsMaxRaw(v);    lsSet(LS_KEY_CB_YT_ITEMS_MAX,  String(v)); };
+  const setCbYtDelayMin    = (v: number)  => { setCbYtDelayMinRaw(v);    lsSet(LS_KEY_CB_YT_DELAY_MIN,  String(v)); };
+  const setCbYtDelayMax    = (v: number)  => { setCbYtDelayMaxRaw(v);    lsSet(LS_KEY_CB_YT_DELAY_MAX,  String(v)); };
+  const setCbGglItemsMin   = (v: number)  => { setCbGglItemsMinRaw(v);   lsSet(LS_KEY_CB_GGL_ITEMS_MIN, String(v)); };
+  const setCbGglItemsMax   = (v: number)  => { setCbGglItemsMaxRaw(v);   lsSet(LS_KEY_CB_GGL_ITEMS_MAX, String(v)); };
+  const setCbGglDelayMin   = (v: number)  => { setCbGglDelayMinRaw(v);   lsSet(LS_KEY_CB_GGL_DELAY_MIN, String(v)); };
+  const setCbGglDelayMax   = (v: number)  => { setCbGglDelayMaxRaw(v);   lsSet(LS_KEY_CB_GGL_DELAY_MAX, String(v)); };
+  const setCbPctSites      = (v: number)  => { setCbPctSitesRaw(v);      lsSet(LS_KEY_CB_PCT_SITES, String(v)); };
+  const setCbPctYt         = (v: number)  => { setCbPctYtRaw(v);         lsSet(LS_KEY_CB_PCT_YT,    String(v)); };
+  const setCbPctGoogle     = (v: number)  => { setCbPctGoogleRaw(v);     lsSet(LS_KEY_CB_PCT_GOOGLE,String(v)); };
+
+  // ── Signup fields ──────────────────────────────────────────────────────────
   const [usernameSpin, setUsernameSpinRaw] = useState(() => lsGet(LS_KEY_USERNAME_SPIN));
   const [bioSpin, setBioSpinRaw]           = useState(() => lsGet(LS_KEY_BIO_SPIN));
   const setUsernameSpin = (v: string) => { setUsernameSpinRaw(v); lsSet(LS_KEY_USERNAME_SPIN, v); };
@@ -514,18 +684,17 @@ export function CreateAccountApiPage() {
     ssSet(SS_KEY_PROXY_ID, v === "" ? "" : String(v));
   };
 
-  // API Controller — persisted to localStorage so settings survive page reloads
   const [apiLimits, setApiLimitsRaw] = useState(loadApiLimits);
   const setApiLimits = (v: typeof DEFAULT_API_LIMITS) => {
     setApiLimitsRaw(v);
     localStorage.setItem(LS_KEY_API_LIMITS, JSON.stringify(v));
   };
+
   const [userAgentApi, setUserAgentApiRaw] = useState(() => ssGet(SS_KEY_UA_API) || UA_POOL[0].api);
   const setUserAgentApi = (v: string) => { setUserAgentApiRaw(v); ssSet(SS_KEY_UA_API, v); };
   const [userAgentEb, setUserAgentEbRaw]   = useState(() => ssGet(SS_KEY_UA_EB) || deriveEbUA(ssGet(SS_KEY_UA_API) || UA_POOL[0].api));
   const setUserAgentEb  = (v: string) => { setUserAgentEbRaw(v);  ssSet(SS_KEY_UA_EB,  v); };
 
-  // Email / IMAP — server+port persisted to localStorage
   const [emailPass, setEmailPassRaw] = useState(() => ssGet(SS_KEY_EMAIL_PASS));
   const setEmailPass = (v: string) => { setEmailPassRaw(v); ssSet(SS_KEY_EMAIL_PASS, v); };
   const _savedImap = loadImap();
@@ -534,9 +703,9 @@ export function CreateAccountApiPage() {
   const setImapServer = (v: string) => { setImapServerRaw(v); localStorage.setItem(LS_KEY_IMAP, JSON.stringify({ server: v, port: imapPort })); };
   const setImapPort   = (v: number) => { setImapPortRaw(v);   localStorage.setItem(LS_KEY_IMAP, JSON.stringify({ server: imapServer, port: v })); };
 
-  // Runtime state — result + verifyCode persisted so verification can continue after navigation
-  const [loading, setLoading]         = useState(false);
-  const [result, setResultRaw]        = useState<SignupResult | null>(() =>
+  // ── Runtime state ──────────────────────────────────────────────────────────
+  const [loading, setLoading]     = useState(false);
+  const [result, setResultRaw]    = useState<SignupResult | null>(() =>
     ssGetJson<SignupResult | null>(SS_KEY_RESULT, null)
   );
   const setResult = (v: SignupResult | null | ((prev: SignupResult | null) => SignupResult | null)) => {
@@ -554,12 +723,12 @@ export function CreateAccountApiPage() {
   const [liveSteps, setLiveSteps]      = useState<Array<{msg: string; ts: number}>>([]);
 
   const createProxy = useCreateProxy();
-  const [showAddProxy, setShowAddProxy]   = useState(false);
-  const [newProxyHost, setNewProxyHost]   = useState("");
-  const [newProxyPort, setNewProxyPort]   = useState("");
-  const [newProxyUser, setNewProxyUser]   = useState("");
-  const [newProxyPass, setNewProxyPass]   = useState("");
-  const [addProxyErr, setAddProxyErr]     = useState("");
+  const [showAddProxy, setShowAddProxy] = useState(false);
+  const [newProxyHost, setNewProxyHost] = useState("");
+  const [newProxyPort, setNewProxyPort] = useState("");
+  const [newProxyUser, setNewProxyUser] = useState("");
+  const [newProxyPass, setNewProxyPass] = useState("");
+  const [addProxyErr, setAddProxyErr]   = useState("");
 
   const handleAddProxy = async () => {
     setAddProxyErr("");
@@ -569,8 +738,7 @@ export function CreateAccountApiPage() {
     if (!port || port < 1 || port > 65535) return setAddProxyErr("Port must be 1–65535");
     try {
       const created = await createProxy.mutateAsync({
-        host,
-        port,
+        host, port,
         username: newProxyUser.trim() || null,
         password: newProxyPass.trim() || null,
       });
@@ -592,7 +760,6 @@ export function CreateAccountApiPage() {
   }, [email]);
 
   const selectedProxy = proxies?.find(p => p.id === Number(selectedProxyId));
-  // Full name is optional — not required for submission
   const canSubmit = usernameSpin.trim() && password && email && selectedProxyId;
 
   const handleCreate = async () => {
@@ -621,6 +788,29 @@ export function CreateAccountApiPage() {
         imapPort: imapServer.trim() ? imapPort : undefined,
         imapUser: imapServer.trim() ? email.trim() : undefined,
         imapPass: emailPass.trim() || undefined,
+        preBakeSites: cbSites.trim() || undefined,
+        preBakeSitesMin: cbSitesMin,
+        preBakeSitesMax: cbSitesMax,
+        preBakeScrollMin: cbScrollMin,
+        preBakeScrollMax: cbScrollMax,
+        preBakeLinksMin: cbLinksMin,
+        preBakeLinksMax: cbLinksMax,
+        preBakeInternalScrollMin: cbIntScrollMin,
+        preBakeInternalScrollMax: cbIntScrollMax,
+        preBakeRandom: cbRandom,
+        preBakeYoutube: cbVisitYoutube,
+        preBakeGoogle: cbVisitGoogle,
+        preBakeYtItemsMin: cbYtItemsMin,
+        preBakeYtItemsMax: cbYtItemsMax,
+        preBakeYtDelayMin: cbYtDelayMin,
+        preBakeYtDelayMax: cbYtDelayMax,
+        preBakeGglItemsMin: cbGglItemsMin,
+        preBakeGglItemsMax: cbGglItemsMax,
+        preBakeGglDelayMin: cbGglDelayMin,
+        preBakeGglDelayMax: cbGglDelayMax,
+        preBakePctSites: cbPctSites,
+        preBakePctYt: cbPctYt,
+        preBakePctGoogle: cbPctGoogle,
       };
       if (selectedProxy) {
         body.proxyHost     = selectedProxy.host;
@@ -698,45 +888,56 @@ export function CreateAccountApiPage() {
     setSelectedProxyId("");
   };
 
-  const statusColors: Record<SignupResult["status"], string> = {
-    success:            "border-green-200 bg-green-50",
-    email_verification: "border-amber-200 bg-amber-50",
-    phone_verification: "border-amber-200 bg-amber-50",
-    error:              "border-red-200 bg-red-50",
-  };
-  const statusIcons: Record<SignupResult["status"], React.ReactNode> = {
-    success:            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />,
-    email_verification: <AlertCircle  className="w-5 h-5 text-amber-600 shrink-0" />,
-    phone_verification: <AlertCircle  className="w-5 h-5 text-amber-600 shrink-0" />,
-    error:              <XCircle      className="w-5 h-5 text-red-600   shrink-0" />,
-  };
-  const statusLabels: Record<SignupResult["status"], string> = {
-    success:            "Account Created",
-    email_verification: "Email Verification Required",
-    phone_verification: "Phone Verification Required",
-    error:              "Creation Failed",
-  };
-
   const locked = loading;
+
+  const numInput = (val: number, onChange: (v: number) => void, min = 0) => (
+    <Input
+      type="number"
+      min={min}
+      value={val}
+      onChange={e => onChange(Number(e.target.value))}
+      className="h-7 w-[68px] text-sm"
+      disabled={locked}
+    />
+  );
 
   return (
     <AppLayout>
+      {/* EB Activity floating panel — rendered at root so it overlays everything */}
+      <SignupBrowserPanel
+        open={ebPanelOpen}
+        onClose={() => setEbPanelOpen(false)}
+        steps={liveSteps}
+        loading={loading}
+      />
+
       {/* Header */}
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <Cpu className="w-6 h-6 text-sky-500" />
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">API Account Creator</h1>
-          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Create an Account</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Creates accounts via the Instagram mobile API — username &amp; bio auto-spun on submit.
+            Visits websites to warm up cookies first, then creates the Instagram account via the mobile API.
           </p>
         </div>
-        {result && tab === "create" && (
-          <Button variant="outline" size="sm" onClick={handleReset} className="shrink-0">
-            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />New Attempt
+        <div className="flex items-center gap-2 shrink-0">
+          {/* EB activity button — always visible so user can open it at any time */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEbPanelOpen(v => !v)}
+            className={`h-8 text-xs gap-1.5 ${loading ? "border-cyan-500 text-cyan-500" : ""}`}
+          >
+            <Monitor className={`w-3.5 h-3.5 ${loading ? "text-cyan-500" : ""}`} />
+            {loading && <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />}
+            Watch EB
+            <ChevronRight className="w-3 h-3 opacity-50" />
           </Button>
-        )}
+          {result && tab === "create" && (
+            <Button variant="outline" size="sm" onClick={handleReset} className="h-8">
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />New Attempt
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -751,7 +952,10 @@ export function CreateAccountApiPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "create" ? <><Cpu className="w-3.5 h-3.5 inline mr-1.5" />Create</> : <><List className="w-3.5 h-3.5 inline mr-1.5" />Created Accounts</>}
+            {t === "create"
+              ? <><Cookie className="w-3.5 h-3.5 inline mr-1.5" />Create</>
+              : <><List className="w-3.5 h-3.5 inline mr-1.5" />Created Accounts</>
+            }
           </button>
         ))}
       </div>
@@ -761,12 +965,275 @@ export function CreateAccountApiPage() {
           <CreatedAccountsTab />
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ height: "calc(100vh - 200px)", overflow: "auto" }}>
+        <div className="overflow-auto" style={{ height: "calc(100vh - 200px)" }}>
+          <div className="max-w-2xl space-y-3">
 
-          {/* ── LEFT: Form ── */}
-          <div className="space-y-3">
+            {/* ── Cookie Baker Template ── */}
+            <div className="desktop-card p-4 space-y-3">
+              <div className="flex items-center gap-2 pb-1 border-b border-border">
+                <Cookie className="w-4 h-4 text-cyan-500" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-foreground">Cookie Baker</p>
+                <span className="text-[10px] text-muted-foreground font-normal normal-case ml-1">— warm up browser cookies before signup</span>
+              </div>
 
-            {/* Username spin + Password */}
+              {/* Row 1: Sites to Visit + Visit Time */}
+              <div className="flex flex-wrap gap-4">
+                <div className="flex flex-col gap-1">
+                  <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    <Globe className="w-3 h-3 text-primary shrink-0" /> Sites to Visit
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {numInput(cbSitesMin, setCbSitesMin, 1)}
+                    <span className="text-xs text-muted-foreground">–</span>
+                    {numInput(cbSitesMax, setCbSitesMax, 1)}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    <Clock className="w-3 h-3 text-violet-500 shrink-0" /> Visit Time
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {numInput(cbScrollMin, setCbScrollMin, 1)}
+                    <span className="text-xs text-muted-foreground">–</span>
+                    {numInput(cbScrollMax, setCbScrollMax, 1)}
+                    <span className="text-[10px] text-muted-foreground">sec</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1 justify-end">
+                  <label className="flex items-center gap-2 cursor-pointer select-none mt-4">
+                    <Checkbox
+                      checked={cbRandom}
+                      onCheckedChange={v => setCbRandom(!!v)}
+                      disabled={locked}
+                    />
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+                      <Shuffle className="w-3 h-3 text-cyan-500" /> Random order
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 2: Internal Links + Internal Visit Time */}
+              <div className="flex flex-wrap gap-4 pt-1 border-t border-border/50">
+                <div className="flex flex-col gap-1">
+                  <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    <Link2 className="w-3 h-3 text-blue-500 shrink-0" /> Internal Links
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {numInput(cbLinksMin, setCbLinksMin, 0)}
+                    <span className="text-xs text-muted-foreground">–</span>
+                    {numInput(cbLinksMax, setCbLinksMax, 0)}
+                    <span className="text-[10px] text-muted-foreground">links</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <p className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    <Clock className="w-3 h-3 text-teal-500 shrink-0" /> Internal Visit Time
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {numInput(cbIntScrollMin, setCbIntScrollMin, 1)}
+                    <span className="text-xs text-muted-foreground">–</span>
+                    {numInput(cbIntScrollMax, setCbIntScrollMax, 1)}
+                    <span className="text-[10px] text-muted-foreground">sec</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sites list */}
+              <div>
+                <Label className="text-xs flex items-center gap-1 mb-1.5">
+                  <Globe className="w-3 h-3 text-primary" /> Website List
+                </Label>
+                <Textarea
+                  placeholder={"www.reddit.com\nwww.bbc.co.uk\nhttps://news.ycombinator.com\nwww.wikipedia.org"}
+                  value={cbSites}
+                  onChange={e => setCbSites(e.target.value)}
+                  className="font-mono text-xs min-h-[90px] resize-y"
+                  disabled={locked}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  One URL per line. Visited using the account's proxy and user agent before signup begins. Leave empty to skip.
+                </p>
+              </div>
+
+              {/* Platform quick-visit options */}
+              <div className="space-y-2 pt-1 border-t border-border/50">
+                {/* YouTube */}
+                <div className={`rounded-lg border transition-colors ${
+                  cbVisitYoutube ? "border-red-400 bg-red-50/40 dark:bg-red-950/20" : "border-border"
+                } ${locked ? "opacity-50 pointer-events-none" : ""}`}>
+                  <label className="flex items-center gap-3 p-3 cursor-pointer select-none">
+                    <Checkbox
+                      checked={cbVisitYoutube}
+                      onCheckedChange={v => setCbVisitYoutube(!!v)}
+                      disabled={locked}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <Youtube className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                      <span className="text-xs font-semibold">Visit YouTube</span>
+                      <span className="text-[10px] text-muted-foreground ml-1 truncate">
+                        Searches, watches a video, scrolls the feed
+                      </span>
+                    </div>
+                  </label>
+                  {cbVisitYoutube && (
+                    <div className="px-3 pb-3 grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Items (min–max)</Label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number" min={1} max={20}
+                            value={cbYtItemsMin}
+                            onChange={e => setCbYtItemsMin(Math.max(1, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                          <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                          <Input
+                            type="number" min={1} max={20}
+                            value={cbYtItemsMax}
+                            onChange={e => setCbYtItemsMax(Math.max(cbYtItemsMin, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Delay secs (min–max)</Label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number" min={1} max={300}
+                            value={cbYtDelayMin}
+                            onChange={e => setCbYtDelayMin(Math.max(1, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                          <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                          <Input
+                            type="number" min={1} max={300}
+                            value={cbYtDelayMax}
+                            onChange={e => setCbYtDelayMax(Math.max(cbYtDelayMin, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Google */}
+                <div className={`rounded-lg border transition-colors ${
+                  cbVisitGoogle ? "border-blue-400 bg-blue-50/40 dark:bg-blue-950/20" : "border-border"
+                } ${locked ? "opacity-50 pointer-events-none" : ""}`}>
+                  <label className="flex items-center gap-3 p-3 cursor-pointer select-none">
+                    <Checkbox
+                      checked={cbVisitGoogle}
+                      onCheckedChange={v => setCbVisitGoogle(!!v)}
+                      disabled={locked}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <Search className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      <span className="text-xs font-semibold">Visit Google</span>
+                      <span className="text-[10px] text-muted-foreground ml-1 truncate">
+                        Searches, clicks a result, browses briefly
+                      </span>
+                    </div>
+                  </label>
+                  {cbVisitGoogle && (
+                    <div className="px-3 pb-3 grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Items (min–max)</Label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number" min={1} max={20}
+                            value={cbGglItemsMin}
+                            onChange={e => setCbGglItemsMin(Math.max(1, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                          <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                          <Input
+                            type="number" min={1} max={20}
+                            value={cbGglItemsMax}
+                            onChange={e => setCbGglItemsMax(Math.max(cbGglItemsMin, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Delay secs (min–max)</Label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number" min={1} max={300}
+                            value={cbGglDelayMin}
+                            onChange={e => setCbGglDelayMin(Math.max(1, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                          <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                          <Input
+                            type="number" min={1} max={300}
+                            value={cbGglDelayMax}
+                            onChange={e => setCbGglDelayMax(Math.max(cbGglDelayMin, +e.target.value))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Order percentage randomiser */}
+                {(cbSites.trim() || cbVisitYoutube || cbVisitGoogle) && (
+                  <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Shuffle className="w-3 h-3 text-cyan-500" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Visit Order — % Chance Each Source is First</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {cbSites.trim() && (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Website List %</Label>
+                          <Input
+                            type="number" min={0} max={100}
+                            value={cbPctSites}
+                            onChange={e => setCbPctSites(Math.min(100, Math.max(0, +e.target.value)))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                        </div>
+                      )}
+                      {cbVisitYoutube && (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">YouTube %</Label>
+                          <Input
+                            type="number" min={0} max={100}
+                            value={cbPctYt}
+                            onChange={e => setCbPctYt(Math.min(100, Math.max(0, +e.target.value)))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                        </div>
+                      )}
+                      {cbVisitGoogle && (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Google %</Label>
+                          <Input
+                            type="number" min={0} max={100}
+                            value={cbPctGoogle}
+                            onChange={e => setCbPctGoogle(Math.min(100, Math.max(0, +e.target.value)))}
+                            className="h-7 text-xs text-center px-1" disabled={locked}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Set the probability each source is visited first. Values don't need to sum to 100 — they're treated as weights.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Account Details ── */}
             <div className="desktop-card p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account Details</p>
               <div className="space-y-1.5">
@@ -785,16 +1252,11 @@ export function CreateAccountApiPage() {
                   <KeyRound className="w-3 h-3" />Password
                   <span className="ml-1 text-[10px] text-muted-foreground">(auto-generated)</span>
                 </Label>
-                <Input
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="h-8 text-sm font-mono"
-                  disabled={locked}
-                />
+                <Input value={password} onChange={e => setPassword(e.target.value)} className="h-8 text-sm font-mono" disabled={locked} />
               </div>
             </div>
 
-            {/* Full name + Email + Bio spin */}
+            {/* ── Profile Info ── */}
             <div className="desktop-card p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -808,14 +1270,7 @@ export function CreateAccountApiPage() {
                   <Label className="text-xs flex items-center gap-1">
                     <Mail className="w-3 h-3" />Email <span className="text-red-500 ml-0.5">*</span>
                   </Label>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="user@domain.com"
-                    className="h-8 text-sm"
-                    disabled={locked}
-                  />
+                  <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@domain.com" className="h-8 text-sm" disabled={locked} />
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -827,11 +1282,10 @@ export function CreateAccountApiPage() {
                   className="h-8 text-xs font-mono"
                   disabled={locked}
                 />
-                <p className="text-[10px] text-muted-foreground">Spun on submit and set on the account if creation succeeds.</p>
               </div>
             </div>
 
-            {/* DOB */}
+            {/* ── Date of Birth ── */}
             <div className="desktop-card p-4 space-y-2">
               <Label className="text-xs flex items-center gap-1">
                 <Calendar className="w-3 h-3" />Date of Birth
@@ -850,25 +1304,16 @@ export function CreateAccountApiPage() {
               </div>
             </div>
 
-            {/* Proxy */}
+            {/* ── Proxy ── */}
             <div className="desktop-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs flex items-center gap-1"><Globe className="w-3 h-3" />Proxy <span className="text-red-500 ml-0.5">*</span></Label>
                 {!locked && (
-                  <button
-                    type="button"
-                    onClick={() => { setShowAddProxy(v => !v); setAddProxyErr(""); }}
-                    className="flex items-center gap-1 text-[10px] text-sky-500 hover:text-sky-600 font-medium"
-                  >
-                    {showAddProxy
-                      ? <><X className="w-3 h-3" />Cancel</>
-                      : <><Plus className="w-3 h-3" />Add new</>
-                    }
+                  <button type="button" onClick={() => { setShowAddProxy(v => !v); setAddProxyErr(""); }} className="flex items-center gap-1 text-[10px] text-sky-500 hover:text-sky-600 font-medium">
+                    {showAddProxy ? <><X className="w-3 h-3" />Cancel</> : <><Plus className="w-3 h-3" />Add new</>}
                   </button>
                 )}
               </div>
-
-              {/* Existing proxy dropdown */}
               {proxies && proxies.length > 0 && !showAddProxy && (
                 <select
                   value={selectedProxyId}
@@ -880,84 +1325,43 @@ export function CreateAccountApiPage() {
                   {proxies.map(p => <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>)}
                 </select>
               )}
-
-              {/* No proxies notice when form is hidden */}
               {(!proxies || proxies.length === 0) && !showAddProxy && (
-                <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                <div className="flex items-center gap-2 text-xs text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800 rounded px-3 py-2">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />No proxies yet — click <strong className="mx-0.5">Add new</strong> above.
                 </div>
               )}
-
-              {/* Inline add-proxy form */}
-              {(showAddProxy || (!proxies || proxies.length === 0) && false) && (
+              {showAddProxy && (
                 <div className="rounded-md border border-sky-200 bg-sky-50/40 dark:bg-sky-950/20 p-3 space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">New Proxy</p>
                   <div className="flex gap-2">
                     <div className="flex-1 space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Host</Label>
-                      <Input
-                        value={newProxyHost}
-                        onChange={e => setNewProxyHost(e.target.value)}
-                        placeholder="123.45.67.89"
-                        className="h-7 text-xs font-mono"
-                        disabled={createProxy.isPending}
-                      />
+                      <Input value={newProxyHost} onChange={e => setNewProxyHost(e.target.value)} placeholder="123.45.67.89" className="h-7 text-xs font-mono" disabled={createProxy.isPending} />
                     </div>
                     <div className="w-20 space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Port</Label>
-                      <Input
-                        value={newProxyPort}
-                        onChange={e => setNewProxyPort(e.target.value)}
-                        placeholder="8080"
-                        className="h-7 text-xs font-mono"
-                        disabled={createProxy.isPending}
-                      />
+                      <Input value={newProxyPort} onChange={e => setNewProxyPort(e.target.value)} placeholder="8080" className="h-7 text-xs font-mono" disabled={createProxy.isPending} />
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <div className="flex-1 space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Username <span className="font-normal">(optional)</span></Label>
-                      <Input
-                        value={newProxyUser}
-                        onChange={e => setNewProxyUser(e.target.value)}
-                        placeholder="user"
-                        className="h-7 text-xs"
-                        disabled={createProxy.isPending}
-                      />
+                      <Input value={newProxyUser} onChange={e => setNewProxyUser(e.target.value)} placeholder="user" className="h-7 text-xs" disabled={createProxy.isPending} />
                     </div>
                     <div className="flex-1 space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Password <span className="font-normal">(optional)</span></Label>
-                      <Input
-                        type="password"
-                        value={newProxyPass}
-                        onChange={e => setNewProxyPass(e.target.value)}
-                        placeholder="••••••"
-                        className="h-7 text-xs"
-                        disabled={createProxy.isPending}
-                      />
+                      <Input type="password" value={newProxyPass} onChange={e => setNewProxyPass(e.target.value)} placeholder="••••••" className="h-7 text-xs" disabled={createProxy.isPending} />
                     </div>
                   </div>
-                  {addProxyErr && (
-                    <p className="text-[10px] text-red-600 flex items-center gap-1">
-                      <XCircle className="w-3 h-3 shrink-0" />{addProxyErr}
-                    </p>
-                  )}
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0 w-full"
-                    onClick={handleAddProxy}
-                    disabled={createProxy.isPending || !newProxyHost.trim() || !newProxyPort.trim()}
-                  >
-                    {createProxy.isPending
-                      ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Saving…</>
-                      : <><Plus className="w-3 h-3 mr-1.5" />Save &amp; Select Proxy</>
-                    }
+                  {addProxyErr && <p className="text-[10px] text-red-600 flex items-center gap-1"><XCircle className="w-3 h-3 shrink-0" />{addProxyErr}</p>}
+                  <Button size="sm" className="h-7 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0 w-full" onClick={handleAddProxy} disabled={createProxy.isPending || !newProxyHost.trim() || !newProxyPort.trim()}>
+                    {createProxy.isPending ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Saving…</> : <><Plus className="w-3 h-3 mr-1.5" />Save &amp; Select Proxy</>}
                   </Button>
                 </div>
               )}
             </div>
 
-            {/* Email / IMAP */}
+            {/* ── Email / IMAP ── */}
             <div className="desktop-card p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Email Access <span className="font-normal normal-case text-muted-foreground/70">(for auto-fetching verification codes)</span>
@@ -976,10 +1380,10 @@ export function CreateAccountApiPage() {
                   <Input type="number" value={imapPort} onChange={e => setImapPort(Number(e.target.value))} className="h-8 text-sm" disabled={locked} />
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground">If filled, the server polls your inbox automatically and submits the verification code — no manual entry needed.</p>
+              <p className="text-[10px] text-muted-foreground">If filled, the server polls your inbox and submits the verification code automatically.</p>
             </div>
 
-            {/* API Controller */}
+            {/* ── API Controller ── */}
             <div className="desktop-card p-4 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-yellow-500" />API Controller
@@ -1003,21 +1407,16 @@ export function CreateAccountApiPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground">Allow x–y API calls every x–y seconds globally for this account.</p>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">API User Agent — Device</Label>
-                  <Button
-                    variant="ghost" size="sm" className="h-6 px-2 text-[10px]"
-                    disabled={locked}
-                    onClick={() => { const ua = randomUA(); setUserAgentApi(ua); setUserAgentEb(deriveEbUA(ua)); }}
-                  >
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" disabled={locked} onClick={() => { const ua = randomUA(); setUserAgentApi(ua); setUserAgentEb(deriveEbUA(ua)); }}>
                     Randomise
                   </Button>
                 </div>
                 <div className="text-[10px] font-mono text-muted-foreground px-1 truncate select-none">{IG_PREFIX}…)</div>
-                <Input value={userAgentApi} onChange={e => setUserAgentApi(e.target.value)} className="h-8 text-xs font-mono" disabled={locked} placeholder="API/ver; dpi; res; Brand; Model; codename; soc; en_US" />
-                <p className="text-[10px] text-muted-foreground">The device descriptor — the Instagram prefix is added automatically by the server. Each account gets a unique device from a pool of {UA_POOL.length}.</p>
+                <Input value={userAgentApi} onChange={e => setUserAgentApi(e.target.value)} className="h-8 text-xs font-mono" disabled={locked} />
+                <p className="text-[10px] text-muted-foreground">Device descriptor — the Instagram prefix is added automatically. Pool of {UA_POOL.length} devices.</p>
               </div>
               <div className="space-y-1.5 pt-1 border-t border-border/60">
                 <Label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -1026,181 +1425,123 @@ export function CreateAccountApiPage() {
                 <div className="h-8 px-3 flex items-center rounded-md border border-border bg-muted/40 text-[10px] font-mono text-muted-foreground truncate select-all">
                   {userAgentEb}
                 </div>
-                <p className="text-[10px] text-muted-foreground">Chrome for Android UA derived from the API agent above — the EB Chrome presents as the same device model. Updates automatically when you randomise the API agent.</p>
               </div>
             </div>
 
-            {/* Submit */}
+            {/* ── Submit ── */}
             {!result && (
               <Button
-                className="w-full bg-sky-500 hover:bg-sky-600 text-white border-0 h-10"
+                className="w-full h-11 bg-cyan-500 hover:bg-cyan-600 text-white border-0 text-sm font-semibold"
                 onClick={handleCreate}
                 disabled={loading || !canSubmit}
               >
-                {loading
-                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating Account…</>
-                  : <><Cpu className="w-4 h-4 mr-2" />Create Account via API</>
-                }
+                {loading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating Account…</>
+                ) : (
+                  <><Cookie className="w-4 h-4 mr-2" />{cbSites.trim() ? "Bake Cookies + Create Account" : "Create Account via API"}</>
+                )}
               </Button>
             )}
-          </div>
 
-          {/* ── RIGHT: Status + Log + Issues — always visible ── */}
-          <div className="space-y-3">
-
-            {/* STATUS — always shown */}
-            <div className={`desktop-card p-4 border-2 transition-colors ${
-              loading
-                ? "border-sky-300 bg-sky-50/40"
-                : result
-                  ? statusColors[result.status]
-                  : "border-border"
-            }`}>
-              <div className="flex items-center gap-2 mb-2">
-                {loading
-                  ? <Loader2 className="w-5 h-5 text-sky-500 animate-spin shrink-0" />
-                  : result
-                    ? statusIcons[result.status]
-                    : <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/20 shrink-0 inline-block" />
-                }
-                <p className="font-semibold text-sm">
-                  {loading ? "Creating Account…" : result ? statusLabels[result.status] : "Status"}
-                </p>
-                {!loading && !result && (
-                  <span className="ml-auto text-[10px] text-muted-foreground/50 font-normal">Waiting for attempt</span>
-                )}
-              </div>
-
-              {!loading && !result && (
-                <p className="text-xs text-muted-foreground">Fill the form and click <strong>Create Account via API</strong> — the result will appear here.</p>
-              )}
-
-              {result && (
-                <>
-                  {result.message && <p className="text-sm text-foreground/80 mb-3">{result.message}</p>}
-
-                  {result.status === "success" && (
-                    <div className="space-y-2">
-                      {result.userId && (
-                        <div className="flex items-center gap-2 text-xs font-mono bg-white/60 rounded px-2 py-1.5">
-                          <ShieldCheck className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                          <span className="text-muted-foreground">User ID:</span>
-                          <span className="font-semibold">{result.userId}</span>
-                        </div>
-                      )}
-                      {result.username && (
-                        <div className="flex items-center gap-2 text-xs font-mono bg-white/60 rounded px-2 py-1.5">
-                          <User className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                          <span className="text-muted-foreground">Username:</span>
-                          <span className="font-semibold">@{result.username}</span>
-                        </div>
-                      )}
-                      <div className="flex gap-2 pt-1">
-                        <Button
-                          size="sm" className="bg-sky-500 hover:bg-sky-600 text-white border-0 text-xs h-7"
-                          onClick={() => { setTab("accounts"); }}
-                        >
-                          <List className="w-3 h-3 mr-1" />View in Created Accounts
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Go to <strong>Created Accounts</strong> to add it to the automation accounts page.
-                      </p>
-                    </div>
-                  )}
-
-                  {(result.status === "email_verification" || result.status === "phone_verification") && result.sessionId && (
-                    <div className="mt-3 p-3 rounded-lg border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 space-y-2">
-                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                        {result.status === "email_verification"
-                          ? "📧 Check your email for a 6-digit code from Instagram"
-                          : "📱 Check your phone for a 6-digit SMS code from Instagram"}
-                      </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        {result.status === "email_verification"
-                          ? "Instagram sent a verification code to your email. Enter it below — no IMAP needed."
-                          : "Instagram sent an SMS to your phone. Enter the code below."}
-                      </p>
-                      <div className="flex gap-2 items-center">
-                        <Input
-                          value={verifyCode}
-                          onChange={e => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                          placeholder="000000"
-                          maxLength={6}
-                          autoFocus
-                          className="h-10 text-center text-xl font-mono tracking-[0.4em] w-40 border-amber-400 focus:border-amber-500"
-                        />
-                        <Button
-                          onClick={handleVerify}
-                          disabled={verifying || verifyCode.length < 6}
-                          className="h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white border-0 font-semibold"
-                        >
-                          {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Code"}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* LIVE TRACE — shown during loading and after completion */}
-            {(loading || liveSteps.length > 0) && (
-              <div className="desktop-card p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    {loading && <Loader2 className="w-3 h-3 animate-spin text-sky-500" />}
-                    Live Trace
+            {/* ── Inline result / verification ── */}
+            {result && (
+              <div className={`desktop-card p-4 space-y-3 border-2 ${
+                result.status === "success"
+                  ? "border-green-300 bg-green-50/40 dark:bg-green-950/20"
+                  : result.status === "error"
+                  ? "border-red-300 bg-red-50/40 dark:bg-red-950/20"
+                  : "border-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
+              }`}>
+                <div className="flex items-center gap-2">
+                  {result.status === "success"
+                    ? <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                    : result.status === "error"
+                    ? <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                    : <AlertCircle className="w-5 h-5 text-cyan-600 shrink-0" />
+                  }
+                  <p className="font-semibold text-sm">
+                    {result.status === "success" ? "Account Created" :
+                     result.status === "error"   ? "Creation Failed" :
+                     result.status === "email_verification" ? "Email Verification Required" :
+                     "Phone Verification Required"}
                   </p>
                 </div>
-                <LiveTracePanel steps={liveSteps} loading={loading} />
-              </div>
-            )}
 
-            {/* API CALL LOG — shown after completion when no live steps (e.g. restored from session) */}
-            {!loading && liveSteps.length === 0 && result && result.steps?.length > 0 && (
-              <div className="desktop-card p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">API Call Log</p>
-                  <span className="text-[10px] text-muted-foreground">{result.steps.length} steps</span>
-                </div>
-                <StepLog steps={result.steps} />
-              </div>
-            )}
+                {result.message && (
+                  <p className="text-sm text-foreground/80">{result.message}</p>
+                )}
 
-            {/* ISSUE LOG — always shown, populated on error */}
-            <div className="desktop-card p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Issue Log</p>
-              {result?.status === "error" && result.message ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-start gap-2 text-xs">
-                    <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-px" />
-                    <span className="text-red-700 dark:text-red-400 font-mono break-all">{result.message}</span>
-                  </div>
-                  {!!result.rawResponse && (
-                    <div className="mt-2 pt-2 border-t border-border">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-[10px] text-muted-foreground">Raw Response</p>
-                        <Button variant="ghost" size="sm" className="h-5 px-2 text-[10px]" onClick={() => {
-                          navigator.clipboard.writeText(JSON.stringify(result.rawResponse, null, 2));
-                          setCopied(true); setTimeout(() => setCopied(false), 1500);
-                        }}>
-                          <Copy className="w-3 h-3 mr-1" />{copied ? "Copied" : "Copy"}
-                        </Button>
+                {result.status === "success" && (
+                  <div className="space-y-2">
+                    {result.userId && (
+                      <div className="flex items-center gap-2 text-xs font-mono bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                        <span className="text-muted-foreground">User ID:</span>
+                        <span className="font-semibold">{result.userId}</span>
                       </div>
-                      <pre className="text-[10px] font-mono bg-black/5 rounded p-2 overflow-auto max-h-28 whitespace-pre-wrap break-all">
-                        {JSON.stringify(result.rawResponse, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground/50 italic">
-                  {result && result.status !== "error" ? "No issues — attempt completed without errors." : "No issues logged."}
-                </p>
-              )}
-            </div>
+                    )}
+                    {result.username && (
+                      <div className="flex items-center gap-2 text-xs font-mono bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
+                        <User className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                        <span className="text-muted-foreground">Username:</span>
+                        <span className="font-semibold">@{result.username}</span>
+                      </div>
+                    )}
+                    <Button size="sm" className="bg-sky-500 hover:bg-sky-600 text-white border-0 text-xs h-7" onClick={() => setTab("accounts")}>
+                      <List className="w-3 h-3 mr-1" />View in Created Accounts
+                    </Button>
+                  </div>
+                )}
 
+                {result.status === "error" && result.rawResponse && (
+                  <div className="pt-1 border-t border-border/60">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[10px] text-muted-foreground">Raw Response</p>
+                      <Button variant="ghost" size="sm" className="h-5 px-2 text-[10px]" onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(result!.rawResponse, null, 2));
+                        setCopied(true); setTimeout(() => setCopied(false), 1500);
+                      }}>
+                        <Copy className="w-3 h-3 mr-1" />{copied ? "Copied" : "Copy"}
+                      </Button>
+                    </div>
+                    <pre className="text-[10px] font-mono bg-black/10 rounded p-2 overflow-auto max-h-24 whitespace-pre-wrap break-all">
+                      {JSON.stringify(result.rawResponse, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {(result.status === "email_verification" || result.status === "phone_verification") && result.sessionId && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-cyan-700 dark:text-cyan-400">
+                      {result.status === "email_verification"
+                        ? "Instagram sent a verification code to your email. Enter it below."
+                        : "Instagram sent an SMS to your phone. Enter the code below."}
+                    </p>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        value={verifyCode}
+                        onChange={e => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        maxLength={6}
+                        autoFocus
+                        className="h-10 text-center text-xl font-mono tracking-[0.4em] w-40 border-cyan-400 focus:border-cyan-500"
+                      />
+                      <Button
+                        onClick={handleVerify}
+                        disabled={verifying || verifyCode.length < 6}
+                        className="h-10 px-5 bg-cyan-500 hover:bg-cyan-600 text-white border-0 font-semibold"
+                      >
+                        {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Code"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <Button variant="outline" size="sm" className="h-7 text-xs w-full" onClick={handleReset}>
+                  <RefreshCw className="w-3 h-3 mr-1.5" />New Attempt
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

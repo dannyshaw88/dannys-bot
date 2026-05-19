@@ -43,6 +43,8 @@ import {
   scheduleAutoLogin,
   getSessionChallengeUrl,
   deleteSavedCookies,
+  attachSignupWS,
+  detachSignupWS,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -1506,6 +1508,16 @@ export async function registerInstagramRoutes(
 
   httpServer.on("upgrade", async (request, socket, head) => {
     const url = new URL(request.url ?? "", `http://localhost`);
+
+    // ── Signup browser live stream ─────────────────────────────────────────────
+    if (url.pathname === "/api/signup/browser/stream") {
+      wss.handleUpgrade(request, socket, head, async (ws) => {
+        ws.on("close", () => { detachSignupWS(ws); });
+        await attachSignupWS(ws);
+      });
+      return;
+    }
+
     const match = url.pathname.match(/^\/api\/browser\/(\d+)\/stream$/);
     if (!match) {
       socket.destroy();

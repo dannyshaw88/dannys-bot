@@ -271,6 +271,10 @@ export async function harvestSignupCookiesFromEB(opts?: {
   const effectiveUA = opts?.userAgent ?? FALLBACK_UA;
   try {
     const [page] = await browser.pages();
+    _signupPage = page;
+    if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+      _startSignupScreencast().catch(() => {});
+    }
     await page.setUserAgent(effectiveUA);
     await page.setViewport({ width: 1280, height: 760 });
 
@@ -374,6 +378,11 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
     return { mid, ig_did, csrftoken, cookieStrings, ebUserAgent: effectiveUA };
   } finally {
+    _signupPage = null;
+    if (_signupCdp) {
+      try { _signupCdp.send("Page.stopScreencast").catch(() => {}); } catch {}
+      _signupCdp = null;
+    }
     try { await browser.close(); } catch {}
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
     log(`${logPfx} Temporary Chrome closed and data dir cleaned up`);
@@ -471,6 +480,13 @@ function wsWrite(ws: WebSocket | null, data: object) {
 }
 
 const sessions = new Map<number, Session>();
+
+// ── Signup Browser Live Stream ────────────────────────────────────────────────
+// The signup route registers the temporary Chrome page here so the frontend
+// can watch the embedded browser in real time via a dedicated WebSocket.
+let _signupPage: any | null = null;
+let _signupCdp:  any | null = null;
+let _signupWs:   WebSocket | null = null;
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
 // ── Graceful shutdown: save all open EB sessions before the process exits ────
@@ -3871,4 +3887,59 @@ export async function releaseEbCookieBakerPage(profileId: number): Promise<void>
   s.lastUrl = "";
   sendTabsUpdate(profileId);
   kickFrame(profileId).catch(() => {});
+}
+
+// ── Signup Browser Live Stream — exported API ─────────────────────────────────
+
+async function _startSignupScreencast(): Promise<void> {
+  if (!_signupPage || !_signupWs || _signupWs.readyState !== WebSocket.OPEN) return;
+  if (_signupCdp) {
+    try { await _signupCdp.send("Page.stopScreencast"); } catch {}
+    _signupCdp = null;
+  }
+  let cdp: any;
+  try {
+    cdp = await (_signupPage as any).createCDPSession();
+  } catch (e: any) {
+    log(`[signup-screencast] createCDPSession failed: ${e?.message}`);
+    return;
+  }
+  _signupCdp = cdp;
+  cdp.on("Page.screencastFrame", (params: any) => {
+    setTimeout(() => {
+      cdp.send("Page.screencastFrameAck", { sessionId: params.sessionId }).catch(() => {});
+    }, 120);
+    const ws = _signupWs;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    setImmediate(() => {
+      try { ws.send(Buffer.from(params.data, "base64")); } catch {}
+    });
+  });
+  try {
+    await cdp.send("Page.startScreencast", { format: "jpeg", quality: 65, maxWidth: 1280, maxHeight: 760, everyNthFrame: 1 });
+    try { _signupWs?.send(JSON.stringify({ type: "screencast_started" })); } catch {}
+  } catch (e: any) {
+    log(`[signup-screencast] startScreencast failed: ${e?.message}`);
+  }
+}
+
+export async function attachSignupWS(ws: WebSocket): Promise<void> {
+  if (_signupWs && _signupWs !== ws && _signupWs.readyState === WebSocket.OPEN) {
+    try { _signupWs.close(); } catch {}
+  }
+  _signupWs = ws;
+  if (_signupPage) {
+    await _startSignupScreencast();
+  } else {
+    try { ws.send(JSON.stringify({ type: "waiting", message: "Waiting for browser to start\u2026" })); } catch {}
+  }
+}
+
+export function detachSignupWS(ws: WebSocket): void {
+  if (_signupWs !== ws) return;
+  _signupWs = null;
+  if (_signupCdp) {
+    try { _signupCdp.send("Page.stopScreencast").catch(() => {}); } catch {}
+    _signupCdp = null;
+  }
 }

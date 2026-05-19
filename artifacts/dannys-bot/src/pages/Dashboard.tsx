@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.389",
+    date: "19 May 2026",
+    items: [
+      { category: "New", text: "The 'Watch EB' button on the Account Creator now shows a real live browser view — you can see exactly what Chrome is doing during cookie baking and signup, the same as every other embedded browser panel in the app." },
+      { category: "New", text: "YouTube and Google toggle cards now have item count (min–max) and delay (min–max seconds) inputs so you can control how many videos or search results are browsed and how long is spent on each." },
+      { category: "New", text: "Added a visit-order percentage randomiser — when Website List, YouTube, or Google are all enabled you can set the probability that each source is visited first, giving more realistic and varied browsing patterns." },
+      { category: "Improvement", text: "Account Creator color scheme changed from amber/orange to cyan throughout — buttons, borders, icons, and the verification code input all use a consistent cyan accent." },
+    ],
+  },
+  {
     version: "1.0.388",
     date: "19 May 2026",
     items: [
