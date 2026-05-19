@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.391",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Clear Cookies button in account settings now always shows — previously it was hidden when no session cookie was stored, making it impossible to find." },
+    ],
+  },
+  {
     version: "1.0.390",
     date: "19 May 2026",
     items: [

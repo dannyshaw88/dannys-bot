@@ -18,7 +18,7 @@ import {
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown, ChevronLeft, ChevronRight,
   Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
   UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
-  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie, PlusCircle
+  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie, PlusCircle, Trash2
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -194,6 +194,7 @@ export function ProfileDetailsPage() {
 
   const [cookieInput, setCookieInput] = useState("");
   const [cookieInjectStatus, setCookieInjectStatus] = useState<"idle" | "injecting" | "ok" | "error">("idle");
+  const [clearCookiesStatus, setClearCookiesStatus] = useState<"idle" | "clearing" | "ok" | "error">("idle");
 
   const handleInjectCookies = async () => {
     const raw = cookieInput.trim();
@@ -860,15 +861,35 @@ export function ProfileDetailsPage() {
                             const [k, v] = s.trim().split("=");
                             return k?.toLowerCase() === "sessionid" && (v?.length ?? 0) > 5;
                           });
-                          return hasSession ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 shrink-0">
-                              <Cookie className="w-3 h-3" />
-                              Session Cookie: <span className="font-bold">Passed</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 shrink-0">
-                              <Cookie className="w-3 h-3" />
-                              Session Cookie: <span className="font-bold">Not set</span>
+                          return (
+                            <span className="inline-flex items-center gap-2 shrink-0">
+                              {hasSession ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700">
+                                  <Cookie className="w-3 h-3" />
+                                  Session Cookie: <span className="font-bold">Passed</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
+                                  <Cookie className="w-3 h-3" />
+                                  Session Cookie: <span className="font-bold">Not set</span>
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                disabled={clearCookiesStatus === "clearing" || (!hasSession && clearCookiesStatus === "idle")}
+                                onClick={async () => {
+                                  setClearCookiesStatus("clearing");
+                                  try {
+                                    const res = await fetch(`/api/profiles/${profile.id}/clear-session-cookies`, { method: "POST" });
+                                    if (res.ok) { setClearCookiesStatus("ok"); setTimeout(() => setClearCookiesStatus("idle"), 2500); }
+                                    else setClearCookiesStatus("error");
+                                  } catch { setClearCookiesStatus("error"); }
+                                }}
+                                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 font-semibold border border-border rounded px-1.5 py-0.5 hover:border-destructive/50"
+                              >
+                                {clearCookiesStatus === "clearing" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                {clearCookiesStatus === "ok" ? "Cleared" : clearCookiesStatus === "clearing" ? "Clearing…" : "Clear Cookies"}
+                              </button>
                             </span>
                           );
                         })()}
