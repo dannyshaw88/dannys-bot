@@ -915,6 +915,50 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
   await page.evaluateOnNewDocument((mobile: boolean, meta: any) => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
 
+    // ── Per-account device profile ───────────────────────────────────────────
+    // Every value that could cluster across accounts (screen size, DPR, memory,
+    // cores, battery level, connection speed) is derived from a seeded PRNG so:
+    //  • Same account → same UA → same seed → identical values every session
+    //  • Different accounts → different seeds → distinct values, no clustering
+    //
+    // Seed = djb2(navigator.userAgent)
+    const _ua = navigator.userAgent;
+    let _s = 5381;
+    for (let i = 0; i < _ua.length; i++) { _s = (((_s << 5) + _s) ^ _ua.charCodeAt(i)) >>> 0; }
+    _s = _s || 1;
+    const _r  = () => { _s = Math.imul(1664525, _s) + 1013904223 >>> 0; return _s / 0x100000000; };
+    const _rI = (lo: number, hi: number) => lo + Math.round(_r() * (hi - lo));
+    const _rp = <T>(arr: readonly T[]) => arr[Math.floor(_r() * arr.length)];
+
+    // Pool of real Android device screen profiles: [cssW, cssH, dpr, memGB, cores]
+    // Values derived from physical specs (dpi / 160 = dpr; px / dpr = css pixels).
+    const _PROF = [
+      [360, 800,  3.0,   12, 12], // Tensor G3 — Pixel 9 Pro     (1080×2400 @ 480dpi)
+      [411, 914,  2.625,  8,  8], // Tensor G2 — Pixel 8a        (1080×2400 @ 420dpi)
+      [411, 891,  2.625,  8,  8], // Tensor G2 — Pixel 8         (1080×2340 @ 420dpi)
+      [360, 780,  3.0,    8,  8], // Exynos 2400 — Samsung S24   (1080×2340 @ 480dpi)
+      [360, 780,  3.0,    8,  8], // Exynos 2200 — Samsung S22   (1080×2340 @ 480dpi)
+      [393, 851,  2.75,  12,  8], // SD 8 Gen 2 — OnePlus 12     (1080×2340 @ 440dpi)
+      [412, 915,  2.625,  8,  8], // SD 8 Gen 1 — OnePlus 10 Pro (1080×2400 @ 420dpi)
+      [412, 900,  2.70,   8,  8], // SD 8 Gen 2 — Motorola Edge  (1080×2400 @ 432dpi)
+      [390, 844,  3.0,   12,  8], // Dimensity 9300 — Xiaomi 14  (1080×2340 @ 480dpi)
+      [393, 873,  2.75,   8,  8], // SD 8 Gen 1 — Sony Xperia 1V (1080×2400 @ 440dpi)
+      [393, 868,  2.75,   8,  8], // SD 8 Gen 2 — OPPO Find X6   (1080×2400 @ 440dpi)
+      [360, 760,  3.0,    6,  8], // Exynos 1380 — Samsung A54   (1080×2340 @ 480dpi)
+    ] as const;
+    const [_SW, _SH, _DPR, _MEM, _CORES] = _rp(_PROF);
+
+    // Battery — level and charging state vary per account
+    const _BLVL = Math.round((0.60 + _r() * 0.39) * 100) / 100; // 0.60 – 0.99
+    const _BCHG = _r() > 0.35;                                   // ~65% plugged in
+    const _BCTM = _BCHG ? _rI(0, 3600) : 0;                      // seconds until full
+    const _BDTM = _BCHG ? Infinity : _rI(1800, 28800);            // seconds until empty
+
+    // Connection — downlink, RTT and connection type vary per account
+    const _CTYPE = _rp(["wifi", "wifi", "wifi", "cellular"] as const); // 75% Wi-Fi
+    const _CDL   = Math.round(2 + _r() * 98); // 2 – 100 Mbps
+    const _CRTT  = _rI(10, 150);              // 10 – 150 ms
+
     // ── WebRTC IP-leak prevention (JS layer) ────────────────────────────────
     // Belt-and-suspenders on top of the --webrtc-ip-handling-policy Chrome flag.
     // Overriding RTCPeerConnection in JS ensures no page script can enumerate
@@ -980,20 +1024,21 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
     if (mobile) {
       // Mobile fingerprint — must match a real Android Chrome session.
       // screen.width/height are CSS (logical) pixels, not physical pixels.
-      Object.defineProperty(screen, "width",       { get: () => 412 });
-      Object.defineProperty(screen, "height",      { get: () => 915 });
-      Object.defineProperty(screen, "availWidth",  { get: () => 412 });
-      Object.defineProperty(screen, "availHeight", { get: () => 892 });
+      // All values are seeded per account via _PROF — no two accounts share a profile.
+      Object.defineProperty(screen, "width",       { get: () => _SW });
+      Object.defineProperty(screen, "height",      { get: () => _SH });
+      Object.defineProperty(screen, "availWidth",  { get: () => _SW });
+      Object.defineProperty(screen, "availHeight", { get: () => _SH - 30 }); // subtract nav bar
       Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
       Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
       // maxTouchPoints > 0 is required — 0 immediately exposes a non-touch device
       Object.defineProperty(navigator, "maxTouchPoints",      { get: () => 10 });
       // platform on Android Chrome is "Linux armv8l" — not "Linux x86_64"
       Object.defineProperty(navigator, "platform",            { get: () => "Linux armv8l" });
-      Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
-      Object.defineProperty(navigator, "deviceMemory",        { get: () => 4 });
-      // devicePixelRatio for a 420 dpi phone = 420/160 = 2.625
-      Object.defineProperty(window, "devicePixelRatio",       { get: () => 2.625 });
+      Object.defineProperty(navigator, "hardwareConcurrency", { get: () => _CORES });
+      Object.defineProperty(navigator, "deviceMemory",        { get: () => _MEM });
+      // Device pixel ratio — seeded from UA, matches the chosen device profile
+      Object.defineProperty(window, "devicePixelRatio",       { get: () => _DPR });
 
       // ── Screen / window orientation ───────────────────────────────────────
       // Mobile browsers always expose window.orientation (0 = portrait) and a
@@ -1022,10 +1067,10 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       if (!(navigator as any).connection) {
         const conn = {
           effectiveType: "4g",
-          downlink:      10,
-          rtt:           50,
+          downlink:      _CDL,
+          rtt:           _CRTT,
           saveData:      false,
-          type:          "wifi" as any,
+          type:          _CTYPE as any,
           onchange:      null as any,
           addEventListener:    () => {},
           removeEventListener: () => {},
@@ -1069,8 +1114,8 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       Object.defineProperty(screen, "colorDepth",  { get: () => 24 });
       Object.defineProperty(screen, "pixelDepth",  { get: () => 24 });
       Object.defineProperty(navigator, "maxTouchPoints",      { get: () => 0 });
-      Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
-      Object.defineProperty(navigator, "deviceMemory",        { get: () => 8 });
+      Object.defineProperty(navigator, "hardwareConcurrency", { get: () => _rp([4, 6, 8, 8, 8, 12, 16] as const) });
+      Object.defineProperty(navigator, "deviceMemory",        { get: () => _rp([8, 8, 16, 32] as const) });
     }
 
     // ── Battery API ──────────────────────────────────────────────────────────
@@ -1081,10 +1126,10 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
     // that the API exists and returns a valid BatteryManager shape.
     try {
       (navigator as any).getBattery = () => Promise.resolve({
-        charging:            true,
-        chargingTime:        0,
-        dischargingTime:     Infinity,
-        level:               0.88,
+        charging:            _BCHG,
+        chargingTime:        _BCTM,
+        dischargingTime:     _BDTM,
+        level:               _BLVL,
         onchargingchange:    null,
         onchargingtimechange: null,
         ondischargingtimechange: null,

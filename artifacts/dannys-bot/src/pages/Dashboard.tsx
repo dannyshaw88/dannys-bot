@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.404",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Battery level, charging state, connection speed, screen size, device pixel ratio, memory, and CPU cores are now unique per account — derived from the account's user agent so they are consistent across sessions but never identical between accounts." },
+      { category: "Fix", text: "Screen dimensions and device pixel ratio now pick from a pool of 12 real Android device profiles (Pixel, Samsung, OnePlus, Motorola, Xiaomi, Sony, OPPO) instead of the same 412×915 for every account." },
+      { category: "Fix", text: "Battery level ranges from 60–99%, charging state is ~65% plugged in, and connection speed ranges from 2–100 Mbps — all seeded per account for realistic variation." },
+    ],
+  },
+  {
     version: "1.0.403",
     date: "19 May 2026",
     items: [
