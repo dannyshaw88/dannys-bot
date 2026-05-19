@@ -191,6 +191,7 @@ const HARVEST_ARGS = [
   "--disable-client-side-phishing-detection",
   "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
   "--enforce-webrtc-ip-permission-check",
+  "--disable-blink-features=AutomationControlled",
 ];
 
 // ── EB signup cookie harvester ────────────────────────────────────────────────
@@ -819,6 +820,13 @@ const LAUNCH_ARGS = [
   // practice WebRTC gets no ICE candidates and reveals nothing).
   "--webrtc-ip-handling-policy=disable_non_proxied_udp",
   "--force-webrtc-ip-handling-policy",
+
+  // Tell Blink not to set navigator.webdriver = true in the first place.
+  // Without this flag Chrome's engine sets the property at a low level that
+  // our JS Object.defineProperty override cannot fully hide — fingerprint
+  // scripts using Object.getOwnPropertyDescriptor(navigator,'webdriver') can
+  // still detect the override pattern.  This flag eliminates the root cause.
+  "--disable-blink-features=AutomationControlled",
 ];
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
@@ -987,6 +995,47 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       // devicePixelRatio for a 420 dpi phone = 420/160 = 2.625
       Object.defineProperty(window, "devicePixelRatio",       { get: () => 2.625 });
 
+      // ── Screen / window orientation ───────────────────────────────────────
+      // Mobile browsers always expose window.orientation (0 = portrait) and a
+      // screen.orientation object.  Headless Chrome has neither — their absence
+      // is an immediate mobile-emulation-vs-real-device tell.
+      try { Object.defineProperty(window, "orientation", { get: () => 0, configurable: true }); } catch { /* frozen */ }
+      try {
+        const orientObj = {
+          type: "portrait-primary" as OrientationType,
+          angle: 0,
+          onchange: null as any,
+          lock: () => Promise.reject(new DOMException("Not supported", "NotSupportedError")),
+          unlock: () => {},
+          addEventListener:    () => {},
+          removeEventListener: () => {},
+          dispatchEvent:       () => true,
+        };
+        Object.defineProperty(screen, "orientation", { get: () => orientObj, configurable: true });
+      } catch { /* frozen */ }
+
+      // ── Network Information API (navigator.connection) ────────────────────
+      // Every real Android Chrome exposes this object.  Headless Chrome does not.
+      // Its absence is a reliable indicator that the device is not a real phone.
+      // We stub a plausible 4G/Wi-Fi profile; the values are not checked for
+      // precise accuracy — only the object's existence and rough shape matter.
+      if (!(navigator as any).connection) {
+        const conn = {
+          effectiveType: "4g",
+          downlink:      10,
+          rtt:           50,
+          saveData:      false,
+          type:          "wifi" as any,
+          onchange:      null as any,
+          addEventListener:    () => {},
+          removeEventListener: () => {},
+          dispatchEvent:       () => true,
+        };
+        try {
+          Object.defineProperty(navigator, "connection", { get: () => conn, configurable: true });
+        } catch { /* frozen */ }
+      }
+
       // Spoof navigator.userAgentData (JS-accessible User-Agent Client Hints API).
       // CDP setUserAgent with metadata fixes HTTP headers; this fixes JS queries.
       if (meta && "userAgentData" in navigator) {
@@ -1023,6 +1072,97 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
       Object.defineProperty(navigator, "deviceMemory",        { get: () => 8 });
     }
+
+    // ── Battery API ──────────────────────────────────────────────────────────
+    // Real phones have navigator.getBattery().  A headless server has no battery
+    // so Chrome either throws or returns undefined — a reliable bot tell.
+    // We return a stable "plugged in, full charge" reading that matches what many
+    // users see when they have their phone on a charger.  Instagram only checks
+    // that the API exists and returns a valid BatteryManager shape.
+    try {
+      (navigator as any).getBattery = () => Promise.resolve({
+        charging:            true,
+        chargingTime:        0,
+        dischargingTime:     Infinity,
+        level:               0.88,
+        onchargingchange:    null,
+        onchargingtimechange: null,
+        ondischargingtimechange: null,
+        onlevelchange:       null,
+        addEventListener:    () => {},
+        removeEventListener: () => {},
+        dispatchEvent:       () => true,
+      });
+    } catch { /* non-fatal */ }
+
+    // ── AudioContext fingerprint protection ───────────────────────────────────
+    // Audio fingerprinting works by routing an OscillatorNode through an
+    // AnalyserNode and reading back the frequency-domain float buffer.  The
+    // floating-point output of the audio DSP pipeline differs by hardware and
+    // OS audio stack — a server running Chrome produces a different signature
+    // from a real Android phone.
+    //
+    // We apply the same seeded-noise approach used for canvas: add a tiny
+    // deterministic offset (≤ 0.0001 per sample) that is unique and consistent
+    // per account (seeded by UA) but invisible to real audio analysis.
+    (() => {
+      const ua = navigator.userAgent;
+      let sa = 0x811c9dc5;
+      for (let i = 0; i < ua.length; i++) { sa ^= ua.charCodeAt(i); sa = Math.imul(sa, 0x01000193) >>> 0; }
+      sa = sa || 1;
+      const arnd = () => { sa = Math.imul(1664525, sa) + 1013904223 >>> 0; return (sa / 0x100000000) * 0.0001 - 0.00005; };
+
+      try {
+        const origGetFloat = AnalyserNode.prototype.getFloatFrequencyData;
+        AnalyserNode.prototype.getFloatFrequencyData = function (array: Float32Array) {
+          origGetFloat.call(this, array);
+          for (let i = 0; i < array.length; i++) array[i] += arnd();
+        };
+      } catch { /* non-fatal */ }
+
+      try {
+        const origGetByte = AnalyserNode.prototype.getByteFrequencyData;
+        AnalyserNode.prototype.getByteFrequencyData = function (array: Uint8Array) {
+          origGetByte.call(this, array);
+          for (let i = 0; i < array.length; i++) {
+            const v = array[i] + (arnd() > 0 ? 1 : 0);
+            array[i] = Math.max(0, Math.min(255, v));
+          }
+        };
+      } catch { /* non-fatal */ }
+
+      try {
+        const origGetTime = AnalyserNode.prototype.getFloatTimeDomainData;
+        AnalyserNode.prototype.getFloatTimeDomainData = function (array: Float32Array) {
+          origGetTime.call(this, array);
+          for (let i = 0; i < array.length; i++) {
+            array[i] = Math.max(-1, Math.min(1, array[i] + arnd()));
+          }
+        };
+      } catch { /* non-fatal */ }
+    })();
+
+    // ── mediaDevices.enumerateDevices ────────────────────────────────────────
+    // Headless Chrome returns an empty device list (0 entries).
+    // A real Android phone returns at least 3 entries (mic, speaker, camera)
+    // even when no media permission has been granted — the entries just have
+    // empty labels and deviceIds.  0 devices is a strong headless bot signal.
+    try {
+      if (navigator.mediaDevices?.enumerateDevices) {
+        const origEnum = navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
+        navigator.mediaDevices.enumerateDevices = async () => {
+          const real = await origEnum();
+          if (real.length === 0) {
+            return [
+              { deviceId: "", groupId: "", kind: "audioinput"  as MediaDeviceKind, label: "", toJSON: () => ({}) },
+              { deviceId: "", groupId: "", kind: "audiooutput" as MediaDeviceKind, label: "", toJSON: () => ({}) },
+              { deviceId: "", groupId: "", kind: "videoinput"  as MediaDeviceKind, label: "", toJSON: () => ({}) },
+            ] as MediaDeviceInfo[];
+          }
+          return real;
+        };
+      }
+    } catch { /* non-fatal */ }
 
     // ── Canvas fingerprint protection ────────────────────────────────────────
     // Server-side Chromium renders canvas via SwiftShader (software renderer).

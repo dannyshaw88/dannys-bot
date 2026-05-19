@@ -55,6 +55,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.403",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Added --disable-blink-features=AutomationControlled to Chrome launch flags — without this, detection scripts could identify the browser as automated even with the navigator.webdriver override in place." },
+      { category: "Fix", text: "Screen orientation (portrait) and window.orientation are now spoofed for mobile accounts — their absence was a clear indicator the browser was not a real phone." },
+      { category: "Fix", text: "navigator.connection (Network Information API) is now present for mobile accounts — every real Android phone has this; headless Chrome does not." },
+      { category: "Fix", text: "navigator.getBattery() now returns a valid battery reading instead of throwing — server Chrome has no battery, which was detectable." },
+      { category: "Fix", text: "AudioContext fingerprinting is now protected — audio DSP output (AnalyserNode frequency data) has deterministic per-account noise applied, the same way canvas reads are protected." },
+      { category: "Fix", text: "navigator.mediaDevices.enumerateDevices() now returns 3 entries (mic, speaker, camera) instead of 0 — real phones always report these even without permission." },
+    ],
+  },
+  {
     version: "1.0.402",
     date: "19 May 2026",
     items: [
