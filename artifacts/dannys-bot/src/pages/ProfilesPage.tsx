@@ -651,27 +651,15 @@ export function ProfilesPage() {
     if (!ids.length) return;
     setVerifyingAll(true);
     try {
-      // Fetch the delay settings so the server uses the values from the Settings page
-      let delayMin = 5;
-      let delayMax = 15;
-      try {
-        const settingsRes = await fetch("/api/settings", { credentials: "include" });
-        if (settingsRes.ok) {
-          const s = await settingsRes.json();
-          if (typeof s.verifyAllDelayMin === "number") delayMin = s.verifyAllDelayMin;
-          if (typeof s.verifyAllDelayMax === "number") delayMax = s.verifyAllDelayMax;
-        }
-      } catch { /* use defaults */ }
-
       const res = await fetch("/api/profiles/verify-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ profileIds: ids, delayMin, delayMax }),
+        body: JSON.stringify({ profileIds: ids }),
       });
       const data = await res.json();
       if (data.ok) {
-        toast({ title: `Verifying ${ids.length} profile${ids.length !== 1 ? "s" : ""}`, description: `Running in the background with ${delayMin}–${delayMax}s delays between each.` });
+        toast({ title: `Verifying ${ids.length} account${ids.length !== 1 ? "s" : ""}`, description: `All ${ids.length} running simultaneously in the background.` });
       } else {
         toast({ title: "Error", description: data.error ?? "Failed to start verification.", variant: "destructive" });
       }

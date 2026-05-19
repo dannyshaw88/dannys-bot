@@ -1895,129 +1895,124 @@ export async function registerInstagramRoutes(
       return res.json({ ok: false, error: "No accounts have a proxy assigned. Assign proxies before verifying." });
     }
 
-    // Run verification in background so the response is immediate
+    // Run verification in background so the response is immediate.
+    // All eligible accounts are verified in parallel — no delays, no queuing.
     res.json({ ok: true, total: eligible.length, skippedNoProxy });
 
-    (async () => {
-      for (let i = 0; i < eligible.length; i++) {
-        const profile = eligible[i];
+    const verifyOne = async (profile: typeof eligible[0]) => {
+      // Skip accounts already being verified by a concurrent single-verify call
+      if (verifyInFlight.has(profile.id)) return;
+      verifyInFlight.add(profile.id);
 
-        // Skip accounts already being verified by a concurrent single-verify call
-        if (verifyInFlight.has(profile.id)) continue;
-        verifyInFlight.add(profile.id);
+      try {
+        await storage.updateProfile(profile.id, { accountStatus: "verifying" });
 
+        // ── EB-first verify (matches Jarvee: web login → grab cookies → hand to API) ──
+        let effectiveP = { ...profile };
+        if (profile.proxyId) {
+          const linked = allProxies.find(px => px.id === profile.proxyId);
+          if (linked) {
+            effectiveP = {
+              ...effectiveP,
+              proxyHost: linked.host,
+              proxyPort: linked.port,
+              proxyUsername: linked.username ?? "",
+              proxyPassword: linked.password ?? "",
+            };
+          }
+        }
+        const bulkProxyConfig: ProxyConfig | undefined = effectiveP.proxyHost ? {
+          host: effectiveP.proxyHost,
+          port: effectiveP.proxyPort!,
+          username: effectiveP.proxyUsername ?? undefined,
+          password: effectiveP.proxyPassword ?? undefined,
+        } : undefined;
+        // ── UA BLOCK — per USER-AGENT RULE ────────────────────────────────────
+        if (!effectiveP.userAgentEmbedded) {
+          bulkResults.push({ id: profile.id, username: profile.username, status: "error", message: "No EB User-Agent configured — skipped to avoid fingerprint leak." });
+          return;
+        }
+        const bulkEbUA = effectiveP.userAgentEmbedded as string;
+
+        // Step 1: Launch EB
+        await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);
+
+        // Step 2: Web login
+        let bulkLoginResult: { ok: boolean; message: string };
         try {
-          await storage.updateProfile(profile.id, { accountStatus: "verifying" });
+          bulkLoginResult = await browserAutoLogin(
+            profile.id,
+            profile.username,
+            profile.password!,
+            profile.twoFASecretKey || "",
+          );
+        } catch (loginErr: any) {
+          bulkLoginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+        }
 
-          // ── EB-first verify (matches Jarvee: web login → grab cookies → hand to API) ──
-          let effectiveP = { ...profile };
-          if (profile.proxyId) {
-            const linked = allProxies.find(px => px.id === profile.proxyId);
-            if (linked) {
-              effectiveP = {
-                ...effectiveP,
-                proxyHost: linked.host,
-                proxyPort: linked.port,
-                proxyUsername: linked.username ?? "",
-                proxyPassword: linked.password ?? "",
-              };
-            }
-          }
-          const bulkProxyConfig: ProxyConfig | undefined = effectiveP.proxyHost ? {
-            host: effectiveP.proxyHost,
-            port: effectiveP.proxyPort!,
-            username: effectiveP.proxyUsername ?? undefined,
-            password: effectiveP.proxyPassword ?? undefined,
-          } : undefined;
-          // ── UA BLOCK — per USER-AGENT RULE ────────────────────────────────────
-          if (!effectiveP.userAgentEmbedded) {
-            bulkResults.push({ id: profile.id, username: profile.username, status: "error", message: "No EB User-Agent configured — skipped to avoid fingerprint leak." });
-            continue;
-          }
-          const bulkEbUA = effectiveP.userAgentEmbedded as string;
-
-          // Step 1: Launch EB
-          await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);
-
-          // Step 2: Web login
-          let bulkLoginResult: { ok: boolean; message: string };
-          try {
-            bulkLoginResult = await browserAutoLogin(
-              profile.id,
-              profile.username,
-              profile.password!,
-              profile.twoFASecretKey || "",
-            );
-          } catch (loginErr: any) {
-            bulkLoginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
-          }
-
-          // Step 3: Extract cookies and build result
-          let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
-          if (bulkLoginResult.ok) {
-            const rawCookies = await getSessionPageCookies(profile.id);
-            const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
-            const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
-            const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;
-            const mid       = rawCookies.find(c => c.name === "mid")?.value;
-            if (!sessionid) {
-              result = {
-                ok: false,
-                accountStatus: "pending",
-                message: `@${profile.username} — browser login appeared to succeed but no sessionid cookie was found.`,
-              };
-            } else {
-              const cookieParts = [`sessionid=${sessionid}`];
-              if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
-              if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
-              if (mid)       cookieParts.push(`mid=${mid}`);
-              const freshCookies = cookieParts.join("; ");
-              await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
-              const profileWithCookies = { ...effectiveP, igApiCookies: freshCookies } as typeof effectiveP;
-              const apiResult = await verifyInstagramCredentials(profileWithCookies);
-              result = { ...apiResult, igApiCookies: freshCookies };
-            }
+        // Step 3: Extract cookies and build result
+        let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
+        if (bulkLoginResult.ok) {
+          const rawCookies = await getSessionPageCookies(profile.id);
+          const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
+          const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
+          const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;
+          const mid       = rawCookies.find(c => c.name === "mid")?.value;
+          if (!sessionid) {
+            result = {
+              ok: false,
+              accountStatus: "pending",
+              message: `@${profile.username} — browser login appeared to succeed but no sessionid cookie was found.`,
+            };
           } else {
-            const msg = bulkLoginResult.message ?? "";
-            let accountStatus = "locked";
-            if (/2fa|two.factor|two_factor/i.test(msg))   accountStatus = "2fa_verification";
-            else if (/challenge|checkpoint/i.test(msg))    accountStatus = "captcha";
-            else if (/disabled/i.test(msg))                accountStatus = "account_disabled";
-            else if (/suspended/i.test(msg))               accountStatus = "suspended";
-            result = { ok: false, accountStatus, message: `@${profile.username} — ${msg}` };
+            const cookieParts = [`sessionid=${sessionid}`];
+            if (csrftoken) cookieParts.push(`csrftoken=${csrftoken}`);
+            if (dsUserId)  cookieParts.push(`ds_user_id=${dsUserId}`);
+            if (mid)       cookieParts.push(`mid=${mid}`);
+            const freshCookies = cookieParts.join("; ");
+            await storage.updateProfile(profile.id, { igApiCookies: freshCookies });
+            const profileWithCookies = { ...effectiveP, igApiCookies: freshCookies } as typeof effectiveP;
+            const apiResult = await verifyInstagramCredentials(profileWithCookies);
+            result = { ...apiResult, igApiCookies: freshCookies };
           }
+        } else {
+          const msg = bulkLoginResult.message ?? "";
+          let accountStatus = "locked";
+          if (/2fa|two.factor|two_factor/i.test(msg))   accountStatus = "2fa_verification";
+          else if (/challenge|checkpoint/i.test(msg))    accountStatus = "captcha";
+          else if (/disabled/i.test(msg))                accountStatus = "account_disabled";
+          else if (/suspended/i.test(msg))               accountStatus = "suspended";
+          result = { ok: false, accountStatus, message: `@${profile.username} — ${msg}` };
+        }
 
-          await storage.updateProfile(profile.id, {
-            accountStatus: result.accountStatus,
-            ...(result.ok ? { credentialsDirty: false } : {}),
-            ...(result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
-          });
-          if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
-            setCheckpointUrl(profile.id, result.checkpointUrl);
-          }
-          await storage.createSessionAction({
-            profileId: profile.id,
-            toolId: 0,
-            action: result.ok ? "verified" : "verification_failed",
-            targetUsername: profile.username,
-            sourceValue: "",
-            sourceType: "verify",
-            result: result.accountStatus ?? (result.ok ? "valid" : "failed"),
-            detail: result.message ?? "",
-            timestamp: new Date().toISOString(),
-          });
-        } catch {
-          // Unexpected error — reset to pending so the account isn't stuck in "verifying"
-          await storage.updateProfile(profile.id, { accountStatus: "pending" });
-        } finally {
-          verifyInFlight.delete(profile.id);
+        await storage.updateProfile(profile.id, {
+          accountStatus: result.accountStatus,
+          ...(result.ok ? { credentialsDirty: false } : {}),
+          ...(result.igApiCookies ? { igApiCookies: result.igApiCookies } : {}),
+        });
+        if (!result.ok && result.accountStatus === "captcha" && result.checkpointUrl) {
+          setCheckpointUrl(profile.id, result.checkpointUrl);
         }
-        if (i < targets.length - 1) {
-          const ms = (Math.random() * (delayMax - delayMin) + delayMin) * 1000;
-          await new Promise(r => setTimeout(r, ms));
-        }
+        await storage.createSessionAction({
+          profileId: profile.id,
+          toolId: 0,
+          action: result.ok ? "verified" : "verification_failed",
+          targetUsername: profile.username,
+          sourceValue: "",
+          sourceType: "verify",
+          result: result.accountStatus ?? (result.ok ? "valid" : "failed"),
+          detail: result.message ?? "",
+          timestamp: new Date().toISOString(),
+        });
+      } catch {
+        // Unexpected error — reset to pending so the account isn't stuck in "verifying"
+        await storage.updateProfile(profile.id, { accountStatus: "pending" });
+      } finally {
+        verifyInFlight.delete(profile.id);
       }
-    })().catch(() => {});
+    };
+
+    Promise.allSettled(eligible.map(verifyOne)).catch(() => {});
   });
 
   // ── Fix Captcha via 2captcha ──────────────────────────────────────────────

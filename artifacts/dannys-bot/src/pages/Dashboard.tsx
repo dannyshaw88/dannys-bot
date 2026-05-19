@@ -86,6 +86,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.412",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Verify All now runs all selected accounts simultaneously with no delays — previously accounts were verified one at a time with 5–15 second gaps, so 50 accounts could take up to 12 minutes." },
+      { category: "Fix", text: "Removed the verify delay settings entirely — there is no reason to artificially stagger logins since every account uses its own proxy and its own Chrome browser session." },
+    ],
+  },
+  {
     version: "1.0.411",
     date: "19 May 2026",
     items: [
