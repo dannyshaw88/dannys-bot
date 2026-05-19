@@ -35,6 +35,7 @@ import {
   clearSession,
   closeSession,
   wipeEbSession,
+  clearEbSessionCookies,
   browserAutoLogin,
   sendLoginDone,
   setCheckpointUrl,
@@ -430,6 +431,8 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
 
+    // 1. Strip session cookies from igApiCookies in DB — keep only device tokens
+    //    (mid, ig_did) so the fingerprint stays intact.
     const existing: string = (profile as any).igApiCookies ?? "";
     const deviceOnly = existing
       .split(";")
@@ -445,12 +448,17 @@ export async function registerInstagramRoutes(
       accountStatus: "logged_out",
     } as any);
 
-    // Also delete the JSON cookie file so Chrome doesn't reload the dead session
-    // on the next EB open. Device tokens (mid, ig_did) stored in igDeviceState
-    // and igApiCookies are untouched — only the file used to seed Chrome is removed.
+    // 2. Delete the JSON cookie file so Chrome doesn't seed from it on next open.
     deleteSavedCookies(profileId);
 
-    console.log(`[profiles] @${profile.username}: session cookies cleared (device tokens preserved: ${deviceOnly ? "yes" : "none"}, cookie JSON file deleted)`);
+    // 3. Close the live EB session (if open) without saving cookies, then scrub
+    //    session cookies directly from Chrome's own SQLite cookie database so
+    //    they aren't restored when the EB reopens. Device tokens are preserved.
+    await clearEbSessionCookies(profileId).catch(e =>
+      console.warn(`[profiles] clearEbSessionCookies failed for ${profileId}: ${e?.message}`),
+    );
+
+    console.log(`[profiles] @${profile.username}: session cookies cleared — DB, JSON file, live session, and Chrome cookie DB all scrubbed (device tokens preserved)`);
     res.json({ ok: true });
   });
 

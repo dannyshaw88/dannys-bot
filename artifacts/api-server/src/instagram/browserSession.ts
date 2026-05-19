@@ -2500,6 +2500,57 @@ export async function wipeEbSession(profileId: number): Promise<void> {
   log(`EB session wiped for profile ${profileId}`, "browser");
 }
 
+/**
+ * Clears only the session cookies for a profile — sessionid, csrftoken,
+ * ds_user_id and related auth tokens — from BOTH the live EB session and
+ * Chrome's own persistent SQLite cookie database.  Device tokens (mid,
+ * ig_did, ig_nrcb) are preserved so the fingerprint stays intact.
+ *
+ * Used by the "Clear Cookies" button in account settings.
+ */
+export async function clearEbSessionCookies(profileId: number): Promise<void> {
+  // 1. Close the running EB session without saving cookies back to disk.
+  //    This flushes any in-memory session state so the account no longer
+  //    appears logged-in in the embedded browser.
+  await closeSession(profileId, { skipCookieSave: true });
+
+  // 2. Scrub session cookies from Chrome's own persistent SQLite cookie store
+  //    so they are not restored when the EB reopens. We only delete session /
+  //    auth cookies — device tokens (mid, ig_did, ig_nrcb) are left untouched.
+  const SESSION_COOKIE_NAMES = [
+    "sessionid", "csrftoken", "ds_user_id", "rur", "igd_id",
+    "shbid", "shbts", "mid_v2",
+  ];
+  const chromeDbPath = path.join(
+    COOKIES_DIR, `userdata-${profileId}`, "Default", "Cookies",
+  );
+  if (fs.existsSync(chromeDbPath)) {
+    try {
+      // Dynamic require so the ESM-compiled bundle can still load it.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Database = require("better-sqlite3") as typeof import("better-sqlite3");
+      const db = new (Database as any)(chromeDbPath) as import("better-sqlite3").Database;
+      const placeholders = SESSION_COOKIE_NAMES.map(() => "?").join(",");
+      const deleted = db
+        .prepare(
+          `DELETE FROM cookies WHERE host_key LIKE '%instagram.com' AND name IN (${placeholders})`,
+        )
+        .run(...SESSION_COOKIE_NAMES);
+      db.close();
+      log(
+        `Cleared ${(deleted as any).changes} session cookie(s) from Chrome DB for profile ${profileId}`,
+        "browser",
+      );
+    } catch (e: any) {
+      console.warn(
+        `[browserSession] Could not scrub Chrome cookie DB for profile ${profileId}: ${e?.message}`,
+      );
+    }
+  }
+
+  log(`Session cookies cleared for profile ${profileId} (device tokens preserved)`, "browser");
+}
+
 // ── Auto-login via Puppeteer ─────────────────────────────────────────────────
 
 // ── Cookie consent auto-dismissal ────────────────────────────────────────────

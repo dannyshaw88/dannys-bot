@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.393",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Clear Cookies in account settings now fully works — it closes the live embedded browser session, wipes session cookies from Chrome's own internal database, clears the DB record, and deletes the saved cookie file, so the account no longer shows as logged in when you reopen the EB." },
+      { category: "Fix", text: "Device tokens (mid, ig_did, ig_nrcb) are preserved during Clear Cookies so Instagram does not fire an unrecognised-device alert on next login." },
+    ],
+  },
+  {
     version: "1.0.392",
     date: "19 May 2026",
     items: [
