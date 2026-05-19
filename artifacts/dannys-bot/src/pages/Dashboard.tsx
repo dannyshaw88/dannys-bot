@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.385",
+    date: "18 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed the whole app freezing or becoming unresponsive when 3 or more embedded browsers are open at the same time. Frame delivery is now deferred so it cannot block the app's request handling, simultaneous frame bursts are absorbed rather than piled up, and the stream resolution and quality automatically scale down as more browsers are opened to reduce the processing load." },
+    ],
+  },
+  {
     version: "1.0.384",
     date: "18 May 2026",
     items: [

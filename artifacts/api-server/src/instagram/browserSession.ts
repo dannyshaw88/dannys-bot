@@ -354,6 +354,11 @@ interface Session {
   activePage: number;
   ws: WebSocket | null; // WebSocket client — null when no client is connected
   frameLoop: ReturnType<typeof setInterval> | null; // kept for backward compat — always null now
+  // Set to true while a setImmediate frame-decode is pending; the next frame
+  // from Chrome is dropped (not decoded or sent) until the current one clears.
+  // Prevents pile-up on the Node.js event loop when Chrome delivers frames
+  // faster than the client WS + base64 decode can absorb them.
+  framePending: boolean;
   // Dedicated CDP session used exclusively for Page.startScreencast so that
   // screencast frames are pushed on a separate CDP message queue from the one
   // used for user input (clicks, typing, navigate). Chrome serialises commands
@@ -1136,7 +1141,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
+  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, framePending: false, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -1642,8 +1647,13 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
   }
   session.screencastCdp = cdp;
 
-  // Adaptive JPEG quality: reduce as session count grows to save bandwidth.
-  const quality  = nSessions <= 2 ? 65 : nSessions <= 5 ? 55 : 45;
+  // Adaptive JPEG quality + resolution: reduce as session count grows.
+  // Smaller JPEGs = shorter Puppeteer JSON.parse on the CDP socket (Chrome
+  // sends screencast frames as base64 inside a JSON message) = less event-loop
+  // saturation when multiple EBs are streaming simultaneously.
+  const quality  = nSessions <= 1 ? 65 : nSessions <= 2 ? 55 : 45;
+  const maxWidth = nSessions <= 1 ? 1280 : nSessions <= 2 ? 960 : 720;
+  const maxHeight = nSessions <= 1 ? 760 : nSessions <= 2 ? 570 : 430;
   // everyNthFrame MUST stay at 1.
   // Chrome uses software compositing (--disable-gpu). In software mode Chrome
   // only generates compositor frames when page content changes — a static page
@@ -1667,23 +1677,24 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
   cdp.on("Page.screencastFrame", (params: any) => {
     // ── Back-pressure rate control ─────────────────────────────────────────
     // Chrome will not send the next frame until it receives the ACK for this one.
-    // Delaying the ACK is therefore the only way to cap Chrome's compositor frame
-    // rate at the source — dropping frames after an immediate ACK still lets Chrome
-    // generate (and Node.js dispatch and route) every frame at full compositor speed,
-    // keeping the CDP event flood alive and the event loop saturated.
+    // Delaying the ACK caps Chrome's compositor frame rate at the source.
     //
-    // By delaying the ACK we also reduce:
-    //   • Chrome compositor CPU (fewer frames to render)
-    //   • Puppeteer internal CDP routing load (fewer "Page.screencastFrame" events)
-    //   • Node.js event loop saturation from Puppeteer's synchronous message handlers
+    // ACK delay is computed from the number of sessions that currently have
+    // BOTH a live WS connection AND an active screencast (not just any session)
+    // so background sessions without a viewer don't artificially inflate the delay.
+    // Jitter (0–80 ms random) desynchronises sessions so their frames don't arrive
+    // simultaneously and create a burst that saturates the Node.js event loop.
     //
-    // Target: ≤20 total screencast frames/sec across all open sessions.
-    //   1 EB  → 50 ms delay  (20 fps)
-    //   2 EBs → 100 ms delay (10 fps each, 20 fps total)
-    //   3 EBs → 150 ms delay (6.7 fps each, 20 fps total)
-    //   4 EBs → 200 ms delay (5 fps each,  20 fps total)
-    //   5 EBs → 250 ms delay (4 fps each,  20 fps total)
-    const ackDelayMs = Math.max(50, sessions.size * 50);
+    // Target: ≤10 total screencast frames/sec across all active sessions.
+    //   1 EB  → 100 ms + jitter (~10 fps)
+    //   2 EBs → 200 ms + jitter (~5 fps each, ~10 fps total)
+    //   3 EBs → 300 ms + jitter (~3.3 fps each, ~10 fps total)
+    //   4 EBs → 400 ms + jitter (~2.5 fps each, ~10 fps total)
+    const nActive = [...sessions.values()].filter(
+      sv => sv.screencastCdp !== null && sv.ws?.readyState === WebSocket.OPEN,
+    ).length;
+    const jitter = Math.floor(Math.random() * 80);
+    const ackDelayMs = Math.max(100, nActive * 100) + jitter;
     const capturedCdp = cdp;
     const capturedSessionId = params.sessionId;
     setTimeout(() => {
@@ -1698,29 +1709,46 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
 
     if (!s?.ws || s.ws.readyState !== WebSocket.OPEN) return;
 
-    // Decode base64 JPEG once on the server and send as a raw binary WebSocket
-    // frame instead of JSON+base64.  This eliminates:
-    //   • JSON.stringify on the server side (~200 KB string allocation per frame)
-    //   • JSON.parse on the client side (synchronous, blocks renderer main thread)
-    //   • base64 decode in the browser (synchronous, ~33% wasted bytes)
-    // The client sets ws.binaryType = "blob" and handles binary frames with
-    // createImageBitmap() (off-thread JPEG decode) + requestAnimationFrame.
-    const jpegBuf = Buffer.from(params.data, "base64");
+    // ── Drop frame if one is already pending decode ────────────────────────
+    // setImmediate defers the decode+send below to the next event loop iteration.
+    // If another frame arrives before that tick fires (e.g. under burst load),
+    // skip it entirely. This prevents a pile-up of base64 decodes on the event
+    // loop that would block Express from processing API requests.
+    if (s.framePending) return;
+    s.framePending = true;
 
-    if (!firstFrameLogged) {
-      firstFrameLogged = true;
-      log(`[screencast:${profileId}] first frame received (${jpegBuf.length} bytes)`, "browser");
-    }
+    // ── Defer decode + send to next event loop tick ────────────────────────
+    // Buffer.from(base64) and ws.send() are synchronous and can block the event
+    // loop for ~1–3 ms per frame. Deferring via setImmediate lets Express (and
+    // any other pending IO callbacks) run between frames from different sessions,
+    // preventing the "whole app freezes" symptom when 3+ EBs are streaming.
+    setImmediate(() => {
+      const sNow = sessions.get(profileId);
+      if (!sNow) { s.framePending = false; return; }
+      sNow.framePending = false;
 
-    s.ws.send(jpegBuf);
+      if (!sNow.ws || sNow.ws.readyState !== WebSocket.OPEN) return;
 
-    // URL changes are still sent as a small JSON text frame (rare, cheap).
-    let currentUrl = s.lastUrl;
-    try { currentUrl = s.page.url(); } catch {}
-    if (currentUrl && currentUrl !== "about:blank" && currentUrl !== s.lastUrl) {
-      s.lastUrl = currentUrl;
-      wsWrite(s.ws, { type: "urlChange", url: currentUrl });
-    }
+      // Decode base64 JPEG once on the server and send as a raw binary WebSocket
+      // frame. The client uses binaryType="blob" + createImageBitmap() for
+      // off-thread JPEG decode + requestAnimationFrame for compositing.
+      const jpegBuf = Buffer.from(params.data, "base64");
+
+      if (!firstFrameLogged) {
+        firstFrameLogged = true;
+        log(`[screencast:${profileId}] first frame received (${jpegBuf.length} bytes)`, "browser");
+      }
+
+      sNow.ws.send(jpegBuf);
+
+      // URL changes are still sent as a small JSON text frame (rare, cheap).
+      let currentUrl = sNow.lastUrl;
+      try { currentUrl = sNow.page.url(); } catch {}
+      if (currentUrl && currentUrl !== "about:blank" && currentUrl !== sNow.lastUrl) {
+        sNow.lastUrl = currentUrl;
+        wsWrite(sNow.ws, { type: "urlChange", url: currentUrl });
+      }
+    });
   });
 
   // Serialize the Page.startScreencast CDP call through a global queue.
@@ -1757,8 +1785,8 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
         cdp.send("Page.startScreencast", {
           format: "jpeg",
           quality,
-          maxWidth: 1280,
-          maxHeight: 760,
+          maxWidth,
+          maxHeight,
           everyNthFrame: nthFrame,
         }),
         new Promise<never>((_, reject) =>
