@@ -3628,9 +3628,15 @@ class AutomationEngine {
       if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
     }
 
-    const ua =
-      profile.userAgentEmbedded ??
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+    // ── UA-FINGERPRINT PREVENTION ───────────────────────────────────────────
+    // The cookie baker must use the account's assigned EB UA — falling back to
+    // a generic Windows Chrome UA would expose a mismatched fingerprint to every
+    // site visited.  If no UA is configured the baker must not run.
+    if (!profile.userAgentEmbedded) {
+      console.log(`[cookie-baker] @${profile.username}: no EB user-agent configured — skipping cookie bake (assign a user agent to this account first)`);
+      return { visited: [], skipped: true, reason: "no_ua" };
+    }
+    const ua = profile.userAgentEmbedded;
 
     let bakePage: any | null = null;
     let headlessBrowser: any | null = null;

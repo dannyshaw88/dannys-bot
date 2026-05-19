@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.397",
+    date: "19 May 2026",
+    items: [
+      { category: "Security", text: "Cookie harvesting for account creation is now blocked if no user-agent is assigned — Chrome will not open with a generic Windows UA that would mismatch the account's device fingerprint on Instagram's first contact." },
+      { category: "Security", text: "The cookie baker (sites visited before signup) is also blocked if no user-agent is assigned — all site visits now use the account's own assigned browser UA with no fallback." },
+      { category: "Security", text: "6 Instagram API calls (profile lookups, DMs, follows, image uploads, thread lookups) now use the account's assigned mobile user-agent instead of a hardcoded OPPO device string shared across all accounts." },
+    ],
+  },
+  {
     version: "1.0.396",
     date: "19 May 2026",
     items: [

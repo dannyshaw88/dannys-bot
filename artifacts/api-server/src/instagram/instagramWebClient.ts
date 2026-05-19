@@ -383,6 +383,22 @@ export class InstagramWebClient {
     this.profileId = profileId;
   }
 
+  // ── Per-account mobile UA resolver ──────────────────────────────────────
+  // Centralises the "full Instagram mobile UA" build logic so every method
+  // that sends a User-Agent header uses the same account-specific value.
+  // Priority: full UA string → device-string-only → MOBILE_UA constant.
+  private get _fullMobileUA(): string {
+    if (this.userAgentApi?.startsWith("Instagram ")) return this.userAgentApi;
+    let deviceStr: string | undefined;
+    if (this.igDeviceState) {
+      try { deviceStr = JSON.parse(this.igDeviceState).deviceString; } catch { /* ignore */ }
+    }
+    deviceStr = deviceStr ?? this.userAgentApi;
+    return deviceStr
+      ? `Instagram ${MOBILE_VERSION} Android (${deviceStr}; ${MOBILE_VERSION_CODE})`
+      : MOBILE_UA;
+  }
+
   setApiLimits(limits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number }) {
     this.throttleRequestsMin = Math.max(1, limits.requestsMin);
     this.throttleRequestsMax = Math.max(1, limits.requestsMax);
@@ -1089,7 +1105,7 @@ export class InstagramWebClient {
       method: "GET",
       headers: {
         Host: "i.instagram.com",
-        "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+        "User-Agent": this._fullMobileUA,
         Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "X-IG-App-ID": APP_ID,
@@ -2403,7 +2419,7 @@ export class InstagramWebClient {
           method: "GET",
           headers: {
             Host: "i.instagram.com",
-            "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+            "User-Agent": this._fullMobileUA,
             Accept: "*/*",
             "Accept-Language": "en-US,en;q=0.9",
             "X-IG-App-ID": APP_ID,
@@ -2435,7 +2451,7 @@ export class InstagramWebClient {
         method: "GET",
         headers: {
           Host: "i.instagram.com",
-          "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+          "User-Agent": this._fullMobileUA,
           Accept: "*/*",
           "Accept-Language": "en-US,en;q=0.9",
           "X-IG-App-ID": APP_ID,
@@ -2645,7 +2661,7 @@ export class InstagramWebClient {
       method: "POST",
       headers: {
         Host: "i.instagram.com",
-        "User-Agent": MOBILE_UA,
+        "User-Agent": this._fullMobileUA,
         Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -2713,7 +2729,7 @@ export class InstagramWebClient {
       method: "POST",
       headers: {
         Host: "i.instagram.com",
-        "User-Agent": "Instagram 317.0.0.24.109 Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; 558044468)",
+        "User-Agent": this._fullMobileUA,
         Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Content-Type": "application/x-www-form-urlencoded",
@@ -2979,7 +2995,7 @@ export class InstagramWebClient {
     const body = Buffer.concat(chunks);
 
     const headers: Record<string, string> = {
-      "User-Agent": MOBILE_UA,
+      "User-Agent": this._fullMobileUA,
       Accept: "*/*",
       "Accept-Language": "en-US,en;q=0.9",
       "Content-Type": `multipart/form-data; boundary=${boundary}`,

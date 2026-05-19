@@ -287,8 +287,17 @@ export async function harvestSignupCookiesFromEB(opts?: {
     return null;
   }
 
-  const FALLBACK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-  const effectiveUA = opts?.userAgent ?? FALLBACK_UA;
+  // ── UA-FINGERPRINT PREVENTION ─────────────────────────────────────────────
+  // The harvest browser must use the same User-Agent that will be assigned to
+  // the account.  Falling back to a generic Windows Chrome UA would send a
+  // different device fingerprint to Instagram before the account even exists.
+  // Block here — the caller must supply the account's EB UA.
+  if (!opts?.userAgent) {
+    log(`${logPfx} No EB user-agent configured — refusing to harvest cookies (generic UA would mismatch account fingerprint)`);
+    try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+    return null;
+  }
+  const effectiveUA = opts.userAgent;
   try {
     const [page] = await browser.pages();
     _signupPage = page;
