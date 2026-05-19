@@ -1023,6 +1023,159 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
       Object.defineProperty(navigator, "deviceMemory",        { get: () => 8 });
     }
+
+    // ── Canvas fingerprint protection ────────────────────────────────────────
+    // Server-side Chromium renders canvas via SwiftShader (software renderer).
+    // Without interception, every account produces the same tell-tale pixel
+    // output that Instagram's fingerprinting script instantly recognises as a
+    // headless browser — triggering update_risky_contactpoint on fresh accounts
+    // that have no cookie history to override the fingerprint check.
+    //
+    // We add a tiny deterministic noise to canvas reads that is:
+    //  • Seeded by navigator.userAgent (already spoofed, unique per account)
+    //    → same account always produces the same fingerprint (device continuity)
+    //  • Distinct per account → no two accounts share a fingerprint cluster
+    //  • ±1 per channel → invisible to the eye, undetectable by content checks
+    //
+    // toDataURL / toBlob are intercepted via an offscreen canvas so the original
+    // canvas DOM element is never mutated — page rendering is untouched.
+    (() => {
+      // djb2 hash of UA → deterministic per-account seed
+      const ua = navigator.userAgent;
+      let seed = 5381;
+      for (let i = 0; i < ua.length; i++) {
+        seed = (((seed << 5) + seed) ^ ua.charCodeAt(i)) >>> 0;
+      }
+      seed = seed || 1;
+
+      // LCG PRNG seeded from the UA hash — fast and deterministic
+      const lcg = () => { seed = Math.imul(1664525, seed) + 1013904223 >>> 0; return seed / 0x100000000; };
+      const noise = () => Math.round(lcg() * 2) - 1; // −1, 0, or +1
+      const clamp = (v: number) => Math.max(0, Math.min(255, v));
+
+      // ── getImageData intercept (primary fingerprinting vector) ────────────
+      const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+      CanvasRenderingContext2D.prototype.getImageData = function (
+        this: CanvasRenderingContext2D, ...args: Parameters<typeof origGetImageData>
+      ) {
+        const d = origGetImageData.apply(this, args);
+        const px = d.data;
+        for (let i = 0; i < px.length; i += 4) {
+          px[i]     = clamp(px[i]     + noise());
+          px[i + 1] = clamp(px[i + 1] + noise());
+          px[i + 2] = clamp(px[i + 2] + noise());
+          // alpha (px[i+3]) left untouched — changes there are detectable
+        }
+        return d;
+      };
+
+      // ── toDataURL intercept — offscreen copy, original canvas untouched ───
+      const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+      HTMLCanvasElement.prototype.toDataURL = function (
+        this: HTMLCanvasElement, ...args: Parameters<typeof origToDataURL>
+      ) {
+        try {
+          if (this.width > 0 && this.height > 0) {
+            const oc = document.createElement("canvas");
+            oc.width  = this.width;
+            oc.height = this.height;
+            const octx = oc.getContext("2d");
+            if (octx) {
+              octx.drawImage(this, 0, 0);
+              const px1 = origGetImageData.call(octx, 0, 0, 1, 1);
+              px1.data[0] = clamp(px1.data[0] + noise());
+              px1.data[1] = clamp(px1.data[1] + noise());
+              px1.data[2] = clamp(px1.data[2] + noise());
+              octx.putImageData(px1, 0, 0);
+              return origToDataURL.apply(oc, args);
+            }
+          }
+        } catch { /* fall through to original */ }
+        return origToDataURL.apply(this, args);
+      };
+
+      // ── toBlob intercept — same offscreen copy approach ───────────────────
+      const origToBlob = HTMLCanvasElement.prototype.toBlob;
+      if (origToBlob) {
+        HTMLCanvasElement.prototype.toBlob = function (
+          this: HTMLCanvasElement,
+          callback: BlobCallback,
+          ...args: [string?, number?]
+        ) {
+          try {
+            if (this.width > 0 && this.height > 0) {
+              const oc = document.createElement("canvas");
+              oc.width  = this.width;
+              oc.height = this.height;
+              const octx = oc.getContext("2d");
+              if (octx) {
+                octx.drawImage(this, 0, 0);
+                const px1 = origGetImageData.call(octx, 0, 0, 1, 1);
+                px1.data[0] = clamp(px1.data[0] + noise());
+                octx.putImageData(px1, 0, 0);
+                return origToBlob.call(oc, callback, ...args);
+              }
+            }
+          } catch { /* fall through to original */ }
+          return origToBlob.call(this, callback, ...args);
+        };
+      }
+    })();
+
+    // ── WebGL fingerprint protection ─────────────────────────────────────────
+    // Server Chromium reports SwiftShader ANGLE as the renderer — a clear
+    // headless-browser tell. Override getParameter and getExtension so
+    // Instagram's WebGL fingerprinting script sees a plausible Android GPU
+    // that is consistent per account (same UA → same GPU string).
+    (() => {
+      // GPU pool — plausible Android GPUs from common device families.
+      // Indexed deterministically by UA hash so each account always gets
+      // the same entry across sessions.
+      const GPUS: [string, string][] = [
+        ["Mali-G710 MP7",                     "ARM"],         // Tensor G2 (Pixel 7/8a)
+        ["Mali-G715 MC10",                    "ARM"],         // Tensor G3 (Pixel 8/9)
+        ["Mali-G78 MP14",                     "ARM"],         // Exynos 2200 (S22)
+        ["Mali-G715 MP5",                     "ARM"],         // Exynos 2400 (S24)
+        ["Adreno (TM) 730",                   "Qualcomm"],    // SD 8 Gen 1
+        ["Adreno (TM) 740",                   "Qualcomm"],    // SD 8 Gen 2
+        ["Adreno (TM) 750",                   "Qualcomm"],    // SD 8 Gen 3
+        ["Adreno (TM) 650",                   "Qualcomm"],    // SD 865
+        ["Mali-G610 MC6",                     "ARM"],         // Dimensity 9000
+        ["Mali-G715 MC11",                    "ARM"],         // Dimensity 9200
+        ["Mali-G720-Immortalis MC12",         "ARM"],         // Dimensity 9300
+        ["PowerVR GM9446",                    "Imagination Technologies"], // Tensor G1
+      ];
+
+      const ua = navigator.userAgent;
+      let h = 2166136261;
+      for (let i = 0; i < ua.length; i++) { h ^= ua.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+      const [renderer, vendor] = GPUS[h % GPUS.length];
+
+      const UNMASKED_VENDOR_WEBGL   = 0x9245;
+      const UNMASKED_RENDERER_WEBGL = 0x9246;
+      const GL_VENDOR   = 0x1F00;
+      const GL_RENDERER = 0x1F01;
+
+      const patchCtx = (proto: WebGLRenderingContext) => {
+        const origGetParam = proto.getParameter;
+        proto.getParameter = function (param: number) {
+          if (param === GL_VENDOR   || param === UNMASKED_VENDOR_WEBGL)   return vendor;
+          if (param === GL_RENDERER || param === UNMASKED_RENDERER_WEBGL) return renderer;
+          return origGetParam.call(this, param);
+        };
+        const origGetExt = proto.getExtension;
+        proto.getExtension = function (name: string) {
+          if (name === "WEBGL_debug_renderer_info") {
+            return { UNMASKED_VENDOR_WEBGL, UNMASKED_RENDERER_WEBGL };
+          }
+          return origGetExt.call(this, name);
+        };
+      };
+
+      try { patchCtx(WebGLRenderingContext.prototype  as unknown as WebGLRenderingContext); } catch { /* not available */ }
+      try { patchCtx(WebGL2RenderingContext.prototype as unknown as WebGLRenderingContext); } catch { /* not available */ }
+    })();
+
   }, mobile, meta);
 }
 

@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.402",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "The embedded browser now protects against canvas fingerprinting — Instagram's fingerprinting script was detecting the server's software renderer (SwiftShader) instead of a real Android GPU, which triggered the contact point verification challenge on fresh accounts with no cookie history." },
+      { category: "Fix", text: "Canvas reads (getImageData, toDataURL, toBlob) now return deterministic per-account noise seeded by the account's user agent — the same account always looks like the same device, but every account has a distinct fingerprint." },
+      { category: "Fix", text: "WebGL GPU strings (RENDERER, VENDOR, and debug renderer info) are now spoofed to a plausible Android GPU matching the account's device profile instead of exposing the server's SwiftShader renderer." },
+    ],
+  },
+  {
     version: "1.0.401",
     date: "19 May 2026",
     items: [
