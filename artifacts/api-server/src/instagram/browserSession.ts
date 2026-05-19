@@ -27,6 +27,13 @@ function classifyEbChallengeUrl(url: string): string | null {
   if (/accounts\/disabled/i.test(url))                                          return "account_disabled";
   if (/accounts\/suspended/i.test(url))                                         return "confirm_human";
   if (/phone.*verif|verif.*phone|phone_required|confirm.*phone/i.test(url))     return "phone_verification";
+  // Device-approval / login-notification challenge — Instagram asks the user to
+  // approve the new login from another trusted device.  This surfaces on the web
+  // at /accounts/login/two_factor (method=notification) and causes ERR_TOO_MANY_
+  // REDIRECTS in headless Chrome because Instagram keeps re-issuing the challenge
+  // redirect before we can land.  Classifying it lets followChallengeRedirects
+  // resolve the final URL server-side and navigate Chrome there in one hop.
+  if (/accounts\/login\/two_factor|two_factor.*login|login.*two_factor/i.test(url)) return "login_approval";
   return null;
 }
 
@@ -1967,7 +1974,23 @@ export async function getOrCreateSession(
     // resetting Chrome's internal counter on every hop so we can follow as many
     // hops as needed.  Only attempt this once per session; if it fails, park.
     const sc = sessions.get(profileId);
-    if (err === "net::ERR_TOO_MANY_REDIRECTS" && sc?.challengeUrl) {
+    if (err === "net::ERR_TOO_MANY_REDIRECTS") {
+      // If the redirect chain listener didn't capture a challengeUrl (e.g. the
+      // device-approval /two_factor URL wasn't seen as a 3xx because Instagram
+      // issued it as a 200 after a series of silent client-side redirects), fall
+      // back to the URL of the failing request itself — that IS the challenge URL
+      // Chrome was trying to land on when it hit the 20-hop limit.
+      if (sc && !sc.challengeUrl && url.includes("instagram.com")) {
+        const fallbackStatus = classifyEbChallengeUrl(url) ?? "login_approval";
+        sc.challengeUrl = url;
+        log(`[challenge:${profileId}] challengeUrl not captured from redirects — using requestfailed URL: ${url.slice(0, 120)}`, "browser");
+        storage.getProfile(profileId).then(p => {
+          if (p?.accountStatus !== "stopped") {
+            storage.updateProfile(profileId, { accountStatus: fallbackStatus }).catch(() => {});
+          }
+        }).catch(() => {});
+      }
+      if (!sc?.challengeUrl) return; // non-Instagram URL or no session — nothing to do
       if (sc.challengeManualFollowAttempted) {
         // Already tried — leave Chrome on chrome-error; the housekeep keepalive
         // will restart the screencast every 50 s so the frozen overlay never fires.
@@ -3330,14 +3353,20 @@ export async function clearSession(profileId: number, userAgent: string, proxy?:
 export async function wipeEbSession(profileId: number): Promise<void> {
   deleteSavedCookies(profileId);
   await closeSession(profileId, { skipCookieSave: true });
+  // Same Windows file-handle race as clearEbSessionCookies — wait for Chrome to
+  // fully release its locks before attempting the delete, with retries.
   const userDataDir = path.join(COOKIES_DIR, `userdata-${profileId}`);
-  try {
-    if (fs.existsSync(userDataDir)) {
+  const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await sleep(500);
+    if (!fs.existsSync(userDataDir)) break;
+    try {
       fs.rmSync(userDataDir, { recursive: true, force: true });
-      log(`Deleted userDataDir for profile ${profileId}: ${userDataDir}`, "browser");
+      log(`Deleted userDataDir for profile ${profileId} (attempt ${attempt}): ${userDataDir}`, "browser");
+      break;
+    } catch (e: any) {
+      console.warn(`[browserSession] wipeEbSession rmSync attempt ${attempt}/3 failed for profile ${profileId}: ${e?.message}`);
     }
-  } catch (e: any) {
-    console.warn(`[browserSession] Could not delete userDataDir for profile ${profileId}: ${e?.message}`);
   }
   log(`EB session wiped for profile ${profileId}`, "browser");
 }
@@ -3367,16 +3396,29 @@ export async function clearEbSessionCookies(profileId: number, igApiCookies?: st
   //    Surgical per-cookie deletion (deleting only rows from Chrome's SQLite
   //    Cookies DB) left localStorage/IndexedDB intact, which is how Instagram
   //    remembers which account was previously logged in.
+  //
+  //    On Windows, Chrome holds file handles open until its process fully exits.
+  //    browser.close() resolves as soon as the CDP quit command is acknowledged,
+  //    but the OS may not release all handles for another ~300-500 ms while
+  //    Chrome flushes its profile data (Cookies SQLite, localStorage LevelDB, etc.).
+  //    We wait up to 3 × 500 ms with retries so rmSync never races the process.
   const userDataDir = path.join(COOKIES_DIR, `userdata-${profileId}`);
-  try {
-    if (fs.existsSync(userDataDir)) {
+  const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  let deleted = false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await sleep(500);
+    if (!fs.existsSync(userDataDir)) { deleted = true; break; }
+    try {
       fs.rmSync(userDataDir, { recursive: true, force: true });
-      log(`Wiped Chrome userDataDir for profile ${profileId} (all session state removed)`, "browser");
+      deleted = true;
+      log(`Wiped Chrome userDataDir for profile ${profileId} (all session state removed, attempt ${attempt})`, "browser");
+      break;
+    } catch (e: any) {
+      console.warn(`[browserSession] rmSync attempt ${attempt}/3 failed for profile ${profileId}: ${e?.message}`);
     }
-  } catch (e: any) {
-    console.warn(
-      `[browserSession] Could not delete userDataDir for profile ${profileId}: ${e?.message}`,
-    );
+  }
+  if (!deleted && fs.existsSync(userDataDir)) {
+    console.warn(`[browserSession] Could not fully delete userDataDir for profile ${profileId} — Chrome may still hold file handles`);
   }
 
   // 3. Delete the JSON cookie seed file (it contained the old session cookies).

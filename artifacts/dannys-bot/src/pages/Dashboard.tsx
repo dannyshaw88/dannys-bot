@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.407",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Clear Cookies now reliably wipes saved login info — Chrome was holding file locks on Windows and the deletion was silently failing. The app now waits for Chrome to fully exit and retries up to 3 times before giving up." },
+      { category: "Fix", text: "Reset Device IDs has the same retry fix — same Windows file-lock race that prevented the userdata directory from being fully deleted." },
+      { category: "Fix", text: "The 'Check your notifications on another device' login challenge (device approval) is now detected and handled — previously the EB would land on an error page with no recovery. It now attempts to resolve and display the waiting-for-approval page so you can approve from your phone and continue." },
+      { category: "Fix", text: "If the device approval redirect chain isn't caught before Chrome hits its redirect limit, the app now falls back to the failing request URL itself and still attempts to load the challenge page rather than parking permanently on the error page." },
+    ],
+  },
+  {
     version: "1.0.406",
     date: "19 May 2026",
     items: [
