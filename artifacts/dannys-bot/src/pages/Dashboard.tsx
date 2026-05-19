@@ -55,6 +55,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.406",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "New accounts created via Bulk Import, Add Profile, and the profiles list now each get a unique random device profile drawn from the full 1000-entry pool — previously all three paths sent no device info and the server always fell back to the same starting entry." },
+      { category: "Fix", text: "Pixel 9 Pro and Pixel 9 Pro XL/Fold device specs corrected — wrong codename, chipset code, and screen resolution were being reported; they now match the real hardware." },
+      { category: "Fix", text: "Pixel 8/8a chipset code corrected from Tensor G2 to Tensor G3; Pixel 8 Pro, 7 Pro, and Galaxy S23 Ultra screen resolutions corrected to match real devices." },
+      { category: "Fix", text: "Core count logic now correctly gives Pixel 8/8a 9 cores (Tensor G3) and all Pixel 9 series 8 cores (Tensor G4) — previously Pixel 9 Pro was being given 9 cores from the wrong regex." },
+      { category: "Fix", text: "The Reset Device IDs endpoint now exists on the server — it was being called by Bulk Import after account creation but silently returning 404 every time." },
+    ],
+  },
+  {
     version: "1.0.405",
     date: "19 May 2026",
     items: [

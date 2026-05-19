@@ -18,7 +18,8 @@ import {
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown, ChevronLeft, ChevronRight,
   Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
   UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
-  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie, PlusCircle, Trash2
+  AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie, PlusCircle, Trash2,
+  Battery, BatteryCharging, Wifi, Cpu, MapPin
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -73,6 +74,75 @@ const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementTyp
   upload:               { label: "Upload",             icon: AlertTriangle, pill: "bg-blue-50   text-blue-700   border-blue-200",   dot: "bg-blue-500"   },
   review:               { label: "Review",             icon: Eye,           pill: "bg-slate-100 text-slate-500  border-slate-200",  dot: "bg-slate-400"  },
 };
+
+// ── Per-account stealth fingerprint decoder ───────────────────────────────────
+// Replicates the djb2 + LCG PRNG call sequence from applyStealthScripts so the
+// UI can show what device identity Instagram sees for each account.
+function _fpDjb2(ua: string): number {
+  let s = 5381;
+  for (let i = 0; i < ua.length; i++) s = (((s << 5) + s) ^ ua.charCodeAt(i)) >>> 0;
+  return s || 1;
+}
+interface FingerprintValues {
+  device: string; sw: number; sh: number; dpr: number; mem: number; cores: number;
+  batteryPct: number; charging: boolean; connType: string; downlink: number; timezone: string;
+}
+function computeFingerprint(ua: string, apiUA?: string | null): FingerprintValues {
+  let s = _fpDjb2(ua);
+  const r  = () => { s = ((Math.imul(1664525, s) + 1013904223) >>> 0); return s / 0x100000000; };
+  const rI = (lo: number, hi: number) => { const v = lo + Math.round(r() * (hi - lo)); return v; };
+  const rp = <T extends unknown>(arr: readonly T[]) => arr[Math.floor(r() * arr.length)];
+
+  const PROF = [
+    [360, 808,  3.0,   8,  8, "Pixel 9 Pro"   ],
+    [411, 914,  2.625, 8,  9, "Pixel 8a"      ],
+    [411, 914,  2.625, 8,  9, "Pixel 8"       ],
+    [360, 780,  3.0,   8, 10, "Samsung S24"   ],
+    [360, 780,  3.0,   8,  8, "Samsung S22"   ],
+    [393, 851,  2.75,  8,  8, "OnePlus 12"    ],
+    [412, 915,  2.625, 8,  8, "OnePlus 10 Pro"],
+    [412, 900,  2.70,  8,  8, "Moto Edge"     ],
+    [393, 873,  2.75,  8,  8, "Xiaomi 14"     ],
+    [393, 873,  2.75,  8,  8, "Sony Xperia 1V"],
+    [393, 868,  2.75,  8,  8, "OPPO Find X6"  ],
+    [360, 780,  3.0,   8,  8, "Samsung A54"   ],
+  ] as const;
+  const _profPick = rp(PROF);                                    // call 1 — always advance PRNG
+  let sw = +_profPick[0], sh = +_profPick[1], dpr = +_profPick[2];
+  let mem = +_profPick[3], cores = +_profPick[4], device = _profPick[5] as string;
+  // Override with exact specs derived from the API UA when available.
+  // API UA format: "SDK/OS; DPIdpi; PHYSWxPHYSH; Manufacturer; Model; Codename; Chipset; Locale"
+  if (apiUA) {
+    const _m = apiUA.match(/;\s*(\d+)dpi;\s*(\d+)x(\d+);[^;]*;([^;]*);[^;]*;([^;]*)/);
+    if (_m) {
+      const _dpi = +_m[1], _pW = +_m[2], _pH = +_m[3];
+      dpr    = Math.round(_dpi / 160 * 10000) / 10000;
+      sw     = Math.round(_pW / dpr);
+      sh     = Math.round(_pH / dpr);
+      mem    = 8;
+      // Only Tensor G3 (Pixel 8 / 8 Pro / 8a) has 9 cores — match on model name
+      // so the logic works for both "gs202" and "Tensor G4" chipset string formats.
+      cores  = /;\s*Pixel 8[^9]/i.test(apiUA) ? 9 : /exynos2400/i.test(apiUA) ? 10 : 8;
+      device = _m[4].trim();
+    }
+  }
+
+  const batteryPct = Math.round((0.60 + r() * 0.39) * 100);    // call 2
+  const charging   = r() > 0.35;                                // call 3
+  if (charging) rI(0, 3600); else rI(1800, 28800);             // call 4 — advance seed
+
+  const connType = rp(["Wi-Fi", "Wi-Fi", "Wi-Fi", "Cellular"] as const); // call 5
+  const downlink = Math.round(2 + r() * 98);                    // call 6
+  rI(10, 150);                                                   // call 7 — RTT, advance seed
+
+  const TZ_POOL = [
+    "New York", "New York", "Los Angeles", "Los Angeles",
+    "Chicago", "Denver", "Phoenix", "London", "Berlin",
+  ] as const;
+  const timezone = rp(TZ_POOL);                                  // call 8
+
+  return { device, sw, sh, dpr, mem, cores, batteryPct, charging, connType, downlink, timezone };
+}
 
 function parseActiveTimerSlots(start: string | null | undefined, end: string | null | undefined): { start: string; end: string }[] {
   if (start) {
@@ -949,6 +1019,67 @@ export function ProfileDetailsPage() {
                     </AlertDialogContent>
                   </AlertDialog>
 
+                  {/* ── Device Fingerprint ── */}
+                  <div className="pt-4 border-t border-border mt-4 space-y-4">
+                    <h4 className="text-sm font-bold flex items-center gap-2"><Shield className="w-4 h-4 text-primary" /> Device Fingerprint</h4>
+
+                    {/* Computed identity chips — derived from the embedded UA seed */}
+                    {formData.userAgentEmbedded && (() => {
+                      const fp = computeFingerprint(formData.userAgentEmbedded, formData.userAgentApi);
+                      const battColor = fp.batteryPct > 60 ? "text-green-600" : fp.batteryPct > 30 ? "text-amber-600" : "text-red-600";
+                      const battBar   = fp.batteryPct > 60 ? "bg-green-400"  : fp.batteryPct > 30 ? "bg-amber-400"  : "bg-red-400";
+                      const Chip = ({ icon: Icon, label, value, iconCls }: { icon: React.ElementType; label: string; value: string; iconCls?: string }) => (
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs">
+                          <Icon className={`w-3 h-3 shrink-0 ${iconCls ?? "text-slate-500"}`} />
+                          <span className="text-slate-400 font-medium">{label}</span>
+                          <span className="font-semibold text-slate-700">{value}</span>
+                        </div>
+                      );
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Computed Device Identity (what Instagram sees)</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Chip icon={Smartphone}  label="Device"  value={fp.device}                                              iconCls="text-indigo-500" />
+                            <Chip icon={Monitor}     label="Screen"  value={`${fp.sw}×${fp.sh} @${fp.dpr}x`}                       iconCls="text-slate-500"  />
+                            <Chip icon={Cpu}         label="CPU"     value={`${fp.cores} cores`}                                    iconCls="text-orange-500" />
+                            <Chip icon={Server}      label="RAM"     value={`${fp.mem} GB`}                                         iconCls="text-purple-500" />
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs">
+                              {fp.charging
+                                ? <BatteryCharging className="w-3 h-3 shrink-0 text-green-500" />
+                                : <Battery className={`w-3 h-3 shrink-0 ${battColor}`} />}
+                              <span className="text-slate-400 font-medium">Battery</span>
+                              <div className="w-12 h-1 rounded-full bg-slate-200 overflow-hidden mx-0.5">
+                                <div className={`h-full rounded-full ${battBar}`} style={{ width: `${fp.batteryPct}%` }} />
+                              </div>
+                              <span className={`font-semibold ${battColor}`}>{fp.batteryPct}%{fp.charging ? " ⚡" : ""}</span>
+                            </div>
+                            <Chip icon={Wifi}        label={fp.connType} value={`${fp.downlink} Mbps`}                              iconCls="text-blue-500"   />
+                            <Chip icon={MapPin}      label="TZ"      value={fp.timezone}                                             iconCls="text-teal-500"   />
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">API User Agent</label>
+                      <input
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        value={formData.userAgentApi}
+                        onChange={e => updateField({ userAgentApi: e.target.value })}
+                        placeholder="API Fingerprint string..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Embedded Browser Agent</label>
+                      <input
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        value={formData.userAgentEmbedded}
+                        onChange={e => updateField({ userAgentEmbedded: e.target.value })}
+                        placeholder="Browser-like User Agent..."
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-3 pt-4 border-t border-border mt-4">
                     <h4 className="text-sm font-bold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> API Limits &amp; Control</h4>
                     <div className="flex gap-2 items-end">
@@ -1148,27 +1279,6 @@ export function ProfileDetailsPage() {
                     )}
                   </div>
                   
-                  <div className="pt-6 border-t border-border mt-6">
-                    <h4 className="text-sm font-bold mb-4 flex items-center gap-2"><Shield className="w-4 h-4 text-primary" /> Device Fingerprint</h4>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">API User Agent</Label>
-                        <Input 
-                          value={formData.userAgentApi}
-                          onChange={e => updateField({ userAgentApi: e.target.value })}
-                          placeholder="API Fingerprint string..."
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Embedded Agent</Label>
-                        <Input 
-                          value={formData.userAgentEmbedded}
-                          onChange={e => updateField({ userAgentEmbedded: e.target.value })}
-                          placeholder="Browser-like User Agent..."
-                        />
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </CardContent>
             </Card>

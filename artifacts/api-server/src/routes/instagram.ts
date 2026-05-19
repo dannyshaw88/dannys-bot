@@ -46,6 +46,7 @@ import {
   deleteSavedCookies,
   attachSignupWS,
   detachSignupWS,
+  getEbLiveStats,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -299,9 +300,18 @@ export async function registerInstagramRoutes(
   app.get(api.profiles.list.path, async (req, res) => {
     const all = await storage.getProfiles();
     const cm = req.query.creatorMode;
-    if (cm === "1") return res.json(all.filter((p: any) => p.creatorMode));
-    if (cm === "0") return res.json(all.filter((p: any) => !p.creatorMode));
-    res.json(all);
+    let filtered: typeof all;
+    if (cm === "1") filtered = all.filter((p: any) => p.creatorMode);
+    else if (cm === "0") filtered = all.filter((p: any) => !p.creatorMode);
+    else filtered = all;
+    // Attach live EB fingerprint stats (battery %, connection Mbps) for any
+    // profile that currently has an open browser session.  Null when the EB
+    // is not running.  The frontend polls every 5 s so the values update live.
+    const enriched = filtered.map((p: any) => ({
+      ...p,
+      ebLiveStats: p.userAgentEmbedded ? getEbLiveStats(p.id, p.userAgentEmbedded) : null,
+    }));
+    res.json(enriched);
   });
 
   app.post("/api/profiles/:id/move-to-accounts", async (req, res) => {
@@ -372,6 +382,24 @@ export async function registerInstagramRoutes(
       res.status(500).json({ message: "Failed to update profile" });
     }
   }
+
+  // Assign a fresh random UA + clear stored device state so the next verify
+  // generates brand-new mobile device IDs for this profile.
+  // Called by BulkImportPage immediately after account creation.
+  // Must be registered BEFORE /api/profiles/:id so it isn't treated as an ID.
+  app.post("/api/profiles/:id/reset-device-ids", async (req, res) => {
+    const id = Number(req.params.id);
+    const randomUA = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+    await storage.updateProfile(id, {
+      userAgentApi: randomUA.api,
+      userAgentEmbedded: randomUA.embedded,
+      igDeviceState: null,
+      igApiCookies: null,
+      accountStatus: "pending",
+      credentialsDirty: true,
+    });
+    res.json({ ok: true });
+  });
 
   // Bulk-update: apply one patch to many profiles in a single request.
   // Must be registered BEFORE /api/profiles/:id so "bulk-update" isn't treated as an ID.
@@ -700,7 +728,7 @@ export async function registerInstagramRoutes(
     // Step 1: Get or create the browser session
     let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
     try {
-      await getOrCreateSession(profileId, ebUA, proxyConfig);
+      await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
     } catch (ebErr: any) {
       verifyInFlight.delete(profileId);
       await storage.updateProfile(profile.id, { accountStatus: "pending" });
@@ -1387,7 +1415,7 @@ export async function registerInstagramRoutes(
     }
     const ua = profile.userAgentEmbedded as string;
     try {
-      await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile));
+      await getOrCreateSession(profileId, ua, await resolveProxyConfig(profile), profile.userAgentApi);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to start browser" });
@@ -1626,7 +1654,7 @@ export async function registerInstagramRoutes(
           return;
         }
         const ua = profile.userAgentEmbedded as string;
-        await getOrCreateSession(profileId, ua, proxy);
+        await getOrCreateSession(profileId, ua, proxy, profile.userAgentApi);
         attachWS(profileId, ws);
         // Auto-login: if the page settles on the login form, fill credentials
         // without any manual button press. scheduleAutoLogin waits 3.5 s for the
@@ -1890,7 +1918,7 @@ export async function registerInstagramRoutes(
           const bulkEbUA = effectiveP.userAgentEmbedded as string;
 
           // Step 1: Launch EB
-          await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig);
+          await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);
 
           // Step 2: Web login
           let bulkLoginResult: { ok: boolean; message: string };

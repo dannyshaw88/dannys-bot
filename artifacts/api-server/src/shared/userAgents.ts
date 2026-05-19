@@ -1,14 +1,14 @@
 export const userAgents = [
   {
-    api: "35/15; 480dpi; 1080x2400; Google; Pixel 9 Pro; husky; gs202; en_US",
+    api: "35/15; 480dpi; 1344x2992; Google; Pixel 9 Pro; caiman; gs302; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2340; Google; Pixel 8; shiba; gs101; en_US",
+    api: "35/15; 420dpi; 1080x2400; Google; Pixel 8; shiba; gs202; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2400; Google; Pixel 7; cheetah; gs202; en_US",
+    api: "35/15; 420dpi; 1080x2400; Google; Pixel 7; panther; gs201; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -20,7 +20,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1284x2778; Samsung; SM-S918B; b0q; Snapdragon8Gen2; en_US",
+    api: "34/14; 393dpi; 1080x2340; Samsung; SM-S918B; b0q; Snapdragon8Gen2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -28,11 +28,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 440dpi; 1080x2400; OnePlus; CPH2551; op535; Snapdragon8Gen2; en_US",
+    api: "34/14; 440dpi; 1080x2400; OnePlus; CPH2551; op535; Snapdragon8Gen3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2551) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 440dpi; 1080x2400; OnePlus; CPH2449; ovaltine; tq3a; en_US",
+    api: "33/13; 440dpi; 1080x2400; OnePlus; CPH2449; ovaltine; Snapdragon8Gen2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 13; CPH2449) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -40,11 +40,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; 23127PN0CC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 400dpi; 1080x2400; Xiaomi; 2201117TY; viva; skq1; en_IN",
+    api: "33/13; 400dpi; 1080x2400; Xiaomi; 2201117TY; viva; Dimensity9000; en_IN",
     embedded: "Mozilla/5.0 (Linux; Android 13; 2201117TY) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 420dpi; 1080x2408; Xiaomi; 23049PCD8G; marble; taro; en_US",
+    api: "34/14; 420dpi; 1080x2408; Xiaomi; 23049PCD8G; marble; Snapdragon7Gen1; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -104,11 +104,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 13; A063) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2400; Google; Pixel 9; tokay; gs202; en_US",
+    api: "35/15; 420dpi; 1080x2424; Google; Pixel 9; tokay; gs302; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 480dpi; 1080x2340; Google; Pixel 8a; akita; gs101; en_US",
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 8a; akita; gs202; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 8a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -116,7 +116,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1080x2340; Samsung; SM-G998B; p3q; exynos2100; en_US",
+    api: "34/14; 420dpi; 1080x2340; Samsung; SM-G998B; p3q; exynos2100; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -160,15 +160,15 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; ASUS_AI2401) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2400; Google; Pixel 9 Pro XL; komodo; gs202; en_US",
+    api: "35/15; 480dpi; 1344x2992; Google; Pixel 9 Pro XL; komodo; gs302; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 480dpi; 1080x2400; Google; Pixel 7a; lynx; gs201; en_US",
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 7a; lynx; gs201; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1080x2340; Samsung; SM-S916B; r1q; Snapdragon8Gen2; en_US",
+    api: "34/14; 393dpi; 1080x2340; Samsung; SM-S916B; r1q; Snapdragon8Gen2; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S916B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -204,11 +204,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; A142) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2340; Google; Pixel 8 Pro; husky; gs202; en_US",
+    api: "35/15; 480dpi; 1344x2992; Google; Pixel 8 Pro; husky; gs202; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 480dpi; 1080x2400; Google; Pixel 6a; bluejay; gs201; en_US",
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 6a; bluejay; gs101; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -264,11 +264,11 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; ASUS_AI2302) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2400; Google; Pixel 7 Pro; cheetah; gs202; en_US",
+    api: "35/15; 480dpi; 1440x3120; Google; Pixel 7 Pro; cheetah; gs201; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 480dpi; 1080x2340; Google; Pixel 6; oriole; gs101; en_US",
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 6; oriole; gs101; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -308,7 +308,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; RMX3741) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "35/15; 480dpi; 1080x2340; Google; Pixel 9 Pro Fold; felix; gs202; en_US",
+    api: "35/15; 420dpi; 1080x2424; Google; Pixel 9 Pro Fold; comet; gs302; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
@@ -316,7 +316,7 @@ export const userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 450dpi; 1080x2340; Samsung; SM-A256B; a25x; exynos1280; en_US",
+    api: "34/14; 420dpi; 1080x2340; Samsung; SM-A256B; a25x; exynos1280; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-A256B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
   },
   {

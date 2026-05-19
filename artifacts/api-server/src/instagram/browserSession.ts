@@ -161,6 +161,187 @@ export function deleteSavedCookies(profileId: number): void {
   } catch {}
 }
 
+// ── Live EB fingerprint stats ─────────────────────────────────────────────────
+// Replicates the exact djb2 + LCG PRNG call sequence from applyStealthScripts
+// so the server can compute the current battery level and connection speed for
+// real-time display in the UI without polling the Puppeteer page.
+//
+// Call order must match evaluateOnNewDocument exactly:
+//   call 1  → rp(_PROF)          (device profile picker)
+//   call 2  → r()                (battery start level)
+//   call 3  → r()                (charging state)
+//   call 4  → rI(...)            (charge time OR discharge time — one call either way)
+//   call 5  → rp(connTypes)      (connection type)
+//   call 6  → r()                (downlink Mbps)
+function _ebDjb2(ua: string): number {
+  let s = 5381;
+  for (let i = 0; i < ua.length; i++) {
+    s = (((s << 5) + s) ^ ua.charCodeAt(i)) >>> 0;
+  }
+  return s || 1;
+}
+
+function _computeEbSeedValues(ua: string): { batteryStart: number; charging: boolean; downlink: number } {
+  let s = _ebDjb2(ua);
+  const r  = () => { s = ((Math.imul(1664525, s) + 1013904223) >>> 0); return s / 0x100000000; };
+  const rI = (lo: number, hi: number) => { r(); return lo + hi; }; // advances seed; return value unused
+  const rp = <T>(arr: readonly T[]) => arr[Math.floor(r() * arr.length)];
+
+  const PROF = [
+    [360, 808,  3.0,   8,  8], [411, 914,  2.625,  8,  9], [411, 914,  2.625,  8,  9],
+    [360, 780,  3.0,   8, 10], [360, 780,  3.0,    8,  8], [393, 851,  2.75,   8,  8],
+    [412, 915,  2.625, 8,  8], [412, 900,  2.70,   8,  8], [393, 873,  2.75,   8,  8],
+    [393, 873,  2.75,  8,  8], [393, 868,  2.75,   8,  8], [360, 780,  3.0,    8,  8],
+  ] as const;
+  rp(PROF);                                                              // call 1 — discard
+
+  const batteryStart = Math.round((0.60 + r() * 0.39) * 100) / 100;   // call 2
+  const charging     = r() > 0.35;                                      // call 3
+  if (charging) rI(0, 3600); else rI(1800, 28800);                     // call 4 — discard
+
+  rp(["wifi", "wifi", "wifi", "cellular"] as const);                    // call 5 — discard
+  const downlink = Math.round(2 + r() * 98);                            // call 6
+
+  return { batteryStart, charging, downlink };
+}
+
+// ── Proxy geo-timezone resolution ─────────────────────────────────────────────
+// Before launching the EB we resolve the proxy exit-IP timezone via ip-api.com
+// (HTTP, plain-text JSON — no key needed) through the proxy itself.  The result
+// [IANA name, stdOffset, dstOffset] replaces the PRNG-selected timezone in
+// applyStealthScripts so Instagram's signal always matches the proxy's country.
+//
+// stdOffset / dstOffset are minutes WEST of UTC — the convention used by
+// Date.prototype.getTimezoneOffset() and the existing _TZ_POOL entries.
+// (New York STD = 300, Berlin STD = -60, etc.)
+
+const _TZ_MAP: Record<string, readonly [string, number, number]> = {
+  "America/New_York":       ["America/New_York",       300, 240],
+  "America/Chicago":        ["America/Chicago",         360, 300],
+  "America/Denver":         ["America/Denver",          420, 360],
+  "America/Phoenix":        ["America/Phoenix",         420, 420],
+  "America/Los_Angeles":    ["America/Los_Angeles",     480, 420],
+  "America/Anchorage":      ["America/Anchorage",       540, 480],
+  "America/Toronto":        ["America/Toronto",         300, 240],
+  "America/Vancouver":      ["America/Vancouver",       480, 420],
+  "America/Sao_Paulo":      ["America/Sao_Paulo",       180, 120],
+  "America/Mexico_City":    ["America/Mexico_City",     360, 300],
+  "America/Buenos_Aires":   ["America/Buenos_Aires",    180, 180],
+  "America/Bogota":         ["America/Bogota",          300, 300],
+  "Europe/London":          ["Europe/London",             0, -60],
+  "Europe/Dublin":          ["Europe/Dublin",             0, -60],
+  "Europe/Lisbon":          ["Europe/Lisbon",             0, -60],
+  "Europe/Paris":           ["Europe/Paris",            -60, -120],
+  "Europe/Berlin":          ["Europe/Berlin",           -60, -120],
+  "Europe/Amsterdam":       ["Europe/Amsterdam",        -60, -120],
+  "Europe/Brussels":        ["Europe/Brussels",         -60, -120],
+  "Europe/Madrid":          ["Europe/Madrid",           -60, -120],
+  "Europe/Rome":            ["Europe/Rome",             -60, -120],
+  "Europe/Warsaw":          ["Europe/Warsaw",           -60, -120],
+  "Europe/Stockholm":       ["Europe/Stockholm",        -60, -120],
+  "Europe/Vienna":          ["Europe/Vienna",           -60, -120],
+  "Europe/Zurich":          ["Europe/Zurich",           -60, -120],
+  "Europe/Prague":          ["Europe/Prague",           -60, -120],
+  "Europe/Budapest":        ["Europe/Budapest",         -60, -120],
+  "Europe/Athens":          ["Europe/Athens",          -120, -180],
+  "Europe/Bucharest":       ["Europe/Bucharest",       -120, -180],
+  "Europe/Helsinki":        ["Europe/Helsinki",        -120, -180],
+  "Europe/Istanbul":        ["Europe/Istanbul",        -180, -180],
+  "Europe/Moscow":          ["Europe/Moscow",          -180, -180],
+  "Asia/Dubai":             ["Asia/Dubai",             -240, -240],
+  "Asia/Karachi":           ["Asia/Karachi",           -300, -300],
+  "Asia/Kolkata":           ["Asia/Kolkata",           -330, -330],
+  "Asia/Dhaka":             ["Asia/Dhaka",             -360, -360],
+  "Asia/Bangkok":           ["Asia/Bangkok",           -420, -420],
+  "Asia/Singapore":         ["Asia/Singapore",         -480, -480],
+  "Asia/Hong_Kong":         ["Asia/Hong_Kong",         -480, -480],
+  "Asia/Shanghai":          ["Asia/Shanghai",          -480, -480],
+  "Asia/Seoul":             ["Asia/Seoul",             -540, -540],
+  "Asia/Tokyo":             ["Asia/Tokyo",             -540, -540],
+  "Australia/Sydney":       ["Australia/Sydney",       -600, -660],
+  "Australia/Melbourne":    ["Australia/Melbourne",    -600, -660],
+  "Pacific/Auckland":       ["Pacific/Auckland",       -720, -780],
+};
+
+function tzFromIana(iana: string): readonly [string, number, number] {
+  return _TZ_MAP[iana] ?? ["America/New_York", 300, 240];
+}
+
+/**
+ * Resolves the IANA timezone of the proxy exit IP by sending a plain HTTP GET
+ * to http://ip-api.com/json?fields=timezone through the proxy.
+ *
+ * Uses a raw TCP connection via the `net` module — no extra dependencies.
+ * Plain HTTP proxies forward the full request without CONNECT.
+ * Returns null on any error or timeout (caller falls back to PRNG timezone).
+ */
+function resolveProxyTimezone(
+  proxyHost: string,
+  proxyPort: number,
+  proxyUser?: string | null,
+  proxyPass?: string | null,
+  timeoutMs = 7000,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v: string | null) => { if (!settled) { settled = true; resolve(v); } };
+
+    const sock = net.createConnection({ host: proxyHost, port: proxyPort });
+    const timer = setTimeout(() => { sock.destroy(); done(null); }, timeoutMs);
+
+    sock.on("error", () => { clearTimeout(timer); done(null); });
+    sock.on("connect", () => {
+      let req = "GET http://ip-api.com/json?fields=timezone HTTP/1.1\r\n" +
+                "Host: ip-api.com\r\n" +
+                "Connection: close\r\n";
+      if (proxyUser) {
+        const creds = Buffer.from(`${proxyUser}:${proxyPass ?? ""}`).toString("base64");
+        req += `Proxy-Authorization: Basic ${creds}\r\n`;
+      }
+      req += "\r\n";
+      sock.write(req);
+
+      let raw = "";
+      sock.on("data", (chunk) => { raw += chunk.toString("utf8"); });
+      sock.on("end", () => {
+        clearTimeout(timer);
+        try {
+          const body = raw.slice(raw.indexOf("\r\n\r\n") + 4).trim();
+          const parsed = JSON.parse(body) as { timezone?: string };
+          done(parsed.timezone ?? null);
+        } catch { done(null); }
+      });
+    });
+  });
+}
+
+/**
+ * Returns the estimated live EB fingerprint state for a profile, or null when
+ * no browser session is currently open for that profile.
+ *
+ * Battery level is calculated as:
+ *   level = batteryStart ± (elapsed_minutes × 0.001)
+ * The 0.001/min rate is the midpoint of the 0.0008–0.0012 random drift range
+ * that the stealth script uses — exact enough for a live display indicator.
+ */
+export function getEbLiveStats(
+  profileId: number,
+  userAgent: string,
+): { battery: number; charging: boolean; downlink: number } | null {
+  const session = sessions.get(profileId);
+  if (!session) return null;
+
+  const { batteryStart, charging, downlink } = _computeEbSeedValues(userAgent);
+  const elapsedMin = (Date.now() - session.startedAt) / 60_000;
+  const drift = elapsedMin * 0.001; // %/min midpoint estimate
+  let battery = charging
+    ? Math.min(1.0, batteryStart + drift)
+    : Math.max(0.05, batteryStart - drift);
+  battery = Math.round(battery * 100) / 100;
+
+  return { battery, charging, downlink };
+}
+
 // ── Minimal Chrome args for the throwaway harvest session ─────────────────────
 // LAUNCH_ARGS is optimised for long-running EBs: it includes
 // --disable-background-networking and --js-flags=--max-old-space-size=128 to
@@ -617,6 +798,12 @@ interface Session {
   autoLoginInProgress?: boolean;
   // ms timestamp of the most recent successful autoLogin.
   lastLoginSuccessAt?: number;
+  // Account's API user-agent string (device string format: "SDK/OS; DPIdpi; WxH; mfr; model; ...")
+  // Stored so every new popup/tab opened in this session gets the same device fingerprint.
+  userAgentApi?: string | null;
+  // Proxy geo-resolved IANA timezone [name, stdOffsetMin, dstOffsetMin] — set at
+  // session start and reused for every new page/tab opened in the same session.
+  resolvedTZ?: readonly [string, number, number];
   // Unique token per session instance. autoLogin captures this at start and checks
   // it before returning ok:true — if the session was replaced (clearSession pressed
   // while login was in progress) the token will differ and the stale loginDone
@@ -633,6 +820,9 @@ interface Session {
   challengeManualFollowAttempted?: boolean;
   // ms timestamp of the last user input (click, scroll, key, mousemove, navigate).
   lastActivityAt: number;
+  // ms timestamp when this browser session was first opened.
+  // Used to estimate the current battery level for live display in the UI.
+  startedAt: number;
 }
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
@@ -908,11 +1098,16 @@ export function viewportForUA(ua: string): { width: number; height: number; devi
   return { width: 1280, height: 760 };
 }
 
-export async function applyStealthScripts(page: Page, userAgent: string): Promise<void> {
+export async function applyStealthScripts(
+  page: Page,
+  userAgent: string,
+  overrideTZ?: readonly [string, number, number] | null,
+  apiUA?: string | null,
+): Promise<void> {
   const mobile = isMobileUA(userAgent);
   const meta = buildUAMetadata(userAgent) as any;
 
-  await page.evaluateOnNewDocument((mobile: boolean, meta: any) => {
+  await page.evaluateOnNewDocument((mobile: boolean, meta: any, _overrideTZ: readonly [string, number, number] | null, _apiUA: string | null) => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
 
     // ── Per-account device profile ───────────────────────────────────────────
@@ -930,23 +1125,51 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
     const _rI = (lo: number, hi: number) => lo + Math.round(_r() * (hi - lo));
     const _rp = <T>(arr: readonly T[]) => arr[Math.floor(_r() * arr.length)];
 
-    // Pool of real Android device screen profiles: [cssW, cssH, dpr, memGB, cores]
-    // Values derived from physical specs (dpi / 160 = dpr; px / dpr = css pixels).
+    // Fallback pool of real Android device screen profiles: [cssW, cssH, dpr, memGB, cores]
+    // Used only when no API UA is available (harvest EB, automation baker, etc.).
+    // When _apiUA is present the specs are overridden with values computed directly
+    // from the API UA's DPI and physical resolution — ensuring a 1-to-1 match
+    // between the Chrome UA model name and the injected screen fingerprint.
     const _PROF = [
-      [360, 800,  3.0,   12, 12], // Tensor G3 — Pixel 9 Pro     (1080×2400 @ 480dpi)
-      [411, 914,  2.625,  8,  8], // Tensor G2 — Pixel 8a        (1080×2400 @ 420dpi)
-      [411, 891,  2.625,  8,  8], // Tensor G2 — Pixel 8         (1080×2340 @ 420dpi)
-      [360, 780,  3.0,    8,  8], // Exynos 2400 — Samsung S24   (1080×2340 @ 480dpi)
-      [360, 780,  3.0,    8,  8], // Exynos 2200 — Samsung S22   (1080×2340 @ 480dpi)
-      [393, 851,  2.75,  12,  8], // SD 8 Gen 2 — OnePlus 12     (1080×2340 @ 440dpi)
-      [412, 915,  2.625,  8,  8], // SD 8 Gen 1 — OnePlus 10 Pro (1080×2400 @ 420dpi)
-      [412, 900,  2.70,   8,  8], // SD 8 Gen 2 — Motorola Edge  (1080×2400 @ 432dpi)
-      [390, 844,  3.0,   12,  8], // Dimensity 9300 — Xiaomi 14  (1080×2340 @ 480dpi)
-      [393, 873,  2.75,   8,  8], // SD 8 Gen 1 — Sony Xperia 1V (1080×2400 @ 440dpi)
-      [393, 868,  2.75,   8,  8], // SD 8 Gen 2 — OPPO Find X6   (1080×2400 @ 440dpi)
-      [360, 760,  3.0,    6,  8], // Exynos 1380 — Samsung A54   (1080×2340 @ 480dpi)
+      [360, 808,  3.0,   8,  8], // Tensor G4  — Pixel 9 Pro     (1080×2424 @ 480dpi, 16GB→devMem8, 8c)
+      [411, 914,  2.625, 8,  9], // Tensor G3  — Pixel 8a        (1080×2400 @ 420dpi,  8GB,          9c)
+      [411, 914,  2.625, 8,  9], // Tensor G3  — Pixel 8         (1080×2400 @ 420dpi,  8GB,          9c)
+      [360, 780,  3.0,   8, 10], // Exynos 2400 — Samsung S24    (1080×2340 @ 480dpi,  8GB,         10c)
+      [360, 780,  3.0,   8,  8], // Exynos 2200 — Samsung S22    (1080×2340 @ 480dpi,  8GB,          8c)
+      [393, 851,  2.75,  8,  8], // SD 8 Gen 3 — OnePlus 12      (1440×3168 → CSS393×851, 12GB→8,   8c)
+      [412, 915,  2.625, 8,  8], // SD 8 Gen 1 — OnePlus 10 Pro  (1080×2400 @ 420dpi,  8GB,          8c)
+      [412, 900,  2.70,  8,  8], // SD 8s Gen 3 — Motorola Edge  (1080×2400 @ 432dpi, 12GB→8,       8c)
+      [393, 873,  2.75,  8,  8], // SD 8 Gen 3 — Xiaomi 14       (1080×2400 @ 440dpi, 12GB→8,       8c)
+      [393, 873,  2.75,  8,  8], // SD 8 Gen 2 — Sony Xperia 1V  (1080×2400 @ 440dpi, 12GB→8,       8c)
+      [393, 868,  2.75,  8,  8], // Dimensity 9200 — OPPO Find X6 (1080×2400 @ 440dpi,12GB→8,       8c)
+      [360, 780,  3.0,   8,  8], // Exynos 1380 — Samsung A54    (1080×2340 @ 480dpi,  8GB,          8c)
     ] as const;
-    const [_SW, _SH, _DPR, _MEM, _CORES] = _rp(_PROF);
+    // Always advance the PRNG past the profile pick so battery/connection call
+    // counts stay identical whether or not the API UA override is applied.
+    const _prf = _rp(_PROF) as unknown as [number, number, number, number, number];
+    let _SW = _prf[0], _SH = _prf[1], _DPR = _prf[2], _MEM = _prf[3], _CORES = _prf[4];
+    // Override: derive exact CSS dims, DPR and core count from the API UA.
+    // API UA format: "SDK/OS; DPIdpi; PHYSWxPHYSH; Manufacturer; Model; Codename; Chipset; Locale"
+    //   DPR  = dpi / 160 (Chrome's logical pixel ratio definition)
+    //   cssW = round(physW / DPR),  cssH = round(physH / DPR)
+    //   cores: Tensor/gs20x → 9, Exynos 2400 → 10, everything else → 8
+    //   mem:   navigator.deviceMemory is capped at 8 for any device with ≥8 GB RAM
+    if (_apiUA) {
+      const _uaM = _apiUA.match(/;\s*(\d+)dpi;\s*(\d+)x(\d+)/);
+      if (_uaM) {
+        const _dpi = +_uaM[1], _pW = +_uaM[2], _pH = +_uaM[3];
+        _DPR    = Math.round(_dpi / 160 * 10000) / 10000;
+        _SW     = Math.round(_pW / _DPR);
+        _SH     = Math.round(_pH / _DPR);
+        _MEM    = 8;
+        // Only Tensor G3 (Pixel 8 / 8 Pro / 8a) has 9 cores — match on model name,
+        // not chipset string, because gs202 appears on both 8-core Pixel 7 and
+        // 9-core Pixel 8 Pro; and "Tensor G4" / "Tensor G3" are format-dependent.
+        _CORES  = /;\s*Pixel 8[^9]/i.test(_apiUA) ? 9
+                : /exynos2400/i.test(_apiUA) ? 10
+                : 8;
+      }
+    }
 
     // Battery — level and charging state vary per account
     const _BLVL = Math.round((0.60 + _r() * 0.39) * 100) / 100; // 0.60 – 0.99
@@ -959,8 +1182,10 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
     const _CDL   = Math.round(2 + _r() * 98); // 2 – 100 Mbps
     const _CRTT  = _rI(10, 150);              // 10 – 150 ms
 
-    // Timezone — US-weighted pool; offset values are minutes WEST of UTC
-    // (matching Date.prototype.getTimezoneOffset() convention)
+    // Timezone — resolved from proxy geo (preferred) or fallback PRNG pool.
+    // _overrideTZ = [IANA name, stdOffset, dstOffset] supplied from Node when
+    // the proxy exit-IP geolocation succeeded before the session launched.
+    // The PRNG still advances so downstream call counts stay in sync.
     const _TZ_POOL = [
       ["America/New_York",    300, 240] as const,  // EST/EDT  — weighted ×2
       ["America/New_York",    300, 240] as const,
@@ -972,7 +1197,8 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       ["Europe/London",         0, -60] as const,  // GMT/BST
       ["Europe/Berlin",        -60,-120] as const, // CET/CEST
     ];
-    const [_TZNAME, _TZSTD, _TZDST] = _rp(_TZ_POOL);
+    const _TZ_PRNG = _rp(_TZ_POOL); // advance PRNG regardless — keeps call sequence stable
+    const [_TZNAME, _TZSTD, _TZDST] = (_overrideTZ as any) ?? _TZ_PRNG;
 
     // ── WebRTC IP-leak prevention (JS layer) ────────────────────────────────
     // Belt-and-suspenders on top of the --webrtc-ip-handling-policy Chrome flag.
@@ -1456,13 +1682,14 @@ export async function applyStealthScripts(page: Page, userAgent: string): Promis
       try { patchCtx(WebGL2RenderingContext.prototype as unknown as WebGLRenderingContext); } catch { /* not available */ }
     })();
 
-  }, mobile, meta);
+  }, mobile, meta, overrideTZ ?? null, apiUA ?? null);
 }
 
 export async function getOrCreateSession(
   profileId: number,
   userAgent: string,
   proxy?: ProxyConfig,
+  userAgentApi?: string | null,
 ): Promise<Session> {
   const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
   const existing = sessions.get(profileId);
@@ -1599,8 +1826,22 @@ export async function getOrCreateSession(
   }
   log(`Chrome launched for profile ${profileId}`, "browser");
 
+  // Resolve proxy exit-IP timezone before injecting stealth scripts.
+  // This ensures the browser's Date API timezone matches the proxy's country
+  // rather than a randomly selected US/EU timezone from the fallback pool.
+  let resolvedTZ: readonly [string, number, number] | undefined;
+  if (proxy?.host && proxy?.port) {
+    try {
+      const iana = await resolveProxyTimezone(proxy.host, proxy.port, proxy.username, proxy.password);
+      if (iana) {
+        resolvedTZ = tzFromIana(iana);
+        log(`Geo-timezone for profile ${profileId}: ${iana} → [${resolvedTZ.join(", ")}]`, "browser");
+      }
+    } catch { /* non-fatal — fall back to PRNG pool */ }
+  }
+
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
-  await applyStealthScripts(page, userAgent);
+  await applyStealthScripts(page, userAgent, resolvedTZ, userAgentApi);
 
   // Enable request interception so we can block heavy media resources for
   // background sessions (no SSE viewer connected).  Instagram loads dozens of
@@ -1810,7 +2051,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, framePending: false, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, sessionToken: Symbol(), lastActivityAt: Date.now() };
+  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, framePending: false, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, userAgentApi: userAgentApi ?? null, sessionToken: Symbol(), lastActivityAt: Date.now(), startedAt: Date.now(), resolvedTZ };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -1827,7 +2068,7 @@ export async function getOrCreateSession(
       const tMeta = buildUAMetadata(userAgent);
       await (tMeta ? newPage.setUserAgent(userAgent, tMeta as any) : newPage.setUserAgent(userAgent));
       await newPage.setViewport(viewportForUA(userAgent));
-      await applyStealthScripts(newPage, userAgent);
+      await applyStealthScripts(newPage, userAgent, sessions.get(profileId)?.resolvedTZ, sessions.get(profileId)?.userAgentApi);
       // Also intercept file choosers on any popup page
       (newPage as any).on("filechooser", (chooser: any) => {
         pendingFileChoosers.set(profileId, chooser);
@@ -2919,7 +3160,7 @@ export async function browserNewTab(profileId: number) {
     // viewportForUA() returns mobile dimensions (e.g. 412×915 @ 2.625x scale) for
     // mobile UAs, which causes severe stretching when drawn onto the 1280×760 canvas.
     await newPage.setViewport({ width: 1280, height: 760 });
-    await applyStealthScripts(newPage, s.userAgent);
+    await applyStealthScripts(newPage, s.userAgent, s.resolvedTZ, s.userAgentApi);
     // File chooser interception for new tab
     (newPage as any).on("filechooser", (chooser: any) => {
       pendingFileChoosers.set(profileId, chooser);

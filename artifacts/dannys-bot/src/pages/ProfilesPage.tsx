@@ -16,7 +16,7 @@ import {
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
   Smartphone, FileDown, Filter, X, Settings2,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, LockOpen, UserMinus, Camera, Eye,
-  Tag, FolderOpen,
+  Tag, FolderOpen, Battery, BatteryCharging, Wifi,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -81,12 +81,46 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, actions: 176, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, actions: true, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "actions", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, actions: 176, battery: 90, connection: 80, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, actions: true, battery: false, connection: false, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "actions", "battery", "connection", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", active: "Active", actions: "Actions", ip: "IP:Port",
+  account: "Account", status: "Status", active: "Active", actions: "Actions", battery: "Battery", connection: "Mbps", ip: "IP:Port",
 };
+
+// ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
+function _pageDjb2(ua: string): number {
+  let s = 5381;
+  for (let i = 0; i < ua.length; i++) s = (((s << 5) + s) ^ ua.charCodeAt(i)) >>> 0;
+  return s || 1;
+}
+function _pageFingerprint(ua: string, _apiUA?: string | null): { batteryPct: number; charging: boolean; connType: string; downlink: number } {
+  let s = _pageDjb2(ua);
+  const r  = () => { s = ((Math.imul(1664525, s) + 1013904223) >>> 0); return s / 0x100000000; };
+  const rI = (lo: number, hi: number) => { lo + Math.round(r() * (hi - lo)); };
+  const rp = <T extends unknown>(arr: readonly T[]) => arr[Math.floor(r() * arr.length)];
+  const PROF = [
+    [360, 808,  3.0,   8,  8, "Pixel 9 Pro"   ],
+    [411, 914,  2.625, 8,  9, "Pixel 8a"      ],
+    [411, 914,  2.625, 8,  9, "Pixel 8"       ],
+    [360, 780,  3.0,   8, 10, "Samsung S24"   ],
+    [360, 780,  3.0,   8,  8, "Samsung S22"   ],
+    [393, 851,  2.75,  8,  8, "OnePlus 12"    ],
+    [412, 915,  2.625, 8,  8, "OnePlus 10 Pro"],
+    [412, 900,  2.70,  8,  8, "Moto Edge"     ],
+    [393, 873,  2.75,  8,  8, "Xiaomi 14"     ],
+    [393, 873,  2.75,  8,  8, "Sony Xperia 1V"],
+    [393, 868,  2.75,  8,  8, "OPPO Find X6"  ],
+    [360, 780,  3.0,   8,  8, "Samsung A54"   ],
+  ] as const;
+  rp(PROF);                                                      // call 1 — advance past device (output ignored; battery/conn follow)
+  const batteryPct = Math.round((0.60 + r() * 0.39) * 100);    // call 2
+  const charging   = r() > 0.35;                                // call 3
+  if (charging) rI(0, 3600); else rI(1800, 28800);             // call 4
+  const connType = rp(["Wi-Fi", "Wi-Fi", "Wi-Fi", "Cellular"] as const); // call 5
+  const downlink = Math.round(2 + r() * 98);                    // call 6
+  return { batteryPct, charging, connType, downlink };
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function ProfilesPage() {
@@ -400,6 +434,7 @@ export function ProfilesPage() {
 
   const handleCreate = () => {
     const nextNum = getNextAccountNum();
+    const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
     createProfileMutation.mutate({
       username: "",
       password: "",
@@ -408,6 +443,8 @@ export function ProfilesPage() {
       proxyPort: null,
       proxyUsername: "",
       proxyPassword: "",
+      userAgentApi: ua.api,
+      userAgentEmbedded: ua.embedded,
     }, {
       onSuccess: (profile) => {
         window.location.href = `/profiles/${profile.id}`;
@@ -421,6 +458,7 @@ export function ProfilesPage() {
     let startNum = getNextAccountNum();
     try {
       for (let i = 0; i < count; i++) {
+        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
         await createProfileMutation.mutateAsync({
           username: "",
           password: "",
@@ -429,6 +467,8 @@ export function ProfilesPage() {
           proxyPort: null,
           proxyUsername: "",
           proxyPassword: "",
+          userAgentApi: ua.api,
+          userAgentEmbedded: ua.embedded,
         });
       }
       setAddProfilePanelOpen(false);
@@ -890,6 +930,8 @@ export function ProfilesPage() {
               );
               if (key === "active") return <div key={key} style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>;
               if (key === "actions") return <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>;
+              if (key === "battery") return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0 text-left">Battery</div>;
+              if (key === "connection") return <div key={key} style={{ width: profColWidths.connection }} className="shrink-0 text-left">Mbps</div>;
               return null;
             })}
             <div className="flex-1" />
@@ -1015,6 +1057,36 @@ export function ProfilesPage() {
                         <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>
                       </div>
                     );
+                    if (key === "battery") {
+                      const live = (profile as any).ebLiveStats as { battery: number; charging: boolean; downlink: number } | undefined;
+                      const pct = live ? Math.round(live.battery * 100) : (profile.userAgentEmbedded ? _pageFingerprint(profile.userAgentEmbedded, profile.userAgentApi).batteryPct : null);
+                      const chg = live ? live.charging : (profile.userAgentEmbedded ? _pageFingerprint(profile.userAgentEmbedded, profile.userAgentApi).charging : false);
+                      if (pct === null) return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0" />;
+                      const color = pct > 60 ? "text-green-600" : pct > 30 ? "text-amber-600" : "text-red-500";
+                      const barW  = pct > 60 ? "bg-green-400" : pct > 30 ? "bg-amber-400" : "bg-red-400";
+                      return (
+                        <div key={key} style={{ width: profColWidths.battery }} className="shrink-0 flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
+                          {chg
+                            ? <BatteryCharging className="w-3 h-3 shrink-0 text-green-500" />
+                            : <Battery className={`w-3 h-3 shrink-0 ${color}`} />}
+                          <div className="w-10 h-1 rounded-full bg-slate-200 overflow-hidden">
+                            <div className={`h-full rounded-full ${barW} ${live ? "transition-all duration-1000" : ""}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className={`text-[10px] font-mono font-semibold ${color}`}>{pct}%</span>
+                        </div>
+                      );
+                    }
+                    if (key === "connection") {
+                      const live = (profile as any).ebLiveStats as { battery: number; charging: boolean; downlink: number } | undefined;
+                      const mbps = live ? live.downlink : (profile.userAgentEmbedded ? _pageFingerprint(profile.userAgentEmbedded, profile.userAgentApi).downlink : null);
+                      if (mbps === null) return <div key={key} style={{ width: profColWidths.connection }} className="shrink-0" />;
+                      return (
+                        <div key={key} style={{ width: profColWidths.connection }} className="shrink-0 flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
+                          <Wifi className="w-3 h-3 shrink-0 text-blue-400" />
+                          <span className="text-[10px] font-mono font-semibold text-blue-600">{mbps}</span>
+                        </div>
+                      );
+                    }
                     return null;
                   })}
                   {profColVisible.ip && (() => {

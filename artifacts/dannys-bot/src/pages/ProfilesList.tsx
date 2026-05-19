@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, MoreVertical, Play, Square, Settings, Trash2, Instagram, Loader2 } from "lucide-react";
+import { Plus, MoreVertical, Play, Square, Settings, Trash2, Instagram, Loader2, BatteryCharging, Battery, Wifi } from "lucide-react";
 import { useProfiles, useCreateProfile, useDeleteProfile, useStartProfile, useStopProfile } from "@/hooks/use-profiles";
+import { userAgents } from "@/shared/userAgents";
 import { useProxies } from "@/hooks/use-proxies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,11 +26,14 @@ export default function ProfilesList() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
     createProfile.mutate(
       { 
         username: formData.username, 
         password: formData.password, 
-        proxyId: formData.proxyId ? Number(formData.proxyId) : null as any 
+        proxyId: formData.proxyId ? Number(formData.proxyId) : null as any,
+        userAgentApi: ua.api,
+        userAgentEmbedded: ua.embedded,
       },
       { 
         onSuccess: () => {
@@ -175,6 +179,42 @@ export default function ProfilesList() {
                     {profile.proxyId ? proxies?.find(p => p.id === profile.proxyId)?.name || 'Unknown' : 'Direct (No Proxy)'}
                   </span>
                 </div>
+
+                {/* Live EB fingerprint stats — only visible while browser session is open */}
+                {(profile as any).ebLiveStats && (() => {
+                  const stats = (profile as any).ebLiveStats as { battery: number; charging: boolean; downlink: number };
+                  const pct   = Math.round(stats.battery * 100);
+                  const color = pct > 60 ? "text-green-600" : pct > 30 ? "text-amber-600" : "text-red-600";
+                  const barW  = pct > 60 ? "bg-green-400" : pct > 30 ? "bg-amber-400" : "bg-red-400";
+                  return (
+                    <div className="space-y-2">
+                      {/* Battery row */}
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-1.5 text-slate-500">
+                          {stats.charging
+                            ? <BatteryCharging className="h-3.5 w-3.5 text-green-500" />
+                            : <Battery className={`h-3.5 w-3.5 ${color}`} />}
+                          Battery
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {/* progress bar */}
+                          <div className="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-1000 ${barW}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className={`font-mono text-xs font-semibold ${color}`}>{pct}%</span>
+                        </div>
+                      </div>
+                      {/* Connection row */}
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-1.5 text-slate-500">
+                          <Wifi className="h-3.5 w-3.5 text-blue-400" />
+                          Connection
+                        </span>
+                        <span className="font-mono text-xs font-semibold text-blue-600">{stats.downlink} Mbps</span>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="flex gap-2">
                   {profile.status === 'running' ? (
                     <Button 

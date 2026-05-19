@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCreateProfile } from "@/hooks/use-profiles";
 import { toast } from "@/hooks/use-toast";
+import { userAgents } from "@/shared/userAgents";
 import {
   CheckCircle2, AlertCircle, Loader2, Instagram, Trash2, Upload,
   Eye, EyeOff, ClipboardPaste,
@@ -186,6 +187,7 @@ export function BulkImportPage() {
       setRows(prev => prev.map(r => r.id === id ? { ...r, status: "adding" } : r));
 
       try {
+        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
         const created = await createProfileMutation.mutateAsync({
           username: row.username,
           password: row.password,
@@ -197,17 +199,9 @@ export function BulkImportPage() {
           proxyPort: null,
           proxyUsername: "",
           proxyPassword: "",
+          userAgentApi: ua.api,
+          userAgentEmbedded: ua.embedded,
         });
-
-        // Auto-assign device IDs immediately after creating
-        try {
-          await fetch(`/api/profiles/${created.id}/reset-device-ids`, {
-            method: "POST",
-            credentials: "include",
-          });
-        } catch {
-          // Non-fatal — account still created
-        }
 
         setRows(prev => prev.map(r => r.id === id ? { ...r, status: "added", profileId: created.id } : r));
         setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
