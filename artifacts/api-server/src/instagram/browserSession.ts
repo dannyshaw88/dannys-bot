@@ -346,12 +346,15 @@ export function getEbLiveStats(
 ): { battery: number; charging: boolean; downlink: number } {
   const { batteryStart, charging, downlink: baseDownlink } = _computeEbSeedValues(userAgent);
 
-  // Battery drift — only when a session is active (we need a real startedAt)
-  const session = sessions.get(profileId);
+  // Battery drift — use API session epoch (automation engine running) first,
+  // then EB session epoch, then static seed (no session of any kind active).
+  const apiEpoch = apiSessionEpochs.get(profileId);
+  const ebSession = sessions.get(profileId);
+  const epochMs = apiEpoch ?? ebSession?.startedAt;
   let battery: number;
-  if (session) {
-    const elapsedMin = (Date.now() - session.startedAt) / 60_000;
-    const drift = elapsedMin * 0.001; // 0.1 %/min as a fraction
+  if (epochMs !== undefined) {
+    const elapsedMin = (Date.now() - epochMs) / 60_000;
+    const drift = elapsedMin * 0.001; // 0.1 %/min as a fraction (matches stealth script)
     battery = charging
       ? Math.min(1.0, batteryStart + drift)
       : Math.max(0.05, batteryStart - drift);
@@ -850,6 +853,12 @@ interface Session {
   // Used to estimate the current battery level for live display in the UI.
   startedAt: number;
 }
+
+// Tracks when each profile's automation (mobile-API) session started.
+// Set by the automation engine when any runner (follow, unfollow, DM, contact,
+// human-session) launches.  Used by getEbLiveStats to drift the battery level
+// even when the EB browser is not open — API work drains the phone too.
+export const apiSessionEpochs = new Map<number, number>();
 
 // Challenge URLs from IgCheckpointError — set by the verify route, consumed by getOrCreateSession
 // Converts mobile API URL (i.instagram.com) → desktop web URL (www.instagram.com) for the browser

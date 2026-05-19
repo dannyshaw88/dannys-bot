@@ -86,6 +86,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.411",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Battery level now drains correctly while accounts are running their automation tools via the API — previously it only drained when the embedded browser was open, which is almost never the case during normal operation." },
+      { category: "Fix", text: "Each automation runner (follow, unfollow, DM, contact, human session) now stamps its own start time so the battery drift is tracked independently per account from the moment its tools begin running." },
+    ],
+  },
+  {
     version: "1.0.410",
     date: "19 May 2026",
     items: [

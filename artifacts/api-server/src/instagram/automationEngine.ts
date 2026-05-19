@@ -25,7 +25,7 @@ import { InstagramWebClient } from "./instagramWebClient";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
-import { applyStealthScripts, getExistingBrowser, viewportForUA } from "./browserSession";
+import { applyStealthScripts, getExistingBrowser, viewportForUA, apiSessionEpochs } from "./browserSession";
 import type { Profile, Tool, Source } from "../shared/schema";
 import { profileUsernameCache } from "../lib/profileUsernameCache";
 import * as fsPromises from "node:fs/promises";
@@ -463,6 +463,7 @@ class AutomationEngine {
   private launch(profile: Profile, _tool: Tool, runImmediately = false) {
     // Guard against double-launch (e.g. rapid toggle OFF→ON)
     if (this.states.has(profile.id)) return;
+    apiSessionEpochs.set(profile.id, Date.now());
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -665,6 +666,7 @@ class AutomationEngine {
 
   // ── Human session runner ──────────────────────────────────────────────────
   private launchHumanSession(profile: Profile, _tool: Tool, runImmediately = false) {
+    apiSessionEpochs.set(profile.id, Date.now());
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -756,6 +758,7 @@ class AutomationEngine {
 
   // ── Unfollow runner launch ─────────────────────────────────────────────────
   private launchUnfollow(profile: Profile, _tool: Tool, runImmediately = false) {
+    apiSessionEpochs.set(profile.id, Date.now());
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -865,6 +868,7 @@ class AutomationEngine {
 
   // ── DM runner launch ─────────────────────────────────────────────────────
   private launchDM(profile: Profile, _tool: Tool, runImmediately = false) {
+    apiSessionEpochs.set(profile.id, Date.now());
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -941,6 +945,7 @@ class AutomationEngine {
 
   // ── Contact (new-follower + users send) runner ────────────────────────────
   private launchContact(profile: Profile, _tool: Tool, runImmediately = false) {
+    apiSessionEpochs.set(profile.id, Date.now());
     const state: ProfileState = {
       stop: { stopped: false },
       client: null,
@@ -3653,7 +3658,7 @@ class AutomationEngine {
         if (proxyAuth) await tab.authenticate(proxyAuth);
         await tab.setUserAgent(ua);
         await tab.setViewport(viewportForUA(ua));
-        await applyStealthScripts(tab, ua);
+        await applyStealthScripts(tab, ua, undefined, profile.userAgentApi);
         bakePage = tab;
         usingEbBrowser = true;
         console.log(`[cookie-baker] @${profile.username}: visiting ${sitesToVisit.length} site(s) [EB tab]`);
@@ -3715,7 +3720,7 @@ class AutomationEngine {
         if (proxyAuth) await headlessPage.authenticate(proxyAuth);
         await headlessPage.setUserAgent(ua);
         await headlessPage.setViewport(viewportForUA(ua));
-        await applyStealthScripts(headlessPage, ua);
+        await applyStealthScripts(headlessPage, ua, undefined, profile.userAgentApi);
         bakePage = headlessPage;
       } catch (launchErr: any) {
         const errMsg = `Browser failed to launch: ${launchErr?.message ?? "unknown error"}`;
