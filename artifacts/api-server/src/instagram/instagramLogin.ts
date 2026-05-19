@@ -455,6 +455,15 @@ async function extractSessionCookies(ig: IgApiClient): Promise<string | null> {
 }
 
 function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiClient; captureDeviceState: () => string } {
+  // ── IP-LEAK PREVENTION ────────────────────────────────────────────────────
+  // The IgApiClient routes all mobile-API traffic.  Without a proxy URL the
+  // library sends requests direct — exposing the server/home IP to Instagram.
+  if (!proxyUrl) {
+    throw new Error(
+      `[IP-LEAK BLOCKED] buildIgClient called without proxy for @${profile.username}. ` +
+      "Assign a proxy before verifying or using this account."
+    );
+  }
   const ig = new IgApiClient();
   // request-promise has no default timeout — hang indefinitely on dead proxies
   // without this, leading to FD exhaustion and server unresponsiveness after ~1h.

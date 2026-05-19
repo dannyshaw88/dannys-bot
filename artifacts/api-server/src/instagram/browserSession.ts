@@ -215,6 +215,8 @@ export async function harvestSignupCookiesFromEB(opts?: {
   preBakeSites?: string[];
   preBakeSitesMin?: number;
   preBakeSitesMax?: number;
+  preBakeScrollMin?: number;
+  preBakeScrollMax?: number;
   preBakePctWebsite?: number;
   preBakePctYt?: number;
   preBakePctGoogle?: number;
@@ -253,9 +255,17 @@ export async function harvestSignupCookiesFromEB(opts?: {
     return null;
   }
 
-  const proxyArg = opts?.proxyHost
-    ? [`--proxy-server=${opts.proxyHost}:${opts.proxyPort ?? 80}`]
-    : [];
+  // ── IP-LEAK PREVENTION ────────────────────────────────────────────────────
+  // The harvest browser visits Instagram to seed device cookies.  Without a
+  // proxy, Chrome connects via the server/home IP — Instagram fingerprints it
+  // and may flag the account before it is even created.  Block early.
+  if (!opts?.proxyHost) {
+    log(`${logPfx} No proxy configured — refusing to harvest EB cookies without a proxy (home IP would be exposed)`);
+    try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+    return null;
+  }
+
+  const proxyArg = [`--proxy-server=${opts.proxyHost}:${opts.proxyPort ?? 80}`];
 
   let browser: any;
   try {
@@ -286,7 +296,9 @@ export async function harvestSignupCookiesFromEB(opts?: {
       _startSignupScreencast().catch(() => {});
     }
     await page.setUserAgent(effectiveUA);
-    await page.setViewport({ width: 1280, height: 760 });
+    // Explicitly force desktop viewport — isMobile/hasTouch must be false or
+    // sites like YouTube will serve the mobile version in headless Chrome.
+    await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
 
     if (opts?.proxyUsername) {
       await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
@@ -325,10 +337,25 @@ export async function harvestSignupCookiesFromEB(opts?: {
           ...sources.filter(s => s.type !== firstType),
         ];
 
-        const minS = opts?.preBakeSitesMin ?? 1;
-        const maxS = opts?.preBakeSitesMax ?? 3;
+        const minS     = opts?.preBakeSitesMin  ?? 1;
+        const maxS     = opts?.preBakeSitesMax  ?? 3;
+        const scrollLo = (opts?.preBakeScrollMin ?? 5) * 1000;
+        const scrollHi = (opts?.preBakeScrollMax ?? 15) * 1000;
         const numSites = Math.floor(Math.random() * (maxS - minS + 1)) + minS;
         const shuffled = [...pbSites].sort(() => Math.random() - 0.5).slice(0, numSites);
+
+        // Organic scroll helper — scrolls the page for a given duration
+        const organicScroll = async (ms: number) => {
+          const end = Date.now() + ms;
+          while (Date.now() < end) {
+            try {
+              await page.evaluate(() => { window.scrollBy(0, 120 + Math.random() * 180); });
+            } catch {}
+            await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
+          }
+        };
+
+        const scrollMs = () => scrollLo + Math.random() * (scrollHi - scrollLo);
 
         for (const src of ordered) {
           if (src.type === "website") {
@@ -339,9 +366,10 @@ export async function harvestSignupCookiesFromEB(opts?: {
                 log(`${logPfx} Pre-bake → ${url}`);
                 await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
                 await dismissCookieBanner(page);
-                await new Promise(r => setTimeout(r, 2500 + Math.random() * 2500));
+                await organicScroll(scrollMs());
               } catch (e: any) {
-                log(`${logPfx} Pre-bake warning (${url}): ${e?.message}`);
+                log(`${logPfx} Pre-bake skip (${url}): ${e?.message}`);
+                opts?.onStep?.(`Pre-bake: skipped ${url} (load failed)`);
               }
             }
           } else if (src.type === "youtube") {
@@ -350,9 +378,22 @@ export async function harvestSignupCookiesFromEB(opts?: {
               log(`${logPfx} Pre-bake → YouTube`);
               await page.goto("https://www.youtube.com/", { waitUntil: "domcontentloaded", timeout: 25000 });
               await dismissCookieBanner(page);
-              await new Promise(r => setTimeout(r, 2500 + Math.random() * 2500));
+              // Scroll the homepage feed organically
+              await organicScroll(3000 + Math.random() * 3000);
+              // Click a random video from the homepage grid
+              try {
+                await page.waitForSelector("ytd-rich-item-renderer a#thumbnail, ytd-video-renderer a#thumbnail", { timeout: 5000 });
+                const thumbs = await page.$$("ytd-rich-item-renderer a#thumbnail, ytd-video-renderer a#thumbnail");
+                if (thumbs.length > 0) {
+                  await thumbs[Math.floor(Math.random() * Math.min(6, thumbs.length))].click();
+                  await new Promise(r => setTimeout(r, 1500));
+                  await dismissCookieBanner(page);
+                  await organicScroll(4000 + Math.random() * 4000);
+                }
+              } catch {}
             } catch (e: any) {
               log(`${logPfx} Pre-bake warning (YouTube): ${e?.message}`);
+              opts?.onStep?.("Pre-bake: YouTube load issue — continuing");
             }
           } else if (src.type === "google") {
             try {
@@ -360,9 +401,28 @@ export async function harvestSignupCookiesFromEB(opts?: {
               log(`${logPfx} Pre-bake → Google`);
               await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded", timeout: 25000 });
               await dismissCookieBanner(page);
-              await new Promise(r => setTimeout(r, 2500 + Math.random() * 2500));
+              await new Promise(r => setTimeout(r, 1500));
+              // Perform an organic search for a random common topic
+              const SEARCH_TERMS = [
+                "weather today", "news headlines", "sports scores",
+                "movies 2025", "best recipes", "travel destinations",
+                "technology news", "fitness tips", "photography ideas",
+              ];
+              const term = SEARCH_TERMS[Math.floor(Math.random() * SEARCH_TERMS.length)];
+              try {
+                opts?.onStep?.(`Pre-bake: Google search "${term}"...`);
+                log(`${logPfx} Pre-bake → Google search: "${term}"`);
+                await page.type("textarea[name='q'], input[name='q']", term, { delay: 80 + Math.random() * 60 });
+                await page.keyboard.press("Enter");
+                await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+                await dismissCookieBanner(page);
+                await organicScroll(3000 + Math.random() * 3000);
+              } catch (e: any) {
+                log(`${logPfx} Pre-bake Google search warning: ${e?.message}`);
+              }
             } catch (e: any) {
               log(`${logPfx} Pre-bake warning (Google): ${e?.message}`);
+              opts?.onStep?.("Pre-bake: Google load issue — continuing");
             }
           }
         }
@@ -389,12 +449,17 @@ export async function harvestSignupCookiesFromEB(opts?: {
       };
     };
 
-    // ── Step 1: Visit the homepage ────────────────────────────────────────────
+    // ── Step 1: Visit homepage to seed mid / ig_did fingerprint cookies ───────
     // Use waitUntil:"load" (not "networkidle2") — Instagram keeps background
     // long-poll connections open, so networkidle2 almost always hits the 30 s
     // timeout before settling.  After the DOM is loaded we wait an explicit 6 s
     // to let Instagram's fingerprinting JS execute and write mid/ig_did.
-    log(`${logPfx} Navigating to instagram.com (homepage) to seed device cookies...`);
+    // Instagram's fingerprinting JS runs on the homepage and writes mid/ig_did.
+    // We visit the homepage first, then ALWAYS navigate to the signup form so
+    // the user can see the signup page in the EB stream and Instagram sees a
+    // natural navigation path (homepage → signup, not signup cold).
+    log(`${logPfx} Step 1: Navigating to instagram.com homepage to seed device cookies...`);
+    opts?.onStep?.("EB: visiting Instagram homepage to seed device cookies (mid, ig_did)...");
     try {
       await page.goto("https://www.instagram.com/", {
         waitUntil: "load",
@@ -405,33 +470,35 @@ export async function harvestSignupCookiesFromEB(opts?: {
     }
     // Give Instagram's fingerprinting scripts time to run and write cookies.
     await new Promise(r => setTimeout(r, 4000));
-    // Dismiss the cookie consent banner if Instagram shows one
     await dismissCookieBanner(page);
     await new Promise(r => setTimeout(r, 2000));
 
     let { mid, ig_did, csrftoken } = await readIgCookies();
     log(`${logPfx} After homepage+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
 
-    // ── Step 2: Navigate to signup page if device cookies still missing ───────
-    if (!mid || !ig_did) {
-      log(`${logPfx} Navigating to instagram.com/accounts/emailsignup/ to get remaining cookies...`);
-      try {
-        await page.goto("https://www.instagram.com/accounts/emailsignup/", {
-          waitUntil: "load",
-          timeout: 30000,
-        });
-      } catch (e: any) {
-        log(`${logPfx} Signup page navigation warning (still checking cookies): ${e?.message}`);
-      }
-      await new Promise(r => setTimeout(r, 4000));
-      await dismissCookieBanner(page);
-      await new Promise(r => setTimeout(r, 2000));
+    // ── Step 2: Navigate to the signup page (always) ─────────────────────────
+    // This gives the user a visible signup form in the EB stream and often
+    // provides the csrftoken cookie that the homepage does not always set.
+    log(`${logPfx} Step 2: Navigating to instagram.com/accounts/emailsignup/ ...`);
+    opts?.onStep?.("EB: navigating to Instagram signup page...");
+    try {
+      await page.goto("https://www.instagram.com/accounts/emailsignup/", {
+        waitUntil: "load",
+        timeout: 30000,
+      });
+    } catch (e: any) {
+      log(`${logPfx} Signup page navigation warning (still checking cookies): ${e?.message}`);
+    }
+    await new Promise(r => setTimeout(r, 4000));
+    await dismissCookieBanner(page);
+    await new Promise(r => setTimeout(r, 2000));
+    {
       const after = await readIgCookies();
       if (after.mid)       mid       = after.mid;
       if (after.ig_did)    ig_did    = after.ig_did;
       if (after.csrftoken) csrftoken = after.csrftoken;
-      log(`${logPfx} After signup page+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
     }
+    log(`${logPfx} After signup page+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
 
     // ── Step 3: Poll until all three cookies appear (up to 15 s more) ─────────
     const deadline = Date.now() + 15000;

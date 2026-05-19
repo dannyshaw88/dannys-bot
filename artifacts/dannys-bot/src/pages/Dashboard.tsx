@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.396",
+    date: "19 May 2026",
+    items: [
+      { category: "Security", text: "All Instagram traffic now requires a proxy — if an account has no proxy assigned, every action (login, verify, account creation, cookie harvest) is blocked before any network connection is made, so your server IP is never exposed to Instagram." },
+      { category: "Security", text: "Cookie harvesting for account creation is now blocked at launch if no proxy is set — Chrome will not open without a proxy, preventing your IP from reaching Instagram before the account even exists." },
+      { category: "Security", text: "Account creation is blocked immediately if no proxy is configured — the process stops before sending any signup API calls." },
+    ],
+  },
+  {
     version: "1.0.395",
     date: "19 May 2026",
     items: [

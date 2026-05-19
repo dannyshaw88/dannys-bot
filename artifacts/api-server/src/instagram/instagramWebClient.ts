@@ -101,6 +101,18 @@ async function igReq(opts: {
 }): Promise<{ status: number; cookies: string[]; json: any; rawBody: string; responseHeaders: Record<string, string | string[] | undefined> }> {
   const { host = "www.instagram.com", path, method, headers, body, cookieJar = [], proxyUrl } = opts;
 
+  // ── IP-LEAK PREVENTION ────────────────────────────────────────────────────
+  // Every Instagram API request MUST go through the account's assigned proxy.
+  // A missing proxyUrl means the request would exit via the server/home IP —
+  // Instagram will fingerprint the mismatch and lock the account.
+  // This throw is intentional: callers must always supply a proxyUrl.
+  if (!proxyUrl) {
+    throw new Error(
+      `[IP-LEAK BLOCKED] Instagram request ${method} ${path} refused — no proxy configured. ` +
+      "Assign a proxy to this account before performing any actions."
+    );
+  }
+
   const reqHeaders: Record<string, string> = {
     ...headers,
     ...(cookieJar.length ? { Cookie: cookieJar.join("; ") } : {}),
@@ -357,6 +369,16 @@ export class InstagramWebClient {
   private throttleSecondsMax  = 8;
 
   constructor(proxyUrl?: string, profileId?: number) {
+    // ── IP-LEAK PREVENTION ──────────────────────────────────────────────────
+    // An InstagramWebClient without a proxy would route ALL mobile-API calls
+    // through the server/home IP, exposing it to Instagram and causing account
+    // locks.  Callers must always resolve and pass a proxyUrl first.
+    if (!proxyUrl) {
+      throw new Error(
+        `[IP-LEAK BLOCKED] InstagramWebClient(profileId=${profileId}) constructed without a proxy. ` +
+        "Resolve the account's proxy before creating an API client."
+      );
+    }
     this.proxyUrl = proxyUrl;
     this.profileId = profileId;
   }
@@ -3234,6 +3256,18 @@ export async function createInstagramAccountViaApi(params: {
   onStep?: (msg: string) => void;
 }): Promise<SignupResult> {
   const { username, password, email, firstName = "", day, month, year, proxyUrl, bio, userAgent, apiLimits, ebCookies, onStep } = params;
+
+  // ── IP-LEAK PREVENTION ────────────────────────────────────────────────────
+  // Account creation sends real Instagram API calls.  Without a proxy the
+  // request exits via the server/home IP — Instagram will flag the account
+  // immediately.  Block before any network I/O occurs.
+  if (!proxyUrl) {
+    return {
+      status: "error",
+      steps: ["[IP-LEAK BLOCKED] No proxy configured — account creation refused to protect your IP. Assign a proxy in the Create Account settings."],
+      message: "No proxy configured. Assign a proxy to this account before creating it.",
+    };
+  }
 
   // Delay helper: respects the API limits by sleeping (everySecondsMin/reqMax … everySecondsMax/reqMin) seconds
   const stepDelay = apiLimits
