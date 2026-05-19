@@ -42,6 +42,7 @@ import {
   harvestSignupCookiesFromEB,
   scheduleAutoLogin,
   getSessionChallengeUrl,
+  deleteSavedCookies,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -422,6 +423,35 @@ export async function registerInstagramRoutes(
   // ── Cookie Injection ─────────────────────────────────────────────────────
   // Writes cookies both to igApiCookies (DB) AND to the Puppeteer cookie file
   // so the embedded browser picks them up on its next session start.
+  app.post("/api/profiles/:id/clear-session-cookies", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+
+    const existing: string = (profile as any).igApiCookies ?? "";
+    const deviceOnly = existing
+      .split(";")
+      .map(s => s.trim())
+      .filter(s => {
+        const name = s.split("=")[0]?.trim().toLowerCase();
+        return name === "mid" || name === "ig_did";
+      })
+      .join(";");
+
+    await storage.updateProfile(profileId, {
+      igApiCookies: deviceOnly || null,
+      accountStatus: "logged_out",
+    } as any);
+
+    // Also delete the JSON cookie file so Chrome doesn't reload the dead session
+    // on the next EB open. Device tokens (mid, ig_did) stored in igDeviceState
+    // and igApiCookies are untouched — only the file used to seed Chrome is removed.
+    deleteSavedCookies(profileId);
+
+    console.log(`[profiles] @${profile.username}: session cookies cleared (device tokens preserved: ${deviceOnly ? "yes" : "none"}, cookie JSON file deleted)`);
+    res.json({ ok: true });
+  });
+
   app.post("/api/profiles/:id/inject-cookies", async (req, res) => {
     const profileId = Number(req.params.id);
     const { cookies: rawCookies } = req.body ?? {};
@@ -2586,6 +2616,135 @@ export async function registerInstagramRoutes(
     } catch (e: any) {
       req.log.error({ err: e }, "signup/start failed");
       return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  // ── Streaming signup (SSE over POST) ─────────────────────────────────────
+  // Same as /api/signup/start but streams each step as an SSE event so the
+  // frontend can render a live trace panel without waiting for completion.
+  app.post("/api/signup/start-stream", async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    try { (res as any).flushHeaders(); } catch {}
+
+    const sendStep = (msg: string) => {
+      try { res.write(`data: ${JSON.stringify({ type: "step", msg, ts: Date.now() })}\n\n`); } catch {}
+    };
+    const sendDone = (result: unknown) => {
+      try {
+        res.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
+        res.end();
+      } catch {}
+    };
+
+    try {
+      const {
+        username, password, email, firstName, day, month, year,
+        proxyHost, proxyPort, proxyUsername, proxyPassword, bio,
+        imapHost, imapPort, imapUser, imapPass,
+        userAgentApi, userAgentEb, apiLimits,
+      } = req.body as any;
+
+      if (!username || !password || !email || !day || !month || !year) {
+        return sendDone({ status: "error", message: "username, password, email, day, month and year are required", steps: [] });
+      }
+
+      let proxyUrl: string | undefined;
+      if (proxyHost) {
+        const auth = proxyUsername ? `${encodeURIComponent(proxyUsername)}:${encodeURIComponent(proxyPassword ?? "")}@` : "";
+        proxyUrl = `http://${auth}${proxyHost}${proxyPort ? `:${proxyPort}` : ""}`;
+      }
+      const dobStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const parsedApiLimits = apiLimits as { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | undefined;
+
+      const dbRecord = await storage.saveApiCreatedAccount({
+        username, password, email,
+        proxyHost: proxyHost ?? null, proxyPort: proxyPort ? Number(proxyPort) : null,
+        proxyUsername: proxyUsername ?? null, proxyPassword: proxyPassword ?? null,
+        bio: bio ?? null, imapServer: imapHost ?? null,
+        imapPort: imapPort ? Number(imapPort) : null, imapPass: imapPass ?? null,
+        status: "pending", instagramUserId: null, sessionCookies: null,
+        errorMessage: null, steps: null, addedToAccounts: false, profileId: null,
+        userAgentApi: userAgentApi ?? null, apiLimits: apiLimits ? JSON.stringify(apiLimits) : null,
+        dateOfBirth: dobStr, createdAt: new Date().toISOString(),
+      });
+
+      // ── EB harvest ─────────────────────────────────────────────────────────
+      sendStep("EB: launching temporary Chrome to harvest Instagram cookies (mid, ig_did, csrftoken)...");
+      let ebCookies: Awaited<ReturnType<typeof harvestSignupCookiesFromEB>>;
+      try {
+        ebCookies = await harvestSignupCookiesFromEB({
+          proxyHost, proxyPort: proxyPort ? Number(proxyPort) : undefined,
+          proxyUsername, proxyPassword, userAgent: userAgentEb || undefined,
+        });
+      } catch (e: any) {
+        const msg = `EB cookie harvest failed: ${e?.message}`;
+        sendStep(`EB: ${msg}`);
+        sendStep("Signup aborted — cannot create account without browser-originated cookies.");
+        await storage.updateApiCreatedAccount(dbRecord.id, {
+          status: "error", instagramUserId: null, sessionCookies: null,
+          errorMessage: msg, steps: JSON.stringify([msg]),
+        });
+        return sendDone({ status: "error", message: msg, steps: [msg], dbId: dbRecord.id });
+      }
+      if (!ebCookies?.ig_did) {
+        const msg = "EB cookie harvest returned no device cookies (mid/ig_did missing) — Chrome may be blocked by the proxy or Instagram's CDN did not set cookies. Signup aborted.";
+        sendStep(`EB: ${msg}`);
+        await storage.updateApiCreatedAccount(dbRecord.id, {
+          status: "error", instagramUserId: null, sessionCookies: null,
+          errorMessage: msg, steps: JSON.stringify([msg]),
+        });
+        return sendDone({ status: "error", message: msg, steps: [msg], dbId: dbRecord.id });
+      }
+      sendStep(`EB: harvested mid=${ebCookies.mid.slice(0, 8)}... ig_did=${ebCookies.ig_did.slice(0, 8)}... csrftoken=${ebCookies.csrftoken ? ebCookies.csrftoken.slice(0, 8) + "..." : "(none)"} (${ebCookies.cookieStrings.length} cookies total) ✓`);
+      sendStep(`EB agent: ${ebCookies.ebUserAgent}`);
+
+      // ── Signup ─────────────────────────────────────────────────────────────
+      let result = await createInstagramAccountViaApi({
+        username, password, email, firstName, day: Number(day), month: Number(month), year: Number(year),
+        proxyUrl, bio: bio || undefined, userAgent: userAgentApi || undefined,
+        apiLimits: parsedApiLimits, ebCookies,
+        onStep: sendStep,
+      });
+
+      // Prepend EB harvest steps so the stored log is complete
+      result = {
+        ...result,
+        steps: [
+          `EB: harvested mid=${ebCookies.mid.slice(0, 8)}... ig_did=${ebCookies.ig_did.slice(0, 8)}... ✓`,
+          `EB agent: ${ebCookies.ebUserAgent}`,
+          ...result.steps,
+        ],
+      };
+
+      // ── IMAP auto-verify ────────────────────────────────────────────────────
+      if (result.status === "email_verification" && imapHost && imapUser && imapPass && result.sessionId) {
+        sendStep(`IMAP: connecting to ${imapHost}:${imapPort ?? 993} as ${imapUser}...`);
+        const code = await fetchInstagramCodeFromImap({
+          host: imapHost, port: Number(imapPort) || 993, user: imapUser, pass: imapPass,
+        });
+        if (code) {
+          sendStep(`IMAP: found code ${code} — submitting`);
+          const verifyResult = await submitSignupCode(result.sessionId, code);
+          result = { ...verifyResult, steps: [...result.steps, ...verifyResult.steps] } as typeof result;
+        } else {
+          sendStep("IMAP: no code found within timeout — manual entry required");
+        }
+      }
+
+      await storage.updateApiCreatedAccount(dbRecord.id, {
+        status: result.status, instagramUserId: result.userId ?? null,
+        sessionCookies: result.sessionCookies ? JSON.stringify(result.sessionCookies) : null,
+        errorMessage: result.status === "error" ? (result.message ?? null) : null,
+        steps: JSON.stringify(result.steps),
+      });
+
+      sendDone({ ...result, dbId: dbRecord.id });
+    } catch (e: any) {
+      req.log.error({ err: e }, "signup/start-stream failed");
+      sendDone({ status: "error", message: e?.message ?? "Internal error", steps: [] });
     }
   });
 

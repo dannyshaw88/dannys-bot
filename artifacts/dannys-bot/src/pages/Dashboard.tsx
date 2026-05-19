@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.388",
+    date: "19 May 2026",
+    items: [
+      { category: "New", text: "Account Creator now shows a live step-by-step trace panel as the signup runs — you can see every API call, HTTP status code, and Instagram response in real time instead of waiting until the end." },
+      { category: "New", text: "Added an inline 'Add new proxy' form directly on the Account Creator page — enter a proxy host, port, and optional credentials without leaving the page, and it is automatically selected ready for use." },
+    ],
+  },
+  {
     version: "1.0.387",
     date: "19 May 2026",
     items: [

@@ -494,6 +494,52 @@ export class InstagramWebClient {
     return this.mobileCookieJar.join(";");
   }
 
+  // Sync sessionid and csrftoken from the web jar (Chrome JSON file) into the
+  // mobile jar WITHOUT touching device tokens (ig_did, mid) or triggering the
+  // cold-start bootstrap sequence. Called every automation cycle when an EB
+  // cookie file exists AND a verified mobile session is already active — this
+  // ensures the mobile API always runs with the most current sessionid Chrome
+  // has, not a potentially stale copy that was last written when the EB panel
+  // was manually opened.
+  syncWebCookiesToMobileJar(): void {
+    const sessionCookie = this.cookieJar.find(c => c.startsWith("sessionid="));
+    const csrfCookie    = this.cookieJar.find(c => c.startsWith("csrftoken="));
+    if (!sessionCookie) return;
+    this.mobileCookieJar = [
+      ...this.mobileCookieJar.filter(c => !c.startsWith("sessionid=") && !c.startsWith("csrftoken=")),
+      sessionCookie,
+      ...(csrfCookie ? [csrfCookie] : []),
+    ];
+    if (csrfCookie) this.mobileCsrf = csrfCookie.split("=").slice(1).join("=");
+    const snip = sessionCookie.split("=")[1]?.slice(0, 8) ?? "?";
+    console.log(`[webClient:${this.profileId}] syncWebCookiesToMobileJar: refreshed sessionid=...${snip}, csrf=${!!csrfCookie}`);
+  }
+
+  // Build a fresh igApiCookies string from the current web jar + stored device
+  // tokens so the DB can be kept in sync even when the EB panel is not open.
+  // Device tokens (mid, ig_did) always come from the Verify-Credentials-seeded
+  // values — never from the JSON file — to preserve fingerprint continuity.
+  // Returns null if no sessionid is present in the web jar.
+  buildFreshApiCookiesString(): string | null {
+    const get = (name: string) => {
+      const e = this.cookieJar.find(c => c.startsWith(name + "="));
+      return e ? e.slice(name.length + 1) : "";
+    };
+    const sessionid = get("sessionid");
+    const csrftoken = get("csrftoken");
+    const dsUserId  = get("ds_user_id");
+    const mid       = this._mobileMid   || get("mid");
+    const igDid     = this._mobileIgDid || get("ig_did");
+    if (!sessionid || !mid) return null;
+    return [
+      `sessionid=${sessionid}`,
+      csrftoken ? `csrftoken=${csrftoken}` : "",
+      dsUserId  ? `ds_user_id=${dsUserId}` : "",
+      `mid=${mid}`,
+      igDid     ? `ig_did=${igDid}`        : "",
+    ].filter(Boolean).join(";");
+  }
+
   // Set the user-agent for web POST requests so it matches the EB browser's UA.
   // This is critical — cookies are bound to the UA that created them.
   // Using a different UA than the EB browser causes Instagram to 302-redirect to login.
@@ -3185,8 +3231,9 @@ export async function createInstagramAccountViaApi(params: {
   userAgent?: string;
   apiLimits?: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number };
   ebCookies?: { mid: string; ig_did: string; csrftoken: string; cookieStrings: string[] } | null;
+  onStep?: (msg: string) => void;
 }): Promise<SignupResult> {
-  const { username, password, email, firstName = "", day, month, year, proxyUrl, bio, userAgent, apiLimits, ebCookies } = params;
+  const { username, password, email, firstName = "", day, month, year, proxyUrl, bio, userAgent, apiLimits, ebCookies, onStep } = params;
 
   // Delay helper: respects the API limits by sleeping (everySecondsMin/reqMax … everySecondsMax/reqMin) seconds
   const stepDelay = apiLimits
@@ -3203,7 +3250,7 @@ export async function createInstagramAccountViaApi(params: {
     ? rawUA
     : `Instagram ${MOBILE_VERSION} Android (${rawUA}; ${MOBILE_VERSION_CODE})`;
   const steps: string[] = [];
-  const step = (msg: string) => { steps.push(msg); console.log(`[accountCreator] ${msg}`); };
+  const step = (msg: string) => { steps.push(msg); console.log(`[accountCreator] ${msg}`); try { onStep?.(msg); } catch {} };
 
   // ── EB-FIRST: device identifiers MUST come from Chrome-harvested cookies ──────
   // The caller (route handler) is required to run harvestSignupCookiesFromEB()
@@ -3234,7 +3281,10 @@ export async function createInstagramAccountViaApi(params: {
   // (commit 57e5f68 / 44b34a0 — before gzip fix, before X-FB-Client-IP was added).
   // Do NOT add X-FB-Client-IP or X-FB-Server-Cluster — those were added AFTER
   // the 200 as speculative improvements and are absent from the working config.
-  const BLOKS_VERSION_ID = "388ece79ebc0e70e87873505ed1b0ff335ae2868a978cc951b6721c41d46a30a";
+  // BLOKS_VERSION_ID: updated 2026-05-18 — confirmed current via instaloader project.
+  // Old v222 value (388ece79...) caused error_type:"needs_upgrade" on accounts/create/.
+  // Update this alongside MOBILE_VERSION when Instagram bumps its minimum accepted version.
+  const BLOKS_VERSION_ID = "16b7bd25c6c06886d57c4d455265669345a2d96625385b8ee30026ac2dc5ed97";
   const baseHeaders: Record<string, string> = {
     "Host": "i.instagram.com",
     "User-Agent": effectiveUA,
@@ -3410,9 +3460,6 @@ export async function createInstagramAccountViaApi(params: {
     } else {
       const detail = isJsonResponse ? JSON.stringify(j) : "(HTML response — skipping cookie merge)";
       step(`Username check HTTP ${res.status} — ${detail}`);
-      if (!isJsonResponse && syncCookiesSeen === 0) {
-        step(`⚠️ Proxy warning: both sync calls + username check returned no real API responses — this proxy IP may be flagged by Instagram's CDN. Signup errors below may be false positives.`);
-      }
     }
   } catch (e: any) {
     step(`Username check error: ${e?.message} (continuing)`);
@@ -3729,10 +3776,7 @@ export async function createInstagramAccountViaApi(params: {
 
     if (j.error_type === "email_is_taken") {
       step(`Email already registered: ${email}`);
-      const proxyNote = syncCookiesSeen === 0
-        ? " NOTE: Both pre-signup sync calls returned zero cookies — this is a strong sign the proxy IP is flagged by Instagram's CDN and this 'email taken' error is a false positive. Try a fresh residential/mobile proxy and retry with the same email."
-        : "";
-      return { status: "error", steps, message: (fieldMsg ?? "Another account is using the same email.") + proxyNote, rawResponse: j };
+      return { status: "error", steps, message: fieldMsg ?? "Another account is using the same email.", rawResponse: j };
     }
     if (j.error_type === "username_is_taken") {
       step(`Username already taken: @${username}`);
@@ -3755,6 +3799,17 @@ export async function createInstagramAccountViaApi(params: {
         status: "error",
         steps,
         message: `Signup blocked — ${detail}. Try a different proxy or email address, and wait a few minutes before retrying.`,
+        rawResponse: j,
+      };
+    }
+
+    // ── needs_upgrade (stale app version) ────────────────────────────────────
+    if (j.error_type === "needs_upgrade") {
+      step(`needs_upgrade — Instagram rejected the app version`);
+      return {
+        status: "error",
+        steps,
+        message: "Instagram rejected the signup request (app version too old). The Bloks version ID has been updated — rebuild and redeploy to apply the fix.",
         rawResponse: j,
       };
     }

@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
-import { useProxies } from "@/hooks/use-proxies";
+import { useProxies, useCreateProxy } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Cpu, CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
   User, Mail, KeyRound, Calendar, Globe, ShieldCheck, Server, Lock,
-  Zap, List, Trash2, UserPlus, Eye, EyeOff, Circle,
+  Zap, List, Trash2, UserPlus, Eye, EyeOff, Plus, X,
 } from "lucide-react";
 
 type SignupResult = {
@@ -74,13 +74,6 @@ function deriveEbUA(descriptor: string): string {
   return `Mozilla/5.0 (Linux; Android ${av}; ${model}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36`;
 }
 
-// Steps shown in the progress tracker while the API call is in flight
-const PROGRESS_STEPS = [
-  { label: "Fetching CSRF token (si/fetch_headers)", ms: 0 },
-  { label: "Checking username availability", ms: 3000 },
-  { label: "Submitting signup (accounts/create/)", ms: 5500 },
-  { label: "Awaiting Instagram response…", ms: 8000 },
-];
 
 function parseSpin(template: string): string {
   let result = template.trim();
@@ -137,6 +130,59 @@ function detectImap(email: string): { server: string; port: number } {
   return { server: "", port: 993 };
 }
 
+function stepClass(msg: string): string {
+  const m = msg.toLowerCase();
+  if (/\berror\b|fail|throw|blocked|reject|abort|invalid|exception/.test(m)) return "text-red-400";
+  if (/http [45]\d\d/.test(m)) return "text-red-400";
+  if (/✓|success|\bok\b|available|created!|harvested|seeded|obtained/.test(m)) return "text-green-400";
+  if (/http [23]\d\d/.test(m)) return "text-emerald-400";
+  if (/retry|non.fatal|warn|missing|skip|none|aborted|unknown/.test(m)) return "text-amber-300";
+  if (/^eb:/.test(m)) return "text-sky-300";
+  if (/^imap:/.test(m)) return "text-purple-300";
+  if (/^library:/.test(m)) return "text-indigo-300";
+  return "text-slate-300";
+}
+
+function fmtTs(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}.${String(d.getMilliseconds()).padStart(3,"0")}`;
+}
+
+function LiveTracePanel({ steps, loading }: { steps: Array<{msg: string; ts: number}>; loading: boolean }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
+  return (
+    <div className="rounded-lg bg-[#0d1117] border border-[#30363d] overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#21262d] bg-[#161b22]">
+        {loading
+          ? <><span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" /><span className="text-[10px] font-mono text-slate-400">LIVE</span></>
+          : <><span className="w-2 h-2 rounded-full bg-slate-600 shrink-0" /><span className="text-[10px] font-mono text-slate-500">COMPLETE</span></>
+        }
+        <span className="ml-auto text-[10px] font-mono text-slate-600">{steps.length} lines</span>
+      </div>
+      <div className="p-2 max-h-[400px] overflow-y-auto font-mono text-[10.5px] leading-relaxed space-y-0.5">
+        {steps.length === 0 && (
+          <div className="text-slate-600 italic py-2 px-1">
+            {loading ? "Waiting for first event…" : "No trace data."}
+          </div>
+        )}
+        {steps.map((s, i) => (
+          <div key={i} className="flex items-start gap-2 hover:bg-white/[0.02] px-1 rounded">
+            <span className="text-slate-700 shrink-0 select-none">{fmtTs(s.ts)}</span>
+            <span className={`break-all ${stepClass(s.msg)}`}>{s.msg}</span>
+          </div>
+        ))}
+        {loading && steps.length > 0 && (
+          <div className="flex items-center gap-1.5 px-1 pt-1">
+            <span className="inline-block w-2 h-3 bg-slate-400 animate-pulse rounded-sm" />
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
 function StepLog({ steps }: { steps: string[] }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
@@ -149,54 +195,6 @@ function StepLog({ steps }: { steps: string[] }) {
         </div>
       ))}
       <div ref={bottomRef} />
-    </div>
-  );
-}
-
-// Animated step-by-step progress tracker shown while the API call is in flight
-function LiveProgressTracker({ loading }: { loading: boolean }) {
-  const [visibleCount, setVisibleCount] = useState(0);
-
-  useEffect(() => {
-    if (!loading) { setVisibleCount(0); return; }
-    setVisibleCount(1);
-    const timers = PROGRESS_STEPS.slice(1).map((s, i) =>
-      setTimeout(() => setVisibleCount(i + 2), s.ms)
-    );
-    return () => timers.forEach(clearTimeout);
-  }, [loading]);
-
-  if (!loading) return null;
-
-  return (
-    <div className="desktop-card p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Loader2 className="w-4 h-4 animate-spin text-sky-500 shrink-0" />
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Progress</p>
-      </div>
-      <div className="space-y-2.5">
-        {PROGRESS_STEPS.map((s, i) => {
-          const active  = i === visibleCount - 1;
-          const done    = i < visibleCount - 1;
-          const pending = i >= visibleCount;
-          return (
-            <div key={i} className="flex items-center gap-2.5">
-              <div className="shrink-0 w-5 h-5 flex items-center justify-center">
-                {done    && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                {active  && <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />}
-                {pending && <Circle className="w-3.5 h-3.5 text-muted-foreground/30" />}
-              </div>
-              <span className={`text-xs transition-colors ${
-                done    ? "text-green-600 font-medium" :
-                active  ? "text-foreground font-medium" :
-                          "text-muted-foreground/40"
-              }`}>
-                {s.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -553,6 +551,36 @@ export function CreateAccountApiPage() {
   const setVerifyCode = (v: string) => { setVerifyCodeRaw(v); ssSet(SS_KEY_VERIFY, v); };
   const [verifying, setVerifying]      = useState(false);
   const [copied, setCopied]            = useState(false);
+  const [liveSteps, setLiveSteps]      = useState<Array<{msg: string; ts: number}>>([]);
+
+  const createProxy = useCreateProxy();
+  const [showAddProxy, setShowAddProxy]   = useState(false);
+  const [newProxyHost, setNewProxyHost]   = useState("");
+  const [newProxyPort, setNewProxyPort]   = useState("");
+  const [newProxyUser, setNewProxyUser]   = useState("");
+  const [newProxyPass, setNewProxyPass]   = useState("");
+  const [addProxyErr, setAddProxyErr]     = useState("");
+
+  const handleAddProxy = async () => {
+    setAddProxyErr("");
+    const host = newProxyHost.trim();
+    const port = parseInt(newProxyPort, 10);
+    if (!host) return setAddProxyErr("Host is required");
+    if (!port || port < 1 || port > 65535) return setAddProxyErr("Port must be 1–65535");
+    try {
+      const created = await createProxy.mutateAsync({
+        host,
+        port,
+        username: newProxyUser.trim() || null,
+        password: newProxyPass.trim() || null,
+      });
+      setSelectedProxyId(created.id);
+      setShowAddProxy(false);
+      setNewProxyHost(""); setNewProxyPort(""); setNewProxyUser(""); setNewProxyPass("");
+    } catch (e: any) {
+      setAddProxyErr(e?.message ?? "Failed to save proxy");
+    }
+  };
 
   const years = Array.from({ length: 80 }, (_, i) => 2006 - i);
   const days  = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -573,6 +601,7 @@ export function CreateAccountApiPage() {
     setLoading(true);
     setResult(null);
     setVerifyCode("");
+    setLiveSteps([]);
     const spunUsername = sanitizeUsername(parseSpin(usernameSpin));
     const spunBio      = bioSpin.trim() ? parseSpin(bioSpin) : undefined;
     try {
@@ -599,13 +628,35 @@ export function CreateAccountApiPage() {
         body.proxyUsername = selectedProxy.username ?? undefined;
         body.proxyPassword = selectedProxy.password ?? undefined;
       }
-      const res = await fetch("/api/signup/start", {
+      const res = await fetch("/api/signup/start-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data: SignupResult = await res.json();
-      setResult(data);
+      if (!res.body) throw new Error("No streaming body from server");
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const events = buf.split("\n\n");
+        buf = events.pop() ?? "";
+        for (const ev of events) {
+          const dataLine = ev.split("\n").find(l => l.startsWith("data: "));
+          if (!dataLine) continue;
+          try {
+            const data = JSON.parse(dataLine.slice(6));
+            if (data.type === "step") {
+              setLiveSteps(prev => [...prev, { msg: data.msg, ts: data.ts ?? Date.now() }]);
+            } else if (data.type === "done") {
+              setResult(data.result as SignupResult);
+              setLoading(false);
+            }
+          } catch {}
+        }
+      }
     } catch (e: any) {
       setResult({ status: "error", steps: [], message: e?.message ?? "Network error" });
     } finally {
@@ -623,7 +674,9 @@ export function CreateAccountApiPage() {
         body: JSON.stringify({ sessionId: result.sessionId, code: verifyCode.trim(), dbId: result.dbId }),
       });
       const data: SignupResult = await res.json();
-      setResult(prev => prev ? { ...data, steps: [...(prev.steps ?? []), ...(data.steps ?? [])] } : data);
+      const newSteps = data.steps ?? [];
+      setLiveSteps(prev => [...prev, ...newSteps.map(msg => ({ msg, ts: Date.now() }))]);
+      setResult(prev => prev ? { ...data, steps: [...(prev.steps ?? []), ...newSteps] } : data);
     } catch (e: any) {
       setResult(prev => prev ? { ...prev, message: e?.message ?? "Network error" } : null);
     } finally {
@@ -635,6 +688,7 @@ export function CreateAccountApiPage() {
     ssClearAll();
     setResult(null);
     setVerifyCode("");
+    setLiveSteps([]);
     setPassword(generatePassword());
     setDob(randomDob());
     const ua = randomUA(); setUserAgentApi(ua); setUserAgentEb(deriveEbUA(ua));
@@ -798,12 +852,24 @@ export function CreateAccountApiPage() {
 
             {/* Proxy */}
             <div className="desktop-card p-4 space-y-2">
-              <Label className="text-xs flex items-center gap-1"><Globe className="w-3 h-3" />Proxy <span className="text-red-500 ml-0.5">*</span></Label>
-              {!proxies || proxies.length === 0 ? (
-                <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />No proxies found — add proxies in the Proxy Manager tab first.
-                </div>
-              ) : (
+              <div className="flex items-center justify-between">
+                <Label className="text-xs flex items-center gap-1"><Globe className="w-3 h-3" />Proxy <span className="text-red-500 ml-0.5">*</span></Label>
+                {!locked && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddProxy(v => !v); setAddProxyErr(""); }}
+                    className="flex items-center gap-1 text-[10px] text-sky-500 hover:text-sky-600 font-medium"
+                  >
+                    {showAddProxy
+                      ? <><X className="w-3 h-3" />Cancel</>
+                      : <><Plus className="w-3 h-3" />Add new</>
+                    }
+                  </button>
+                )}
+              </div>
+
+              {/* Existing proxy dropdown */}
+              {proxies && proxies.length > 0 && !showAddProxy && (
                 <select
                   value={selectedProxyId}
                   onChange={e => setSelectedProxyId(e.target.value ? Number(e.target.value) : "")}
@@ -813,6 +879,81 @@ export function CreateAccountApiPage() {
                   <option value="">— Select a proxy —</option>
                   {proxies.map(p => <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>)}
                 </select>
+              )}
+
+              {/* No proxies notice when form is hidden */}
+              {(!proxies || proxies.length === 0) && !showAddProxy && (
+                <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />No proxies yet — click <strong className="mx-0.5">Add new</strong> above.
+                </div>
+              )}
+
+              {/* Inline add-proxy form */}
+              {(showAddProxy || (!proxies || proxies.length === 0) && false) && (
+                <div className="rounded-md border border-sky-200 bg-sky-50/40 dark:bg-sky-950/20 p-3 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">New Proxy</p>
+                  <div className="flex gap-2">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Host</Label>
+                      <Input
+                        value={newProxyHost}
+                        onChange={e => setNewProxyHost(e.target.value)}
+                        placeholder="123.45.67.89"
+                        className="h-7 text-xs font-mono"
+                        disabled={createProxy.isPending}
+                      />
+                    </div>
+                    <div className="w-20 space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Port</Label>
+                      <Input
+                        value={newProxyPort}
+                        onChange={e => setNewProxyPort(e.target.value)}
+                        placeholder="8080"
+                        className="h-7 text-xs font-mono"
+                        disabled={createProxy.isPending}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Username <span className="font-normal">(optional)</span></Label>
+                      <Input
+                        value={newProxyUser}
+                        onChange={e => setNewProxyUser(e.target.value)}
+                        placeholder="user"
+                        className="h-7 text-xs"
+                        disabled={createProxy.isPending}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Password <span className="font-normal">(optional)</span></Label>
+                      <Input
+                        type="password"
+                        value={newProxyPass}
+                        onChange={e => setNewProxyPass(e.target.value)}
+                        placeholder="••••••"
+                        className="h-7 text-xs"
+                        disabled={createProxy.isPending}
+                      />
+                    </div>
+                  </div>
+                  {addProxyErr && (
+                    <p className="text-[10px] text-red-600 flex items-center gap-1">
+                      <XCircle className="w-3 h-3 shrink-0" />{addProxyErr}
+                    </p>
+                  )}
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0 w-full"
+                    onClick={handleAddProxy}
+                    disabled={createProxy.isPending || !newProxyHost.trim() || !newProxyPort.trim()}
+                  >
+                    {createProxy.isPending
+                      ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Saving…</>
+                      : <><Plus className="w-3 h-3 mr-1.5" />Save &amp; Select Proxy</>
+                    }
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -920,7 +1061,7 @@ export function CreateAccountApiPage() {
                   ? <Loader2 className="w-5 h-5 text-sky-500 animate-spin shrink-0" />
                   : result
                     ? statusIcons[result.status]
-                    : <Circle className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                    : <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/20 shrink-0 inline-block" />
                 }
                 <p className="font-semibold text-sm">
                   {loading ? "Creating Account…" : result ? statusLabels[result.status] : "Status"}
@@ -929,8 +1070,6 @@ export function CreateAccountApiPage() {
                   <span className="ml-auto text-[10px] text-muted-foreground/50 font-normal">Waiting for attempt</span>
                 )}
               </div>
-
-              {loading && <LiveProgressTracker loading={loading} />}
 
               {!loading && !result && (
                 <p className="text-xs text-muted-foreground">Fill the form and click <strong>Create Account via API</strong> — the result will appear here.</p>
@@ -1005,23 +1144,29 @@ export function CreateAccountApiPage() {
               )}
             </div>
 
-            {/* API CALL LOG — always shown */}
-            <div className="desktop-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">API Call Log</p>
-                {result && result.steps?.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{result.steps.length} steps</span>
-                )}
-              </div>
-              {result && result.steps?.length > 0
-                ? <StepLog steps={result.steps} />
-                : (
-                  <p className="text-xs text-muted-foreground/50 italic">
-                    {loading ? "Waiting for server…" : "No log yet — step-by-step API trace will appear here."}
+            {/* LIVE TRACE — shown during loading and after completion */}
+            {(loading || liveSteps.length > 0) && (
+              <div className="desktop-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    {loading && <Loader2 className="w-3 h-3 animate-spin text-sky-500" />}
+                    Live Trace
                   </p>
-                )
-              }
-            </div>
+                </div>
+                <LiveTracePanel steps={liveSteps} loading={loading} />
+              </div>
+            )}
+
+            {/* API CALL LOG — shown after completion when no live steps (e.g. restored from session) */}
+            {!loading && liveSteps.length === 0 && result && result.steps?.length > 0 && (
+              <div className="desktop-card p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">API Call Log</p>
+                  <span className="text-[10px] text-muted-foreground">{result.steps.length} steps</span>
+                </div>
+                <StepLog steps={result.steps} />
+              </div>
+            )}
 
             {/* ISSUE LOG — always shown, populated on error */}
             <div className="desktop-card p-4">
