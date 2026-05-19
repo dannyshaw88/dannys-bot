@@ -323,28 +323,47 @@ function resolveProxyTimezone(
 }
 
 /**
- * Returns the estimated live EB fingerprint state for a profile, or null when
- * no browser session is currently open for that profile.
+ * Returns the estimated live EB fingerprint state for a profile.
+ * Always returns a value (never null) so the UI can show live-updating
+ * battery and connection speed for every account, not just open sessions.
  *
- * Battery level is calculated as:
- *   level = batteryStart ± (elapsed_minutes × 0.001)
- * The 0.001/min rate is the midpoint of the 0.0008–0.0012 random drift range
- * that the stealth script uses — exact enough for a live display indicator.
+ * Battery:
+ *   - When an EB session is running: drifts from batteryStart at 0.1%/min
+ *     (midpoint of the 0.08–0.12 range the stealth script uses in Chrome).
+ *   - When no session is open: held at the seeded batteryStart value
+ *     (we can't know elapsed time without a real session epoch).
+ *
+ * Downlink:
+ *   Oscillates ±25% around the seeded base on a 30-second sin cycle using
+ *   Date.now() as the clock.  Each profile has a unique phase offset so
+ *   accounts don't all pulse in sync.  The UI polls every 5 s so users see
+ *   a visible Mbps change on every refresh — matching the behaviour of the
+ *   real stealth script that re-randomises the value every 25–35 s.
  */
 export function getEbLiveStats(
   profileId: number,
   userAgent: string,
-): { battery: number; charging: boolean; downlink: number } | null {
-  const session = sessions.get(profileId);
-  if (!session) return null;
+): { battery: number; charging: boolean; downlink: number } {
+  const { batteryStart, charging, downlink: baseDownlink } = _computeEbSeedValues(userAgent);
 
-  const { batteryStart, charging, downlink } = _computeEbSeedValues(userAgent);
-  const elapsedMin = (Date.now() - session.startedAt) / 60_000;
-  const drift = elapsedMin * 0.001; // %/min midpoint estimate
-  let battery = charging
-    ? Math.min(1.0, batteryStart + drift)
-    : Math.max(0.05, batteryStart - drift);
-  battery = Math.round(battery * 100) / 100;
+  // Battery drift — only when a session is active (we need a real startedAt)
+  const session = sessions.get(profileId);
+  let battery: number;
+  if (session) {
+    const elapsedMin = (Date.now() - session.startedAt) / 60_000;
+    const drift = elapsedMin * 0.001; // 0.1 %/min as a fraction
+    battery = charging
+      ? Math.min(1.0, batteryStart + drift)
+      : Math.max(0.05, batteryStart - drift);
+    battery = Math.round(battery * 100) / 100;
+  } else {
+    battery = batteryStart;
+  }
+
+  // Downlink oscillation — visible on every 5-second UI poll
+  // Phase offset per profile so accounts fluctuate independently
+  const phase = (Date.now() / 30_000) * Math.PI * 2 + profileId * 1.3;
+  const downlink = Math.max(1, Math.round(baseDownlink * (1 + 0.25 * Math.sin(phase))));
 
   return { battery, charging, downlink };
 }

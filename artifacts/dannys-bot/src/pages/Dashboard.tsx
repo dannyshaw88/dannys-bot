@@ -86,6 +86,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.410",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Battery percentage and Mbps columns on the accounts page now show live values for every account — they were stuck showing the same static number forever because the server only computed live values for accounts with an open browser session." },
+      { category: "Fix", text: "Connection speed (Mbps) now visibly fluctuates every 5 seconds in the accounts list, matching the behaviour of the real stealth script inside Chrome that re-randomises the value every 25–35 seconds — each account pulses at its own independent rate." },
+    ],
+  },
+  {
     version: "1.0.409",
     date: "19 May 2026",
     items: [
