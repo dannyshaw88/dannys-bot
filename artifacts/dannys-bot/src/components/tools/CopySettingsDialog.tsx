@@ -83,17 +83,18 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
   const storageKey = `copyDialog:targets:${title}`;
 
-  const [targets, setTargets]   = useState<Set<number>>(() => {
+  const [targets, setTargets]    = useState<Set<number>>(() => {
     try {
       const stored = sessionStorage.getItem(storageKey);
       return stored ? new Set(JSON.parse(stored) as number[]) : new Set();
     } catch { return new Set(); }
   });
-  const [search, setSearch]     = useState("");
-  const [sortBy, setSortBy]     = useState<SortBy>("name");
-  const [sortDir, setSortDir]   = useState<SortDir>("asc");
-  const [selected, setSelected] = useState<Set<string>>(() => buildInitialSelected(optionGroups));
-  const [status, setStatus]     = useState<"idle" | "copying" | "done">("idle");
+  const [search, setSearch]      = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy]      = useState<SortBy>("name");
+  const [sortDir, setSortDir]    = useState<SortDir>("asc");
+  const [selected, setSelected]  = useState<Set<string>>(() => buildInitialSelected(optionGroups));
+  const [status, setStatus]      = useState<"idle" | "copying" | "done">("idle");
 
   // Persist targets to sessionStorage whenever they change
   useEffect(() => {
@@ -106,12 +107,23 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     if (open) {
       // Preserve targets across re-opens — only NONE clears them
       setSearch("");
+      setStatusFilter("");
       setSortBy("name");
       setSortDir("asc");
       setStatus("idle");
       setSelected(buildInitialSelected(optionGroups));
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Unique statuses present in the profiles list, for the status filter dropdown
+  const uniqueStatuses = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of profiles) {
+      const s = ((p as any).accountStatus as string | undefined ?? "").replace(/_/g, " ").trim();
+      if (s) seen.add(s);
+    }
+    return Array.from(seen).sort();
+  }, [profiles]);
 
   const profileGroups = useMemo(() => {
     const map = new Map<string, Profile[]>();
@@ -126,14 +138,19 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   // Multi-term search: split on "||" and match any term against label, username, status, or group
   const filteredProfiles = useMemo(() => {
     const terms = search.split("||").map(t => t.trim().toLowerCase()).filter(Boolean);
-    const base = terms.length === 0 ? profiles : profiles.filter(p =>
+    const afterSearch = terms.length === 0 ? profiles : profiles.filter(p =>
       terms.some(q =>
         p.username.toLowerCase().includes(q) ||
         (p.accountLabel ?? "").toLowerCase().includes(q) ||
-        (p.status ?? "").toLowerCase().includes(q) ||
+        ((p as any).accountStatus ?? "").toLowerCase().replace(/_/g, " ").includes(q) ||
         (p.tags ?? "").toLowerCase().includes(q)
       )
     );
+    const base = statusFilter
+      ? afterSearch.filter(p =>
+          ((p as any).accountStatus ?? "").replace(/_/g, " ").trim().toLowerCase() === statusFilter.toLowerCase()
+        )
+      : afterSearch;
 
     const dir = sortDir === "asc" ? 1 : -1;
     return [...base].sort((a, b) => {
@@ -253,6 +270,11 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               >
                 NONE
               </button>
+              {targets.size > 0 && (
+                <span className="text-[11px] text-primary font-bold">
+                  ({targets.size} selected)
+                </span>
+              )}
             </div>
 
             {/* Group quick-select */}
@@ -282,18 +304,28 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               </div>
             )}
 
-            {/* Search */}
-            <div className="px-3 py-2 border-b border-border">
-              <div className="relative">
+            {/* Search + Status filter */}
+            <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+              <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search name, group, status…"
+                  placeholder="Search name, group…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="text-xs rounded-md border border-input bg-background text-foreground px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer shrink-0"
+              >
+                <option value="">All statuses</option>
+                {uniqueStatuses.map(s => (
+                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                ))}
+              </select>
             </div>
 
             {/* Column headers */}
@@ -336,11 +368,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                       <span className="text-xs font-semibold truncate block leading-tight">
                         {p.accountLabel || p.username}
                       </span>
-                      {p.accountLabel && (
-                        <span className="text-[10px] text-muted-foreground truncate block leading-tight">
-                          @{p.username}
-                        </span>
-                      )}
                     </div>
                     <div className="w-[72px] shrink-0">
                       {displayStatus && (
@@ -357,11 +384,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               })}
             </div>
 
-            {targets.size > 0 && (
-              <div className="px-4 py-2 border-t border-border bg-muted/20">
-                <p className="text-[11px] text-muted-foreground">{targets.size} profile{targets.size > 1 ? "s" : ""} selected</p>
-              </div>
-            )}
           </div>
 
           {/* RIGHT settings */}

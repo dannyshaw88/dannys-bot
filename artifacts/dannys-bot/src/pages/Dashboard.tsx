@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.398",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings dialog now has a Status filter dropdown so you can narrow the target account list by account status before copying." },
+      { category: "Fix", text: "Copy Settings dialog now shows how many accounts are currently selected next to the NONE button." },
+      { category: "Fix", text: "Copy Settings dialog no longer shows the @username secondary line under each account name — cleaner list." },
+    ],
+  },
+  {
     version: "1.0.397",
     date: "19 May 2026",
     items: [
