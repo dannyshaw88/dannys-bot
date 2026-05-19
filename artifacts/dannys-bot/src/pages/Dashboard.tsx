@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.387",
+    date: "19 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed \"Randomise timing\" in Copy Settings not actually staggering tool start times — accounts were all firing at nearly the same time. Each account now gets a random start time within the tool's configured \"Wait Until Next Session\" window (between the min and max you've set), so sessions spread out naturally instead of piling up." },
+    ],
+  },
+  {
     version: "1.0.386",
     date: "18 May 2026",
     items: [

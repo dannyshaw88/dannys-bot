@@ -313,16 +313,17 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     const keysToSend   = expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources");
 
     // When "Randomise timing" is selected and accounts are being enabled,
-    // spread start times evenly across the [0, delayMax] window so accounts
-    // don't all fire at the same time. No need to check source tool value  
-    // the user explicitly chose to stagger via the copy dialog.
+    // give each account a random start time within [delayMin, delayMax] so
+    // they don't all fire at the same moment. This mirrors what the engine
+    // does on a cold startup (randInt(delayMin, delayMax)).
     const willEnable    = copyEnabled && tool.enabled;
     const willRandomise = expandedKeys.includes("randomiseTiming");
     let staggerOffsets: number[] | undefined;
-    if (willRandomise && targetIds.length > 1) {
-      const delayMax = (settings as any).delayMax ?? 5;
-      staggerOffsets = targetIds.map((_, i) =>
-        Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
+    if (willEnable && willRandomise) {
+      const delayMin = Math.max(1, (settings as any).delayMin ?? 1);
+      const delayMax = Math.max(delayMin, (settings as any).delayMax ?? 5);
+      staggerOffsets = targetIds.map(() =>
+        delayMin + Math.floor(Math.random() * (delayMax - delayMin + 1))
       );
     }
 
