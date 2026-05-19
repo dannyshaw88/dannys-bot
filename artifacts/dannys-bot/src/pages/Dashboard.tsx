@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.399",
+    date: "19 May 2026",
+    items: [
+      { category: "Security", text: "The Copy Settings bulk update endpoint now only accepts the specific settings it is designed to copy — group, API limits, scheduling, and profile sync. Account identity fields like user-agents, device state, proxy, and session cookies can no longer be touched through this route under any circumstances." },
+    ],
+  },
+  {
     version: "1.0.398",
     date: "19 May 2026",
     items: [

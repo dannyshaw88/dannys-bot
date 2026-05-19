@@ -357,7 +357,25 @@ export async function registerInstagramRoutes(
     if (!Array.isArray(ids) || !patch || typeof patch !== "object") {
       return res.status(400).json({ message: "ids (array) and patch (object) are required" });
     }
-    await Promise.all((ids as number[]).map(id => storage.updateProfile(id, patch)));
+    // ── Field whitelist ───────────────────────────────────────────────────────
+    // Only allow the fields that the account-level Copy Settings UI legitimately
+    // sends.  Any other field — especially identity/fingerprint fields like
+    // userAgentEmbedded, userAgentApi, igDeviceState, igApiCookies, proxyId — is
+    // silently stripped so a crafted API call can never overwrite them in bulk.
+    const ALLOWED: Set<string> = new Set([
+      "tags",
+      "apiLimits",
+      "activeTimerEnabled", "activeTimerStart", "activeTimerEnd",
+      "syncEnabled", "syncIntervalMin", "syncIntervalMax", "syncUseHiker",
+    ]);
+    const safePatch: Record<string, unknown> = {};
+    for (const key of Object.keys(patch)) {
+      if (ALLOWED.has(key)) safePatch[key] = patch[key];
+    }
+    if (Object.keys(safePatch).length === 0) {
+      return res.status(400).json({ message: "No valid fields in patch" });
+    }
+    await Promise.all((ids as number[]).map(id => storage.updateProfile(id, safePatch)));
     res.json({ ok: true, updated: ids.length });
   });
 
@@ -2665,6 +2683,7 @@ export async function registerInstagramRoutes(
         userAgentApi, userAgentEb, apiLimits,
         preBakeSites: _preBakeSitesRaw,
         preBakeSitesMin, preBakeSitesMax,
+        preBakeScrollMin, preBakeScrollMax,
         preBakePctWebsite, preBakePctYt, preBakePctGoogle,
         preBakeYoutube, preBakeGoogle,
       } = req.body as any;
@@ -2712,6 +2731,8 @@ export async function registerInstagramRoutes(
           preBakeSites:      preBakeSitesList.length ? preBakeSitesList : undefined,
           preBakeSitesMin:   preBakeSitesMin   ? Number(preBakeSitesMin)   : 1,
           preBakeSitesMax:   preBakeSitesMax   ? Number(preBakeSitesMax)   : 3,
+          preBakeScrollMin:  preBakeScrollMin  ? Number(preBakeScrollMin)  : 5,
+          preBakeScrollMax:  preBakeScrollMax  ? Number(preBakeScrollMax)  : 15,
           preBakePctWebsite: preBakePctWebsite ? Number(preBakePctWebsite) : 34,
           preBakePctYt:      preBakePctYt      ? Number(preBakePctYt)      : 33,
           preBakePctGoogle:  preBakePctGoogle  ? Number(preBakePctGoogle)  : 33,
