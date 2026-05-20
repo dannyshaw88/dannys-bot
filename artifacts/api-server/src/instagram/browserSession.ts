@@ -1051,9 +1051,12 @@ const LAUNCH_ARGS_BASE = [
   // The flags below cut each instance down to ~2 processes and ~80–150 MB,
   // matching Jarvee's resource profile for large multi-account setups.
 
-  // Cap the V8 JS heap to 128 MB per renderer (default can grow to 1.5 GB).
-  // Instagram's web app runs fine within this limit for cookie/session use.
-  "--js-flags=--max-old-space-size=128",
+  // Cap the V8 JS heap to 256 MB per renderer (default can grow to 1.5 GB).
+  // Instagram's JS bundle + runtime data needs ~150-200 MB; 128 MB caused
+  // V8 to run a major GC (mark-compact) at ~2 minutes after page load when
+  // the heap pressure peaked, appearing as a CPU spike. 256 MB gives enough
+  // headroom to avoid that GC burst without exceeding practical RAM limits.
+  "--js-flags=--max-old-space-size=256",
 
   // Limit Chrome to 1 renderer process per browser instance.
   // We only ever have a single tab, so this is always safe and eliminates
@@ -3461,20 +3464,6 @@ function startHousekeepLoop(profileId: number): void {
       saveCookies(profileId, s.page).catch(() => {});
     }
 
-    // ── Background-tab throttle (idle session) ─────────────────────────────
-    // If the user hasn't interacted for >3 s, put the page into Chrome's
-    // "hidden" lifecycle state — the same state a background tab gets.
-    // Chrome throttles requestAnimationFrame to ~1fps and JS timers to ≥1s,
-    // stopping Instagram's animation/polling CPU work without affecting
-    // session stability.  touchActivity() restores "active" on next input.
-    if (s.lifecycleCdp) {
-      const nowMs = Date.now();
-      if (!s.lifecycleHidden && (nowMs - s.lastActivityAt) >= 3000) {
-        s.lifecycleHidden = true;
-        s.lifecycleCdp.send("Page.setWebLifecycleState", { state: "hidden" }).catch(() => {});
-      }
-    }
-
     // ── Error-page recovery + challenge URL scan ───────────────────────────
     // Checks the current page URL on every other tick (every 10 s).
     // 1. If Chrome landed on chrome-error:// / about:blank, navigate back to login.
@@ -3565,7 +3554,12 @@ function startHousekeepLoop(profileId: number): void {
     //   PATH B — Idle crash: user was active 30–120 s ago and no frame for 30 s.
     //   Ping Chrome to confirm it is alive.  If alive → stalled screencast →
     //   restart screencast.  If dead → close session.
-    if (s.screencastCdp && !(s as any)._crashPingInProgress) {
+    if (s.screencastCdp && !(s as any)._crashPingInProgress
+        // Skip crash/stall checks when the page is intentionally in "hidden"
+        // lifecycle state — frame silence is expected and is NOT a crash.
+        // PATH B was incorrectly restarting the screencast every 5-15 s when
+        // the page was hidden, causing a CPU-spike loop from 30s to 2 minutes.
+        && !s.lifecycleHidden) {
       const idleMs   = Date.now() - s.lastActivityAt;
       const silentMs = Date.now() - s.lastScreencastFrameAt;
 

@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.422",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed CPU spiking at exactly 2 minutes after opening an Antidetect browser — Chrome's memory limit was set too low (128 MB), causing a large garbage collection sweep when Instagram's page data filled the heap. Raised to 256 MB to give the page enough room." },
+      { category: "Fix", text: "Fixed a secondary CPU spike loop introduced in v1.0.421 — the crash detector was incorrectly treating expected frame silence (when the browser is in low-power mode) as a freeze, restarting the screencast every 5-15 seconds until the 2-minute mark." },
+    ],
+  },
+  {
     version: "1.0.421",
     date: "20 May 2026",
     items: [
