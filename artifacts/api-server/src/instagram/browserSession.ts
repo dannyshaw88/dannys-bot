@@ -877,13 +877,6 @@ interface Session {
   // ms timestamp when this browser session was first opened.
   // Used to estimate the current battery level for live display in the UI.
   startedAt: number;
-  // CDP session used exclusively for Page.setWebLifecycleState so we can
-  // put the page into "hidden" mode (throttles rAF + JS timers to background-
-  // tab rates) when no viewer is connected or the user is idle, then snap back
-  // to "active" the moment the user touches the browser.
-  lifecycleCdp: any | null;
-  // True while the page is in the "hidden" lifecycle state.
-  lifecycleHidden: boolean;
 }
 
 // Tracks when each profile's automation (mobile-API) session started.
@@ -1009,12 +1002,6 @@ function touchActivity(profileId: number) {
   if (!s) return;
   const wasIdle = s.lastActivityAt < Date.now() - 3000;
   s.lastActivityAt = Date.now();
-  // If the page was put into "hidden" lifecycle state (background-tab throttle),
-  // snap it back to "active" immediately so the user sees full-speed response.
-  if (wasIdle && s.lifecycleHidden && s.lifecycleCdp) {
-    s.lifecycleHidden = false;
-    s.lifecycleCdp.send("Page.setWebLifecycleState", { state: "active" }).catch(() => {});
-  }
 }
 
 // --no-sandbox is required in all environments.
@@ -2311,7 +2298,7 @@ export async function getOrCreateSession(
   });
   // ────────────────────────────────────────────────────────────────────────────
 
-  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, framePending: false, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, userAgentApi: userAgentApi ?? null, sessionToken: Symbol(), lastActivityAt: Date.now(), startedAt: Date.now(), resolvedTZ, lifecycleCdp: null, lifecycleHidden: false };
+  const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, framePending: false, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, userAgentApi: userAgentApi ?? null, sessionToken: Symbol(), lastActivityAt: Date.now(), startedAt: Date.now(), resolvedTZ };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
 
@@ -2516,14 +2503,6 @@ export function detachWS(profileId: number, ws: WebSocket) {
   if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
   if ((session as any)._challengeKeepalive) { clearInterval((session as any)._challengeKeepalive); (session as any)._challengeKeepalive = null; }
   stopScreencast(profileId).catch(() => {});
-  // No viewer — put page into "hidden" lifecycle state immediately.
-  // This throttles Instagram's rAF loops and JS timers to background-tab rates
-  // (rAF ~1fps, timers ≥1s) which eliminates the continuous compositor-frame
-  // CPU work Chrome does for animations even when no one is watching.
-  if (session.lifecycleCdp && !session.lifecycleHidden) {
-    session.lifecycleHidden = true;
-    session.lifecycleCdp.send("Page.setWebLifecycleState", { state: "hidden" }).catch(() => {});
-  }
   // Grace period: give the client 10 s to reconnect before killing Chrome.
   // Normal drops (network blips, Replit proxy resets, HMR updates) reconnect
   // within 3 s and reuse the live Chrome session — no relaunch needed.
@@ -2559,28 +2538,6 @@ export function attachWS(profileId: number, ws: WebSocket) {
     } catch {}
   }
   session.ws = ws;
-
-  // ── Background-tab throttle: restore "active" lifecycle state ────────────
-  // If the page was put into "hidden" state while no viewer was connected,
-  // restore full-speed operation now that a viewer has arrived.
-  if (session.lifecycleHidden && session.lifecycleCdp) {
-    session.lifecycleHidden = false;
-    session.lifecycleCdp.send("Page.setWebLifecycleState", { state: "active" }).catch(() => {});
-  }
-  // Create the lifecycle CDP session lazily on first attach.
-  if (!session.lifecycleCdp) {
-    session.page.createCDPSession().then((cdp: any) => {
-      const s = sessions.get(profileId);
-      if (s && !s.lifecycleCdp) {
-        s.lifecycleCdp = cdp;
-        // Viewer is connected — ensure "active" state.
-        s.lifecycleHidden = false;
-        cdp.send("Page.setWebLifecycleState", { state: "active" }).catch(() => {});
-      } else {
-        cdp.detach().catch(() => {});
-      }
-    }).catch(() => {});
-  }
 
   // Start the screencast BEFORE firing any navigation so Chrome receives the
   // Page.startScreencast CDP command while it is idle.  If we start it after
@@ -3584,12 +3541,7 @@ function startHousekeepLoop(profileId: number): void {
     //   PATH B — Idle crash: user was active 30–120 s ago and no frame for 30 s.
     //   Ping Chrome to confirm it is alive.  If alive → stalled screencast →
     //   restart screencast.  If dead → close session.
-    if (s.screencastCdp && !(s as any)._crashPingInProgress
-        // Skip crash/stall checks when the page is intentionally in "hidden"
-        // lifecycle state — frame silence is expected and is NOT a crash.
-        // PATH B was incorrectly restarting the screencast every 5-15 s when
-        // the page was hidden, causing a CPU-spike loop from 30s to 2 minutes.
-        && !s.lifecycleHidden) {
+    if (s.screencastCdp && !(s as any)._crashPingInProgress) {
       const idleMs   = Date.now() - s.lastActivityAt;
       const silentMs = Date.now() - s.lastScreencastFrameAt;
 
@@ -4013,7 +3965,6 @@ export async function closeSession(profileId: number, opts?: { skipCookieSave?: 
   if (!s) return;
   if (s.frameLoop) clearInterval(s.frameLoop);
   if (s.housekeepLoop) { clearInterval(s.housekeepLoop); s.housekeepLoop = null; }
-  if (s.lifecycleCdp) { s.lifecycleCdp.detach().catch(() => {}); s.lifecycleCdp = null; }
   await stopScreencast(profileId).catch(() => {});
   if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}
   // Save cookies before closing so the next open restores the latest session state.

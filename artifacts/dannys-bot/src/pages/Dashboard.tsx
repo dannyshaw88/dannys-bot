@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.424",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Removed the background-tab throttle (Page lifecycle hidden/active) introduced in v1.0.421 — it was causing EBs to freeze and stop responding to user input. All EBs now stay in full-speed mode at all times." },
+    ],
+  },
+  {
     version: "1.0.423",
     date: "20 May 2026",
     items: [
