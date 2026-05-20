@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.415",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Clicking on the Antidetect browser canvas now lands exactly where you click — previously every click was shifted up/down by 30–50 pixels due to the letterbox gap above the page stream, making it impossible to hit the Instagram login fields." },
+      { category: "Fix", text: "Typing in the Antidetect browser now works reliably — after a click, the focused input field is explicitly activated so your keystrokes actually appear in the field." },
+    ],
+  },
+  {
     version: "1.0.414",
     date: "19 May 2026",
     items: [
