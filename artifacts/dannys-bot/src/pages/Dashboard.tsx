@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.421",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed CPU spiking when Antidetect browsers are open — Chrome now enters a low-power mode 3 seconds after the user stops interacting, throttling Instagram's background animations and timers to near-zero. Touching the browser restores full speed instantly." },
+      { category: "Fix", text: "Reduced how often Chrome encodes and sends video frames when idle — the browser now sends fewer than 1 frame per second when idle and less than 1 every 5 seconds when dormant, instead of the previous 2fps and 0.5fps." },
+    ],
+  },
+  {
     version: "1.0.420",
     date: "20 May 2026",
     items: [
