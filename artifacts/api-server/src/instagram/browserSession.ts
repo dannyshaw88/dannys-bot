@@ -3096,16 +3096,26 @@ async function startScreencast(profileId: number, _retry = 0): Promise<void> {
     // Jitter (0–80 ms random) desynchronises sessions so their frames don't arrive
     // simultaneously and create a burst that saturates the Node.js event loop.
     //
-    // Target: ≤10 total screencast frames/sec across all active sessions.
-    //   1 EB  → 100 ms + jitter (~10 fps)
-    //   2 EBs → 200 ms + jitter (~5 fps each, ~10 fps total)
-    //   3 EBs → 300 ms + jitter (~3.3 fps each, ~10 fps total)
-    //   4 EBs → 400 ms + jitter (~2.5 fps each, ~10 fps total)
+    // Idle throttle: when no user input has occurred for >3 s the browser is just
+    // sitting there — Chrome still encodes and sends frames at the full rate, which
+    // pegs CPU on Windows (software compositor encodes 1280×760 JPEGs continuously).
+    // Ramping the ACK delay up as the session goes idle cuts CPU dramatically:
+    //
+    //   active  (< 3 s since last input)  → base 100 ms → ~10 fps
+    //   idle    (3–30 s since last input) → base 500 ms → ~2 fps
+    //   dormant (> 30 s since last input) → base 2000 ms → ~0.5 fps
+    //
+    // The idle ramp resets the moment the user touches the browser again
+    // (markActive() updates lastActivityAt on every mouse/keyboard event), so
+    // responsiveness is instant — the next frame ACK goes out at the active rate.
     const nActive = [...sessions.values()].filter(
       sv => sv.screencastCdp !== null && sv.ws?.readyState === WebSocket.OPEN,
     ).length;
+    const sessionNow = sessions.get(profileId);
+    const idleMs = sessionNow ? Date.now() - sessionNow.lastActivityAt : 0;
+    const idleBase = idleMs < 3_000 ? 0 : idleMs < 30_000 ? 400 : 1900;
     const jitter = Math.floor(Math.random() * 80);
-    const ackDelayMs = Math.max(100, nActive * 100) + jitter;
+    const ackDelayMs = Math.max(100, nActive * 100) + idleBase + jitter;
     const capturedCdp = cdp;
     const capturedSessionId = params.sessionId;
     setTimeout(() => {

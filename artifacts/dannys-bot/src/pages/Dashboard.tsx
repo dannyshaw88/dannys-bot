@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.416",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Opening an Antidetect browser no longer pegs CPU at 100% while idle — the browser now drops from ~10 frames per second down to ~0.5 fps when you haven't touched it for 30 seconds, and snaps back to full speed the moment you click or type." },
+    ],
+  },
+  {
     version: "1.0.415",
     date: "20 May 2026",
     items: [
