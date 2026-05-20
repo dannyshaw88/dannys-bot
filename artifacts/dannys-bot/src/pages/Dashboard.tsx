@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.419",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed CPU spiking when Antidetect browsers are open — GPU compositing was generating up to 60 frames per second on idle pages; reverting to software rendering means Chrome only generates a frame when the page actually changes, keeping idle CPU near-zero." },
+      { category: "Fix", text: "Opening multiple Antidetect browsers at once no longer saturates the CPU — launches are now staggered (max 3 at a time instead of 10)." },
+      { category: "Fix", text: "If an Antidetect browser failed to open due to a proxy error, trying to open it again no longer hangs for 20 seconds before retrying." },
+    ],
+  },
+  {
     version: "1.0.418",
     date: "20 May 2026",
     items: [

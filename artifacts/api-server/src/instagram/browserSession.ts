@@ -974,7 +974,7 @@ const MAX_CONCURRENT_SCREENSHOTS = 6;
 // simultaneously) while still preventing runaway parallelism if the user bulk-
 // verifies dozens of accounts at once.
 let ebLaunchCount = 0;
-const MAX_CONCURRENT_EB_LAUNCHES = 10;
+const MAX_CONCURRENT_EB_LAUNCHES = 3;
 
 function waitForEbLaunchSlot(): Promise<void> {
   return new Promise(resolve => {
@@ -1088,13 +1088,18 @@ const LAUNCH_ARGS_BASE = [
   "--disable-blink-features=AutomationControlled",
 ];
 
-// On Windows (Electron desktop) Chrome can use GPU hardware acceleration, which
-// offloads compositing and JPEG encoding from CPU → GPU and drops idle CPU usage
-// from ~100% to a few percent.  On Linux (Replit / CI) there is no display or
-// GPU process, so --disable-gpu must stay to avoid a "no rendering path" freeze.
-const LAUNCH_ARGS = process.platform === "win32"
-  ? LAUNCH_ARGS_BASE.filter(a => a !== "--disable-gpu")
-  : LAUNCH_ARGS_BASE;
+// --disable-gpu stays on ALL platforms, including Windows.
+//
+// v1.0.417 tried removing it on Windows to offload compositing to the GPU, but
+// the GPU process does not help: Chrome's Page.screencastFrame JPEG encoder runs
+// CPU-side regardless of GPU compositing, AND GPU compositing causes Chrome to
+// generate compositor frames at the GPU refresh rate (~60fps) even for a
+// completely static Instagram page — so the JPEG encoder fires far more often.
+// With software rendering (--disable-gpu) Chrome only generates a compositor
+// frame when page content actually changes, which for a dormant EB is nearly
+// never.  Combined with the ACK-delay idle throttle (v1.0.416), software
+// rendering keeps idle EB CPU usage at near-zero.
+const LAUNCH_ARGS = LAUNCH_ARGS_BASE;
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
 // findChromiumPath which locates Chrome/Edge/Brave) or puppeteer's bundled Chrome (Linux dev).
@@ -1818,6 +1823,7 @@ export async function getOrCreateSession(
     if (!proxyCheck.ok) {
       const errMsg = `Proxy ${proxy.host}:${proxy.port} is unreachable (${proxyCheck.errorCode ?? "unknown"}) — not launching Chrome to avoid renderer freeze. Will retry on next open.`;
       log(`[proxy-check:${profileId}] ${errMsg}`, "browser");
+      _launchingProfiles.delete(profileId);
       throw new Error(errMsg);
     }
     log(`[proxy-check:${profileId}] Proxy ${proxy.host}:${proxy.port} reachable ✓`, "browser");
@@ -1864,6 +1870,7 @@ export async function getOrCreateSession(
   if (!CHROMIUM_PATH) {
     const msg = "No browser found. Please install Google Chrome or Microsoft Edge, then restart Equinox.";
     console.error(`[EB-DEBUG][browserSession] FATAL: ${msg}`);
+    _launchingProfiles.delete(profileId);
     throw new Error(msg);
   }
 
@@ -1906,6 +1913,7 @@ export async function getOrCreateSession(
     const msg = `Chrome failed to launch: ${err?.message ?? err}`;
     console.error(`[EB-DEBUG][browserSession] LAUNCH ERROR: ${msg}`);
     if (err?.stack) console.error(`[EB-DEBUG][browserSession] stack: ${err.stack}`);
+    _launchingProfiles.delete(profileId);
     throw new Error(msg);
   } finally {
     ebLaunchCount--;
