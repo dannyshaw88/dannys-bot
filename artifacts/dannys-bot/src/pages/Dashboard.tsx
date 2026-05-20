@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.417",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Opening an Antidetect browser no longer pegs CPU at 100% — Chrome now uses your GPU for rendering on Windows instead of doing all the work on the CPU." },
+    ],
+  },
+  {
     version: "1.0.416",
     date: "20 May 2026",
     items: [

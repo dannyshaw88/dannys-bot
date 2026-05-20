@@ -981,7 +981,7 @@ function touchActivity(profileId: number) {
 // --no-sandbox is required in all environments.
 // --no-zygote is intentionally EXCLUDED — it crashes Chrome silently on Windows
 //   when combined with --no-sandbox. It is only needed in sandboxed Linux containers.
-const LAUNCH_ARGS = [
+const LAUNCH_ARGS_BASE = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
   "--disable-dev-shm-usage",
@@ -997,6 +997,10 @@ const LAUNCH_ARGS = [
   // Disable GPU hardware acceleration — forces software rendering instead.
   // Do NOT also add --disable-software-rasterizer: that kills the software
   // fallback too, leaving Chrome with no rendering path and causing freezes.
+  //
+  // NOTE: This flag is filtered OUT on Windows — see below. On Windows (Electron)
+  // the GPU is available and hardware-accelerated compositing keeps CPU low.
+  // On Linux (Replit, CI) there is no display/GPU so software rendering is required.
   "--disable-gpu",
 
   // ── Memory & process-count optimisations (allows 25+ concurrent EBs) ──────────
@@ -1059,6 +1063,14 @@ const LAUNCH_ARGS = [
   // still detect the override pattern.  This flag eliminates the root cause.
   "--disable-blink-features=AutomationControlled",
 ];
+
+// On Windows (Electron desktop) Chrome can use GPU hardware acceleration, which
+// offloads compositing and JPEG encoding from CPU → GPU and drops idle CPU usage
+// from ~100% to a few percent.  On Linux (Replit / CI) there is no display or
+// GPU process, so --disable-gpu must stay to avoid a "no rendering path" freeze.
+const LAUNCH_ARGS = process.platform === "win32"
+  ? LAUNCH_ARGS_BASE.filter(a => a !== "--disable-gpu")
+  : LAUNCH_ARGS_BASE;
 
 // Chromium executable — resolved from env (set by Electron main on Windows via
 // findChromiumPath which locates Chrome/Edge/Brave) or puppeteer's bundled Chrome (Linux dev).
