@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.420",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Clear Cookies now actually clears the session — Chrome's internal cookie store, localStorage, and IndexedDB are wiped via an in-process command before Chrome closes, so the account is genuinely logged out even on Windows where file deletion is delayed by OS file locks." },
+      { category: "Fix", text: "File deletion after Clear Cookies now retries for up to 6 seconds (was 1.5 s) to give Windows time to release Chrome's file handles." },
+    ],
+  },
+  {
     version: "1.0.419",
     date: "20 May 2026",
     items: [

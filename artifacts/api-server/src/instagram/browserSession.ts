@@ -3998,41 +3998,65 @@ export async function wipeEbSession(profileId: number): Promise<void> {
  * longer used — device tokens are NOT written back.
  */
 export async function clearEbSessionCookies(profileId: number, igApiCookies?: string): Promise<void> {
-  // 1. Close the running EB session without saving cookies back to disk.
+  const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+  // 1. While Chrome is still running, use CDP to wipe cookies + storage in-process.
+  //    This is the most reliable wipe path on Windows: even if the userDataDir file
+  //    deletion fails (Chrome holds SQLite locks), Chrome will flush empty storage to
+  //    disk before it exits because the in-memory state is already cleared.
+  //    Without this, rmSync silently partially-deletes the directory, Chrome relaunches
+  //    reading its own Cookies database, and the account appears still logged in.
+  const liveSession = sessions.get(profileId);
+  if (liveSession?.page) {
+    try {
+      const cdp = await (liveSession.page as any).createCDPSession();
+      // Clear every cookie Chrome holds (all origins).
+      await cdp.send("Network.clearBrowserCookies").catch(() => null);
+      // Clear cookies + localStorage + IndexedDB + cache + service workers for IG.
+      for (const origin of ["https://www.instagram.com", "https://i.instagram.com"]) {
+        await cdp.send("Storage.clearDataForOrigin", {
+          origin,
+          storageTypes: "cookies,local_storage,indexedDB,service_workers,cache_storage",
+        }).catch(() => null);
+      }
+      await cdp.detach().catch(() => null);
+      log(`[clear:${profileId}] CDP wipe complete — cookies + localStorage + IndexedDB cleared in Chrome before close`, "browser");
+    } catch (e: any) {
+      console.warn(`[browserSession] CDP wipe failed for ${profileId} (non-fatal — will still delete files): ${e?.message}`);
+    }
+  }
+
+  // 2. Close the running EB session without saving cookies back to disk.
   await closeSession(profileId, { skipCookieSave: true });
 
-  // 2. Delete the ENTIRE Chrome userdata directory so ALL stored Instagram
+  // 3. Delete the ENTIRE Chrome userdata directory so ALL stored Instagram
   //    state is wiped — cookies, localStorage, IndexedDB, and the "saved login"
   //    account bubble that Instagram stores in localStorage.
-  //    Surgical per-cookie deletion (deleting only rows from Chrome's SQLite
-  //    Cookies DB) left localStorage/IndexedDB intact, which is how Instagram
-  //    remembers which account was previously logged in.
   //
-  //    On Windows, Chrome holds file handles open until its process fully exits.
-  //    browser.close() resolves as soon as the CDP quit command is acknowledged,
-  //    but the OS may not release all handles for another ~300-500 ms while
-  //    Chrome flushes its profile data (Cookies SQLite, localStorage LevelDB, etc.).
-  //    We wait up to 3 × 500 ms with retries so rmSync never races the process.
+  //    On Windows, Chrome holds file handles open for 1–3 s after browser.close()
+  //    resolves (Cookies SQLite WAL, localStorage LevelDB journal, etc.).
+  //    We retry for up to 6 s (6 × 1 000 ms) to give the OS time to release locks.
+  //    The CDP wipe above is the primary defence; the file deletion is belt-and-
+  //    suspenders — even a partial delete removes the SQLite Cookies file.
   const userDataDir = path.join(COOKIES_DIR, `userdata-${profileId}`);
-  const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
   let deleted = false;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await sleep(500);
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    await sleep(1000);
     if (!fs.existsSync(userDataDir)) { deleted = true; break; }
     try {
       fs.rmSync(userDataDir, { recursive: true, force: true });
       deleted = true;
-      log(`Wiped Chrome userDataDir for profile ${profileId} (all session state removed, attempt ${attempt})`, "browser");
+      log(`Wiped Chrome userDataDir for profile ${profileId} (attempt ${attempt})`, "browser");
       break;
     } catch (e: any) {
-      console.warn(`[browserSession] rmSync attempt ${attempt}/3 failed for profile ${profileId}: ${e?.message}`);
+      console.warn(`[browserSession] rmSync attempt ${attempt}/6 failed for profile ${profileId}: ${e?.message}`);
     }
   }
   if (!deleted && fs.existsSync(userDataDir)) {
-    console.warn(`[browserSession] Could not fully delete userDataDir for profile ${profileId} — Chrome may still hold file handles`);
+    console.warn(`[browserSession] Could not fully delete userDataDir for profile ${profileId} after 6 s — CDP wipe already cleared cookies in-process`);
   }
 
-  // 3. Delete the JSON cookie seed file (it contained the old session cookies).
+  // 4. Delete the JSON cookie seed file (it contained the old session cookies).
   deleteSavedCookies(profileId);
 
   // 4. Write back ONLY the device tokens (mid, ig_did, ig_nrcb) to a fresh
