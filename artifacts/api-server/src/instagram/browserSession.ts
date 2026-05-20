@@ -1098,6 +1098,13 @@ const LAUNCH_ARGS_BASE = [
   "--webrtc-ip-handling-policy=disable_non_proxied_udp",
   "--force-webrtc-ip-handling-policy",
 
+  // Prevent Chrome from auto-playing video before a user gesture.
+  // Instagram's feed auto-plays Reel videos as soon as they load. With
+  // --disable-gpu, video decode runs on the CPU and spikes it heavily.
+  // This flag stops the decode pipeline from starting at all — no gesture,
+  // no decode, no spike.  Videos still display thumbnails.
+  "--autoplay-policy=user-gesture-required",
+
   // Tell Blink not to set navigator.webdriver = true in the first place.
   // Without this flag Chrome's engine sets the property at a low level that
   // our JS Object.defineProperty override cannot fully hide — fingerprint
@@ -2237,20 +2244,43 @@ export async function getOrCreateSession(
       return;
     }
 
-    // ── Background media blocking ─────────────────────────────────────────────
-    // When no SSE viewer is connected, abort image / media / font requests.
-    // Instagram loads 50–100 images per page visit; each one sits in Chrome's
-    // memory even when the EB is just idling in the background.  Blocking them
-    // drops per-session RAM from ~300 MB to ~80 MB, making 25+ concurrent EBs
-    // viable.  When the user opens the session (res becomes non-null) Chrome
-    // re-requests anything it needs for the current viewport automatically.
+    // ── Always-block: media (video) and font resources ───────────────────────
+    // Video files (Reels, story videos) are never needed for cookie/session
+    // management. Instagram pre-loads multiple Reel videos 1-2 minutes after
+    // page load. With --disable-gpu, Chrome decodes video in software (no GPU
+    // acceleration) — a 2-5 MB Reel decode spikes CPU for 200-500 ms. Blocking
+    // at the network layer stops the download before Chrome can try to decode.
+    // Fonts are equally unnecessary in a headless session management context.
+    const rType = req.resourceType();
+    if (rType === "media" || rType === "font") {
+      req.abort("blockedbyclient").catch(() => {});
+      return;
+    }
+
+    // ── Always-block: analytics and tracking endpoints ────────────────────────
+    // Instagram's analytics and tracking beacons fire ~1-2 minutes after page
+    // load and carry large JSON payloads. The response processing (JSON parse +
+    // React state update) spikes CPU. None of these affect session validity.
+    const url = req.url();
+    if (
+      url.includes("/logging/1/") ||
+      url.includes("/b/l.php") ||
+      url.includes("pixel.facebook.com") ||
+      url.includes("connect.facebook.net") ||
+      url.includes("analytics.instagram.com") ||
+      (url.includes("instagram.com") && url.includes("/ajax/bz"))
+    ) {
+      req.abort("blockedbyclient").catch(() => {});
+      return;
+    }
+
+    // ── Background image blocking (no viewer) ────────────────────────────────
+    // Block images when no viewer is connected to save RAM (~300 MB → ~80 MB).
+    // Chrome re-requests viewport images automatically when the viewer connects.
     const hasViewer = !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
-    if (!hasViewer) {
-      const rType = req.resourceType();
-      if (rType === "image" || rType === "media" || rType === "font") {
-        req.abort("blockedbyclient").catch(() => {});
-        return;
-      }
+    if (!hasViewer && rType === "image") {
+      req.abort("blockedbyclient").catch(() => {});
+      return;
     }
 
     req.continue().catch(() => {});

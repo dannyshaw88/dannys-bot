@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.423",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed the 2-minute CPU spike — Instagram auto-loads Reel videos shortly after the feed renders; with software rendering Chrome decodes video on the CPU causing a heavy spike. Video files are now blocked at the network level (videos are never needed to manage a session) and Chrome is told not to auto-play media without a click." },
+      { category: "Fix", text: "Blocked Instagram's analytics beacons and tracking pixels that fire at ~2 minutes — their large response payloads triggered JavaScript processing that contributed to the spike." },
+      { category: "Fix", text: "Font files are now always blocked (not just when the browser panel is closed) — fonts are unnecessary for session management and loading them wastes bandwidth and memory." },
+    ],
+  },
+  {
     version: "1.0.422",
     date: "20 May 2026",
     items: [
