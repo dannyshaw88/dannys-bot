@@ -86,6 +86,30 @@ async function saveCookies(profileId: number, page: Page): Promise<void> {
       "https://instagram.com",
     );
     if (!cookies.length) return;
+
+    // ── Guard: never overwrite the JSON file with a session-less snapshot ─────
+    // When a session expires, Chrome's jar still holds device tokens (mid, ig_did)
+    // but loses sessionid.  Without this guard the 60-second heartbeat would
+    // overwrite the JSON file with ONLY device tokens, so the next EB open would
+    // load a file with no sessionid, navigate to instagram.com, and immediately
+    // hit the login form — making it appear as though cookies were "lost".
+    // If the current Chrome jar has no sessionid, check whether the existing JSON
+    // file still has one.  If it does, preserve the richer file rather than
+    // stamping it with degraded data.
+    const currentSessionId = cookies.find(c => c.name === "sessionid")?.value ?? "";
+    if (!currentSessionId) {
+      try {
+        const p = cookiePath(profileId);
+        if (fs.existsSync(p)) {
+          const existing = JSON.parse(fs.readFileSync(p, "utf8"));
+          if (Array.isArray(existing) && existing.some((c: any) => c.name === "sessionid" && c.value)) {
+            log(`[cookies:${profileId}] Skipping JSON overwrite — Chrome has no sessionid but file still has one (session likely expired; file preserved)`, "browser");
+            return;
+          }
+        }
+      } catch { /* non-fatal — fall through and write normally */ }
+    }
+
     fs.mkdirSync(COOKIES_DIR, { recursive: true });
     fs.writeFileSync(cookiePath(profileId), JSON.stringify(cookies, null, 2), "utf8");
     log(`[cookies:${profileId}] Saved ${cookies.length} cookies (explicit IG domain fetch)`, "browser");
@@ -2336,7 +2360,56 @@ export async function getOrCreateSession(
   // on the same page (first gets cancelled by the second, leaving the page on
   // about:blank in some cases). Instead we store the target in session.pendingInitUrl
   // so attachSSE is the single source of truth for the initial navigation.
-  const cookiesLoaded = await loadCookies(profileId, page);
+  let cookiesLoaded = await loadCookies(profileId, page);
+
+  // ── DB fallback: re-seed the JSON file from igApiCookies when the file is absent ──
+  // The JSON seed file can be deleted by browserAutoLogin (proxy/network error causes
+  // Chrome to land on a non-Instagram page → deleteSavedCookies fires), by the Clear
+  // or Clear Cookies buttons, or by a crash during a previous session.  When that
+  // happens loadCookies() returns false and the EB opens on the login page — even
+  // though the DB may hold a perfectly valid, unexpired session.
+  //
+  // Fix: if no JSON file was loaded, check DB igApiCookies.  If it contains a
+  // sessionid, reconstruct the Puppeteer-format cookie file from it and retry.
+  // This makes the DB the authoritative recovery source, matching how Jarvee
+  // handles cookie persistence across restarts.
+  if (!cookiesLoaded) {
+    try {
+      const dbProfile = await storage.getProfile(profileId);
+      const dbCookies: string = (dbProfile as any)?.igApiCookies ?? "";
+      const hasSession = dbCookies.split(";").some(s => s.trim().startsWith("sessionid=") && s.includes("=") && s.split("=")[1]?.trim());
+      if (hasSession) {
+        log(`[cookies:${profileId}] JSON seed missing — re-seeding from DB igApiCookies`, "browser");
+        const COOKIE_META: Record<string, { httpOnly: boolean; sameSite: string }> = {
+          sessionid:  { httpOnly: true,  sameSite: "Lax" },
+          csrftoken:  { httpOnly: false, sameSite: "Lax" },
+          ds_user_id: { httpOnly: true,  sameSite: "Lax" },
+          mid:        { httpOnly: false, sameSite: "Lax" },
+          ig_did:     { httpOnly: false, sameSite: "Lax" },
+          ig_nrcb:    { httpOnly: false, sameSite: "Lax" },
+        };
+        const parsed: Record<string, string> = {};
+        for (const part of dbCookies.split(";")) {
+          const eqIdx = part.indexOf("=");
+          if (eqIdx < 1) continue;
+          const name  = part.slice(0, eqIdx).trim();
+          const value = part.slice(eqIdx + 1).trim();
+          if (name) parsed[name] = value;
+        }
+        const puppeteerCookies = Object.entries(parsed).map(([name, value]) => {
+          const meta = COOKIE_META[name] ?? { httpOnly: false, sameSite: "Lax" };
+          return { name, value, domain: ".instagram.com", path: "/", expires: -1,
+                   httpOnly: meta.httpOnly, secure: true, sameSite: meta.sameSite, session: false };
+        });
+        fs.mkdirSync(COOKIES_DIR, { recursive: true });
+        fs.writeFileSync(cookiePath(profileId), JSON.stringify(puppeteerCookies, null, 2), "utf8");
+        cookiesLoaded = await loadCookies(profileId, page);
+        log(`[cookies:${profileId}] DB re-seed ${cookiesLoaded ? "succeeded ✓" : "failed — will open login page"}`, "browser");
+      }
+    } catch (e: any) {
+      log(`[cookies:${profileId}] DB re-seed attempt failed (non-fatal): ${e?.message}`, "browser");
+    }
+  }
 
   // ── Re-apply Chrome's userDataDir device tokens on top of the JSON load ─────
   // loadCookies() just called page.setCookie() for every cookie in the JSON file,
@@ -3902,17 +3975,19 @@ export async function wipeEbSession(profileId: number): Promise<void> {
 /**
  * Clears ALL Instagram session state for a profile from the embedded browser.
  *
- * Wipes Chrome's entire userdata directory so cookies, localStorage, IndexedDB,
- * and Instagram's "saved login" account data are all removed.  Device tokens
- * (mid, ig_did, ig_nrcb) are preserved by writing them back to the JSON seed
- * file so Chrome re-seeds the fingerprint on the next open without any saved
- * login showing up.
+ * Used by the "Clear Cookies" button.  Behaviour is a complete wipe — nothing
+ * is written back afterward:
+ *   1. Closes the live EB session (skipCookieSave so no heartbeat write races in).
+ *   2. Deletes Chrome's entire userdata directory — cookies, localStorage,
+ *      IndexedDB, and Instagram's "saved login" bubble are all gone.
+ *   3. Deletes the JSON cookie seed file.
  *
- * Used by the "Clear Cookies" button in account settings.
+ * After this call, igApiCookies is null in the DB (set by the caller before
+ * invoking this function) and accountStatus is "pending".  The next EB open
+ * will show the Instagram login page with a completely blank slate.
  *
- * @param igApiCookies - The full igApiCookies string from DB (semicolon-separated
- *   name=value pairs).  Device tokens are extracted from this and written back
- *   to the JSON seed file.  Pass undefined to skip device-token preservation.
+ * The optional igApiCookies parameter is kept for API compatibility but is no
+ * longer used — device tokens are NOT written back.
  */
 export async function clearEbSessionCookies(profileId: number, igApiCookies?: string): Promise<void> {
   // 1. Close the running EB session without saving cookies back to disk.

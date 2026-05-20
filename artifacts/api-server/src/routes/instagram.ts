@@ -373,6 +373,25 @@ export async function registerInstagramRoutes(
           body.accountStatus = "pending";
         }
       }
+      // ── Protect session credentials from accidental erasure via PATCH ─────────
+      // igApiCookies and igDeviceState hold the account's active Instagram session
+      // and device identity.  A null/empty value arriving via a generic PATCH
+      // (e.g. from a form field that renders empty when not set) must never
+      // overwrite valid stored cookies.  The dedicated /inject-cookies and
+      // /clear-session-cookies routes are the only legitimate paths for modifying
+      // these fields.  If this PATCH explicitly carries a non-empty string cookie
+      // value (e.g. the edit form's cookie textarea was filled in), allow it through.
+      if ("igApiCookies" in body) {
+        const val = body.igApiCookies;
+        if (!val || typeof val !== "string" || !val.includes("sessionid=")) {
+          console.warn(`[cookie-guard] BLOCKED attempt to set igApiCookies → ${JSON.stringify(val)} via PATCH route for profile ${id}`);
+          delete body.igApiCookies;
+        }
+      }
+      if ("igDeviceState" in body && !body.igDeviceState) {
+        console.warn(`[cookie-guard] BLOCKED attempt to clear igDeviceState via PATCH route for profile ${id}`);
+        delete body.igDeviceState;
+      }
       const updated = await storage.updateProfile(id, body);
       // If cookies were changed via the edit form, refresh the browser cookie file
       if (body.igApiCookies && typeof body.igApiCookies === "string") {
@@ -501,32 +520,22 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
 
-    // 1. Strip session cookies from igApiCookies in DB — keep only device tokens
-    //    (mid, ig_did) so the fingerprint stays intact.
-    const existing: string = (profile as any).igApiCookies ?? "";
-    const deviceOnly = existing
-      .split(";")
-      .map(s => s.trim())
-      .filter(s => {
-        const name = s.split("=")[0]?.trim().toLowerCase();
-        return name === "mid" || name === "ig_did";
-      })
-      .join(";");
-
+    // Full wipe — igApiCookies null, Chrome userdata gone, JSON seed file gone.
+    // Nothing is written back.  The account returns to "pending" so the next
+    // EB open shows the login page and the user can start a fresh session.
     await storage.updateProfile(profileId, {
-      igApiCookies: deviceOnly || null,
-      accountStatus: "logged_out",
+      igApiCookies: null,
+      accountStatus: "pending",
     } as any);
 
-    // 2+3. Close the live EB session, wipe Chrome's entire userdata directory
-    //      (clears cookies, localStorage, IndexedDB, saved logins — everything),
-    //      then write device tokens back to the JSON seed file so Chrome re-seeds
-    //      the fingerprint on next open without touching saved login state.
-    await clearEbSessionCookies(profileId, existing).catch(e =>
+    // Close the live EB session and delete Chrome's entire userdata directory
+    // (cookies, localStorage, IndexedDB, saved logins).  No device-token seed
+    // file is written back — the slate is completely clean.
+    await clearEbSessionCookies(profileId).catch(e =>
       console.warn(`[profiles] clearEbSessionCookies failed for ${profileId}: ${e?.message}`),
     );
 
-    console.log(`[profiles] @${profile.username}: session fully cleared — Chrome userdata wiped, device tokens preserved in seed file`);
+    console.log(`[profiles] @${profile.username}: session fully cleared — igApiCookies null, Chrome userdata wiped, no seed file written`);
     res.json({ ok: true });
   });
 

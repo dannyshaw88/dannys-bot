@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.418",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Clear Cookies now does a complete wipe — nothing is left behind. Previously it kept device tokens in the database and wrote them back to a seed file; now the account returns to a blank pending state, ready for a fresh login." },
+      { category: "Fix", text: "If a proxy error causes the embedded browser to lose its cookie file, the app now recovers automatically from the database on next open instead of landing on the login page." },
+      { category: "Fix", text: "The 60-second cookie save can no longer overwrite a valid session file with an empty one when a session expires mid-use." },
+    ],
+  },
+  {
     version: "1.0.417",
     date: "20 May 2026",
     items: [
