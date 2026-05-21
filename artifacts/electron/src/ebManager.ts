@@ -76,7 +76,8 @@ function buildToolbarJs(_username: string): string {
   function _tick(){var s=Math.floor((Date.now()-_start)/1000),m=Math.floor(s/60);s=s%60;timerEl.textContent=m+':'+(s<10?'0':'')+s;}
   _tick();setInterval(_tick,1000);
   bar.appendChild(timerEl);
-  (function tryPrepend(){var _b=document.body||document.documentElement;if(!_b){setTimeout(tryPrepend,80);return;}_b.prepend(bar);})();
+  (function tryPrepend(){if(!document.body){setTimeout(tryPrepend,80);return;}document.body.prepend(bar);})();
+  setInterval(function(){if(!document.getElementById('__eq_bar__')&&document.body){document.body.prepend(bar);}},3000);
   window.__eq_syncUrl=function(u){var el=document.getElementById('__eq_url__');if(el&&document.activeElement!==el)el.value=u;};
 })();`;
 }
@@ -475,17 +476,35 @@ export async function openEbWindow(opts: {
     await syncCookies(profileId, ses);
   });
 
-  // Inject the toolbar overlay — use dom-ready (fires on all pages including
-  // chrome-error://) as the primary injection point, then did-finish-load as
-  // a secondary pass (catches pages where dom-ready fires before body exists).
-  win.webContents.on("dom-ready", () => {
-    win.webContents.executeJavaScript(buildToolbarJs(username))
-      .catch((e: any) => console.error(`[ebManager] toolbar inject dom-ready failed for @${username}:`, e?.message));
-  });
-  win.webContents.on("did-finish-load", () => {
-    win.webContents.executeJavaScript(buildToolbarJs(username))
-      .catch((e: any) => console.error(`[ebManager] toolbar inject did-finish-load failed for @${username}:`, e?.message));
-  });
+  // ── Toolbar injection — three independent triggers ────────────────────────
+  // 1. dom-ready   — earliest point where JS can run; fires on all pages
+  //                  including chrome-error://.
+  // 2. did-navigate — fires once when the committed URL changes (after any
+  //                  redirect chain settles). Catches rapid post-2FA redirects
+  //                  where the dom-ready executeJavaScript gets killed by the
+  //                  next redirect before it finishes.
+  // 3. did-finish-load — final pass once all resources are loaded. If it
+  //                  fails (frame detached / rapid nav) we retry once after
+  //                  800 ms so the toolbar always eventually appears.
+  // Inside buildToolbarJs, tryPrepend() retries every 80 ms until document.body
+  // exists, and a 3-second setInterval re-adds the bar if Instagram's SPA
+  // ever removes it.
+  const injectToolbar = (label: string) => {
+    win.webContents.executeJavaScript(buildToolbarJs(username)).catch((e: any) => {
+      console.error(`[ebManager] toolbar inject ${label} failed for @${username}:`, e?.message);
+    });
+  };
+  const injectToolbarWithRetry = () => {
+    win.webContents.executeJavaScript(buildToolbarJs(username)).catch((e: any) => {
+      console.error(`[ebManager] toolbar did-finish-load failed for @${username}:`, e?.message);
+      setTimeout(() => {
+        win.webContents.executeJavaScript(buildToolbarJs(username)).catch(() => {});
+      }, 800);
+    });
+  };
+  win.webContents.on("dom-ready",       () => injectToolbar("dom-ready"));
+  win.webContents.on("did-navigate",    () => setTimeout(() => injectToolbar("did-navigate"), 100));
+  win.webContents.on("did-finish-load", () => injectToolbarWithRetry());
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
   });

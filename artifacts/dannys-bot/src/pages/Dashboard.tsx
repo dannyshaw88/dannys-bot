@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.443",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Toolbar buttons permanently disappearing after 2FA submission is now fixed. Instagram navigates through several pages quickly after 2FA and the previous toolbar injection was racing with those redirects and silently failing. The toolbar is now injected at three independent points (DOM-ready, navigation commit, and page load complete) with an automatic retry, so at least one always succeeds." },
+      { category: "Fix", text: "Toolbar buttons no longer vanish if Instagram's own page scripts remove the toolbar element — a background check now re-adds it within 3 seconds if it goes missing on any page." },
+      { category: "Fix", text: "Toolbar was previously being attached to the wrong part of the page (the HTML root element instead of the body) when the page body wasn't ready yet, causing it to render incorrectly. It now waits properly for the body to exist before attaching." },
+    ],
+  },
+  {
     version: "1.0.442",
     date: "21 May 2026",
     items: [
