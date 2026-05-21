@@ -10,7 +10,7 @@
  * server at serverPort via HTTP.
  */
 
-import { BrowserWindow, session as electronSession, ipcMain } from "electron";
+import { BrowserWindow, Menu, session as electronSession, ipcMain } from "electron";
 import http from "http";
 import fs from "fs";
 import path from "path";
@@ -21,7 +21,10 @@ import { createHmac } from "crypto";
 // Injected via executeJavaScript into the EB window after every full page load.
 // Uses window.__eq (exposed by ebToolbarPreload.ts via contextBridge) to route
 // all button actions through IPC → ipcMain handler → eb-toolbar-cmd.
-const TOOLBAR_JS = `(function(){
+// username is embedded via JSON.stringify so any character is safe.
+function buildToolbarJs(username: string): string {
+  const safeLabel = JSON.stringify("🤖 " + username);
+  return `(function(){
   if(document.getElementById('__eq_bar__'))return;
   var bar=document.createElement('div');
   bar.id='__eq_bar__';
@@ -36,10 +39,16 @@ const TOOLBAR_JS = `(function(){
   }
   function sep(){var s=document.createElement('span');s.style.cssText='width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0;';return s;}
   function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
+  var lbl=document.createElement('span');
+  lbl.textContent=${safeLabel};
+  lbl.style.cssText='font-size:12px;font-weight:700;color:#0ea5e9;white-space:nowrap;padding-right:4px;flex-shrink:0;';
+  bar.appendChild(lbl);
+  bar.appendChild(sep());
   bar.appendChild(mkBtn('Back','&#9664;',function(){cmd('back');}));
   bar.appendChild(mkBtn('Forward','&#9654;',function(){cmd('forward');}));
   bar.appendChild(mkBtn('Reload','&#8635;',function(){cmd('reload');}));
   bar.appendChild(mkBtn('Instagram Home','&#8962;',function(){cmd('navigate',{url:'https://www.instagram.com/'});}));
+  bar.appendChild(mkBtn('New tab','&#43;',function(){cmd('new-tab');}));
   bar.appendChild(sep());
   var inp=document.createElement('input');
   inp.id='__eq_url__';inp.value=location.href;
@@ -49,12 +58,12 @@ const TOOLBAR_JS = `(function(){
   inp.onkeydown=function(e){if(e.key==='Enter'){e.preventDefault();var u=inp.value.trim();if(u&&u.indexOf('http')!==0)u='https://'+u;cmd('navigate',{url:u});}};
   bar.appendChild(inp);
   bar.appendChild(sep());
-  var loginBtn=mkBtn('Auto-login: fill credentials and sign in','&#8594; Login',function(){loginBtn.disabled=true;loginBtn.style.opacity='0.5';Promise.resolve(cmd('login')).then(function(){loginBtn.disabled=false;loginBtn.style.opacity='1';});},'border-color:#3b82f6;color:#1d4ed8;');
+  var loginBtn=mkBtn('Find username & password fields on this page and fill them in','&#8594; Login',function(){loginBtn.disabled=true;loginBtn.style.opacity='0.5';Promise.resolve(cmd('login')).then(function(){loginBtn.disabled=false;loginBtn.style.opacity='1';});},'border-color:#3b82f6;color:#1d4ed8;');
   bar.appendChild(loginBtn);
-  bar.appendChild(mkBtn('Generate TOTP and type into focused field','&#128273; 2FA',function(){cmd('totp');}));
-  bar.appendChild(mkBtn('Type pre-filled phone number into focused field','&#128242; Phone',function(){cmd('phone');}));
-  bar.appendChild(mkBtn('Type email account into focused field','&#9993; Email',function(){cmd('email-user');}));
-  bar.appendChild(mkBtn('Type email password into focused field','&#128274; Email Pass',function(){cmd('email-pass');}));
+  bar.appendChild(mkBtn('Generate TOTP code and type it into the focused field','&#128273; 2FA',function(){cmd('totp');}));
+  bar.appendChild(mkBtn('Type pre-filled phone number into the focused field','&#128242; Phone',function(){cmd('phone');}));
+  bar.appendChild(mkBtn('Type email address into the focused field','&#9993; Email',function(){cmd('email-user');}));
+  bar.appendChild(mkBtn('Type email password into the focused field','&#128274; Email Pass',function(){cmd('email-pass');}));
   bar.appendChild(sep());
   var timerEl=document.createElement('span');
   timerEl.title='Time since browser was opened';
@@ -64,11 +73,10 @@ const TOOLBAR_JS = `(function(){
   function _tick(){var s=Math.floor((Date.now()-_start)/1000),m=Math.floor(s/60);s=s%60;timerEl.textContent=m+':'+(s<10?'0':'')+s;}
   _tick();setInterval(_tick,1000);
   bar.appendChild(timerEl);
-  bar.appendChild(sep());
-  bar.appendChild(mkBtn('Clear browser session and cookies','&#128465; Clear',function(){if(confirm('Clear this browser session? You will be logged out.'))cmd('clear');},'border-color:#dc2626;color:#dc2626;'));
   document.body.prepend(bar);
   window.__eq_syncUrl=function(u){var el=document.getElementById('__eq_url__');if(el&&document.activeElement!==el)el.value=u;};
 })();`;
+}
 
 // ── Module state ───────────────────────────────────────────────────────────────
 
@@ -78,6 +86,7 @@ let _iconPath    = "";
 
 interface EbEntry {
   win: BrowserWindow;
+  username: string;
   proxy?: { host: string; port: number; user?: string; pass?: string };
 }
 const ebMap = new Map<number, EbEntry>();
@@ -433,7 +442,7 @@ export async function openEbWindow(opts: {
   }
 
   // Store in map
-  ebMap.set(profileId, { win, proxy });
+  ebMap.set(profileId, { win, username, proxy });
 
   // Sync cookies + push URL change on every navigation
   win.webContents.on("did-navigate", async (_e, navUrl) => {
@@ -451,7 +460,24 @@ export async function openEbWindow(opts: {
 
   // Inject the toolbar overlay after every full page load
   win.webContents.on("did-finish-load", () => {
-    win.webContents.executeJavaScript(TOOLBAR_JS).catch(() => {});
+    win.webContents.executeJavaScript(buildToolbarJs(username)).catch(() => {});
+  });
+
+  // Prevent Instagram's page <title> from overriding the window title.
+  // Without this, Electron replaces "@username — Equinox Browser" with "Instagram".
+  win.webContents.on("page-title-updated", (e) => {
+    e.preventDefault();
+    win.setTitle(`@${username} — Equinox Browser`);
+  });
+
+  // Right-click context menu: cut / copy / paste / select-all
+  win.webContents.on("context-menu", (_e, params) => {
+    const tpl: Electron.MenuItemConstructorOptions[] = [];
+    if (params.editFlags.canCut)   tpl.push({ role: "cut" });
+    if (params.editFlags.canCopy)  tpl.push({ role: "copy" });
+    if (params.editFlags.canPaste) tpl.push({ role: "paste" });
+    tpl.push({ type: "separator" }, { role: "selectAll" });
+    Menu.buildFromTemplate(tpl).popup({ window: win });
   });
 
   // SPA navigations (Instagram pushState) don't fire did-finish-load —
@@ -528,11 +554,72 @@ function setupToolbarIpc(): void {
         break;
 
       case "login": {
+        // Fill username + password into the visible Instagram login form.
+        // Searches the current page for the fields first; navigates to the
+        // login page only if they aren't present yet.
         try {
           const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
           const p = await r.json() as any;
-          await doAutoLogin(foundPid, foundWin, p.username ?? "", p.password ?? "", p.twoFASecretKey ?? "");
+          const usr = JSON.stringify(p.username ?? "");
+          const pwd = JSON.stringify(p.password ?? "");
+          await wc.executeJavaScript(`(async () => {
+            const wait = ms => new Promise(res => setTimeout(res, ms));
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            const fill = (el, val) => {
+              setter.call(el, val);
+              el.dispatchEvent(new Event('input',  { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+            let uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
+            let pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
+            if (!uInp && !pInp) {
+              window.location.href = 'https://www.instagram.com/accounts/login/';
+              return;
+            }
+            if (uInp) { fill(uInp, ${usr}); uInp.focus(); }
+            await wait(250);
+            if (pInp) { fill(pInp, ${pwd}); pInp.focus(); }
+            await wait(400);
+            const btn = document.querySelector('button[type="submit"]');
+            if (btn && !btn.disabled) btn.click();
+          })()`).catch(() => {});
         } catch {}
+        break;
+      }
+
+      case "new-tab": {
+        // Open a second browser window sharing the same session partition
+        const entry = ebMap.get(foundPid);
+        const partition = `persist:eb-${foundPid}`;
+        const tabWin = new BrowserWindow({
+          width: 1280, height: 900,
+          title: `@${entry?.username ?? foundPid} — Equinox Browser`,
+          icon: _iconPath || undefined,
+          webPreferences: {
+            partition,
+            preload: require("path").join(__dirname, "ebToolbarPreload.js"),
+            contextIsolation: true,
+            nodeIntegration: false,
+          },
+        });
+        const tabUsr = entry?.username ?? String(foundPid);
+        tabWin.webContents.on("did-finish-load", () => {
+          tabWin.webContents.executeJavaScript(buildToolbarJs(tabUsr)).catch(() => {});
+        });
+        tabWin.webContents.on("page-title-updated", (e) => {
+          e.preventDefault();
+          tabWin.setTitle(`@${tabUsr} — Equinox Browser`);
+        });
+        tabWin.webContents.on("context-menu", (_e, params) => {
+          const tpl: Electron.MenuItemConstructorOptions[] = [];
+          if (params.editFlags.canCut)   tpl.push({ role: "cut" });
+          if (params.editFlags.canCopy)  tpl.push({ role: "copy" });
+          if (params.editFlags.canPaste) tpl.push({ role: "paste" });
+          tpl.push({ type: "separator" }, { role: "selectAll" });
+          Menu.buildFromTemplate(tpl).popup({ window: tabWin });
+        });
+        tabWin.loadURL("https://www.instagram.com/").catch(() => {});
+        tabWin.show();
         break;
       }
 

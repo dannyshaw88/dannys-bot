@@ -55,6 +55,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.437",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "The Login button now finds the username and password fields directly on the current page and fills them in — it no longer navigates away from the page you are on. If the login form is not visible yet, it opens the login page first." },
+      { category: "Fix", text: "The 2FA, Phone, Email, and Email Pass buttons now correctly paste into whichever field you have clicked on." },
+      { category: "Remove", text: "The Clear button has been removed from the browser toolbar." },
+      { category: "New", text: "A New Tab button (+) opens a second browser window for the same account, sharing the same session and cookies." },
+      { category: "Fix", text: "Right-clicking inside the browser now shows a Cut / Copy / Paste / Select All context menu." },
+      { category: "Fix", text: "The browser window title and toolbar now show the account username (e.g. 🤖 myaccount) instead of the word Instagram." },
+    ],
+  },
+  {
     version: "1.0.436",
     date: "21 May 2026",
     items: [
