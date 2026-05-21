@@ -25,6 +25,8 @@ interface BrowserPanelProps {
   profileId: number;
   userAgent: string;
   username: string;
+  /** When true, renders as a fixed-height panel inside a page (no h-full). */
+  embedded?: boolean;
 }
 
 type SSEStatus = "idle" | "connecting" | "connected" | "error";
@@ -57,7 +59,7 @@ function nowTs() {
 // Detect Electron native EB mode (window.electronAPI exposed by preload)
 const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelProps) {
+export function BrowserPanel({ profileId, userAgent, username, embedded }: BrowserPanelProps) {
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const esRef = useRef<WebSocket | null>(null);
@@ -177,9 +179,9 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   // ── Input sender: POST to /api/browser/:id/input ─────────────────────────
   const send = useCallback((msg: object) => {
-    if (statusRef.current !== "connected") return;
-    // Electron mode: route commands to the native BrowserWindow via IPC proxy endpoint.
-    // Puppeteer mode: route commands to the CDP session via input endpoint.
+    // Electron mode: commands always go to the native window — no WS required.
+    // Puppeteer mode: require an active WebSocket connection.
+    if (!IS_ELECTRON && statusRef.current !== "connected") return;
     const url = IS_ELECTRON
       ? `/api/profiles/${profileId}/eb-input`
       : `/api/browser/${profileId}/input`;
@@ -240,6 +242,13 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   // queued behind the frame streams. With SSE, 5+ EBs saturated the pool and
   // clicks never reached the server — hence the "login button does nothing" bug.
   const connect = useCallback(() => {
+    // Electron mode: no Puppeteer / WebSocket stream. Mark as "connected"
+    // immediately so all toolbar buttons are enabled. URL updates come from polling.
+    if (IS_ELECTRON) {
+      setStatusSafe("connected");
+      return;
+    }
+
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -472,6 +481,23 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   useEffect(() => { connect(); }, [connect]);
 
+  // ── Electron mode: poll native window state for address bar updates ───────
+  useEffect(() => {
+    if (!IS_ELECTRON) return;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/profiles/${profileId}/eb-state`);
+        const data: { open: boolean; url: string } = await r.json();
+        if (data.url && data.url !== "about:blank" && !addressFocusedRef.current) {
+          setAddressBar(data.url);
+        }
+      } catch { /* ignore */ }
+    };
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => clearInterval(id);
+  }, [profileId]);
+
   // Track how long the EB has been open (since first connection)
   useEffect(() => {
     if (status === "connected" && openedAt === null) {
@@ -664,9 +690,14 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
 
   const clearSession = async () => {
     try {
-      await fetch(`/api/browser/${profileId}/session`, { method: "DELETE" });
+      if (IS_ELECTRON) {
+        // Clear cookies from the EB session partition via the profile wipe endpoint
+        await fetch(`/api/profiles/${profileId}/wipe-eb-session`, { method: "POST" });
+      } else {
+        await fetch(`/api/browser/${profileId}/session`, { method: "DELETE" });
+        setTimeout(connect, 800);
+      }
       setLoginState("idle");
-      setTimeout(connect, 800);
     } catch {
       console.error("Could not clear session.");
     }
@@ -681,11 +712,34 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
     setLoginState("running");
     setLogTab("login");
     appendLog("Starting auto-login…", "step");
-    fetch(`/api/browser/${profileId}/login`, { method: "POST" }).catch(() => {
-      setLoginState("fail");
-      appendLog("Could not reach server", "fail");
-      setTimeout(() => setLoginState("idle"), 4000);
-    });
+
+    if (IS_ELECTRON) {
+      // Electron mode: eb-auto-login returns a synchronous {ok, message} result.
+      fetch(`/api/profiles/${profileId}/eb-auto-login`, { method: "POST" })
+        .then(r => r.json())
+        .then((data: { ok: boolean; message: string }) => {
+          if (data.ok) {
+            setLoginState("ok");
+            appendLog(data.message || "Login successful", "ok");
+          } else {
+            setLoginState("fail");
+            appendLog(data.message || "Login failed", "fail");
+            setTimeout(() => setLoginState("idle"), 12000);
+          }
+        })
+        .catch(() => {
+          setLoginState("fail");
+          appendLog("Could not reach server", "fail");
+          setTimeout(() => setLoginState("idle"), 4000);
+        });
+    } else {
+      // Non-Electron mode: fire-and-forget; result comes back via WebSocket messages.
+      fetch(`/api/browser/${profileId}/login`, { method: "POST" }).catch(() => {
+        setLoginState("fail");
+        appendLog("Could not reach server", "fail");
+        setTimeout(() => setLoginState("idle"), 4000);
+      });
+    }
   };
 
   const lastEntry = loginLog[loginLog.length - 1];
@@ -695,7 +749,7 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   const connected   = status === "connected";
 
   return (
-    <div className="flex flex-col h-full bg-background rounded-xl border border-border overflow-hidden shadow-sm">
+    <div className={`flex flex-col bg-background rounded-xl border border-border overflow-hidden shadow-sm ${embedded ? "" : "h-full"}`}>
 
       {/* Isolation banner */}
       <div className="flex items-center gap-2 px-4 py-2 bg-background border-b border-border/60 text-xs shrink-0">

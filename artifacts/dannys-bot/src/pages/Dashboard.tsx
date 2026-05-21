@@ -55,6 +55,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.431",
+    date: "21 May 2026",
+    items: [
+      { category: "New", text: "Mobile tab completely rebuilt — connect BlueStacks, LDPlayer, Nox, or any Android emulator in two clicks, no Android Studio required." },
+      { category: "New", text: "Auto-detect button scans all known emulator ports and connects whatever is running." },
+      { category: "New", text: "Each connected device gets its own spoofed Device ID (android_id) — editable, copyable, and randomisable per device." },
+      { category: "New", text: "Per-device proxy assignment pulls from your existing Proxy Manager list and can be applied to a running emulator instantly." },
+      { category: "New", text: "Device panel: install Instagram from APK, launch, clear app data, mirror screen, and save account credentials — all from Equinox." },
+      { category: "Fix", text: "Embedded browser windows no longer open multiple times when clicking Browser repeatedly." },
+      { category: "Fix", text: "Minimising the embedded browser no longer opens a new window — it brings the existing one back." },
+      { category: "Fix", text: "Browser control panel (URL bar, login, 2FA, clear session) is now embedded directly in the Human Session tab." },
+    ],
+  },
+  {
     version: "1.0.430",
     date: "21 May 2026",
     items: [

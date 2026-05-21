@@ -732,6 +732,76 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── EB Auto-login (Electron native window mode) ───────────────────────────
+  // Called by BrowserPanel when the Login button is clicked in Electron mode.
+  // Proxies to ebManager IPC /eb/auto-login which drives the native BrowserWindow.
+  app.post("/api/profiles/:id/eb-auto-login", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const ipcPort   = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) return res.json({ ok: false, message: "Not running in Electron mode" });
+
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+
+    const body = {
+      profileId,
+      username:  profile.username,
+      password:  profile.password,
+      twoFAKey:  profile.twoFASecretKey ?? "",
+      proxy:     profile.proxyHost ? { host: profile.proxyHost, port: profile.proxyPort, user: profile.proxyUsername, pass: profile.proxyPassword } : undefined,
+      userAgent: profile.userAgentEmbedded ?? "",
+    };
+    try {
+      const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/auto-login`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(body),
+      });
+      const data = await r.json().catch(() => ({ ok: false, message: "IPC parse error" }));
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, message: err?.message ?? "IPC error" });
+    }
+  });
+
+  // ── Wipe EB session (Electron native window mode) ─────────────────────────
+  // Clears the native BrowserWindow's cookie partition and the stored igApiCookies
+  // so the next login starts completely fresh.
+  app.post("/api/profiles/:id/wipe-eb-session", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const ipcPort   = Number(process.env.EB_IPC_PORT ?? 0);
+
+    if (ipcPort) {
+      try {
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/close`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ profileId }),
+        });
+      } catch { /* ignore */ }
+    }
+    try {
+      await storage.updateProfile(profileId, { igApiCookies: null as any, igDeviceState: null as any });
+    } catch { /* ignore */ }
+    res.json({ ok: true });
+  });
+
+  // ── EB State (Electron native window mode) ────────────────────────────────
+  // Returns whether the native BrowserWindow is currently open and its URL.
+  // Used by BrowserPanel to poll for address bar updates.
+  app.get("/api/profiles/:id/eb-state", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const ipcPort   = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) return res.json({ open: false, url: "" });
+    try {
+      const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/state?profileId=${profileId}`);
+      const data = await r.json().catch(() => ({ open: false, url: "" }));
+      return res.json(data);
+    } catch {
+      return res.json({ open: false, url: "" });
+    }
+  });
+
   // ── Profile Sync — fetch latest follower/following/posts counts ───────────
   app.post("/api/profiles/:id/sync", async (req, res) => {
     const id = Number(req.params.id);

@@ -5,6 +5,7 @@ import { useTools } from "@/hooks/use-tools";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
+import { BrowserPanel } from "@/components/BrowserPanel";
 import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
 import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
 import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
@@ -613,6 +614,27 @@ export function ProfileDetailsPage() {
         onError: () => toast({ title: "Error", description: "Failed to reset device IDs.", variant: "destructive" }),
       }
     );
+  };
+
+  const handleClearCookies = async () => {
+    setClearCookiesStatus("clearing");
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/clear-session-cookies`, { method: "POST" });
+      if (res.ok) {
+        setClearCookiesStatus("ok");
+        setVerifyStatus("idle");
+        queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+        toast({ title: "Cookies Cleared", description: "Session cookies wiped. Account set to Pending." });
+        setTimeout(() => setClearCookiesStatus("idle"), 2500);
+      } else {
+        setClearCookiesStatus("error");
+        setTimeout(() => setClearCookiesStatus("idle"), 3000);
+      }
+    } catch {
+      setClearCookiesStatus("error");
+      setTimeout(() => setClearCookiesStatus("idle"), 3000);
+    }
   };
 
   if (profileLoading || toolsLoading) {
@@ -1570,7 +1592,16 @@ export function ProfileDetailsPage() {
           }
         </Tabs.Content>
 
-        <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
+        <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300 space-y-4">
+          {/* Browser controls — always visible in this tab so the user can open,
+              navigate, login, fill 2FA, type phone/email, and clear the session
+              without a floating overlay getting in the way. */}
+          <BrowserPanel
+            profileId={profile.id}
+            username={profile.username}
+            userAgent={profile.userAgentEmbedded ?? ""}
+            embedded
+          />
           {getTool('human_sessions')
             ? <HumanSessionPanel tool={getTool('human_sessions')!} profile={profile} />
             : <p className="text-sm text-muted-foreground py-8">Human sessions tool not found for this profile.</p>
