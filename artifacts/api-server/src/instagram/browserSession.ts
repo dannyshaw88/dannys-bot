@@ -2209,6 +2209,14 @@ export async function getOrCreateSession(
     }
   });
 
+  // ── CPU-spike diagnostics ────────────────────────────────────────────────
+  // Count every network request by resourceType + path prefix in 30-second
+  // buckets for the first 5 minutes of the session.  The bucket summary is
+  // logged at the end of each window so the CPU-spike investigation can see
+  // what Chrome is loading (and when) without relying on DevTools.
+  const _diagStartMs = Date.now();
+  const _diagWindow: Record<string, number> = {};
+
   page.on("request", (req) => {
     if (isIgApiCall(req.url())) {
       pending.set(req.url(), { startMs: Date.now(), method: req.method() });
@@ -2270,6 +2278,19 @@ export async function getOrCreateSession(
       return;
     }
 
+    // ── Diag counter (first 5 minutes) ───────────────────────────────────────
+    if (Date.now() - _diagStartMs < 5 * 60 * 1000) {
+      _diagWindow[rType] = (_diagWindow[rType] ?? 0) + 1;
+      if (rType === "xhr" || rType === "fetch") {
+        try {
+          const u = new URL(req.url());
+          // Key = first two path segments, strips query strings and IDs
+          const pathKey = u.pathname.split("/").slice(0, 4).join("/") || "/";
+          _diagWindow[`xhr:${pathKey}`] = (_diagWindow[`xhr:${pathKey}`] ?? 0) + 1;
+        } catch {}
+      }
+    }
+
     req.continue().catch(() => {});
   });
 
@@ -2301,6 +2322,87 @@ export async function getOrCreateSession(
   const session: Session = { browser, page, pages: [page], activePage: 0, ws: null, frameLoop: null, framePending: false, screencastCdp: null, housekeepLoop: null, lastScreencastFrameAt: Date.now(), lastUrl: "", proxyKey: newProxyKey, userAgent, userAgentApi: userAgentApi ?? null, sessionToken: Symbol(), lastActivityAt: Date.now(), startedAt: Date.now(), resolvedTZ };
   sessions.set(profileId, session);
   log(`Chrome launched for profile ${profileId}`, "browser");
+
+  // ── CPU-spike diagnostic loop ─────────────────────────────────────────────
+  // Runs every 30 s for the first 5 minutes.  Each tick:
+  //   1. Logs the request-type counters accumulated since last tick (network).
+  //   2. Calls CDP Performance.getMetrics() and logs the DELTA so the
+  //      investigation can see which Chrome metric jumps at the ~2-min mark.
+  // All lines are tagged [cpudiag:N] so they are easy to grep in the log file.
+  {
+    let _diagTick = 0;
+    let _diagPrevMetrics: Record<string, number> = {};
+    let _diagCdp: any = null;
+
+    page.createCDPSession().then((cdp: any) => {
+      _diagCdp = cdp;
+      return cdp.send("Performance.enable", { timeDomain: "timeTicks" });
+    }).catch(() => {});
+
+    const _diagInterval = setInterval(async () => {
+      _diagTick++;
+      const ageS = _diagTick * 30;
+
+      // ── Network request summary ──────────────────────────────────────────
+      const snap = { ..._diagWindow };
+      Object.keys(_diagWindow).forEach(k => delete _diagWindow[k]);
+      const netLines = Object.entries(snap)
+        .sort(([, a], [, b]) => b - a)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(" ");
+      log(`[cpudiag:${profileId}] t=${ageS}s NET ${netLines || "(none)"}`, "browser");
+
+      // ── CDP Performance.getMetrics() ────────────────────────────────────
+      if (_diagCdp) {
+        try {
+          const { metrics } = await _diagCdp.send("Performance.getMetrics");
+          const cur: Record<string, number> = {};
+          for (const m of metrics) cur[m.name] = m.value;
+
+          // Log deltas for the metrics most likely to reveal a CPU spike.
+          const keys = [
+            "TaskDuration",       // total time on main thread tasks (seconds)
+            "ScriptDuration",     // JS execution time (seconds)
+            "LayoutDuration",     // layout time (seconds)
+            "RecalcStyleDuration",// style recalc time (seconds)
+            "JSHeapUsedSize",     // V8 live heap (bytes)
+            "JSHeapTotalSize",    // V8 total heap (bytes)
+            "Nodes",              // DOM node count
+            "LayoutCount",        // layout operations count
+            "RecalcStyleCount",   // style recalc count
+          ];
+          const parts: string[] = [];
+          for (const k of keys) {
+            if (cur[k] === undefined) continue;
+            const prev = _diagPrevMetrics[k] ?? cur[k];
+            const delta = cur[k] - prev;
+            // Format: key=current(+delta)
+            const fmt = k.includes("Size")
+              ? `${Math.round(cur[k] / 1024)}KB`
+              : k.includes("Duration")
+                ? `${(cur[k] * 1000).toFixed(0)}ms(+${(delta * 1000).toFixed(0)}ms)`
+                : `${cur[k]}(+${delta})`;
+            parts.push(`${k}=${fmt}`);
+          }
+          _diagPrevMetrics = cur;
+          log(`[cpudiag:${profileId}] t=${ageS}s CDP ${parts.join(" ")}`, "browser");
+        } catch { /* CDP session may have closed */ }
+      }
+
+      // Stop after 5 minutes — diagnostics only needed for the spike window.
+      if (ageS >= 300) {
+        clearInterval(_diagInterval);
+        if (_diagCdp) { _diagCdp.detach().catch(() => {}); _diagCdp = null; }
+        log(`[cpudiag:${profileId}] diagnostic logging complete (5 min window)`, "browser");
+      }
+    }, 30_000);
+
+    // Clean up if the session closes before 5 minutes.
+    browser.on("disconnected", () => {
+      clearInterval(_diagInterval);
+      if (_diagCdp) { _diagCdp.detach().catch(() => {}); _diagCdp = null; }
+    });
+  }
 
   // ── Apply UA to every new page/popup that Chrome creates ──────────────────
   // page.setUserAgent() is per-page only. Instagram and Chrome itself can open

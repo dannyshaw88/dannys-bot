@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.425",
+    date: "20 May 2026",
+    items: [
+      { category: "Fix", text: "Added CPU spike diagnostics — the app now logs every network request type and Chrome performance metrics (JS time, heap size, layout count) every 30 seconds for the first 5 minutes after each EB opens. This will identify the exact cause of the spike." },
+    ],
+  },
+  {
     version: "1.0.424",
     date: "20 May 2026",
     items: [
