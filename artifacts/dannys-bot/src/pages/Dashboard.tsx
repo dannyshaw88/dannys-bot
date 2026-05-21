@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.441",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Verify now correctly detects an existing login on the Windows app and skips the re-login step. Previously the Windows verify flow always attempted a fresh login even when the account was already logged in via the embedded browser, causing a 'Could not find login form' error." },
+      { category: "Fix", text: "Embedded browser toolbar buttons now always appear, even when the page is still loading or hasn't fully rendered. The toolbar injection previously failed silently if the page body wasn't ready yet." },
+    ],
+  },
+  {
     version: "1.0.440",
     date: "21 May 2026",
     items: [

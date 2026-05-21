@@ -76,7 +76,7 @@ function buildToolbarJs(_username: string): string {
   function _tick(){var s=Math.floor((Date.now()-_start)/1000),m=Math.floor(s/60);s=s%60;timerEl.textContent=m+':'+(s<10?'0':'')+s;}
   _tick();setInterval(_tick,1000);
   bar.appendChild(timerEl);
-  document.body.prepend(bar);
+  (function tryPrepend(){var _b=document.body||document.documentElement;if(!_b){setTimeout(tryPrepend,80);return;}_b.prepend(bar);})();
   window.__eq_syncUrl=function(u){var el=document.getElementById('__eq_url__');if(el&&document.activeElement!==el)el.value=u;};
 })();`;
 }
@@ -891,6 +891,24 @@ export function startEbIpcServer(
           await ses.setProxy({ proxyRules: "direct://" });
         }
         await loadCookiesFromFile(pid, ses);
+
+        // ── Skip auto-login if already logged in (same check as Puppeteer path) ──
+        // The Electron session already has cookies loaded from the file. If there is
+        // already a sessionid, the account is logged in — run doAutoLogin would just
+        // try to log in again (finding no login form) and fail with a misleading error.
+        const existingSession = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+        if (existingSession.length > 0) {
+          console.log(`[silent-verify:${pid}] @${body.username} — sessionid found in Electron session, skipping auto-login`);
+          const c1 = await ses.cookies.get({ domain: ".instagram.com" });
+          const c2 = await ses.cookies.get({ domain: "instagram.com" });
+          const seen = new Set<string>();
+          const cookies = [...c1, ...c2].filter(c => {
+            if (seen.has(c.name)) return false;
+            seen.add(c.name);
+            return true;
+          }).map(c => ({ name: c.name, value: c.value }));
+          return send(res, 200, { ok: true, message: "Using existing EB session", cookies });
+        }
 
         const hiddenWin = new BrowserWindow({
           width: 1280,
