@@ -1979,67 +1979,31 @@ export async function getOrCreateSession(
   // also zero overhead, handled natively inside Chrome.
   const fetchCdp = await page.createCDPSession();
 
-  // Block analytics/tracking at the Chrome network layer — zero Node.js round-trips.
-  await fetchCdp.send("Network.setBlockedURLs", {
-    urls: [
-      "*pixel.facebook.com*",
-      "*connect.facebook.net*",
-      "*analytics.instagram.com*",
-      "*/logging/1/*",
-      "*/b/l.php*",
-      "*/ajax/bz*",
-    ]
-  }).catch(() => {});
-
-  // Pause ONLY the resource types we need to block.  Everything else flows freely.
+  // Intercept ONLY the challenge redirect URL — needed so startApprovalPolling can
+  // capture the freshest token on each hop.  No image/font/media blocking here;
+  // those restrictions caused pages to hang and white-screen.
   await fetchCdp.send("Fetch.enable", {
     patterns: [
-      { resourceType: "Media",    requestStage: "Request" },
-      { resourceType: "Font",     requestStage: "Request" },
-      { resourceType: "Image",    requestStage: "Request" },
-      // Capture challenge redirect hops so startApprovalPolling can re-navigate Chrome
-      // and reset its 20-hop counter on every iteration.
       { urlPattern: "*update_risky_contactpoint*", requestStage: "Request" },
     ]
   });
 
   fetchCdp.on("Fetch.requestPaused", (p: any) => {
-    const { requestId, resourceType, request, redirectedRequestId } = p;
+    const { requestId, request, redirectedRequestId } = p;
 
-    // Challenge redirect interceptor — only for REDIRECT hops (redirectedRequestId set),
-    // not the initial navigation.  Captures the updated token URL so startApprovalPolling
-    // can re-navigate Chrome fresh on each iteration, resetting its 20-hop counter.
-    if (request?.url?.includes("update_risky_contactpoint")) {
-      if (redirectedRequestId) {
-        const sc = sessions.get(profileId);
-        if (sc && (sc as any)._challengeRedirectInterceptor) {
-          (sc as any)._challengeRedirectInterceptor(request.url);
-        }
-        fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => {});
-      } else {
-        // First navigation — allow Chrome to follow the chain normally.
-        fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
+    // Challenge redirect interceptor — abort REDIRECT hops (redirectedRequestId set)
+    // to prevent Chrome hitting ERR_TOO_MANY_REDIRECTS, and capture the freshest
+    // token URL so startApprovalPolling can re-navigate on each iteration.
+    if (redirectedRequestId) {
+      const sc = sessions.get(profileId);
+      if (sc && (sc as any)._challengeRedirectInterceptor) {
+        (sc as any)._challengeRedirectInterceptor(request.url);
       }
-      return;
+      fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => {});
+    } else {
+      // First navigation to the challenge URL — let Chrome follow it normally.
+      fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
     }
-
-    // Always block media (Reels, story video) and fonts — never needed for sessions.
-    if (resourceType === "Media" || resourceType === "Font") {
-      fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => {});
-      return;
-    }
-
-    // Block images when no viewer is watching — saves ~220 MB per idle session.
-    if (resourceType === "Image") {
-      const s = sessions.get(profileId);
-      const hasViewer = !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
-      if (!hasViewer) {
-        fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => {});
-        return;
-      }
-    }
-
-    fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
   });
 
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation

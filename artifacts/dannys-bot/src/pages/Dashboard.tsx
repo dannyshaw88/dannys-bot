@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.428",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Removed all image, font, and media blocking from the embedded browser. These restrictions were causing pages to hang on a white screen. The browser now loads pages without any interference." },
+    ],
+  },
+  {
     version: "1.0.427",
     date: "21 May 2026",
     items: [
