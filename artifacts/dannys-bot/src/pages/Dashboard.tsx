@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.440",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Verify no longer times out and goes back to pending on slow proxies. The initial app config download was taking 90+ seconds on some proxies, leaving no time for the actual session check. It is now capped at 20 seconds and skipped if slow so the session check always gets a chance to run." },
+      { category: "Fix", text: "Embedded browser toolbar buttons no longer go missing on Windows. If the browser window had previously failed to load a page (e.g. due to a proxy issue), the toolbar was silently lost and never recovered. The toolbar is now re-injected whenever the window is re-opened, and the page is automatically navigated back to Instagram if it was stuck on an error screen." },
+    ],
+  },
+  {
     version: "1.0.439",
     date: "21 May 2026",
     items: [

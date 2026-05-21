@@ -380,6 +380,18 @@ export async function openEbWindow(opts: {
     if (existing.win.isMinimized()) existing.win.restore();
     if (!existing.win.isVisible()) existing.win.show();
     existing.win.focus();
+    // Re-inject toolbar — it may have been lost if the page failed to load last time
+    // (e.g. chrome-error:// from a bad proxy) and executeJavaScript silently rejected.
+    existing.win.webContents.executeJavaScript(buildToolbarJs(existing.username))
+      .catch((e: any) => console.error(`[ebManager] toolbar re-inject failed (existing win):`, e?.message));
+    // If the current page is a chrome error or about:blank, navigate back to Instagram
+    const currentUrl: string = existing.win.webContents.getURL();
+    if (!currentUrl || currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank") {
+      const hasCk = fs.existsSync(cookieFilePath(profileId));
+      existing.win.webContents.loadURL(
+        hasCk ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+      ).catch(() => {});
+    }
     return;
   }
 
@@ -461,9 +473,19 @@ export async function openEbWindow(opts: {
     await syncCookies(profileId, ses);
   });
 
-  // Inject the toolbar overlay after every full page load
+  // Inject the toolbar overlay — use dom-ready (fires on all pages including
+  // chrome-error://) as the primary injection point, then did-finish-load as
+  // a secondary pass (catches pages where dom-ready fires before body exists).
+  win.webContents.on("dom-ready", () => {
+    win.webContents.executeJavaScript(buildToolbarJs(username))
+      .catch((e: any) => console.error(`[ebManager] toolbar inject dom-ready failed for @${username}:`, e?.message));
+  });
   win.webContents.on("did-finish-load", () => {
-    win.webContents.executeJavaScript(buildToolbarJs(username)).catch(() => {});
+    win.webContents.executeJavaScript(buildToolbarJs(username))
+      .catch((e: any) => console.error(`[ebManager] toolbar inject did-finish-load failed for @${username}:`, e?.message));
+  });
+  win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
   });
 
   // Prevent Instagram's page <title> from overriding the window title.

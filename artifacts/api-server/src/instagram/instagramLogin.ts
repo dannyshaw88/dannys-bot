@@ -1045,12 +1045,18 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
         // ── Phase 0b: SendMobileConfig (launcher/sync) ────────────────────
         // Called with clean jar — Instagram sees anonymous device probe, not checkpoint.
-        try {
-          await ig.launcher.preLoginSync();
-          console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`);
-        } catch (e: any) {
-          console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (non-fatal): ${e?.message}`);
-        }
+        // Hard cap at 20 s: this is a large config download that can take 90+ seconds
+        // on high-latency proxies, starving the session probe (users/{id}/info) of time.
+        // It is non-fatal so we race it against a timeout and move on either way.
+        await Promise.race([
+          ig.launcher.preLoginSync()
+            .then(() => console.error(`[instagramLogin] @${profile.username} — launcher/sync (SendMobileConfig) OK`))
+            .catch((e: any) => console.error(`[instagramLogin] @${profile.username} — launcher/sync failed (non-fatal): ${e?.message}`)),
+          new Promise<void>(r => setTimeout(() => {
+            console.error(`[instagramLogin] @${profile.username} — launcher/sync capped at 20 s (slow proxy), moving on`);
+            r();
+          }, 20_000)),
+        ]);
 
         // ── Phase 0c: GetTokenResult #2 ───────────────────────────────────
         // Jarvee calls GetTokenResult a second time right after launcher/sync.
