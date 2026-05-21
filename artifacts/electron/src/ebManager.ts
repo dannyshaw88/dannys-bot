@@ -22,8 +22,7 @@ import { createHmac } from "crypto";
 // Uses window.__eq (exposed by ebToolbarPreload.ts via contextBridge) to route
 // all button actions through IPC → ipcMain handler → eb-toolbar-cmd.
 // username is embedded via JSON.stringify so any character is safe.
-function buildToolbarJs(username: string): string {
-  const safeLabel = JSON.stringify("🤖 " + username);
+function buildToolbarJs(_username: string): string {
   return `(function(){
   if(document.getElementById('__eq_bar__'))return;
   var bar=document.createElement('div');
@@ -39,11 +38,15 @@ function buildToolbarJs(username: string): string {
   }
   function sep(){var s=document.createElement('span');s.style.cssText='width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0;';return s;}
   function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
-  var lbl=document.createElement('span');
-  lbl.textContent=${safeLabel};
-  lbl.style.cssText='font-size:12px;font-weight:700;color:#0ea5e9;white-space:nowrap;padding-right:4px;flex-shrink:0;';
-  bar.appendChild(lbl);
-  bar.appendChild(sep());
+  // Track the last input/textarea the user focused so paste-style buttons
+  // (Phone, Email, etc.) can target it even after focus shifts to the button.
+  window.__eq_lastInput=null;
+  document.addEventListener('focusin',function(e){
+    var t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')&&t.id!=='__eq_url__'){
+      window.__eq_lastInput=t;
+    }
+  },true);
   bar.appendChild(mkBtn('Back','&#9664;',function(){cmd('back');}));
   bar.appendChild(mkBtn('Forward','&#9654;',function(){cmd('forward');}));
   bar.appendChild(mkBtn('Reload','&#8635;',function(){cmd('reload');}));
@@ -525,12 +528,18 @@ function setupToolbarIpc(): void {
     // used by /eb/input so behaviour is identical to BrowserPanel typing)
     const typeIntoFocused = async (text: string) => {
       const chars = JSON.stringify(text);
+      // Use __eq_lastInput (set by focusin listener in the toolbar) so paste
+      // works even though clicking the button shifts focus away from the field.
       await wc.executeJavaScript(`(function(){
-        var el=document.activeElement;
-        if(!el)return;
-        var setter=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value')&&Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value').set;
-        if(setter){setter.call(el,el.value+${chars});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
-        else{el.value=el.value+${chars};el.dispatchEvent(new Event('input',{bubbles:true}));}
+        var el=window.__eq_lastInput||document.activeElement;
+        if(!el||el.tagName==='BUTTON'||el===document.body)return;
+        var proto=Object.getPrototypeOf(el);
+        var desc=Object.getOwnPropertyDescriptor(proto,'value')||Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+        var setter=desc&&desc.set;
+        var cur=el.value||'';
+        if(setter){setter.call(el,cur+${chars});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
+        else{el.value=cur+${chars};el.dispatchEvent(new Event('input',{bubbles:true}));}
+        el.focus();
       })()`).catch(() => {});
     };
 

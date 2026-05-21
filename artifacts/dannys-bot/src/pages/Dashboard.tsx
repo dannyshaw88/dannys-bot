@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.438",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Verify no longer tries to re-login if you are already logged in via the embedded browser — it reads the existing session cookies directly and skips the re-login step that was wiping your session and failing." },
+      { category: "Fix", text: "The Phone, Email, and Email Pass toolbar buttons now correctly paste into the field you last clicked on. Previously clicking the button shifted focus away from the field so nothing was pasted." },
+      { category: "Fix", text: "Removed the duplicate account username label that was appearing to the left of the Back button in the embedded browser toolbar." },
+    ],
+  },
+  {
     version: "1.0.437",
     date: "21 May 2026",
     items: [

@@ -942,15 +942,25 @@ export async function registerInstagramRoutes(
         await storage.updateProfile(profile.id, { accountStatus: "pending" });
         return fail(500, `Browser failed to launch: ${ebErr?.message ?? "Unknown error"}`);
       }
-      try {
-        loginResult = await browserAutoLogin(
-          profileId,
-          profile.username,
-          profile.password!,
-          profile.twoFASecretKey || "",
-        );
-      } catch (loginErr: any) {
-        loginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+      // If the user already logged in manually via the embedded browser, skip the
+      // re-login entirely — browserAutoLogin clears session cookies first, which
+      // causes a proxy-auth failure when the credentials are already valid.
+      const existingCookies = await getSessionPageCookies(profileId);
+      const alreadyLoggedIn = existingCookies.some(c => c.name === "sessionid");
+      if (alreadyLoggedIn) {
+        loginResult    = { ok: true, message: "Using existing EB session" };
+        _silentCookies = existingCookies;
+      } else {
+        try {
+          loginResult = await browserAutoLogin(
+            profileId,
+            profile.username,
+            profile.password!,
+            profile.twoFASecretKey || "",
+          );
+        } catch (loginErr: any) {
+          loginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+        }
       }
     }
 
@@ -2161,15 +2171,23 @@ export async function registerInstagramRoutes(
           }
         } else {
           await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);
-          try {
-            bulkLoginResult = await browserAutoLogin(
-              profile.id,
-              profile.username,
-              profile.password!,
-              profile.twoFASecretKey || "",
-            );
-          } catch (loginErr: any) {
-            bulkLoginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+          // Skip re-login if the browser already has a valid session
+          const existingBulkCookies = await getSessionPageCookies(profile.id);
+          const bulkAlreadyLoggedIn = existingBulkCookies.some(c => c.name === "sessionid");
+          if (bulkAlreadyLoggedIn) {
+            bulkLoginResult    = { ok: true, message: "Using existing EB session" };
+            _bulkSilentCookies = existingBulkCookies;
+          } else {
+            try {
+              bulkLoginResult = await browserAutoLogin(
+                profile.id,
+                profile.username,
+                profile.password!,
+                profile.twoFASecretKey || "",
+              );
+            } catch (loginErr: any) {
+              bulkLoginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+            }
           }
         }
 
