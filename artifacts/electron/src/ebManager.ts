@@ -344,6 +344,29 @@ export async function openEbWindow(opts: {
     },
   });
 
+  // Block sub-browsers: any window.open() or target="_blank" link Instagram fires
+  // would normally spawn a brand-new BrowserWindow child. Instead, intercept every
+  // new-window request and load the URL inside this same window so only 1 EB exists
+  // per account at all times.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url && !url.startsWith("about:") && !url.startsWith("chrome-error://")) {
+      win.webContents.loadURL(url).catch(() => {});
+    }
+    return { action: "deny" };
+  });
+
+  // Hide to tray on close (matching main-window behaviour) so the EB session
+  // survives an accidental X-click. The /eb/close IPC endpoint calls win.destroy()
+  // directly when the user explicitly closes from the BrowserPanel.
+  win.on("close", (event) => {
+    event.preventDefault();
+    win.hide();
+  });
+
+  win.on("closed", () => {
+    ebMap.delete(profileId);
+  });
+
   // Handle proxy authentication
   win.webContents.on("login", (_event, _req, _authInfo, callback) => {
     callback(proxy?.user ?? "", proxy?.pass ?? "");
@@ -356,10 +379,6 @@ export async function openEbWindow(opts: {
 
   // Store in map
   ebMap.set(profileId, { win, proxy });
-
-  win.on("closed", () => {
-    ebMap.delete(profileId);
-  });
 
   // Sync cookies + push URL change on every navigation
   win.webContents.on("did-navigate", async (_e, navUrl) => {
@@ -474,7 +493,9 @@ export function startEbIpcServer(
           // Save cookies before closing
           const ses = electronSession.fromPartition(`persist:eb-${pid}`);
           await saveCookiesToFile(pid, ses);
-          e.win.close();
+          // destroy() bypasses the "close" event handler that hides the window,
+          // so this actually removes the window rather than hiding it to tray.
+          e.win.destroy();
         }
         return send(res, 200, { ok: true });
       }
@@ -605,8 +626,8 @@ export function startEbIpcServer(
       if (req.method === "POST" && u.pathname === "/eb/wipe") {
         const e = ebMap.get(pid);
         if (e && !e.win.isDestroyed()) {
-          e.win.close();
-          await new Promise(r => setTimeout(r, 800));
+          e.win.destroy();
+          await new Promise(r => setTimeout(r, 200));
         }
         ebMap.delete(pid);
 
@@ -635,4 +656,16 @@ export function startEbIpcServer(
     });
     server.on("error", reject);
   });
+}
+
+// ── Public helper used by main.ts IPC handlers ─────────────────────────────────
+
+/** Bring an already-open EB window to the front, or no-op if not open. */
+export function focusEbWindow(profileId: number): void {
+  const e = ebMap.get(profileId);
+  if (e && !e.win.isDestroyed()) {
+    if (e.win.isMinimized()) e.win.restore();
+    if (!e.win.isVisible()) e.win.show();
+    e.win.focus();
+  }
 }

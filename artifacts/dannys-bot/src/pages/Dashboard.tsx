@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.433",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Opening an embedded browser no longer spawns sub-windows — any popup or new-tab request Instagram fires is now redirected into the same single EB window." },
+      { category: "Fix", text: "Closing an embedded browser window with the X button now hides it to the system tray instead of destroying the session." },
+      { category: "Fix", text: "Browser controls (toolbar) removed from the Human Sessions tab — the browser opens correctly as its own standalone window via the Browser button." },
+      { category: "Fix", text: "Bring to Front now correctly focuses the existing EB window for an account instead of silently doing nothing." },
+    ],
+  },
+  {
     version: "1.0.432",
     date: "21 May 2026",
     items: [

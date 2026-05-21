@@ -7,7 +7,7 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { startEbIpcServer, openEbWindow } from "./ebManager";
+import { startEbIpcServer, openEbWindow, focusEbWindow } from "./ebManager";
 
 const execAsync = promisify(exec);
 
@@ -17,7 +17,6 @@ let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let splashWin: BrowserWindow | null = null;
-const ebWindows = new Map<number, BrowserWindow>();
 let splashIconDataUrl = "";
 
 function findFreePort(): Promise<number> {
@@ -759,11 +758,7 @@ function setupBackupHandlers() {
 
   // focus-browser-window: bring an already-open native EB window to the front.
   ipcMain.handle("focus-browser-window", (_event, profileId: number) => {
-    const e = ebWindows.get(profileId);
-    if (e && !e.isDestroyed()) {
-      if (e.isMinimized()) e.restore();
-      e.focus();
-    }
+    focusEbWindow(profileId);
   });
 }
 
