@@ -25,16 +25,16 @@ const TOOLBAR_JS = `(function(){
   if(document.getElementById('__eq_bar__'))return;
   var bar=document.createElement('div');
   bar.id='__eq_bar__';
-  bar.style.cssText='position:fixed;top:0;left:0;right:0;height:44px;z-index:2147483647;background:#0f172a;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5);';
+  bar.style.cssText='position:fixed;top:0;left:0;right:0;height:44px;z-index:2147483647;background:#ffffff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);';
   function mkBtn(title,html,onclick,extra){
     var b=document.createElement('button');
     b.title=title;b.innerHTML=html;b.onclick=onclick;
-    b.style.cssText='height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;'+(extra||'');
-    b.onmouseenter=function(){b.style.background='#1e293b';b.style.color='#e2e8f0';};
-    b.onmouseleave=function(){b.style.background='transparent';b.style.color='#94a3b8';};
+    b.style.cssText='height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;'+(extra||'');
+    b.onmouseenter=function(){b.style.background='#f3f4f6';};
+    b.onmouseleave=function(){b.style.background='transparent';};
     return b;
   }
-  function sep(){var s=document.createElement('span');s.style.cssText='width:1px;height:20px;background:#334155;margin:0 2px;flex-shrink:0;';return s;}
+  function sep(){var s=document.createElement('span');s.style.cssText='width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0;';return s;}
   function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
   bar.appendChild(mkBtn('Back','&#9664;',function(){cmd('back');}));
   bar.appendChild(mkBtn('Forward','&#9654;',function(){cmd('forward');}));
@@ -43,19 +43,29 @@ const TOOLBAR_JS = `(function(){
   bar.appendChild(sep());
   var inp=document.createElement('input');
   inp.id='__eq_url__';inp.value=location.href;
-  inp.style.cssText='flex:1;min-width:0;height:30px;padding:0 10px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:12px;font-family:monospace;outline:none;box-sizing:border-box;';
+  inp.style.cssText='flex:1;min-width:0;height:30px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:5px;color:#111827;font-size:12px;font-family:monospace;outline:none;box-sizing:border-box;';
   inp.onfocus=function(){inp.style.borderColor='#3b82f6';inp.select();};
-  inp.onblur=function(){inp.style.borderColor='#334155';};
+  inp.onblur=function(){inp.style.borderColor='#d1d5db';};
   inp.onkeydown=function(e){if(e.key==='Enter'){e.preventDefault();var u=inp.value.trim();if(u&&u.indexOf('http')!==0)u='https://'+u;cmd('navigate',{url:u});}};
   bar.appendChild(inp);
   bar.appendChild(sep());
-  var loginBtn=mkBtn('Auto-login: fill credentials and sign in','&#8594; Login',function(){loginBtn.disabled=true;loginBtn.style.opacity='0.5';Promise.resolve(cmd('login')).then(function(){loginBtn.disabled=false;loginBtn.style.opacity='1';});},'border-color:#3b82f6;color:#60a5fa;');
+  var loginBtn=mkBtn('Auto-login: fill credentials and sign in','&#8594; Login',function(){loginBtn.disabled=true;loginBtn.style.opacity='0.5';Promise.resolve(cmd('login')).then(function(){loginBtn.disabled=false;loginBtn.style.opacity='1';});},'border-color:#3b82f6;color:#1d4ed8;');
   bar.appendChild(loginBtn);
-  bar.appendChild(mkBtn('Generate TOTP and type into focused field','&#128273; 2FA Code',function(){cmd('totp');}));
-  bar.appendChild(mkBtn('Type pre-filled phone number into focused field','&#128242; Phone Number',function(){cmd('phone');}));
-  bar.appendChild(mkBtn('Type email account into focused field','&#9993; Email Account',function(){cmd('email-user');}));
-  bar.appendChild(mkBtn('Type email password into focused field','&#128274; Email Password',function(){cmd('email-pass');}));
-  bar.appendChild(mkBtn('Clear browser session and cookies','&#128465; Clear',function(){if(confirm('Clear this browser session? You will be logged out.'))cmd('clear');},'border-color:#dc2626;color:#f87171;'));
+  bar.appendChild(mkBtn('Generate TOTP and type into focused field','&#128273; 2FA',function(){cmd('totp');}));
+  bar.appendChild(mkBtn('Type pre-filled phone number into focused field','&#128242; Phone',function(){cmd('phone');}));
+  bar.appendChild(mkBtn('Type email account into focused field','&#9993; Email',function(){cmd('email-user');}));
+  bar.appendChild(mkBtn('Type email password into focused field','&#128274; Email Pass',function(){cmd('email-pass');}));
+  bar.appendChild(sep());
+  var timerEl=document.createElement('span');
+  timerEl.title='Time since browser was opened';
+  timerEl.style.cssText='font-size:11px;color:#6b7280;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px;';
+  var _start=parseInt(sessionStorage.getItem('__eq_open_ts')||'0',10);
+  if(!_start){_start=Date.now();try{sessionStorage.setItem('__eq_open_ts',String(_start));}catch(e){}}
+  function _tick(){var s=Math.floor((Date.now()-_start)/1000),m=Math.floor(s/60);s=s%60;timerEl.textContent=m+':'+(s<10?'0':'')+s;}
+  _tick();setInterval(_tick,1000);
+  bar.appendChild(timerEl);
+  bar.appendChild(sep());
+  bar.appendChild(mkBtn('Clear browser session and cookies','&#128465; Clear',function(){if(confirm('Clear this browser session? You will be logged out.'))cmd('clear');},'border-color:#dc2626;color:#dc2626;'));
   document.body.prepend(bar);
   window.__eq_syncUrl=function(u){var el=document.getElementById('__eq_url__');if(el&&document.activeElement!==el)el.value=u;};
 })();`;
@@ -352,10 +362,11 @@ export async function openEbWindow(opts: {
 }): Promise<void> {
   const { profileId, username, proxy, userAgent } = opts;
 
-  // Focus existing window if already open
+  // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
   if (existing && !existing.win.isDestroyed()) {
     if (existing.win.isMinimized()) existing.win.restore();
+    if (!existing.win.isVisible()) existing.win.show();
     existing.win.focus();
     return;
   }

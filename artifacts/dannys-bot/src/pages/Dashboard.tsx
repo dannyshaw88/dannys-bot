@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.435",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "After pressing Verify, clicking Browser for that account now correctly shows the embedded browser window — it was being hidden and not re-shown on subsequent opens." },
+      { category: "Fix", text: "The embedded browser toolbar is now white with a light theme instead of dark blue." },
+      { category: "New", text: "The embedded browser toolbar now shows a live timer (e.g. 2:34) counting how long the browser has been open. The timer persists across page navigations within the same session." },
+    ],
+  },
+  {
     version: "1.0.434",
     date: "21 May 2026",
     items: [
