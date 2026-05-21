@@ -5,6 +5,7 @@ import express from "express";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { registerInstagramRoutes } from "./routes/instagram";
+import { registerMobileRoutes } from "./routes/mobile";
 
 const port = Number(process.env["PORT"] ?? "3000");
 
@@ -13,6 +14,8 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const httpServer = createServer(app);
+
+registerMobileRoutes(app);
 
 registerInstagramRoutes(httpServer, app).then(() => {
   const frontendDist = process.env.FRONTEND_DIST_PATH ||

@@ -14,6 +14,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { StandaloneBrowserPage } from "@/pages/StandaloneBrowserPage";
 import { ReadmePage } from "@/pages/ReadmePage";
 import { BulkImportPage } from "@/pages/BulkImportPage";
+import { MobilePage } from "@/pages/MobilePage";
 
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/settings" component={SettingsPage} />
       <Route path="/browser/:id" component={StandaloneBrowserPage} />
       <Route path="/bulk-import" component={BulkImportPage} />
+      <Route path="/mobile" component={MobilePage} />
       <Route path="/readme" component={ReadmePage} />
       <Route component={NotFound} />
     </Switch>

@@ -1,7 +1,7 @@
 import { useLocation, useSearch } from "wouter";
 import {
   LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, PlusCircle, User, UserMinus, MessageSquare, Cookie, Upload,
+  ChevronLeft, ChevronRight, PlusCircle, User, UserMinus, MessageSquare, Cookie, Upload, Smartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
@@ -42,6 +42,7 @@ export function Sidebar() {
     { name: "Accounts",          path: "/profiles",            icon: Users,           iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Create an Account", path: "/create-account-api", icon: PlusCircle,       iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Bulk Import",       path: "/bulk-import",        icon: Upload,          iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "Mobile",            path: "/mobile",             icon: Smartphone,      iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: undefined,  iconStyle: { color: BRAND } },
   ];
