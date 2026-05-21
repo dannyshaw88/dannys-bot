@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.448",
+    date: "21 May 2026",
+    items: [
+      { category: "New", text: "The proxy selector on the Mobile page now actually routes BlueStacks traffic through your chosen proxy. Equinox starts a silent local relay in the background — no manual configuration needed. Just pick a proxy and click Apply." },
+    ],
+  },
+  {
     version: "1.0.447",
     date: "21 May 2026",
     items: [

@@ -372,7 +372,24 @@ export function startEmulator(
   return { pid: child.pid ?? 0, serial };
 }
 
-/** Apply or clear the global HTTP proxy on a running emulator via ADB. */
+/**
+ * Returns the default gateway IP of the Android device — i.e. the IP address
+ * that the Windows host exposes to the Android VM. This is what we set the
+ * relay to listen on so BlueStacks can reach it.
+ * Parses `ip route show default` output: "default via 10.0.2.2 dev eth0 ..."
+ */
+export function getDeviceGateway(serial: string): string | null {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(
+    adb,
+    ["-s", serial, "shell", "ip", "route", "show", "default"],
+    { encoding: "utf8", timeout: 5000 },
+  );
+  const match = (r.stdout ?? "").match(/default via ([\d.]+)/);
+  return match ? match[1] : null;
+}
+
 export async function setDeviceProxy(
   serial: string,
   proxy: { host: string; port: number; user?: string; pass?: string } | null,

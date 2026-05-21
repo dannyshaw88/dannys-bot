@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import fs from "fs";
 import path from "path";
 import * as android from "../mobile/androidManager";
+import * as proxyRelay from "../mobile/proxyRelay";
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
 
@@ -115,23 +116,60 @@ export function registerMobileRoutes(app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // Apply proxy to a running device via ADB (call after boot)
+  // Apply proxy to a running device via a transparent local relay.
+  //
+  // How it works:
+  //   1. Equinox starts a local TCP relay on a random port (0.0.0.0).
+  //   2. The relay forwards all CONNECT (HTTPS) and plain HTTP to the real
+  //      upstream proxy, injecting Proxy-Authorization automatically.
+  //   3. Android's global proxy is pointed at GATEWAY_IP:RELAY_PORT — no
+  //      credentials needed from Android's side, so auth stripping is never
+  //      an issue.
+  //
+  // The gateway IP (e.g. 10.0.2.2) is how the Android VM reaches the Windows
+  // host. We detect it from the device's default route so it works for both
+  // AVD and BlueStacks without hardcoding anything.
   const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
       const input = deviceProxySchema.parse(req.body);
+      const serial = p(req, "serial");
+
       if (input.proxyId) {
         const proxies = await storage.getProxies();
         const proxy = proxies.find(pr => pr.id === input.proxyId);
-        if (!proxy) return res.status(404).json({ error: "Proxy not found" });
-        await android.setDeviceProxy(p(req, "serial"), {
-          host: proxy.host, port: proxy.port,
-          user: proxy.username ?? undefined, pass: proxy.password ?? undefined,
-        });
+        if (!proxy) { res.status(404).json({ error: "Proxy not found" }); return; }
+
+        // 1. Start (or reuse) the local relay for this upstream
+        const upstream: proxyRelay.RelayUpstream = {
+          host: proxy.host,
+          port: proxy.port,
+          user: proxy.username ?? undefined,
+          pass: proxy.password ?? undefined,
+        };
+        const relayPort = await proxyRelay.getOrCreateRelay(upstream);
+
+        // 2. Find the gateway IP so Android can reach the Windows host
+        const gateway = android.getDeviceGateway(serial);
+        if (!gateway) {
+          res.status(400).json({
+            error: "Could not read device route table — is the device connected via ADB?",
+          });
+          return;
+        }
+
+        // 3. Point Android's global proxy at the relay (no auth needed here)
+        await android.setDeviceProxy(serial, { host: gateway, port: relayPort });
+
+        logger.info(
+          { serial, relay: `${gateway}:${relayPort}`, upstream: `${proxy.host}:${proxy.port}` },
+          "mobile proxy relay applied",
+        );
+        res.json({ ok: true, relay: `${gateway}:${relayPort}`, upstream: `${proxy.host}:${proxy.port}` });
       } else {
-        await android.setDeviceProxy(p(req, "serial"), null);
+        await android.setDeviceProxy(serial, null);
+        res.json({ ok: true });
       }
-      res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
