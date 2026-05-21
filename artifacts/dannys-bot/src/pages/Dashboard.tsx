@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.432",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Included all missing files from v1.0.431 — Electron browser window manager, main process, preload bridge, browser session handler, and sidebar were absent from the previous build." },
+    ],
+  },
+  {
     version: "1.0.431",
     date: "21 May 2026",
     items: [
