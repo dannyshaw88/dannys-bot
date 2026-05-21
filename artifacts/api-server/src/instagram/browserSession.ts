@@ -1820,8 +1820,11 @@ export async function getOrCreateSession(
   // ── Electron native EB mode ────────────────────────────────────────────────
   if (IS_ELECTRON_EB) {
     const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
-    const existing = electronSessions.get(profileId);
-    if (existing?.proxyKey === newProxyKey) return {} as unknown as Session;
+    // Always update the map and always call /eb/open.
+    // openEbWindow already handles "already open" by focusing the existing window,
+    // so it is safe to call every time. The old fast-path (return early if same
+    // proxyKey) caused a bug where the EB window would not reopen after being
+    // closed/cleared because the stale electronSessions entry was never evicted.
     electronSessions.set(profileId, { ws: null, proxyKey: newProxyKey });
     const profile = await storage.getProfile(profileId).catch(() => null);
     await ebIpc("POST", "/eb/open", {

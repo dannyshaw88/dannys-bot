@@ -10,12 +10,55 @@
  * server at serverPort via HTTP.
  */
 
-import { BrowserWindow, session as electronSession } from "electron";
+import { BrowserWindow, session as electronSession, ipcMain } from "electron";
 import http from "http";
 import fs from "fs";
 import path from "path";
 import net from "net";
 import { createHmac } from "crypto";
+
+// ── Toolbar injection script ───────────────────────────────────────────────────
+// Injected via executeJavaScript into the EB window after every full page load.
+// Uses window.__eq (exposed by ebToolbarPreload.ts via contextBridge) to route
+// all button actions through IPC → ipcMain handler → eb-toolbar-cmd.
+const TOOLBAR_JS = `(function(){
+  if(document.getElementById('__eq_bar__'))return;
+  var bar=document.createElement('div');
+  bar.id='__eq_bar__';
+  bar.style.cssText='position:fixed;top:0;left:0;right:0;height:44px;z-index:2147483647;background:#0f172a;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5);';
+  function mkBtn(title,html,onclick,extra){
+    var b=document.createElement('button');
+    b.title=title;b.innerHTML=html;b.onclick=onclick;
+    b.style.cssText='height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;'+(extra||'');
+    b.onmouseenter=function(){b.style.background='#1e293b';b.style.color='#e2e8f0';};
+    b.onmouseleave=function(){b.style.background='transparent';b.style.color='#94a3b8';};
+    return b;
+  }
+  function sep(){var s=document.createElement('span');s.style.cssText='width:1px;height:20px;background:#334155;margin:0 2px;flex-shrink:0;';return s;}
+  function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
+  bar.appendChild(mkBtn('Back','&#9664;',function(){cmd('back');}));
+  bar.appendChild(mkBtn('Forward','&#9654;',function(){cmd('forward');}));
+  bar.appendChild(mkBtn('Reload','&#8635;',function(){cmd('reload');}));
+  bar.appendChild(mkBtn('Instagram Home','&#8962;',function(){cmd('navigate',{url:'https://www.instagram.com/'});}));
+  bar.appendChild(sep());
+  var inp=document.createElement('input');
+  inp.id='__eq_url__';inp.value=location.href;
+  inp.style.cssText='flex:1;min-width:0;height:30px;padding:0 10px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:#e2e8f0;font-size:12px;font-family:monospace;outline:none;box-sizing:border-box;';
+  inp.onfocus=function(){inp.style.borderColor='#3b82f6';inp.select();};
+  inp.onblur=function(){inp.style.borderColor='#334155';};
+  inp.onkeydown=function(e){if(e.key==='Enter'){e.preventDefault();var u=inp.value.trim();if(u&&u.indexOf('http')!==0)u='https://'+u;cmd('navigate',{url:u});}};
+  bar.appendChild(inp);
+  bar.appendChild(sep());
+  var loginBtn=mkBtn('Auto-login: fill credentials and sign in','&#8594; Login',function(){loginBtn.disabled=true;loginBtn.style.opacity='0.5';Promise.resolve(cmd('login')).then(function(){loginBtn.disabled=false;loginBtn.style.opacity='1';});},'border-color:#3b82f6;color:#60a5fa;');
+  bar.appendChild(loginBtn);
+  bar.appendChild(mkBtn('Generate TOTP and type into focused field','&#128273; 2FA Code',function(){cmd('totp');}));
+  bar.appendChild(mkBtn('Type pre-filled phone number into focused field','&#128242; Phone Number',function(){cmd('phone');}));
+  bar.appendChild(mkBtn('Type email account into focused field','&#9993; Email Account',function(){cmd('email-user');}));
+  bar.appendChild(mkBtn('Type email password into focused field','&#128274; Email Password',function(){cmd('email-pass');}));
+  bar.appendChild(mkBtn('Clear browser session and cookies','&#128465; Clear',function(){if(confirm('Clear this browser session? You will be logged out.'))cmd('clear');},'border-color:#dc2626;color:#f87171;'));
+  document.body.prepend(bar);
+  window.__eq_syncUrl=function(u){var el=document.getElementById('__eq_url__');if(el&&document.activeElement!==el)el.value=u;};
+})();`;
 
 // ── Module state ───────────────────────────────────────────────────────────────
 
@@ -341,6 +384,7 @@ export async function openEbWindow(opts: {
       nodeIntegration:  false,
       contextIsolation: true,
       partition,
+      preload: path.join(__dirname, "ebToolbarPreload.js"),
     },
   });
 
@@ -394,6 +438,19 @@ export async function openEbWindow(opts: {
     await syncCookies(profileId, ses);
   });
 
+  // Inject the toolbar overlay after every full page load
+  win.webContents.on("did-finish-load", () => {
+    win.webContents.executeJavaScript(TOOLBAR_JS).catch(() => {});
+  });
+
+  // SPA navigations (Instagram pushState) don't fire did-finish-load —
+  // the toolbar DOM survives, just update the URL bar.
+  win.webContents.on("did-navigate-in-page", (_e, navUrl) => {
+    win.webContents.executeJavaScript(
+      `window.__eq_syncUrl && window.__eq_syncUrl(${JSON.stringify(navUrl)})`
+    ).catch(() => {});
+  });
+
   // Navigate to Instagram
   const hasCookies = fs.existsSync(cookieFilePath(profileId));
   win.webContents.loadURL(
@@ -401,6 +458,134 @@ export async function openEbWindow(opts: {
       ? "https://www.instagram.com/"
       : "https://www.instagram.com/accounts/login/",
   ).catch(() => {});
+}
+
+// ── Toolbar IPC handler ────────────────────────────────────────────────────────
+
+let _toolbarIpcRegistered = false;
+
+function setupToolbarIpc(): void {
+  if (_toolbarIpcRegistered) return;
+  _toolbarIpcRegistered = true;
+
+  ipcMain.handle("eb-toolbar-cmd", async (event, cmd: string, payload?: any) => {
+    // Identify which profile's EB window sent this command
+    const sender = event.sender;
+    let foundPid = 0;
+    let foundWin: BrowserWindow | null = null;
+    for (const [pid, entry] of ebMap.entries()) {
+      if (!entry.win.isDestroyed() && entry.win.webContents === sender) {
+        foundPid = pid;
+        foundWin = entry.win;
+        break;
+      }
+    }
+    if (!foundPid || !foundWin) return;
+
+    const wc = foundWin.webContents;
+
+    // Helper: type text into the renderer's currently-focused input (same script
+    // used by /eb/input so behaviour is identical to BrowserPanel typing)
+    const typeIntoFocused = async (text: string) => {
+      const chars = JSON.stringify(text);
+      await wc.executeJavaScript(`(function(){
+        var el=document.activeElement;
+        if(!el)return;
+        var setter=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value')&&Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value').set;
+        if(setter){setter.call(el,el.value+${chars});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
+        else{el.value=el.value+${chars};el.dispatchEvent(new Event('input',{bubbles:true}));}
+      })()`).catch(() => {});
+    };
+
+    switch (cmd) {
+      case "back":
+        if ((wc.navigationHistory as any)?.canGoBack?.()) (wc.navigationHistory as any).goBack();
+        else if ((wc as any).canGoBack?.()) (wc as any).goBack();
+        break;
+
+      case "forward":
+        if ((wc.navigationHistory as any)?.canGoForward?.()) (wc.navigationHistory as any).goForward();
+        else if ((wc as any).canGoForward?.()) (wc as any).goForward();
+        break;
+
+      case "reload":
+        wc.reloadIgnoringCache();
+        break;
+
+      case "navigate":
+        if (payload?.url) wc.loadURL(payload.url).catch(() => {});
+        break;
+
+      case "login": {
+        try {
+          const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
+          const p = await r.json() as any;
+          await doAutoLogin(foundPid, foundWin, p.username ?? "", p.password ?? "", p.twoFASecretKey ?? "");
+        } catch {}
+        break;
+      }
+
+      case "totp": {
+        try {
+          const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
+          const p = await r.json() as any;
+          const key = (p.twoFASecretKey ?? "").trim();
+          if (key) {
+            const code = generateTotp(key);
+            await typeIntoFocused(code);
+          }
+        } catch {}
+        break;
+      }
+
+      case "phone": {
+        try {
+          const r = await fetch(`http://127.0.0.1:${_serverPort}/api/settings`);
+          const s = await r.json() as any;
+          const num = (s.preFilledPhoneNumber ?? "").trim();
+          if (num) await typeIntoFocused(num);
+        } catch {}
+        break;
+      }
+
+      case "email-user": {
+        try {
+          const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
+          const p = await r.json() as any;
+          const val = (p.emailValidationUsername ?? "").trim();
+          if (val) await typeIntoFocused(val);
+        } catch {}
+        break;
+      }
+
+      case "email-pass": {
+        try {
+          const r = await fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${foundPid}`);
+          const p = await r.json() as any;
+          const val = (p.emailValidationPassword ?? "").trim();
+          if (val) await typeIntoFocused(val);
+        } catch {}
+        break;
+      }
+
+      case "clear": {
+        // Wipe the session: destroy window, clear storage, delete cookie file
+        foundWin.destroy();
+        await new Promise(r => setTimeout(r, 200));
+        ebMap.delete(foundPid);
+        const ses = electronSession.fromPartition(`persist:eb-${foundPid}`);
+        await ses.clearStorageData({
+          storages: ["cookies", "localstorage", "cachestorage", "shadercache", "websql", "serviceworkers"],
+        }).catch(() => {});
+        const fp = cookieFilePath(foundPid);
+        try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch {}
+        break;
+      }
+
+      default:
+        break;
+    }
+  });
 }
 
 // ── IPC HTTP request/response helpers ─────────────────────────────────────────
@@ -433,6 +618,7 @@ export function startEbIpcServer(
   _serverPort = serverPort;
   _cookiesDir  = cookiesDir;
   _iconPath    = iconPath;
+  setupToolbarIpc();
 
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url ?? "/", "http://localhost");

@@ -48,6 +48,17 @@ await esbuild({
   format: "cjs",
 });
 
+// 1d. Compile EB toolbar preload → dist/ebToolbarPreload.js (CJS)
+await esbuild({
+  entryPoints: [path.join(__dirname, "src/ebToolbarPreload.ts")],
+  bundle: true,
+  platform: "node",
+  target: "node20",
+  external: ["electron"],
+  outfile: path.join(dist, "ebToolbarPreload.js"),
+  format: "cjs",
+});
+
 // 2. Copy bundled API server
 const serverSrc = path.join(__dirname, "../api-server/dist");
 if (!existsSync(serverSrc)) {

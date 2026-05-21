@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.434",
+    date: "21 May 2026",
+    items: [
+      { category: "New", text: "The embedded browser window now has a built-in toolbar: Back, Forward, Reload, Home, URL bar, Login, 2FA Code, Phone Number, Email Account, Email Password, and Clear — all living directly on the native browser window." },
+      { category: "Fix", text: "Browser controls removed from the Human Sessions tab — they had no relevance there and belong on the EB window itself." },
+      { category: "Fix", text: "Clicking Verify more than once for the same account now correctly reopens the embedded browser window — previously it would silently skip re-opening after the first verify." },
+    ],
+  },
+  {
     version: "1.0.433",
     date: "21 May 2026",
     items: [
