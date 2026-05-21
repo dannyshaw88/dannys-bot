@@ -169,6 +169,71 @@ function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, on
   );
 }
 
+// ─── Random generators & spintax ──────────────────────────────────────────────
+
+const RANDOM_NAMES = [
+  "maia","mila","mira","neli","nina","nora","olga","rada","raya","roza","yana","zora","zana","jona","buna","arta",
+  "luan","geni","enis","rion","erza","adea","bora","kida","vesa","besa","abby","aida","alba","alex","alia","ally",
+  "alma","alva","amie","anja","anna","anne","anya","aria","arya","asia","aura","ayla","bebe","bell","bess","beth",
+  "brea","bree","bria","bryn","cali","cami","cara","jade","jane","jean","jess","joan","joni","kate","kati","katy",
+  "kyra","lana","lara","leah","lexi","lila","lily","lisa","lori","lucy","luna","maci","macy","maja","mali","mara",
+  "mari","mary","maya","mela","meli","mika","mimi","mina","miri","mona","myra","nell","neve","nica","nico","nika",
+  "niki","nila","noa","nola","nova","nyla","olga","oona","page","rana","reba","rica","rina","rita","riya","roma",
+  "rosa","rose","rosy","ruby","ruth","sage","sara","sasha","shae","shea","sia","sina","skye","sofi","sola","sona",
+  "tala","tali","tana","tara","taya","tess","thea","tia","tina","toya","tyra","uma","una","vale","vali","vera",
+  "vika","vina","vita","viva","wren","xena","yael","yara","zoey","zola","zoya","zuri","blake","casey","drew",
+  "emery","finley","grey","hayden","kai","lane","morgan","noel","peyton","quinn","reese","riley","sam","scout",
+  "tate","alex","avery","brook","charlie","cloud","dana","eden","fern","glen","haven","indie","jade","juno",
+  "kali","lake","lena","lola","luma","lyra","nova","opal","petra","piper","remi","rue","seren","sloane","winter",
+];
+
+function _rng<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function resolveSpintax(template: string): string {
+  let s = template, prev = "";
+  while (s !== prev) {
+    prev = s;
+    s = s.replace(/\{(\d+)\.\.(\d+)\}/g, (_m, a, b) => {
+      const min = parseInt(a), max = parseInt(b);
+      return String(Math.floor(Math.random() * (max - min + 1)) + min);
+    });
+    s = s.replace(/\{([^{}]+)\}/g, (_m, inner) => {
+      const opts = inner.split("|");
+      return opts[Math.floor(Math.random() * opts.length)];
+    });
+  }
+  return s;
+}
+
+function generateUsername(): string {
+  const name = _rng(RANDOM_NAMES);
+  const sep = _rng(["_", ".", ""]);
+  const num = Math.floor(Math.random() * 9000) + 100;
+  return name + sep + num;
+}
+
+function generatePassword(): string {
+  const words = ["travel","sunset","coffee","garden","music","happy","lucky","bright","ocean","forest","light","dream","smile","river","cloud"];
+  const word = _rng(words);
+  const num = Math.floor(Math.random() * 900) + 100;
+  const special = _rng(["!", "@", "#", "$", "&"]);
+  return word.charAt(0).toUpperCase() + word.slice(1) + num + special;
+}
+
+function generateEmail(username: string): string {
+  const domains = ["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.com","proton.me"];
+  const base = (username || (_rng(RANDOM_NAMES) + Math.floor(Math.random() * 999 + 1)))
+    .replace(/[^a-z0-9._-]/gi, "").toLowerCase();
+  return base + "@" + _rng(domains);
+}
+
+function generateDob(): string {
+  const year = 1982 + Math.floor(Math.random() * 22);
+  const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, "0");
+  const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // ─── Device detail panel ───────────────────────────────────────────────────────
 
 function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => void }) {
@@ -183,6 +248,21 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
   const [dob, setDob]           = useState("");
   const [notes, setNotes]       = useState("");
   const [typeText, setTypeText] = useState("");
+
+  // Spintax editor state (persisted per-device)
+  const [customSpin, setCustomSpin] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("mobile_spin") ?? "{}"); } catch { return {}; }
+  });
+  const [showSpinEditor, setShowSpinEditor] = useState(false);
+  const saveSpin = (id: string, val: string) => {
+    const next = { ...customSpin, [id]: val };
+    setCustomSpin(next);
+    localStorage.setItem("mobile_spin", JSON.stringify(next));
+  };
+  const shuffle = (id: string, setter: (v: string) => void, fallback: () => string) => {
+    const spin = (customSpin[id] ?? "").trim();
+    setter(spin ? resolveSpintax(spin) : fallback());
+  };
 
   const instQ = useQuery({
     queryKey: ["ig-installed", serial],
@@ -253,24 +333,73 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
 
         {/* Right: signup */}
         <div className="space-y-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Save account credentials</div>
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Save account credentials</div>
+            <button
+              className="text-[10px] text-primary/60 hover:text-primary underline"
+              onClick={() => setShowSpinEditor(v => !v)}
+            >{showSpinEditor ? "Hide spintax ↑" : "Custom spintax ↓"}</button>
+          </div>
+
+          {/* Generate all button */}
+          <Button size="sm" variant="outline" className="w-full text-xs gap-1.5" onClick={() => {
+            const u = (customSpin["u"] ?? "").trim() ? resolveSpintax(customSpin["u"]) : generateUsername();
+            setUsername(u);
+            setPassword((customSpin["pw"] ?? "").trim() ? resolveSpintax(customSpin["pw"]) : generatePassword());
+            setEmail((customSpin["em"] ?? "").trim() ? resolveSpintax(customSpin["em"]) : generateEmail(u));
+            setDob((customSpin["db"] ?? "").trim() ? resolveSpintax(customSpin["db"]) : generateDob());
+          }}>
+            <Shuffle className="w-3 h-3" />Generate all fields
+          </Button>
+
           <div className="grid grid-cols-2 gap-2">
             {[
-              { id: "u",  label: "Username", val: username, set: setUsername },
-              { id: "pw", label: "Password", val: password, set: setPassword },
-              { id: "em", label: "Email",    val: email,    set: setEmail },
-              { id: "ph", label: "Phone",    val: phone,    set: setPhone },
-              { id: "db", label: "Date of birth (YYYY-MM-DD)", val: dob, set: setDob },
+              { id: "u",  label: "Username",               val: username, set: setUsername, gen: () => generateUsername() },
+              { id: "pw", label: "Password",               val: password, set: setPassword, gen: () => generatePassword() },
+              { id: "em", label: "Email",                  val: email,    set: setEmail,    gen: () => generateEmail(username) },
+              { id: "ph", label: "Phone",                  val: phone,    set: setPhone,    gen: null },
+              { id: "db", label: "Date of birth (YYYY-MM-DD)", val: dob,  set: setDob,      gen: () => generateDob() },
             ].map(f => (
               <div key={f.id} className="space-y-1">
                 <Label htmlFor={`sp-${f.id}`} className="text-[10px] text-muted-foreground">{f.label}</Label>
                 <div className="flex gap-1">
                   <Input id={`sp-${f.id}`} className="text-xs h-8 flex-1" value={f.val} onChange={e => f.set(e.target.value)} />
+                  {f.gen && (
+                    <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" title="Generate random value" onClick={() => shuffle(f.id, f.set, f.gen!)}>
+                      <Shuffle className="w-3 h-3" />
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0" disabled={!f.val || typeMut.isPending} onClick={() => typeMut.mutate(f.val)}>Type</Button>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* Spintax editor */}
+          {showSpinEditor && (
+            <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                Paste your own spintax for any field — e.g. <span className="font-mono bg-background px-1 rounded">{"{"} maia|nina|zara{"}"}_{"{"} 1..99{"}"}</span>. Leave blank to use the built-in generator. Saved automatically.
+              </p>
+              {[
+                { id: "u",  label: "Username spintax" },
+                { id: "pw", label: "Password spintax" },
+                { id: "em", label: "Email spintax" },
+                { id: "db", label: "Date of birth spintax" },
+              ].map(f => (
+                <div key={f.id} className="space-y-0.5">
+                  <Label className="text-[10px] text-muted-foreground">{f.label}</Label>
+                  <Input
+                    className="text-xs h-7 font-mono"
+                    placeholder="leave blank for auto-generate"
+                    value={customSpin[f.id] ?? ""}
+                    onChange={e => saveSpin(f.id, e.target.value)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="space-y-1">
             <Label className="text-[10px] text-muted-foreground">Notes</Label>
             <Textarea rows={2} className="text-xs resize-none" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. phone used, recovery email…" />

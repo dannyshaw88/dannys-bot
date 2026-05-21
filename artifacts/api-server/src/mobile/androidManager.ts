@@ -50,6 +50,37 @@ function which(cmd: string): string | null {
   return null;
 }
 
+/** Scan common user locations for scrcpy.exe on Windows — so PATH config is not required. */
+function findScrcpyInCommonLocations(): string | null {
+  if (process.platform !== "win32") return null;
+  const home = os.homedir();
+  const searchRoots = [
+    path.join(home, "Desktop"),
+    path.join(home, "Downloads"),
+    path.join(home, "AppData", "Local", "Programs"),
+    "C:\\scrcpy",
+    "C:\\Program Files\\scrcpy",
+    "C:\\tools",
+  ];
+  for (const root of searchRoots) {
+    try {
+      // Check root itself first
+      const direct = path.join(root, "scrcpy.exe");
+      if (fs.existsSync(direct)) return direct;
+      // Then scan one level of subdirectories (e.g. scrcpy-win64-v3.1/)
+      const entries = fs.readdirSync(root, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const candidate = path.join(root, entry.name, "scrcpy.exe");
+        try {
+          if (fs.statSync(candidate).isFile()) return candidate;
+        } catch { /* ignore */ }
+      }
+    } catch { /* root doesn't exist, skip */ }
+  }
+  return null;
+}
+
 function candidateSdkRoots(): string[] {
   const out: string[] = [];
   const env = process.env;
@@ -163,6 +194,7 @@ export function detectToolset(): AndroidToolset {
     } else {
       p = which(name);
       if (!p && sdkRoot) p = findInSdk(name, sdkRoot);
+      if (!p && name === "scrcpy") p = findScrcpyInCommonLocations();
     }
     if (p) return { found: true, path: p, version: getVersion(p) };
     return { found: false, path: null, version: null };
@@ -411,7 +443,12 @@ export async function isPackageInstalled(serial: string, pkg: string): Promise<b
 export async function launchInstagram(serial: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  spawnSync(adb, ["-s", serial, "shell", "monkey", "-p", "com.instagram.android", "-c", "android.intent.category.LAUNCHER", "1"], { encoding: "utf8", timeout: 10000 });
+  // Use am start instead of monkey — monkey can trigger ADB server restarts
+  // which kill scrcpy connections. am start is a clean single-activity launch.
+  spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
+    "com.instagram.android/com.instagram.mainactivity.LauncherActivity",
+    "--activity-clear-top",
+  ], { encoding: "utf8", timeout: 10000 });
 }
 
 export async function stopInstagram(serial: string): Promise<void> {

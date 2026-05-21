@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.447",
+    date: "21 May 2026",
+    items: [
+      { category: "New", text: "Mobile page now auto-detects scrcpy on your Desktop and Downloads folders — no PATH configuration needed." },
+      { category: "New", text: "Random generators added to the credential form on the Mobile page. Each field (username, password, email, date of birth) gets its own shuffle button. A Generate All button fills everything at once." },
+      { category: "New", text: "Custom spintax editor added to the Mobile credential form. Paste your own spintax like {maia|nina|zara}_{1..99} for any field and it will be used instead of the built-in generator. Settings save automatically." },
+      { category: "Fix", text: "Clicking Launch in the Mobile panel no longer closes an open scrcpy mirror window. The launch command has been changed to avoid triggering ADB server restarts." },
+    ],
+  },
+  {
     version: "1.0.446",
     date: "21 May 2026",
     items: [
