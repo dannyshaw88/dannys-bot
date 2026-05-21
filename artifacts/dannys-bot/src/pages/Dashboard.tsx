@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.427",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Reduced CPU and memory load when multiple accounts are stuck in an Instagram security challenge at the same time. Chrome no longer streams video frames when nobody is actively watching that browser window. Challenge checks are now staggered so several accounts don't all fire at the exact same moment." },
+      { category: "Fix", text: "Database writes from browser traffic are now deferred to the background so they can't block other work happening in the app at the same time." },
+      { category: "Fix", text: "Added an event-loop lag detector — the app now logs a warning whenever something caused a delay of more than 100 ms, making future slowdowns much easier to diagnose." },
+    ],
+  },
+  {
     version: "1.0.426",
     date: "21 May 2026",
     items: [

@@ -900,6 +900,35 @@ function wsWrite(ws: WebSocket | null, data: object) {
 
 const sessions = new Map<number, Session>();
 
+// ── Event-loop lag monitor ────────────────────────────────────────────────────
+// Measures the difference between when a setInterval callback was _scheduled_
+// to fire and when it _actually_ fired.  Any gap > 100 ms means the Node.js
+// event loop was blocked for that duration — useful for diagnosing freezes
+// caused by synchronous work (DB writes, CPU-heavy CDP event processing, etc.).
+// Fires every 5 s; only logs when lag is significant to avoid log noise.
+{
+  const LAG_WARN_MS  = 100;   // log at WARN level above this
+  const LAG_ALERT_MS = 500;   // log extra context (open sessions, screencasts) above this
+  const INTERVAL_MS  = 5_000;
+  let _lastTick = Date.now();
+  setInterval(() => {
+    const now  = Date.now();
+    const lag  = now - _lastTick - INTERVAL_MS;
+    _lastTick  = now;
+    if (lag >= LAG_WARN_MS) {
+      const openIds   = [...sessions.keys()];
+      const castCount = openIds.filter(id => sessions.get(id)?.screencastCdp).length;
+      const pollCount = openIds.filter(id => (sessions.get(id) as any)?._approvalPolling).length;
+      const msg = `[eventloop-lag] ${lag} ms delay detected — open=${openIds.length} screencasts=${castCount} challengePolling=${pollCount}`;
+      if (lag >= LAG_ALERT_MS) {
+        log(`⚠ ${msg}`, "browser");
+      } else {
+        log(msg, "browser");
+      }
+    }
+  }, INTERVAL_MS).unref();
+}
+
 // Prevents concurrent Chrome launches for the same profile.
 // A profile ID is in this Set while its getOrCreateSession call is actively
 // launching Chrome.  Other concurrent callers poll until it's done.
@@ -964,31 +993,6 @@ setInterval(() => {
 let globalScreenshotCount = 0;
 const MAX_CONCURRENT_SCREENSHOTS = 6;
 
-// ── EB launch concurrency limiter ──────────────────────────────────────────
-// Launching Chrome is expensive: each instance peaks at ~80–150 MB and spikes
-// the CPU for 2–4 s during V8 JIT warmup.  When 10+ EBs are opened at once
-// they all race through puppeteer.launch() simultaneously, saturating the CPU
-// and causing some instances to never complete their init → frozen EBs.
-// Limit concurrent Chrome launches to avoid saturating the CPU during startup.
-// 10 is safe for normal desktop use (manually verifying a handful of accounts
-// simultaneously) while still preventing runaway parallelism if the user bulk-
-// verifies dozens of accounts at once.
-let ebLaunchCount = 0;
-const MAX_CONCURRENT_EB_LAUNCHES = 3;
-
-function waitForEbLaunchSlot(): Promise<void> {
-  return new Promise(resolve => {
-    const tryAcquire = () => {
-      if (ebLaunchCount < MAX_CONCURRENT_EB_LAUNCHES) {
-        ebLaunchCount++;
-        resolve();
-      } else {
-        setTimeout(tryAcquire, 500);
-      }
-    };
-    tryAcquire();
-  });
-}
 
 // Mark a session as "recently active". Called by every input handler.
 // The frame loop reads lastActivityAt to decide the screenshot cadence:
@@ -1910,8 +1914,6 @@ export async function getOrCreateSession(
   console.log(`[EB-DEBUG][browserSession] launching via ${puppeteerSource}, executablePath="${CHROMIUM_PATH}"`);
   console.log(`[EB-DEBUG][browserSession] launch args: ${fullArgs.join(" ")}`);
 
-  // Throttle concurrent Chrome launches to avoid CPU saturation.
-  await waitForEbLaunchSlot();
   let browser: Browser;
   try {
     browser = await puppeteerLib.launch({
@@ -1927,8 +1929,6 @@ export async function getOrCreateSession(
     if (err?.stack) console.error(`[EB-DEBUG][browserSession] stack: ${err.stack}`);
     _launchingProfiles.delete(profileId);
     throw new Error(msg);
-  } finally {
-    ebLaunchCount--;
   }
 
   const [page] = await browser.pages();
@@ -1964,12 +1964,83 @@ export async function getOrCreateSession(
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
   await applyStealthScripts(page, userAgent, resolvedTZ, userAgentApi);
 
-  // Enable request interception so we can block heavy media resources for
-  // background sessions (no SSE viewer connected).  Instagram loads dozens of
-  // high-res images on every page; blocking them when the user isn't watching
-  // cuts per-session RAM by 60–80 % and is the single biggest win for running
-  // 20+ concurrent EBs without crashing.
-  await page.setRequestInterception(true);
+  // ── Request filtering via CDP Fetch (replaces setRequestInterception) ─────────
+  // page.setRequestInterception(true) pauses EVERY network request in Node.js and
+  // requires a full CDP round-trip back to Chrome before each request can proceed.
+  // With 20+ EBs open and 50–100 requests per page load, that is thousands of queued
+  // CDP messages per navigation — request #500 waits for #1–499 to be acknowledged.
+  // Result: pages that should load in 1–2 s take 30+ seconds under any real load.
+  //
+  // Fetch.enable with explicit resource-type patterns is the zero-overhead alternative:
+  // only the ~5–10% of requests matching our block patterns (Media, Font, Image when
+  // idle) are paused in Node.js; all other requests (XHR, Fetch, Document, Script,
+  // Stylesheet, …) flow directly through Chrome with no Node.js involvement at all.
+  // URL-pattern blocks (analytics/tracking) are handled by Network.setBlockedURLs —
+  // also zero overhead, handled natively inside Chrome.
+  const fetchCdp = await page.createCDPSession();
+
+  // Block analytics/tracking at the Chrome network layer — zero Node.js round-trips.
+  await fetchCdp.send("Network.setBlockedURLs", {
+    urls: [
+      "*pixel.facebook.com*",
+      "*connect.facebook.net*",
+      "*analytics.instagram.com*",
+      "*/logging/1/*",
+      "*/b/l.php*",
+      "*/ajax/bz*",
+    ]
+  }).catch(() => {});
+
+  // Pause ONLY the resource types we need to block.  Everything else flows freely.
+  await fetchCdp.send("Fetch.enable", {
+    patterns: [
+      { resourceType: "Media",    requestStage: "Request" },
+      { resourceType: "Font",     requestStage: "Request" },
+      { resourceType: "Image",    requestStage: "Request" },
+      // Capture challenge redirect hops so startApprovalPolling can re-navigate Chrome
+      // and reset its 20-hop counter on every iteration.
+      { urlPattern: "*update_risky_contactpoint*", requestStage: "Request" },
+    ]
+  });
+
+  fetchCdp.on("Fetch.requestPaused", (p: any) => {
+    const { requestId, resourceType, request, redirectedRequestId } = p;
+
+    // Challenge redirect interceptor — only for REDIRECT hops (redirectedRequestId set),
+    // not the initial navigation.  Captures the updated token URL so startApprovalPolling
+    // can re-navigate Chrome fresh on each iteration, resetting its 20-hop counter.
+    if (request?.url?.includes("update_risky_contactpoint")) {
+      if (redirectedRequestId) {
+        const sc = sessions.get(profileId);
+        if (sc && (sc as any)._challengeRedirectInterceptor) {
+          (sc as any)._challengeRedirectInterceptor(request.url);
+        }
+        fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => {});
+      } else {
+        // First navigation — allow Chrome to follow the chain normally.
+        fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
+      }
+      return;
+    }
+
+    // Always block media (Reels, story video) and fonts — never needed for sessions.
+    if (resourceType === "Media" || resourceType === "Font") {
+      fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => {});
+      return;
+    }
+
+    // Block images when no viewer is watching — saves ~220 MB per idle session.
+    if (resourceType === "Image") {
+      const s = sessions.get(profileId);
+      const hasViewer = !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
+      if (!hasViewer) {
+        fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" }).catch(() => {});
+        return;
+      }
+    }
+
+    fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
+  });
 
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
   page.on("framenavigated", async (frame) => {
@@ -2217,84 +2288,31 @@ export async function getOrCreateSession(
   const _diagStartMs = Date.now();
   const _diagWindow: Record<string, number> = {};
 
+  // Monitoring-only — no req.continue/abort calls needed (Fetch.enable handles blocking).
   page.on("request", (req) => {
     if (isIgApiCall(req.url())) {
       pending.set(req.url(), { startMs: Date.now(), method: req.method() });
     }
 
-    // ── Challenge redirect interceptor (used by startApprovalPolling) ─────────
-    // startApprovalPolling sets _challengeRedirectInterceptor on the session so
-    // it can capture each redirect URL without adding a second page.on("request")
-    // listener — which would cause "Request is already handled" errors since only
-    // one handler may call req.continue/abort per request.
-    const s = sessions.get(profileId);
-    if (
-      s && (s as any)._challengeRedirectInterceptor &&
-      req.isNavigationRequest() &&
-      req.redirectChain().length >= 1 &&
-      req.url().includes("update_risky_contactpoint")
-    ) {
-      (s as any)._challengeRedirectInterceptor(req.url());
-      req.abort("aborted").catch(() => {});
-      return;
-    }
-
-    // ── Always-block: media (video) and font resources ───────────────────────
-    // Video files (Reels, story videos) are never needed for cookie/session
-    // management. Instagram pre-loads multiple Reel videos 1-2 minutes after
-    // page load. With --disable-gpu, Chrome decodes video in software (no GPU
-    // acceleration) — a 2-5 MB Reel decode spikes CPU for 200-500 ms. Blocking
-    // at the network layer stops the download before Chrome can try to decode.
-    // Fonts are equally unnecessary in a headless session management context.
-    const rType = req.resourceType();
-    if (rType === "media" || rType === "font") {
-      req.abort("blockedbyclient").catch(() => {});
-      return;
-    }
-
-    // ── Always-block: analytics and tracking endpoints ────────────────────────
-    // Instagram's analytics and tracking beacons fire ~1-2 minutes after page
-    // load and carry large JSON payloads. The response processing (JSON parse +
-    // React state update) spikes CPU. None of these affect session validity.
-    const url = req.url();
-    if (
-      url.includes("/logging/1/") ||
-      url.includes("/b/l.php") ||
-      url.includes("pixel.facebook.com") ||
-      url.includes("connect.facebook.net") ||
-      url.includes("analytics.instagram.com") ||
-      (url.includes("instagram.com") && url.includes("/ajax/bz"))
-    ) {
-      req.abort("blockedbyclient").catch(() => {});
-      return;
-    }
-
-    // ── Background image blocking (no viewer) ────────────────────────────────
-    // Block images when no viewer is connected to save RAM (~300 MB → ~80 MB).
-    // Chrome re-requests viewport images automatically when the viewer connects.
-    const hasViewer = !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
-    if (!hasViewer && rType === "image") {
-      req.abort("blockedbyclient").catch(() => {});
-      return;
-    }
-
     // ── Diag counter (first 5 minutes) ───────────────────────────────────────
     if (Date.now() - _diagStartMs < 5 * 60 * 1000) {
+      const rType = req.resourceType();
       _diagWindow[rType] = (_diagWindow[rType] ?? 0) + 1;
       if (rType === "xhr" || rType === "fetch") {
         try {
           const u = new URL(req.url());
-          // Key = first two path segments, strips query strings and IDs
           const pathKey = u.pathname.split("/").slice(0, 4).join("/") || "/";
           _diagWindow[`xhr:${pathKey}`] = (_diagWindow[`xhr:${pathKey}`] ?? 0) + 1;
         } catch {}
       }
     }
-
-    req.continue().catch(() => {});
   });
 
-  page.on("response", async (res) => {
+  // Monitoring-only — response events are informational (no CDP blocking).
+  // The DB write is deferred via setImmediate so the synchronous better-sqlite3
+  // write never blocks the Puppeteer event handler stack.  This keeps the CDP
+  // message pump free to process the next incoming event immediately.
+  page.on("response", (res) => {
     const url = res.url();
     const info = pending.get(url);
     if (!info) return;
@@ -2304,18 +2322,20 @@ export async function getOrCreateSession(
     if (NOISE_PATHS.has(opName)) return; // skip telemetry noise
 
     const durationMs = Date.now() - info.startMs;
-    try {
-      await db.insert(instagramApiCalls).values({
-        profileId,
-        operationName: opName,
-        date: new Date().toISOString(),
-        message: url,
-        source: "Browser",
-        navChain: "",
-        ipAddress: "",
-        durationMs,
-      });
-    } catch { /* never crash the browser session on a log failure */ }
+    setImmediate(() => {
+      try {
+        void db.insert(instagramApiCalls).values({
+          profileId,
+          operationName: opName,
+          date: new Date().toISOString(),
+          message: url,
+          source: "Browser",
+          navChain: "",
+          ipAddress: "",
+          durationMs,
+        });
+      } catch { /* never crash the browser session on a log failure */ }
+    });
   });
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -3038,9 +3058,25 @@ async function startApprovalPolling(profileId: number, page: Page): Promise<void
   log(`[challenge:${profileId}] URC: waiting for phone action (Dismiss or Approve) — polling for resolution`, "browser");
   sendStatus(profileId, `⚠ Open Instagram on your phone — if you see "We suspect automated behavior", tap Dismiss. If you see a login alert, tap Approve. This browser will update automatically once done.`);
 
-  // Stay on about:blank (already navigated there before probing).
-  // No custom HTML pages — Chrome stays blank while waiting for approval.
-  await startScreencast(profileId).catch(() => {});
+  // Only start screencast if a viewer is actively watching — streaming JPEG frames
+  // from about:blank to nobody burns Chrome renderer CPU on every open challenge
+  // account simultaneously and contributes to event-loop saturation.
+  {
+    const sc0 = sessions.get(profileId);
+    if (sc0?.ws?.readyState === WebSocket.OPEN) {
+      await startScreencast(profileId).catch(() => {});
+    }
+  }
+
+  // ── Stagger start to prevent N challenge accounts all polling at the same time ──
+  // If multiple accounts hit URC challenge together (e.g. on app startup) they all
+  // arrive here within seconds of each other.  Without a stagger every 30-second
+  // poll fires simultaneously, creating a burst of 20+ CDP events per account
+  // all at once.  A per-account random offset (0–20 s) spreads them out.
+  const staggerMs = (profileId % 20) * 1_000 + Math.floor(Math.random() * 5_000);
+  if (staggerMs > 0) {
+    await new Promise<void>(r => setTimeout(r, staggerMs));
+  }
 
   try {
     while (Date.now() - startMs < MAX_TIME_MS) {
@@ -3106,7 +3142,12 @@ async function startApprovalPolling(profileId: number, page: Page): Promise<void
       // in < 1 second. Without a sleep here the loop hammers at ~3 req/s per
       // account, causing continuous CPU and network load.
       // The user needs to act on their phone — polling every 30 s is plenty.
-      await startScreencast(profileId).catch(() => {});
+      // Only restart screencast if a viewer is now watching (avoids streaming
+      // about:blank JPEG frames to nobody and wasting Chrome renderer CPU).
+      const scMid = sessions.get(profileId);
+      if (scMid?.ws?.readyState === WebSocket.OPEN) {
+        await startScreencast(profileId).catch(() => {});
+      }
       log(`[challenge:${profileId}] still on chrome-error — waiting 30 s before next check`, "browser");
       await new Promise<void>(r => setTimeout(r, 30_000));
     }
