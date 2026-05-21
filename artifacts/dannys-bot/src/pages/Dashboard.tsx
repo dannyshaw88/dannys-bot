@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.429",
+    date: "21 May 2026",
+    items: [
+      { category: "Improvement", text: "The embedded browser now opens as a real native window instead of a streamed canvas. Each account gets its own dedicated browser window you can interact with directly — no lag, no frozen frames, no compression." },
+      { category: "Improvement", text: "Cookies are automatically captured and saved to the account after every Instagram page load in the native window. The Verify flow works exactly as before." },
+      { category: "Improvement", text: "The Browser panel now shows a 'Bring to Front' button to instantly focus the native window for that account instead of a video canvas." },
+    ],
+  },
+  {
     version: "1.0.428",
     date: "21 May 2026",
     items: [

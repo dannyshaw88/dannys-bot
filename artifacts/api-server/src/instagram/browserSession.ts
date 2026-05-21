@@ -13,6 +13,34 @@ import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
 import { storage } from "../storage";
 
+// ── Electron native EB mode ───────────────────────────────────────────────────
+// When running inside Electron, `EB_IPC_PORT` is set to the port of the native
+// ebManager IPC server.  All embedded-browser operations are forwarded to that
+// server (which drives a real BrowserWindow) instead of using Puppeteer/CDP.
+const IS_ELECTRON_EB = !!process.env.EB_IPC_PORT;
+const EB_IPC_BASE    = `http://127.0.0.1:${process.env.EB_IPC_PORT ?? "0"}`;
+
+async function ebIpc(method: string, urlPath: string, body?: unknown): Promise<any> {
+  const res = await fetch(`${EB_IPC_BASE}${urlPath}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`EB IPC ${method} ${urlPath} → ${res.status}: ${txt}`);
+  }
+  return res.json();
+}
+
+interface ElectronSessionState {
+  ws:        WebSocket | null;
+  proxyKey:  string;
+  challengeUrl?: string;
+  lastLoginSuccessAt?: number;
+}
+const electronSessions = new Map<number, ElectronSessionState>();
+
 function log(msg: string, _category?: string) {
   const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
   console.log(`[${ts}] [browser] ${msg}`);
@@ -1789,6 +1817,22 @@ export async function getOrCreateSession(
   proxy?: ProxyConfig,
   userAgentApi?: string | null,
 ): Promise<Session> {
+  // ── Electron native EB mode ────────────────────────────────────────────────
+  if (IS_ELECTRON_EB) {
+    const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
+    const existing = electronSessions.get(profileId);
+    if (existing?.proxyKey === newProxyKey) return {} as unknown as Session;
+    electronSessions.set(profileId, { ws: null, proxyKey: newProxyKey });
+    const profile = await storage.getProfile(profileId).catch(() => null);
+    await ebIpc("POST", "/eb/open", {
+      profileId,
+      username:  profile?.username ?? String(profileId),
+      proxy:     proxy ? { host: proxy.host, port: proxy.port, user: proxy.username, pass: proxy.password } : undefined,
+      userAgent: userAgent || undefined,
+    }).catch(err => log(`[getOrCreate:${profileId}] EB open failed: ${err?.message}`, "browser"));
+    return {} as unknown as Session;
+  }
+  // ── Puppeteer mode (dev / non-Electron) ───────────────────────────────────
   const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
   const existing = sessions.get(profileId);
 
@@ -2577,11 +2621,20 @@ export async function getOrCreateSession(
 
 /** True if the profile already has an open WS connection serving its EB session. */
 export function hasActiveWS(profileId: number): boolean {
+  if (IS_ELECTRON_EB) {
+    const s = electronSessions.get(profileId);
+    return !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
+  }
   const s = sessions.get(profileId);
   return !!(s?.ws && s.ws.readyState === WebSocket.OPEN);
 }
 
 export function detachWS(profileId: number, ws: WebSocket) {
+  if (IS_ELECTRON_EB) {
+    const s = electronSessions.get(profileId);
+    if (s && s.ws === ws) s.ws = null;
+    return;
+  }
   const session = sessions.get(profileId);
   if (!session || session.ws !== ws) return;
   session.ws = null;
@@ -2603,6 +2656,20 @@ export function detachWS(profileId: number, ws: WebSocket) {
 }
 
 export function attachWS(profileId: number, ws: WebSocket) {
+  if (IS_ELECTRON_EB) {
+    let s = electronSessions.get(profileId);
+    if (!s) {
+      s = { ws: null, proxyKey: "direct" };
+      electronSessions.set(profileId, s);
+    }
+    if (s.ws && s.ws.readyState === WebSocket.OPEN) {
+      try { s.ws.send(JSON.stringify({ type: "replaced" })); s.ws.close(); } catch {}
+    }
+    s.ws = ws;
+    log(`[attachWS:${profileId}] Electron native EB: WS attached`, "browser");
+    wsWrite(ws, { type: "loginStatus", message: "✓ Instagram browser is open as a native window." });
+    return;
+  }
   const session = sessions.get(profileId);
   if (!session) return;
 
@@ -2728,6 +2795,19 @@ export function scheduleAutoLogin(
   password: string,
   twoFAKey: string,
 ): void {
+  if (IS_ELECTRON_EB) {
+    // In Electron mode the native window opens to the login page when no cookies
+    // exist; we ask the ebManager to perform the login via its executeJavaScript
+    // auto-login flow.  No need to check page URL — ebManager navigates itself.
+    setTimeout(() => {
+      if (!electronSessions.has(profileId)) return;
+      log(`[autoLogin:${profileId}] Electron native EB: scheduling auto-login`, "browser");
+      browserAutoLogin(profileId, username, password, twoFAKey)
+        .then(result => sendLoginDone(profileId, result.ok, result.message))
+        .catch(err  => sendLoginDone(profileId, false, String(err)));
+    }, 3500);
+    return;
+  }
   setTimeout(() => {
     const s = sessions.get(profileId);
     if (!s || s.autoLoginInProgress) return;
@@ -3256,7 +3336,17 @@ async function followChallengeRedirects(
 // (each startScreencast takes ~10–50 ms in practice).
 let _screencastStartQueue: Promise<void> = Promise.resolve();
 
-async function startScreencast(profileId: number, _retry = 0): Promise<void> {
+function startScreencast(profileId: number, _retry = 0): Promise<void> {
+  // Chain onto the global queue so concurrent calls from multiple EBs opening at
+  // the same time run ONE AT A TIME.  Without this, simultaneous createCDPSession()
+  // calls from N EBs flood the Puppeteer WebSocket protocol queue and Chrome stalls.
+  _screencastStartQueue = _screencastStartQueue
+    .catch(() => {})                          // never let a prior failure block the queue
+    .then(() => _doStartScreencast(profileId, _retry));
+  return _screencastStartQueue;
+}
+
+async function _doStartScreencast(profileId: number, _retry = 0): Promise<void> {
   const session = sessions.get(profileId);
   if (!session || !session.ws || session.ws.readyState !== WebSocket.OPEN) return;
 
@@ -4075,6 +4165,16 @@ export async function browserSendDM(
 }
 
 export async function closeSession(profileId: number, opts?: { skipCookieSave?: boolean }) {
+  if (IS_ELECTRON_EB) {
+    const s = electronSessions.get(profileId);
+    if (!s) return;
+    if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}
+    electronSessions.delete(profileId);
+    await ebIpc("POST", "/eb/close", { profileId })
+      .catch(err => log(`[closeSession:${profileId}] EB close failed: ${err?.message}`, "browser"));
+    log(`EB window closed for profile ${profileId}`, "browser");
+    return;
+  }
   const s = sessions.get(profileId);
   if (!s) return;
   if (s.frameLoop) clearInterval(s.frameLoop);
@@ -4109,6 +4209,13 @@ export async function clearSession(profileId: number, userAgent: string, proxy?:
 // the browser, and also deletes the Puppeteer user-data-dir so Chrome's own
 // internal cookie database is erased (not just the app's saved JSON file).
 export async function wipeEbSession(profileId: number): Promise<void> {
+  if (IS_ELECTRON_EB) {
+    electronSessions.delete(profileId);
+    await ebIpc("POST", "/eb/wipe", { profileId })
+      .catch(err => log(`[wipeEbSession:${profileId}] EB wipe failed: ${err?.message}`, "browser"));
+    log(`EB session wiped for profile ${profileId}`, "browser");
+    return;
+  }
   deleteSavedCookies(profileId);
   await closeSession(profileId, { skipCookieSave: true });
   // Same Windows file-handle race as clearEbSessionCookies — wait for Chrome to
@@ -4384,20 +4491,33 @@ async function dismissInstagramPopups(page: Page): Promise<void> {
 }
 
 function sendStatus(profileId: number, message: string) {
-  const s = sessions.get(profileId);
-  wsWrite(s?.ws ?? null, { type: "loginStatus", message });
+  const ws = IS_ELECTRON_EB
+    ? (electronSessions.get(profileId)?.ws ?? null)
+    : (sessions.get(profileId)?.ws ?? null);
+  wsWrite(ws, { type: "loginStatus", message });
   log(`[autoLogin:${profileId}] ${message}`, "browser");
 }
 
 export function sendLoginDone(profileId: number, ok: boolean, message: string) {
-  const s = sessions.get(profileId);
-  wsWrite(s?.ws ?? null, { type: "loginDone", ok, message });
+  const ws = IS_ELECTRON_EB
+    ? (electronSessions.get(profileId)?.ws ?? null)
+    : (sessions.get(profileId)?.ws ?? null);
+  wsWrite(ws, { type: "loginDone", ok, message });
   log(`[loginDone:${profileId}] ${ok ? "✅" : "❌"} ${message}`, "browser");
 }
 
 // Extract raw cookies from the active browser session page.
 // Used by the verify route to hand browser-authenticated cookies to the API client.
 export async function getSessionPageCookies(profileId: number): Promise<Array<{ name: string; value: string }>> {
+  if (IS_ELECTRON_EB) {
+    try {
+      const res = await ebIpc("GET", `/eb/cookies?profileId=${profileId}`);
+      return Array.isArray(res.cookies) ? res.cookies : [];
+    } catch (err: any) {
+      log(`[getSessionPageCookies:${profileId}] EB IPC error: ${err?.message}`, "browser");
+      return [];
+    }
+  }
   const s = sessions.get(profileId);
   if (!s) return [];
   try {
@@ -4443,6 +4563,21 @@ export async function browserAutoLogin(
   password: string,
   twoFAKey: string,
 ): Promise<{ ok: boolean; message: string }> {
+  if (IS_ELECTRON_EB) {
+    sendStatus(profileId, "⟳ Starting auto-login in native browser window…");
+    try {
+      const result = await ebIpc("POST", "/eb/auto-login", {
+        profileId, username, password, twoFAKey,
+      });
+      if (result.ok) sendStatus(profileId, "✅ Login successful");
+      else           sendStatus(profileId, `❌ ${result.message}`);
+      return result;
+    } catch (err: any) {
+      const msg = `Auto-login IPC error: ${err?.message}`;
+      sendStatus(profileId, `❌ ${msg}`);
+      return { ok: false, message: msg };
+    }
+  }
   const s = sessions.get(profileId);
   if (!s) return { ok: false, message: "No active browser session" };
   // If a challenge was detected in THIS session, bail immediately — do not

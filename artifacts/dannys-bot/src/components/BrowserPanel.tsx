@@ -54,6 +54,9 @@ function nowTs() {
   return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
 }
 
+// Detect Electron native EB mode (window.electronAPI exposed by preload)
+const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
+
 export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelProps) {
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1010,106 +1013,152 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       {/* Viewport */}
       <div className="flex-1 relative bg-white min-h-0 overflow-hidden flex items-center justify-center">
 
-        {status === "idle" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
-            <MonitorPlay className="w-10 h-10 text-slate-400" />
-            <p className="text-sm font-medium text-foreground">Browser disconnected</p>
-            {errorMsg ? (
-              <div className="flex flex-col items-center gap-2 max-w-sm">
-                <p className="text-xs text-red-500 text-center font-medium">Last error: {errorMsg}</p>
-                <button
-                  onClick={() => navigator.clipboard?.writeText(errorMsg ?? "").catch(() => {})}
-                  className="text-[10px] text-slate-400 hover:text-slate-600 underline"
-                >
-                  Copy error
-                </button>
+        {/* ── Electron native EB mode — no canvas, native BrowserWindow is open ── */}
+        {IS_ELECTRON ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-50">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <MonitorPlay className="w-7 h-7 text-primary" />
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Reconnecting in a moment…</p>
+              <p className="text-sm font-semibold text-foreground">Browser running as native window</p>
+              <p className="text-xs text-muted-foreground text-center max-w-xs">
+                Instagram is open in a dedicated native window in your taskbar. Use it like a real browser — no streaming delay.
+              </p>
+            </div>
+
+            {/* Login status messages from server */}
+            {loginLog.length > 0 && (
+              <div className="w-full max-w-sm rounded-md border border-border bg-background px-3 py-2 space-y-0.5 max-h-32 overflow-y-auto font-mono text-xs">
+                {loginLog.map((e, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-muted-foreground shrink-0 select-none">{e.ts}</span>
+                    <span className={e.kind === "ok" ? "text-green-600" : e.kind === "fail" ? "text-red-500" : e.kind === "error" ? "text-amber-500" : "text-foreground"}>
+                      {e.kind === "ok" ? "✓ " : e.kind === "fail" ? "✗ " : e.kind === "error" ? "⚠ " : "· "}{e.text}
+                    </span>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
             )}
-            <Button onClick={connect} variant="outline" size="sm">Connect now</Button>
-          </div>
-        )}
 
-        {status === "connecting" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Starting browser…</p>
-          </div>
-        )}
-
-        {status === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
-            <WifiOff className="w-10 h-10 text-red-400" />
-            <p className="text-sm font-medium text-foreground">Browser failed to start</p>
-            <Button onClick={connect} variant="outline" size="sm">Retry</Button>
-          </div>
-        )}
-
-        <canvas
-          ref={canvasRef}
-          width={BROWSER_W}
-          height={BROWSER_H}
-          className="outline-none"
-          style={{
-            display: connected ? "block" : "none",
-            maxWidth: "100%",
-            maxHeight: "100%",
-            width: "auto",
-            height: "auto",
-            aspectRatio: `${BROWSER_W} / ${BROWSER_H}`,
-            cursor: "default",
-            touchAction: "none",
-          }}
-          tabIndex={0}
-          onClick={onCanvasClick}
-          onMouseMove={onCanvasMouseMove}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          onContextMenu={onContextMenu}
-        />
-
-
-        {/* First-frame overlay — connected but Chrome hasn't rendered anything yet */}
-        {connected && waitingFirstFrame && !isFrozen && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm font-medium text-foreground">Starting browser…</p>
-            <p className="text-xs text-muted-foreground">Loading Instagram, please wait</p>
-          </div>
-        )}
-
-        {/* Frozen overlay — no frame received for 60 s while connected */}
-        {isFrozen && connected && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/80 z-20 backdrop-blur-sm">
-            <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
-            <p className="text-sm font-semibold text-white">Browser appears frozen</p>
-            <p className="text-xs text-slate-400 text-center max-w-xs">The page stopped sending frames. If it just logged in or navigated to a new page, give it more time — Instagram can be slow to load.</p>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="gap-1.5 border-slate-500 text-slate-200 hover:bg-slate-700" onClick={() => { lastFrameTimeRef.current = Date.now(); setIsFrozen(false); }}>
-                Keep Waiting
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => (window as any).electronAPI?.focusBrowserWindow(profileId)}
+              >
+                <MonitorPlay className="w-3.5 h-3.5" />
+                Bring to Front
               </Button>
-              <Button size="sm" variant="destructive" onClick={clearSession} className="gap-1.5">
-                <Trash2 className="w-3.5 h-3.5" /> Clear &amp; Reset
+              <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" onClick={clearSession}>
+                <Trash2 className="w-3.5 h-3.5" /> Clear Session
               </Button>
             </div>
           </div>
-        )}
-
-        {/* Right-click context menu */}
-        {ctxMenu && (
+        ) : (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
-            <div
-              className="fixed z-50 min-w-[120px] rounded-md border border-border bg-popover shadow-md py-1 text-sm"
-              style={{ left: ctxMenu.x, top: ctxMenu.y }}
-            >
-              <button onClick={ctxCut}       className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Cut</button>
-              <button onClick={ctxCopy}      className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Copy</button>
-              <button onClick={ctxPaste}     className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Paste</button>
-              <div className="my-1 border-t border-border" />
-              <button onClick={ctxSelectAll} className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Select All</button>
-            </div>
+            {status === "idle" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
+                <MonitorPlay className="w-10 h-10 text-slate-400" />
+                <p className="text-sm font-medium text-foreground">Browser disconnected</p>
+                {errorMsg ? (
+                  <div className="flex flex-col items-center gap-2 max-w-sm">
+                    <p className="text-xs text-red-500 text-center font-medium">Last error: {errorMsg}</p>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(errorMsg ?? "").catch(() => {})}
+                      className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                    >
+                      Copy error
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Reconnecting in a moment…</p>
+                )}
+                <Button onClick={connect} variant="outline" size="sm">Connect now</Button>
+              </div>
+            )}
+
+            {status === "connecting" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Starting browser…</p>
+              </div>
+            )}
+
+            {status === "error" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
+                <WifiOff className="w-10 h-10 text-red-400" />
+                <p className="text-sm font-medium text-foreground">Browser failed to start</p>
+                <Button onClick={connect} variant="outline" size="sm">Retry</Button>
+              </div>
+            )}
+
+            <canvas
+              ref={canvasRef}
+              width={BROWSER_W}
+              height={BROWSER_H}
+              className="outline-none"
+              style={{
+                display: connected ? "block" : "none",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                width: "auto",
+                height: "auto",
+                aspectRatio: `${BROWSER_W} / ${BROWSER_H}`,
+                cursor: "default",
+                touchAction: "none",
+              }}
+              tabIndex={0}
+              onClick={onCanvasClick}
+              onMouseMove={onCanvasMouseMove}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              onContextMenu={onContextMenu}
+            />
+
+            {/* First-frame overlay — connected but Chrome hasn't rendered anything yet */}
+            {connected && waitingFirstFrame && !isFrozen && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm font-medium text-foreground">Starting browser…</p>
+                <p className="text-xs text-muted-foreground">Loading Instagram, please wait</p>
+              </div>
+            )}
+
+            {/* Frozen overlay — no frame received for 60 s while connected */}
+            {isFrozen && connected && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/80 z-20 backdrop-blur-sm">
+                <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
+                <p className="text-sm font-semibold text-white">Browser appears frozen</p>
+                <p className="text-xs text-slate-400 text-center max-w-xs">The page stopped sending frames. If it just logged in or navigated to a new page, give it more time — Instagram can be slow to load.</p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="gap-1.5 border-slate-500 text-slate-200 hover:bg-slate-700" onClick={() => { lastFrameTimeRef.current = Date.now(); setIsFrozen(false); }}>
+                    Keep Waiting
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={clearSession} className="gap-1.5">
+                    <Trash2 className="w-3.5 h-3.5" /> Clear &amp; Reset
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Right-click context menu */}
+            {ctxMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} />
+                <div
+                  className="fixed z-50 min-w-[120px] rounded-md border border-border bg-popover shadow-md py-1 text-sm"
+                  style={{ left: ctxMenu.x, top: ctxMenu.y }}
+                >
+                  <button onClick={ctxCut}       className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Cut</button>
+                  <button onClick={ctxCopy}      className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Copy</button>
+                  <button onClick={ctxPaste}     className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Paste</button>
+                  <div className="my-1 border-t border-border" />
+                  <button onClick={ctxSelectAll} className="w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground">Select All</button>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

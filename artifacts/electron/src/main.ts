@@ -7,6 +7,7 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { startEbIpcServer, openEbWindow } from "./ebManager";
 
 const execAsync = promisify(exec);
 
@@ -233,7 +234,7 @@ function rotateLogs(logPath: string): void {
   } catch {}
 }
 
-function startServer(port: number, logPath: string): void {
+function startServer(port: number, logPath: string, ebIpcPort = 0): void {
   // Rotate previous log so it survives the next restart (logs → logs.1 → logs.2 → logs.3)
   rotateLogs(logPath);
 
@@ -273,6 +274,7 @@ function startServer(port: number, logPath: string): void {
       NODE_TLS_REJECT_UNAUTHORIZED: "0",
       ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
+      ...(ebIpcPort   ? { EB_IPC_PORT: String(ebIpcPort) } : {}),
     },
   });
 
@@ -718,42 +720,50 @@ function setupBackupHandlers() {
     scheduleAutoBackup(enabled, intervalDays);
   });
 
-  // open-browser-window: opens a standalone Electron window loading the
-  // /browser/:profileId route (StandaloneBrowserPage → BrowserPanel → SSE stream).
-  // Called by older builds whose frontend still uses window.electronAPI.openBrowserWindow().
-  // Also called by current builds as a fallback — whichever path fires first wins.
-  ipcMain.handle("open-browser-window", (_event, { profileId, username }: any) => {
-    if (!serverPort || !profileId) return;
+  // open-browser-window: opens a NATIVE Electron BrowserWindow that loads
+  // Instagram directly — no Puppeteer, no screencasting, no canvas.
+  // This is the Jarvee-style CEF embedded browser approach.
+  ipcMain.handle("open-browser-window", async (_event, { profileId, username }: any) => {
+    if (!profileId) return;
+    try {
+      // Fetch the profile's proxy + UA from the API server so the native window
+      // can be configured correctly (same proxy the mobile API uses).
+      let proxy: { host: string; port: number; user?: string; pass?: string } | undefined;
+      let userAgent: string | undefined;
+      try {
+        const r = await fetch(`http://127.0.0.1:${serverPort}/api/profiles/${profileId}`);
+        if (r.ok) {
+          const p = await r.json();
+          if (p.proxyHost && p.proxyPort) {
+            proxy = {
+              host: p.proxyHost,
+              port: Number(p.proxyPort),
+              user: p.proxyUsername || undefined,
+              pass: p.proxyPassword || undefined,
+            };
+          }
+          userAgent = p.userAgentEmbedded || undefined;
+        }
+      } catch {}
 
-    // Enforce 1 EB window per account — focus the existing window if already open
-    const existing = ebWindows.get(profileId);
-    if (existing && !existing.isDestroyed()) {
-      if (existing.isMinimized()) existing.restore();
-      existing.focus();
-      return;
+      await openEbWindow({
+        profileId,
+        username: username || String(profileId),
+        proxy,
+        userAgent,
+      });
+    } catch (err: any) {
+      console.error(`[EB] open-browser-window error for profile ${profileId}:`, err?.message);
     }
+  });
 
-    const child = new BrowserWindow({
-      width: 1280,
-      height: 800,
-      title: username ? `@${username} — Equinox Browser` : "Equinox Browser",
-      icon: getIconPath(),
-      autoHideMenuBar: true,
-      show: false,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: path.join(__dirname, "preload.js"),
-      },
-    });
-    ebWindows.set(profileId, child);
-    child.on("closed", () => ebWindows.delete(profileId));
-    child.loadURL(`http://127.0.0.1:${serverPort}/browser/${profileId}`);
-    child.once("ready-to-show", () => {
-      child.maximize();
-      child.show();
-      child.focus();
-    });
+  // focus-browser-window: bring an already-open native EB window to the front.
+  ipcMain.handle("focus-browser-window", (_event, profileId: number) => {
+    const e = ebWindows.get(profileId);
+    if (e && !e.isDestroyed()) {
+      if (e.isMinimized()) e.restore();
+      e.focus();
+    }
   });
 }
 
@@ -795,7 +805,18 @@ async function createWindow() {
 
   serverPort = await getServerPort();
 
-  startServer(serverPort, logPath);
+  // Start the native EB IPC server BEFORE the API server so EB_IPC_PORT is
+  // available as an env var when the Node.js server process launches.
+  const cookiesDir = path.join(getUserDataPath(), "browser-data");
+  let ebIpcPort = 0;
+  try {
+    ebIpcPort = await startEbIpcServer(serverPort, cookiesDir, getIconPath());
+    console.log(`[EB] Native IPC server started on port ${ebIpcPort}`);
+  } catch (err) {
+    console.error("[EB] Failed to start IPC server:", err);
+  }
+
+  startServer(serverPort, logPath, ebIpcPort);
 
   try {
     await waitForServer(serverPort);

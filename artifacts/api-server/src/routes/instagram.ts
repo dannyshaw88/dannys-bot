@@ -630,6 +630,73 @@ export async function registerInstagramRoutes(
     res.json({ ok: true, cookieCount: puppeteerCookies.length });
   });
 
+  // ── Native EB cookie push — called by ebManager (Electron) after every
+  // Instagram navigation to hand fresh browser cookies to the API server.
+  // The same flow as a Puppeteer-EB cookie save: build igApiCookies string,
+  // write cookie JSON file, update the DB, then mark account status valid if
+  // a sessionid is present.  Does NOT trigger full re-verify (the Jarvee
+  // two-stage handshake is still handled by the /verify route on demand).
+  app.post("/api/profiles/:id/eb-cookies", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const { cookies } = req.body ?? {};
+    if (!Array.isArray(cookies)) return res.status(400).json({ ok: false, message: "cookies array required" });
+
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+
+    const map: Record<string, string> = {};
+    for (const c of cookies) {
+      if (c.name && c.value != null) map[c.name] = c.value;
+    }
+
+    if (!map["sessionid"]) return res.json({ ok: true, skipped: true });
+
+    // Build canonical igApiCookies string
+    const parts = [
+      `sessionid=${map["sessionid"]}`,
+      map["csrftoken"]  ? `csrftoken=${map["csrftoken"]}`    : "",
+      map["ds_user_id"] ? `ds_user_id=${map["ds_user_id"]}`  : "",
+      map["mid"]        ? `mid=${map["mid"]}`                : "",
+      map["ig_did"]     ? `ig_did=${map["ig_did"]}`          : "",
+    ].filter(Boolean);
+    const igApiCookies = parts.join(";");
+
+    // Write cookie JSON file (same format ebManager already wrote; this is a DB-side sync)
+    const cookiesDir = process.env.DATABASE_PATH
+      ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data")
+      : path.join(process.cwd(), "server", "browser-data");
+    const cookieFilePath2 = path.join(cookiesDir, `cookies-${profileId}.json`);
+    const cookieObjs = cookies.map((c: any) => ({
+      name:     c.name,
+      value:    c.value,
+      domain:   c.domain   ?? ".instagram.com",
+      path:     c.path     ?? "/",
+      expires:  c.expirationDate ?? -1,
+      httpOnly: c.httpOnly ?? false,
+      secure:   c.secure   ?? true,
+      session:  !c.expirationDate,
+      sameSite: "None",
+    }));
+    try {
+      fs.mkdirSync(cookiesDir, { recursive: true });
+      fs.writeFileSync(cookieFilePath2, JSON.stringify(cookieObjs, null, 2), "utf8");
+    } catch {}
+
+    // Sync device IDs from cookies into igDeviceState (DEVICE FINGERPRINT CONTINUITY RULE)
+    const dbUpdate: Record<string, unknown> = { igApiCookies };
+    if (map["ig_did"] || map["mid"]) {
+      try {
+        const existing = JSON.parse((profile.igDeviceState as string | null) ?? "{}");
+        if (map["ig_did"]) existing.igDid = map["ig_did"];
+        if (map["mid"])    existing.mid    = map["mid"];
+        dbUpdate.igDeviceState = JSON.stringify(existing);
+      } catch {}
+    }
+    await storage.updateProfile(profileId, dbUpdate as any);
+    console.log(`[eb-cookies:${profileId}] Synced ${cookies.length} cookies to DB (sessionid present, mid=${map["mid"]?.slice(0,10) ?? "n/a"}…)`);
+    res.json({ ok: true });
+  });
+
   // ── Profile Sync — fetch latest follower/following/posts counts ───────────
   app.post("/api/profiles/:id/sync", async (req, res) => {
     const id = Number(req.params.id);
