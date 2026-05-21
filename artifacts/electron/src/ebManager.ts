@@ -759,6 +759,60 @@ export function startEbIpcServer(
         return send(res, 200, result);
       }
 
+      // ── POST /eb/silent-verify ─────────────────────────────────────────────────
+      // Full EB login in a hidden (never-shown) BrowserWindow.
+      // Used by the Verify button so no EB window pops up during verification.
+      // Opens hidden window → loads existing cookies → auto-login → extract cookies
+      // → destroy window → return { ok, message, cookies }.
+      if (req.method === "POST" && u.pathname === "/eb/silent-verify") {
+        const partition = `persist:eb-${pid}`;
+        const ses = electronSession.fromPartition(partition);
+        if (body.proxy) {
+          await ses.setProxy({ proxyRules: `${body.proxy.host}:${body.proxy.port}` });
+        } else {
+          await ses.setProxy({ proxyRules: "direct://" });
+        }
+        await loadCookiesFromFile(pid, ses);
+
+        const hiddenWin = new BrowserWindow({
+          width: 1280,
+          height: 820,
+          show: false,
+          skipTaskbar: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            partition,
+          },
+        });
+
+        if (body.proxy) {
+          hiddenWin.webContents.on("login", (_ev: any, _rq: any, _auth: any, cb: any) => {
+            cb(body.proxy.user ?? "", body.proxy.pass ?? "");
+          });
+        }
+        if (body.userAgent) {
+          hiddenWin.webContents.setUserAgent(body.userAgent);
+        }
+
+        try {
+          const loginResult = await doAutoLogin(pid, hiddenWin, body.username, body.password, body.twoFAKey ?? "");
+          const c1 = await ses.cookies.get({ domain: ".instagram.com" });
+          const c2 = await ses.cookies.get({ domain: "instagram.com" });
+          const seen = new Set<string>();
+          const cookies = [...c1, ...c2].filter(c => {
+            if (seen.has(c.name)) return false;
+            seen.add(c.name);
+            return true;
+          }).map(c => ({ name: c.name, value: c.value }));
+          hiddenWin.destroy();
+          return send(res, 200, { ...loginResult, cookies });
+        } catch (err: any) {
+          try { hiddenWin.destroy(); } catch {}
+          return send(res, 200, { ok: false, message: err?.message ?? "Silent verify error", cookies: [] });
+        }
+      }
+
       // ── POST /eb/input ────────────────────────────────────────────────────────
       // Accepts the same message shapes BrowserPanel sends via send().
       // Routes: navigate, reload, back, forward, type, keydown, newTab.

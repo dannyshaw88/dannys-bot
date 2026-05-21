@@ -968,6 +968,13 @@ app.whenReady().then(() => {
 
 app.on("before-quit", (event) => {
   isQuitting = true;
+  // Destroy the tray icon immediately so it disappears from the Windows system
+  // tray right away. Without this explicit destroy() the icon lingers after the
+  // process exits and produces an error when the user right-clicks the ghost icon.
+  trayPopup?.destroy();
+  trayPopup = null;
+  tray?.destroy();
+  tray = null;
   if (!serverProc) return;
   // Give the server process a moment to flush and close the SQLite database
   // cleanly before Electron exits. better-sqlite3 is synchronous so the

@@ -4536,6 +4536,32 @@ export async function getSessionPageCookies(profileId: number): Promise<Array<{ 
   } catch { return []; }
 }
 
+// Silent EB verify — runs the full login cycle in a hidden Electron BrowserWindow.
+// Called by the /verify route in Electron mode so Verify never shows a visible EB window.
+export async function electronSilentVerify(opts: {
+  profileId: number;
+  username: string;
+  password: string;
+  twoFAKey: string;
+  proxy?: { host: string; port: number; user?: string; pass?: string };
+  userAgent?: string;
+}): Promise<{ ok: boolean; message: string; cookies: Array<{ name: string; value: string }> }> {
+  if (!IS_ELECTRON_EB) {
+    return { ok: false, message: "electronSilentVerify called outside Electron mode", cookies: [] };
+  }
+  try {
+    const res = await ebIpc("POST", "/eb/silent-verify", opts);
+    return {
+      ok:      res.ok      ?? false,
+      message: res.message ?? "",
+      cookies: Array.isArray(res.cookies) ? res.cookies : [],
+    };
+  } catch (err: any) {
+    log(`[electronSilentVerify:${opts.profileId}] IPC error: ${err?.message}`, "browser");
+    return { ok: false, message: err?.message ?? "Silent verify IPC failed", cookies: [] };
+  }
+}
+
 // Fill a field using real keyboard events so React's controlled inputs update correctly.
 async function fillField(page: Page, selector: string, text: string) {
   await page.click(selector);

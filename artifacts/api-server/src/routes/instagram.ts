@@ -49,6 +49,7 @@ import {
   getEbLiveStats,
   hasActiveWS,
   sendEbWsMessage,
+  electronSilentVerify,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -907,28 +908,52 @@ export async function registerInstagramRoutes(
     }
     const ebUA = effectiveProfile.userAgentEmbedded as string;
 
-    // Step 1: Get or create the browser session
+    // Steps 1-2: Launch EB + auto-login.
+    // Electron mode: hidden silent window — Verify never pops up a visible browser.
+    // Puppeteer mode: open the visible embedded browser session and auto-login.
     let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
-    try {
-      await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
-    } catch (ebErr: any) {
-      verifyInFlight.delete(profileId);
-      await storage.updateProfile(profile.id, { accountStatus: "pending" });
-      return fail(500, `Browser failed to launch: ${ebErr?.message ?? "Unknown error"}`);
+    let loginResult: { ok: boolean; message: string };
+    let _silentCookies: Array<{ name: string; value: string }> | null = null;
+
+    if (process.env.EB_IPC_PORT) {
+      // Electron silent path — no visible window ever opens during verify
+      try {
+        const silentRes = await electronSilentVerify({
+          profileId,
+          username:  profile.username,
+          password:  profile.password!,
+          twoFAKey:  profile.twoFASecretKey || "",
+          proxy:     proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
+          userAgent: ebUA,
+        });
+        loginResult    = { ok: silentRes.ok, message: silentRes.message };
+        _silentCookies = silentRes.cookies;
+      } catch (ebErr: any) {
+        verifyInFlight.delete(profileId);
+        await storage.updateProfile(profile.id, { accountStatus: "pending" });
+        return fail(500, `Browser verify failed: ${ebErr?.message ?? "Unknown error"}`);
+      }
+    } else {
+      // Puppeteer path — opens a visible EB session
+      try {
+        await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
+      } catch (ebErr: any) {
+        verifyInFlight.delete(profileId);
+        await storage.updateProfile(profile.id, { accountStatus: "pending" });
+        return fail(500, `Browser failed to launch: ${ebErr?.message ?? "Unknown error"}`);
+      }
+      try {
+        loginResult = await browserAutoLogin(
+          profileId,
+          profile.username,
+          profile.password!,
+          profile.twoFASecretKey || "",
+        );
+      } catch (loginErr: any) {
+        loginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+      }
     }
 
-    // Step 2: Auto-login via browser (web login)
-    let loginResult: { ok: boolean; message: string };
-    try {
-      loginResult = await browserAutoLogin(
-        profileId,
-        profile.username,
-        profile.password!,
-        profile.twoFASecretKey || "",
-      );
-    } catch (loginErr: any) {
-      loginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
-    }
     // NOTE: verifyInFlight lock is intentionally NOT released here.
     // It covers the full verify flow — including getSessionPageCookies and the mobile
     // API cold-start — to prevent a second concurrent verify from starting a second
@@ -937,7 +962,7 @@ export async function registerInstagramRoutes(
 
     // Step 3: Extract cookies and build result
     if (loginResult.ok) {
-      const rawCookies = await getSessionPageCookies(profileId);
+      const rawCookies = _silentCookies ?? await getSessionPageCookies(profileId);
       const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
       const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
       const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;
@@ -2115,26 +2140,43 @@ export async function registerInstagramRoutes(
         }
         const bulkEbUA = effectiveP.userAgentEmbedded as string;
 
-        // Step 1: Launch EB
-        await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);
-
-        // Step 2: Web login
+        // Steps 1-2: Launch EB + auto-login (silent in Electron, visible in Puppeteer)
         let bulkLoginResult: { ok: boolean; message: string };
-        try {
-          bulkLoginResult = await browserAutoLogin(
-            profile.id,
-            profile.username,
-            profile.password!,
-            profile.twoFASecretKey || "",
-          );
-        } catch (loginErr: any) {
-          bulkLoginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+        let _bulkSilentCookies: Array<{ name: string; value: string }> | null = null;
+
+        if (process.env.EB_IPC_PORT) {
+          try {
+            const silentRes = await electronSilentVerify({
+              profileId: profile.id,
+              username:  profile.username,
+              password:  profile.password!,
+              twoFAKey:  profile.twoFASecretKey || "",
+              proxy:     bulkProxyConfig ? { host: bulkProxyConfig.host, port: bulkProxyConfig.port, user: bulkProxyConfig.username, pass: bulkProxyConfig.password } : undefined,
+              userAgent: bulkEbUA,
+            });
+            bulkLoginResult    = { ok: silentRes.ok, message: silentRes.message };
+            _bulkSilentCookies = silentRes.cookies;
+          } catch (ebErr: any) {
+            bulkLoginResult = { ok: false, message: ebErr?.message ?? "Browser verify failed" };
+          }
+        } else {
+          await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);
+          try {
+            bulkLoginResult = await browserAutoLogin(
+              profile.id,
+              profile.username,
+              profile.password!,
+              profile.twoFASecretKey || "",
+            );
+          } catch (loginErr: any) {
+            bulkLoginResult = { ok: false, message: loginErr?.message ?? "Browser login error" };
+          }
         }
 
         // Step 3: Extract cookies and build result
         let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
         if (bulkLoginResult.ok) {
-          const rawCookies = await getSessionPageCookies(profile.id);
+          const rawCookies = _bulkSilentCookies ?? await getSessionPageCookies(profile.id);
           const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
           const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
           const dsUserId  = rawCookies.find(c => c.name === "ds_user_id")?.value;

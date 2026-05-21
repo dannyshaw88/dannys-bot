@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.436",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Pressing Verify no longer opens a visible browser window. The login and cookie harvest now happen silently in the background — you will never see a browser pop up when verifying an account." },
+      { category: "Fix", text: "The Verify flow now correctly captures session cookies and passes them to the mobile API, so accounts should actually reach Valid status after a successful login." },
+      { category: "Fix", text: "The system tray icon now disappears immediately when closing the app. Previously the ghost icon remained in the taskbar and gave an error on right-click." },
+    ],
+  },
+  {
     version: "1.0.435",
     date: "21 May 2026",
     items: [
