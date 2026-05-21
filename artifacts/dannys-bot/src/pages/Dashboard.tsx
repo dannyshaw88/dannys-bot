@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.430",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Clicking Browser now shows the full control panel in the main app — URL bar, back, forward, refresh, home, login, 2FA code, phone number, email account, email password, upload, and clear session are all back." },
+      { category: "Fix", text: "The native browser window still opens as before, and the Bring to Front button in the toolbar instantly focuses it." },
+      { category: "Improvement", text: "The address bar in the control panel now updates automatically as you navigate in the native browser window." },
+      { category: "Improvement", text: "Toolbar buttons that type text (2FA code, phone number, email) now inject directly into the focused field in the native browser window." },
+    ],
+  },
+  {
     version: "1.0.429",
     date: "21 May 2026",
     items: [

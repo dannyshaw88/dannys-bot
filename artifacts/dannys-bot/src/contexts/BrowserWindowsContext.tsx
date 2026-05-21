@@ -35,16 +35,17 @@ export function BrowserWindowsProvider({ children }: { children: ReactNode }) {
   const topZ = useCallback(() => ++baseZ, []);
 
   const openWindow = useCallback((profileId: number, username: string, userAgent: string) => {
-    // In Electron, delegate to the native IPC so the EB opens as a real OS window
-    // that minimizes to the Windows taskbar. The server-side Puppeteer handles all
-    // user-agent spoofing — nothing about the EB changes, only the window host.
+    // In Electron, ALSO call the native IPC so the EB opens as a real OS-level
+    // BrowserWindow visible in the Windows taskbar.  But we do NOT return early —
+    // we still add the entry to `windows` so the BrowserPanel renders in the main
+    // app with its full toolbar (URL bar, login, 2FA, phone, email, upload, etc.).
+    // The toolbar buttons route commands to the native window via /api/profiles/:id/eb-input.
     const electronAPI = (window as any).electronAPI;
     if (electronAPI?.openBrowserWindow) {
       electronAPI.openBrowserWindow(profileId, username, userAgent);
-      return;
     }
 
-    // Browser/dev fallback: render as in-app floating panel
+    // Always render as in-app floating panel (with full toolbar)
     setWindows(prev => {
       if (prev.find(w => w.profileId === profileId)) {
         baseZ++;

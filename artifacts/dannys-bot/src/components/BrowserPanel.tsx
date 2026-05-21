@@ -178,7 +178,12 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
   // ── Input sender: POST to /api/browser/:id/input ─────────────────────────
   const send = useCallback((msg: object) => {
     if (statusRef.current !== "connected") return;
-    fetch(`/api/browser/${profileId}/input`, {
+    // Electron mode: route commands to the native BrowserWindow via IPC proxy endpoint.
+    // Puppeteer mode: route commands to the CDP session via input endpoint.
+    const url = IS_ELECTRON
+      ? `/api/profiles/${profileId}/eb-input`
+      : `/api/browser/${profileId}/input`;
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg),
@@ -896,6 +901,18 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
           onClick={clearSession} disabled={!connected} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
         </Button>
+        {IS_ELECTRON && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 text-xs gap-1 shrink-0"
+            disabled={!connected}
+            title="Bring the native browser window to the front"
+            onClick={() => (window as any).electronAPI?.focusBrowserWindow?.(profileId)}
+          >
+            <MonitorPlay className="w-3.5 h-3.5" /> Bring to Front
+          </Button>
+        )}
         <div
           title={openedAt ? `Browser open for ${elapsedLabel}` : "Browser not yet connected"}
           className={`h-8 px-2.5 flex items-center rounded-md border text-xs font-mono font-semibold shrink-0 tabular-nums transition-colors ${
@@ -1013,22 +1030,21 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
       {/* Viewport */}
       <div className="flex-1 relative bg-white min-h-0 overflow-hidden flex items-center justify-center">
 
-        {/* ── Electron native EB mode — no canvas, native BrowserWindow is open ── */}
+        {/* ── Electron native EB mode — viewport shows info; toolbar above has all controls ── */}
         {IS_ELECTRON ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-50">
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <MonitorPlay className="w-7 h-7 text-primary" />
-              </div>
-              <p className="text-sm font-semibold text-foreground">Browser running as native window</p>
-              <p className="text-xs text-muted-foreground text-center max-w-xs">
-                Instagram is open in a dedicated native window in your taskbar. Use it like a real browser — no streaming delay.
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 select-none">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <MonitorPlay className="w-6 h-6 text-primary" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-sm font-semibold text-foreground">Native browser window</p>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Instagram is open in a dedicated OS window — no streaming delay, no canvas lag.
+                Use the toolbar above to navigate, login, fill 2FA, type phone numbers, etc.
               </p>
             </div>
-
-            {/* Login status messages from server */}
-            {loginLog.length > 0 && (
-              <div className="w-full max-w-sm rounded-md border border-border bg-background px-3 py-2 space-y-0.5 max-h-32 overflow-y-auto font-mono text-xs">
+            {connected && loginLog.length > 0 && (
+              <div className="w-full max-w-sm rounded-md border border-border bg-background px-3 py-2 space-y-0.5 max-h-28 overflow-y-auto font-mono text-xs">
                 {loginLog.map((e, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <span className="text-muted-foreground shrink-0 select-none">{e.ts}</span>
@@ -1040,21 +1056,6 @@ export function BrowserPanel({ profileId, userAgent, username }: BrowserPanelPro
                 <div ref={logEndRef} />
               </div>
             )}
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => (window as any).electronAPI?.focusBrowserWindow(profileId)}
-              >
-                <MonitorPlay className="w-3.5 h-3.5" />
-                Bring to Front
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" onClick={clearSession}>
-                <Trash2 className="w-3.5 h-3.5" /> Clear Session
-              </Button>
-            </div>
           </div>
         ) : (
           <>

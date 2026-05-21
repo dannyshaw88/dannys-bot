@@ -361,10 +361,16 @@ export async function openEbWindow(opts: {
     ebMap.delete(profileId);
   });
 
-  // Sync cookies on every Instagram navigation
+  // Sync cookies + push URL change on every navigation
   win.webContents.on("did-navigate", async (_e, navUrl) => {
-    if (!navUrl.includes("instagram.com")) return;
     if (navUrl.startsWith("chrome-error://")) return;
+    // Push URL change to BrowserPanel address bar (via server WS relay)
+    fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${profileId}/eb-nav`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ url: navUrl }),
+    }).catch(() => {});
+    if (!navUrl.includes("instagram.com")) return;
     await new Promise(r => setTimeout(r, 600));
     await syncCookies(profileId, ses);
   });
@@ -533,6 +539,66 @@ export function startEbIpcServer(
         }
         const result = await doAutoLogin(pid, e.win, body.username, body.password, body.twoFAKey ?? "");
         return send(res, 200, result);
+      }
+
+      // ── POST /eb/input ────────────────────────────────────────────────────────
+      // Accepts the same message shapes BrowserPanel sends via send().
+      // Routes: navigate, reload, back, forward, type, keydown, newTab.
+      if (req.method === "POST" && u.pathname === "/eb/input") {
+        const e = ebMap.get(pid);
+        if (!e || e.win.isDestroyed()) return send(res, 200, { ok: true, skipped: true });
+        const wc = e.win.webContents;
+        const { type, url, text, key } = body;
+        switch (type) {
+          case "navigate":
+            if (url) wc.loadURL(url).catch(() => {});
+            break;
+          case "reload":
+            wc.reloadIgnoringCache();
+            break;
+          case "back":
+            if (wc.navigationHistory?.canGoBack?.()) wc.navigationHistory.goBack();
+            else if ((wc as any).canGoBack?.()) (wc as any).goBack();
+            break;
+          case "forward":
+            if (wc.navigationHistory?.canGoForward?.()) wc.navigationHistory.goForward();
+            else if ((wc as any).canGoForward?.()) (wc as any).goForward();
+            break;
+          case "type":
+          case "keydown":
+            if (text || key) {
+              // Use executeJavaScript to type into the currently-focused element.
+              // Uses React's native input-value setter so controlled components update.
+              const chars = text ?? key ?? "";
+              const script = `(function(){
+                const el = document.activeElement;
+                if (!el) return;
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                  const setter = Object.getOwnPropertyDescriptor(
+                    Object.getPrototypeOf(el), 'value'
+                  )?.set;
+                  if (setter) setter.call(el, el.value + ${JSON.stringify(chars)});
+                  else el.value = el.value + ${JSON.stringify(chars)};
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                  el.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(chars)}, bubbles: true }));
+                }
+              })()`;
+              await wc.executeJavaScript(script).catch(() => {});
+            }
+            break;
+          case "newTab":
+            // Open instagram home in same window (native tabs not available)
+            wc.loadURL(url ?? "https://www.instagram.com/").catch(() => {});
+            break;
+          default:
+            break;
+        }
+        // Bring the window to focus so the user can see the result
+        if (e.win.isMinimized()) e.win.restore();
+        e.win.focus();
+        return send(res, 200, { ok: true });
       }
 
       // ── POST /eb/wipe ──────────────────────────────────────────────────────────

@@ -5837,3 +5837,13 @@ export function detachSignupWS(ws: WebSocket): void {
     _signupCdp = null;
   }
 }
+
+// ── Electron EB — push arbitrary WS message to the BrowserPanel ──────────────
+// Called by the /api/profiles/:id/eb-nav route so ebManager can push urlChange
+// messages when the native BrowserWindow navigates.
+export function sendEbWsMessage(profileId: number, msg: object): void {
+  if (!IS_ELECTRON_EB) return;
+  const s = electronSessions.get(profileId);
+  if (!s?.ws) return;
+  wsWrite(s.ws, msg);
+}

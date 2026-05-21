@@ -48,6 +48,7 @@ import {
   detachSignupWS,
   getEbLiveStats,
   hasActiveWS,
+  sendEbWsMessage,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -695,6 +696,40 @@ export async function registerInstagramRoutes(
     await storage.updateProfile(profileId, dbUpdate as any);
     console.log(`[eb-cookies:${profileId}] Synced ${cookies.length} cookies to DB (sessionid present, mid=${map["mid"]?.slice(0,10) ?? "n/a"}…)`);
     res.json({ ok: true });
+  });
+
+  // ── EB Nav push (Electron native window → BrowserPanel address bar) ──────
+  // Called by ebManager on did-navigate to push a urlChange WS message so
+  // the address bar in the main app updates when the native window navigates.
+  app.post("/api/profiles/:id/eb-nav", (req, res) => {
+    const profileId = Number(req.params.id);
+    const { url } = req.body ?? {};
+    if (url) sendEbWsMessage(profileId, { type: "urlChange", url });
+    res.json({ ok: true });
+  });
+
+  // ── EB Input proxy (Electron native window mode) ─────────────────────────
+  // Receives the same message objects BrowserPanel's send() emits.
+  // Proxies them to the ebManager IPC HTTP server which controls the native
+  // BrowserWindow (navigate, reload, back, forward, type, newTab).
+  // Only active when EB_IPC_PORT is set (i.e. running inside Electron).
+  app.post("/api/profiles/:id/eb-input", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const ipcPort   = Number(process.env.EB_IPC_PORT ?? 0);
+    if (!ipcPort) return res.json({ ok: true, skipped: true, reason: "not in Electron mode" });
+
+    const body = { ...req.body, profileId };
+    try {
+      const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/input`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(body),
+      });
+      const data = await r.json().catch(() => ({}));
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, error: err?.message ?? "IPC error" });
+    }
   });
 
   // ── Profile Sync — fetch latest follower/following/posts counts ───────────
