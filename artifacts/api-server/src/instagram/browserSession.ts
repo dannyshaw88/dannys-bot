@@ -3100,8 +3100,15 @@ async function startApprovalPolling(profileId: number, page: Page): Promise<void
         break;
       }
 
-      // Still on chrome-error — keep screencast alive and retry immediately.
+      // ── Still on chrome-error — wait before retrying ─────────────────────
+      // update_risky_contactpoint 302s to a new challenge_context token on
+      // every hop. Chrome follows up to 20 hops then throws ERR_TOO_MANY_REDIRECTS
+      // in < 1 second. Without a sleep here the loop hammers at ~3 req/s per
+      // account, causing continuous CPU and network load.
+      // The user needs to act on their phone — polling every 30 s is plenty.
       await startScreencast(profileId).catch(() => {});
+      log(`[challenge:${profileId}] still on chrome-error — waiting 30 s before next check`, "browser");
+      await new Promise<void>(r => setTimeout(r, 30_000));
     }
   } finally {
     const scFinal = sessions.get(profileId);

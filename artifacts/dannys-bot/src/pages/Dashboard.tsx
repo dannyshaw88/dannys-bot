@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.426",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed the CPU spike — accounts with an Instagram security challenge (update_risky_contactpoint) were hammering Chrome with ~3 navigation requests per second each in an infinite redirect loop. The challenge check now waits 30 seconds between attempts instead of retrying immediately. CPU impact from challenge accounts drops from continuous to near-zero." },
+    ],
+  },
+  {
     version: "1.0.425",
     date: "20 May 2026",
     items: [
