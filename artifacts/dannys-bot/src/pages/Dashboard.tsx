@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.439",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "The app process now exits immediately and completely when closing. Previously the process could linger in the background after the tray icon disappeared, causing the updater to report the software was still running." },
+    ],
+  },
+  {
     version: "1.0.438",
     date: "21 May 2026",
     items: [

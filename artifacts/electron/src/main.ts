@@ -988,7 +988,12 @@ app.on("before-quit", (event) => {
   proc.kill("SIGTERM");
   setTimeout(() => {
     try { proc.kill("SIGKILL"); } catch {}
-    app.quit();
+    // Destroy all open BrowserWindows before exit so nothing holds the process
+    // open (the splash window would keep Electron alive if we used app.quit()).
+    // process.exit(0) is unconditional — the updater's process scan won't see
+    // a lingering Equinox.exe after this point.
+    try { BrowserWindow.getAllWindows().forEach(w => { try { w.destroy(); } catch {} }); } catch {}
+    process.exit(0);
   }, 2500);
 });
 
