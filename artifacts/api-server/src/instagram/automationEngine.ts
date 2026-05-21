@@ -1283,6 +1283,19 @@ class AutomationEngine {
       try {
         const result = await client.sendDirectMessage(msg.instagramUserId, msg.messageText, msg.instagramUsername);
         if (result === "blocked") {
+          // Jarvee ABD dismiss — try before suspending the DM tool
+          await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
+          const abdOk = await client.tryDismissABD();
+          if (abdOk) {
+            await storage.updateProfile(profile.id, { accountStatus: "valid" });
+            await storage.incrementStat(profile.id, "abd");
+            console.log(`[engine] @${profile.username}: Contact DM ABD auto-dismissed ✓ — skipping this message, continuing`);
+            this.logAction(profile.id, tool.id, "abd_dismissed", msg.instagramUsername, "", "", "ok", "Automated Behavior warning auto-dismissed");
+            await storage.updateContactPendingMessage(msg.id, { status: "failed" });
+            await sleep(5000);
+            continue; // skip this recipient but don't suspend the tool
+          }
+          await storage.updateProfile(profile.id, { accountStatus: "valid" });
           this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "skipped", "Instagram action-blocked contact DM");
           await storage.updateContactPendingMessage(msg.id, { status: "failed" });
           if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
@@ -1798,6 +1811,18 @@ class AutomationEngine {
           if (mediaId) {
             const liked = await client.likeMedia(mediaId, uname);
             if (liked === "blocked") {
+              // Jarvee ABD dismiss — try before applying suspension
+              await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
+              const abdOk = await client.tryDismissABD();
+              if (abdOk) {
+                await storage.updateProfile(profile.id, { accountStatus: "valid" });
+                await storage.incrementStat(profile.id, "abd");
+                console.log(`[engine] @${profile.username}: Like ABD auto-dismissed ✓ — continuing`);
+                this.logAction(profile.id, tool.id, "abd_dismissed", uname, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed");
+                await sleep(5000);
+                break; // stop liking this user's post but don't suspend
+              }
+              await storage.updateProfile(profile.id, { accountStatus: "valid" });
               this.recordActionBlock(state, profile.id, tool.id, "like", "Like", uname, source.value, source.type);
               break;
             } else if (liked) {
@@ -2187,6 +2212,18 @@ class AutomationEngine {
         const text = this.applySpintax(withTokens);
         const result = await client.sendDirectMessage(user.pk, text, user.username);
         if (result === "blocked") {
+          // Jarvee ABD dismiss — try before logging a hard block
+          await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
+          const abdOk = await client.tryDismissABD();
+          if (abdOk) {
+            await storage.updateProfile(profile.id, { accountStatus: "valid" });
+            await storage.incrementStat(profile.id, "abd");
+            console.log(`[engine] @${profile.username}: DM ABD auto-dismissed ✓ — continuing session`);
+            this.logAction(profile.id, tool.id, "abd_dismissed", user.username, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed");
+            await sleep(5000);
+            continue;
+          }
+          await storage.updateProfile(profile.id, { accountStatus: "valid" });
           this.logAction(profile.id, tool.id, "dm_blocked", user.username, source.value, source.type, "skipped", "Instagram action-blocked DM");
           break;
         }
@@ -3109,6 +3146,22 @@ class AutomationEngine {
         // Only apply suspension for explicit Instagram account-level blocks
         const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong");
         if (isLegitBlock) {
+          // Jarvee "Auto Verify Automatic Behaviour Detected": if the block is a soft
+          // feedback_required ABD warning, try to dismiss it via the challenge endpoint
+          // before applying the 24-hour suspension. If dismiss succeeds the session continues.
+          if (reason.includes("feedback_required") && state.client) {
+            await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
+            const abdOk = await state.client.tryDismissABD();
+            if (abdOk) {
+              await storage.updateProfile(profile.id, { accountStatus: "valid" });
+              await storage.incrementStat(profile.id, "abd");
+              console.log(`[engine] @${profile.username}: ABD auto-dismissed ✓ — continuing session`);
+              this.logAction(profile.id, tool.id, "abd_dismissed", user.username, source.value, source.type, "ok", "Automated Behavior warning auto-dismissed — session continues");
+              await sleep(5000); // brief cooldown after dismiss
+              continue; // don't suspend, keep going with the next candidate
+            }
+            await storage.updateProfile(profile.id, { accountStatus: "valid" });
+          }
           this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, source.value, source.type);
           if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
             const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
@@ -3267,6 +3320,20 @@ class AutomationEngine {
               state.client = null; hitHardLimit = true; break;
             }
             if (reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong")) {
+              // Jarvee ABD dismiss — try to acknowledge soft "Automated Behavior" warnings
+              if (reason.includes("feedback_required") && state.client) {
+                await storage.updateProfile(profile.id, { accountStatus: "automated_behaviour_detected" });
+                const abdOk = await state.client.tryDismissABD();
+                if (abdOk) {
+                  await storage.updateProfile(profile.id, { accountStatus: "valid" });
+                  await storage.incrementStat(profile.id, "abd");
+                  console.log(`[engine] @${profile.username}: ABD auto-dismissed ✓ — continuing session`);
+                  this.logAction(profile.id, tool.id, "abd_dismissed", user.username, rescrapeSource.value, rescrapeSource.type, "ok", "Automated Behavior warning auto-dismissed — session continues");
+                  await sleep(5000);
+                  continue;
+                }
+                await storage.updateProfile(profile.id, { accountStatus: "valid" });
+              }
               this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, rescrapeSource.value, rescrapeSource.type);
               hitHardLimit = true; break;
             }

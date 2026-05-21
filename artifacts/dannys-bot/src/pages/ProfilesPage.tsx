@@ -65,6 +65,7 @@ const STATUS_META: Record<AccountStatus, {
   email_connection:     { label: "Email Connect",        icon: Mail,        pill: "bg-orange-50 text-orange-700 border-orange-200" },
   upload:               { label: "Upload",               icon: Upload,      pill: "bg-blue-50   text-blue-700   border-blue-200"   },
   review:               { label: "Review",               icon: Eye,         pill: "bg-slate-100 text-slate-600  border-slate-200"  },
+  automated_behaviour_detected: { label: "Auto Behav.", icon: ShieldAlert, pill: "bg-orange-50 text-orange-700 border-orange-200" },
 };
 
 function AccountStatusBadge({ status, statusMessage }: { status: string; statusMessage?: string | null }) {
@@ -81,11 +82,11 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, actions: 176, battery: 90, connection: 80, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, actions: true, battery: false, connection: false, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "actions", "battery", "connection", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, actions: true, battery: false, connection: false, abd: true, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "actions", "battery", "connection", "abd", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", active: "Active", actions: "Actions", battery: "Battery", connection: "Mbps", ip: "IP:Port",
+  account: "Account", status: "Status", active: "Active", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -182,6 +183,20 @@ export function ProfilesPage() {
       return s ? JSON.parse(s) : DEFAULT_PROFILES_COL_ORDER;
     } catch { return DEFAULT_PROFILES_COL_ORDER; }
   });
+
+  // ── Daily ABD (Automated Behaviour Detected) dismissal counts ─────────────
+  const [abdDailyCount, setAbdDailyCount] = useState<Record<number, number>>({});
+  useEffect(() => {
+    const fetchAbd = async () => {
+      try {
+        const r = await fetch("/api/stats/abd-daily");
+        if (r.ok) setAbdDailyCount(await r.json());
+      } catch { /* ignore */ }
+    };
+    fetchAbd();
+    const t = setInterval(fetchAbd, 30_000);
+    return () => clearInterval(t);
+  }, []);
   const moveProfCol = (key: keyof typeof DEFAULT_PROFILES_COL_WIDTHS, dir: -1 | 1) => {
     const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
     const idx = reorderable.indexOf(key as any);
@@ -920,6 +935,7 @@ export function ProfilesPage() {
               if (key === "actions") return <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>;
               if (key === "battery") return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0 text-left">Battery</div>;
               if (key === "connection") return <div key={key} style={{ width: profColWidths.connection }} className="shrink-0 text-left">Mbps</div>;
+              if (key === "abd") return <div key={key} style={{ width: profColWidths.abd }} className="shrink-0 text-left">ABD</div>;
               return null;
             })}
             <div className="flex-1" />
@@ -1072,6 +1088,16 @@ export function ProfilesPage() {
                         <div key={key} style={{ width: profColWidths.connection }} className="shrink-0 flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
                           <Wifi className="w-3 h-3 shrink-0 text-blue-400" />
                           <span className="text-[10px] font-mono font-semibold text-blue-600">{mbps}</span>
+                        </div>
+                      );
+                    }
+                    if (key === "abd") {
+                      const count = abdDailyCount[profile.id] ?? 0;
+                      return (
+                        <div key={key} style={{ width: profColWidths.abd }} className="shrink-0 flex items-center justify-center" title={count > 0 ? `${count} automated behaviour warning${count === 1 ? "" : "s"} auto-dismissed today` : "No ABD flags today"}>
+                          {count > 0
+                            ? <span className="text-[11px] font-bold text-orange-600">{count}</span>
+                            : <span className="text-[10px] text-muted-foreground/30">—</span>}
                         </div>
                       );
                     }

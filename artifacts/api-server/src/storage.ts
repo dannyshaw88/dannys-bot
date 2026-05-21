@@ -49,6 +49,7 @@ export interface IStorage {
   // Stats
   getStatsByProfile(profileId: number): Promise<any[]>;
   incrementStat(profileId: number, toolType: string): Promise<void>;
+  getDailyAbdStats(): Promise<Record<number, number>>;
 
   // Sources
   getSourcesByTool(toolId: number): Promise<Source[]>;
@@ -378,6 +379,14 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.insert(stats).values({ profileId, toolType, count: 1, date: 'lifetime' });
     }
+  }
+
+  async getDailyAbdStats(): Promise<Record<number, number>> {
+    const today = new Date().toISOString().split('T')[0];
+    const rows = await db.select().from(stats).where(and(eq(stats.toolType, 'abd'), eq(stats.date, today)));
+    const result: Record<number, number> = {};
+    for (const row of rows) result[row.profileId] = row.count;
+    return result;
   }
 
   async getFollowedUsersByProfile(profileId: number, limit: number = 10000): Promise<FollowedUser[]> {

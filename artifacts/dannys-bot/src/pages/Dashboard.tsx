@@ -32,6 +32,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }
   dm:                      { label: "DM",              cls: "text-purple-700",    icon: "✉" },
   dm_blocked:              { label: "DM Block",        cls: "text-fuchsia-700",   icon: "⊘" },
   contact_dm_blocked:      { label: "Contact Block",   cls: "text-indigo-700",    icon: "⊘" },
+  abd_dismissed:           { label: "ABD Cleared",     cls: "text-teal-700",      icon: "✓" },
   no_sources:              { label: "No Sources",      cls: "text-slate-600",     icon: "⚠" },
   logged_out:              { label: "Logged Out",      cls: "text-red-700",       icon: "⚠" },
   account_imported:        { label: "EQX Import",      cls: "text-blue-700",      icon: "↓" },
@@ -54,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.446",
+    date: "21 May 2026",
+    items: [
+      { category: "New", text: "When Instagram fires an Automated Behaviour Detected warning during automation, the app now briefly shows a new account status — Auto Behav. — while it automatically dismisses the warning via the Instagram API. If the dismissal succeeds, automation continues without applying a suspension. Each successful dismissal is counted and shown in a new ABD column on the accounts page." },
+      { category: "New", text: "New ABD column on the accounts page shows how many Automated Behaviour warnings have been auto-dismissed for each account today. The column label in the settings dialog is Automatic Behaviour Detected." },
+    ],
+  },
   {
     version: "1.0.445",
     date: "21 May 2026",

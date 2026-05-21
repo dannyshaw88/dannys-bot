@@ -1629,6 +1629,11 @@ export async function registerInstagramRoutes(
     res.json(data);
   });
 
+  app.get("/api/stats/abd-daily", async (_req, res) => {
+    const data = await storage.getDailyAbdStats();
+    res.json(data);
+  });
+
   // Browser session endpoints
   app.post("/api/browser/:profileId/start", async (req, res) => {
     const profileId = Number(req.params.profileId);

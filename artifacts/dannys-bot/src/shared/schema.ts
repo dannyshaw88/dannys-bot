@@ -33,6 +33,7 @@ export const ACCOUNT_STATUSES = [
   'email_connection',
   'upload',
   'review',
+  'automated_behaviour_detected',
 ] as const;
 
 export type AccountStatus = typeof ACCOUNT_STATUSES[number];
