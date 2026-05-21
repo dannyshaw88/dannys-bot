@@ -371,8 +371,10 @@ export async function openEbWindow(opts: {
   username:  string;
   proxy?:    { host: string; port: number; user?: string; pass?: string };
   userAgent?: string;
+  password?: string;
+  twoFAKey?: string;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent } = opts;
+  const { profileId, username, proxy, userAgent, password, twoFAKey } = opts;
 
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
@@ -520,6 +522,31 @@ export async function openEbWindow(opts: {
       ? "https://www.instagram.com/"
       : "https://www.instagram.com/accounts/login/",
   ).catch(() => {});
+
+  // ── Auto-login ────────────────────────────────────────────────────────────
+  // If credentials are provided and the session has no active sessionid, wait
+  // for the initial page load then automatically fill and submit the login form.
+  // Runs in the background — openEbWindow returns immediately.
+  if (password) {
+    (async () => {
+      // Wait for the initial page to finish loading (max 20 s)
+      await new Promise<void>(r => {
+        const t = setTimeout(r, 20_000);
+        win.webContents.once("did-finish-load", () => { clearTimeout(t); r(); });
+      });
+      if (win.isDestroyed()) return;
+      // Skip if a sessionid already landed in the session (e.g. from loaded cookies)
+      const ses2 = electronSession.fromPartition(partition);
+      const hasSid = await ses2.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+      if (hasSid.length > 0) {
+        console.log(`[ebManager] @${username} — sessionid present, skipping auto-login`);
+        return;
+      }
+      console.log(`[ebManager] @${username} — no sessionid, starting auto-login`);
+      const res = await doAutoLogin(profileId, win, username, password, twoFAKey ?? "");
+      console.log(`[ebManager] @${username} auto-login: ok=${res.ok} — ${res.message}`);
+    })().catch(err => console.error(`[ebManager] @${username} auto-login error:`, err?.message));
+  }
 }
 
 // ── Toolbar IPC handler ────────────────────────────────────────────────────────
@@ -634,8 +661,16 @@ function setupToolbarIpc(): void {
           },
         });
         const tabUsr = entry?.username ?? String(foundPid);
+        tabWin.webContents.on("dom-ready", () => {
+          tabWin.webContents.executeJavaScript(buildToolbarJs(tabUsr))
+            .catch((e: any) => console.error(`[ebManager] tab toolbar dom-ready failed:`, e?.message));
+        });
         tabWin.webContents.on("did-finish-load", () => {
-          tabWin.webContents.executeJavaScript(buildToolbarJs(tabUsr)).catch(() => {});
+          tabWin.webContents.executeJavaScript(buildToolbarJs(tabUsr))
+            .catch((e: any) => console.error(`[ebManager] tab toolbar did-finish-load failed:`, e?.message));
+        });
+        tabWin.webContents.on("did-fail-load", (_e: any, code: number, desc: string) => {
+          console.error(`[ebManager] tab did-fail-load: code=${code} desc=${desc}`);
         });
         tabWin.webContents.on("page-title-updated", (e) => {
           e.preventDefault();
@@ -785,6 +820,8 @@ export function startEbIpcServer(
         await openEbWindow({
           profileId: pid,
           username:  body.username  ?? String(pid),
+          password:  body.password,
+          twoFAKey:  body.twoFAKey,
           proxy:     body.proxy,
           userAgent: body.userAgent,
         });

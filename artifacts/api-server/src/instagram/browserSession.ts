@@ -1829,7 +1829,9 @@ export async function getOrCreateSession(
     const profile = await storage.getProfile(profileId).catch(() => null);
     await ebIpc("POST", "/eb/open", {
       profileId,
-      username:  profile?.username ?? String(profileId),
+      username:  profile?.username  ?? String(profileId),
+      password:  profile?.password  ?? "",
+      twoFAKey:  profile?.twoFASecretKey ?? "",
       proxy:     proxy ? { host: proxy.host, port: proxy.port, user: proxy.username, pass: proxy.password } : undefined,
       userAgent: userAgent || undefined,
     }).catch(err => log(`[getOrCreate:${profileId}] EB open failed: ${err?.message}`, "browser"));

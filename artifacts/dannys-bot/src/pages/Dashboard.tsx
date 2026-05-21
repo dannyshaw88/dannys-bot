@@ -55,6 +55,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.442",
+    date: "21 May 2026",
+    items: [
+      { category: "New", text: "Embedded browser now auto-accepts the Instagram cookies consent dialog, automatically fills in your username and password, clicks login, and if 2FA is required it fills in the code and submits — all without you having to touch anything." },
+      { category: "Fix", text: "After entering a 2FA code in the embedded browser the page went white and all toolbar buttons disappeared. The toolbar is now injected earlier in the page lifecycle (at DOM-ready, not just full load) so it reappears immediately after each navigation." },
+      { category: "Fix", text: "New browser tab windows (opened via the toolbar) now get the toolbar injected at DOM-ready as well as on full load, matching the behaviour of the main embedded browser window." },
+    ],
+  },
+  {
     version: "1.0.441",
     date: "21 May 2026",
     items: [
