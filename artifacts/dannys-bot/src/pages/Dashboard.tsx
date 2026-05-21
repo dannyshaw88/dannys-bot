@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.445",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "After 2FA, Instagram's redirect chain can exceed Chrome's redirect limit and produce a blank error page. The app now detects this automatically and navigates directly to instagram.com — bypassing the broken redirect — so you land on the home feed instead of a white screen. Up to 3 auto-recovery attempts are made before giving up." },
+      { category: "Fix", text: "Chrome load errors on Instagram pages (ERR_TOO_MANY_REDIRECTS, proxy tunnel failures, etc.) are now logged with their exact error code so problems can be identified." },
+    ],
+  },
+  {
     version: "1.0.444",
     date: "21 May 2026",
     items: [

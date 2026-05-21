@@ -462,9 +462,38 @@ export async function openEbWindow(opts: {
   // Store in map
   ebMap.set(profileId, { win, username, proxy });
 
+  // Chrome-error recovery: auto-navigate back to Instagram when the page hits
+  // chrome-error://. This handles ERR_TOO_MANY_REDIRECTS (Instagram's post-2FA
+  // redirect chain) and similar transient errors. The session cookie is already
+  // set by the time 2FA completes, so navigating directly to instagram.com/
+  // bypasses the broken redirect chain and lands on the home page.
+  // Allow up to 3 consecutive auto-recoveries before giving up.
+  let chromeErrorRecoveryCount = 0;
+
   // Sync cookies + push URL change on every navigation
   win.webContents.on("did-navigate", async (_e, navUrl) => {
-    if (navUrl.startsWith("chrome-error://")) return;
+    if (navUrl.startsWith("chrome-error://")) {
+      // Always push the error URL to the address bar relay so the user sees it
+      fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${profileId}/eb-nav`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ url: navUrl }),
+      }).catch(() => {});
+      chromeErrorRecoveryCount++;
+      console.warn(`[ebManager] chrome-error for @${username} (#${chromeErrorRecoveryCount})`);
+      if (chromeErrorRecoveryCount <= 3) {
+        // Wait 2 s then navigate directly to Instagram, bypassing the broken chain
+        await new Promise(r => setTimeout(r, 2000));
+        if (!win.isDestroyed()) {
+          const hasCk = fs.existsSync(cookieFilePath(profileId));
+          win.webContents.loadURL(
+            hasCk ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/",
+          ).catch(() => {});
+        }
+      }
+      return;
+    }
+    chromeErrorRecoveryCount = 0; // Reset counter on any successful navigation
     // Push URL change to BrowserPanel address bar (via server WS relay)
     fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${profileId}/eb-nav`, {
       method:  "POST",
@@ -507,6 +536,14 @@ export async function openEbWindow(opts: {
   win.webContents.on("did-finish-load", () => injectToolbarWithRetry());
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
+    // Push the error to the server log AND to the address bar relay so it's visible
+    if (url && url.includes("instagram.com")) {
+      fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${profileId}/eb-fail`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ code, desc, url }),
+      }).catch(() => {});
+    }
   });
 
   // Prevent Instagram's page <title> from overriding the window title.

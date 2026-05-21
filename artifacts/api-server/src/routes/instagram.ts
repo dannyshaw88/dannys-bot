@@ -709,6 +709,17 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── EB load-failure reporting (Electron native window mode) ──────────────
+  // Electron's did-fail-load fires when Chrome hits ERR_TOO_MANY_REDIRECTS,
+  // ERR_TUNNEL_CONNECTION_FAILED, proxy errors, etc. This logs the error code
+  // so it appears in server logs for debugging.
+  app.post("/api/profiles/:id/eb-fail", (req, res) => {
+    const profileId = Number(req.params.id);
+    const { code, desc, url } = req.body ?? {};
+    console.error(`[EB-FAIL] profile=${profileId} code=${code} desc=${desc} url=${url}`);
+    res.json({ ok: true });
+  });
+
   // ── EB Input proxy (Electron native window mode) ─────────────────────────
   // Receives the same message objects BrowserPanel's send() emits.
   // Proxies them to the ebManager IPC HTTP server which controls the native
