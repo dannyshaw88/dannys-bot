@@ -534,6 +534,19 @@ export async function openEbWindow(opts: {
     ).catch(() => {});
   });
 
+  // ── Main-process toolbar heartbeat ────────────────────────────────────────
+  // Runs every 4 s from Node.js — completely independent of renderer events.
+  // This is the final safety net: even if every renderer-side event fires
+  // during a transitional state (post-2FA redirect chain, SPA re-renders,
+  // chrome-error pages), the toolbar will reappear within 4 s.
+  // buildToolbarJs starts with: if(document.getElementById('__eq_bar__'))return;
+  // so when the toolbar already exists this is effectively a no-op.
+  const toolbarHeartbeat = setInterval(() => {
+    if (win.isDestroyed()) { clearInterval(toolbarHeartbeat); return; }
+    win.webContents.executeJavaScript(buildToolbarJs(username)).catch(() => {});
+  }, 4000);
+  win.on("closed", () => clearInterval(toolbarHeartbeat));
+
   // Navigate to Instagram
   const hasCookies = fs.existsSync(cookieFilePath(profileId));
   win.webContents.loadURL(

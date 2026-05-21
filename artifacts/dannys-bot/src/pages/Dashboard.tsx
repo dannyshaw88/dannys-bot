@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.444",
+    date: "21 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser toolbar now has a guaranteed recovery mechanism running entirely outside the browser page. Every 4 seconds the app checks whether the toolbar is present and re-adds it if not — this runs in the background independently of any page events, so even if Instagram's post-2FA navigation sequence prevents the normal injection from working, the toolbar will always reappear within 4 seconds." },
+    ],
+  },
+  {
     version: "1.0.443",
     date: "21 May 2026",
     items: [
