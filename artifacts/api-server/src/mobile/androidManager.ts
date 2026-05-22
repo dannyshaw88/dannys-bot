@@ -634,20 +634,17 @@ const DRONY_ACTIVITY = "org.sandrob.drony/.activity.MainActivity";
 function _bringBlueStacksToFront(): void {
   if (process.platform !== "win32") return;
   try {
-    // PowerShell: find the BlueStacks process (HD-Player on modern BlueStacks) and foreground it
-    const ps = [
-      "$p = Get-Process -Name 'HD-Player','BlueStacks','BlueStacks App Player' -ErrorAction SilentlyContinue",
-      "      | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
-      "if ($p) {",
-      "  $sig = '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int n);",
-      "          [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);'",
-      "  Add-Type -MemberDefinition $sig -Name Win32FG -Namespace W",
-      "  [W.Win32FG]::ShowWindow($p.MainWindowHandle, 9)   # SW_RESTORE",
-      "  [W.Win32FG]::SetForegroundWindow($p.MainWindowHandle)",
-      "}",
-    ].join(" ");
+    // Single clean PowerShell line — finds HD-Player (BlueStacks 5) and brings it to front
+    const ps = `$p=Get-Process -Name HD-Player,BlueStacks -EA 0|Where-Object{$_.MainWindowHandle -ne 0}|Select -First 1;if($p){Add-Type -Name U32 -Namespace W -MemberDefinition '[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int n);[DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr h);';[W.U32]::ShowWindow($p.MainWindowHandle,9);[W.U32]::SetForegroundWindow($p.MainWindowHandle)}`;
     spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], { encoding: "utf8", timeout: 5000 });
   } catch { /* best-effort — never fail the whole automation */ }
+}
+
+/** Close BlueStacks on Windows (best-effort). */
+export function closeBlueStacks(): void {
+  if (process.platform !== "win32") return;
+  try { spawnSync("taskkill", ["/F", "/IM", "HD-Player.exe"], { encoding: "utf8", timeout: 6000 }); } catch { /**/ }
+  try { spawnSync("taskkill", ["/F", "/IM", "BlueStacks.exe"], { encoding: "utf8", timeout: 3000 }); } catch { /**/ }
 }
 
 function _sleep(ms: number): Promise<void> {
@@ -961,6 +958,82 @@ export async function configureDrony(
     return { ok: true, steps };
   } catch (e: any) {
     return { ok: false, steps, error: e?.message ?? "Automation failed" };
+  }
+}
+
+/**
+ * Open Instagram, navigate to the email sign-up screen, and pre-fill the email.
+ * The user completes the rest (OTP, username, password) manually.
+ */
+export async function instagramSignup(serial: string, email: string): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  try {
+    _bringBlueStacksToFront();
+    await _sleep(400);
+    steps.push("BlueStacks brought to front");
+
+    // Launch Instagram
+    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-a", "android.intent.action.MAIN",
+      "-n", "com.instagram.android/.activity.MainTabActivity"], { encoding: "utf8", timeout: 8000 });
+    await _sleep(4500);
+    steps.push("Instagram launched");
+
+    let xml = await _uiDump(adb, serial);
+    if (!xml || xml.length < 200) { await _sleep(3000); xml = await _uiDump(adb, serial); }
+
+    // Tap "Get started" / "Create new account" on the welcome screen
+    const getStartedPos =
+      _findElem(xml, "Get started", "GET STARTED", "Create new account", "Sign up for an account") ||
+      _findByResId(xml, ":id/get_started_button", ":id/sign_up_button");
+    if (getStartedPos) {
+      _adbTap(adb, serial, getStartedPos.x, getStartedPos.y);
+      steps.push("Tapped Get Started");
+      await _sleep(2500);
+      xml = await _uiDump(adb, serial);
+    } else {
+      steps.push("⚠ Get Started button not found — Instagram may already be on a signup screen");
+    }
+
+    // Some versions show a "Sign up with email or phone" link; tap it
+    const emailLinkPos =
+      _findElem(xml, "Sign up with email or phone number", "Use email or phone", "Sign up with email", "Email") ||
+      _findByResId(xml, ":id/email_phone_field", ":id/signup_with_email_button");
+    if (emailLinkPos) {
+      _adbTap(adb, serial, emailLinkPos.x, emailLinkPos.y);
+      steps.push("Selected email signup");
+      await _sleep(2000);
+      xml = await _uiDump(adb, serial);
+    }
+
+    // Fill the email / phone field (first EditText on screen)
+    const emailFieldPos =
+      _findByResId(xml, ":id/email_field", ":id/registration_email_field", ":id/phone_or_email") ||
+      _findElem(xml, "Email address", "Email or phone number", "Phone number, username or email") ||
+      _findEditTextN(xml, 0);
+    if (emailFieldPos) {
+      await _tapField(adb, serial, emailFieldPos, email);
+      steps.push(`Email filled: ${email}`);
+      // Tap Next / Continue
+      await _sleep(500);
+      xml = await _uiDump(adb, serial);
+      const nextPos =
+        _findElem(xml, "Next", "NEXT", "Continue", "CONTINUE") ||
+        _findByResId(xml, ":id/next_button", ":id/button_continue");
+      if (nextPos) {
+        _adbTap(adb, serial, nextPos.x, nextPos.y);
+        steps.push("Tapped Next — complete signup manually (OTP, username, password)");
+      } else {
+        steps.push("Email filled — tap Next manually, then complete the remaining steps");
+      }
+    } else {
+      steps.push("⚠ Email field not found — Instagram signup screen may differ. Open Mirror and complete signup manually.");
+    }
+
+    return { ok: true, steps };
+  } catch (e: any) {
+    return { ok: false, steps, error: e?.message ?? "Failed" };
   }
 }
 

@@ -87,7 +87,7 @@ const COLORS = [
 
 // ─── Proxy selector ────────────────────────────────────────────────────────────
 
-function DronySection({ serial, savedProxyId }: { serial: string; savedProxyId?: number | null }) {
+function DronySection({ serial, savedProxyId, onAutoSelect }: { serial: string; savedProxyId?: number | null; onAutoSelect?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [dronyApk, setDronyApk] = useState("");
@@ -111,8 +111,12 @@ function DronySection({ serial, savedProxyId }: { serial: string; savedProxyId?:
     onSuccess: (r) => {
       setConfigResult(r);
       qc.invalidateQueries({ queryKey: ["drony-status", serial] });
-      if (r.ok) toast({ title: "Drony configured & VPN activated", description: "All BlueStacks traffic now routes through the proxy." });
-      else toast({ title: "Configuration had issues", description: r.error ?? "Check the steps below", variant: "destructive" });
+      if (r.ok) {
+        toast({ title: "Drony configured & VPN activated", description: "All BlueStacks traffic now routes through the proxy." });
+        onAutoSelect?.();
+      } else {
+        toast({ title: "Configuration had issues", description: r.error ?? "Check the steps below", variant: "destructive" });
+      }
     },
     onError: (e: any) => toast({ title: "Configure failed", description: e?.message, variant: "destructive" }),
   });
@@ -215,7 +219,7 @@ function DronySection({ serial, savedProxyId }: { serial: string; savedProxyId?:
   );
 }
 
-function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null }) {
+function ProxySelector({ serial, proxies, savedProxyId, onAutoSelect }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null; onAutoSelect?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [ipResult, setIpResult] = useState<{ ip?: string; error?: string } | null>(null);
@@ -281,17 +285,17 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
       )}
 
       {/* Drony VPN section — routes ALL traffic through the proxy */}
-      <DronySection serial={serial} savedProxyId={savedProxyId} />
+      <DronySection serial={serial} savedProxyId={savedProxyId} onAutoSelect={onAutoSelect} />
     </div>
   );
 }
 
 // ─── Device card ───────────────────────────────────────────────────────────────
 
-function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, onDisconnect }: {
+function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, onDisconnect, onAutoSelect }: {
   device: DeviceInfo; idx: number; selected: boolean;
   proxies: ProxyEntry[]; savedProxyId?: number | null;
-  onSelect: () => void; onDisconnect: () => Promise<void>;
+  onSelect: () => void; onDisconnect: () => Promise<void>; onAutoSelect?: () => void;
 }) {
   const { toast } = useToast();
   const id = useAndroidId(device.serial);
@@ -357,7 +361,7 @@ function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, on
           </div>
         )}
         <div onClick={e => e.stopPropagation()}>
-          <ProxySelector serial={device.serial} proxies={proxies} savedProxyId={savedProxyId} />
+          <ProxySelector serial={device.serial} proxies={proxies} savedProxyId={savedProxyId} onAutoSelect={onAutoSelect} />
         </div>
       </div>
     </div>
@@ -483,7 +487,7 @@ function DevicePropsPanel({ serial }: { serial: string }) {
 
 // ─── Device detail panel ───────────────────────────────────────────────────────
 
-function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => void }) {
+function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose: () => void; onReset?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const serial = device.serial;
@@ -546,9 +550,21 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
       qc.invalidateQueries({ queryKey: ["android-id", serial] });
       qc.invalidateQueries({ queryKey: ["mobile-config"] });
       qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
-      toast({ title: "Device reset", description: `Instagram uninstalled. New device ID: ${d.newAndroidId}. Now change the device profile in BlueStacks → Settings → Phone, then save the next account.` });
+      qc.invalidateQueries({ queryKey: ["mobile-devices"] });
+      toast({ title: "Reset complete", description: `Drony deactivated, Instagram uninstalled, new device ID set (${d.newAndroidId}). BlueStacks has been closed — reopen it, change the device profile in Settings → Phone, then start the next account.` });
+      onReset?.();
     },
     onError: (e: any) => toast({ title: "Reset failed", description: e?.message, variant: "destructive" }),
+  });
+  const [signupResult, setSignupResult] = useState<{ ok: boolean; steps: string[]; error?: string } | null>(null);
+  const signupMut = useMutation({
+    mutationFn: () => api<{ ok: boolean; steps: string[]; error?: string }>("POST", `/api/mobile/devices/${serial}/instagram/signup`, { email }),
+    onSuccess: (r) => {
+      setSignupResult(r);
+      if (r.ok) toast({ title: "Instagram signup started", description: "Email filled — complete the remaining steps (name, OTP, password) in BlueStacks." });
+      else toast({ title: "Signup automation had issues", description: r.error ?? "Check the steps below", variant: "destructive" });
+    },
+    onError: (e: any) => toast({ title: "Signup failed", description: e?.message, variant: "destructive" }),
   });
   const saveMut    = useMutation({
     mutationFn: async () => {
@@ -641,6 +657,39 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
                     </div>
                   </div>
                 )}
+                {/* Sign up button — reads email from the credentials form */}
+                <div className="space-y-1 mb-2">
+                  <Button
+                    size="sm"
+                    className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white border-0"
+                    disabled={signupMut.isPending || !email}
+                    title={email ? `Open Instagram and start signup with ${email}` : "Enter an email in the Save Account Credentials section below first"}
+                    onClick={() => { setSignupResult(null); signupMut.mutate(); }}
+                  >
+                    {signupMut.isPending
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Instagram…</>
+                      : <><Play className="w-3.5 h-3.5" />Open Instagram &amp; Sign Up</>}
+                  </Button>
+                  {!email && <p className="text-[9px] text-muted-foreground/60 text-center">Fill in an email below first</p>}
+                  {signupMut.isPending && (
+                    <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
+                      BlueStacks will come to the front — tapping Get Started and filling your email automatically…
+                    </p>
+                  )}
+                  {signupResult && (
+                    <details className="text-[10px]" open={!signupResult.ok}>
+                      <summary className="cursor-pointer text-muted-foreground/70 hover:text-muted-foreground select-none">
+                        {signupResult.ok ? "✓" : "⚠"} Signup log ({signupResult.steps.length} steps)
+                      </summary>
+                      <ul className="mt-1 space-y-0.5 pl-2 border-l border-border/40">
+                        {signupResult.steps.map((s, i) => (
+                          <li key={i} className={`text-[9px] leading-tight ${s.startsWith("⚠") ? "text-amber-600" : "text-muted-foreground"}`}>{s}</li>
+                        ))}
+                        {signupResult.error && <li className="text-[9px] text-destructive leading-tight">{signupResult.error}</li>}
+                      </ul>
+                    </details>
+                  )}
+                </div>
               </>
             ) : (
               <div className="space-y-2 mb-2">
@@ -1042,11 +1091,12 @@ export function MobilePage() {
                     proxies={proxies}
                     savedProxyId={configs[dev.serial]?.proxyId}
                     onSelect={() => { setSelectedSerial(selectedSerial === dev.serial ? null : dev.serial); setShowAddForm(false); }}
-                    onDisconnect={() => disconnectMut.mutateAsync(dev.serial)}
+                    onDisconnect={() => disconnectMut.mutateAsync(dev.serial).then(() => { /* void */ })}
+                    onAutoSelect={() => { setSelectedSerial(dev.serial); setShowAddForm(false); }}
                   />
                 ))}
               </div>
-              {selected && <DevicePanel device={selected} onClose={() => setSelectedSerial(null)} />}
+              {selected && <DevicePanel device={selected} onClose={() => setSelectedSerial(null)} onReset={() => setSelectedSerial(null)} />}
             </div>
           ) : (
             <SetupGuide onConnected={() => devicesQ.refetch()} />

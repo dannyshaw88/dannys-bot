@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { spawnSync } from "child_process";
 import { z } from "zod/v4";
 import fs from "fs";
 import path from "path";
@@ -289,6 +290,17 @@ export function registerMobileRoutes(app: Express) {
     }
   });
 
+  const signupSchema = z.object({ email: z.string().email() });
+  app.post("/api/mobile/devices/:serial/instagram/signup", async (req: Request, res: Response) => {
+    try {
+      const { email } = signupSchema.parse(req.body);
+      const result = await android.instagramSignup(p(req, "serial"), email);
+      res.json(result);
+    } catch (e: any) {
+      res.status(400).json({ ok: false, steps: [], error: e?.message ?? "Failed" });
+    }
+  });
+
   app.get("/api/mobile/devices/:serial/instagram-installed", async (req: Request, res: Response) => {
     try {
       const installed = await android.isPackageInstalled(p(req, "serial"), "com.instagram.android");
@@ -443,6 +455,20 @@ export function registerMobileRoutes(app: Express) {
         cfg[serial] = { ...cfg[serial], proxyId: null };
         saveInstanceConfigs(cfg);
       }
+
+      // 5. Deactivate Drony VPN (best-effort — don't fail reset if Drony not installed)
+      try { await android.deactivateDrony(serial); } catch { /* non-fatal */ }
+
+      // 6. Disconnect the device from ADB so it disappears from the device list
+      try {
+        const tools = android.detectToolset();
+        if (tools.adb.path) {
+          spawnSync(tools.adb.path, ["disconnect", serial], { encoding: "utf8", timeout: 5000 });
+        }
+      } catch { /* non-fatal */ }
+
+      // 7. Close BlueStacks on Windows so the next account starts fresh
+      android.closeBlueStacks();
 
       logger.info({ serial, newAndroidId: newId }, "device reset for next account creation");
       res.json({ ok: true, newAndroidId: newId });

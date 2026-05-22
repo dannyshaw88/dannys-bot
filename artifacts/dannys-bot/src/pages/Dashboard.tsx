@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.459",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "BlueStacks now reliably comes to the front when Apply proxy via Drony is clicked — improved the window focus command so it works consistently." },
+      { category: "New", text: "Device panel now opens automatically after Drony proxy is successfully applied — no need to click the device card manually." },
+      { category: "New", text: "Open Instagram & Sign Up button added — opens Instagram in BlueStacks, taps Get Started, selects email signup, and pre-fills the email from your credentials form automatically." },
+      { category: "Improved", text: "Reset for next account now does a full cleanup: deactivates Drony, disconnects the device from Equinox, and closes BlueStacks — ready to start fresh with the next account." },
+    ],
+  },
+  {
     version: "1.0.458",
     date: "22 May 2026",
     items: [
