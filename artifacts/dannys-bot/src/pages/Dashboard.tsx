@@ -56,10 +56,11 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.467",
+    version: "1.0.468",
     date: "22 May 2026",
     items: [
-      { category: "Fixed", text: "CloakBrowser now launches correctly on Windows — the stealth Chromium package was missing from the installer and is now properly included." },
+      { category: "Removed", text: "CloakBrowser tab has been removed." },
+      { category: "Changed", text: "Create & Spoof now uses LD Player instead of BlueStacks — setup guide, address hints, and all references updated." },
     ],
   },
   {

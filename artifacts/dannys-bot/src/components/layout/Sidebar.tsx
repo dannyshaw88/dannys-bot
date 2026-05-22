@@ -44,7 +44,6 @@ export function Sidebar() {
     { name: "Create & Spoof",       path: "/mobile",     icon: Smartphone, iconColor: undefined, iconStyle: { color: BRAND } },
     { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: undefined,  iconStyle: { color: BRAND } },
-    { name: "CloakBrowser",     path: "/cloak-browser",      icon: Globe,           iconColor: undefined,  iconStyle: { color: BRAND } },
   ];
 
   function goBack() {

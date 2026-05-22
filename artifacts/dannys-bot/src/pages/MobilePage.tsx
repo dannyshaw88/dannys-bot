@@ -119,7 +119,7 @@ function ProxyRelaySection({ serial, savedProxyId, savedSourceInterface, onAppli
     }),
     onSuccess: (r) => {
       if (r.ok) {
-        toast({ title: "Applied", description: `BlueStacks traffic routing via ${r.upstream}.` });
+        toast({ title: "Applied", description: `LD Player traffic routing via ${r.upstream}.` });
         onApplied?.();
       }
       qc.invalidateQueries({ queryKey: ["relay-status", serial] });
@@ -181,7 +181,7 @@ function ProxyRelaySection({ serial, savedProxyId, savedSourceInterface, onAppli
           </select>
         </div>
         {hasSource && !savedProxyId && (
-          <p className="text-[9px] text-blue-500 leading-tight">Direct mode — BlueStacks traffic will go through {ifaceLabel(sourceIface)} with no upstream proxy.</p>
+          <p className="text-[9px] text-blue-500 leading-tight">Direct mode — LD Player traffic will go through {ifaceLabel(sourceIface)} with no upstream proxy.</p>
         )}
         {hasSource && savedProxyId && (
           <p className="text-[9px] text-muted-foreground/60 leading-tight">Proxy traffic will leave via {ifaceLabel(sourceIface)}.</p>
@@ -344,14 +344,14 @@ function DeviceCard({ device, idx, selected, proxies, savedProxyId, savedSourceI
         </div>
         <button
           className="text-white/50 hover:text-white p-1 disabled:opacity-30"
-          title="Disconnect device from ADB (BlueStacks may reconnect automatically)"
+          title="Disconnect device from ADB (LD Player may reconnect automatically)"
           disabled={disconnecting}
           onClick={async e => {
             e.stopPropagation();
             setDisconnecting(true);
             try {
               await onDisconnect();
-              toast({ title: "Disconnected", description: "BlueStacks may reconnect automatically. Close BlueStacks first to prevent reconnection." });
+              toast({ title: "Disconnected", description: "LD Player may reconnect automatically. Close LD Player first to prevent reconnection." });
             } catch (err: any) {
               toast({ title: "Disconnect failed", description: err?.message, variant: "destructive" });
             } finally { setDisconnecting(false); }
@@ -1024,8 +1024,8 @@ function ConnectForm({ onConnected, compact = false }: { onConnected: () => void
           </Button>
         </div>
         <div className="text-[10px] text-muted-foreground space-y-0.5">
-          <div>BlueStacks instance 1: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
-          <div>BlueStacks instance 2: <span className="font-mono text-foreground/70">127.0.0.1:5565</span></div>
+          <div>LD Player (default): <span className="font-mono text-foreground/70">127.0.0.1:5554</span></div>
+          <div>LD Player (instance 2): <span className="font-mono text-foreground/70">127.0.0.1:5556</span></div>
         </div>
       </div>
     );
@@ -1045,7 +1045,7 @@ function ConnectForm({ onConnected, compact = false }: { onConnected: () => void
           className="text-xs font-mono flex-1"
           value={address}
           onChange={e => setAddress(e.target.value)}
-          placeholder="127.0.0.1:5555"
+          placeholder="127.0.0.1:5554"
           onKeyDown={e => { if (e.key === "Enter") connectMut.mutate(address); }}
         />
         <Button disabled={!address || connectMut.isPending} onClick={() => connectMut.mutate(address)}>
@@ -1054,8 +1054,8 @@ function ConnectForm({ onConnected, compact = false }: { onConnected: () => void
         </Button>
       </div>
       <div className="text-[10px] text-muted-foreground space-y-0.5">
-        <div>BlueStacks instance 1: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
-        <div>BlueStacks instance 2: <span className="font-mono text-foreground/70">127.0.0.1:5565</span></div>
+        <div>LD Player (default): <span className="font-mono text-foreground/70">127.0.0.1:5554</span></div>
+        <div>LD Player (instance 2): <span className="font-mono text-foreground/70">127.0.0.1:5556</span></div>
       </div>
     </div>
   );
@@ -1070,19 +1070,19 @@ function SetupGuide({ onConnected }: { onConnected: () => void }) {
         <div className="flex gap-4 items-start">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">1</div>
           <div className="flex-1">
-            <div className="font-semibold text-sm">Install BlueStacks 5</div>
+            <div className="font-semibold text-sm">Install LD Player</div>
             <p className="text-xs text-muted-foreground mt-1 mb-3">
               Free Android emulator — install Instagram from its built-in Google Play Store, or via APK.
             </p>
-            <a href="https://www.bluestacks.com/download.html" target="_blank" rel="noreferrer" className="block border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-md transition-all group max-w-xs">
-              <div className="bg-gradient-to-br from-blue-600 to-blue-800 px-3 py-2.5 flex items-center gap-2">
+            <a href="https://www.ldplayer.net/download/" target="_blank" rel="noreferrer" className="block border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-md transition-all group max-w-xs">
+              <div className="bg-gradient-to-br from-green-600 to-teal-700 px-3 py-2.5 flex items-center gap-2">
                 <Smartphone className="w-4 h-4 text-white shrink-0" />
-                <span className="font-semibold text-white text-sm">BlueStacks 5</span>
+                <span className="font-semibold text-white text-sm">LD Player</span>
                 <ExternalLink className="w-3 h-3 text-white/60 ml-auto group-hover:text-white" />
               </div>
               <div className="px-3 py-2 bg-card">
-                <p className="text-[10px] text-muted-foreground">Most popular Android emulator. 100% free.</p>
-                <p className="text-[10px] text-primary/80 mt-1 font-medium">After installing: Settings → Advanced → enable "Android Debug Bridge"</p>
+                <p className="text-[10px] text-muted-foreground">Fast Android emulator. 100% free.</p>
+                <p className="text-[10px] text-primary/80 mt-1 font-medium">After installing: Settings (gear) → Other Settings → enable "Open ADB debugging"</p>
               </div>
             </a>
           </div>
@@ -1186,7 +1186,7 @@ export function MobilePage() {
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
               <div>
-                <div className="font-semibold text-sm">Reconnecting to BlueStacks…</div>
+                <div className="font-semibold text-sm">Reconnecting to LD Player…</div>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs">
                   ADB briefly dropped the connection. This is normal — it reconnects automatically in a few seconds.
                 </p>
