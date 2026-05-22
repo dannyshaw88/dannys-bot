@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.457",
+    date: "22 May 2026",
+    items: [
+      { category: "Improved", text: "BlueStacks now comes to the front automatically when Apply proxy via Drony is clicked — you can watch the automation happen in real time." },
+      { category: "Fixed", text: "After Drony's VPN activates, Equinox now immediately reconnects ADB — device reconnects in seconds instead of waiting up to 2 minutes for BlueStacks to auto-recover." },
+      { category: "Improved", text: "A note is shown while the automation runs explaining that a brief disconnection is normal and will self-recover." },
+    ],
+  },
+  {
     version: "1.0.456",
     date: "22 May 2026",
     items: [

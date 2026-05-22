@@ -627,6 +627,29 @@ export async function getDeviceProxySetting(serial: string): Promise<string | nu
 const DRONY_PKG = "org.sandrob.drony";
 const DRONY_ACTIVITY = "org.sandrob.drony/.activity.MainActivity";
 
+/**
+ * On Windows: bring the BlueStacks window to the foreground so the user
+ * can see the UIAutomator automation happening in real time.
+ */
+function _bringBlueStacksToFront(): void {
+  if (process.platform !== "win32") return;
+  try {
+    // PowerShell: find the BlueStacks process (HD-Player on modern BlueStacks) and foreground it
+    const ps = [
+      "$p = Get-Process -Name 'HD-Player','BlueStacks','BlueStacks App Player' -ErrorAction SilentlyContinue",
+      "      | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1",
+      "if ($p) {",
+      "  $sig = '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h, int n);",
+      "          [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);'",
+      "  Add-Type -MemberDefinition $sig -Name Win32FG -Namespace W",
+      "  [W.Win32FG]::ShowWindow($p.MainWindowHandle, 9)   # SW_RESTORE",
+      "  [W.Win32FG]::SetForegroundWindow($p.MainWindowHandle)",
+      "}",
+    ].join(" ");
+    spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], { encoding: "utf8", timeout: 5000 });
+  } catch { /* best-effort — never fail the whole automation */ }
+}
+
 function _sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
@@ -762,7 +785,11 @@ export async function configureDrony(
   const steps: string[] = [];
 
   try {
-    // 1. Launch Drony (app may display as "Droni" in some locales — package name is what matters)
+    // 1. Bring BlueStacks window to the front so the user can see the automation
+    _bringBlueStacksToFront();
+    await _sleep(400);
+
+    // Launch Drony (app may display as "Droni" in some locales — package name is what matters)
     spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n", DRONY_ACTIVITY], { encoding: "utf8", timeout: 6000 });
     await _sleep(3000); // Give BlueStacks time to fully switch to the app
 
@@ -914,6 +941,21 @@ export async function configureDrony(
       _adbTap(adb, serial, vpnOkPos.x, vpnOkPos.y);
       await _sleep(1000);
       steps.push("VPN permission accepted");
+    }
+
+    // 9. Proactively reconnect ADB — Drony's VPN briefly restarts Android networking
+    // which drops the TCP link. Re-issuing `adb connect` brings it back in seconds
+    // instead of waiting for BlueStacks's 2-minute auto-reconnect.
+    await _sleep(1500);
+    if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(serial)) {
+      spawnSync(adb, ["connect", serial], { encoding: "utf8", timeout: 8000 });
+      steps.push(`ADB reconnected (${serial})`);
+    } else {
+      // Serial is emulator-XXXX style — try the default BlueStacks TCP ports
+      for (const addr of ["127.0.0.1:5555", "127.0.0.1:5556", "127.0.0.1:5565"]) {
+        spawnSync(adb, ["connect", addr], { encoding: "utf8", timeout: 5000 });
+      }
+      steps.push("ADB reconnect attempted (default ports)");
     }
 
     return { ok: true, steps };

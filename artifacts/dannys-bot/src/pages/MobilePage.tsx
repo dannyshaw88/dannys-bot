@@ -166,16 +166,23 @@ function DronySection({ serial, savedProxyId }: { serial: string; savedProxyId?:
 
       {/* Installed — show Apply button */}
       {status?.installed && !status.active && savedProxyId && (
-        <Button
-          size="sm"
-          className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
-          disabled={configureMut.isPending}
-          onClick={() => configureMut.mutate()}
-        >
-          {configureMut.isPending
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Configuring BlueStacks…</>
-            : <><Play className="w-3.5 h-3.5" />Apply proxy via Drony</>}
-        </Button>
+        <div className="space-y-1">
+          <Button
+            size="sm"
+            className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
+            disabled={configureMut.isPending}
+            onClick={() => configureMut.mutate()}
+          >
+            {configureMut.isPending
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Configuring BlueStacks…</>
+              : <><Play className="w-3.5 h-3.5" />Apply proxy via Drony</>}
+          </Button>
+          {configureMut.isPending && (
+            <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
+              BlueStacks will come to the front — this takes ~15 seconds. A brief disconnection when the VPN activates is normal and auto-recovers.
+            </p>
+          )}
+        </div>
       )}
 
       {status?.installed && !status.active && !savedProxyId && (
