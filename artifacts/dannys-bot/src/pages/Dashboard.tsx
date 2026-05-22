@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.449",
+    date: "22 May 2026",
+    items: [
+      { category: "Fix", text: "On the Mobile page, the Install Instagram from APK section is now hidden when Instagram is already detected as installed. A compact green badge replaces it, with a Reinstall link if you ever need to overwrite it." },
+      { category: "Improved", text: "Selecting a proxy on the Mobile page now applies it to the device immediately — no separate Apply button click required." },
+      { category: "New", text: "Test IP button added to each device on the Mobile page. When a proxy is assigned, clicking Test IP makes a live check through that proxy and shows the external IP address it is routing through, so you can confirm it is working before starting a session." },
+    ],
+  },
+  {
     version: "1.0.448",
     date: "21 May 2026",
     items: [

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
@@ -78,30 +78,74 @@ const COLORS = [
 function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [ipResult, setIpResult] = useState<{ ip?: string; error?: string } | null>(null);
+  const [checkingIp, setCheckingIp] = useState(false);
+
   const saveMut = useMutation({
     mutationFn: (proxyId: number | null) => api("POST", `/api/mobile/instances/${encodeURIComponent(serial)}/config`, { proxyId }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mobile-config"] }); toast({ title: "Proxy saved" }); },
-    onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mobile-config"] }); },
+    onError: (e: any) => toast({ title: "Save failed", description: e?.message, variant: "destructive" }),
   });
   const applyMut = useMutation({
-    mutationFn: (proxyId: number | null) => api("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId }),
-    onSuccess: () => toast({ title: "Proxy applied" }),
-    onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }),
+    mutationFn: (proxyId: number | null) => api<{ relay?: string; upstream?: string }>("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId }),
+    onSuccess: (_d, id) => {
+      toast({ title: id ? "Proxy applied to device" : "Proxy removed" });
+      setIpResult(null);
+    },
+    onError: (e: any) => toast({ title: "Apply failed", description: e?.message, variant: "destructive" }),
   });
+
+  const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const id = e.target.value ? Number(e.target.value) : null;
+    saveMut.mutate(id);
+    applyMut.mutate(id);
+    setIpResult(null);
+  };
+
+  const checkIp = async () => {
+    setCheckingIp(true);
+    setIpResult(null);
+    try {
+      const r = await api<{ ok: boolean; ip?: string; proxy?: string; error?: string }>("GET", `/api/mobile/devices/${serial}/check-ip`);
+      if (r.ok && r.ip) setIpResult({ ip: r.ip });
+      else setIpResult({ error: r.error ?? "No IP returned" });
+    } catch (e: any) {
+      setIpResult({ error: e?.message ?? "Check failed" });
+    } finally {
+      setCheckingIp(false);
+    }
+  };
+
+  const busy = saveMut.isPending || applyMut.isPending;
+
   return (
-    <div className="flex gap-2 items-center">
-      <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-      <select
-        className="flex-1 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        value={savedProxyId ?? ""}
-        onChange={e => saveMut.mutate(e.target.value ? Number(e.target.value) : null)}
-      >
-        <option value="">No proxy</option>
-        {proxies.map(px => <option key={px.id} value={px.id}>{px.name ? `${px.name} — ` : ""}{px.host}:{px.port}</option>)}
-      </select>
-      <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] shrink-0" disabled={applyMut.isPending} onClick={() => applyMut.mutate(savedProxyId ?? null)}>
-        {applyMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Apply"}
-      </Button>
+    <div className="space-y-1.5">
+      <div className="flex gap-2 items-center">
+        <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <select
+          className="flex-1 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          value={savedProxyId ?? ""}
+          onChange={handleChange}
+          disabled={busy}
+        >
+          <option value="">No proxy</option>
+          {proxies.map(px => <option key={px.id} value={px.id}>{px.name ? `${px.name} — ` : ""}{px.host}:{px.port}</option>)}
+        </select>
+        {busy && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />}
+        {savedProxyId && (
+          <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] shrink-0" disabled={checkingIp || busy} onClick={checkIp} title="Test that the proxy is working and see the external IP">
+            {checkingIp ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test IP"}
+          </Button>
+        )}
+      </div>
+      {ipResult && (
+        <div className={`text-[10px] px-2 py-1 rounded ${ipResult.ip ? "bg-green-500/10 text-green-600 border border-green-500/20" : "bg-destructive/10 text-destructive border border-destructive/20"}`}>
+          {ipResult.ip
+            ? <><CheckCircle2 className="w-3 h-3 inline mr-1" />Proxy working — external IP: <span className="font-mono font-semibold">{ipResult.ip}</span></>
+            : <>Proxy test failed: {ipResult.error}</>
+          }
+        </div>
+      )}
     </div>
   );
 }
@@ -240,7 +284,8 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
   const { toast } = useToast();
   const qc = useQueryClient();
   const serial = device.serial;
-  const [apkPath, setApkPath]   = useState("");
+  const [apkPath, setApkPath]       = useState("");
+  const [showReinstall, setShowReinstall] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail]       = useState("");
@@ -304,19 +349,42 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
               <Button size="sm" variant="outline" className="text-xs" disabled={clearMut.isPending} title="Wipes Instagram data — next launch is a clean phone for a new signup" onClick={() => clearMut.mutate()}><Trash2 className="w-3.5 h-3.5 mr-1" />Clear data</Button>
               <Button size="sm" variant="outline" className="text-xs" disabled={mirrorMut.isPending} onClick={() => mirrorMut.mutate()}><MonitorPlay className="w-3.5 h-3.5 mr-1" />Mirror</Button>
             </div>
-            <div className="space-y-1.5 mb-2">
-              <Label className="text-xs">Install Instagram from APK</Label>
-              <div className="flex gap-2">
-                <Input className="text-xs flex-1" placeholder="C:\Downloads\instagram.apk" value={apkPath} onChange={e => setApkPath(e.target.value)} />
-                <Button size="sm" disabled={!apkPath || installMut.isPending} onClick={() => installMut.mutate()}>
-                  {installMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                </Button>
+            {instQ.data?.installed ? (
+              <>
+                <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-md bg-green-500/10 border border-green-500/20">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                  <span className="text-xs text-green-600 font-medium flex-1">Instagram installed</span>
+                  <button className="text-[10px] text-muted-foreground hover:text-foreground underline shrink-0" onClick={() => setShowReinstall(v => !v)}>
+                    {showReinstall ? "Cancel" : "Reinstall?"}
+                  </button>
+                </div>
+                {showReinstall && (
+                  <div className="space-y-1.5 mb-2">
+                    <Label className="text-xs">Reinstall from APK</Label>
+                    <div className="flex gap-2">
+                      <Input className="text-xs flex-1" placeholder="C:\Downloads\instagram.apk" value={apkPath} onChange={e => setApkPath(e.target.value)} />
+                      <Button size="sm" disabled={!apkPath || installMut.isPending} onClick={() => installMut.mutate()}>
+                        {installMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-1.5 mb-2">
+                <Label className="text-xs">Install Instagram from APK</Label>
+                <div className="flex gap-2">
+                  <Input className="text-xs flex-1" placeholder="C:\Downloads\instagram.apk" value={apkPath} onChange={e => setApkPath(e.target.value)} />
+                  <Button size="sm" disabled={!apkPath || installMut.isPending} onClick={() => installMut.mutate()}>
+                    {installMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Or install directly inside the emulator's app store. APK from{" "}
+                  <a className="underline hover:text-primary" href="https://www.apkmirror.com/apk/instagram/instagram-instagram/" target="_blank" rel="noreferrer">APKMirror <ExternalLink className="w-2.5 h-2.5 inline" /></a>
+                </p>
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                Or install directly inside the emulator's app store. APK from{" "}
-                <a className="underline hover:text-primary" href="https://www.apkmirror.com/apk/instagram/instagram-instagram/" target="_blank" rel="noreferrer">APKMirror <ExternalLink className="w-2.5 h-2.5 inline" /></a>
-              </p>
-            </div>
+            )}
           </div>
           <Separator />
           <div>

@@ -2,10 +2,42 @@ import type { Express, Request, Response } from "express";
 import { z } from "zod/v4";
 import fs from "fs";
 import path from "path";
+import * as http from "http";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
+
+/** Makes a plain HTTP proxy request to api.ipify.org through the given upstream. */
+function fetchExternalIpViaProxy(host: string, port: number, user?: string, pass?: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const authHeader = user
+      ? `Basic ${Buffer.from(`${user}:${pass ?? ""}`).toString("base64")}`
+      : null;
+    const req = http.request(
+      {
+        host,
+        port,
+        method: "GET",
+        path: "http://api.ipify.org/",
+        headers: {
+          Host: "api.ipify.org",
+          "User-Agent": "curl/8.0",
+          ...(authHeader ? { "Proxy-Authorization": authHeader } : {}),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => resolve(data.trim()));
+        res.on("error", reject);
+      },
+    );
+    req.on("error", reject);
+    req.setTimeout(12000, () => req.destroy(new Error("IP check timed out after 12 s")));
+    req.end();
+  });
+}
 
 const p = (req: Request, key: string): string => String((req.params as any)[key] ?? "");
 
@@ -129,6 +161,29 @@ export function registerMobileRoutes(app: Express) {
   // The gateway IP (e.g. 10.0.2.2) is how the Android VM reaches the Windows
   // host. We detect it from the device's default route so it works for both
   // AVD and BlueStacks without hardcoding anything.
+  // Check the external IP seen through the device's assigned proxy (server-side test).
+  app.get("/api/mobile/devices/:serial/check-ip", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      const proxyId = cfg[serial]?.proxyId;
+      if (!proxyId) return res.status(400).json({ ok: false, error: "No proxy assigned to this device" });
+
+      const proxies = await storage.getProxies();
+      const proxy = proxies.find(pr => pr.id === proxyId);
+      if (!proxy) return res.status(404).json({ ok: false, error: "Proxy not found" });
+
+      const ip = await fetchExternalIpViaProxy(
+        proxy.host, proxy.port,
+        proxy.username ?? undefined,
+        proxy.password ?? undefined,
+      );
+      res.json({ ok: true, ip, proxy: `${proxy.host}:${proxy.port}` });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? "IP check failed" });
+    }
+  });
+
   const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
