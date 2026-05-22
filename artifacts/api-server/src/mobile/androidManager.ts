@@ -736,15 +736,22 @@ export async function configureDrony(
   const steps: string[] = [];
 
   try {
-    // 1. Launch Drony
+    // 1. Launch Drony (app may display as "Droni" in some locales — package name is what matters)
     spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n", DRONY_ACTIVITY], { encoding: "utf8", timeout: 6000 });
-    await _sleep(2000);
-    steps.push("Drony opened");
+    await _sleep(3000); // Give BlueStacks time to fully switch to the app
 
     let xml = await _uiDump(adb, serial);
-    if (!xml.toLowerCase().includes("drony")) {
-      return { ok: false, steps, error: "Drony did not open — is it installed?" };
+    // Retry once if the dump came back empty/tiny (screen was still loading)
+    if (!xml || xml.length < 200) {
+      await _sleep(2500);
+      xml = await _uiDump(adb, serial);
     }
+    // Check that Drony is in the foreground — display name varies ("Drony"/"Droni") but package always contains "drony"
+    const dronyOpen = xml.includes(DRONY_PKG) || xml.toLowerCase().includes("drony") || xml.toLowerCase().includes("droni");
+    if (!dronyOpen) {
+      return { ok: false, steps, error: "Drony is not in the foreground. Make sure BlueStacks is running and Drony is installed. Try opening Drony manually first, then retry." };
+    }
+    steps.push("Drony opened");
 
     // 2. If there's a "+" FAB or "Add" button, tap it to create a new proxy entry
     const addPos = _findElem(xml, "+", "Add", "NEW PROXY", "New proxy", "Add proxy");

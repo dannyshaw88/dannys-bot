@@ -805,7 +805,6 @@ function ConnectForm({ onConnected, compact = false }: { onConnected: () => void
         <div className="text-[10px] text-muted-foreground space-y-0.5">
           <div>BlueStacks instance 1: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
           <div>BlueStacks instance 2: <span className="font-mono text-foreground/70">127.0.0.1:5565</span></div>
-          <div>LDPlayer default: <span className="font-mono text-foreground/70">127.0.0.1:5554</span></div>
         </div>
       </div>
     );
@@ -834,9 +833,8 @@ function ConnectForm({ onConnected, compact = false }: { onConnected: () => void
         </Button>
       </div>
       <div className="text-[10px] text-muted-foreground space-y-0.5">
-        <div>BlueStacks default address: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
-        <div>LDPlayer default address: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
-        <div>Nox default address: <span className="font-mono text-foreground/70">127.0.0.1:62001</span></div>
+        <div>BlueStacks instance 1: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
+        <div>BlueStacks instance 2: <span className="font-mono text-foreground/70">127.0.0.1:5565</span></div>
       </div>
     </div>
   );
@@ -851,28 +849,21 @@ function SetupGuide({ onConnected }: { onConnected: () => void }) {
         <div className="flex gap-4 items-start">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">1</div>
           <div className="flex-1">
-            <div className="font-semibold text-sm">Install a free Android emulator</div>
+            <div className="font-semibold text-sm">Install BlueStacks 5</div>
             <p className="text-xs text-muted-foreground mt-1 mb-3">
-              These work exactly like BlueStacks — install apps from their built-in Google Play Store. Both are completely free.
+              Free Android emulator — install Instagram from its built-in Google Play Store, or via APK.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { name: "LDPlayer 9", desc: "Lightweight, great for multi-instance. Recommended.", url: "https://www.ldplayer.net/", color: "from-orange-500 to-orange-700", note: "ADB enabled by default — no settings needed" },
-                { name: "BlueStacks 5", desc: "Most popular. 100% free (ads only).", url: "https://www.bluestacks.com/download.html", color: "from-blue-600 to-blue-800", note: 'Settings → Advanced → enable "Android Debug Bridge"' },
-              ].map(em => (
-                <a key={em.name} href={em.url} target="_blank" rel="noreferrer" className="block border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-md transition-all group">
-                  <div className={`bg-gradient-to-br ${em.color} px-3 py-2.5 flex items-center gap-2`}>
-                    <Smartphone className="w-4 h-4 text-white shrink-0" />
-                    <span className="font-semibold text-white text-sm">{em.name}</span>
-                    <ExternalLink className="w-3 h-3 text-white/60 ml-auto group-hover:text-white" />
-                  </div>
-                  <div className="px-3 py-2 bg-card">
-                    <p className="text-[10px] text-muted-foreground">{em.desc}</p>
-                    <p className="text-[10px] text-primary/80 mt-1 font-medium">{em.note}</p>
-                  </div>
-                </a>
-              ))}
-            </div>
+            <a href="https://www.bluestacks.com/download.html" target="_blank" rel="noreferrer" className="block border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-md transition-all group max-w-xs">
+              <div className="bg-gradient-to-br from-blue-600 to-blue-800 px-3 py-2.5 flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-white shrink-0" />
+                <span className="font-semibold text-white text-sm">BlueStacks 5</span>
+                <ExternalLink className="w-3 h-3 text-white/60 ml-auto group-hover:text-white" />
+              </div>
+              <div className="px-3 py-2 bg-card">
+                <p className="text-[10px] text-muted-foreground">Most popular Android emulator. 100% free.</p>
+                <p className="text-[10px] text-primary/80 mt-1 font-medium">After installing: Settings → Advanced → enable "Android Debug Bridge"</p>
+              </div>
+            </a>
           </div>
         </div>
 
@@ -911,7 +902,16 @@ export function MobilePage() {
   const [selectedSerial, setSelectedSerial] = useState<string | null>(null);
   const [showAddForm, setShowAddForm]       = useState(false);
 
-  const devices  = devicesQ.data?.filter(d => d.state === "device" || d.state === "offline") ?? [];
+  // Deduplicate: BlueStacks can appear in `adb devices` as both a TCP entry
+  // (127.0.0.1:5555) and an emulator entry (emulator-5554) simultaneously.
+  // Prefer the TCP entry when model/product names match.
+  const rawDevices = devicesQ.data?.filter(d => d.state === "device" || d.state === "offline") ?? [];
+  const tcpSerials = new Set(rawDevices.filter(d => /^\d+\.\d+\.\d+\.\d+:\d+$/.test(d.serial)).map(d => `${d.model ?? ""}|${d.product ?? ""}`));
+  const devices = rawDevices.filter(d => {
+    if (!/^emulator-/.test(d.serial)) return true;
+    // Drop emulator-XXXX if a TCP entry with same model+product already exists
+    return !tcpSerials.has(`${d.model ?? ""}|${d.product ?? ""}`);
+  });
   const proxies  = configQ.data?.proxies ?? [];
   const configs  = configQ.data?.instanceConfigs ?? {};
   const selected = devices.find(d => d.serial === selectedSerial) ?? null;

@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.455",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Drony automation no longer fails with 'Drony did not open' when the app name shows as Droni inside BlueStacks — the check now uses the package name which is always correct." },
+      { category: "Fixed", text: "Drony launch now waits longer and retries the screen read once if BlueStacks is still animating — prevents false failures on slower PCs." },
+      { category: "Fixed", text: "Duplicate device cards no longer appear when BlueStacks registers itself as both a TCP connection and an emulator connection at the same time." },
+      { category: "Improved", text: "Setup guide now shows only BlueStacks — LDPlayer references removed throughout." },
+    ],
+  },
+  {
     version: "1.0.454",
     date: "22 May 2026",
     items: [
