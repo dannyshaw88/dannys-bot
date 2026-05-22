@@ -85,150 +85,112 @@ const COLORS = [
   "from-pink-600 to-pink-800", "from-teal-600 to-teal-800",
 ];
 
-// ─── Proxy selector ────────────────────────────────────────────────────────────
+// ─── Proxy relay section ───────────────────────────────────────────────────────
 
-function DronySection({ serial, savedProxyId, onAutoSelect }: { serial: string; savedProxyId?: number | null; onAutoSelect?: () => void }) {
+function ProxyRelaySection({ serial, savedProxyId, onApplied }: { serial: string; savedProxyId?: number | null; onApplied?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [dronyApk, setDronyApk] = useState("");
-  const [configResult, setConfigResult] = useState<{ ok: boolean; steps: string[]; error?: string } | null>(null);
-  const [proxyType, setProxyType] = useState<"SOCKS5" | "SOCKS4" | "HTTP" | "HTTPS">("SOCKS5");
+  const [protocol, setProtocol] = useState<"http" | "socks5">("http");
 
-  const dronyQ = useQuery({
-    queryKey: ["drony-status", serial],
-    queryFn: () => api<{ installed: boolean; active: boolean }>("GET", `/api/mobile/devices/${serial}/drony`),
-    refetchInterval: 8000,
+  const statusQ = useQuery({
+    queryKey: ["relay-status", serial],
+    queryFn: () => api<{ active: boolean; relayPort?: number | null; deviceProxy?: string | null }>("GET", `/api/mobile/devices/${serial}/relay-status`),
+    refetchInterval: 5000,
     retry: false,
+    enabled: !!savedProxyId,
   });
 
-  const installMut = useMutation({
-    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/drony/install`, { apkPath: dronyApk }),
-    onSuccess: () => { toast({ title: "Drony installed" }); qc.invalidateQueries({ queryKey: ["drony-status", serial] }); setDronyApk(""); },
-    onError: (e: any) => toast({ title: "Install failed", description: e?.message, variant: "destructive" }),
-  });
-
-  const configureMut = useMutation({
-    mutationFn: () => api<{ ok: boolean; steps: string[]; error?: string }>("POST", `/api/mobile/devices/${serial}/drony/configure`, { proxyId: savedProxyId, proxyType }),
+  const applyMut = useMutation({
+    mutationFn: () => api<{ ok: boolean; relay?: string; upstream?: string }>("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId: savedProxyId, proxyProtocol: protocol }),
     onSuccess: (r) => {
-      setConfigResult(r);
-      qc.invalidateQueries({ queryKey: ["drony-status", serial] });
       if (r.ok) {
-        toast({ title: "Drony configured & VPN activated", description: "All BlueStacks traffic now routes through the proxy." });
-        onAutoSelect?.();
-      } else {
-        toast({ title: "Configuration had issues", description: r.error ?? "Check the steps below", variant: "destructive" });
+        toast({ title: "Proxy applied", description: `Traffic routing through ${r.upstream} via local relay.` });
+        onApplied?.();
       }
+      qc.invalidateQueries({ queryKey: ["relay-status", serial] });
     },
-    onError: (e: any) => toast({ title: "Configure failed", description: e?.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Failed to apply proxy", description: e?.message, variant: "destructive" }),
   });
 
-  const deactivateMut = useMutation({
-    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/drony/deactivate`, {}),
-    onSuccess: () => { toast({ title: "Drony VPN stopped" }); qc.invalidateQueries({ queryKey: ["drony-status", serial] }); setConfigResult(null); },
-    onError: (e: any) => toast({ title: "Deactivate failed", description: e?.message, variant: "destructive" }),
+  const clearMut = useMutation({
+    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId: null }),
+    onSuccess: () => { toast({ title: "Proxy cleared" }); qc.invalidateQueries({ queryKey: ["relay-status", serial] }); },
+    onError: (e: any) => toast({ title: "Failed to clear proxy", description: e?.message, variant: "destructive" }),
   });
 
-  const status = dronyQ.data;
+  const status = statusQ.data;
+  const isActive = !!(status?.active && status?.relayPort);
+  const relayDown = !isActive && !!status?.deviceProxy;
 
   return (
     <div className="space-y-1.5 pt-1 border-t border-border/60">
-      {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${status?.active ? "bg-green-500 animate-pulse" : status?.installed ? "bg-amber-400" : "bg-muted-foreground/30"}`} />
+          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
           <span className="text-[10px] font-semibold text-muted-foreground">
-            Drony VPN —{" "}
-            {!status ? "checking…" : !status.installed ? "not installed" : status.active ? "active" : "installed, off"}
+            Proxy relay —{" "}
+            {!savedProxyId ? "no proxy selected" : !status ? "checking…" : isActive ? "active" : relayDown ? "relay stopped" : "inactive"}
           </span>
-          {dronyQ.isFetching && <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground/50" />}
+          {statusQ.isFetching && <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground/50" />}
         </div>
-        {status?.active && (
+        {isActive && (
           <button
             className="text-[9px] text-destructive/70 hover:text-destructive underline"
-            disabled={deactivateMut.isPending}
-            onClick={() => deactivateMut.mutate()}
+            disabled={clearMut.isPending}
+            onClick={() => clearMut.mutate()}
           >
-            {deactivateMut.isPending ? "Stopping…" : "Stop VPN"}
+            {clearMut.isPending ? "Clearing…" : "Clear proxy"}
           </button>
         )}
       </div>
 
-      {/* Not installed — show install section */}
-      {status && !status.installed && (
-        <div className="space-y-1">
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            <strong>Drony</strong> routes all BlueStacks traffic through your proxy — including Instagram HTTPS. Free, no root required.{" "}
-            <a className="underline hover:text-primary" href="https://apkpure.com/drony/org.sandrob.drony" target="_blank" rel="noreferrer">Download APK <ExternalLink className="w-2.5 h-2.5 inline" /></a>
-          </p>
-          <div className="flex gap-1">
-            <Input className="text-[10px] h-7 font-mono flex-1" placeholder="C:\Downloads\drony.apk" value={dronyApk} onChange={e => setDronyApk(e.target.value)} />
-            <Button size="sm" className="h-7 px-2.5 text-[10px]" disabled={!dronyApk || installMut.isPending} onClick={() => installMut.mutate()}>
-              {installMut.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Download className="w-3 h-3 mr-1" />}Install
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Installed — show Apply button */}
-      {status?.installed && !status.active && savedProxyId && (
+      {savedProxyId && !isActive && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-muted-foreground shrink-0">Protocol</span>
             <select
               className="flex-1 text-[10px] bg-background border border-border rounded px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              value={proxyType}
-              onChange={e => setProxyType(e.target.value as typeof proxyType)}
-              disabled={configureMut.isPending}
+              value={protocol}
+              onChange={e => setProtocol(e.target.value as "http" | "socks5")}
+              disabled={applyMut.isPending}
             >
-              <option value="SOCKS5">SOCKS5 (most common)</option>
-              <option value="SOCKS4">SOCKS4</option>
-              <option value="HTTP">HTTP</option>
-              <option value="HTTPS">HTTPS</option>
+              <option value="http">HTTP / HTTPS (most common)</option>
+              <option value="socks5">SOCKS5</option>
             </select>
           </div>
+          {relayDown && (
+            <p className="text-[9px] text-amber-600">Relay stopped (server restarted?) — click Apply to restart.</p>
+          )}
           <Button
             size="sm"
             className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
-            disabled={configureMut.isPending}
-            onClick={() => configureMut.mutate()}
+            disabled={applyMut.isPending}
+            onClick={() => applyMut.mutate()}
           >
-            {configureMut.isPending
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Configuring Drony…</>
-              : <><Play className="w-3.5 h-3.5" />Apply proxy via Drony</>}
+            {applyMut.isPending
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Applying…</>
+              : <><Play className="w-3.5 h-3.5" />Apply proxy</>}
           </Button>
-          {configureMut.isPending && (
-            <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
-              Drony is opening in BlueStacks automatically — proxy is being configured (~20 s). A brief disconnection when the VPN activates is normal.
-            </p>
-          )}
+          <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
+            No VPN app needed. Instant, no disconnections.
+          </p>
         </div>
       )}
 
-      {status?.installed && !status.active && !savedProxyId && (
-        <p className="text-[10px] text-muted-foreground/60 italic">Select a proxy above to activate Drony.</p>
+      {!savedProxyId && (
+        <p className="text-[10px] text-muted-foreground/60 italic">Select a proxy above to apply it.</p>
       )}
 
-      {status?.active && savedProxyId && (
+      {isActive && (
         <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-green-500/10 border border-green-500/20">
           <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-          <span className="text-[10px] text-green-700 font-medium flex-1">Drony VPN active — all traffic routed through proxy</span>
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled={configureMut.isPending} onClick={() => configureMut.mutate()} title="Re-run auto-configure with current proxy">
-            {configureMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          <span className="text-[10px] text-green-700 font-medium flex-1">
+            Proxy active — relay on port {status?.relayPort}
+          </span>
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled={applyMut.isPending} onClick={() => applyMut.mutate()} title="Re-apply proxy">
+            {applyMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
           </Button>
         </div>
-      )}
-
-      {/* Step-by-step result log */}
-      {configResult && (
-        <details className="text-[10px]">
-          <summary className="cursor-pointer text-muted-foreground/70 hover:text-muted-foreground select-none">
-            {configResult.ok ? "✓" : "⚠"} Configuration log ({configResult.steps.length} steps)
-          </summary>
-          <div className="mt-1 space-y-0.5 pl-2 border-l-2 border-border">
-            {configResult.steps.map((s, i) => <div key={i} className={s.startsWith("⚠") ? "text-amber-600" : "text-muted-foreground"}>{s}</div>)}
-            {configResult.error && <div className="text-destructive font-medium">{configResult.error}</div>}
-          </div>
-        </details>
       )}
     </div>
   );
@@ -299,8 +261,8 @@ function ProxySelector({ serial, proxies, savedProxyId, onAutoSelect }: { serial
         </div>
       )}
 
-      {/* Drony VPN section — routes ALL traffic through the proxy */}
-      <DronySection serial={serial} savedProxyId={savedProxyId} onAutoSelect={onAutoSelect} />
+      {/* Proxy relay — routes all traffic through the proxy, no VPN app needed */}
+      <ProxyRelaySection serial={serial} savedProxyId={savedProxyId} onApplied={onAutoSelect} />
     </div>
   );
 }
@@ -566,7 +528,7 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
       qc.invalidateQueries({ queryKey: ["mobile-config"] });
       qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
       qc.invalidateQueries({ queryKey: ["mobile-devices"] });
-      toast({ title: "Reset complete", description: `Drony deactivated, Instagram uninstalled, new device ID set (${d.newAndroidId}). BlueStacks has been closed — reopen it, change the device profile in Settings → Phone, then start the next account.` });
+      toast({ title: "Reset complete", description: `Instagram uninstalled, new device ID set (${d.newAndroidId}), proxy cleared. Change the device profile in BlueStacks → Settings → Phone, then start the next account.` });
       onReset?.();
     },
     onError: (e: any) => toast({ title: "Reset failed", description: e?.message, variant: "destructive" }),
@@ -1095,7 +1057,7 @@ export function MobilePage() {
               <div>
                 <div className="font-semibold text-sm">Reconnecting to BlueStacks…</div>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Drony's VPN briefly drops the ADB connection when it activates. This is normal — it reconnects automatically in a few seconds.
+                  ADB briefly dropped the connection. This is normal — it reconnects automatically in a few seconds.
                 </p>
               </div>
             </div>

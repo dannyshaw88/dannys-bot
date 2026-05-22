@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.461",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Drony removed entirely — proxy now applies instantly via a built-in local relay with no VPN, no disconnections, and no third-party app required." },
+      { category: "Fixed", text: "Wrong IP issue resolved — the relay correctly authenticates to your proxy and routes all traffic through it." },
+      { category: "Fixed", text: "Reset no longer closes BlueStacks — BlueStacks stays open so you can change the device profile yourself without the 5-minute freeze." },
+      { category: "New", text: "Protocol selector added (HTTP / SOCKS5) — pick the type that matches your proxy provider." },
+    ],
+  },
+  {
     version: "1.0.460",
     date: "22 May 2026",
     items: [

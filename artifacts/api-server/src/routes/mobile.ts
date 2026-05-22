@@ -44,7 +44,7 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 
 // ── Per-instance config (proxy assignment) ────────────────────────────────────
 // Stored in mobile-instances.json next to the DB so it survives restarts.
-type InstanceConfig = { proxyId?: number | null };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5" };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -137,7 +137,10 @@ export function registerMobileRoutes(app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
-  const instanceConfigSchema = z.object({ proxyId: z.number().nullable().optional() });
+  const instanceConfigSchema = z.object({
+    proxyId: z.number().nullable().optional(),
+    proxyProtocol: z.enum(["http", "socks5"]).optional(),
+  });
   app.post("/api/mobile/instances/:name/config", async (req: Request, res: Response) => {
     try {
       const name = p(req, "name");
@@ -185,7 +188,32 @@ export function registerMobileRoutes(app: Express) {
     }
   });
 
-  const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
+  // ── Relay status for a device ─────────────────────────────────────────────
+  app.get("/api/mobile/devices/:serial/relay-status", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      const proxyId = cfg[serial]?.proxyId ?? null;
+      const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
+      if (!proxyId) { res.json({ active: false, relayPort: null, deviceProxy: null }); return; }
+      const proxies = await storage.getProxies();
+      const px = proxies.find(pr => pr.id === proxyId);
+      if (!px) { res.json({ active: false, relayPort: null, deviceProxy: null }); return; }
+      const upstream: proxyRelay.RelayUpstream = {
+        host: px.host, port: px.port,
+        user: px.username ?? undefined, pass: px.password ?? undefined,
+        protocol: proxyProtocol as "http" | "socks5",
+      };
+      const relayPort = proxyRelay.getRelayPort(upstream);
+      const deviceProxy = await android.getDeviceProxySetting(serial);
+      res.json({ active: !!relayPort && !!deviceProxy, relayPort, deviceProxy });
+    } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  const deviceProxySchema = z.object({
+    proxyId: z.number().nullable(),
+    proxyProtocol: z.enum(["http", "socks5"]).optional(),
+  });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
       const input = deviceProxySchema.parse(req.body);
@@ -196,12 +224,15 @@ export function registerMobileRoutes(app: Express) {
         const proxy = proxies.find(pr => pr.id === input.proxyId);
         if (!proxy) { res.status(404).json({ error: "Proxy not found" }); return; }
 
+        const proto = input.proxyProtocol ?? "http";
+
         // 1. Start (or reuse) the local relay for this upstream
         const upstream: proxyRelay.RelayUpstream = {
           host: proxy.host,
           port: proxy.port,
           user: proxy.username ?? undefined,
           pass: proxy.password ?? undefined,
+          protocol: proto,
         };
         const relayPort = await proxyRelay.getOrCreateRelay(upstream);
 
@@ -214,15 +245,29 @@ export function registerMobileRoutes(app: Express) {
           return;
         }
 
-        // 3. Point Android's global proxy at the relay (no auth needed here)
+        // 3. Save protocol choice so relay-status and reset can look it up
+        const cfg = loadInstanceConfigs();
+        cfg[serial] = { ...cfg[serial], proxyId: input.proxyId, proxyProtocol: proto };
+        saveInstanceConfigs(cfg);
+
+        // 4. Point Android's global proxy at the relay (no auth needed here)
         await android.setDeviceProxy(serial, { host: gateway, port: relayPort });
 
         logger.info(
-          { serial, relay: `${gateway}:${relayPort}`, upstream: `${proxy.host}:${proxy.port}` },
+          { serial, relay: `${gateway}:${relayPort}`, upstream: `${proto}://${proxy.host}:${proxy.port}` },
           "mobile proxy relay applied",
         );
         res.json({ ok: true, relay: `${gateway}:${relayPort}`, upstream: `${proxy.host}:${proxy.port}` });
       } else {
+        // Clear: stop any running relay for the currently-assigned proxy
+        const cfg = loadInstanceConfigs();
+        const proxyId = cfg[serial]?.proxyId ?? null;
+        const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
+        if (proxyId) {
+          const proxies = await storage.getProxies();
+          const px = proxies.find(pr => pr.id === proxyId);
+          if (px) await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined, protocol: proxyProtocol as "http" | "socks5" });
+        }
         await android.setDeviceProxy(serial, null);
         res.json({ ok: true });
       }
@@ -446,29 +491,24 @@ export function registerMobileRoutes(app: Express) {
       // 4. Stop the relay and remove proxy assignment from instance config
       const cfg = loadInstanceConfigs();
       const proxyId = cfg[serial]?.proxyId ?? null;
+      const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
       if (proxyId) {
         const proxies = await storage.getProxies();
         const px = proxies.find(pr => pr.id === proxyId);
         if (px) {
-          await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined });
+          await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined, protocol: proxyProtocol as "http" | "socks5" });
         }
         cfg[serial] = { ...cfg[serial], proxyId: null };
         saveInstanceConfigs(cfg);
       }
 
-      // 5. Deactivate Drony VPN (best-effort — don't fail reset if Drony not installed)
-      try { await android.deactivateDrony(serial); } catch { /* non-fatal */ }
-
-      // 6. Disconnect the device from ADB so it disappears from the device list
+      // 5. Disconnect the device from ADB so it disappears from the device list
       try {
         const tools = android.detectToolset();
         if (tools.adb.path) {
           spawnSync(tools.adb.path, ["disconnect", serial], { encoding: "utf8", timeout: 5000 });
         }
       } catch { /* non-fatal */ }
-
-      // 7. Close BlueStacks on Windows so the next account starts fresh
-      android.closeBlueStacks();
 
       logger.info({ serial, newAndroidId: newId }, "device reset for next account creation");
       res.json({ ok: true, newAndroidId: newId });
