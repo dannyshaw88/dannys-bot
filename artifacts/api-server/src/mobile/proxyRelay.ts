@@ -13,11 +13,12 @@
 import * as net from "net";
 
 export interface RelayUpstream {
-  host: string;
-  port: number;
+  host?: string;        // upstream proxy host; omit for direct-connect mode
+  port?: number;        // upstream proxy port; omit for direct-connect mode
   user?: string;
   pass?: string;
   protocol?: "http" | "socks5";
+  localAddress?: string; // bind outgoing sockets to this host adapter IP
 }
 
 interface RelayEntry {
@@ -28,11 +29,37 @@ interface RelayEntry {
 const relays = new Map<string, RelayEntry>();
 
 function relayKey(u: RelayUpstream): string {
-  return `${u.protocol ?? "http"}|${u.host}|${u.port}|${u.user ?? ""}|${u.pass ?? ""}`;
+  if (!u.host) return `direct|${u.localAddress ?? ""}`;
+  return `${u.protocol ?? "http"}|${u.host}|${u.port}|${u.user ?? ""}|${u.pass ?? ""}|${u.localAddress ?? ""}`;
 }
 
 function basicAuth(user: string, pass: string): string {
   return "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
+}
+
+// ── Direct-connect mode (no upstream proxy, bind to localAddress) ──────────────
+
+function handleConnectDirect(
+  clientSock: net.Socket,
+  target: string,
+  localAddress?: string,
+): void {
+  const [host, portStr] = target.split(":");
+  const port = parseInt(portStr ?? "443", 10);
+  if (!host || isNaN(port)) {
+    try { clientSock.write("HTTP/1.1 400 Bad Request\r\n\r\n"); } catch { /**/ }
+    clientSock.destroy(); return;
+  }
+  const opts: net.NetConnectOpts = { host, port, ...(localAddress ? { localAddress } : {}) };
+  const upSock = net.connect(opts);
+  upSock.once("connect", () => {
+    clientSock.write("HTTP/1.1 200 Connection established\r\n\r\n");
+    clientSock.pipe(upSock); upSock.pipe(clientSock);
+  });
+  upSock.on("error", () => { try { clientSock.write("HTTP/1.1 502 Bad Gateway\r\n\r\n"); } catch { /**/ } clientSock.destroy(); });
+  clientSock.on("error", () => upSock.destroy());
+  upSock.on("close",     () => { try { clientSock.destroy(); } catch { /**/ } });
+  clientSock.on("close", () => { try { upSock.destroy(); } catch { /**/ } });
 }
 
 // ── HTTP upstream: CONNECT tunnel (HTTPS) ─────────────────────────────────────
@@ -42,7 +69,8 @@ function handleConnectViaHttp(
   target: string,
   upstream: RelayUpstream,
 ): void {
-  const upSock = net.connect(upstream.port, upstream.host);
+  const opts: net.NetConnectOpts = { host: upstream.host!, port: upstream.port!, ...(upstream.localAddress ? { localAddress: upstream.localAddress } : {}) };
+  const upSock = net.connect(opts);
   upSock.once("connect", () => {
     let req = `CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n`;
     if (upstream.user) {
@@ -79,7 +107,8 @@ function handleHttpViaHttp(
   rawRequest: Buffer,
   upstream: RelayUpstream,
 ): void {
-  const upSock = net.connect(upstream.port, upstream.host);
+  const opts: net.NetConnectOpts = { host: upstream.host!, port: upstream.port!, ...(upstream.localAddress ? { localAddress: upstream.localAddress } : {}) };
+  const upSock = net.connect(opts);
   upSock.once("connect", () => {
     if (upstream.user) {
       let s = rawRequest.toString("utf8");
@@ -110,7 +139,8 @@ function openSocks5Tunnel(
   targetPort: number,
 ): Promise<net.Socket> {
   return new Promise((resolve, reject) => {
-    const sock = net.connect(upstream.port, upstream.host);
+    const opts: net.NetConnectOpts = { host: upstream.host!, port: upstream.port!, ...(upstream.localAddress ? { localAddress: upstream.localAddress } : {}) };
+    const sock = net.connect(opts);
     sock.setTimeout(15000, () => { reject(new Error("SOCKS5 connect timeout")); sock.destroy(); });
     sock.on("error", reject);
 
@@ -252,11 +282,17 @@ function createRelayServer(upstream: RelayUpstream): net.Server {
 
       if (firstLine.startsWith("CONNECT ")) {
         const target = firstLine.split(" ")[1] ?? "";
-        if (isSocks5) handleConnectViaSocks5(clientSock, target, upstream);
-        else           handleConnectViaHttp(clientSock, target, upstream);
+        if (!upstream.host)  handleConnectDirect(clientSock, target, upstream.localAddress);
+        else if (isSocks5)   handleConnectViaSocks5(clientSock, target, upstream);
+        else                  handleConnectViaHttp(clientSock, target, upstream);
       } else {
-        if (isSocks5) handleHttpViaSocks5(clientSock, acc, upstream);
-        else           handleHttpViaHttp(clientSock, acc, upstream);
+        if (!upstream.host) {
+          // Plain HTTP in direct mode — extract host:port from request line
+          const urlMatch = firstLine.match(/^[A-Z]+ https?:\/\/([^/:]+)(?::(\d+))?/);
+          const directTarget = urlMatch ? `${urlMatch[1]}:${urlMatch[2] ?? "80"}` : "";
+          handleConnectDirect(clientSock, directTarget, upstream.localAddress);
+        } else if (isSocks5) handleHttpViaSocks5(clientSock, acc, upstream);
+        else                  handleHttpViaHttp(clientSock, acc, upstream);
       }
     };
 

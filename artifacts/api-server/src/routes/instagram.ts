@@ -50,6 +50,7 @@ import {
   hasActiveWS,
   sendEbWsMessage,
   electronSilentVerify,
+  browserFill2fa,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -366,6 +367,15 @@ export async function registerInstagramRoutes(
           console.warn(`[status-guard] BLOCKED attempt to set profile ${id} → "valid" via PATCH route (current: ${current?.accountStatus})`);
           delete body.accountStatus;
         }
+      }
+      // Never allow a PATCH to overwrite a meaningful verify-result status with "pending".
+      // This prevents the frontend from trampling "locked", "captcha", or
+      // "automated_behaviour_detected" with stale form data immediately after verify.
+      // Only the dedicated /verify route, /wipe, and /reset-device-ids may set "pending".
+      const PROTECTED_STATUSES = new Set(["locked", "captcha", "automated_behaviour_detected", "valid", "stopped"]);
+      if ("accountStatus" in body && body.accountStatus === "pending" && current && PROTECTED_STATUSES.has(current.accountStatus ?? "")) {
+        console.warn(`[status-guard] BLOCKED attempt to set profile ${id} → "pending" via PATCH route (current: ${current.accountStatus})`);
+        delete body.accountStatus;
       }
       if ("username" in body || "password" in body) {
         const usernameChanged = current && "username" in body && body.username !== current.username;
@@ -1960,6 +1970,7 @@ export async function registerInstagramRoutes(
         case "newTab":     await browserNewTab(profileId); break;
         case "switchTab":  await browserSwitchTab(profileId, msg.index); break;
         case "closeTab":   await browserCloseTab(profileId, msg.index); break;
+        case "fill2fa":    await browserFill2fa(profileId, msg.code ?? ""); break;
       }
       res.json({ ok: true });
     } catch (err: any) {

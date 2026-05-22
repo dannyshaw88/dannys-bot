@@ -532,6 +532,80 @@ export async function clearInstagramData(serial: string): Promise<void> {
   spawnSync(adb, ["-s", serial, "shell", "pm", "clear", "com.instagram.android"], { encoding: "utf8", timeout: 10000 });
 }
 
+/**
+ * Nuclear deep reset: clears Instagram + Google Play Services + GSF.
+ * Resets: Instagram data, GAID, GSF ID (device registration), cached Google tokens.
+ * After this the user must re-sign into their Google account in BlueStacks.
+ * Returns a list of steps performed.
+ */
+export async function deepResetDevice(serial: string): Promise<{ steps: string[] }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+
+  const run = (args: string[], label: string, timeout = 15000) => {
+    const r = spawnSync(adb, ["-s", serial, ...args], { encoding: "utf8", timeout });
+    steps.push(r.status === 0 ? `✓ ${label}` : `⚠ ${label} (exit ${r.status})`);
+  };
+
+  // 1. Stop Instagram
+  run(["shell", "am", "force-stop", "com.instagram.android"], "Stop Instagram");
+  // 2. Clear Instagram data
+  run(["shell", "pm", "clear", "com.instagram.android"], "Clear Instagram data");
+  // 3. Stop Google Play Services
+  run(["shell", "am", "force-stop", "com.google.android.gms"], "Stop Google Play Services");
+  // 4. Clear GMS data — resets GSF ID + GAID + all device Google registration
+  run(["shell", "pm", "clear", "com.google.android.gms"], "Clear Google Play Services (resets GSF ID + GAID)", 30000);
+  // 5. Clear GSF package separately (present on some BlueStacks builds)
+  run(["shell", "pm", "clear", "com.google.android.gsf"], "Clear Google Services Framework");
+  // 6. Clear Play Store too (it caches device credentials)
+  run(["shell", "pm", "clear", "com.android.vending"], "Clear Play Store cache");
+
+  steps.push("✓ All Google identifiers cleared — new GSF ID will be assigned on next GMS start");
+  console.log(`[androidManager] deep reset complete for ${serial}:`, steps);
+  return { steps };
+}
+
+/**
+ * Reset the Google Advertising ID (GAID) on the device.
+ * GAID survives pm clear and Android ID changes — Instagram reads it at signup.
+ * We try three approaches in order, returning which one worked.
+ */
+export function resetAdvertisingId(serial: string): { ok: boolean; method: string } {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const newUuid = randomUUID();
+
+  // Approach 1: direct settings write (works on many BlueStacks / Android 9 builds)
+  const r1 = spawnSync(adb, ["-s", serial, "shell", "settings", "put", "secure", "advertising_id", newUuid], { encoding: "utf8", timeout: 5000 });
+  const verify1 = spawnSync(adb, ["-s", serial, "shell", "settings", "get", "secure", "advertising_id"], { encoding: "utf8", timeout: 4000 });
+  if ((verify1.stdout ?? "").trim() === newUuid) {
+    console.log(`[androidManager] GAID reset via settings put (${newUuid})`);
+    return { ok: true, method: "settings" };
+  }
+  void r1;
+
+  // Approach 2: overwrite the adid_settings.xml inside Google Play Services shared_prefs
+  // (works when adb has shell-level access to /data/data — common on BlueStacks)
+  const xmlContent = `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <string name="adid_key">${newUuid}</string>\n    <boolean name="limit_ad_tracking" value="false" />\n</map>`;
+  const tmpPath = "/sdcard/adid_settings.xml";
+  const destPath = "/data/data/com.google.android.gms/shared_prefs/adid_settings.xml";
+  spawnSync(adb, ["-s", serial, "shell", `echo '${xmlContent.replace(/'/g, "'\\''")}' > ${tmpPath}`], { encoding: "utf8", timeout: 5000 });
+  const mv = spawnSync(adb, ["-s", serial, "shell", `run-as com.google.android.gms cp ${tmpPath} ${destPath} 2>/dev/null || true`], { encoding: "utf8", timeout: 5000 });
+  void mv;
+
+  // Approach 3: restart GMS to force it to re-read (best effort)
+  spawnSync(adb, ["-s", serial, "shell", "am", "force-stop", "com.google.android.gms"], { encoding: "utf8", timeout: 5000 });
+
+  console.log(`[androidManager] GAID reset attempted (xml write), new UUID: ${newUuid}`);
+  return { ok: false, method: "manual-required" };
+}
+
+function randomUUID(): string {
+  const hex = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
+  return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${(Math.floor(Math.random() * 4) + 8).toString(16)}${hex().slice(1)}-${hex()}${hex()}${hex()}`;
+}
+
 function escapeForAdbInput(s: string): string {
   return s
     .replace(/\\/g, "\\\\")

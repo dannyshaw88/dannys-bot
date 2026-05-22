@@ -60,7 +60,7 @@ export function BrowserWindowsProvider({ children }: { children: ReactNode }) {
         username,
         userAgent,
         minimized: false,
-        maximized: false,
+        maximized: true,
         zIndex: topZ(),
         x: 120 + offset,
         y: 60 + offset,

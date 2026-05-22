@@ -3627,9 +3627,10 @@ function startHousekeepLoop(profileId: number): void {
 
   if (session.housekeepLoop) { clearInterval(session.housekeepLoop); session.housekeepLoop = null; }
 
-  let cookieSaveTick  = 0; // increments every 5s; save at 12 (=60s)
-  let popupCheckTick  = 0; // increments every 5s; dismiss at 2 (=10s)
-  let keepAliveTick   = 0; // increments every 5s; ping at 3 (=15s)
+  let cookieSaveTick    = 0; // increments every 5s; save at 12 (=60s)
+  let popupCheckTick    = 0; // increments every 5s; dismiss at 2 (=10s)
+  let bannerCheckTick   = 0; // increments every 5s; dismiss cookie banner at 2 (=10s)
+  let keepAliveTick     = 0; // increments every 5s; ping at 3 (=15s)
   let errorRecoveryTick = 0; // increments every 5s; check at 2 (=10s)
 
   session.housekeepLoop = setInterval(async () => {
@@ -3644,6 +3645,17 @@ function startHousekeepLoop(profileId: number): void {
     if (keepAliveTick >= 3) {
       keepAliveTick = 0;
       try { s.ws.ping(); } catch {}
+    }
+
+    // ── Cookie banner dismissal ────────────────────────────────────────────
+    // Fires every 10 s while the EB is open. Instagram renders the consent
+    // dialog asynchronously — the framenavigated handler may fire before it
+    // appears. The real Puppeteer click inside dismissCookieBanner() is safe
+    // to call even when no banner is visible (noop if nothing matches).
+    bannerCheckTick++;
+    if (bannerCheckTick >= 2) {
+      bannerCheckTick = 0;
+      dismissCookieBanner(s.page).catch(() => {});
     }
 
     // ── Popup dismissal ────────────────────────────────────────────────────
@@ -4172,9 +4184,16 @@ export async function browserSendDM(
 export async function closeSession(profileId: number, opts?: { skipCookieSave?: boolean }) {
   if (IS_ELECTRON_EB) {
     const s = electronSessions.get(profileId);
-    if (!s) return;
-    if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}
-    electronSessions.delete(profileId);
+    if (s) {
+      if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}
+      electronSessions.delete(profileId);
+    }
+    // Always send /eb/close regardless of whether a server-side session entry exists.
+    // The EB window may have been opened via electronAPI.openBrowserWindow() from the
+    // frontend (e.g. user clicked the Browser button) which registers the window in
+    // Electron's ebMap but never creates an electronSessions entry on the server side.
+    // Without this unconditional IPC the window stays open after profile deletion.
+    // The IPC handler is a no-op if no window is open, so this is always safe.
     await ebIpc("POST", "/eb/close", { profileId })
       .catch(err => log(`[closeSession:${profileId}] EB close failed: ${err?.message}`, "browser"));
     log(`EB window closed for profile ${profileId}`, "browser");
@@ -4377,37 +4396,47 @@ export async function clearEbSessionCookies(profileId: number, igApiCookies?: st
 // Tries every known Instagram cookie banner selector and clicks Accept.
 // Safe to call any time — silently does nothing if no banner is visible.
 async function dismissCookieBanner(page: Page): Promise<void> {
+  // Instagram's cookie consent buttons are React-controlled — a plain JS .click()
+  // inside page.evaluate() fires a synthetic click that React's event delegation
+  // may not pick up.  Instead, get the button's bounding rect from the DOM and
+  // send a real Puppeteer mouse click (CDP Input.dispatchMouseEvent) which the
+  // browser treats identically to a real user interaction.
+  const ACCEPT_TEXTS = [
+    "allow all cookies",
+    "allow essential and optional cookies",
+    "accept all",
+    "accept cookies",
+    "allow cookies",
+    "allow all",
+    "akzeptieren",           // German
+    "accepter tout",         // French
+    "aceptar todo",          // Spanish
+    "accetta tutto",         // Italian
+    "alle cookies akzeptieren",
+  ];
   try {
-    await page.evaluate(() => {
-      // Selectors for known Instagram / GDPR cookie buttons (text-based + attribute)
-      const acceptTexts = [
-        "allow all cookies",
-        "allow essential and optional cookies",
-        "accept all",
-        "accept cookies",
-        "allow cookies",
-        "allow all",
-        "akzeptieren",           // German
-        "accepter tout",         // French
-        "aceptar todo",          // Spanish
-        "accetta tutto",         // Italian
-        "alle cookies akzeptieren",
-      ];
-
-      // 1. Try Instagram's own data attribute
+    const btnRect = await page.evaluate((texts: string[]) => {
+      // 1. Try Instagram's own data attribute first
       const attrBtn = document.querySelector<HTMLElement>('[data-cookiebanner="accept_button"]');
-      if (attrBtn) { attrBtn.click(); return; }
-
-      // 2. Try role="dialog" buttons matching known text
+      if (attrBtn) {
+        const r = attrBtn.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+      // 2. Walk all buttons looking for known accept text
       const allBtns = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
       for (const btn of allBtns) {
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-        if (acceptTexts.some(t => txt.includes(t))) {
-          btn.click();
-          return;
+        if (texts.some(t => txt.includes(t))) {
+          const r = btn.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
         }
       }
-    });
+      return null;
+    }, ACCEPT_TEXTS).catch(() => null);
+
+    if (btnRect) {
+      await page.mouse.click(btnRect.x, btnRect.y);
+    }
   } catch {
     // Page navigating or closed — ignore
   }
@@ -5877,4 +5906,73 @@ export function sendEbWsMessage(profileId: number, msg: object): void {
   const s = electronSessions.get(profileId);
   if (!s?.ws) return;
   wsWrite(s.ws, msg);
+}
+
+// ── 2FA code fill + auto-submit ───────────────────────────────────────────────
+// Finds the OTP code input on the current page, fills it with the supplied code,
+// then finds and clicks the Continue / Submit button.  Safe to call at any time —
+// does nothing if no OTP input is visible.
+export async function browserFill2fa(profileId: number, code: string): Promise<void> {
+  const s = sessions.get(profileId);
+  if (!s) return;
+  const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+  // Try each selector in priority order
+  const OTP_SELECTORS = [
+    'input[autocomplete="one-time-code"]',
+    'input[name="verificationCode"]',
+    'input[name="verification_code"]',
+    'input[name="security_code"]',
+    'input[name="totp_code"]',
+    'input[name="code"]',
+    'input[inputmode="numeric"]',
+  ];
+
+  let filled = false;
+  for (const sel of OTP_SELECTORS) {
+    const el = await s.page.$(sel).catch(() => null);
+    if (!el) continue;
+    const box = await el.boundingBox().catch(() => null);
+    if (!box || box.width === 0 || box.height === 0) continue;
+    // Click the field to focus it
+    await s.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await delay(120);
+    // Select all existing content and replace with the code
+    await s.page.keyboard.down("Control");
+    await s.page.keyboard.press("a");
+    await s.page.keyboard.up("Control");
+    await delay(60);
+    await s.page.keyboard.press("Backspace");
+    await delay(80);
+    await s.page.keyboard.type(code, { delay: 70 });
+    filled = true;
+    break;
+  }
+  if (!filled) return;
+
+  await delay(350);
+
+  // Find and click the Continue / Submit button
+  const submitRect = await s.page.evaluate(() => {
+    const SUBMIT = ["confirm", "continue", "submit", "verify", "next", "done", "ok"];
+    const btns = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
+    for (const btn of btns) {
+      const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+      if (SUBMIT.some(t => txt.includes(t))) {
+        const r = btn.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }
+    }
+    // Fallback: any visible submit-type input
+    const submits = Array.from(document.querySelectorAll<HTMLElement>('button[type="submit"], input[type="submit"]'));
+    for (const el of submits) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    }
+    return null;
+  }).catch(() => null);
+
+  if (submitRect) {
+    await s.page.mouse.click(submitRect.x, submitRect.y);
+  }
 }

@@ -56,6 +56,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.464",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Cookie consent dialog on the Instagram login page is now auto-clicked using a real mouse click — Instagram's React buttons were ignoring the old JavaScript click, so the banner was never dismissed." },
+      { category: "Fixed", text: "Cookie banner dismissal now runs every 10 seconds while the browser is open, not just on page load — catches dialogs that appear after the initial navigation." },
+      { category: "Fixed", text: "2FA Code button now automatically finds the code field on screen, fills the code, and clicks Continue — previously it only typed the code wherever the cursor happened to be." },
+      { category: "Fixed", text: "Embedded browser windows now open maximised by default." },
+      { category: "Improvement", text: "Browser toolbar navigation buttons (Back, Forward, Refresh, Home) are now larger and easier to click." },
+      { category: "New", text: "Deep Reset button added to the Create & Spoof device card — clears Instagram, Google account data, and advertising IDs in one step to help avoid ban-on-creation." },
+      { category: "New", text: "GAID (Advertising ID) reset added to the Reset flow — resets the Google Advertising ID before each account creation attempt." },
+      { category: "New", text: "Source network adapter picker added — lets you bind the proxy relay to a specific network interface (e.g. a USB tether) so only BlueStacks traffic is routed through it." },
+    ],
+  },
+  {
     version: "1.0.463",
     date: "22 May 2026",
     items: [

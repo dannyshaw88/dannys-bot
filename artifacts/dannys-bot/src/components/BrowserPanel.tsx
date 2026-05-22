@@ -770,25 +770,25 @@ export function BrowserPanel({ profileId, userAgent, username, embedded }: Brows
         <button
           onClick={() => send({ type: "newTab" })}
           disabled={!connected}
-          className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          className="flex items-center justify-center h-10 w-10 rounded-md hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           title="Open new tab"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-5 h-5" />
         </button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => send({ type: "back" })}    disabled={!connected} title="Back">
-          <ArrowLeft className="w-4 h-4" />
+        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => send({ type: "back" })}    disabled={!connected} title="Back">
+          <ArrowLeft className="w-5 h-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => send({ type: "forward" })} disabled={!connected} title="Forward">
-          <ArrowRight className="w-4 h-4" />
+        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => send({ type: "forward" })} disabled={!connected} title="Forward">
+          <ArrowRight className="w-5 h-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0"
           onClick={() => { setIsLoading(true); send({ type: "reload" }); }} disabled={!connected} title="Refresh">
-          {isLoading && connected ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <RotateCw className="w-4 h-4" />}
+          {isLoading && connected ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <RotateCw className="w-5 h-5" />}
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0"
           onClick={() => { setIsLoading(true); send({ type: "navigate", url: "https://www.instagram.com/" }); }}
           disabled={!connected} title="Home">
-          <Home className="w-4 h-4" />
+          <Home className="w-5 h-5" />
         </Button>
 
         <form onSubmit={onAddressSubmit} className="flex-1 min-w-0">
@@ -839,9 +839,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded }: Brows
           <>
             <button
               type="button"
-              onClick={() => generateTotp((code) => send({ type: "type", text: code }))}
+              onClick={() => generateTotp((code) => send({ type: "fill2fa", code }))}
               disabled={!connected}
-              title="Generate a live 2FA/TOTP code, copy to clipboard, and paste into the browser"
+              title="Generate a live 2FA code, paste it into the 2FA field on screen, and auto-click Continue"
               className={`h-8 px-3 rounded-md border text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
                 totpCopied  ? "border-green-400 text-green-700 bg-green-50" :
                 totpNoKey   ? "border-red-300 text-red-700 bg-red-50" :

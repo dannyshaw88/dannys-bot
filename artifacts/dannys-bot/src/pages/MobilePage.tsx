@@ -34,7 +34,8 @@ async function api<T>(method: string, path: string, body?: any): Promise<T> {
 
 type DeviceInfo   = { serial: string; state: string; product?: string; model?: string };
 type ProxyEntry   = { id: number; name?: string | null; host: string; port: number; username?: string | null; password?: string | null };
-type ConfigResp   = { instanceConfigs: Record<string, { proxyId?: number | null }>; proxies: ProxyEntry[] };
+type ConfigResp   = { instanceConfigs: Record<string, { proxyId?: number | null; sourceInterface?: string | null }>; proxies: ProxyEntry[] };
+type NetIface     = { name: string; ip: string; family: string };
 type DevicePropsResp = { manufacturer: string; model: string; androidVersion: string; sdkInt: string; density: string; width: string; height: string; board: string; deviceString: string; userAgent: string };
 
 const randHex16 = () => Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
@@ -87,40 +88,59 @@ const COLORS = [
 
 // ─── Proxy relay section ───────────────────────────────────────────────────────
 
-function ProxyRelaySection({ serial, savedProxyId, onApplied }: { serial: string; savedProxyId?: number | null; onApplied?: () => void }) {
+function ProxyRelaySection({ serial, savedProxyId, savedSourceInterface, onApplied }: { serial: string; savedProxyId?: number | null; savedSourceInterface?: string | null; onApplied?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [protocol, setProtocol] = useState<"http" | "socks5">("http");
+  const [sourceIface, setSourceIface] = useState<string>(savedSourceInterface ?? "");
+
+  const ifacesQ = useQuery({
+    queryKey: ["network-interfaces"],
+    queryFn: () => api<NetIface[]>("GET", "/api/network/interfaces"),
+    staleTime: 15000,
+  });
+
+  const hasSource = !!(sourceIface && sourceIface !== "default");
+  const canApply = !!(savedProxyId || hasSource);
 
   const statusQ = useQuery({
     queryKey: ["relay-status", serial],
     queryFn: () => api<{ active: boolean; relayPort?: number | null; deviceProxy?: string | null }>("GET", `/api/mobile/devices/${serial}/relay-status`),
     refetchInterval: 5000,
     retry: false,
-    enabled: !!savedProxyId,
+    enabled: canApply,
   });
 
   const applyMut = useMutation({
-    mutationFn: () => api<{ ok: boolean; relay?: string; upstream?: string }>("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId: savedProxyId, proxyProtocol: protocol }),
+    mutationFn: () => api<{ ok: boolean; relay?: string; upstream?: string }>("POST", `/api/mobile/devices/${serial}/proxy`, {
+      proxyId: savedProxyId ?? null,
+      proxyProtocol: protocol,
+      sourceInterface: hasSource ? sourceIface : null,
+    }),
     onSuccess: (r) => {
       if (r.ok) {
-        toast({ title: "Proxy applied", description: `Traffic routing through ${r.upstream} via local relay.` });
+        toast({ title: "Applied", description: `BlueStacks traffic routing via ${r.upstream}.` });
         onApplied?.();
       }
       qc.invalidateQueries({ queryKey: ["relay-status", serial] });
     },
-    onError: (e: any) => toast({ title: "Failed to apply proxy", description: e?.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Failed to apply", description: e?.message, variant: "destructive" }),
   });
 
   const clearMut = useMutation({
-    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId: null }),
-    onSuccess: () => { toast({ title: "Proxy cleared" }); qc.invalidateQueries({ queryKey: ["relay-status", serial] }); },
-    onError: (e: any) => toast({ title: "Failed to clear proxy", description: e?.message, variant: "destructive" }),
+    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId: null, sourceInterface: null }),
+    onSuccess: () => { toast({ title: "Relay cleared" }); qc.invalidateQueries({ queryKey: ["relay-status", serial] }); },
+    onError: (e: any) => toast({ title: "Failed to clear", description: e?.message, variant: "destructive" }),
   });
 
   const status = statusQ.data;
   const isActive = !!(status?.active && status?.relayPort);
   const relayDown = !isActive && !!status?.deviceProxy;
+
+  const ifaceLabel = (ip: string) => {
+    const iface = ifacesQ.data?.find(i => i.ip === ip);
+    return iface ? `${iface.name} (${ip})` : ip;
+  };
 
   return (
     <div className="space-y-1.5 pt-1 border-t border-border/60">
@@ -128,8 +148,8 @@ function ProxyRelaySection({ serial, savedProxyId, onApplied }: { serial: string
         <div className="flex items-center gap-1.5">
           <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
           <span className="text-[10px] font-semibold text-muted-foreground">
-            Proxy relay —{" "}
-            {!savedProxyId ? "no proxy selected" : !status ? "checking…" : isActive ? "active" : relayDown ? "relay stopped" : "inactive"}
+            Relay —{" "}
+            {!canApply ? "not configured" : !status ? "checking…" : isActive ? "active" : relayDown ? "stopped" : "inactive"}
           </span>
           {statusQ.isFetching && <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground/50" />}
         </div>
@@ -139,25 +159,51 @@ function ProxyRelaySection({ serial, savedProxyId, onApplied }: { serial: string
             disabled={clearMut.isPending}
             onClick={() => clearMut.mutate()}
           >
-            {clearMut.isPending ? "Clearing…" : "Clear proxy"}
+            {clearMut.isPending ? "Clearing…" : "Clear"}
           </button>
         )}
       </div>
 
-      {savedProxyId && !isActive && (
+      {/* Source network adapter picker */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-muted-foreground shrink-0">Source network</span>
+          <select
+            className="flex-1 text-[10px] bg-background border border-border rounded px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            value={sourceIface}
+            onChange={e => setSourceIface(e.target.value)}
+            disabled={applyMut.isPending || isActive}
+          >
+            <option value="default">Default (regular internet)</option>
+            {ifacesQ.data?.filter(i => i.family === "IPv4").map(i => (
+              <option key={i.ip} value={i.ip}>{i.name} — {i.ip}</option>
+            ))}
+          </select>
+        </div>
+        {hasSource && !savedProxyId && (
+          <p className="text-[9px] text-blue-500 leading-tight">Direct mode — BlueStacks traffic will go through {ifaceLabel(sourceIface)} with no upstream proxy.</p>
+        )}
+        {hasSource && savedProxyId && (
+          <p className="text-[9px] text-muted-foreground/60 leading-tight">Proxy traffic will leave via {ifaceLabel(sourceIface)}.</p>
+        )}
+      </div>
+
+      {canApply && !isActive && (
         <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground shrink-0">Protocol</span>
-            <select
-              className="flex-1 text-[10px] bg-background border border-border rounded px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              value={protocol}
-              onChange={e => setProtocol(e.target.value as "http" | "socks5")}
-              disabled={applyMut.isPending}
-            >
-              <option value="http">HTTP / HTTPS (most common)</option>
-              <option value="socks5">SOCKS5</option>
-            </select>
-          </div>
+          {savedProxyId && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted-foreground shrink-0">Protocol</span>
+              <select
+                className="flex-1 text-[10px] bg-background border border-border rounded px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                value={protocol}
+                onChange={e => setProtocol(e.target.value as "http" | "socks5")}
+                disabled={applyMut.isPending}
+              >
+                <option value="http">HTTP / HTTPS (most common)</option>
+                <option value="socks5">SOCKS5</option>
+              </select>
+            </div>
+          )}
           {relayDown && (
             <p className="text-[9px] text-amber-600">Relay stopped (server restarted?) — click Apply to restart.</p>
           )}
@@ -169,16 +215,16 @@ function ProxyRelaySection({ serial, savedProxyId, onApplied }: { serial: string
           >
             {applyMut.isPending
               ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Applying…</>
-              : <><Play className="w-3.5 h-3.5" />Apply proxy</>}
+              : <><Play className="w-3.5 h-3.5" />Apply</>}
           </Button>
           <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
-            No VPN app needed. Instant, no disconnections.
+            No VPN needed — Equinox relays traffic internally.
           </p>
         </div>
       )}
 
-      {!savedProxyId && (
-        <p className="text-[10px] text-muted-foreground/60 italic">Select a proxy above to apply it.</p>
+      {!canApply && (
+        <p className="text-[10px] text-muted-foreground/60 italic">Select a proxy or a source network above.</p>
       )}
 
       {isActive && (
@@ -196,7 +242,7 @@ function ProxyRelaySection({ serial, savedProxyId, onApplied }: { serial: string
   );
 }
 
-function ProxySelector({ serial, proxies, savedProxyId, onAutoSelect }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null; onAutoSelect?: () => void }) {
+function ProxySelector({ serial, proxies, savedProxyId, savedSourceInterface, onAutoSelect }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null; savedSourceInterface?: string | null; onAutoSelect?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [ipResult, setIpResult] = useState<{ ip?: string; error?: string } | null>(null);
@@ -262,16 +308,16 @@ function ProxySelector({ serial, proxies, savedProxyId, onAutoSelect }: { serial
       )}
 
       {/* Proxy relay — routes all traffic through the proxy, no VPN app needed */}
-      <ProxyRelaySection serial={serial} savedProxyId={savedProxyId} onApplied={onAutoSelect} />
+      <ProxyRelaySection serial={serial} savedProxyId={savedProxyId} savedSourceInterface={savedSourceInterface} onApplied={onAutoSelect} />
     </div>
   );
 }
 
 // ─── Device card ───────────────────────────────────────────────────────────────
 
-function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, onDisconnect, onAutoSelect }: {
+function DeviceCard({ device, idx, selected, proxies, savedProxyId, savedSourceInterface, onSelect, onDisconnect, onAutoSelect }: {
   device: DeviceInfo; idx: number; selected: boolean;
-  proxies: ProxyEntry[]; savedProxyId?: number | null;
+  proxies: ProxyEntry[]; savedProxyId?: number | null; savedSourceInterface?: string | null;
   onSelect: () => void; onDisconnect: () => Promise<void>; onAutoSelect?: () => void;
 }) {
   const { toast } = useToast();
@@ -338,7 +384,7 @@ function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, on
           </div>
         )}
         <div onClick={e => e.stopPropagation()}>
-          <ProxySelector serial={device.serial} proxies={proxies} savedProxyId={savedProxyId} onAutoSelect={onAutoSelect} />
+          <ProxySelector serial={device.serial} proxies={proxies} savedProxyId={savedProxyId} savedSourceInterface={savedSourceInterface} onAutoSelect={onAutoSelect} />
         </div>
       </div>
     </div>
@@ -533,16 +579,32 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
     onError: (e: any) => toast({ title: "Type failed — make sure a text field is focused in BlueStacks", description: e?.message, variant: "destructive" }),
   });
   const resetMut   = useMutation({
-    mutationFn: () => api<{ ok: boolean; newAndroidId: string }>("POST", `/api/mobile/devices/${serial}/reset`),
+    mutationFn: () => api<{ ok: boolean; newAndroidId: string; gaidReset: boolean }>("POST", `/api/mobile/devices/${serial}/reset`),
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["android-id", serial] });
       qc.invalidateQueries({ queryKey: ["mobile-config"] });
       qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
       qc.invalidateQueries({ queryKey: ["mobile-devices"] });
-      toast({ title: "Reset complete", description: `Instagram data cleared (app stays installed), new device ID set (${d.newAndroidId}), proxy cleared. Change the device profile in BlueStacks → Settings → Phone, then open Instagram — it will start fresh.` });
+      const gaidNote = d.gaidReset
+        ? "Android ID + Advertising ID (GAID) reset automatically."
+        : "Android ID reset. GAID could not be auto-reset — go to BlueStacks Settings → Google → Ads → Reset advertising ID manually.";
+      toast({ title: "Reset complete", description: `${gaidNote} Proxy cleared. Change device profile in BlueStacks → Settings → Phone, then open Instagram.` });
       onReset?.();
     },
     onError: (e: any) => toast({ title: "Reset failed", description: e?.message, variant: "destructive" }),
+  });
+  const [deepResetSteps, setDeepResetSteps] = useState<string[] | null>(null);
+  const deepResetMut = useMutation({
+    mutationFn: () => api<{ ok: boolean; newAndroidId: string; steps: string[] }>("POST", `/api/mobile/devices/${serial}/deep-reset`),
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["android-id", serial] });
+      qc.invalidateQueries({ queryKey: ["mobile-config"] });
+      qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
+      qc.invalidateQueries({ queryKey: ["mobile-devices"] });
+      setDeepResetSteps(d.steps);
+      onReset?.();
+    },
+    onError: (e: any) => toast({ title: "Deep reset failed", description: e?.message, variant: "destructive" }),
   });
   const [signupResult, setSignupResult] = useState<{ ok: boolean; steps: string[]; error?: string } | null>(null);
   const signupMut = useMutation({
@@ -604,12 +666,27 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
             size="sm"
             variant="outline"
             className="h-7 px-2.5 text-[10px] border-orange-500/50 text-orange-600 hover:bg-orange-500/10 hover:border-orange-500 gap-1.5"
-            disabled={resetMut.isPending}
-            title="Clears Instagram data (app stays installed — no re-download), generates a new device ID, and clears the proxy. Then change device profile in BlueStacks → Settings → Phone."
+            disabled={resetMut.isPending || deepResetMut.isPending}
+            title="Clears Instagram data, resets Android ID + GAID, clears proxy. Quick reset between accounts on the same device."
             onClick={() => resetMut.mutate()}
           >
             {resetMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-            Reset for next account
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2.5 text-[10px] border-red-500/50 text-red-600 hover:bg-red-500/10 hover:border-red-500 gap-1.5"
+            disabled={resetMut.isPending || deepResetMut.isPending}
+            title="Nuclear reset: clears Instagram + ALL Google identifiers (GSF ID, GAID, Play Services). Stops Instagram from recognising the device across accounts. You must re-sign into your Google account in BlueStacks afterwards."
+            onClick={() => {
+              if (window.confirm("Deep Reset will clear ALL Google identifiers (GSF ID, GAID, Play Services) — this is the strongest possible device clean.\n\nAfterwards you MUST re-sign into your Google account in BlueStacks before using the Play Store again.\n\nInstagram can be re-installed from cache (no Play Store needed).\n\nContinue?")) {
+                deepResetMut.mutate();
+              }
+            }}
+          >
+            {deepResetMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shield className="w-3 h-3" />}
+            Deep Reset
           </Button>
           <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>
         </div>
@@ -676,6 +753,28 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
                         {signupResult.error && <li className="text-[9px] text-destructive leading-tight">{signupResult.error}</li>}
                       </ul>
                     </details>
+                  )}
+                  {deepResetSteps && (
+                    <div className="rounded-md border border-red-500/30 bg-red-500/5 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-semibold text-red-600">Deep Reset complete</p>
+                        <button className="text-[9px] text-muted-foreground hover:text-foreground" onClick={() => setDeepResetSteps(null)}>dismiss</button>
+                      </div>
+                      <ul className="space-y-0.5">
+                        {deepResetSteps.map((s, i) => (
+                          <li key={i} className={`text-[9px] leading-tight ${s.startsWith("⚠") ? "text-amber-600" : "text-muted-foreground"}`}>{s}</li>
+                        ))}
+                      </ul>
+                      <div className="border-t border-red-500/20 pt-2 space-y-1">
+                        <p className="text-[9px] font-semibold text-foreground">Next steps — do these in order:</p>
+                        <ol className="list-decimal list-inside space-y-0.5">
+                          <li className="text-[9px] text-muted-foreground">Change phone model in BlueStacks → Settings → Phone</li>
+                          <li className="text-[9px] text-muted-foreground">Open BlueStacks → sign into your Google account (Play Services needs to re-register)</li>
+                          <li className="text-[9px] text-muted-foreground">Come back and install Instagram from cache (no Play Store needed)</li>
+                          <li className="text-[9px] text-muted-foreground">Set a fresh proxy, then start the signup</li>
+                        </ol>
+                      </div>
+                    </div>
                   )}
                 </div>
               </>
@@ -1121,6 +1220,7 @@ export function MobilePage() {
                     selected={selectedSerial === dev.serial}
                     proxies={proxies}
                     savedProxyId={configs[dev.serial]?.proxyId}
+                    savedSourceInterface={configs[dev.serial]?.sourceInterface}
                     onSelect={() => { setSelectedSerial(selectedSerial === dev.serial ? null : dev.serial); setShowAddForm(false); }}
                     onDisconnect={() => disconnectMut.mutateAsync(dev.serial).then(() => { /* void */ })}
                     onAutoSelect={() => { setSelectedSerial(dev.serial); setReconnectingSerial(dev.serial); setShowAddForm(false); }}

@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import fs from "fs";
 import path from "path";
 import * as http from "http";
+import * as os from "os";
 import * as android from "../mobile/androidManager";
 import * as proxyRelay from "../mobile/proxyRelay";
 import { storage } from "../storage";
@@ -44,7 +45,7 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 
 // ── Per-instance config (proxy assignment) ────────────────────────────────────
 // Stored in mobile-instances.json next to the DB so it survives restarts.
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5" };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -61,6 +62,20 @@ function saveInstanceConfigs(cfg: InstanceConfigMap): void {
 }
 
 export function registerMobileRoutes(app: Express) {
+  // ── Network interfaces (for source-adapter picker in UI) ───────────────────
+  app.get("/api/network/interfaces", (_req: Request, res: Response) => {
+    const raw = os.networkInterfaces();
+    const result: { name: string; ip: string; family: string }[] = [];
+    for (const [name, addrs] of Object.entries(raw)) {
+      for (const addr of addrs ?? []) {
+        if (!addr.internal) {
+          result.push({ name, ip: addr.address, family: addr.family });
+        }
+      }
+    }
+    res.json(result);
+  });
+
   app.get("/api/mobile/status", async (_req: Request, res: Response) => {
     try {
       const toolset = android.detectToolset();
@@ -213,11 +228,13 @@ export function registerMobileRoutes(app: Express) {
   const deviceProxySchema = z.object({
     proxyId: z.number().nullable(),
     proxyProtocol: z.enum(["http", "socks5"]).optional(),
+    sourceInterface: z.string().nullable().optional(), // local adapter IP to bind relay to
   });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
       const input = deviceProxySchema.parse(req.body);
       const serial = p(req, "serial");
+      const localAddress = input.sourceInterface ?? undefined;
 
       if (input.proxyId) {
         const proxies = await storage.getProxies();
@@ -233,36 +250,58 @@ export function registerMobileRoutes(app: Express) {
           user: proxy.username ?? undefined,
           pass: proxy.password ?? undefined,
           protocol: proto,
+          localAddress,
         };
         const relayPort = await proxyRelay.getOrCreateRelay(upstream);
 
         // 2. Find the gateway IP so Android can reach the Windows host
-        // getDeviceGateway always returns a string (falls back to 10.0.2.2 for emulators)
         const gateway = android.getDeviceGateway(serial);
 
-        // 3. Save protocol choice so relay-status and reset can look it up
+        // 3. Save config
         const cfg = loadInstanceConfigs();
-        cfg[serial] = { ...cfg[serial], proxyId: input.proxyId, proxyProtocol: proto };
+        cfg[serial] = { ...cfg[serial], proxyId: input.proxyId, proxyProtocol: proto, sourceInterface: input.sourceInterface ?? null };
         saveInstanceConfigs(cfg);
 
-        // 4. Point Android's global proxy at the relay (no auth needed here)
+        // 4. Point Android's global proxy at the relay
         await android.setDeviceProxy(serial, { host: gateway, port: relayPort });
 
+        const ifaceNote = localAddress ? ` via ${localAddress}` : "";
         logger.info(
-          { serial, relay: `${gateway}:${relayPort}`, upstream: `${proto}://${proxy.host}:${proxy.port}` },
+          { serial, relay: `${gateway}:${relayPort}`, upstream: `${proto}://${proxy.host}:${proxy.port}`, localAddress },
           "mobile proxy relay applied",
         );
-        res.json({ ok: true, relay: `${gateway}:${relayPort}`, upstream: `${proxy.host}:${proxy.port}` });
-      } else {
-        // Clear: stop any running relay for the currently-assigned proxy
+        res.json({ ok: true, relay: `${gateway}:${relayPort}`, upstream: `${proxy.host}:${proxy.port}${ifaceNote}` });
+
+      } else if (localAddress) {
+        // Direct mode: no upstream proxy, but bind to a specific adapter (e.g. iPhone hotspot)
+        const upstream: proxyRelay.RelayUpstream = { localAddress };
+        const relayPort = await proxyRelay.getOrCreateRelay(upstream);
+        const gateway = android.getDeviceGateway(serial);
+
         const cfg = loadInstanceConfigs();
-        const proxyId = cfg[serial]?.proxyId ?? null;
-        const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
-        if (proxyId) {
+        cfg[serial] = { ...cfg[serial], proxyId: null, proxyProtocol: null, sourceInterface: localAddress };
+        saveInstanceConfigs(cfg);
+
+        await android.setDeviceProxy(serial, { host: gateway, port: relayPort });
+
+        logger.info({ serial, relay: `${gateway}:${relayPort}`, localAddress }, "mobile direct relay applied");
+        res.json({ ok: true, relay: `${gateway}:${relayPort}`, upstream: `direct via ${localAddress}` });
+
+      } else {
+        // Clear everything
+        const cfg = loadInstanceConfigs();
+        const existingCfg = cfg[serial];
+        if (existingCfg?.proxyId) {
           const proxies = await storage.getProxies();
-          const px = proxies.find(pr => pr.id === proxyId);
-          if (px) await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined, protocol: proxyProtocol as "http" | "socks5" });
+          const px = proxies.find(pr => pr.id === existingCfg.proxyId);
+          if (px) await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined, protocol: (existingCfg.proxyProtocol ?? "http") as "http" | "socks5" });
         }
+        if (existingCfg?.sourceInterface && !existingCfg?.proxyId) {
+          // Stop any direct relay
+          await proxyRelay.stopRelay({ localAddress: existingCfg.sourceInterface });
+        }
+        cfg[serial] = { ...existingCfg, proxyId: null, proxyProtocol: null, sourceInterface: null };
+        saveInstanceConfigs(cfg);
         await android.setDeviceProxy(serial, null);
         res.json({ ok: true });
       }
@@ -501,6 +540,9 @@ export function registerMobileRoutes(app: Express) {
       // 1. Clear Instagram data (keeps the app installed — no re-download needed)
       await android.clearInstagramData(serial);
 
+      // 1b. Reset Google Advertising ID (GAID) — survives pm clear, used by Instagram at signup
+      const gaidResult = android.resetAdvertisingId(serial);
+
       // 2. Fresh device ID
       const newId = android.randomAndroidId();
       await android.setAndroidId(serial, newId);
@@ -530,11 +572,59 @@ export function registerMobileRoutes(app: Express) {
         }
       } catch { /* non-fatal */ }
 
-      logger.info({ serial, newAndroidId: newId }, "device reset for next account creation");
-      res.json({ ok: true, newAndroidId: newId });
+      logger.info({ serial, newAndroidId: newId, gaidReset: gaidResult.ok }, "device reset for next account creation");
+      res.json({ ok: true, newAndroidId: newId, gaidReset: gaidResult.ok });
     } catch (e: any) {
       logger.error({ err: e }, "device reset failed");
       res.status(500).json({ error: e?.message ?? "Reset failed" });
+    }
+  });
+
+  // Deep reset: clears Instagram + ALL Google identity (GSF ID + GAID) + Android ID
+  // The user must re-sign into their Google account in BlueStacks after this.
+  app.post("/api/mobile/devices/:serial/deep-reset", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+
+      // 1. Clear Instagram + GMS + GSF (resets GSF ID, GAID, all Google device registration)
+      const { steps } = await android.deepResetDevice(serial);
+
+      // 2. Fresh Android ID
+      const newId = android.randomAndroidId();
+      await android.setAndroidId(serial, newId);
+      steps.push(`✓ Android ID reset → ${newId}`);
+
+      // 3. Clear proxy
+      await android.setDeviceProxy(serial, null);
+      steps.push("✓ Proxy cleared");
+
+      // 4. Stop relay and clear instance config
+      const cfg = loadInstanceConfigs();
+      const proxyId = cfg[serial]?.proxyId ?? null;
+      const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
+      if (proxyId) {
+        const proxies = await storage.getProxies();
+        const px = proxies.find(pr => pr.id === proxyId);
+        if (px) {
+          await stopRelay(px.host, px.port, proxyProtocol as "http" | "socks5");
+        }
+      }
+      cfg[serial] = { ...cfg[serial], proxyId: null, proxyPort: null, proxyProtocol: null };
+      saveInstanceConfigs(cfg);
+
+      // 5. Disconnect ADB
+      try {
+        const tools = android.detectToolset();
+        if (tools.adb.path) {
+          spawnSync(tools.adb.path, ["disconnect", serial], { encoding: "utf8", timeout: 5000 });
+        }
+      } catch { /* non-fatal */ }
+
+      logger.info({ serial, newAndroidId: newId, steps }, "device deep reset complete");
+      res.json({ ok: true, newAndroidId: newId, steps });
+    } catch (e: any) {
+      logger.error({ err: e }, "device deep reset failed");
+      res.status(500).json({ error: e?.message ?? "Deep reset failed" });
     }
   });
 

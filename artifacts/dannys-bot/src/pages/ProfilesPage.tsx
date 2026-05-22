@@ -1111,9 +1111,9 @@ export function ProfilesPage() {
                       </div>
                     );
                     if (key === "battery") {
-                      const live = (profile as any).ebLiveStats as { battery: number; charging: boolean; downlink: number } | undefined;
-                      const pct = live ? Math.round(live.battery * 100) : (profile.userAgentEmbedded ? _pageFingerprint(profile.userAgentEmbedded, profile.userAgentApi).batteryPct : null);
-                      const chg = live ? live.charging : (profile.userAgentEmbedded ? _pageFingerprint(profile.userAgentEmbedded, profile.userAgentApi).charging : false);
+                      const fp  = profile.userAgentEmbedded ? _pageFingerprint(profile.userAgentEmbedded, profile.userAgentApi) : null;
+                      const pct = fp?.batteryPct ?? null;
+                      const chg = fp?.charging ?? false;
                       if (pct === null) return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0" />;
                       const color = pct > 60 ? "text-green-600" : pct > 30 ? "text-amber-600" : "text-red-500";
                       const barW  = pct > 60 ? "bg-green-400" : pct > 30 ? "bg-amber-400" : "bg-red-400";
@@ -1123,7 +1123,7 @@ export function ProfilesPage() {
                             ? <BatteryCharging className="w-3 h-3 shrink-0 text-green-500" />
                             : <Battery className={`w-3 h-3 shrink-0 ${color}`} />}
                           <div className="w-10 h-1 rounded-full bg-slate-200 overflow-hidden">
-                            <div className={`h-full rounded-full ${barW} ${live ? "transition-all duration-1000" : ""}`} style={{ width: `${pct}%` }} />
+                            <div className={`h-full rounded-full ${barW}`} style={{ width: `${pct}%` }} />
                           </div>
                           <span className={`text-[10px] font-mono font-semibold ${color}`}>{pct}%</span>
                         </div>
@@ -1145,17 +1145,17 @@ export function ProfilesPage() {
                       const isFixing = fixingAbdIds.has(profile.id);
                       return (
                         <div key={key} style={{ width: profColWidths.abd }} className="shrink-0 flex items-center gap-1.5 justify-center" onMouseDown={e => e.stopPropagation()} title={count > 0 ? `${count} automated behaviour warning${count === 1 ? "" : "s"} auto-dismissed today` : "No ABD flags today"}>
-                          {count > 0
-                            ? <span className="text-[11px] font-bold text-orange-600">{count}</span>
-                            : <span className="text-[10px] text-muted-foreground/30">—</span>}
-                          <button
-                            onClick={() => handleFixAbdForProfile(profile.id)}
-                            disabled={isFixing}
-                            className="text-[9px] font-bold text-orange-500 hover:text-orange-700 disabled:opacity-40 transition-colors"
-                            title="Manually dismiss Automated Behaviour Detected warning"
-                          >
-                            {isFixing ? "…" : "Fix"}
-                          </button>
+                          <span className={`text-[11px] font-bold ${count > 0 ? "text-orange-600" : "text-muted-foreground/50"}`}>{count}</span>
+                          {profile.accountStatus === "automated_behaviour_detected" && (
+                            <button
+                              onClick={() => handleFixAbdForProfile(profile.id)}
+                              disabled={isFixing}
+                              className="text-[9px] font-bold text-orange-500 hover:text-orange-700 disabled:opacity-40 transition-colors"
+                              title="Manually dismiss Automated Behaviour Detected warning"
+                            >
+                              {isFixing ? "…" : "Fix"}
+                            </button>
+                          )}
                         </div>
                       );
                     }
@@ -1490,12 +1490,14 @@ export function ProfilesPage() {
                 <Download className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Open Browsers</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+O</span>
-              </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Login Embedded Browsers</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+L</span>
-              </button>
+              <div className="flex">
+                <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex flex-1 items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                  <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>
+                </button>
+                <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex flex-1 items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed border-l border-border">
+                  <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Login EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+L</span>
+                </button>
+              </div>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
