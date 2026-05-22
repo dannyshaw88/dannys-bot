@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.456",
+    date: "22 May 2026",
+    items: [
+      { category: "Improved", text: "Drony automation is now fully automatic — clicking Apply proxy via Drony opens Drony, fills in the proxy details, saves the config, and activates the VPN all in one go with no manual steps needed." },
+      { category: "Fixed", text: "Drony's + button is now found reliably using multiple detection methods including resource ID and screen position — the proxy form always opens correctly." },
+      { category: "Fixed", text: "Proxy host, port, username, and password fields are now filled correctly using a robust field-finding approach that works across all Drony versions." },
+      { category: "Fixed", text: "Drony's VPN power button is now activated automatically, with a coordinate fallback if the button cannot be identified by text." },
+    ],
+  },
+  {
     version: "1.0.455",
     date: "22 May 2026",
     items: [

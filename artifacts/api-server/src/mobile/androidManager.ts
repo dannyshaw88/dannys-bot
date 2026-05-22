@@ -652,24 +652,50 @@ function _parseCenter(bounds: string): { x: number; y: number } | null {
 }
 
 /**
- * Find an element by any of the given strings in text/content-desc/hint attrs.
+ * Find an element by any of the given strings in text/content-desc/hint/resource-id attrs.
  * Returns the centre {x,y} of the first match, or null.
  */
 function _findElem(xml: string, ...candidates: string[]): { x: number; y: number } | null {
   for (const t of candidates) {
     const esc = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    for (const attr of ["text", "content-desc", "hint"]) {
-      // attr value exactly, or starts with the candidate (handles hint="Proxy host" matching "host")
+    for (const attr of ["text", "content-desc", "hint", "resource-id"]) {
       const re = new RegExp(`${attr}="${esc}"[^>]*bounds="([^"]+)"`, "i");
       const m = xml.match(re);
       if (m) { const c = _parseCenter(m[1]); if (c) return c; }
-      // partial match (value contains candidate)
       const re2 = new RegExp(`${attr}="[^"]*${esc}[^"]*"[^>]*bounds="([^"]+)"`, "i");
       const m2 = xml.match(re2);
       if (m2) { const c2 = _parseCenter(m2[1]); if (c2) return c2; }
     }
   }
   return null;
+}
+
+/** Find an element by partial resource-id match (e.g. "fab", "hostname"). */
+function _findByResId(xml: string, ...ids: string[]): { x: number; y: number } | null {
+  for (const id of ids) {
+    const esc = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`resource-id="[^"]*${esc}[^"]*"[^>]*bounds="([^"]+)"`, "i");
+    const m = xml.match(re);
+    if (m) { const c = _parseCenter(m[1]); if (c) return c; }
+  }
+  return null;
+}
+
+/** Find the Nth android.widget.EditText in the XML (0-based). Robust fallback for form fields. */
+function _findEditTextN(xml: string, index: number): { x: number; y: number } | null {
+  const re = /class="android\.widget\.EditText"[^>]*bounds="([^"]+)"/gi;
+  let n = 0, m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    if (n === index) { return _parseCenter(m[1]); }
+    n++;
+  }
+  return null;
+}
+
+/** Get screen dimensions from the root hierarchy node bounds, e.g. "[0,0][1600,900]" → {w,h} */
+function _getScreenSize(xml: string): { w: number; h: number } {
+  const m = xml.match(/bounds="\[0,0\]\[(\d+),(\d+)\]"/);
+  return m ? { w: +m[1], h: +m[2] } : { w: 1600, h: 900 };
 }
 
 function _adbTap(adb: string, serial: string, x: number, y: number): void {
@@ -753,96 +779,138 @@ export async function configureDrony(
     }
     steps.push("Drony opened");
 
-    // 2. If there's a "+" FAB or "Add" button, tap it to create a new proxy entry
-    const addPos = _findElem(xml, "+", "Add", "NEW PROXY", "New proxy", "Add proxy");
-    if (addPos) {
-      _adbTap(adb, serial, addPos.x, addPos.y);
-      await _sleep(1200);
+    // 2. Open a proxy entry to edit. Check if EditText fields are already visible first.
+    let hasForm = _findEditTextN(xml, 0) !== null;
+    if (!hasForm) {
+      // Try FAB by resource-id (common Drony IDs), then by text, then by screen position (bottom-right)
+      const fabPos =
+        _findByResId(xml, ":id/fab", ":id/add", ":id/add_proxy", ":id/button_add") ||
+        _findElem(xml, "+", "Add", "NEW PROXY", "New proxy", "Add proxy");
+      if (fabPos) {
+        _adbTap(adb, serial, fabPos.x, fabPos.y);
+        steps.push("Tapped + (add proxy)");
+      } else {
+        // FAB has no text in many Drony builds — tap the bottom-right corner where it lives
+        const scr = _getScreenSize(xml);
+        _adbTap(adb, serial, Math.floor(scr.w * 0.92), Math.floor(scr.h * 0.90));
+        steps.push("Tapped FAB position (bottom-right)");
+      }
+      await _sleep(1500);
       xml = await _uiDump(adb, serial);
-      steps.push("Opened new proxy form");
+      hasForm = _findEditTextN(xml, 0) !== null;
+
+      // If still no form, try tapping the first list item (may be an existing proxy entry)
+      if (!hasForm) {
+        const entryPos = _findByResId(xml, ":id/proxy_list", ":id/list_item", ":id/item") ||
+          _findElem(xml, "Edit", "EDIT", "HTTP", "HTTPS", "SOCKS");
+        if (entryPos) {
+          _adbTap(adb, serial, entryPos.x, entryPos.y);
+          await _sleep(1200);
+          xml = await _uiDump(adb, serial);
+          hasForm = _findEditTextN(xml, 0) !== null;
+          if (hasForm) steps.push("Opened existing proxy to edit");
+        }
+      } else {
+        steps.push("Proxy form opened");
+      }
     } else {
-      // Try editing the first existing entry (long-press or single tap)
-      const entryPos = _findElem(xml, "Edit", "EDIT", "Proxy", "HTTP");
-      if (entryPos) {
-        _adbTap(adb, serial, entryPos.x, entryPos.y);
-        await _sleep(1000);
+      steps.push("Proxy form already open");
+    }
+
+    if (!hasForm) {
+      steps.push("⚠ Could not open proxy form — Drony UI not recognised");
+    } else {
+      // 3. Fill Host — try resource-id, then text/hint, then 1st EditText by index
+      const hostPos =
+        _findByResId(xml, ":id/hostname", ":id/host_name", ":id/host", ":id/server_host", ":id/proxy_host") ||
+        _findElem(xml, "Host name or IP address", "Hostname or IP address", "Proxy host", "Host", "Server host") ||
+        _findEditTextN(xml, 0);
+      if (hostPos) {
+        await _tapField(adb, serial, hostPos, config.host);
+        steps.push(`Host → ${config.host}`);
+      } else {
+        steps.push("⚠ Host field not found");
+      }
+
+      // Re-dump (keyboard may shift layout)
+      xml = await _uiDump(adb, serial);
+
+      // 4. Fill Port — resource-id, then text/hint, then 2nd EditText by index
+      const portPos =
+        _findByResId(xml, ":id/port", ":id/port_number", ":id/server_port", ":id/proxy_port") ||
+        _findElem(xml, "Port number", "Port", "Server port", "Proxy port") ||
+        _findEditTextN(xml, 1);
+      if (portPos) {
+        await _tapField(adb, serial, portPos, String(config.port));
+        steps.push(`Port → ${config.port}`);
+      } else {
+        steps.push("⚠ Port field not found");
+      }
+
+      xml = await _uiDump(adb, serial);
+
+      // 5. Auth (optional)
+      if (config.user) {
+        const userPos =
+          _findByResId(xml, ":id/username", ":id/login", ":id/user_name", ":id/user") ||
+          _findElem(xml, "Login", "Username", "User name") ||
+          _findEditTextN(xml, 2);
+        if (userPos) {
+          await _tapField(adb, serial, userPos, config.user);
+          steps.push(`Username → ${config.user}`);
+        }
         xml = await _uiDump(adb, serial);
-        steps.push("Opened existing proxy to edit");
+        const passPos =
+          _findByResId(xml, ":id/password", ":id/pass") ||
+          _findElem(xml, "Password") ||
+          _findEditTextN(xml, 3);
+        if (passPos) {
+          await _tapField(adb, serial, passPos, config.pass ?? "");
+          steps.push("Password set");
+        }
+        xml = await _uiDump(adb, serial);
       }
-    }
 
-    // 3. Fill Host
-    const hostPos = _findElem(xml, "Hostname or IP address", "Proxy host", "Host", "Server host", "hostname", "server");
-    if (hostPos) {
-      await _tapField(adb, serial, hostPos, config.host);
-      steps.push(`Host → ${config.host}`);
-    } else {
-      steps.push("⚠ Host field not found — UI may differ");
-    }
-
-    // Re-dump after host entry (keyboard may have shifted layout)
-    xml = await _uiDump(adb, serial);
-
-    // 4. Fill Port
-    const portPos = _findElem(xml, "Port", "Server port", "Proxy port", "port");
-    if (portPos) {
-      await _tapField(adb, serial, portPos, String(config.port));
-      steps.push(`Port → ${config.port}`);
-    } else {
-      steps.push("⚠ Port field not found");
-    }
-
-    // Re-dump
-    xml = await _uiDump(adb, serial);
-
-    // 5. Auth (optional)
-    if (config.user) {
-      const userPos = _findElem(xml, "Username", "Login", "User name", "user");
-      if (userPos) {
-        await _tapField(adb, serial, userPos, config.user);
-        steps.push(`Username → ${config.user}`);
+      // 6. Save — resource-id, then text, then top-right area (common toolbar "OK" position)
+      const savePos =
+        _findByResId(xml, ":id/save", ":id/ok", ":id/confirm", ":id/done", ":id/action_ok") ||
+        _findElem(xml, "OK", "Save", "SAVE", "Done", "DONE", "Apply", "✓");
+      if (savePos) {
+        _adbTap(adb, serial, savePos.x, savePos.y);
+        await _sleep(1200);
+        steps.push("Configuration saved");
+      } else {
+        // Toolbar OK is often top-right — tap there
+        const scr2 = _getScreenSize(xml);
+        _adbTap(adb, serial, Math.floor(scr2.w * 0.95), Math.floor(scr2.h * 0.06));
+        await _sleep(1000);
+        steps.push("Tapped toolbar top-right (save fallback)");
       }
-      xml = await _uiDump(adb, serial);
-      const passPos = _findElem(xml, "Password", "password");
-      if (passPos) {
-        await _tapField(adb, serial, passPos, config.pass ?? "");
-        steps.push("Password set");
-      }
-      xml = await _uiDump(adb, serial);
-    }
-
-    // 6. Save / OK
-    const savePos = _findElem(xml, "OK", "Save", "SAVE", "Done", "DONE", "Apply", "APPLY", "✓");
-    if (savePos) {
-      _adbTap(adb, serial, savePos.x, savePos.y);
-      await _sleep(1200);
-      steps.push("Configuration saved");
-    } else {
-      // Try Android back to dismiss the form
-      spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], { encoding: "utf8", timeout: 3000 });
-      await _sleep(800);
-      steps.push("Form closed (back key)");
     }
 
     // 7. Activate VPN toggle on the main screen
-    xml = await _uiDump(adb, serial);
-    // Drony shows a power-button style toggle or a text like "Tap to start" / "OFF" / "Stopped"
-    const togglePos = _findElem(xml, "OFF", "Stopped", "Tap to start", "START", "Start", "Enable");
-    if (togglePos) {
-      _adbTap(adb, serial, togglePos.x, togglePos.y);
-      await _sleep(1800);
-      steps.push("VPN toggle activated");
-    } else {
-      // Some Drony versions use the large power button as an ImageView with no text.
-      // Tap the approximate screen centre-top area where it usually appears.
-      steps.push("⚠ Power toggle not found by text — tap the power button in Drony manually if VPN is not active");
-    }
-
-    // 8. Accept Android VPN permission dialog if it appeared
     await _sleep(800);
     xml = await _uiDump(adb, serial);
+    const scr3 = _getScreenSize(xml);
+
+    // Try by resource-id, then by text, then use screen-centre-upper area where Drony puts the power button
+    const togglePos =
+      _findByResId(xml, ":id/start_stop", ":id/power", ":id/toggle", ":id/vpn_toggle", ":id/btn_start", ":id/button_start") ||
+      _findElem(xml, "OFF", "Stopped", "Tap to start", "START", "Start", "Enable", "Disabled");
+    if (togglePos) {
+      _adbTap(adb, serial, togglePos.x, togglePos.y);
+      steps.push("VPN toggle tapped");
+    } else {
+      // Drony's power button is typically at ~50% x, ~30% y
+      _adbTap(adb, serial, Math.floor(scr3.w * 0.50), Math.floor(scr3.h * 0.30));
+      steps.push("Tapped power button position (centre-upper fallback)");
+    }
+    await _sleep(2000);
+
+    // 8. Accept Android VPN permission dialog if it appeared
+    xml = await _uiDump(adb, serial);
     const vpnOkPos = _findElem(xml, "OK", "Allow", "ACCEPT", "Yes");
-    if (vpnOkPos && (xml.includes("VPN") || xml.includes("network") || xml.includes("connection"))) {
+    if (vpnOkPos && (xml.includes("VPN") || xml.toLowerCase().includes("network") || xml.toLowerCase().includes("connection"))) {
       _adbTap(adb, serial, vpnOkPos.x, vpnOkPos.y);
       await _sleep(1000);
       steps.push("VPN permission accepted");
