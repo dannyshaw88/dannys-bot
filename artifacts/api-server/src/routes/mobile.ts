@@ -478,4 +478,63 @@ export function registerMobileRoutes(app: Express) {
       res.status(400).json({ error: e?.message ?? "Failed to save account" });
     }
   });
+
+  // ── Drony VPN proxy automation ────────────────────────────────────────────
+  // GET  /api/mobile/devices/:serial/drony        → { installed, active }
+  // POST /api/mobile/devices/:serial/drony/install → install from apkPath
+  // POST /api/mobile/devices/:serial/drony/configure → configure + activate
+  // POST /api/mobile/devices/:serial/drony/deactivate → turn VPN off
+
+  app.get("/api/mobile/devices/:serial/drony", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const [installed, active] = await Promise.all([
+        android.isDronyInstalled(serial),
+        android.isDronyVpnActive(serial),
+      ]);
+      res.json({ installed, active });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Could not check Drony status" });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/drony/install", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { apkPath } = z.object({ apkPath: z.string().min(1) }).parse(req.body);
+      await android.installApk(serial, apkPath);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Install failed" });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/drony/configure", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { proxyId } = z.object({ proxyId: z.number() }).parse(req.body);
+      const proxies = await storage.getProxies();
+      const proxy = proxies.find(pr => pr.id === proxyId);
+      if (!proxy) return res.status(404).json({ error: "Proxy not found" });
+      const result = await android.configureDrony(serial, {
+        host: proxy.host,
+        port: proxy.port,
+        user: proxy.username ?? undefined,
+        pass: proxy.password ?? undefined,
+      });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Configuration failed" });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/drony/deactivate", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const result = await android.deactivateDrony(serial);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Deactivate failed" });
+    }
+  });
 }

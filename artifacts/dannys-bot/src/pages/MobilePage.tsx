@@ -12,7 +12,7 @@ import {
   Smartphone, Download, MonitorPlay, RefreshCw, Save, Shuffle,
   CheckCircle2, Loader2, Copy, Settings, Keyboard, Trash2, X,
   ExternalLink, Shield, Plug, Search, Link2Off, Play, RotateCcw,
-  AlertTriangle, Info,
+  AlertTriangle, Info, ChevronDown, ChevronUp,
 } from "lucide-react";
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -87,38 +87,145 @@ const COLORS = [
 
 // ─── Proxy selector ────────────────────────────────────────────────────────────
 
+function DronySection({ serial, savedProxyId }: { serial: string; savedProxyId?: number | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dronyApk, setDronyApk] = useState("");
+  const [configResult, setConfigResult] = useState<{ ok: boolean; steps: string[]; error?: string } | null>(null);
+
+  const dronyQ = useQuery({
+    queryKey: ["drony-status", serial],
+    queryFn: () => api<{ installed: boolean; active: boolean }>("GET", `/api/mobile/devices/${serial}/drony`),
+    refetchInterval: 8000,
+    retry: false,
+  });
+
+  const installMut = useMutation({
+    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/drony/install`, { apkPath: dronyApk }),
+    onSuccess: () => { toast({ title: "Drony installed" }); qc.invalidateQueries({ queryKey: ["drony-status", serial] }); setDronyApk(""); },
+    onError: (e: any) => toast({ title: "Install failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const configureMut = useMutation({
+    mutationFn: () => api<{ ok: boolean; steps: string[]; error?: string }>("POST", `/api/mobile/devices/${serial}/drony/configure`, { proxyId: savedProxyId }),
+    onSuccess: (r) => {
+      setConfigResult(r);
+      qc.invalidateQueries({ queryKey: ["drony-status", serial] });
+      if (r.ok) toast({ title: "Drony configured & VPN activated", description: "All BlueStacks traffic now routes through the proxy." });
+      else toast({ title: "Configuration had issues", description: r.error ?? "Check the steps below", variant: "destructive" });
+    },
+    onError: (e: any) => toast({ title: "Configure failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const deactivateMut = useMutation({
+    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/drony/deactivate`, {}),
+    onSuccess: () => { toast({ title: "Drony VPN stopped" }); qc.invalidateQueries({ queryKey: ["drony-status", serial] }); setConfigResult(null); },
+    onError: (e: any) => toast({ title: "Deactivate failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const status = dronyQ.data;
+
+  return (
+    <div className="space-y-1.5 pt-1 border-t border-border/60">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${status?.active ? "bg-green-500 animate-pulse" : status?.installed ? "bg-amber-400" : "bg-muted-foreground/30"}`} />
+          <span className="text-[10px] font-semibold text-muted-foreground">
+            Drony VPN —{" "}
+            {!status ? "checking…" : !status.installed ? "not installed" : status.active ? "active" : "installed, off"}
+          </span>
+          {dronyQ.isFetching && <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground/50" />}
+        </div>
+        {status?.active && (
+          <button
+            className="text-[9px] text-destructive/70 hover:text-destructive underline"
+            disabled={deactivateMut.isPending}
+            onClick={() => deactivateMut.mutate()}
+          >
+            {deactivateMut.isPending ? "Stopping…" : "Stop VPN"}
+          </button>
+        )}
+      </div>
+
+      {/* Not installed — show install section */}
+      {status && !status.installed && (
+        <div className="space-y-1">
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            <strong>Drony</strong> routes all BlueStacks traffic through your proxy — including Instagram HTTPS. Free, no root required.{" "}
+            <a className="underline hover:text-primary" href="https://apkpure.com/drony/org.sandrob.drony" target="_blank" rel="noreferrer">Download APK <ExternalLink className="w-2.5 h-2.5 inline" /></a>
+          </p>
+          <div className="flex gap-1">
+            <Input className="text-[10px] h-7 font-mono flex-1" placeholder="C:\Downloads\drony.apk" value={dronyApk} onChange={e => setDronyApk(e.target.value)} />
+            <Button size="sm" className="h-7 px-2.5 text-[10px]" disabled={!dronyApk || installMut.isPending} onClick={() => installMut.mutate()}>
+              {installMut.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Download className="w-3 h-3 mr-1" />}Install
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Installed — show Apply button */}
+      {status?.installed && !status.active && savedProxyId && (
+        <Button
+          size="sm"
+          className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
+          disabled={configureMut.isPending}
+          onClick={() => configureMut.mutate()}
+        >
+          {configureMut.isPending
+            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Configuring BlueStacks…</>
+            : <><Play className="w-3.5 h-3.5" />Apply proxy via Drony</>}
+        </Button>
+      )}
+
+      {status?.installed && !status.active && !savedProxyId && (
+        <p className="text-[10px] text-muted-foreground/60 italic">Select a proxy above to activate Drony.</p>
+      )}
+
+      {status?.active && savedProxyId && (
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-green-500/10 border border-green-500/20">
+          <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+          <span className="text-[10px] text-green-700 font-medium flex-1">Drony VPN active — all traffic routed through proxy</span>
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled={configureMut.isPending} onClick={() => configureMut.mutate()} title="Re-run auto-configure with current proxy">
+            {configureMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          </Button>
+        </div>
+      )}
+
+      {/* Step-by-step result log */}
+      {configResult && (
+        <details className="text-[10px]">
+          <summary className="cursor-pointer text-muted-foreground/70 hover:text-muted-foreground select-none">
+            {configResult.ok ? "✓" : "⚠"} Configuration log ({configResult.steps.length} steps)
+          </summary>
+          <div className="mt-1 space-y-0.5 pl-2 border-l-2 border-border">
+            {configResult.steps.map((s, i) => <div key={i} className={s.startsWith("⚠") ? "text-amber-600" : "text-muted-foreground"}>{s}</div>)}
+            {configResult.error && <div className="text-destructive font-medium">{configResult.error}</div>}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [ipResult, setIpResult]           = useState<{ ip?: string; error?: string } | null>(null);
-  const [deviceProxyResult, setDeviceProxyResult] = useState<{ proxy?: string; upstream?: string; error?: string } | null>(null);
-  const [checkingIp, setCheckingIp]       = useState(false);
-  const [checkingDevice, setCheckingDevice] = useState(false);
+  const [ipResult, setIpResult] = useState<{ ip?: string; error?: string } | null>(null);
+  const [checkingIp, setCheckingIp] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: (proxyId: number | null) => api("POST", `/api/mobile/instances/${encodeURIComponent(serial)}/config`, { proxyId }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["mobile-config"] }); },
     onError: (e: any) => toast({ title: "Save failed", description: e?.message, variant: "destructive" }),
   });
-  const applyMut = useMutation({
-    mutationFn: (proxyId: number | null) => api<{ relay?: string; upstream?: string }>("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId }),
-    onSuccess: (_d, id) => {
-      toast({ title: id ? "Proxy applied to device" : "Proxy removed" });
-      setIpResult(null);
-      setDeviceProxyResult(null);
-    },
-    onError: (e: any) => toast({ title: "Apply failed", description: e?.message, variant: "destructive" }),
-  });
 
   const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value ? Number(e.target.value) : null;
     saveMut.mutate(id);
-    applyMut.mutate(id);
     setIpResult(null);
-    setDeviceProxyResult(null);
   };
 
-  // Server-side test: confirms the upstream proxy is reachable & shows its external IP
   const checkProxyIp = async () => {
     setCheckingIp(true);
     setIpResult(null);
@@ -133,24 +240,7 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
     }
   };
 
-  // On-device check: reads the proxy BlueStacks itself is configured with (via ADB)
-  const checkDeviceProxy = async () => {
-    setCheckingDevice(true);
-    setDeviceProxyResult(null);
-    try {
-      const r = await api<{ deviceProxy: string | null; upstreamProxy: string | null }>("GET", `/api/mobile/devices/${serial}/proxy-status`);
-      if (r.deviceProxy) setDeviceProxyResult({ proxy: r.deviceProxy, upstream: r.upstreamProxy ?? undefined });
-      else setDeviceProxyResult({ error: "No proxy configured on device — apply a proxy first." });
-    } catch (e: any) {
-      setDeviceProxyResult({ error: e?.message ?? "Check failed" });
-    } finally {
-      setCheckingDevice(false);
-    }
-  };
-
-  // Deduplicate proxies by id (defensive: prevents duplicate entries from storage)
   const uniqueProxies = proxies.filter((px, idx, arr) => arr.findIndex(p => p.id === px.id) === idx);
-  const busy = saveMut.isPending || applyMut.isPending;
 
   return (
     <div className="space-y-1.5">
@@ -160,23 +250,20 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
           className="flex-1 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           value={savedProxyId ?? ""}
           onChange={handleChange}
-          disabled={busy}
+          disabled={saveMut.isPending}
         >
           <option value="">No proxy</option>
           {uniqueProxies.map(px => <option key={px.id} value={px.id}>{proxyLabel(px)}</option>)}
         </select>
-        {busy && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />}
+        {saveMut.isPending && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />}
       </div>
+
       {savedProxyId && (
-        <div className="flex gap-1.5">
-          <Button size="sm" variant="outline" className="flex-1 h-7 px-2 text-[10px]" disabled={checkingIp || busy} onClick={checkProxyIp} title="Confirms the proxy is reachable and shows its external IP address (server-side test)">
-            {checkingIp ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Test Proxy IP
-          </Button>
-          <Button size="sm" variant="outline" className="flex-1 h-7 px-2 text-[10px]" disabled={checkingDevice || busy} onClick={checkDeviceProxy} title="Shows what proxy BlueStacks itself is currently configured with (reads from the device via ADB)">
-            {checkingDevice ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Device Proxy
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" className="w-full h-7 text-[10px]" disabled={checkingIp} onClick={checkProxyIp} title="Confirms the proxy is reachable from this PC and shows its external IP">
+          {checkingIp ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Test proxy reachability
+        </Button>
       )}
+
       {ipResult && (
         <div className={`text-[10px] px-2 py-1 rounded ${ipResult.ip ? "bg-green-500/10 text-green-600 border border-green-500/20" : "bg-destructive/10 text-destructive border border-destructive/20"}`}>
           {ipResult.ip
@@ -185,14 +272,9 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
           }
         </div>
       )}
-      {deviceProxyResult && (
-        <div className={`text-[10px] px-2 py-1 rounded ${deviceProxyResult.proxy ? "bg-blue-500/10 text-blue-600 border border-blue-500/20" : "bg-amber-500/10 text-amber-600 border border-amber-500/20"}`}>
-          {deviceProxyResult.proxy
-            ? <><Info className="w-3 h-3 inline mr-1" />BlueStacks proxy: <span className="font-mono font-semibold">{deviceProxyResult.proxy}</span>{deviceProxyResult.upstream ? <> → upstream: <span className="font-mono">{deviceProxyResult.upstream}</span></> : null}</>
-            : <><AlertTriangle className="w-3 h-3 inline mr-1" />{deviceProxyResult.error}</>
-          }
-        </div>
-      )}
+
+      {/* Drony VPN section — routes ALL traffic through the proxy */}
+      <DronySection serial={serial} savedProxyId={savedProxyId} />
     </div>
   );
 }
@@ -228,12 +310,17 @@ function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, on
         </div>
         <button
           className="text-white/50 hover:text-white p-1 disabled:opacity-30"
-          title="Disconnect device"
+          title="Disconnect device from ADB (BlueStacks may reconnect automatically)"
           disabled={disconnecting}
           onClick={async e => {
             e.stopPropagation();
             setDisconnecting(true);
-            try { await onDisconnect(); } finally { setDisconnecting(false); }
+            try {
+              await onDisconnect();
+              toast({ title: "Disconnected", description: "BlueStacks may reconnect automatically. Close BlueStacks first to prevent reconnection." });
+            } catch (err: any) {
+              toast({ title: "Disconnect failed", description: err?.message, variant: "destructive" });
+            } finally { setDisconnecting(false); }
           }}
         >
           {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2Off className="w-4 h-4" />}
@@ -335,6 +422,58 @@ function generateDob(): string {
   return `${year}-${month}-${day}`;
 }
 
+// ─── Device props panel ────────────────────────────────────────────────────────
+
+function DevicePropsPanel({ serial }: { serial: string }) {
+  const { toast } = useToast();
+  const propsQ = useQuery({
+    queryKey: ["device-props", serial],
+    queryFn: () => api<DevicePropsResp>("GET", `/api/mobile/devices/${serial}/device-props`),
+    retry: false,
+  });
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">BlueStacks Device Profile</div>
+        <Button
+          size="sm" variant="ghost" className="h-6 px-2 text-[10px] gap-1"
+          onClick={() => propsQ.refetch()}
+          disabled={propsQ.isFetching}
+          title="Re-read device properties from BlueStacks via ADB — use this after changing the device profile in BlueStacks Settings → Phone"
+        >
+          <RefreshCw className={`w-3 h-3 ${propsQ.isFetching ? "animate-spin" : ""}`} />
+          {propsQ.isFetching ? "Reading…" : "Refresh"}
+        </Button>
+      </div>
+      {propsQ.isError ? (
+        <div className="text-[10px] text-muted-foreground/60 italic px-1">Could not read device props — is the device connected?</div>
+      ) : propsQ.data ? (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          {[
+            ["Manufacturer", propsQ.data.manufacturer],
+            ["Model", propsQ.data.model],
+            ["Android", propsQ.data.androidVersion],
+            ["Resolution", propsQ.data.width && propsQ.data.height ? `${propsQ.data.width}×${propsQ.data.height}` : "—"],
+          ].map(([label, val]) => (
+            <div key={label} className="flex flex-col">
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wide">{label}</span>
+              <span className="text-[11px] font-medium text-foreground/80 truncate">{val || "—"}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
+          <Loader2 className="w-3 h-3 animate-spin" />Reading device profile…
+        </div>
+      )}
+      <div className="text-[10px] text-muted-foreground/60 leading-relaxed">
+        Change the device profile in <strong>BlueStacks → Settings → Phone → Device Profile</strong>, then click Refresh above to see the updated profile. The new fingerprint is captured automatically when you click <strong>Save to Accounts</strong>.
+      </div>
+    </div>
+  );
+}
+
 // ─── Device detail panel ───────────────────────────────────────────────────────
 
 function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => void }) {
@@ -351,7 +490,6 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
   const [notes, setNotes]       = useState("");
   const [typeText, setTypeText] = useState("");
 
-  // Spintax editor state (persisted per-device)
   const [customSpin, setCustomSpin] = useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem("mobile_spin") ?? "{}"); } catch { return {}; }
   });
@@ -376,14 +514,18 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
   const launchMut  = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/instagram/launch`, {}), onSuccess: () => toast({ title: "Instagram launched" }), onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }) });
   const clearMut   = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/instagram/clear`, {}),   onSuccess: () => toast({ title: "App data cleared — fresh signup ready" }), onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }) });
   const mirrorMut  = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/scrcpy/start`, {}),      onSuccess: () => toast({ title: "Screen mirror opened" }), onError: (e: any) => toast({ title: "Mirror failed — install scrcpy and add to PATH", description: e?.message, variant: "destructive" }) });
-  const typeMut    = useMutation({ mutationFn: (text: string) => api("POST", `/api/mobile/devices/${serial}/input/text`, { text }), onError: (e: any) => toast({ title: "Type failed", description: e?.message, variant: "destructive" }) });
+  const typeMut    = useMutation({
+    mutationFn: (text: string) => api("POST", `/api/mobile/devices/${serial}/input/text`, { text }),
+    onSuccess: () => toast({ title: "Text injected" }),
+    onError: (e: any) => toast({ title: "Type failed — make sure a text field is focused in BlueStacks", description: e?.message, variant: "destructive" }),
+  });
   const resetMut   = useMutation({
     mutationFn: () => api<{ ok: boolean; newAndroidId: string }>("POST", `/api/mobile/devices/${serial}/reset`),
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["android-id", serial] });
       qc.invalidateQueries({ queryKey: ["mobile-config"] });
       qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
-      toast({ title: "Device reset", description: `Instagram uninstalled. New device ID: ${d.newAndroidId}` });
+      toast({ title: "Device reset", description: `Instagram uninstalled. New device ID: ${d.newAndroidId}. Now change the device profile in BlueStacks → Settings → Phone, then save the next account.` });
     },
     onError: (e: any) => toast({ title: "Reset failed", description: e?.message, variant: "destructive" }),
   });
@@ -414,6 +556,14 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
     onError: (e: any) => toast({ title: "Save failed", description: e?.message, variant: "destructive" }),
   });
 
+  const fields = [
+    { id: "u",  label: "Username",               val: username, set: setUsername, gen: () => generateUsername() },
+    { id: "pw", label: "Password",               val: password, set: setPassword, gen: () => generatePassword() },
+    { id: "em", label: "Email",                  val: email,    set: setEmail,    gen: () => generateEmail(username) },
+    { id: "ph", label: "Phone",                  val: phone,    set: setPhone,    gen: null },
+    { id: "db", label: "Date of birth (YYYY-MM-DD)", val: dob,  set: setDob,      gen: () => generateDob() },
+  ];
+
   return (
     <div className="border border-border rounded-xl bg-card overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3 bg-muted/40 border-b border-border">
@@ -430,7 +580,7 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
             variant="outline"
             className="h-7 px-2.5 text-[10px] border-orange-500/50 text-orange-600 hover:bg-orange-500/10 hover:border-orange-500 gap-1.5"
             disabled={resetMut.isPending}
-            title="Uninstalls Instagram, generates a new device ID, and clears the proxy — ready for the next fresh account"
+            title="Uninstalls Instagram, generates a new device ID, and clears the proxy — ready for the next fresh account. Then change device profile in BlueStacks → Settings → Phone."
             onClick={() => resetMut.mutate()}
           >
             {resetMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
@@ -481,22 +631,30 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
                   </Button>
                 </div>
                 <p className="text-[10px] text-muted-foreground">
-                  Or install directly inside the emulator's app store. APK from{" "}
+                  Or install from Google Play inside BlueStacks — it's the easiest way. APK from{" "}
                   <a className="underline hover:text-primary" href="https://www.apkmirror.com/apk/instagram/instagram-instagram/" target="_blank" rel="noreferrer">APKMirror <ExternalLink className="w-2.5 h-2.5 inline" /></a>
                 </p>
               </div>
             )}
           </div>
+
           <Separator />
+
+          <DevicePropsPanel serial={serial} />
+
+          <Separator />
+
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5"><Keyboard className="w-3.5 h-3.5" />Type into focused field</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Keyboard className="w-3.5 h-3.5" />Type into focused field
+            </div>
             <div className="flex gap-2">
               <Input className="text-xs flex-1" placeholder="Text to inject…" value={typeText} onChange={e => setTypeText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && typeText) typeMut.mutate(typeText); }} />
               <Button size="sm" variant="outline" disabled={!typeText || typeMut.isPending} onClick={() => typeMut.mutate(typeText)}>
                 {typeMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Keyboard className="w-3.5 h-3.5" />}
               </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Tap a field in the Mirror window, then press Enter here to fill it.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Open Mirror → tap a field inside BlueStacks to focus it → press Enter here or click the button to fill it.</p>
           </div>
         </div>
 
@@ -510,7 +668,6 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
             >{showSpinEditor ? "Hide spintax ↑" : "Custom spintax ↓"}</button>
           </div>
 
-          {/* Generate all button */}
           <Button size="sm" variant="outline" className="w-full text-xs gap-1.5" onClick={() => {
             const u = (customSpin["u"] ?? "").trim() ? resolveSpintax(customSpin["u"]) : generateUsername();
             setUsername(u);
@@ -521,14 +678,12 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
             <Shuffle className="w-3 h-3" />Generate all fields
           </Button>
 
+          <p className="text-[10px] text-muted-foreground -mt-1">
+            Generate fields, then use <strong>Type</strong> to inject each value directly into BlueStacks. Open Mirror first, focus the field in BlueStacks, then click Type.
+          </p>
+
           <div className="grid grid-cols-2 gap-2">
-            {[
-              { id: "u",  label: "Username",               val: username, set: setUsername, gen: () => generateUsername() },
-              { id: "pw", label: "Password",               val: password, set: setPassword, gen: () => generatePassword() },
-              { id: "em", label: "Email",                  val: email,    set: setEmail,    gen: () => generateEmail(username) },
-              { id: "ph", label: "Phone",                  val: phone,    set: setPhone,    gen: null },
-              { id: "db", label: "Date of birth (YYYY-MM-DD)", val: dob,  set: setDob,      gen: () => generateDob() },
-            ].map(f => (
+            {fields.map(f => (
               <div key={f.id} className="space-y-1">
                 <Label htmlFor={`sp-${f.id}`} className="text-[10px] text-muted-foreground">{f.label}</Label>
                 <div className="flex gap-1">
@@ -538,16 +693,27 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
                       <Shuffle className="w-3 h-3" />
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" title="Copy to clipboard — paste into BlueStacks" disabled={!f.val} onClick={() => navigator.clipboard.writeText(f.val).then(() => toast({ title: "Copied!", description: f.label }))}>
+                  <Button
+                    size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0"
+                    title="Copy to clipboard"
+                    disabled={!f.val}
+                    onClick={() => navigator.clipboard.writeText(f.val).then(() => toast({ title: "Copied!", description: f.label }))}
+                  >
                     <Copy className="w-3 h-3" />
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0" title="Inject text via ADB — focus the field in Mirror first" disabled={!f.val || typeMut.isPending} onClick={() => typeMut.mutate(f.val)}>Type</Button>
+                  <Button
+                    size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0"
+                    title="Focus a field in the Mirror window, then click this to type it in"
+                    disabled={!f.val || typeMut.isPending}
+                    onClick={() => typeMut.mutate(f.val)}
+                  >
+                    {typeMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Type"}
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Spintax editor */}
           {showSpinEditor && (
             <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
               <p className="text-[10px] text-muted-foreground leading-relaxed">
@@ -586,9 +752,9 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
   );
 }
 
-// ─── Setup guide ──────────────────────────────────────────────────────────────
+// ─── Connect form (reusable) ──────────────────────────────────────────────────
 
-function SetupGuide({ onConnected }: { onConnected: () => void }) {
+function ConnectForm({ onConnected, compact = false }: { onConnected: () => void; compact?: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [address, setAddress] = useState("127.0.0.1:5555");
@@ -614,11 +780,74 @@ function SetupGuide({ onConnected }: { onConnected: () => void }) {
     finally { setDiscovering(false); }
   };
 
+  if (compact) {
+    return (
+      <div className="border border-border rounded-xl bg-card p-4 space-y-3">
+        <div className="text-sm font-semibold">Connect another emulator</div>
+        <div className="flex gap-2">
+          <Button className="flex-1" disabled={discovering} onClick={discover} variant="outline">
+            {discovering ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
+            Auto-detect
+          </Button>
+          <span className="self-center text-xs text-muted-foreground">or</span>
+          <Input
+            className="text-xs font-mono flex-1"
+            value={address}
+            onChange={e => setAddress(e.target.value)}
+            placeholder="127.0.0.1:5555"
+            onKeyDown={e => { if (e.key === "Enter") connectMut.mutate(address); }}
+          />
+          <Button disabled={!address || connectMut.isPending} onClick={() => connectMut.mutate(address)}>
+            {connectMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plug className="w-4 h-4 mr-1" />}
+            Connect
+          </Button>
+        </div>
+        <div className="text-[10px] text-muted-foreground space-y-0.5">
+          <div>BlueStacks instance 1: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
+          <div>BlueStacks instance 2: <span className="font-mono text-foreground/70">127.0.0.1:5565</span></div>
+          <div>LDPlayer default: <span className="font-mono text-foreground/70">127.0.0.1:5554</span></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Button className="w-full" disabled={discovering} onClick={discover}>
+        {discovering ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
+        Auto-detect emulator
+      </Button>
+      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+        <div className="flex-1 h-px bg-border" />or type address manually<div className="flex-1 h-px bg-border" />
+      </div>
+      <div className="flex gap-2">
+        <Input
+          className="text-xs font-mono flex-1"
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          placeholder="127.0.0.1:5555"
+          onKeyDown={e => { if (e.key === "Enter") connectMut.mutate(address); }}
+        />
+        <Button disabled={!address || connectMut.isPending} onClick={() => connectMut.mutate(address)}>
+          {connectMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plug className="w-4 h-4 mr-1" />}
+          Connect
+        </Button>
+      </div>
+      <div className="text-[10px] text-muted-foreground space-y-0.5">
+        <div>BlueStacks default address: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
+        <div>LDPlayer default address: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
+        <div>Nox default address: <span className="font-mono text-foreground/70">127.0.0.1:62001</span></div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Setup guide ──────────────────────────────────────────────────────────────
+
+function SetupGuide({ onConnected }: { onConnected: () => void }) {
   return (
     <div className="max-w-xl mx-auto space-y-6 py-4">
-      {/* Steps */}
       <div className="space-y-4">
-        {/* Step 1 */}
         <div className="flex gap-4 items-start">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">1</div>
           <div className="flex-1">
@@ -647,43 +876,15 @@ function SetupGuide({ onConnected }: { onConnected: () => void }) {
           </div>
         </div>
 
-        {/* Step 2 */}
         <div className="flex gap-4 items-start">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">2</div>
           <div className="flex-1">
             <div className="font-semibold text-sm">Open the emulator, then click Auto-detect</div>
             <p className="text-xs text-muted-foreground mt-1 mb-3">Equinox will find it automatically. If it doesn't, enter the address manually.</p>
-            <div className="space-y-2">
-              <Button className="w-full" disabled={discovering} onClick={discover}>
-                {discovering ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
-                Auto-detect emulator
-              </Button>
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <div className="flex-1 h-px bg-border" />or type address manually<div className="flex-1 h-px bg-border" />
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  className="text-xs font-mono flex-1"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  placeholder="127.0.0.1:5555"
-                  onKeyDown={e => { if (e.key === "Enter") connectMut.mutate(address); }}
-                />
-                <Button disabled={!address || connectMut.isPending} onClick={() => connectMut.mutate(address)}>
-                  {connectMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plug className="w-4 h-4 mr-1" />}
-                  Connect
-                </Button>
-              </div>
-              <div className="text-[10px] text-muted-foreground space-y-0.5">
-                <div>LDPlayer default address: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
-                <div>BlueStacks default address: <span className="font-mono text-foreground/70">127.0.0.1:5555</span></div>
-                <div>Nox default address: <span className="font-mono text-foreground/70">127.0.0.1:62001</span></div>
-              </div>
-            </div>
+            <ConnectForm onConnected={onConnected} />
           </div>
         </div>
 
-        {/* Step 3 */}
         <div className="flex gap-4 items-start opacity-50">
           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold text-sm shrink-0">3</div>
           <div>
@@ -708,6 +909,7 @@ export function MobilePage() {
   const configQ  = useQuery({ queryKey: ["mobile-config"], queryFn: () => api<ConfigResp>("GET", "/api/mobile/config") });
 
   const [selectedSerial, setSelectedSerial] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm]       = useState(false);
 
   const devices  = devicesQ.data?.filter(d => d.state === "device" || d.state === "offline") ?? [];
   const proxies  = configQ.data?.proxies ?? [];
@@ -716,8 +918,8 @@ export function MobilePage() {
 
   const disconnectMut = useMutation({
     mutationFn: (address: string) => api("POST", "/api/mobile/disconnect", { address }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mobile-devices"] }); toast({ title: "Disconnected" }); },
-    onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mobile-devices"] }); },
+    onError: (e: any) => toast({ title: "Disconnect failed", description: e?.message, variant: "destructive" }),
   });
 
   return (
@@ -737,7 +939,7 @@ export function MobilePage() {
                 <p className="text-xs text-muted-foreground">Run multiple Instagram mobile instances, each with its own device identity and proxy.</p>
               </div>
             </div>
-            <Button size="sm" variant="outline" onClick={() => devicesQ.refetch()} disabled={devicesQ.isFetching}>
+            <Button size="sm" variant="outline" onClick={() => { devicesQ.refetch(); qc.invalidateQueries({ queryKey: ["mobile-config"] }); }} disabled={devicesQ.isFetching}>
               <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${devicesQ.isFetching ? "animate-spin" : ""}`} />Refresh
             </Button>
           </div>
@@ -754,10 +956,18 @@ export function MobilePage() {
                   <CheckCircle2 className="w-4 h-4 text-green-500" />
                   {devices.length} device{devices.length !== 1 ? "s" : ""} connected
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setSelectedSerial(null)}>
-                  <Plug className="w-3.5 h-3.5 mr-1.5" />Add another
+                <Button size="sm" variant="outline" onClick={() => { setShowAddForm(v => !v); setSelectedSerial(null); }}>
+                  {showAddForm
+                    ? <><ChevronUp className="w-3.5 h-3.5 mr-1.5" />Cancel</>
+                    : <><Plug className="w-3.5 h-3.5 mr-1.5" />Add another</>
+                  }
                 </Button>
               </div>
+
+              {showAddForm && (
+                <ConnectForm compact onConnected={() => { setShowAddForm(false); devicesQ.refetch(); }} />
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {devices.map((dev, i) => (
                   <DeviceCard
@@ -767,7 +977,7 @@ export function MobilePage() {
                     selected={selectedSerial === dev.serial}
                     proxies={proxies}
                     savedProxyId={configs[dev.serial]?.proxyId}
-                    onSelect={() => setSelectedSerial(selectedSerial === dev.serial ? null : dev.serial)}
+                    onSelect={() => { setSelectedSerial(selectedSerial === dev.serial ? null : dev.serial); setShowAddForm(false); }}
                     onDisconnect={() => disconnectMut.mutateAsync(dev.serial)}
                   />
                 ))}

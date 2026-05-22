@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.454",
+    date: "22 May 2026",
+    items: [
+      { category: "New", text: "Drony VPN proxy automation added to Create & Spoof — install Drony once, then clicking Apply Proxy via Drony makes Equinox open Drony in BlueStacks, fill in the proxy host, port, and credentials automatically, and activate the VPN. All BlueStacks traffic including Instagram HTTPS is routed through the proxy without any manual steps." },
+      { category: "New", text: "Add another emulator button now opens a connection form inline — you can auto-detect or type an address to connect a second BlueStacks or LDPlayer instance without leaving the page." },
+      { category: "New", text: "BlueStacks device profile panel added inside every device card — shows manufacturer, model, Android version, and resolution read live from the device. A Refresh button re-reads the values after you change the profile in BlueStacks Settings." },
+      { category: "Improved", text: "Proxy selector simplified — the global Android proxy and relay buttons have been replaced by the Drony VPN approach which actually works for Instagram HTTPS traffic." },
+    ],
+  },
+  {
     version: "1.0.453",
     date: "22 May 2026",
     items: [

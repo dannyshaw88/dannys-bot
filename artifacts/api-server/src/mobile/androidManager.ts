@@ -617,3 +617,256 @@ export async function getDeviceProxySetting(serial: string): Promise<string | nu
   const val = (r.stdout || "").trim();
   return val && val !== "null" ? val : null;
 }
+
+// ── Drony VPN proxy automation ─────────────────────────────────────────────────
+// Drony (org.sandrob.drony) is a free Android VPN proxy app that routes ALL
+// traffic — including HTTPS — through the configured proxy at the OS network
+// level. No root required. Equinox automates its configuration via ADB
+// UIAutomator (ui dump → parse element bounds → tap + type).
+
+const DRONY_PKG = "org.sandrob.drony";
+const DRONY_ACTIVITY = "org.sandrob.drony/.activity.MainActivity";
+
+function _sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+/** Dump current UI to XML and return its content. */
+async function _uiDump(adb: string, serial: string): Promise<string> {
+  const tmpDev = "/sdcard/equinox_ui_dump.xml";
+  const tmpHost = path.join(os.tmpdir(), `equinox-ui-${serial.replace(/[^a-z0-9]/gi, "-")}.xml`);
+  spawnSync(adb, ["-s", serial, "shell", "uiautomator", "dump", tmpDev], { encoding: "utf8", timeout: 10000 });
+  spawnSync(adb, ["-s", serial, "pull", tmpDev, tmpHost], { encoding: "utf8", timeout: 6000 });
+  try {
+    const xml = fs.readFileSync(tmpHost, "utf8");
+    try { fs.unlinkSync(tmpHost); } catch { /**/ }
+    return xml;
+  } catch { return ""; }
+}
+
+/** Parse "[x1,y1][x2,y2]" bounds → centre point. */
+function _parseCenter(bounds: string): { x: number; y: number } | null {
+  const m = bounds.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+  if (!m) return null;
+  return { x: Math.floor((+m[1] + +m[3]) / 2), y: Math.floor((+m[2] + +m[4]) / 2) };
+}
+
+/**
+ * Find an element by any of the given strings in text/content-desc/hint attrs.
+ * Returns the centre {x,y} of the first match, or null.
+ */
+function _findElem(xml: string, ...candidates: string[]): { x: number; y: number } | null {
+  for (const t of candidates) {
+    const esc = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const attr of ["text", "content-desc", "hint"]) {
+      // attr value exactly, or starts with the candidate (handles hint="Proxy host" matching "host")
+      const re = new RegExp(`${attr}="${esc}"[^>]*bounds="([^"]+)"`, "i");
+      const m = xml.match(re);
+      if (m) { const c = _parseCenter(m[1]); if (c) return c; }
+      // partial match (value contains candidate)
+      const re2 = new RegExp(`${attr}="[^"]*${esc}[^"]*"[^>]*bounds="([^"]+)"`, "i");
+      const m2 = xml.match(re2);
+      if (m2) { const c2 = _parseCenter(m2[1]); if (c2) return c2; }
+    }
+  }
+  return null;
+}
+
+function _adbTap(adb: string, serial: string, x: number, y: number): void {
+  spawnSync(adb, ["-s", serial, "shell", "input", "tap", String(x), String(y)], { encoding: "utf8", timeout: 3000 });
+}
+
+function _adbType(adb: string, serial: string, text: string): void {
+  const escaped = text
+    .replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"')
+    .replace(/ /g, "%s").replace(/&/g, "\\&").replace(/\$/g, "\\$")
+    .replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  spawnSync(adb, ["-s", serial, "shell", "input", "text", escaped], { encoding: "utf8", timeout: 5000 });
+}
+
+function _clearField(adb: string, serial: string): void {
+  // Select all then delete — works across Android versions
+  spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_MOVE_END"], { encoding: "utf8", timeout: 2000 });
+  spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "--longpress", "KEYCODE_DEL"], { encoding: "utf8", timeout: 3000 });
+  // Belt-and-suspenders: ctrl+A then delete
+  spawnSync(adb, ["-s", serial, "shell", "input", "keycombination", "KEYCODE_CTRL_LEFT", "KEYCODE_A"], { encoding: "utf8", timeout: 2000 });
+  spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_DEL"], { encoding: "utf8", timeout: 2000 });
+}
+
+async function _tapField(adb: string, serial: string, pos: { x: number; y: number }, value: string): Promise<void> {
+  _adbTap(adb, serial, pos.x, pos.y);
+  await _sleep(350);
+  _clearField(adb, serial);
+  await _sleep(200);
+  _adbType(adb, serial, value);
+  await _sleep(200);
+}
+
+export async function isDronyInstalled(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  if (!tools.adb.found || !tools.adb.path) return false;
+  const r = spawnSync(tools.adb.path, ["-s", serial, "shell", "pm", "list", "packages", DRONY_PKG], { encoding: "utf8", timeout: 5000 });
+  return (r.stdout || "").includes(DRONY_PKG);
+}
+
+export async function isDronyVpnActive(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  if (!tools.adb.found || !tools.adb.path) return false;
+  // tun0 existing means an Android VPN is up (Drony uses tun)
+  const r = spawnSync(tools.adb.path, ["-s", serial, "shell", "ip", "link", "show", "tun0"], { encoding: "utf8", timeout: 5000 });
+  const out = (r.stdout || "") + (r.stderr || "");
+  return (r.status ?? 1) === 0 && !out.includes("does not exist") && !out.includes("not found");
+}
+
+/**
+ * Fully automates Drony configuration via UIAutomator:
+ * 1. Opens Drony
+ * 2. Navigates to proxy entry form (adds or edits)
+ * 3. Fills in host / port / credentials
+ * 4. Saves and activates the VPN
+ *
+ * Returns { ok, steps } — steps is a human-readable log of what was done.
+ */
+export async function configureDrony(
+  serial: string,
+  config: { host: string; port: number; user?: string; pass?: string },
+): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+
+  try {
+    // 1. Launch Drony
+    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n", DRONY_ACTIVITY], { encoding: "utf8", timeout: 6000 });
+    await _sleep(2000);
+    steps.push("Drony opened");
+
+    let xml = await _uiDump(adb, serial);
+    if (!xml.toLowerCase().includes("drony")) {
+      return { ok: false, steps, error: "Drony did not open — is it installed?" };
+    }
+
+    // 2. If there's a "+" FAB or "Add" button, tap it to create a new proxy entry
+    const addPos = _findElem(xml, "+", "Add", "NEW PROXY", "New proxy", "Add proxy");
+    if (addPos) {
+      _adbTap(adb, serial, addPos.x, addPos.y);
+      await _sleep(1200);
+      xml = await _uiDump(adb, serial);
+      steps.push("Opened new proxy form");
+    } else {
+      // Try editing the first existing entry (long-press or single tap)
+      const entryPos = _findElem(xml, "Edit", "EDIT", "Proxy", "HTTP");
+      if (entryPos) {
+        _adbTap(adb, serial, entryPos.x, entryPos.y);
+        await _sleep(1000);
+        xml = await _uiDump(adb, serial);
+        steps.push("Opened existing proxy to edit");
+      }
+    }
+
+    // 3. Fill Host
+    const hostPos = _findElem(xml, "Hostname or IP address", "Proxy host", "Host", "Server host", "hostname", "server");
+    if (hostPos) {
+      await _tapField(adb, serial, hostPos, config.host);
+      steps.push(`Host → ${config.host}`);
+    } else {
+      steps.push("⚠ Host field not found — UI may differ");
+    }
+
+    // Re-dump after host entry (keyboard may have shifted layout)
+    xml = await _uiDump(adb, serial);
+
+    // 4. Fill Port
+    const portPos = _findElem(xml, "Port", "Server port", "Proxy port", "port");
+    if (portPos) {
+      await _tapField(adb, serial, portPos, String(config.port));
+      steps.push(`Port → ${config.port}`);
+    } else {
+      steps.push("⚠ Port field not found");
+    }
+
+    // Re-dump
+    xml = await _uiDump(adb, serial);
+
+    // 5. Auth (optional)
+    if (config.user) {
+      const userPos = _findElem(xml, "Username", "Login", "User name", "user");
+      if (userPos) {
+        await _tapField(adb, serial, userPos, config.user);
+        steps.push(`Username → ${config.user}`);
+      }
+      xml = await _uiDump(adb, serial);
+      const passPos = _findElem(xml, "Password", "password");
+      if (passPos) {
+        await _tapField(adb, serial, passPos, config.pass ?? "");
+        steps.push("Password set");
+      }
+      xml = await _uiDump(adb, serial);
+    }
+
+    // 6. Save / OK
+    const savePos = _findElem(xml, "OK", "Save", "SAVE", "Done", "DONE", "Apply", "APPLY", "✓");
+    if (savePos) {
+      _adbTap(adb, serial, savePos.x, savePos.y);
+      await _sleep(1200);
+      steps.push("Configuration saved");
+    } else {
+      // Try Android back to dismiss the form
+      spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], { encoding: "utf8", timeout: 3000 });
+      await _sleep(800);
+      steps.push("Form closed (back key)");
+    }
+
+    // 7. Activate VPN toggle on the main screen
+    xml = await _uiDump(adb, serial);
+    // Drony shows a power-button style toggle or a text like "Tap to start" / "OFF" / "Stopped"
+    const togglePos = _findElem(xml, "OFF", "Stopped", "Tap to start", "START", "Start", "Enable");
+    if (togglePos) {
+      _adbTap(adb, serial, togglePos.x, togglePos.y);
+      await _sleep(1800);
+      steps.push("VPN toggle activated");
+    } else {
+      // Some Drony versions use the large power button as an ImageView with no text.
+      // Tap the approximate screen centre-top area where it usually appears.
+      steps.push("⚠ Power toggle not found by text — tap the power button in Drony manually if VPN is not active");
+    }
+
+    // 8. Accept Android VPN permission dialog if it appeared
+    await _sleep(800);
+    xml = await _uiDump(adb, serial);
+    const vpnOkPos = _findElem(xml, "OK", "Allow", "ACCEPT", "Yes");
+    if (vpnOkPos && (xml.includes("VPN") || xml.includes("network") || xml.includes("connection"))) {
+      _adbTap(adb, serial, vpnOkPos.x, vpnOkPos.y);
+      await _sleep(1000);
+      steps.push("VPN permission accepted");
+    }
+
+    return { ok: true, steps };
+  } catch (e: any) {
+    return { ok: false, steps, error: e?.message ?? "Automation failed" };
+  }
+}
+
+/** Deactivate Drony: open it and tap the ON/active toggle. */
+export async function deactivateDrony(serial: string): Promise<{ ok: boolean; steps: string[] }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  try {
+    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n", DRONY_ACTIVITY], { encoding: "utf8", timeout: 6000 });
+    await _sleep(1800);
+    steps.push("Drony opened");
+    const xml = await _uiDump(adb, serial);
+    const offPos = _findElem(xml, "ON", "Running", "STOP", "Stop", "Disable", "Connected");
+    if (offPos) {
+      _adbTap(adb, serial, offPos.x, offPos.y);
+      await _sleep(1000);
+      steps.push("VPN deactivated");
+    } else {
+      steps.push("VPN toggle not found — may already be off");
+    }
+    return { ok: true, steps };
+  } catch (e: any) {
+    return { ok: false, steps, error: e?.message } as any;
+  }
+}
