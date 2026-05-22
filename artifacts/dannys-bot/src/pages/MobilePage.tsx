@@ -518,6 +518,20 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
   });
 
   const installMut = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/install`, { apkPath }), onSuccess: () => { toast({ title: "Instagram installed" }); qc.invalidateQueries({ queryKey: ["ig-installed", serial] }); }, onError: (e: any) => toast({ title: "Install failed", description: e?.message, variant: "destructive" }) });
+  const [playStoreResult, setPlayStoreResult] = useState<{ ok: boolean; steps: string[]; error?: string } | null>(null);
+  const playStoreMut = useMutation({
+    mutationFn: () => api<{ ok: boolean; steps: string[]; error?: string }>("POST", `/api/mobile/devices/${serial}/instagram/install-from-play`, {}),
+    onSuccess: (r) => {
+      setPlayStoreResult(r);
+      if (r.ok) {
+        toast({ title: "Instagram installing via Play Store", description: "Watch BlueStacks — download will start shortly." });
+        qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
+      } else {
+        toast({ title: "Play Store install issue", description: r.error ?? "Check the steps below", variant: "destructive" });
+      }
+    },
+    onError: (e: any) => toast({ title: "Play Store install failed", description: e?.message, variant: "destructive" }),
+  });
   const launchMut  = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/instagram/launch`, {}), onSuccess: () => toast({ title: "Instagram launched" }), onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }) });
   const clearMut   = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/instagram/clear`, {}),   onSuccess: () => toast({ title: "App data cleared — fresh signup ready" }), onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }) });
   const mirrorMut  = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/scrcpy/start`, {}),      onSuccess: () => toast({ title: "Screen mirror opened" }), onError: (e: any) => toast({ title: "Mirror failed — install scrcpy and add to PATH", description: e?.message, variant: "destructive" }) });
@@ -629,18 +643,61 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
                 )}
               </>
             ) : (
-              <div className="space-y-1.5 mb-2">
-                <Label className="text-xs">Install Instagram from APK</Label>
-                <div className="flex gap-2">
-                  <Input className="text-xs flex-1" placeholder="C:\Downloads\instagram.apk" value={apkPath} onChange={e => setApkPath(e.target.value)} />
-                  <Button size="sm" disabled={!apkPath || installMut.isPending} onClick={() => installMut.mutate()}>
-                    {installMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <div className="space-y-2 mb-2">
+                <Label className="text-xs">Install Instagram</Label>
+
+                {/* Option 1 — Play Store (recommended) */}
+                <div className="space-y-1">
+                  <Button
+                    size="sm"
+                    className="w-full h-8 text-xs gap-1.5"
+                    disabled={playStoreMut.isPending}
+                    onClick={() => { setPlayStoreResult(null); playStoreMut.mutate(); }}
+                  >
+                    {playStoreMut.isPending
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Play Store…</>
+                      : <><Download className="w-3.5 h-3.5" />Install via Google Play</>}
                   </Button>
+                  {playStoreMut.isPending && (
+                    <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
+                      BlueStacks will come to the front — Play Store will open and Install will be tapped automatically.
+                    </p>
+                  )}
+                  {playStoreResult && (
+                    <details className="text-[10px]" open={!playStoreResult.ok}>
+                      <summary className="cursor-pointer text-muted-foreground/70 hover:text-muted-foreground select-none">
+                        {playStoreResult.ok ? "✓" : "⚠"} Play Store log ({playStoreResult.steps.length} steps)
+                      </summary>
+                      <ul className="mt-1 space-y-0.5 pl-2 border-l border-border/40">
+                        {playStoreResult.steps.map((s, i) => (
+                          <li key={i} className={`text-[9px] leading-tight ${s.startsWith("⚠") ? "text-amber-600" : "text-muted-foreground"}`}>{s}</li>
+                        ))}
+                        {playStoreResult.error && <li className="text-[9px] text-destructive leading-tight">{playStoreResult.error}</li>}
+                      </ul>
+                    </details>
+                  )}
                 </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Or install from Google Play inside BlueStacks — it's the easiest way. APK from{" "}
-                  <a className="underline hover:text-primary" href="https://www.apkmirror.com/apk/instagram/instagram-instagram/" target="_blank" rel="noreferrer">APKMirror <ExternalLink className="w-2.5 h-2.5 inline" /></a>
-                </p>
+
+                {/* Divider */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-border/50" />
+                  <span className="text-[9px] text-muted-foreground/50 uppercase tracking-wide">or via APK</span>
+                  <div className="flex-1 h-px bg-border/50" />
+                </div>
+
+                {/* Option 2 — APK file */}
+                <div className="space-y-1">
+                  <div className="flex gap-2">
+                    <Input className="text-xs flex-1" placeholder="C:\Downloads\instagram.apk" value={apkPath} onChange={e => setApkPath(e.target.value)} />
+                    <Button size="sm" disabled={!apkPath || installMut.isPending} onClick={() => installMut.mutate()}>
+                      {installMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    APK from{" "}
+                    <a className="underline hover:text-primary" href="https://www.apkmirror.com/apk/instagram/instagram-instagram/" target="_blank" rel="noreferrer">APKMirror <ExternalLink className="w-2.5 h-2.5 inline" /></a>
+                  </p>
+                </div>
               </div>
             )}
           </div>

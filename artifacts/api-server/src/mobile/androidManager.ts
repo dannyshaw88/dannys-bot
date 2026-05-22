@@ -964,6 +964,67 @@ export async function configureDrony(
   }
 }
 
+/**
+ * Open Google Play Store to the Instagram page and tap Install automatically.
+ * Brings BlueStacks to the front first so the user can watch.
+ */
+export async function installInstagramFromPlayStore(serial: string): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  try {
+    _bringBlueStacksToFront();
+    await _sleep(500);
+    steps.push("BlueStacks brought to front");
+
+    // Open Play Store directly on the Instagram page
+    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-a", "android.intent.action.VIEW",
+      "-d", "market://details?id=com.instagram.android", "com.android.vending"],
+      { encoding: "utf8", timeout: 8000 });
+    await _sleep(4500); // Give Play Store time to load the app page
+    steps.push("Play Store opened on Instagram page");
+
+    let xml = await _uiDump(adb, serial);
+    if (!xml || xml.length < 200) {
+      await _sleep(3000);
+      xml = await _uiDump(adb, serial);
+    }
+
+    // Check if already installed
+    const openPos = _findElem(xml, "Open", "OPEN") || _findByResId(xml, ":id/launch_button");
+    if (openPos) {
+      steps.push("Instagram is already installed — nothing to do");
+      return { ok: true, steps };
+    }
+
+    // Find the Install button (text, resource-id, or index-based)
+    const installPos =
+      _findElem(xml, "Install", "INSTALL") ||
+      _findByResId(xml, ":id/buy_button", ":id/install_button", ":id/0_resource_name_obfuscated");
+    if (!installPos) {
+      steps.push("⚠ Install button not found — Play Store may still be loading. Try again in a moment.");
+      return { ok: false, steps, error: "Install button not found in Play Store. Make sure BlueStacks has internet access and is signed into a Google account." };
+    }
+
+    _adbTap(adb, serial, installPos.x, installPos.y);
+    steps.push("Tapped Install");
+    await _sleep(2500);
+
+    // Accept any permissions / account selection dialog that may appear
+    xml = await _uiDump(adb, serial);
+    const acceptPos = _findElem(xml, "Accept", "Continue", "OK", "Allow");
+    if (acceptPos && (xml.toLowerCase().includes("account") || xml.toLowerCase().includes("permission") || xml.toLowerCase().includes("accept"))) {
+      _adbTap(adb, serial, acceptPos.x, acceptPos.y);
+      steps.push("Accepted permissions dialog");
+    }
+
+    steps.push("Installation started — Instagram is downloading. This takes 1–2 minutes.");
+    return { ok: true, steps };
+  } catch (e: any) {
+    return { ok: false, steps, error: e?.message ?? "Failed" };
+  }
+}
+
 /** Deactivate Drony: open it and tap the ON/active toggle. */
 export async function deactivateDrony(serial: string): Promise<{ ok: boolean; steps: string[] }> {
   const tools = detectToolset();

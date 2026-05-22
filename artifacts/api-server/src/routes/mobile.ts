@@ -280,6 +280,15 @@ export function registerMobileRoutes(app: Express) {
     }
   });
 
+  app.post("/api/mobile/devices/:serial/instagram/install-from-play", async (req: Request, res: Response) => {
+    try {
+      const result = await android.installInstagramFromPlayStore(p(req, "serial"));
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ ok: false, steps: [], error: e?.message ?? "Failed" });
+    }
+  });
+
   app.get("/api/mobile/devices/:serial/instagram-installed", async (req: Request, res: Response) => {
     try {
       const installed = await android.isPackageInstalled(p(req, "serial"), "com.instagram.android");

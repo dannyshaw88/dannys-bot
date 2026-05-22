@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.458",
+    date: "22 May 2026",
+    items: [
+      { category: "New", text: "Install Instagram via Google Play button added — one click opens Play Store inside BlueStacks and taps Install automatically. No APK download needed." },
+      { category: "Improved", text: "APK install is still available as a fallback option below the Play Store button." },
+    ],
+  },
+  {
     version: "1.0.457",
     date: "22 May 2026",
     items: [
