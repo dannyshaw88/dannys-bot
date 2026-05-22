@@ -775,7 +775,7 @@ export async function isDronyVpnActive(serial: string): Promise<boolean> {
  */
 export async function configureDrony(
   serial: string,
-  config: { host: string; port: number; user?: string; pass?: string },
+  config: { host: string; port: number; user?: string; pass?: string; proxyType?: string },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -786,9 +786,13 @@ export async function configureDrony(
     _bringBlueStacksToFront();
     await _sleep(400);
 
-    // Launch Drony (app may display as "Droni" in some locales — package name is what matters)
-    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n", DRONY_ACTIVITY], { encoding: "utf8", timeout: 6000 });
-    await _sleep(3000); // Give BlueStacks time to fully switch to the app
+    // Launch Drony — use `am start` (preferred) and `monkey` (guaranteed launcher hit) back-to-back.
+    // Running both is harmless: if am-start works, monkey is a no-op; if am-start fails silently, monkey opens it.
+    spawnSync(adb, ["-s", serial, "shell", "am", "start", "-a", "android.intent.action.MAIN",
+      "-c", "android.intent.category.LAUNCHER", "-n", DRONY_ACTIVITY], { encoding: "utf8", timeout: 6000 });
+    spawnSync(adb, ["-s", serial, "shell", "monkey", "-p", DRONY_PKG,
+      "-c", "android.intent.category.LAUNCHER", "1"], { encoding: "utf8", timeout: 6000 });
+    await _sleep(4000); // Give BlueStacks time to fully switch to the app
 
     let xml = await _uiDump(adb, serial);
     // Retry once if the dump came back empty/tiny (screen was still loading)
@@ -844,7 +848,33 @@ export async function configureDrony(
     if (!hasForm) {
       steps.push("⚠ Could not open proxy form — Drony UI not recognised");
     } else {
-      // 3. Fill Host — try resource-id, then text/hint, then 1st EditText by index
+      // 3. Set proxy protocol type (SOCKS5/SOCKS4/HTTP/HTTPS) via the type spinner
+      const targetType = (config.proxyType ?? "SOCKS5").toUpperCase();
+      const typeSpinner =
+        _findByResId(xml, ":id/proxy_type", ":id/type_spinner", ":id/protocol_spinner", ":id/spinner_type") ||
+        _findElem(xml, "SOCKS5", "SOCKS4", "HTTP", "HTTPS", "None", "Type", "Protocol");
+      if (typeSpinner) {
+        _adbTap(adb, serial, typeSpinner.x, typeSpinner.y);
+        await _sleep(1000);
+        const menuXml = await _uiDump(adb, serial);
+        const typeOption = _findElem(menuXml, targetType);
+        if (typeOption) {
+          _adbTap(adb, serial, typeOption.x, typeOption.y);
+          await _sleep(700);
+          xml = await _uiDump(adb, serial);
+          steps.push(`Protocol set to ${targetType}`);
+        } else {
+          steps.push(`⚠ ${targetType} option not found in dropdown — check proxy type manually`);
+          spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"],
+            { encoding: "utf8", timeout: 3000 });
+          await _sleep(500);
+          xml = await _uiDump(adb, serial);
+        }
+      } else {
+        steps.push(`⚠ Proxy type dropdown not found — ${targetType} must be selected manually`);
+      }
+
+      // 4. Fill Host — try resource-id, then text/hint, then 1st EditText by index
       const hostPos =
         _findByResId(xml, ":id/hostname", ":id/host_name", ":id/host", ":id/server_host", ":id/proxy_host") ||
         _findElem(xml, "Host name or IP address", "Hostname or IP address", "Proxy host", "Host", "Server host") ||

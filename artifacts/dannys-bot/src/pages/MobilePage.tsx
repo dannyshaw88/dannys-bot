@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,7 @@ function DronySection({ serial, savedProxyId, onAutoSelect }: { serial: string; 
   const qc = useQueryClient();
   const [dronyApk, setDronyApk] = useState("");
   const [configResult, setConfigResult] = useState<{ ok: boolean; steps: string[]; error?: string } | null>(null);
+  const [proxyType, setProxyType] = useState<"SOCKS5" | "SOCKS4" | "HTTP" | "HTTPS">("SOCKS5");
 
   const dronyQ = useQuery({
     queryKey: ["drony-status", serial],
@@ -107,7 +108,7 @@ function DronySection({ serial, savedProxyId, onAutoSelect }: { serial: string; 
   });
 
   const configureMut = useMutation({
-    mutationFn: () => api<{ ok: boolean; steps: string[]; error?: string }>("POST", `/api/mobile/devices/${serial}/drony/configure`, { proxyId: savedProxyId }),
+    mutationFn: () => api<{ ok: boolean; steps: string[]; error?: string }>("POST", `/api/mobile/devices/${serial}/drony/configure`, { proxyId: savedProxyId, proxyType }),
     onSuccess: (r) => {
       setConfigResult(r);
       qc.invalidateQueries({ queryKey: ["drony-status", serial] });
@@ -170,7 +171,21 @@ function DronySection({ serial, savedProxyId, onAutoSelect }: { serial: string; 
 
       {/* Installed — show Apply button */}
       {status?.installed && !status.active && savedProxyId && (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground shrink-0">Protocol</span>
+            <select
+              className="flex-1 text-[10px] bg-background border border-border rounded px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              value={proxyType}
+              onChange={e => setProxyType(e.target.value as typeof proxyType)}
+              disabled={configureMut.isPending}
+            >
+              <option value="SOCKS5">SOCKS5 (most common)</option>
+              <option value="SOCKS4">SOCKS4</option>
+              <option value="HTTP">HTTP</option>
+              <option value="HTTPS">HTTPS</option>
+            </select>
+          </div>
           <Button
             size="sm"
             className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
@@ -178,12 +193,12 @@ function DronySection({ serial, savedProxyId, onAutoSelect }: { serial: string; 
             onClick={() => configureMut.mutate()}
           >
             {configureMut.isPending
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Configuring BlueStacks…</>
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Configuring Drony…</>
               : <><Play className="w-3.5 h-3.5" />Apply proxy via Drony</>}
           </Button>
           {configureMut.isPending && (
             <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
-              BlueStacks will come to the front — this takes ~15 seconds. A brief disconnection when the VPN activates is normal and auto-recovers.
+              Drony is opening in BlueStacks automatically — proxy is being configured (~20 s). A brief disconnection when the VPN activates is normal.
             </p>
           )}
         </div>
@@ -1012,8 +1027,9 @@ export function MobilePage() {
   const devicesQ = useDevices();
   const configQ  = useQuery({ queryKey: ["mobile-config"], queryFn: () => api<ConfigResp>("GET", "/api/mobile/config") });
 
-  const [selectedSerial, setSelectedSerial] = useState<string | null>(null);
-  const [showAddForm, setShowAddForm]       = useState(false);
+  const [selectedSerial, setSelectedSerial]         = useState<string | null>(null);
+  const [showAddForm, setShowAddForm]               = useState(false);
+  const [reconnectingSerial, setReconnectingSerial] = useState<string | null>(null);
 
   // Deduplicate: BlueStacks can appear in `adb devices` as both a TCP entry
   // (127.0.0.1:5555) and an emulator entry (emulator-5554) simultaneously.
@@ -1025,6 +1041,15 @@ export function MobilePage() {
     // Drop emulator-XXXX if a TCP entry with same model+product already exists
     return !tcpSerials.has(`${d.model ?? ""}|${d.product ?? ""}`);
   });
+
+  // Clear reconnecting state as soon as the device reappears in the ADB list
+  useEffect(() => {
+    if (reconnectingSerial && devices.some(d => d.serial === reconnectingSerial)) {
+      setReconnectingSerial(null);
+      setSelectedSerial(reconnectingSerial);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devicesQ.data, reconnectingSerial]);
   const proxies  = configQ.data?.proxies ?? [];
   const configs  = configQ.data?.instanceConfigs ?? {};
   const selected = devices.find(d => d.serial === selectedSerial) ?? null;
@@ -1062,6 +1087,18 @@ export function MobilePage() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" />Scanning for devices…
             </div>
+          ) : devices.length === 0 && reconnectingSerial ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+              <div>
+                <div className="font-semibold text-sm">Reconnecting to BlueStacks…</div>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                  Drony's VPN briefly drops the ADB connection when it activates. This is normal — it reconnects automatically in a few seconds.
+                </p>
+              </div>
+            </div>
           ) : devices.length > 0 ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -1092,7 +1129,7 @@ export function MobilePage() {
                     savedProxyId={configs[dev.serial]?.proxyId}
                     onSelect={() => { setSelectedSerial(selectedSerial === dev.serial ? null : dev.serial); setShowAddForm(false); }}
                     onDisconnect={() => disconnectMut.mutateAsync(dev.serial).then(() => { /* void */ })}
-                    onAutoSelect={() => { setSelectedSerial(dev.serial); setShowAddForm(false); }}
+                    onAutoSelect={() => { setSelectedSerial(dev.serial); setReconnectingSerial(dev.serial); setShowAddForm(false); }}
                   />
                 ))}
               </div>

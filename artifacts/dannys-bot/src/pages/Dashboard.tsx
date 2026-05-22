@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.460",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Drony now opens automatically in BlueStacks when Apply proxy via Drony is clicked — uses a more reliable launch method so it always appears on screen." },
+      { category: "New", text: "Proxy type selector added (SOCKS5 / SOCKS4 / HTTP / HTTPS) — choose the correct type for your proxy before applying so Drony routes traffic properly." },
+      { category: "New", text: "Reconnecting banner now shows while BlueStacks is recovering its ADB connection after Drony's VPN activates — no more jumping back to the empty screen." },
+    ],
+  },
+  {
     version: "1.0.459",
     date: "22 May 2026",
     items: [

@@ -547,7 +547,10 @@ export function registerMobileRoutes(app: Express) {
   app.post("/api/mobile/devices/:serial/drony/configure", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const { proxyId } = z.object({ proxyId: z.number() }).parse(req.body);
+      const { proxyId, proxyType } = z.object({
+        proxyId: z.number(),
+        proxyType: z.string().optional(),
+      }).parse(req.body);
       const proxies = await storage.getProxies();
       const proxy = proxies.find(pr => pr.id === proxyId);
       if (!proxy) return res.status(404).json({ error: "Proxy not found" });
@@ -556,6 +559,7 @@ export function registerMobileRoutes(app: Express) {
         port: proxy.port,
         user: proxy.username ?? undefined,
         pass: proxy.password ?? undefined,
+        proxyType: proxyType ?? "SOCKS5",
       });
       res.json(result);
     } catch (e: any) {
