@@ -230,6 +230,7 @@ export function ProfilesPage() {
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
   const [fixingAbd, setFixingAbd] = useState(false);
+  const [fixingAbdIds, setFixingAbdIds] = useState<Set<number>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
   const [sortField, setSortField] = useState<"account" | "status" | "ip" | null>(() => {
     const v = sessionStorage.getItem("profiles:sortField");
@@ -686,18 +687,39 @@ export function ProfilesPage() {
     }
   }, [selectedProfileIds, filteredProfiles, toast]);
 
+  // ── Per-account: Fix Automated Behaviour Detected ────────────────────────
+  const handleFixAbdForProfile = useCallback(async (profileId: number) => {
+    if (fixingAbdIds.has(profileId)) return;
+    setFixingAbdIds(prev => new Set(prev).add(profileId));
+    try {
+      const result = await fetch(`/api/profiles/${profileId}/fix-abd`, { method: "POST", credentials: "include" }).then(r => r.json());
+      toast({
+        title: "Fix Auto-Behaviour",
+        description: result?.ok
+          ? "Automated Behaviour warning dismissed — account restored to valid."
+          : (result?.message ?? "Dismiss failed. Try Verify Credentials first."),
+        variant: result?.ok ? "default" : "destructive",
+      });
+    } catch {
+      toast({ title: "Error", description: "Fix Auto-Behaviour failed.", variant: "destructive" });
+    } finally {
+      setFixingAbdIds(prev => { const s = new Set(prev); s.delete(profileId); return s; });
+    }
+  }, [fixingAbdIds, toast]);
+
   // ── Bulk: Fix Automated Behaviour Detected ───────────────────────────────
   const handleBulkFixAbd = useCallback(async () => {
-    if (selectedProfileIds.length === 0) return;
+    const ids = selectedProfileIds.length > 0 ? selectedProfileIds : filteredProfiles.map(p => p.id);
+    if (ids.length === 0) return;
     setFixingAbd(true);
     try {
       const results = await Promise.allSettled(
-        selectedProfileIds.map(id =>
+        ids.map(id =>
           fetch(`/api/profiles/${id}/fix-abd`, { method: "POST", credentials: "include" }).then(r => r.json())
         )
       );
       const ok = results.filter(r => r.status === "fulfilled" && (r as any).value?.ok).length;
-      const fail = selectedProfileIds.length - ok;
+      const fail = ids.length - ok;
       toast({
         title: "Fix Auto-Behaviour",
         description: ok > 0
@@ -710,7 +732,7 @@ export function ProfilesPage() {
     } finally {
       setFixingAbd(false);
     }
-  }, [selectedProfileIds, toast]);
+  }, [selectedProfileIds, filteredProfiles, toast]);
 
   // ── Bulk: Fix Captcha ────────────────────────────────────────────────────
   const handleBulkFixCaptcha = useCallback(async () => {
@@ -1120,11 +1142,20 @@ export function ProfilesPage() {
                     }
                     if (key === "abd") {
                       const count = abdDailyCount[profile.id] ?? 0;
+                      const isFixing = fixingAbdIds.has(profile.id);
                       return (
-                        <div key={key} style={{ width: profColWidths.abd }} className="shrink-0 flex items-center justify-center" title={count > 0 ? `${count} automated behaviour warning${count === 1 ? "" : "s"} auto-dismissed today` : "No ABD flags today"}>
+                        <div key={key} style={{ width: profColWidths.abd }} className="shrink-0 flex items-center gap-1.5 justify-center" onMouseDown={e => e.stopPropagation()} title={count > 0 ? `${count} automated behaviour warning${count === 1 ? "" : "s"} auto-dismissed today` : "No ABD flags today"}>
                           {count > 0
                             ? <span className="text-[11px] font-bold text-orange-600">{count}</span>
                             : <span className="text-[10px] text-muted-foreground/30">—</span>}
+                          <button
+                            onClick={() => handleFixAbdForProfile(profile.id)}
+                            disabled={isFixing}
+                            className="text-[9px] font-bold text-orange-500 hover:text-orange-700 disabled:opacity-40 transition-colors"
+                            title="Manually dismiss Automated Behaviour Detected warning"
+                          >
+                            {isFixing ? "…" : "Fix"}
+                          </button>
                         </div>
                       );
                     }
@@ -1474,9 +1505,9 @@ export function ProfilesPage() {
                 {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1">Fix Captcha</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+F</span>
               </button>
-              <button onClick={() => { setActionsOpen(false); handleBulkFixAbd(); }} disabled={selectedProfileIds.length === 0 || fixingAbd} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={() => { setActionsOpen(false); handleBulkFixAbd(); }} disabled={fixingAbd} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingAbd ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ShieldCheck className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                <span className="flex-1">Fix Auto-Behaviour</span>
+                <span className="flex-1">Fix Auto-Behaviour ({selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length})</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Remove Proxies</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+P</span>

@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.452",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Fix Auto-Behaviour now works without having to select accounts first — a Fix button appears directly in the ABD column on every account row." },
+      { category: "Improved", text: "The Fix Auto-Behaviour option in the Actions menu now runs on all visible accounts when nothing is selected, matching the same behaviour as Verify." },
+    ],
+  },
+  {
     version: "1.0.451",
     date: "22 May 2026",
     items: [
