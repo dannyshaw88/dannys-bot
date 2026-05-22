@@ -11,7 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Smartphone, Download, MonitorPlay, RefreshCw, Save, Shuffle,
   CheckCircle2, Loader2, Copy, Settings, Keyboard, Trash2, X,
-  ExternalLink, Shield, Plug, Search, Link2Off, Play,
+  ExternalLink, Shield, Plug, Search, Link2Off, Play, RotateCcw,
+  AlertTriangle, Info,
 } from "lucide-react";
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -31,9 +32,20 @@ async function api<T>(method: string, path: string, body?: any): Promise<T> {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type DeviceInfo  = { serial: string; state: string; product?: string; model?: string };
-type ProxyEntry  = { id: number; name?: string | null; host: string; port: number; username?: string | null; password?: string | null };
-type ConfigResp  = { instanceConfigs: Record<string, { proxyId?: number | null }>; proxies: ProxyEntry[] };
+type DeviceInfo   = { serial: string; state: string; product?: string; model?: string };
+type ProxyEntry   = { id: number; name?: string | null; host: string; port: number; username?: string | null; password?: string | null };
+type ConfigResp   = { instanceConfigs: Record<string, { proxyId?: number | null }>; proxies: ProxyEntry[] };
+type DevicePropsResp = { manufacturer: string; model: string; androidVersion: string; sdkInt: string; density: string; width: string; height: string; board: string; deviceString: string; userAgent: string };
+
+const randHex16 = () => Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+
+function proxyLabel(px: ProxyEntry): string {
+  const addr = `${px.host}:${px.port}`;
+  if (!px.name) return addr;
+  const name = px.name.trim();
+  if (!name || name === px.host || name === addr) return addr;
+  return `${name} — ${addr}`;
+}
 
 // ─── Data hooks ───────────────────────────────────────────────────────────────
 
@@ -78,8 +90,10 @@ const COLORS = [
 function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [ipResult, setIpResult] = useState<{ ip?: string; error?: string } | null>(null);
-  const [checkingIp, setCheckingIp] = useState(false);
+  const [ipResult, setIpResult]           = useState<{ ip?: string; error?: string } | null>(null);
+  const [deviceProxyResult, setDeviceProxyResult] = useState<{ proxy?: string; upstream?: string; error?: string } | null>(null);
+  const [checkingIp, setCheckingIp]       = useState(false);
+  const [checkingDevice, setCheckingDevice] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: (proxyId: number | null) => api("POST", `/api/mobile/instances/${encodeURIComponent(serial)}/config`, { proxyId }),
@@ -91,6 +105,7 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
     onSuccess: (_d, id) => {
       toast({ title: id ? "Proxy applied to device" : "Proxy removed" });
       setIpResult(null);
+      setDeviceProxyResult(null);
     },
     onError: (e: any) => toast({ title: "Apply failed", description: e?.message, variant: "destructive" }),
   });
@@ -100,9 +115,11 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
     saveMut.mutate(id);
     applyMut.mutate(id);
     setIpResult(null);
+    setDeviceProxyResult(null);
   };
 
-  const checkIp = async () => {
+  // Server-side test: confirms the upstream proxy is reachable & shows its external IP
+  const checkProxyIp = async () => {
     setCheckingIp(true);
     setIpResult(null);
     try {
@@ -116,6 +133,23 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
     }
   };
 
+  // On-device check: reads the proxy BlueStacks itself is configured with (via ADB)
+  const checkDeviceProxy = async () => {
+    setCheckingDevice(true);
+    setDeviceProxyResult(null);
+    try {
+      const r = await api<{ deviceProxy: string | null; upstreamProxy: string | null }>("GET", `/api/mobile/devices/${serial}/proxy-status`);
+      if (r.deviceProxy) setDeviceProxyResult({ proxy: r.deviceProxy, upstream: r.upstreamProxy ?? undefined });
+      else setDeviceProxyResult({ error: "No proxy configured on device — apply a proxy first." });
+    } catch (e: any) {
+      setDeviceProxyResult({ error: e?.message ?? "Check failed" });
+    } finally {
+      setCheckingDevice(false);
+    }
+  };
+
+  // Deduplicate proxies by id (defensive: prevents duplicate entries from storage)
+  const uniqueProxies = proxies.filter((px, idx, arr) => arr.findIndex(p => p.id === px.id) === idx);
   const busy = saveMut.isPending || applyMut.isPending;
 
   return (
@@ -129,20 +163,33 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
           disabled={busy}
         >
           <option value="">No proxy</option>
-          {proxies.map(px => <option key={px.id} value={px.id}>{px.name ? `${px.name} — ` : ""}{px.host}:{px.port}</option>)}
+          {uniqueProxies.map(px => <option key={px.id} value={px.id}>{proxyLabel(px)}</option>)}
         </select>
         {busy && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />}
-        {savedProxyId && (
-          <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] shrink-0" disabled={checkingIp || busy} onClick={checkIp} title="Test that the proxy is working and see the external IP">
-            {checkingIp ? <Loader2 className="w-3 h-3 animate-spin" /> : "Test IP"}
-          </Button>
-        )}
       </div>
+      {savedProxyId && (
+        <div className="flex gap-1.5">
+          <Button size="sm" variant="outline" className="flex-1 h-7 px-2 text-[10px]" disabled={checkingIp || busy} onClick={checkProxyIp} title="Confirms the proxy is reachable and shows its external IP address (server-side test)">
+            {checkingIp ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Test Proxy IP
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1 h-7 px-2 text-[10px]" disabled={checkingDevice || busy} onClick={checkDeviceProxy} title="Shows what proxy BlueStacks itself is currently configured with (reads from the device via ADB)">
+            {checkingDevice ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Device Proxy
+          </Button>
+        </div>
+      )}
       {ipResult && (
         <div className={`text-[10px] px-2 py-1 rounded ${ipResult.ip ? "bg-green-500/10 text-green-600 border border-green-500/20" : "bg-destructive/10 text-destructive border border-destructive/20"}`}>
           {ipResult.ip
-            ? <><CheckCircle2 className="w-3 h-3 inline mr-1" />Proxy working — external IP: <span className="font-mono font-semibold">{ipResult.ip}</span></>
+            ? <><CheckCircle2 className="w-3 h-3 inline mr-1" />Proxy reachable — external IP: <span className="font-mono font-semibold">{ipResult.ip}</span></>
             : <>Proxy test failed: {ipResult.error}</>
+          }
+        </div>
+      )}
+      {deviceProxyResult && (
+        <div className={`text-[10px] px-2 py-1 rounded ${deviceProxyResult.proxy ? "bg-blue-500/10 text-blue-600 border border-blue-500/20" : "bg-amber-500/10 text-amber-600 border border-amber-500/20"}`}>
+          {deviceProxyResult.proxy
+            ? <><Info className="w-3 h-3 inline mr-1" />BlueStacks proxy: <span className="font-mono font-semibold">{deviceProxyResult.proxy}</span>{deviceProxyResult.upstream ? <> → upstream: <span className="font-mono">{deviceProxyResult.upstream}</span></> : null}</>
+            : <><AlertTriangle className="w-3 h-3 inline mr-1" />{deviceProxyResult.error}</>
           }
         </div>
       )}
@@ -155,12 +202,13 @@ function ProxySelector({ serial, proxies, savedProxyId }: { serial: string; prox
 function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, onDisconnect }: {
   device: DeviceInfo; idx: number; selected: boolean;
   proxies: ProxyEntry[]; savedProxyId?: number | null;
-  onSelect: () => void; onDisconnect: () => void;
+  onSelect: () => void; onDisconnect: () => Promise<void>;
 }) {
   const { toast } = useToast();
   const id = useAndroidId(device.serial);
   const color = COLORS[idx % COLORS.length];
   const isOnline = device.state === "device";
+  const [disconnecting, setDisconnecting] = useState(false);
 
   return (
     <div
@@ -178,8 +226,17 @@ function DeviceCard({ device, idx, selected, proxies, savedProxyId, onSelect, on
             <span className={`text-xs ${isOnline ? "text-green-200 font-medium" : "text-white/60"}`}>{isOnline ? "Connected" : device.state}</span>
           </div>
         </div>
-        <button className="text-white/50 hover:text-white p-1" title="Disconnect" onClick={e => { e.stopPropagation(); onDisconnect(); }}>
-          <Link2Off className="w-4 h-4" />
+        <button
+          className="text-white/50 hover:text-white p-1 disabled:opacity-30"
+          title="Disconnect device"
+          disabled={disconnecting}
+          onClick={async e => {
+            e.stopPropagation();
+            setDisconnecting(true);
+            try { await onDisconnect(); } finally { setDisconnecting(false); }
+          }}
+        >
+          {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2Off className="w-4 h-4" />}
         </button>
       </div>
       <div className="bg-card px-4 py-3 space-y-3 flex-1">
@@ -320,9 +377,40 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
   const clearMut   = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/instagram/clear`, {}),   onSuccess: () => toast({ title: "App data cleared — fresh signup ready" }), onError: (e: any) => toast({ title: "Failed", description: e?.message, variant: "destructive" }) });
   const mirrorMut  = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/scrcpy/start`, {}),      onSuccess: () => toast({ title: "Screen mirror opened" }), onError: (e: any) => toast({ title: "Mirror failed — install scrcpy and add to PATH", description: e?.message, variant: "destructive" }) });
   const typeMut    = useMutation({ mutationFn: (text: string) => api("POST", `/api/mobile/devices/${serial}/input/text`, { text }), onError: (e: any) => toast({ title: "Type failed", description: e?.message, variant: "destructive" }) });
+  const resetMut   = useMutation({
+    mutationFn: () => api<{ ok: boolean; newAndroidId: string }>("POST", `/api/mobile/devices/${serial}/reset`),
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["android-id", serial] });
+      qc.invalidateQueries({ queryKey: ["mobile-config"] });
+      qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
+      toast({ title: "Device reset", description: `Instagram uninstalled. New device ID: ${d.newAndroidId}` });
+    },
+    onError: (e: any) => toast({ title: "Reset failed", description: e?.message, variant: "destructive" }),
+  });
   const saveMut    = useMutation({
-    mutationFn: () => api("POST", "/api/mobile/accounts", { username, password, email: email || null, phoneNumber: phone || null, dateOfBirth: dob || null, notes: notes || null, serial, avdName: null }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profiles"] }); toast({ title: "Account saved", description: `@${username} added to Accounts.` }); setUsername(""); setPassword(""); setEmail(""); setPhone(""); setDob(""); setNotes(""); },
+    mutationFn: async () => {
+      let igDeviceState: string | null = null;
+      let userAgentApi: string | null = null;
+      try {
+        const props = await api<DevicePropsResp>("GET", `/api/mobile/devices/${serial}/device-props`);
+        igDeviceState = JSON.stringify({
+          v: 3,
+          deviceId: `android-${randHex16()}`,
+          uuid: crypto.randomUUID(),
+          phoneId: crypto.randomUUID(),
+          adid: crypto.randomUUID(),
+          deviceString: props.deviceString,
+          igDid: crypto.randomUUID(),
+        });
+        userAgentApi = props.userAgent;
+      } catch { /* device props non-critical — save proceeds without them */ }
+      return api("POST", "/api/mobile/accounts", {
+        username, password, email: email || null, phoneNumber: phone || null,
+        dateOfBirth: dob || null, notes: notes || null, serial, avdName: null,
+        igDeviceState, userAgentApi,
+      });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profiles"] }); toast({ title: "Account saved", description: `@${username} added to Accounts — device fingerprint captured.` }); setUsername(""); setPassword(""); setEmail(""); setPhone(""); setDob(""); setNotes(""); },
     onError: (e: any) => toast({ title: "Save failed", description: e?.message, variant: "destructive" }),
   });
 
@@ -336,7 +424,20 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
           {instQ.data?.installed === true  && <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] border-0">Instagram installed</Badge>}
           {instQ.data?.installed === false && <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/40">Instagram not installed</Badge>}
         </div>
-        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={onClose}><X className="w-4 h-4" /></Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2.5 text-[10px] border-orange-500/50 text-orange-600 hover:bg-orange-500/10 hover:border-orange-500 gap-1.5"
+            disabled={resetMut.isPending}
+            title="Uninstalls Instagram, generates a new device ID, and clears the proxy — ready for the next fresh account"
+            onClick={() => resetMut.mutate()}
+          >
+            {resetMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+            Reset for next account
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose}><X className="w-4 h-4" /></Button>
+        </div>
       </div>
 
       <div className="p-5 grid grid-cols-2 gap-6">
@@ -437,7 +538,10 @@ function DevicePanel({ device, onClose }: { device: DeviceInfo; onClose: () => v
                       <Shuffle className="w-3 h-3" />
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0" disabled={!f.val || typeMut.isPending} onClick={() => typeMut.mutate(f.val)}>Type</Button>
+                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" title="Copy to clipboard — paste into BlueStacks" disabled={!f.val} onClick={() => navigator.clipboard.writeText(f.val).then(() => toast({ title: "Copied!", description: f.label }))}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 px-2 text-[10px] shrink-0" title="Inject text via ADB — focus the field in Mirror first" disabled={!f.val || typeMut.isPending} onClick={() => typeMut.mutate(f.val)}>Type</Button>
                 </div>
               </div>
             ))}
@@ -664,7 +768,7 @@ export function MobilePage() {
                     proxies={proxies}
                     savedProxyId={configs[dev.serial]?.proxyId}
                     onSelect={() => setSelectedSerial(selectedSerial === dev.serial ? null : dev.serial)}
-                    onDisconnect={() => disconnectMut.mutate(dev.serial)}
+                    onDisconnect={() => disconnectMut.mutateAsync(dev.serial)}
                   />
                 ))}
               </div>

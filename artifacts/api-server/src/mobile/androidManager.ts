@@ -564,3 +564,56 @@ export async function runSignupRecipe(serial: string, steps: SignupRecipeStep[],
     }
   }
 }
+
+// ── Device property inspection ─────────────────────────────────────────────────
+
+export type DeviceProps = {
+  manufacturer: string;
+  model: string;
+  brand: string;
+  androidVersion: string;
+  sdkInt: string;
+  density: string;
+  width: string;
+  height: string;
+  board: string;
+  deviceString: string;
+  userAgent: string;
+};
+
+export async function getDeviceProps(serial: string): Promise<DeviceProps> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+
+  function prop(key: string): string {
+    const r = spawnSync(adb, ["-s", serial, "shell", "getprop", key], { encoding: "utf8", timeout: 4000 });
+    return (r.stdout || "").trim().replace(/^\[|\]$/g, "") || "";
+  }
+
+  const manufacturer = prop("ro.product.manufacturer") || "Samsung";
+  const model        = prop("ro.product.model") || "SM-G991B";
+  const brand        = prop("ro.product.brand") || manufacturer;
+  const androidVersion = prop("ro.build.version.release") || "11";
+  const sdkInt       = prop("ro.build.version.sdk") || "30";
+  const density      = prop("ro.sf.lcd_density") || prop("ro.screen.density") || "420";
+  const board        = prop("ro.product.board") || prop("ro.board.platform") || "universal2100";
+
+  const sizeR = spawnSync(adb, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 4000 });
+  const sizeMatch = (sizeR.stdout || "").match(/(\d+)x(\d+)/);
+  const width  = sizeMatch ? sizeMatch[1] : "1080";
+  const height = sizeMatch ? sizeMatch[2] : "2400";
+
+  const deviceString = `${sdkInt}/${androidVersion}; ${density}dpi; ${width}x${height}; ${manufacturer}; ${model}; ${model}; ${board}; en_US; 746996204`;
+  const userAgent    = `Instagram 427.0.0.47.73 Android (${deviceString})`;
+
+  return { manufacturer, model, brand, androidVersion, sdkInt, density, width, height, board, deviceString, userAgent };
+}
+
+/** Reads the http_proxy global setting currently configured on the device. */
+export async function getDeviceProxySetting(serial: string): Promise<string | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "settings", "get", "global", "http_proxy"], { encoding: "utf8", timeout: 4000 });
+  const val = (r.stdout || "").trim();
+  return val && val !== "null" ? val : null;
+}

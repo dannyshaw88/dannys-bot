@@ -1096,7 +1096,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           const igMsg: string = (typeof body === "object" && body !== null ? (body?.message ?? "") : "") as string;
           const statusCode: number | undefined = err?.response?.statusCode;
 
-          if (err instanceof IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg)) {
+          if (err instanceof IgCheckpointError || /checkpoint/i.test(msg) || /checkpoint/i.test(igMsg) || /challenge_required/i.test(msg) || /challenge_required/i.test(igMsg)) {
             // Inspect explicit boolean fields only — never search the full body string
             // because checkpoint URLs can contain "bad_password" or "invalid_credentials"
             // as path segments, causing false bad_password classifications for live sessions.
@@ -1199,6 +1199,56 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           }
         }
 
+        // Helper: classify a cold-start error that might be an ABD response.
+        // instagram-private-api throws IgResponseError on non-2xx — check both
+        // the error message and the raw response body.
+        const isABDError = (e: any): boolean => {
+          const msg: string = (e?.message ?? "").toLowerCase();
+          const body: any   = e?.response?.body ?? {};
+          const igMsg: string = (typeof body === "object" && body !== null ? (body?.message ?? "") : "").toLowerCase();
+          return msg.includes("feedback_required") || igMsg === "feedback_required";
+        };
+
+        const abdResult = (): VerifyResult => ({
+          ok: false,
+          message: `@${profile.username} — Automated Behaviour Detected. Use Fix Auto-Behaviour to dismiss it.`,
+          accountStatus: "automated_behaviour_detected",
+          igDeviceState: captureDeviceState(),
+        });
+
+        // ── ABD probe — fires immediately after session confirmation ──────
+        // POST /api/v1/qe/sync/ with NO body — this is the exact request pattern
+        // that triggers feedback_required for ABD accounts.  A signed/formatted
+        // syncLoginExperiments call does NOT trigger it (Instagram accepts it fine
+        // even in ABD state); only the bare unsigned POST reliably surfaces ABD.
+        // This mirrors what probeAndDismissABD() uses in InstagramWebClient.
+        // Check both the return body (200 with feedback_required) and thrown error
+        // body (400 with feedback_required).
+        try {
+          const abdProbeBody: any = await ig.request.send({
+            url:    "/api/v1/qe/sync/",
+            method: "POST",
+          });
+          if (abdProbeBody?.message === "feedback_required") {
+            console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: feedback_required in 200 body → automated_behaviour_detected`);
+            return abdResult();
+          }
+          console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe OK (no ABD)`);
+        } catch (abdProbeErr: any) {
+          const body = abdProbeErr?.response?.body ?? {};
+          const igMsg: string = (typeof body === "object" && body !== null ? (body?.message ?? "") : "") as string;
+          const errMsg = String(abdProbeErr?.message ?? "").toLowerCase();
+          if (igMsg === "feedback_required" || errMsg.includes("feedback_required")) {
+            console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: feedback_required (HTTP ${abdProbeErr?.response?.statusCode ?? "n/a"}) → automated_behaviour_detected`);
+            return abdResult();
+          }
+          if (igMsg === "challenge_required" || errMsg.includes("challenge_required")) {
+            console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: challenge_required (HTTP ${abdProbeErr?.response?.statusCode ?? "n/a"}) → captcha`);
+            return { ok: false, message: `@${profile.username} — account requires a security challenge. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(abdProbeErr), igDeviceState: captureDeviceState() };
+          }
+          console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: non-fatal error: ${abdProbeErr?.message ?? ""}`);
+        }
+
         // ── Phase 2b: GetTimeLine cold_start_fetch (feed/timeline) ────────
         // NOTE: checkpoint_required here is NOT treated as a hard gate.
         // If get_account_family returned 200, the session is valid.  Instagram
@@ -1212,6 +1262,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           console.error(`[instagramLogin] @${profile.username} — feed/timeline cold_start_fetch OK`);
         } catch (tlErr: any) {
           const msg: string = tlErr?.message ?? "";
+          if (isABDError(tlErr)) {
+            console.error(`[instagramLogin] @${profile.username} — feed/timeline: feedback_required (ABD) → automated_behaviour_detected`);
+            return abdResult();
+          }
           console.error(`[instagramLogin] @${profile.username} — feed/timeline failed (non-fatal): ${msg}`);
           // Intentionally not returning captcha here — get_account_family is the
           // authoritative checkpoint check.  Timeline soft-checkpoints are ignored.
@@ -1223,6 +1277,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           await reelsFeed.request();
           console.error(`[instagramLogin] @${profile.username} — feed/reels_tray (GetReelsTray) OK`);
         } catch (e: any) {
+          if (isABDError(e)) {
+            console.error(`[instagramLogin] @${profile.username} — reels_tray: feedback_required (ABD) → automated_behaviour_detected`);
+            return abdResult();
+          }
           console.error(`[instagramLogin] @${profile.username} — reels_tray failed (non-fatal): ${e?.message}`);
         }
 
@@ -1231,6 +1289,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           await ig.news.inbox();
           console.error(`[instagramLogin] @${profile.username} — news/inbox (ExecuteNotificationsBadge) OK`);
         } catch (e: any) {
+          if (isABDError(e)) {
+            console.error(`[instagramLogin] @${profile.username} — news/inbox: feedback_required (ABD) → automated_behaviour_detected`);
+            return abdResult();
+          }
           console.error(`[instagramLogin] @${profile.username} — news/inbox failed (non-fatal): ${e?.message}`);
         }
 
@@ -1240,6 +1302,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           await ig.qe.syncLoginExperiments();
           console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
         } catch (e: any) {
+          if (isABDError(e)) {
+            console.error(`[instagramLogin] @${profile.username} — qe/sync: feedback_required (ABD) → automated_behaviour_detected`);
+            return abdResult();
+          }
           console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
         }
 
@@ -1261,6 +1327,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           });
           console.error(`[instagramLogin] @${profile.username} — banyan/banyan (GetBanyan) OK`);
         } catch (e: any) {
+          if (isABDError(e)) {
+            console.error(`[instagramLogin] @${profile.username} — banyan: feedback_required (ABD) → automated_behaviour_detected`);
+            return abdResult();
+          }
           console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
         }
 
@@ -1270,6 +1340,10 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           await (ig.discover as any).topicalExplore();
           console.error(`[instagramLogin] @${profile.username} — discover/topical_explore (ExecuteDiscoverExplore) OK`);
         } catch (e: any) {
+          if (isABDError(e)) {
+            console.error(`[instagramLogin] @${profile.username} — topical_explore: feedback_required (ABD) → automated_behaviour_detected`);
+            return abdResult();
+          }
           console.error(`[instagramLogin] @${profile.username} — discover/topical_explore failed (non-fatal): ${e?.message}`);
         }
 

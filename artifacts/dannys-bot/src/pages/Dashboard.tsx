@@ -56,6 +56,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.453",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Verify now correctly detects when Instagram flags an account as needing a security challenge — those accounts now show the Captcha status instead of being incorrectly marked as Valid." },
+      { category: "Fixed", text: "Automated Behaviour Detected is now correctly identified during verification and sets the account to the ABD status." },
+      { category: "New", text: "Reset for next account button added to the Create & Spoof device panel. One click uninstalls Instagram, generates a fresh device ID, and clears the proxy — the device is ready for the next signup." },
+      { category: "New", text: "Device fingerprint is now captured and saved when you save an account from Create & Spoof — the device hardware profile and User Agent are stored so Equinox can identify as that exact device during verification." },
+      { category: "New", text: "Copy buttons added to every credential field on Create & Spoof — click to copy Username, Password, Email, or Date of Birth directly to your clipboard for easy pasting into BlueStacks." },
+      { category: "New", text: "Device Proxy button added to the Create & Spoof proxy selector — it reads back the actual proxy configured on the device via ADB so you can confirm BlueStacks is routing through the right proxy." },
+      { category: "Improved", text: "The Disconnect button on device cards now shows a spinner while disconnecting and is disabled until complete." },
+    ],
+  },
+  {
     version: "1.0.452",
     date: "22 May 2026",
     items: [

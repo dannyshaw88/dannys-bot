@@ -376,6 +376,73 @@ export function registerMobileRoutes(app: Express) {
     res.json({ androidId: android.randomAndroidId() });
   });
 
+  // ── Device property inspection ─────────────────────────────────────────────
+  app.get("/api/mobile/devices/:serial/device-props", async (req: Request, res: Response) => {
+    try {
+      const props = await android.getDeviceProps(p(req, "serial"));
+      res.json(props);
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Could not read device properties" });
+    }
+  });
+
+  // ── Device proxy status (what proxy Android itself is configured with) ─────
+  app.get("/api/mobile/devices/:serial/proxy-status", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const deviceProxy = await android.getDeviceProxySetting(serial);
+      const cfg = loadInstanceConfigs();
+      const proxyId = cfg[serial]?.proxyId ?? null;
+      let upstreamProxy: string | null = null;
+      if (proxyId) {
+        const proxies = await storage.getProxies();
+        const px = proxies.find(pr => pr.id === proxyId);
+        if (px) upstreamProxy = `${px.host}:${px.port}`;
+      }
+      res.json({ deviceProxy, upstreamProxy, relayActive: !!deviceProxy });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Could not read device proxy status" });
+    }
+  });
+
+  // ── Reset device for next account creation ────────────────────────────────
+  // Uninstalls Instagram, sets a new android_id, clears the device proxy setting,
+  // and removes the proxy assignment from the instance config.
+  app.post("/api/mobile/devices/:serial/reset", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+
+      // 1. Uninstall Instagram (clears all app data too)
+      await android.uninstallPackage(serial, "com.instagram.android");
+
+      // 2. Fresh device ID
+      const newId = android.randomAndroidId();
+      await android.setAndroidId(serial, newId);
+
+      // 3. Clear proxy from the device's global settings
+      await android.setDeviceProxy(serial, null);
+
+      // 4. Stop the relay and remove proxy assignment from instance config
+      const cfg = loadInstanceConfigs();
+      const proxyId = cfg[serial]?.proxyId ?? null;
+      if (proxyId) {
+        const proxies = await storage.getProxies();
+        const px = proxies.find(pr => pr.id === proxyId);
+        if (px) {
+          await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined });
+        }
+        cfg[serial] = { ...cfg[serial], proxyId: null };
+        saveInstanceConfigs(cfg);
+      }
+
+      logger.info({ serial, newAndroidId: newId }, "device reset for next account creation");
+      res.json({ ok: true, newAndroidId: newId });
+    } catch (e: any) {
+      logger.error({ err: e }, "device reset failed");
+      res.status(500).json({ error: e?.message ?? "Reset failed" });
+    }
+  });
+
   const saveAccountSchema = z.object({
     username: z.string().min(1),
     password: z.string().min(1),
@@ -385,6 +452,8 @@ export function registerMobileRoutes(app: Express) {
     notes: z.string().optional().nullable(),
     serial: z.string().optional().nullable(),
     avdName: z.string().optional().nullable(),
+    igDeviceState: z.string().optional().nullable(),
+    userAgentApi: z.string().optional().nullable(),
   });
   app.post("/api/mobile/accounts", async (req: Request, res: Response) => {
     try {
@@ -400,6 +469,8 @@ export function registerMobileRoutes(app: Express) {
         status: "idle",
         accountStatus: "pending",
         credentialsDirty: true,
+        ...(input.igDeviceState ? { igDeviceState: input.igDeviceState } : {}),
+        ...(input.userAgentApi ? { userAgentApi: input.userAgentApi } : {}),
       } as any);
       res.json({ ok: true, profile });
     } catch (e: any) {
