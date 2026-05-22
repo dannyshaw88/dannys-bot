@@ -237,13 +237,8 @@ export function registerMobileRoutes(app: Express) {
         const relayPort = await proxyRelay.getOrCreateRelay(upstream);
 
         // 2. Find the gateway IP so Android can reach the Windows host
+        // getDeviceGateway always returns a string (falls back to 10.0.2.2 for emulators)
         const gateway = android.getDeviceGateway(serial);
-        if (!gateway) {
-          res.status(400).json({
-            error: "Could not read device route table — is the device connected via ADB?",
-          });
-          return;
-        }
 
         // 3. Save protocol choice so relay-status and reset can look it up
         const cfg = loadInstanceConfigs();

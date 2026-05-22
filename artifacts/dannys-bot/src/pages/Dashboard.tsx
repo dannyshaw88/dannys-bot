@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.462",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Apply proxy now works on BlueStacks — the emulator's network gateway is detected automatically (falls back to the standard Android host address 10.0.2.2) so the proxy applies every time." },
+    ],
+  },
+  {
     version: "1.0.461",
     date: "22 May 2026",
     items: [

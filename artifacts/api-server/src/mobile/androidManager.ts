@@ -378,16 +378,42 @@ export function startEmulator(
  * relay to listen on so BlueStacks can reach it.
  * Parses `ip route show default` output: "default via 10.0.2.2 dev eth0 ..."
  */
-export function getDeviceGateway(serial: string): string | null {
+export function getDeviceGateway(serial: string): string {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const r = spawnSync(
+
+  // Attempt 1: ip route show default
+  const r1 = spawnSync(
     adb,
     ["-s", serial, "shell", "ip", "route", "show", "default"],
     { encoding: "utf8", timeout: 5000 },
   );
-  const match = (r.stdout ?? "").match(/default via ([\d.]+)/);
-  return match ? match[1] : null;
+  const m1 = (r1.stdout ?? "").match(/default via ([\d.]+)/);
+  if (m1) return m1[1];
+
+  // Attempt 2: full ip route table (BlueStacks sometimes omits "default via" in the first command)
+  const r2 = spawnSync(
+    adb,
+    ["-s", serial, "shell", "ip", "route"],
+    { encoding: "utf8", timeout: 5000 },
+  );
+  const m2 = (r2.stdout ?? "").match(/default via ([\d.]+)/);
+  if (m2) return m2[1];
+
+  // Attempt 3: getprop net.eth0.gw (works on some older AOSP images)
+  const r3 = spawnSync(
+    adb,
+    ["-s", serial, "shell", "getprop", "net.eth0.gw"],
+    { encoding: "utf8", timeout: 4000 },
+  );
+  const gw3 = (r3.stdout ?? "").trim();
+  if (gw3 && /^\d+\.\d+\.\d+\.\d+$/.test(gw3)) return gw3;
+
+  // Fallback: 10.0.2.2 is the host machine IP for both standard Android
+  // emulators and BlueStacks 5 NAT mode — safe default when route table
+  // is unparseable.
+  console.log(`[androidManager] getDeviceGateway(${serial}): route table unreadable, using 10.0.2.2`);
+  return "10.0.2.2";
 }
 
 export async function setDeviceProxy(
