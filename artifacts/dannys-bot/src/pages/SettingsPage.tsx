@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -113,6 +113,53 @@ function ThemePicker() {
         <p className="text-xs text-muted-foreground mt-2">
           {THEME_COLORS.find(t => t.key === themeColor)?.label ?? ""}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function AutostartCard() {
+  const { toast } = useToast();
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    eAPI().getAutostart().then((v: boolean) => setEnabled(v)).catch(() => setEnabled(false));
+  }, []);
+
+  const toggle = async (v: boolean) => {
+    setSaving(true);
+    try {
+      const result: boolean = await eAPI().setAutostart(v);
+      setEnabled(result);
+      toast({ title: result ? "Equinox will start with Windows" : "Autostart disabled" });
+    } catch {
+      toast({ title: "Failed to update autostart", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="desktop-card p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-green-100 text-green-600 mt-0.5">
+            <Power className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Start with Windows</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Equinox will launch automatically when Windows starts. The app opens minimised to the tray.
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={enabled ?? false}
+          onCheckedChange={toggle}
+          disabled={enabled === null || saving}
+          className="data-[state=checked]:bg-green-500 shrink-0 mt-0.5"
+        />
       </div>
     </div>
   );
@@ -265,6 +312,9 @@ export function SettingsPage() {
             <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
           </div>
         </Link>
+
+        {/* Autostart — Electron only */}
+        {isElectron && <AutostartCard />}
 
         {/* HikerAPI Scraper Protection */}
         <div className="desktop-card p-6">

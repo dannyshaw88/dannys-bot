@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.451",
+    date: "22 May 2026",
+    items: [
+      { category: "New", text: "Settings page now has a Start with Windows toggle. When enabled, Equinox launches automatically when Windows starts, minimised to the tray." },
+      { category: "Improved", text: "The Create an Account tab has been removed from the sidebar — account creation is handled through the Create & Spoof page." },
+      { category: "Improved", text: "Bulk Import renamed to Bulk Import Accounts, and Mobile renamed to Create & Spoof in the sidebar." },
+    ],
+  },
+  {
     version: "1.0.450",
     date: "22 May 2026",
     items: [

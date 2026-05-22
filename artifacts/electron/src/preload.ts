@@ -22,4 +22,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("export-eqx-folder", files),
   focusBrowserWindow: (profileId: number) =>
     ipcRenderer.invoke("focus-browser-window", profileId),
+  getAutostart: () => ipcRenderer.invoke("get-autostart"),
+  setAutostart: (enable: boolean) => ipcRenderer.invoke("set-autostart", enable),
 });

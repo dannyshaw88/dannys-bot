@@ -913,6 +913,15 @@ async function createWindow() {
     return { canceled: false, folder, count: files.length };
   });
 
+  ipcMain.handle("get-autostart", () => {
+    return app.getLoginItemSettings().openAtLogin;
+  });
+
+  ipcMain.handle("set-autostart", (_e, enable: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: enable });
+    return app.getLoginItemSettings().openAtLogin;
+  });
+
   ipcMain.handle("check-for-updates", async () => {
     if (!app.isPackaged) {
       dialog.showMessageBox(win!, {
