@@ -100,6 +100,7 @@ async function buildAll() {
       "playwright",
       "puppeteer",
       "puppeteer-core",
+      "cloakbrowser",
       "electron",
     ],
     sourcemap: "linked",

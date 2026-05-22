@@ -54,6 +54,7 @@ import {
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
+import { openCloakSession, closeCloakSession, isCloakOpen, getCloakUrl, attachCloakWS } from "../cloak/cloakSession";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
@@ -1840,6 +1841,48 @@ export async function registerInstagramRoutes(
     res.json(info);
   });
 
+  // ── CloakBrowser routes ─────────────────────────────────────────────────────
+  app.post("/api/cloak/open", async (req, res) => {
+    try {
+      const { url, proxyId, manualProxy } = req.body as {
+        url?: string;
+        proxyId?: number | null;
+        manualProxy?: { host: string; port: number; username?: string; password?: string; protocol?: string };
+      };
+      let proxy: { host: string; port: number; username?: string; password?: string; protocol?: string } | undefined;
+      if (manualProxy?.host && manualProxy?.port) {
+        proxy = manualProxy;
+      } else if (proxyId) {
+        const proxies = await storage.getProxies();
+        const found = proxies.find((p) => p.id === proxyId);
+        if (found) {
+          proxy = {
+            host: found.host,
+            port: found.port,
+            username: found.username ?? undefined,
+            password: found.password ?? undefined,
+            protocol: (found as any).protocol ?? undefined,
+          };
+        }
+      }
+      openCloakSession({ url, proxy }).catch((err) => {
+        console.error("[cloak] session error:", err?.message ?? err);
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Failed to open CloakBrowser" });
+    }
+  });
+
+  app.post("/api/cloak/close", async (_req, res) => {
+    await closeCloakSession().catch(() => {});
+    res.json({ ok: true });
+  });
+
+  app.get("/api/cloak/status", (_req, res) => {
+    res.json({ open: isCloakOpen(), url: getCloakUrl() });
+  });
+
   // WebSocket stream for real-time browser frames.
   // WebSocket connections use a separate socket pool in Chromium and do NOT count
   // against the 6-connection-per-origin HTTP/1.1 limit, so 10+ EBs can be open
@@ -1848,6 +1891,14 @@ export async function registerInstagramRoutes(
 
   httpServer.on("upgrade", async (request, socket, head) => {
     const url = new URL(request.url ?? "", `http://localhost`);
+
+    // ── CloakBrowser live stream ───────────────────────────────────────────────
+    if (url.pathname === "/api/cloak/stream") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        attachCloakWS(ws);
+      });
+      return;
+    }
 
     // ── Signup browser live stream ─────────────────────────────────────────────
     if (url.pathname === "/api/signup/browser/stream") {

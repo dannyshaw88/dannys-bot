@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.466",
+    date: "22 May 2026",
+    items: [
+      { category: "New", text: "CloakBrowser tab added — launches a stealth Chromium browser for account creation testing, routed through any proxy from your Proxy Manager." },
+      { category: "New", text: "CloakBrowser includes a live interactive browser panel with back, forward, reload, and a URL bar." },
+    ],
+  },
+  {
     version: "1.0.465",
     date: "22 May 2026",
     items: [

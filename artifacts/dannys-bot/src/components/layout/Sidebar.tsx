@@ -1,7 +1,7 @@
 import { useLocation, useSearch } from "wouter";
 import {
   LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, PlusCircle, User, UserMinus, MessageSquare, Cookie, Upload, Smartphone,
+  ChevronLeft, ChevronRight, PlusCircle, User, UserMinus, MessageSquare, Cookie, Upload, Smartphone, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
@@ -44,6 +44,7 @@ export function Sidebar() {
     { name: "Create & Spoof",       path: "/mobile",     icon: Smartphone, iconColor: undefined, iconStyle: { color: BRAND } },
     { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "CloakBrowser",     path: "/cloak-browser",      icon: Globe,           iconColor: undefined,  iconStyle: { color: BRAND } },
   ];
 
   function goBack() {
