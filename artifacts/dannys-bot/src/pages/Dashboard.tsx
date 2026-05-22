@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.450",
+    date: "22 May 2026",
+    items: [
+      { category: "New", text: "Fix Auto-Behaviour button added to the account actions menu. Use it to manually trigger an ABD dismissal for any account at any time, without waiting for automation to encounter one." },
+    ],
+  },
+  {
     version: "1.0.449",
     date: "22 May 2026",
     items: [

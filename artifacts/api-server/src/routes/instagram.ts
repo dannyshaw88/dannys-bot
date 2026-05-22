@@ -2305,6 +2305,17 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Manual Fix: dismiss Automated Behaviour Detected warning ─────────────
+  app.post("/api/profiles/:id/fix-abd", async (req, res) => {
+    const profileId = Number(req.params.id);
+    try {
+      const result = await automationEngine.dismissABDForProfile(profileId);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ ok: false, message: e?.message ?? "Fix ABD failed" });
+    }
+  });
+
   // ── Fetch Followings via HikerAPI (for Unfollow target list) ─────────────
   app.post("/api/profiles/:id/fetch-followings", async (req, res) => {
     const profileId = Number(req.params.id);

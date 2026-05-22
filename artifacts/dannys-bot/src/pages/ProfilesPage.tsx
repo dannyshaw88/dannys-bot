@@ -229,6 +229,7 @@ export function ProfilesPage() {
   const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
+  const [fixingAbd, setFixingAbd] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
   const [sortField, setSortField] = useState<"account" | "status" | "ip" | null>(() => {
     const v = sessionStorage.getItem("profiles:sortField");
@@ -684,6 +685,32 @@ export function ProfilesPage() {
       setVerifyingAll(false);
     }
   }, [selectedProfileIds, filteredProfiles, toast]);
+
+  // ── Bulk: Fix Automated Behaviour Detected ───────────────────────────────
+  const handleBulkFixAbd = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    setFixingAbd(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedProfileIds.map(id =>
+          fetch(`/api/profiles/${id}/fix-abd`, { method: "POST", credentials: "include" }).then(r => r.json())
+        )
+      );
+      const ok = results.filter(r => r.status === "fulfilled" && (r as any).value?.ok).length;
+      const fail = selectedProfileIds.length - ok;
+      toast({
+        title: "Fix Auto-Behaviour",
+        description: ok > 0
+          ? `${ok} account${ok !== 1 ? "s" : ""} cleared${fail > 0 ? ` — ${fail} could not be dismissed` : ""}.`
+          : "No accounts could be dismissed. Accounts may not be in ABD state — try Verify Credentials first.",
+        variant: ok > 0 ? "default" : "destructive",
+      });
+    } catch {
+      toast({ title: "Error", description: "Fix Auto-Behaviour failed.", variant: "destructive" });
+    } finally {
+      setFixingAbd(false);
+    }
+  }, [selectedProfileIds, toast]);
 
   // ── Bulk: Fix Captcha ────────────────────────────────────────────────────
   const handleBulkFixCaptcha = useCallback(async () => {
@@ -1446,6 +1473,10 @@ export function ProfilesPage() {
               <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1">Fix Captcha</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+F</span>
+              </button>
+              <button onClick={() => { setActionsOpen(false); handleBulkFixAbd(); }} disabled={selectedProfileIds.length === 0 || fixingAbd} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                {fixingAbd ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ShieldCheck className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                <span className="flex-1">Fix Auto-Behaviour</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Remove Proxies</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+P</span>
