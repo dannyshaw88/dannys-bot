@@ -497,16 +497,27 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
     queryFn: () => api<{ installed: boolean }>("GET", `/api/mobile/devices/${serial}/instagram-installed`),
     refetchInterval: 12000,
   });
+  const apkCacheQ = useQuery({
+    queryKey: ["apk-cache"],
+    queryFn: () => api<{ cached: boolean; size?: number }>("GET", "/api/mobile/instagram-apk-cache"),
+    refetchInterval: 20000,
+  });
 
   const installMut = useMutation({ mutationFn: () => api("POST", `/api/mobile/devices/${serial}/install`, { apkPath }), onSuccess: () => { toast({ title: "Instagram installed" }); qc.invalidateQueries({ queryKey: ["ig-installed", serial] }); }, onError: (e: any) => toast({ title: "Install failed", description: e?.message, variant: "destructive" }) });
+  const installCachedMut = useMutation({
+    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/instagram/install-cached`),
+    onSuccess: () => { toast({ title: "Instagram installed from cache" }); qc.invalidateQueries({ queryKey: ["ig-installed", serial] }); },
+    onError: (e: any) => toast({ title: "Cached install failed", description: e?.message, variant: "destructive" }),
+  });
   const [playStoreResult, setPlayStoreResult] = useState<{ ok: boolean; steps: string[]; error?: string } | null>(null);
   const playStoreMut = useMutation({
     mutationFn: () => api<{ ok: boolean; steps: string[]; error?: string }>("POST", `/api/mobile/devices/${serial}/instagram/install-from-play`, {}),
     onSuccess: (r) => {
       setPlayStoreResult(r);
       if (r.ok) {
-        toast({ title: "Instagram installing via Play Store", description: "Watch BlueStacks — download will start shortly." });
+        toast({ title: "Instagram installing via Play Store", description: "APK will be cached automatically after install — next time will be instant." });
         qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
+        setTimeout(() => qc.invalidateQueries({ queryKey: ["apk-cache"] }), 30000);
       } else {
         toast({ title: "Play Store install issue", description: r.error ?? "Check the steps below", variant: "destructive" });
       }
@@ -528,7 +539,7 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
       qc.invalidateQueries({ queryKey: ["mobile-config"] });
       qc.invalidateQueries({ queryKey: ["ig-installed", serial] });
       qc.invalidateQueries({ queryKey: ["mobile-devices"] });
-      toast({ title: "Reset complete", description: `Instagram uninstalled, new device ID set (${d.newAndroidId}), proxy cleared. Change the device profile in BlueStacks → Settings → Phone, then start the next account.` });
+      toast({ title: "Reset complete", description: `Instagram data cleared (app stays installed), new device ID set (${d.newAndroidId}), proxy cleared. Change the device profile in BlueStacks → Settings → Phone, then open Instagram — it will start fresh.` });
       onReset?.();
     },
     onError: (e: any) => toast({ title: "Reset failed", description: e?.message, variant: "destructive" }),
@@ -594,7 +605,7 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
             variant="outline"
             className="h-7 px-2.5 text-[10px] border-orange-500/50 text-orange-600 hover:bg-orange-500/10 hover:border-orange-500 gap-1.5"
             disabled={resetMut.isPending}
-            title="Uninstalls Instagram, generates a new device ID, and clears the proxy — ready for the next fresh account. Then change device profile in BlueStacks → Settings → Phone."
+            title="Clears Instagram data (app stays installed — no re-download), generates a new device ID, and clears the proxy. Then change device profile in BlueStacks → Settings → Phone."
             onClick={() => resetMut.mutate()}
           >
             {resetMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
@@ -672,21 +683,42 @@ function DevicePanel({ device, onClose, onReset }: { device: DeviceInfo; onClose
               <div className="space-y-2 mb-2">
                 <Label className="text-xs">Install Instagram</Label>
 
-                {/* Option 1 — Play Store (recommended) */}
+                {/* Option 1 — Cached APK (fast) or Play Store */}
                 <div className="space-y-1">
-                  <Button
-                    size="sm"
-                    className="w-full h-8 text-xs gap-1.5"
-                    disabled={playStoreMut.isPending}
-                    onClick={() => { setPlayStoreResult(null); playStoreMut.mutate(); }}
-                  >
-                    {playStoreMut.isPending
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Play Store…</>
-                      : <><Download className="w-3.5 h-3.5" />Install via Google Play</>}
-                  </Button>
+                  {apkCacheQ.data?.cached ? (
+                    <>
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0"
+                        disabled={installCachedMut.isPending}
+                        onClick={() => installCachedMut.mutate()}
+                      >
+                        {installCachedMut.isPending
+                          ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Installing…</>
+                          : <><Download className="w-3.5 h-3.5" />Install Instagram (~5s, cached)</>}
+                      </Button>
+                      <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
+                        Using locally cached APK — no download needed.{" "}
+                        <button className="underline hover:text-foreground" onClick={() => { setPlayStoreResult(null); playStoreMut.mutate(); }} disabled={playStoreMut.isPending}>
+                          Re-download from Play Store
+                        </button>
+                      </p>
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="w-full h-8 text-xs gap-1.5"
+                      disabled={playStoreMut.isPending}
+                      onClick={() => { setPlayStoreResult(null); playStoreMut.mutate(); }}
+                    >
+                      {playStoreMut.isPending
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Opening Play Store…</>
+                        : <><Download className="w-3.5 h-3.5" />Install via Google Play</>}
+                    </Button>
+                  )}
                   {playStoreMut.isPending && (
                     <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
-                      BlueStacks will come to the front — Play Store will open and Install will be tapped automatically.
+                      BlueStacks will come to the front — Play Store will open and Install will be tapped automatically. APK will be cached for next time.
                     </p>
                   )}
                   {playStoreResult && (

@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.463",
+    date: "22 May 2026",
+    items: [
+      { category: "Fixed", text: "Reset no longer uninstalls Instagram — it just clears the app data, so Instagram stays installed and you skip the 10-minute re-download for every account." },
+      { category: "New", text: "APK cache added — after your first Play Store install, the APK is saved locally so future installs take ~5 seconds instead of 10 minutes." },
+      { category: "New", text: "Install screen now shows a blue 'Install Instagram (~5s, cached)' button when the local cache is ready, with an option to re-download from Play Store if needed." },
+    ],
+  },
+  {
     version: "1.0.462",
     date: "22 May 2026",
     items: [

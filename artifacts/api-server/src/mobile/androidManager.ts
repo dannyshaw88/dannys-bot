@@ -470,6 +470,32 @@ export async function installApk(serial: string, apkPath: string): Promise<void>
   }
 }
 
+export function getCachedApkPath(): string {
+  return process.env.DATABASE_PATH
+    ? path.join(path.dirname(process.env.DATABASE_PATH), "browser-data", "instagram.apk")
+    : path.join(process.cwd(), "server", "browser-data", "instagram.apk");
+}
+
+export async function pullAndCacheInstalledApk(serial: string): Promise<string> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "pm", "path", "com.instagram.android"], { encoding: "utf8", timeout: 10000 });
+  const match = (r.stdout ?? "").match(/package:(.+)/);
+  if (!match) throw new Error("Could not find Instagram APK path on device");
+  const deviceApkPath = match[1].trim();
+  const cachePath = getCachedApkPath();
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  const pullR = spawnSync(adb, ["-s", serial, "pull", deviceApkPath, cachePath], { encoding: "utf8", timeout: 120000 });
+  if (pullR.status !== 0) throw new Error(`adb pull failed: ${pullR.stderr || pullR.stdout}`);
+  console.log(`[androidManager] Instagram APK cached to ${cachePath} (${fs.statSync(cachePath).size} bytes)`);
+  return cachePath;
+}
+
+export async function installFromCachedApk(serial: string): Promise<void> {
+  const cachePath = getCachedApkPath();
+  await installApk(serial, cachePath);
+}
+
 export async function uninstallPackage(serial: string, pkg: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");

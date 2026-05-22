@@ -323,10 +323,35 @@ export function registerMobileRoutes(app: Express) {
 
   app.post("/api/mobile/devices/:serial/instagram/install-from-play", async (req: Request, res: Response) => {
     try {
-      const result = await android.installInstagramFromPlayStore(p(req, "serial"));
+      const serial = p(req, "serial");
+      const result = await android.installInstagramFromPlayStore(serial);
       res.json(result);
+      if (result.ok) {
+        android.pullAndCacheInstalledApk(serial).catch((e: any) =>
+          logger.warn({ err: e }, "[mobile] background APK cache pull failed"),
+        );
+      }
     } catch (e: any) {
       res.status(500).json({ ok: false, steps: [], error: e?.message ?? "Failed" });
+    }
+  });
+
+  app.get("/api/mobile/instagram-apk-cache", (_req: Request, res: Response) => {
+    const cachePath = android.getCachedApkPath();
+    if (fs.existsSync(cachePath)) {
+      const size = fs.statSync(cachePath).size;
+      res.json({ cached: true, size, path: cachePath });
+    } else {
+      res.json({ cached: false });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/instagram/install-cached", async (req: Request, res: Response) => {
+    try {
+      await android.installFromCachedApk(p(req, "serial"));
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Cached install failed" });
     }
   });
 
@@ -473,8 +498,8 @@ export function registerMobileRoutes(app: Express) {
     try {
       const serial = p(req, "serial");
 
-      // 1. Uninstall Instagram (clears all app data too)
-      await android.uninstallPackage(serial, "com.instagram.android");
+      // 1. Clear Instagram data (keeps the app installed — no re-download needed)
+      await android.clearInstagramData(serial);
 
       // 2. Fresh device ID
       const newId = android.randomAndroidId();
