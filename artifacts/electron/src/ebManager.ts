@@ -27,11 +27,11 @@ function buildToolbarJs(_username: string): string {
   if(document.getElementById('__eq_bar__'))return;
   var bar=document.createElement('div');
   bar.id='__eq_bar__';
-  bar.style.cssText='position:fixed;top:0;left:0;right:0;height:44px;z-index:2147483647;background:#ffffff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);';
+  bar.style.cssText='position:fixed;top:0;left:0;right:0;height:52px;z-index:2147483647;background:#ffffff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);';
   function mkBtn(title,html,onclick,extra){
     var b=document.createElement('button');
     b.title=title;b.innerHTML=html;b.onclick=onclick;
-    b.style.cssText='height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;'+(extra||'');
+    b.style.cssText='height:38px;min-width:38px;padding:0 10px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;'+(extra||'');
     b.onmouseenter=function(){b.style.background='#f3f4f6';};
     b.onmouseleave=function(){b.style.background='transparent';};
     return b;
@@ -55,7 +55,7 @@ function buildToolbarJs(_username: string): string {
   bar.appendChild(sep());
   var inp=document.createElement('input');
   inp.id='__eq_url__';inp.value=location.href;
-  inp.style.cssText='flex:1;min-width:0;height:30px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:5px;color:#111827;font-size:12px;font-family:monospace;outline:none;box-sizing:border-box;';
+  inp.style.cssText='flex:1;min-width:0;height:38px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;box-sizing:border-box;';
   inp.onfocus=function(){inp.style.borderColor='#3b82f6';inp.select();};
   inp.onblur=function(){inp.style.borderColor='#d1d5db';};
   inp.onkeydown=function(e){if(e.key==='Enter'){e.preventDefault();var u=inp.value.trim();if(u&&u.indexOf('http')!==0)u='https://'+u;cmd('navigate',{url:u});}};
@@ -79,6 +79,13 @@ function buildToolbarJs(_username: string): string {
   (function tryPrepend(){if(!document.body){setTimeout(tryPrepend,80);return;}document.body.prepend(bar);})();
   setInterval(function(){if(!document.getElementById('__eq_bar__')&&document.body){document.body.prepend(bar);}},3000);
   window.__eq_syncUrl=function(u){var el=document.getElementById('__eq_url__');if(el&&document.activeElement!==el)el.value=u;};
+  // Auto-dismiss Instagram cookie consent banner every 8s.
+  // One interval per window lifetime — the __eq_cookie_tick flag prevents stacking.
+  if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
+    var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
+    var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]')||Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});
+    if(btn)btn.click();
+  },8000);}
 })();`;
 }
 
@@ -297,10 +304,15 @@ async function doAutoLogin(
     return { ok: false, message: "Could not find login form on Instagram login page" };
   }
 
-  // Wait up to 30s for navigation away from login page
+  // Wait up to 30s for navigation away from the bare login page.
+  // The 2FA page URL is "accounts/login/two_factor?..." — it still contains
+  // "accounts/login", so the predicate must explicitly accept it, otherwise
+  // the code waits the full 30 s before detecting 2FA (looks like it does nothing).
   const postLoginUrl = await waitForNav(
     wc,
-    url => url.includes("instagram.com") && !url.includes("accounts/login"),
+    url =>
+      url.includes("instagram.com") &&
+      (!url.includes("accounts/login/") || url.includes("two_factor")),
     30000,
   );
   await delay(1000);
@@ -417,7 +429,7 @@ export async function openEbWindow(opts: {
     title:           `@${username} — Equinox Browser`,
     icon:            _iconPath || undefined,
     autoHideMenuBar: true,
-    show:            true,
+    show:            false,
     webPreferences: {
       nodeIntegration:  false,
       contextIsolation: true,
@@ -425,6 +437,7 @@ export async function openEbWindow(opts: {
       preload: path.join(__dirname, "ebToolbarPreload.js"),
     },
   });
+  win.once("ready-to-show", () => { win.show(); win.maximize(); });
 
   // Block sub-browsers: any window.open() or target="_blank" link Instagram fires
   // would normally spawn a brand-new BrowserWindow child. Instead, intercept every
@@ -592,29 +605,113 @@ export async function openEbWindow(opts: {
       : "https://www.instagram.com/accounts/login/",
   ).catch(() => {});
 
-  // ── Auto-login ────────────────────────────────────────────────────────────
-  // If credentials are provided and the session has no active sessionid, wait
-  // for the initial page load then automatically fill and submit the login form.
-  // Runs in the background — openEbWindow returns immediately.
+  // ── Page-detection auto-fill ──────────────────────────────────────────────
+  // Detects every navigation to the Instagram login page or 2FA page and
+  // automatically fills + submits the form. Fires on the initial open AND on
+  // any subsequent navigation (session expiry, re-login, manual back, etc.).
+  // Credentials must be stored on the profile — if password is empty nothing fires.
   if (password) {
-    (async () => {
-      // Wait for the initial page to finish loading (max 20 s)
-      await new Promise<void>(r => {
-        const t = setTimeout(r, 20_000);
-        win.webContents.once("did-finish-load", () => { clearTimeout(t); r(); });
-      });
-      if (win.isDestroyed()) return;
-      // Skip if a sessionid already landed in the session (e.g. from loaded cookies)
-      const ses2 = electronSession.fromPartition(partition);
-      const hasSid = await ses2.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-      if (hasSid.length > 0) {
-        console.log(`[ebManager] @${username} — sessionid present, skipping auto-login`);
-        return;
+    let _autoFillBusy = false;
+
+    win.webContents.on("did-navigate", async (_e: any, navUrl: string) => {
+      if (_autoFillBusy || win.isDestroyed()) return;
+      if (navUrl.startsWith("chrome-error://")) return;
+
+      const onLogin = navUrl.includes("accounts/login/") && !navUrl.includes("two_factor");
+      const on2FA   = navUrl.includes("two_factor");
+      if (!onLogin && !on2FA) return;
+
+      _autoFillBusy = true;
+      console.log(`[ebManager] @${username} — auto-fill detected ${on2FA ? "2FA" : "login"} page`);
+
+      // Short wait for React to mount the form after navigation commits
+      await new Promise(r => setTimeout(r, 1500));
+      if (win.isDestroyed()) { _autoFillBusy = false; return; }
+
+      try {
+        if (onLogin) {
+          await win.webContents.executeJavaScript(`
+            (async () => {
+              const wait = ms => new Promise(r => setTimeout(r, ms));
+
+              // ── Step 1: dismiss cookie consent banner if present ──────────────
+              // Instagram shows a GDPR cookie dialog in many regions. It sits on
+              // top of the login form. We must click "Allow all cookies" before
+              // the login inputs become interactive.
+              // Try for up to 5 s; skip if not present.
+              for (let t = 0; t < 10; t++) {
+                // Selector set covers current and past Instagram cookie banners
+                const cookieBtn = (
+                  document.querySelector('button[data-cookiebanner="accept_button"]') ||
+                  [...document.querySelectorAll('button')].find(b =>
+                    /allow all cookies|accept all|consenti a|accepter tous|alle zulassen|aceptar todo|tillåt alla/i
+                      .test(b.textContent)
+                  ) ||
+                  document.querySelector('[data-testid="cookie-policy-banner-accept"]') ||
+                  document.querySelector('[class*="cookie"] button:last-of-type')
+                );
+                if (cookieBtn) {
+                  cookieBtn.click();
+                  await wait(1000); // wait for the banner to dismiss
+                  break;
+                }
+                await wait(500);
+              }
+
+              // ── Step 2: fill login form ───────────────────────────────────────
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+              let uInp, pInp, tries = 0;
+              while (tries++ < 20) {
+                uInp = document.querySelector('input[name="username"]');
+                pInp = document.querySelector('input[name="password"]');
+                if (uInp && pInp) break;
+                await wait(500);
+              }
+              if (!uInp || !pInp) return;
+              setter.call(uInp, ${JSON.stringify(username)});
+              uInp.dispatchEvent(new Event("input", { bubbles: true }));
+              await wait(300);
+              setter.call(pInp, ${JSON.stringify(password)});
+              pInp.dispatchEvent(new Event("input", { bubbles: true }));
+              await wait(500);
+              const btn = document.querySelector('button[type="submit"]');
+              if (btn && !btn.disabled) btn.click();
+            })()
+          `).catch((e: any) => console.warn(`[ebManager] @${username} login fill failed:`, e?.message));
+
+        } else if (on2FA && twoFAKey) {
+          const code = generateTotp(twoFAKey);
+          await win.webContents.executeJavaScript(`
+            (async () => {
+              const wait = ms => new Promise(r => setTimeout(r, ms));
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+              let inp, tries = 0;
+              while (tries++ < 20) {
+                inp = document.querySelector(
+                  'input[name="verificationCode"], input[aria-label*="security" i], ' +
+                  'input[aria-label*="code" i], input[autocomplete="one-time-code"]'
+                );
+                if (inp) break;
+                await wait(500);
+              }
+              if (!inp) return;
+              setter.call(inp, ${JSON.stringify(code)});
+              inp.dispatchEvent(new Event("input", { bubbles: true }));
+              await wait(400);
+              const btn = document.querySelector('button[type="submit"]');
+              if (btn) btn.click();
+            })()
+          `).catch((e: any) => console.warn(`[ebManager] @${username} 2FA fill failed:`, e?.message));
+
+        } else if (on2FA && !twoFAKey) {
+          console.warn(`[ebManager] @${username} — 2FA page detected but no 2FA key stored`);
+        }
+      } finally {
+        // Hold the lock for 3 s so a rapid re-navigation doesn't re-trigger immediately
+        await new Promise(r => setTimeout(r, 3000));
+        _autoFillBusy = false;
       }
-      console.log(`[ebManager] @${username} — no sessionid, starting auto-login`);
-      const res = await doAutoLogin(profileId, win, username, password, twoFAKey ?? "");
-      console.log(`[ebManager] @${username} auto-login: ok=${res.ok} — ${res.message}`);
-    })().catch(err => console.error(`[ebManager] @${username} auto-login error:`, err?.message));
+    });
   }
 }
 
@@ -765,7 +862,58 @@ function setupToolbarIpc(): void {
           const key = (p.twoFASecretKey ?? "").trim();
           if (key) {
             const code = generateTotp(key);
-            await typeIntoFocused(code);
+            const codeJson = JSON.stringify(code);
+            // Actively find the OTP input, fill it, then click Continue/Submit.
+            // Falls back to the last-focused field if no standard OTP selector matches.
+            await wc.executeJavaScript(`(async function(){
+              var delay=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+              var code=${codeJson};
+              var OTP=[
+                'input[autocomplete="one-time-code"]',
+                'input[name="verificationCode"]',
+                'input[name="verification_code"]',
+                'input[name="security_code"]',
+                'input[name="totp_code"]',
+                'input[name="code"]',
+                'input[inputmode="numeric"]'
+              ];
+              var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+              var filled=false;
+              for(var i=0;i<OTP.length;i++){
+                var el=document.querySelector(OTP[i]);
+                if(!el)continue;
+                var rc=el.getBoundingClientRect();
+                if(rc.width===0||rc.height===0)continue;
+                el.focus();
+                setter.call(el,'');
+                el.dispatchEvent(new Event('input',{bubbles:true}));
+                await delay(80);
+                setter.call(el,code);
+                el.dispatchEvent(new Event('input',{bubbles:true}));
+                el.dispatchEvent(new Event('change',{bubbles:true}));
+                filled=true;
+                break;
+              }
+              if(!filled){
+                var fe=window.__eq_lastInput||document.activeElement;
+                if(fe&&fe.tagName==='INPUT'){
+                  setter.call(fe,code);
+                  fe.dispatchEvent(new Event('input',{bubbles:true}));
+                  fe.dispatchEvent(new Event('change',{bubbles:true}));
+                }
+              }
+              await delay(350);
+              var SUBMIT=['confirm','continue','submit','verify','next','done','ok'];
+              var btns=Array.from(document.querySelectorAll('button,[role="button"],input[type="submit"]'));
+              for(var j=0;j<btns.length;j++){
+                var txt=(btns[j].innerText||btns[j].textContent||'').trim().toLowerCase();
+                var rc2=btns[j].getBoundingClientRect();
+                if(SUBMIT.some(function(t){return txt.indexOf(t)!==-1;})&&rc2.width>0&&rc2.height>0){
+                  btns[j].click();
+                  break;
+                }
+              }
+            })()`).catch(()=>{});
           }
         } catch {}
         break;
