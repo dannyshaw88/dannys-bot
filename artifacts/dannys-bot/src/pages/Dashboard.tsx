@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.482",
+    date: "23 May 2026",
+    items: [
+      { category: "Improved", text: "The 'no adapter found' message in the Hotspot panel now explains step-by-step how to get USB tethering working on both iPhone (install Apple Devices from Microsoft Store, enable Personal Hotspot) and Android (enable USB tethering in phone settings)." },
+    ],
+  },
+  {
     version: "1.0.481",
     date: "23 May 2026",
     items: [

@@ -309,9 +309,12 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
       )}
 
       {adapters.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          No USB-tethered adapter detected. Connect your phone via USB and enable USB tethering on the phone.
-        </p>
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">No USB tethering adapter detected.</p>
+          <p><span className="font-medium">iPhone:</span> Install <span className="font-medium">Apple Devices</span> from the Microsoft Store (or iTunes from apple.com — not the Store version). Then go to iPhone Settings → Personal Hotspot → turn on <span className="font-medium">Allow Others to Join</span>. Reconnect the USB cable — you should see a blue banner on the iPhone screen.</p>
+          <p><span className="font-medium">Android:</span> In your phone settings search for <span className="font-medium">USB tethering</span> and enable it while the cable is plugged in.</p>
+          <p>Once connected, press Refresh above.</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {adapters.map((a) => {
