@@ -10,6 +10,11 @@ import * as proxyRelay from "../mobile/proxyRelay";
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
 
+// In-memory cache for android IDs — avoids repeated slow ADB reads after a
+// successful write. Keyed by device serial. Cleared only on server restart or
+// explicit reset; the value on-device is the source of truth for first-read.
+const androidIdCache = new Map<string, string>();
+
 /** Makes a plain HTTP proxy request to api.ipify.org through the given upstream. */
 function fetchExternalIpViaProxy(host: string, port: number, user?: string, pass?: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -433,7 +438,14 @@ export function registerMobileRoutes(app: Express) {
 
   app.get("/api/mobile/devices/:serial/android-id", async (req: Request, res: Response) => {
     try {
-      const id = await android.getAndroidId(p(req, "serial"));
+      const serial = p(req, "serial");
+      // Return cached value immediately if we've already read/written it this session
+      if (androidIdCache.has(serial)) {
+        res.json({ androidId: androidIdCache.get(serial) });
+        return;
+      }
+      const id = await android.getAndroidId(serial);
+      if (id) androidIdCache.set(serial, id);
       res.json({ androidId: id });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
@@ -441,8 +453,10 @@ export function registerMobileRoutes(app: Express) {
   const androidIdSchema = z.object({ androidId: z.string().regex(/^[0-9a-f]{16}$/, "Must be 16 hex characters") });
   app.post("/api/mobile/devices/:serial/android-id", async (req: Request, res: Response) => {
     try {
+      const serial = p(req, "serial");
       const input = androidIdSchema.parse(req.body);
-      await android.setAndroidId(p(req, "serial"), input.androidId);
+      await android.setAndroidId(serial, input.androidId);
+      androidIdCache.set(serial, input.androidId);
       res.json({ ok: true, androidId: input.androidId });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
@@ -534,6 +548,7 @@ export function registerMobileRoutes(app: Express) {
       // 2. Fresh Android ID
       const newId = android.randomAndroidId();
       await android.setAndroidId(serial, newId);
+      androidIdCache.set(serial, newId);
       steps.push(`✓ Android ID reset → ${newId}`);
 
       // 3. Clear proxy

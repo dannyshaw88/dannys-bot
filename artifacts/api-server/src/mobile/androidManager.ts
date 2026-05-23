@@ -320,10 +320,15 @@ export async function setAndroidId(serial: string, id: string): Promise<void> {
   const adb = requireTool(tools.adb, "adb");
   // Try direct settings put first (works on most emulators without root)
   const r = spawnSync(adb, ["-s", serial, "shell", "settings", "put", "secure", "android_id", id], {
-    encoding: "utf8", timeout: 5000,
+    encoding: "utf8", timeout: 10000,
   });
-  if ((r.status ?? 0) !== 0) {
-    throw new Error(`Could not set android_id: ${r.stderr || r.stdout || "adb error"}`);
+  // r.status is null when spawnSync kills the process due to timeout (signal is set instead)
+  if (r.error || r.signal || (r.status !== null && r.status !== 0)) {
+    throw new Error(
+      r.signal ? `adb timed out setting android_id (signal: ${r.signal})` :
+      r.error ? `adb error: ${r.error.message}` :
+      `Could not set android_id: ${r.stderr || r.stdout || "adb error"}`
+    );
   }
 }
 

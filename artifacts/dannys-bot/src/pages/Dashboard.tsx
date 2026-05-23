@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.479",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Spoofed Device ID no longer stays on Not set for several minutes after clicking Apply — a silent timeout bug meant the ADB write was silently ignored and the next background poll reverted it. The write now detects the timeout and shows a proper error instead of pretending it succeeded." },
+      { category: "Fixed", text: "Spoofed Device ID no longer flickers back to Not set after being set — the page was polling ADB every 5 seconds and overwriting the value. The ID is now cached server-side and the poll is removed; the value stays correct until you change it." },
+    ],
+  },
+  {
     version: "1.0.478",
     date: "23 May 2026",
     items: [

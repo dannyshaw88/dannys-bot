@@ -64,7 +64,7 @@ function useAndroidId(serial: string) {
   const q = useQuery({
     queryKey: ["android-id", serial],
     queryFn: () => api<{ androidId: string | null }>("GET", `/api/mobile/devices/${serial}/android-id`),
-    refetchInterval: 5000,
+    staleTime: Infinity,
   });
   const setMut = useMutation({
     mutationFn: (id: string) => api("POST", `/api/mobile/devices/${serial}/android-id`, { androidId: id }),
