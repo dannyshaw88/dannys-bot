@@ -46,6 +46,7 @@ import {
   deleteSavedCookies,
   attachSignupWS,
   detachSignupWS,
+  signupBrowserInput,
   getEbLiveStats,
   hasActiveWS,
   sendEbWsMessage,
@@ -1984,6 +1985,16 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // Signup browser input — routes mouse/keyboard/nav commands to the signup Puppeteer page
+  app.post("/api/signup/browser/input", async (req, res) => {
+    try {
+      await signupBrowserInput(req.body as any);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
   // Accept a user-picked file and upload it to the pending Puppeteer file chooser
   app.post("/api/browser/:profileId/files", async (req, res) => {
     const profileId = Number(req.params.profileId);
@@ -3295,6 +3306,113 @@ export async function registerInstagramRoutes(
     } catch (e: any) {
       req.log.error({ err: e }, "jarvee import-followed-users failed");
       return res.status(500).json({ error: e?.message });
+    }
+  });
+
+  // ── SMS-man proxy routes ───────────────────────────────────────────────────
+  // These proxy sms-man.com API calls through the server so the API key is
+  // never exposed in client-side network requests.
+
+  app.post("/api/sms-man/get-number", async (req, res) => {
+    try {
+      const { apiKey, countryId = "0", service = "ig" } = req.body as { apiKey: string; countryId?: string; service?: string };
+      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
+      const url = `https://api.sms-man.com/stubs/handler_api.php?action=getNumber&api_key=${encodeURIComponent(apiKey)}&country=${encodeURIComponent(countryId)}&service=${encodeURIComponent(service)}`;
+      const r = await fetch(url);
+      const text = await r.text();
+      if (text.startsWith("ACCESS_NUMBER:")) {
+        const parts = text.trim().split(":");
+        const id = parts[1];
+        const phone = parts[2];
+        return res.json({ ok: true, id, phone });
+      }
+      return res.json({ ok: false, error: text.trim() });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Internal error" });
+    }
+  });
+
+  app.get("/api/sms-man/get-sms/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { apiKey } = req.query as { apiKey: string };
+      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
+      const url = `https://api.sms-man.com/stubs/handler_api.php?action=getStatus&api_key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(id)}`;
+      const r = await fetch(url);
+      const text = await r.text();
+      if (text.startsWith("STATUS_OK:")) {
+        const code = text.slice("STATUS_OK:".length).trim();
+        return res.json({ ok: true, code });
+      }
+      return res.json({ ok: false, status: text.trim() });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Internal error" });
+    }
+  });
+
+  app.post("/api/sms-man/cancel/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { apiKey } = req.body as { apiKey: string };
+      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
+      const url = `https://api.sms-man.com/stubs/handler_api.php?action=setStatus&api_key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(id)}&status=8`;
+      const r = await fetch(url);
+      const text = await r.text();
+      return res.json({ ok: text.includes("ACCESS_CANCEL"), raw: text.trim() });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Internal error" });
+    }
+  });
+
+  // ── 5sim proxy routes ─────────────────────────────────────────────────────
+  // Proxy 5sim.net API calls through the server so the API key is never
+  // exposed in client-side network requests.
+
+  app.post("/api/5sim/get-number", async (req, res) => {
+    try {
+      const { apiKey, country = "any" } = req.body as { apiKey: string; country?: string };
+      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
+      const countrySlug = country === "any" ? "any" : encodeURIComponent(country);
+      const url = `https://5sim.net/v1/user/buy/activation/${countrySlug}/any/instagram`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
+      if (!r.ok) return res.json({ ok: false, error: `5sim HTTP ${r.status}` });
+      const data = await r.json() as { id?: number; phone?: string; status?: string };
+      if (data.id && data.phone) {
+        return res.json({ ok: true, id: String(data.id), phone: data.phone.replace(/^\+/, "") });
+      }
+      return res.json({ ok: false, error: JSON.stringify(data) });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Internal error" });
+    }
+  });
+
+  app.get("/api/5sim/get-sms/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { apiKey } = req.query as { apiKey: string };
+      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
+      const url = `https://5sim.net/v1/user/check/${encodeURIComponent(id)}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
+      if (!r.ok) return res.json({ ok: false, status: `HTTP ${r.status}` });
+      const data = await r.json() as { sms?: Array<{ code?: string }>; status?: string };
+      const code = data.sms?.[0]?.code;
+      if (code) return res.json({ ok: true, code });
+      return res.json({ ok: false, status: data.status ?? "WAIT_CODE" });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Internal error" });
+    }
+  });
+
+  app.post("/api/5sim/cancel/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { apiKey } = req.body as { apiKey: string };
+      if (!apiKey) return res.status(400).json({ error: "apiKey required" });
+      const url = `https://5sim.net/v1/user/cancel/${encodeURIComponent(id)}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
+      return res.json({ ok: r.ok });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Internal error" });
     }
   });
 

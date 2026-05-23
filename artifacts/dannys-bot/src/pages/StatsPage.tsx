@@ -181,13 +181,27 @@ export function StatsPage() {
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("stats:groupMode") === "true");
 
   // ── Sort state ────────────────────────────────────────────────────────────
-  const [sortKey, setSortKey] = useState<StatKey | "account" | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<StatKey | "account" | null>(() => {
+    const v = localStorage.getItem("stats:sortKey");
+    return v ? (v as StatKey | "account") : null;
+  });
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
+    localStorage.getItem("stats:sortDir") === "desc" ? "desc" : "asc"
+  );
 
   const cycleSort = (key: StatKey | "account") => {
-    if (sortKey !== key) { setSortKey(key); setSortDir("asc"); }
-    else if (sortDir === "asc") setSortDir("desc");
-    else { setSortKey(null); setSortDir("asc"); }
+    if (sortKey !== key) {
+      setSortKey(key); setSortDir("asc");
+      localStorage.setItem("stats:sortKey", key);
+      localStorage.setItem("stats:sortDir", "asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+      localStorage.setItem("stats:sortDir", "desc");
+    } else {
+      setSortKey(null); setSortDir("asc");
+      localStorage.removeItem("stats:sortKey");
+      localStorage.setItem("stats:sortDir", "asc");
+    }
   };
 
   // ── Fetch all profile stats at page level (enables sort) ──────────────────

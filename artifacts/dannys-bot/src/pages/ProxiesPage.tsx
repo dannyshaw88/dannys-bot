@@ -253,8 +253,13 @@ export function ProxiesPage() {
 
   type SortKey = "proxy" | "username" | "accounts" | "status" | null;
   type SortDir = "asc" | "desc";
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
+    const v = localStorage.getItem("proxies:sortKey");
+    return (v === "proxy" || v === "username" || v === "accounts" || v === "status") ? v : null;
+  });
+  const [sortDir, setSortDir] = useState<SortDir>(() =>
+    (localStorage.getItem("proxies:sortDir") as SortDir) === "desc" ? "desc" : "asc"
+  );
 
   const [proxyColOrder, setProxyColOrder] = useState<ProxyCol[]>(() => {
     try {
@@ -292,11 +297,19 @@ export function ProxiesPage() {
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
-      if (sortDir === "asc") setSortDir("desc");
-      else { setSortKey(null); setSortDir("asc"); }
+      if (sortDir === "asc") {
+        setSortDir("desc");
+        localStorage.setItem("proxies:sortDir", "desc");
+      } else {
+        setSortKey(null); setSortDir("asc");
+        localStorage.removeItem("proxies:sortKey");
+        localStorage.setItem("proxies:sortDir", "asc");
+      }
     } else {
       setSortKey(key);
       setSortDir("asc");
+      localStorage.setItem("proxies:sortKey", key ?? "");
+      localStorage.setItem("proxies:sortDir", "asc");
     }
   };
 

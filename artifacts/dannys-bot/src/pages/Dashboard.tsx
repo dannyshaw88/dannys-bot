@@ -56,6 +56,26 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.490",
+    date: "23 May 2026",
+    items: [
+      { category: "Improvement", text: "Proxy Manager now remembers the column you sorted by when you leave and return to the page." },
+      { category: "Improvement", text: "Statistics page now remembers its sort column and direction when you navigate away and come back." },
+      { category: "Improvement", text: "Accounts page sort order is already remembered per session — no change needed." },
+    ],
+  },
+  {
+    version: "1.0.489",
+    date: "23 May 2026",
+    items: [
+      { category: "New", text: "Added 'Create an Account' to the sidebar so it is always one click away." },
+      { category: "New", text: "Added SMS-man.com auto-verify — when Instagram asks for phone verification, a temp number is auto-requested and the SMS code auto-filled." },
+      { category: "New", text: "Added 5sim.net as a second phone verification provider — switch between SMS-man and 5sim with a single click in the Phone Auto-Verify card." },
+      { category: "Removed", text: "Removed the Watch EB button and embedded browser live panel from the Create Account page." },
+      { category: "Removed", text: "Removed the Email and IMAP fields from the Create Account page — phone-based verification via SMS-man or 5sim is now the only auto-verify method." },
+    ],
+  },
+  {
     version: "1.0.488",
     date: "23 May 2026",
     items: [

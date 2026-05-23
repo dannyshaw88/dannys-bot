@@ -27,6 +27,10 @@ interface BrowserPanelProps {
   username: string;
   /** When true, renders as a fixed-height panel inside a page (no h-full). */
   embedded?: boolean;
+  /** Override the WebSocket stream URL (default: /api/browser/:profileId/stream). */
+  streamUrl?: string;
+  /** Override the input POST URL (default: /api/browser/:profileId/input). */
+  inputUrl?: string;
 }
 
 type SSEStatus = "idle" | "connecting" | "connected" | "error";
@@ -59,7 +63,7 @@ function nowTs() {
 // Detect Electron native EB mode (window.electronAPI exposed by preload)
 const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-export function BrowserPanel({ profileId, userAgent, username, embedded }: BrowserPanelProps) {
+export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl }: BrowserPanelProps) {
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const esRef = useRef<WebSocket | null>(null);
@@ -184,13 +188,13 @@ export function BrowserPanel({ profileId, userAgent, username, embedded }: Brows
     if (!IS_ELECTRON && statusRef.current !== "connected") return;
     const url = IS_ELECTRON
       ? `/api/profiles/${profileId}/eb-input`
-      : `/api/browser/${profileId}/input`;
+      : (inputUrl ?? `/api/browser/${profileId}/input`);
     fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg),
     }).catch(() => {});
-  }, [profileId]);
+  }, [profileId, inputUrl]);
 
   // ── Non-passive wheel listener (throttled) ───────────────────────────────
   // Wheel events fire at up to 60/s on a trackpad. Each one was spawning a
@@ -285,7 +289,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded }: Brows
     }, 45000);
 
     const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${wsProto}//${window.location.host}/api/browser/${profileId}/stream`);
+    const resolvedStreamUrl = streamUrl ?? `/api/browser/${profileId}/stream`;
+    const ws = new WebSocket(`${wsProto}//${window.location.host}${resolvedStreamUrl}`);
     // Binary frames carry raw JPEG bytes (no base64/JSON wrapping).
     // All other messages are still JSON text frames.
     ws.binaryType = "blob";
@@ -470,7 +475,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded }: Brows
     ws.onerror = () => {
       ws.close();
     };
-  }, [profileId, setStatusSafe, appendLog]);
+  }, [profileId, streamUrl, setStatusSafe, appendLog]);
 
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);

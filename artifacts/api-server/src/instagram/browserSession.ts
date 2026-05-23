@@ -5877,6 +5877,37 @@ async function _startSignupScreencast(): Promise<void> {
   }
 }
 
+export async function signupBrowserInput(msg: { type: string; [key: string]: any }): Promise<void> {
+  const page = _signupPage;
+  if (!page) return;
+  try {
+    switch (msg.type) {
+      case "navigate":
+        if (_signupWs) wsWrite(_signupWs, { type: "loading", loading: true });
+        await page.goto(msg.url as string, { waitUntil: "domcontentloaded", timeout: 20000 });
+        if (_signupWs) wsWrite(_signupWs, { type: "loading", loading: false });
+        break;
+      case "click":       await page.mouse.click(msg.x as number, msg.y as number); break;
+      case "mousemove":   await page.mouse.move(msg.x as number, msg.y as number); break;
+      case "scroll":
+        await page.mouse.move(msg.x as number, msg.y as number);
+        await page.mouse.wheel({ deltaX: (msg.deltaX as number) ?? 0, deltaY: (msg.deltaY as number) ?? 0 });
+        break;
+      case "keydown":     await page.keyboard.down(msg.key as string); break;
+      case "keyup":       await page.keyboard.up(msg.key as string); break;
+      case "type":        await page.keyboard.type((msg.text as string) ?? "", { delay: 30 }); break;
+      case "keycombo":
+        await page.keyboard.down(msg.modifier as string);
+        await page.keyboard.press(msg.key as string);
+        await page.keyboard.up(msg.modifier as string);
+        break;
+      case "back":        await page.goBack(); break;
+      case "forward":     await page.goForward(); break;
+      case "reload":      await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 }); break;
+    }
+  } catch { /* ignore individual input errors */ }
+}
+
 export async function attachSignupWS(ws: WebSocket): Promise<void> {
   if (_signupWs && _signupWs !== ws && _signupWs.readyState === WebSocket.OPEN) {
     try { _signupWs.close(); } catch {}
