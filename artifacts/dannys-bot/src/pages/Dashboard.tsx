@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.493",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Signup browser now actually streams live in the Electron app — the stream was silently skipped in Electron mode even when a server-side browser was running." },
+    ],
+  },
+  {
     version: "1.0.492",
     date: "23 May 2026",
     items: [

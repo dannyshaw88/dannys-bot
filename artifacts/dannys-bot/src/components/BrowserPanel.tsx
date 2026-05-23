@@ -187,8 +187,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const send = useCallback((msg: object) => {
     // Electron mode: commands always go to the native window — no WS required.
     // Puppeteer mode: require an active WebSocket connection.
-    if (!IS_ELECTRON && statusRef.current !== "connected") return;
-    const url = IS_ELECTRON
+    if (!(IS_ELECTRON && !forceStream) && statusRef.current !== "connected") return;
+    const url = (IS_ELECTRON && !forceStream)
       ? `/api/profiles/${profileId}/eb-input`
       : (inputUrl ?? `/api/browser/${profileId}/input`);
     fetch(url, {
@@ -196,7 +196,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg),
     }).catch(() => {});
-  }, [profileId, inputUrl]);
+  }, [profileId, inputUrl, forceStream]);
 
   // ── Non-passive wheel listener (throttled) ───────────────────────────────
   // Wheel events fire at up to 60/s on a trackpad. Each one was spawning a
@@ -250,7 +250,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const connect = useCallback(() => {
     // Electron mode: no Puppeteer / WebSocket stream. Mark as "connected"
     // immediately so all toolbar buttons are enabled. URL updates come from polling.
-    if (IS_ELECTRON) {
+    // Exception: forceStream=true means a server-side Puppeteer browser is streaming
+    // even inside Electron (e.g. signup browser) — fall through to WebSocket path.
+    if (IS_ELECTRON && !forceStream) {
       setStatusSafe("connected");
       return;
     }
@@ -477,7 +479,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     ws.onerror = () => {
       ws.close();
     };
-  }, [profileId, streamUrl, setStatusSafe, appendLog]);
+  }, [profileId, streamUrl, forceStream, setStatusSafe, appendLog]);
 
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -492,7 +494,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
 
   // ── Electron mode: poll native window state for address bar updates ───────
   useEffect(() => {
-    if (!IS_ELECTRON) return;
+    if (!IS_ELECTRON || forceStream) return;
     const poll = async () => {
       try {
         const r = await fetch(`/api/profiles/${profileId}/eb-state`);
