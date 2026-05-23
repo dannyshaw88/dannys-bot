@@ -1140,6 +1140,15 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — ${source}: IG returned "login information incorrect" → bad_password`);
             return { ok: false, message: `@${profile.username} — Instagram says the login information is incorrect. The stored session is no longer valid.`, accountStatus: "bad_password", igDeviceState: captureDeviceState() };
           }
+          // feedback_required = Instagram's Automated Behaviour Detected (ABD) signal.
+          // The session IS alive — Instagram is blocking API calls with a soft warning.
+          // Must be caught here so both users/info and get_account_family short-circuit
+          // to automated_behaviour_detected instead of falling through to "inconclusive"
+          // and then incorrectly returning logged_out.
+          if (igMsg === "feedback_required" || msg.includes("feedback_required")) {
+            console.error(`[instagramLogin] @${profile.username} — ${source}: feedback_required → automated_behaviour_detected`);
+            return { ok: false, message: `@${profile.username} — Automated Behaviour Detected. Use Fix Auto-Behaviour to dismiss it.`, accountStatus: "automated_behaviour_detected", igDeviceState: captureDeviceState() };
+          }
           // 404 or any other non-auth HTTP error = endpoint not available for this
           // account type, not a session failure — return null (treat as inconclusive)
           return null;
@@ -1242,11 +1251,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: feedback_required (HTTP ${abdProbeErr?.response?.statusCode ?? "n/a"}) → automated_behaviour_detected`);
             return abdResult();
           }
+          // challenge_required on qe/sync (after users/info already confirmed the session is alive)
+          // is the ABD feedback prompt manifesting as a mobile-API challenge — NOT a traditional
+          // login captcha. The account is alive but has an ABD warning that needs dismissal.
           if (igMsg === "challenge_required" || errMsg.includes("challenge_required")) {
-            console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: challenge_required (HTTP ${abdProbeErr?.response?.statusCode ?? "n/a"}) → captcha`);
-            return { ok: false, message: `@${profile.username} — account requires a security challenge. Open the embedded browser to resolve it.`, accountStatus: "captcha", checkpointUrl: extractCheckpointUrl(abdProbeErr), igDeviceState: captureDeviceState() };
+            console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: challenge_required (HTTP ${abdProbeErr?.response?.statusCode ?? "n/a"}) → automated_behaviour_detected (ABD prompt on mobile, session confirmed alive via users/info)`);
+            return abdResult();
           }
-          console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: non-fatal error: ${abdProbeErr?.message ?? ""}`);
+          console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: non-fatal error (HTTP ${abdProbeErr?.response?.statusCode ?? "n/a"}): ${abdProbeErr?.message ?? ""}`);
         }
 
         // ── Phase 2b: GetTimeLine cold_start_fetch (feed/timeline) ────────

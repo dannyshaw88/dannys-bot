@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.470",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Accounts with Automated Behaviour Detected now correctly show that status after clicking Verify instead of incorrectly showing Logged Out." },
+    ],
+  },
+  {
     version: "1.0.469",
     date: "22 May 2026",
     items: [
