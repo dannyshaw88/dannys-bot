@@ -269,7 +269,7 @@ export function ProfilesPage() {
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("profiles:groupMode") === "true");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
     try {
-      const stored = sessionStorage.getItem("profiles:collapsedGroups");
+      const stored = localStorage.getItem("profiles:collapsedGroups");
       return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
     } catch { return new Set(); }
   });
@@ -384,7 +384,7 @@ export function ProfilesPage() {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
       if (next.has(groupKey)) next.delete(groupKey); else next.add(groupKey);
-      try { sessionStorage.setItem("profiles:collapsedGroups", JSON.stringify([...next])); } catch {}
+      try { localStorage.setItem("profiles:collapsedGroups", JSON.stringify([...next])); } catch {}
       return next;
     });
   };

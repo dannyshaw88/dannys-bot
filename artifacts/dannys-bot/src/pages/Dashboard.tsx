@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.477",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Fix ABD now tries banner_dismiss with the stored session first, then falls back to a fresh mobile login using the stored password and device fingerprint — no embedded browser required at any point." },
+      { category: "Fixed", text: "Clicking between Accounts and Dashboard no longer causes the app to lag or hang — queries no longer all fire at once when the window receives focus." },
+      { category: "Fixed", text: "Group collapsed/expanded state on the Accounts page is now remembered across restarts." },
+      { category: "Fixed", text: "Apply Proxy to LDPlayer now uses the correct format — the previous release accidentally broke the proxy setting by including username and password in the wrong place." },
+    ],
+  },
+  {
     version: "1.0.476",
     date: "23 May 2026",
     items: [

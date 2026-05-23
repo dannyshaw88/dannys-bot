@@ -423,13 +423,10 @@ export async function setDeviceProxy(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   if (proxy) {
-    // Include credentials in the proxy URL so Android apps that honour the
-    // system proxy setting can authenticate automatically.  The format
-    // "user:pass@host:port" is recognised by Android's HttpURLConnection
-    // and by apps using the system WebView (including Instagram on LDPlayer).
-    const val = (proxy.user && proxy.pass)
-      ? `${proxy.user}:${proxy.pass}@${proxy.host}:${proxy.port}`
-      : `${proxy.host}:${proxy.port}`;
+    // Android's global http_proxy setting only accepts "host:port" — credentials
+    // cannot be embedded in this field.  Using any other format (e.g. user:pass@host:port)
+    // silently breaks the setting and traffic bypasses the proxy entirely.
+    const val = `${proxy.host}:${proxy.port}`;
     const r1 = spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "http_proxy", val], { encoding: "utf8", timeout: 8000 });
     if ((r1.status ?? 0) !== 0) throw new Error(`ADB proxy set failed: ${(r1.stderr || r1.stdout || "unknown").trim()}`);
     spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "https_proxy", val], { encoding: "utf8", timeout: 5000 });

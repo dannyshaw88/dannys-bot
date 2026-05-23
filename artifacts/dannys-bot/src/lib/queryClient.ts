@@ -19,6 +19,7 @@ export const queryClient = new QueryClient({
       queryFn: defaultQueryFn,
       staleTime: 10 * 1000,
       retry: 1,
+      refetchOnWindowFocus: false,
     },
   },
 });

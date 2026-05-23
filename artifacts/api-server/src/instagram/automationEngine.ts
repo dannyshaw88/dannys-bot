@@ -3569,32 +3569,58 @@ class AutomationEngine {
     const profile = await storage.getProfile(profileId);
     if (!profile) return { ok: false, message: "Profile not found" };
 
-    if (!profile.igApiCookies) {
-      return { ok: false, message: "No stored session credentials — run Verify Credentials first" };
-    }
-
     const proxyUrl = await this.buildProxyUrl(profile);
-
     const client = new InstagramWebClient(proxyUrl ?? "", profileId);
     client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
     client.username = profile.username;
 
-    console.log(`[engine] @${profile.username}: Fix ABD — calling banner_dismiss directly`);
+    // ── Path A: banner_dismiss with stored session ────────────────────────────
+    // Works when the mobile sessionid is still valid (e.g. soft ABD warning only).
+    const hasSession = !!(profile.igApiCookies ?? "").split(";").find(s => s.trim().startsWith("sessionid="));
+    if (hasSession) {
+      console.log(`[engine] @${profile.username}: Fix ABD — trying banner_dismiss (stored session)`);
+      const { raw, ok } = await client.bannerDismiss();
+      if (ok) {
+        await storage.updateProfile(profileId, { accountStatus: "valid" });
+        await storage.incrementStat(profileId, "abd");
+        this.logAction(profileId, 0, "abd_dismissed", "", "", "", "ok", "ABD dismissed via banner_dismiss");
+        console.log(`[engine] @${profile.username}: Fix ABD SUCCESS via banner_dismiss ✓`);
+        return { ok: true, message: "ABD warning dismissed — account restored to valid" };
+      }
+      const detail = raw?._error ?? raw?.message ?? (raw === null ? "session expired" : JSON.stringify(raw)?.slice(0, 80));
+      console.warn(`[engine] @${profile.username}: banner_dismiss failed (${detail}) — falling through to fresh login`);
+    } else {
+      console.log(`[engine] @${profile.username}: Fix ABD — no stored session, going straight to fresh login`);
+    }
 
-    const { raw, ok } = await client.bannerDismiss();
+    // ── Path B: fresh mobile login (no EB) ───────────────────────────────────
+    // Performs a cold instagram-private-api login using the stored password and
+    // preserved device fingerprint (uuid, deviceId, ig_did, etc.).
+    // If Instagram returns IgCheckpointError the ABD checkpoint is auto-dismissed
+    // with choice=0. This path works even when the stored sessionid is fully revoked.
+    if (!profile.password) {
+      const msg = "Session expired and no stored password — add the account password and try Verify Credentials to restore the session";
+      console.warn(`[engine] @${profile.username}: Fix ABD — no password stored, cannot attempt fresh login`);
+      this.logAction(profileId, 0, "abd_dismissed", "", "", "", "error", msg);
+      return { ok: false, message: msg };
+    }
 
-    if (ok) {
+    console.log(`[engine] @${profile.username}: Fix ABD — attempting fresh mobile login (no EB)`);
+    this.logAction(profileId, 0, "abd_dismissed", "", "", "", "info", "Attempting fresh mobile login to dismiss ABD checkpoint");
+
+    const freshOk = await client.dismissABD_freshLogin(profile.username, profile.password);
+    if (freshOk) {
       await storage.updateProfile(profileId, { accountStatus: "valid" });
       await storage.incrementStat(profileId, "abd");
-      this.logAction(profileId, 0, "abd_dismissed", "", "", "", "ok", "ABD warning dismissed via banner_dismiss");
-      console.log(`[engine] @${profile.username}: Fix ABD SUCCESS ✓`);
+      this.logAction(profileId, 0, "abd_dismissed", "", "", "", "ok", "ABD dismissed via fresh mobile login");
+      console.log(`[engine] @${profile.username}: Fix ABD SUCCESS via fresh login ✓`);
       return { ok: true, message: "ABD warning dismissed — account restored to valid" };
     }
 
-    const detail = raw?._error ?? raw?.message ?? JSON.stringify(raw)?.slice(0, 120) ?? "no response";
-    console.warn(`[engine] @${profile.username}: Fix ABD FAILED — Instagram returned: ${detail}`);
-    this.logAction(profileId, 0, "abd_dismissed", "", "", "", "error", `banner_dismiss failed: ${detail}`);
-    return { ok: false, message: `Instagram rejected the dismiss request: ${detail}` };
+    const msg = "Fresh login could not dismiss the ABD checkpoint — Instagram may require manual verification";
+    console.warn(`[engine] @${profile.username}: Fix ABD FAILED — dismissABD_freshLogin returned false`);
+    this.logAction(profileId, 0, "abd_dismissed", "", "", "", "error", msg);
+    return { ok: false, message: msg };
   }
 
   // Force an immediate new-follower extraction for the given profile,
