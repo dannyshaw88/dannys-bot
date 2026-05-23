@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.492",
+    date: "23 May 2026",
+    items: [
+      { category: "Feature", text: "Signup browser now launches a real Puppeteer browser on the server when you click 'Open Browser' — it boots Chrome, loads instagram.com, and streams it live." },
+      { category: "Feature", text: "Signup browser window has proper Windows-style controls: minimise collapses to just the title bar, maximise fills the whole screen, close shuts the window." },
+      { category: "Feature", text: "Reset button (↺) next to Open Browser closes the browser and wipes its session data so you can start fresh." },
+    ],
+  },
+  {
     version: "1.0.491",
     date: "23 May 2026",
     items: [

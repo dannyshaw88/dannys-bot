@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
   User, KeyRound, Calendar, Globe, ShieldCheck,
-  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Phone, Smartphone, Monitor, Maximize2, Minimize2,
+  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Phone, Smartphone, Monitor, RotateCcw,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
@@ -135,10 +135,11 @@ function SignupBrowserWindow({
   onClose: () => void;
   ebUA: string;
 }) {
+  const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [pos, setPos] = useState(() => ({
-    x: Math.max(0, Math.round((window.innerWidth - SIGNUP_WIN_W) / 2)),
-    y: Math.max(0, Math.round((window.innerHeight - SIGNUP_WIN_H) / 2)),
+    x: Math.round((window.innerWidth - SIGNUP_WIN_W) / 2),
+    y: Math.round((window.innerHeight - SIGNUP_WIN_H) / 2),
   }));
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -164,48 +165,64 @@ function SignupBrowserWindow({
 
   if (!open) return null;
 
-  const style: React.CSSProperties = maximized
+  const winStyle: React.CSSProperties = maximized
     ? { position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", zIndex: 200 }
+    : minimized
+    ? { position: "fixed", left: pos.x, top: pos.y, width: SIGNUP_WIN_W, height: "auto", zIndex: 200 }
     : { position: "fixed", left: pos.x, top: pos.y, width: SIGNUP_WIN_W, height: SIGNUP_WIN_H, zIndex: 200 };
 
+  const btnBase = "w-8 h-8 flex items-center justify-center text-sm font-medium text-muted-foreground transition-colors";
+
   return (
-    <div style={style} className="flex flex-col overflow-hidden shadow-2xl border border-border bg-background select-none">
+    <div style={winStyle} className="flex flex-col overflow-hidden shadow-2xl border border-border bg-background select-none">
       {/* Title bar */}
       <div
         onMouseDown={onTitleMouseDown}
-        onDoubleClick={() => setMaximized(m => !m)}
-        className={`flex items-center gap-2 px-3 h-9 bg-slate-100 dark:bg-slate-800 border-b border-border shrink-0 ${maximized ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
+        className={`flex items-center px-2 h-9 bg-slate-100 dark:bg-slate-800 border-b border-border shrink-0 ${!maximized ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
       >
-        <Monitor className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <Monitor className="w-3.5 h-3.5 text-muted-foreground shrink-0 mr-2" />
         <span className="text-sm font-semibold text-foreground truncate flex-1">Signup Embedded Browser</span>
+        {/* ─ Minimise */}
         <button
           onMouseDown={e => e.stopPropagation()}
-          onClick={() => setMaximized(m => !m)}
-          className="w-6 h-6 rounded flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 text-muted-foreground hover:text-foreground transition-colors"
-          title={maximized ? "Restore" : "Maximize"}
+          onClick={() => { setMinimized(m => !m); setMaximized(false); }}
+          className={`${btnBase} hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground`}
+          title={minimized ? "Restore" : "Minimise"}
         >
-          {maximized ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+          ─
         </button>
+        {/* □ Maximise */}
+        <button
+          onMouseDown={e => e.stopPropagation()}
+          onClick={() => { setMaximized(m => !m); setMinimized(false); }}
+          className={`${btnBase} hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground`}
+          title={maximized ? "Restore" : "Maximise"}
+        >
+          {maximized ? "❐" : "□"}
+        </button>
+        {/* × Close */}
         <button
           onMouseDown={e => e.stopPropagation()}
           onClick={onClose}
-          className="w-6 h-6 rounded flex items-center justify-center hover:bg-red-100 hover:text-red-600 text-muted-foreground transition-colors"
+          className={`${btnBase} hover:bg-red-500 hover:text-white`}
           title="Close"
         >
-          <X className="w-3 h-3" />
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
-      {/* Browser content */}
-      <div className="flex-1 min-h-0">
-        <BrowserPanel
-          profileId={0}
-          userAgent={ebUA}
-          username="signup"
-          streamUrl="/api/signup/browser/stream"
-          inputUrl="/api/signup/browser/input"
-          forceStream
-        />
-      </div>
+      {/* Browser content — hidden when minimised */}
+      {!minimized && (
+        <div className="flex-1 min-h-0">
+          <BrowserPanel
+            profileId={0}
+            userAgent={ebUA}
+            username="signup"
+            streamUrl="/api/signup/browser/stream"
+            inputUrl="/api/signup/browser/input"
+            forceStream
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -556,6 +573,8 @@ export function CreateAccountApiPage() {
   const [copied, setCopied]            = useState(false);
   const [liveSteps, setLiveSteps]      = useState<Array<{msg: string; ts: number}>>([]);
   const [ebPanelOpen, setEbPanelOpen]  = useState(false);
+  const [ebOpening, setEbOpening]      = useState(false);
+  const [ebResetBusy, setEbResetBusy]  = useState(false);
 
   // ── SMS state ──────────────────────────────────────────────────────────────
   const [smsManEnabled, setSmsManEnabledRaw] = useState(() => localStorage.getItem(LS_KEY_SMS_MAN_ENABLED) === "true");
@@ -617,6 +636,33 @@ export function CreateAccountApiPage() {
 
   const selectedDevice = UA_POOL.find(d => d.api === userAgentApi) ?? UA_POOL[0];
   const ebUA = selectedDevice.embedded;
+
+  const handleOpenBrowser = useCallback(async () => {
+    setEbOpening(true);
+    try {
+      await fetch("/api/signup/browser/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proxyHost:     selectedProxy?.host,
+          proxyPort:     selectedProxy?.port,
+          proxyUsername: selectedProxy?.username ?? undefined,
+          proxyPassword: selectedProxy?.password ?? undefined,
+          userAgent:     ebUA,
+        }),
+      });
+    } catch {}
+    setEbOpening(false);
+    setEbPanelOpen(true);
+  }, [selectedProxy, ebUA]);
+
+  const handleResetBrowser = useCallback(async () => {
+    setEbResetBusy(true);
+    try { await fetch("/api/signup/browser/reset", { method: "POST" }); } catch {}
+    setEbResetBusy(false);
+    setEbPanelOpen(false);
+  }, []);
+
   const deviceLabel = (() => {
     const parts = userAgentApi.split(";").map(s => s.trim());
     const brand = parts[3] ?? "";
@@ -883,9 +929,21 @@ export function CreateAccountApiPage() {
                     variant="outline"
                     size="sm"
                     className="h-7 px-2.5 text-[10px] border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300"
-                    onClick={() => setEbPanelOpen(true)}
+                    onClick={handleOpenBrowser}
+                    disabled={ebOpening}
                   >
-                    <Monitor className="w-3 h-3 mr-1" />Open Browser
+                    {ebOpening ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Monitor className="w-3 h-3 mr-1" />}
+                    {ebOpening ? "Starting…" : "Open Browser"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive"
+                    onClick={handleResetBrowser}
+                    disabled={ebResetBusy}
+                    title="Close browser and wipe all cookies / device data"
+                  >
+                    {ebResetBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
                   </Button>
                 </div>
               </div>

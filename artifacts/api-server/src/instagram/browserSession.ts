@@ -965,9 +965,10 @@ const _launchingProfiles = new Set<number>();
 // ── Signup Browser Live Stream ────────────────────────────────────────────────
 // The signup route registers the temporary Chrome page here so the frontend
 // can watch the embedded browser in real time via a dedicated WebSocket.
-let _signupPage: any | null = null;
-let _signupCdp:  any | null = null;
-let _signupWs:   WebSocket | null = null;
+let _signupPage:    any | null = null;
+let _signupCdp:     any | null = null;
+let _signupWs:      WebSocket | null = null;
+let _signupBrowser: any | null = null;
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
 // ── Graceful shutdown: save all open EB sessions before the process exits ────
@@ -5927,6 +5928,101 @@ export function detachSignupWS(ws: WebSocket): void {
     try { _signupCdp.send("Page.stopScreencast").catch(() => {}); } catch {}
     _signupCdp = null;
   }
+}
+
+// ── Standalone signup browser — open/close/reset ──────────────────────────────
+// Launched when the user clicks "Open Browser" on the Create Account page.
+// Unlike harvestSignupCookiesFromEB this browser stays open so the user can
+// manually sign up. The page is streamed via the existing _signupPage / _signupWs
+// pipeline — the BrowserPanel canvas shows the live Chrome tab.
+
+export async function openSignupBrowser(opts?: {
+  proxyHost?: string;
+  proxyPort?: number;
+  proxyUsername?: string;
+  proxyPassword?: string;
+  userAgent?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  // Already running — just ensure the screencast is going.
+  if (_signupPage) {
+    try { if (!(_signupPage as any).isClosed()) {
+      if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+        _startSignupScreencast().catch(() => {});
+      }
+      return { ok: true };
+    }} catch {}
+  }
+
+  // Close any stale browser before launching a new one.
+  await closeSignupBrowser();
+
+  let puppeteerLib: any;
+  try {
+    puppeteerLib = (await import("puppeteer-core")).default;
+  } catch {
+    try { puppeteerLib = (await import("puppeteer")).default; }
+    catch (e: any) { return { ok: false, error: `Cannot load puppeteer: ${e?.message}` }; }
+  }
+
+  if (!CHROMIUM_PATH) return { ok: false, error: "No Chromium executable found" };
+
+  const dataDir = path.join(COOKIES_DIR, "signup-browser");
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  const args: string[] = [...HARVEST_ARGS, `--user-data-dir=${dataDir}`];
+  if (opts?.proxyHost) args.push(`--proxy-server=${opts.proxyHost}:${opts.proxyPort ?? 80}`);
+
+  let browser: any;
+  try {
+    browser = await puppeteerLib.launch({
+      headless: true,
+      executablePath: CHROMIUM_PATH,
+      args,
+      ignoreHTTPSErrors: true,
+    });
+  } catch (e: any) {
+    return { ok: false, error: `Browser launch failed: ${e?.message}` };
+  }
+
+  _signupBrowser = browser;
+  try {
+    const [page] = await browser.pages();
+    if (opts?.userAgent) await page.setUserAgent(opts.userAgent);
+    await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+    if (opts?.proxyUsername) {
+      await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
+    }
+    _signupPage = page;
+    if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+      _startSignupScreencast().catch(() => {});
+    }
+    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+    return { ok: true };
+  } catch (e: any) {
+    await closeSignupBrowser();
+    return { ok: false, error: e?.message };
+  }
+}
+
+export async function closeSignupBrowser(): Promise<void> {
+  _signupPage = null;
+  if (_signupCdp) {
+    try { _signupCdp.send("Page.stopScreencast").catch(() => {}); } catch {}
+    _signupCdp = null;
+  }
+  if (_signupBrowser) {
+    try { await _signupBrowser.close(); } catch {}
+    _signupBrowser = null;
+  }
+  if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+    try { _signupWs.send(JSON.stringify({ type: "waiting", message: "Browser closed." })); } catch {}
+  }
+}
+
+export async function resetSignupBrowser(): Promise<void> {
+  await closeSignupBrowser();
+  const dataDir = path.join(COOKIES_DIR, "signup-browser");
+  try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch {}
 }
 
 // ── Electron EB — push arbitrary WS message to the BrowserPanel ──────────────

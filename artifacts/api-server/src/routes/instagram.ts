@@ -47,6 +47,9 @@ import {
   attachSignupWS,
   detachSignupWS,
   signupBrowserInput,
+  openSignupBrowser,
+  closeSignupBrowser,
+  resetSignupBrowser,
   getEbLiveStats,
   hasActiveWS,
   sendEbWsMessage,
@@ -1992,6 +1995,37 @@ export async function registerInstagramRoutes(
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Open the standalone signup browser (user-driven EB signup)
+  app.post("/api/signup/browser/open", async (req, res) => {
+    try {
+      const { proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent } = req.body as any;
+      const result = await openSignupBrowser({ proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err?.message });
+    }
+  });
+
+  // Close the standalone signup browser
+  app.post("/api/signup/browser/close", async (_req, res) => {
+    try {
+      await closeSignupBrowser();
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err?.message });
+    }
+  });
+
+  // Reset signup browser — close + wipe persistent data dir (fresh device identity)
+  app.post("/api/signup/browser/reset", async (_req, res) => {
+    try {
+      await resetSignupBrowser();
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err?.message });
     }
   });
 
