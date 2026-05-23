@@ -258,6 +258,11 @@ export function ProfileDetailsPage() {
   const [linkedPassword, setLinkedPassword] = useState("");
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [followCopyOpen, setFollowCopyOpen] = useState(false);
+  const [unfollowCopyOpen, setUnfollowCopyOpen] = useState(false);
+  const [contactCopyOpen, setContactCopyOpen] = useState(false);
+  const [humanCopyOpen, setHumanCopyOpen] = useState(false);
+  const [cookieCopyOpen, setCookieCopyOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [totpCode, setTotpCode] = useState<string | null>(null);
   const [totpError, setTotpError] = useState<string | null>(null);
@@ -707,6 +712,61 @@ export function ProfileDetailsPage() {
                         <button
                           className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
                           onClick={() => setCopyDialogOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "follow" && getTool('follow') && (
+                      <>
+                        <span className="text-border mx-1 select-none">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
+                          onClick={() => setFollowCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "unfollow" && getTool('unfollow') && (
+                      <>
+                        <span className="text-border mx-1 select-none">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
+                          onClick={() => setUnfollowCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "contact" && getTool('contact') && (
+                      <>
+                        <span className="text-border mx-1 select-none">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
+                          onClick={() => setContactCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "human-session" && getTool('human_sessions') && (
+                      <>
+                        <span className="text-border mx-1 select-none">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
+                          onClick={() => setHumanCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "create-cookie" && (
+                      <>
+                        <span className="text-border mx-1 select-none">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
+                          onClick={() => setCookieCopyOpen(true)}
                         >
                           <Copy className="w-3 h-3" /> Copy Settings
                         </button>
@@ -1574,28 +1634,28 @@ export function ProfileDetailsPage() {
 
         <Tabs.Content value="follow" className="outline-none animate-in fade-in duration-300">
           {getTool('follow')
-            ? <ToolConfigPanel tool={getTool('follow')!} profile={profile} />
+            ? <ToolConfigPanel tool={getTool('follow')!} profile={profile} copyOpen={followCopyOpen} onCopyOpenChange={setFollowCopyOpen} />
             : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
           }
         </Tabs.Content>
 
         <Tabs.Content value="unfollow" className="outline-none animate-in fade-in duration-300">
           {getTool('unfollow')
-            ? <UnfollowToolPanel tool={getTool('unfollow')!} profile={profile} />
+            ? <UnfollowToolPanel tool={getTool('unfollow')!} profile={profile} copyOpen={unfollowCopyOpen} onCopyOpenChange={setUnfollowCopyOpen} />
             : <p className="text-sm text-muted-foreground py-8">Unfollow tool not found for this profile.</p>
           }
         </Tabs.Content>
 
         <Tabs.Content value="contact" className="outline-none animate-in fade-in duration-300">
           {getTool('contact')
-            ? <ContactToolPanel tool={getTool('contact')!} profile={profile} />
+            ? <ContactToolPanel tool={getTool('contact')!} profile={profile} copyOpen={contactCopyOpen} onCopyOpenChange={setContactCopyOpen} />
             : <p className="text-sm text-muted-foreground py-8">Contact tool not found for this profile.</p>
           }
         </Tabs.Content>
 
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
           {getTool('human_sessions')
-            ? <HumanSessionPanel tool={getTool('human_sessions')!} profile={profile} />
+            ? <HumanSessionPanel tool={getTool('human_sessions')!} profile={profile} copyOpen={humanCopyOpen} onCopyOpenChange={setHumanCopyOpen} />
             : <p className="text-sm text-muted-foreground py-8">Human sessions tool not found for this profile.</p>
           }
         </Tabs.Content>
@@ -1608,7 +1668,7 @@ export function ProfileDetailsPage() {
         </Tabs.Content>
 
         <Tabs.Content value="create-cookie" className="outline-none animate-in fade-in duration-300">
-          <CreateCookiePanel profile={profile} />
+          <CreateCookiePanel profile={profile} copyOpen={cookieCopyOpen} onCopyOpenChange={setCookieCopyOpen} />
         </Tabs.Content>
 
         </div>

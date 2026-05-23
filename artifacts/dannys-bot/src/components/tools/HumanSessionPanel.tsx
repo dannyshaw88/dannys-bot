@@ -24,9 +24,11 @@ import { ImageSettingsDialog } from "@/components/tools/ImageSettingsDialog";
 interface HumanSessionPanelProps {
   tool: Tool;
   profile: Profile;
+  copyOpen?: boolean;
+  onCopyOpenChange?: (v: boolean) => void;
 }
 
-export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
+export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: HumanSessionPanelProps) {
   const updateToolMutation = useUpdateTool();
   const { navigateTo } = useBrowserWindows();
   const { toast } = useToast();
@@ -34,7 +36,9 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [spinSyntaxMsg, setSpinSyntaxMsg] = useState<string | null>(null);
-  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyOpen, _setCopyOpen] = useState(false);
+  const _copyOpen = copyOpenProp ?? copyOpen;
+  const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const [repostingNow, setRepostingNow] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
@@ -269,12 +273,6 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
           <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
             {tool.enabled ? 'ACTIVE' : 'STOPPED'}
           </span>
-          <button
-            onClick={() => setCopyOpen(true)}
-            className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
-          >
-            COPY SETTINGS
-          </button>
           {nextRunStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
@@ -1009,9 +1007,9 @@ export function HumanSessionPanel({ tool, profile }: HumanSessionPanelProps) {
       </div>
 
       <CopySettingsDialog
-        key={copyOpen ? "open" : "closed"}
-        open={copyOpen}
-        onOpenChange={setCopyOpen}
+        key={_copyOpen ? "open" : "closed"}
+        open={_copyOpen}
+        onOpenChange={_setCopyOpenFn}
         title="Copy Human Session Settings"
         profiles={otherProfiles}
         optionGroups={HUMAN_COPY_GROUPS}

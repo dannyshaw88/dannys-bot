@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 interface Props {
   tool: Tool;
   profile: Profile;
+  copyOpen?: boolean;
+  onCopyOpenChange?: (v: boolean) => void;
 }
 
 type SubTab = "new-followers" | "contact-users" | "auto-reply";
@@ -55,9 +57,11 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
 ];
 
-export function ContactToolPanel({ tool, profile }: Props) {
+export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: Props) {
   const [activeTab, setActiveTab] = useState<SubTab>("new-followers");
-  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyOpen, _setCopyOpen] = useState(false);
+  const _copyOpen = copyOpenProp ?? copyOpen;
+  const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
@@ -132,12 +136,6 @@ export function ContactToolPanel({ tool, profile }: Props) {
           <Users className="w-3.5 h-3.5" />
           Contact Users
         </button>
-        <button
-          className="ml-3 mb-0.5 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer whitespace-nowrap"
-          onClick={() => setCopyOpen(true)}
-        >
-          COPY SETTINGS
-        </button>
       </div>
 
       {/* Panel content */}
@@ -152,9 +150,9 @@ export function ContactToolPanel({ tool, profile }: Props) {
       )}
 
       <CopySettingsDialog
-        key={copyOpen ? "open" : "closed"}
-        open={copyOpen}
-        onOpenChange={setCopyOpen}
+        key={_copyOpen ? "open" : "closed"}
+        open={_copyOpen}
+        onOpenChange={_setCopyOpenFn}
         title="Copy Contact Tool Settings"
         profiles={otherProfiles}
         optionGroups={CONTACT_COPY_GROUPS}

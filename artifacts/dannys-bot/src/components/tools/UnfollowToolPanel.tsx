@@ -16,6 +16,8 @@ import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 interface UnfollowToolPanelProps {
   tool: Tool;
   profile: Profile;
+  copyOpen?: boolean;
+  onCopyOpenChange?: (v: boolean) => void;
 }
 
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
@@ -46,12 +48,14 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
 ];
 
-export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
+export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: UnfollowToolPanelProps) {
   const updateToolMutation = useUpdateTool();  // settings saves
   const toggleMutation     = useUpdateTool();  // enable/disable toggle separate so it's never blocked
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
-  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyOpen, _setCopyOpen] = useState(false);
+  const _copyOpen = copyOpenProp ?? copyOpen;
+  const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const [fetchingFollowings, setFetchingFollowings] = useState(false);
   const [hikerFetchMin, setHikerFetchMin] = useState(50);
   const [hikerFetchMax, setHikerFetchMax] = useState(200);
@@ -187,12 +191,6 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
           <span className={`text-sm font-medium ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
             {tool.enabled ? "ACTIVE" : "STOPPED"}
           </span>
-          <button
-            onClick={() => setCopyOpen(true)}
-            className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
-          >
-            COPY SETTINGS
-          </button>
           {nextUnfollowStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
@@ -447,9 +445,9 @@ export function UnfollowToolPanel({ tool, profile }: UnfollowToolPanelProps) {
       </div>
 
       <CopySettingsDialog
-        key={copyOpen ? "open" : "closed"}
-        open={copyOpen}
-        onOpenChange={setCopyOpen}
+        key={_copyOpen ? "open" : "closed"}
+        open={_copyOpen}
+        onOpenChange={_setCopyOpenFn}
         title="Copy Unfollow Tool Settings"
         profiles={otherProfiles}
         optionGroups={UNFOLLOW_COPY_GROUPS}

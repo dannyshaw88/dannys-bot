@@ -81,6 +81,8 @@ const COPY_GROUPS = [
 
 interface Props {
   profile: Profile;
+  copyOpen?: boolean;
+  onCopyOpenChange?: (v: boolean) => void;
 }
 
 function formatSessionTime(ts: number): string {
@@ -107,13 +109,15 @@ function shortUrl(url: string): string {
   }
 }
 
-export function CreateCookiePanel({ profile }: Props) {
+export function CreateCookiePanel({ profile, copyOpen: copyOpenProp, onCopyOpenChange }: Props) {
   const [local, setLocal] = useState<CookieBakerSettings>(() => ({
     ...DEFAULTS,
     ...(((profile as any).cookieBakerSettings as Partial<CookieBakerSettings>) ?? {}),
   }));
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyOpen, _setCopyOpen] = useState(false);
+  const _copyOpen = copyOpenProp ?? copyOpen;
+  const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const [showActivity, setShowActivity] = useState(false);
   const [activity, setActivity] = useState<CookieBakerSessionActivity[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -214,12 +218,6 @@ export function CreateCookiePanel({ profile }: Props) {
         <Label className="text-sm font-semibold">Enable Cookie Baker</Label>
         {!showActivity ? (
           <>
-            <button
-              className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
-              onClick={() => setCopyOpen(true)}
-            >
-              COPY SETTINGS
-            </button>
             <button
               className="text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
               onClick={() => setShowActivity(true)}
@@ -445,9 +443,9 @@ export function CreateCookiePanel({ profile }: Props) {
       )}
 
       <CopySettingsDialog
-        key={copyOpen ? "open" : "closed"}
-        open={copyOpen}
-        onOpenChange={setCopyOpen}
+        key={_copyOpen ? "open" : "closed"}
+        open={_copyOpen}
+        onOpenChange={_setCopyOpenFn}
         title="Copy Cookie Baker Settings"
         profiles={otherProfiles}
         optionGroups={COPY_GROUPS}

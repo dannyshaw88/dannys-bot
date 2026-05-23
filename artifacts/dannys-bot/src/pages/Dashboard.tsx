@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.499",
+    date: "23 May 2026",
+    items: [
+      { category: "Improvement", text: "Copy Settings button for every tool (Follow, Unfollow, Contact, Human Session, Cookie Baker) now appears in the top nav bar — same position as Account Settings — instead of buried inside the tool panel." },
+      { category: "Fix", text: "Verify button stays visible and shows a spinner during verification instead of disappearing, preventing confusion about whether the click was registered." },
+      { category: "Fix", text: "Fixed a race condition where verification could get stuck showing 'Verifying' permanently due to a competing status update." },
+      { category: "Improvement", text: "Accounts page now shows Followers, Following, and Last Sync columns with sortable headers." },
+    ],
+  },
+  {
     version: "1.0.498",
     date: "23 May 2026",
     items: [

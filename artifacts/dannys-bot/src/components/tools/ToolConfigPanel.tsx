@@ -19,10 +19,12 @@ import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 interface ToolConfigPanelProps {
   tool: Tool;
   profile: Profile;
+  copyOpen?: boolean;
+  onCopyOpenChange?: (v: boolean) => void;
 }
 
 
-export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
+export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: ToolConfigPanelProps) {
   const { toast } = useToast();
   const { navigateTo } = useBrowserWindows();
   const updateToolMutation = useUpdateTool();  // settings saves
@@ -228,7 +230,9 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
     return { label: format(new Date(nextAt), "d MMM, HH:mm:ss"), executing: false };
   })();
 
-  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [showCopyModal, _setShowCopyModal] = useState(false);
+  const _copyOpen = copyOpenProp ?? showCopyModal;
+  const _setCopyOpen = onCopyOpenChange ?? _setShowCopyModal;
   const { data: allProfiles = [] } = useProfiles();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
   const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
@@ -678,12 +682,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
               <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
                 {tool.enabled ? 'ACTIVE' : 'STOPPED'}
               </span>
-              <button
-                onClick={() => setShowCopyModal(true)}
-                className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
-              >
-                COPY SETTINGS
-              </button>
             </div>
           </>
         )}
@@ -730,12 +728,6 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
                 <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
                   {tool.enabled ? 'ACTIVE' : 'STOPPED'}
                 </span>
-                <button
-                  onClick={() => setShowCopyModal(true)}
-                  className="ml-1 text-xs text-blue-500 hover:text-blue-600 hover:underline underline-offset-2 cursor-pointer"
-                >
-                  COPY SETTINGS
-                </button>
                 <button
                   onClick={() => setShowSources(true)}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
@@ -1370,9 +1362,9 @@ export function ToolConfigPanel({ tool, profile }: ToolConfigPanelProps) {
       </div>
 
       <CopySettingsDialog
-        key={showCopyModal ? "open" : "closed"}
-        open={showCopyModal}
-        onOpenChange={setShowCopyModal}
+        key={_copyOpen ? "open" : "closed"}
+        open={_copyOpen}
+        onOpenChange={_setCopyOpen}
         title="Copy Follow Tool Settings"
         profiles={otherProfiles}
         optionGroups={FOLLOW_TOOL_COPY_GROUPS}
