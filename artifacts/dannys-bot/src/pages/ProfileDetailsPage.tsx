@@ -225,199 +225,6 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
   );
 }
 
-// ── Hotspot adapter picker ────────────────────────────────────────────────
-type AdapterInfo = { name: string; ip: string; score: number };
-type RelayInfo = { bindIp: string; port: number; refCount: number };
-
-function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
-  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
-  const [relays, setRelays] = useState<RelayInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fixResult, setFixResult] = useState<{ ok: boolean; needsAdmin?: boolean; error?: string } | null>(null);
-  const [fixing, setFixing] = useState(false);
-
-  const refresh = async () => {
-    try {
-      const [aRes, rRes] = await Promise.all([
-        fetch("/api/hotspot/adapters"),
-        fetch("/api/hotspot/relay/status"),
-      ]);
-      const aData = await aRes.json();
-      const rData = await rRes.json();
-      setAdapters(aData.adapters ?? []);
-      setRelays(rData.relays ?? []);
-      setError(null);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load adapters");
-    }
-  };
-
-  useEffect(() => { refresh(); }, []);
-
-  const handleStartRelay = async (ip: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/hotspot/relay/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bindIp: ip }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
-      await refresh();
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to start relay");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStopRelay = async (ip: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/hotspot/relay/stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bindIp: ip }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
-      await refresh();
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to stop relay");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFixRouting = async (ip: string) => {
-    setFixing(true);
-    setFixResult(null);
-    try {
-      const res = await fetch("/api/hotspot/fix-routing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bindIp: ip }),
-      });
-      const data = await res.json();
-      setFixResult(data);
-    } catch (e: any) {
-      setFixResult({ ok: false, error: e?.message ?? "Request failed" });
-    } finally {
-      setFixing(false);
-    }
-  };
-
-  const activeRelay = relays[0];
-  const topAdapter = adapters[0];
-
-  return (
-    <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 px-4 py-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Wifi className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">USB Hotspot Relay</span>
-        </div>
-        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={refresh}>
-          <RefreshCw className="w-3 h-3 mr-1" /> Refresh
-        </Button>
-      </div>
-
-      {/* Windows routing warning — only shown when a tethering adapter (score > 0) is detected */}
-      {adapters.some(a => a.score > 0) && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 space-y-1.5">
-          <p className="text-xs font-semibold text-amber-800">
-            ⚠ Windows may be routing ALL your computer&apos;s traffic through the phone
-          </p>
-          <p className="text-xs text-amber-700">
-            Plugging in a USB-tethered phone can cause Windows to route your entire computer&apos;s internet through the phone. Press the button below — Windows will ask for permission (click <strong>Yes</strong>). This is a one-time fix that Windows remembers permanently.
-          </p>
-          <div className="flex items-center gap-2 flex-wrap">
-            {adapters.filter(a => a.score > 0).map(a => (
-              <Button
-                key={a.ip}
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
-                disabled={fixing}
-                onClick={() => handleFixRouting(a.ip)}
-              >
-                {fixing ? "Fixing…" : `Fix routing (${a.ip})`}
-              </Button>
-            ))}
-          </div>
-          {fixResult && (
-            <p className={`text-xs font-medium ${fixResult.ok ? "text-green-700" : "text-red-700"}`}>
-              {fixResult.ok
-                ? (fixResult as any).uacPending
-                  ? "✓ A Windows permission prompt should have appeared on your screen — click Yes to apply the fix. This is a one-time action and Windows will remember it permanently."
-                  : "✓ Done — Windows will now use your main connection for everything except this account."
-                : `Failed: ${fixResult.error} — Right-click Equinox and choose Run as administrator, then press Fix routing again.`}
-            </p>
-          )}
-        </div>
-      )}
-
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
-
-      {adapters.length === 0 ? (
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p className="font-medium text-foreground">No USB tethering adapter detected.</p>
-          <p><span className="font-medium">iPhone:</span> Install <span className="font-medium">Apple Devices</span> from the Microsoft Store (or iTunes from apple.com — not the Store version). Then go to iPhone Settings → Personal Hotspot → turn on <span className="font-medium">Allow Others to Join</span>. Reconnect the USB cable — you should see a blue banner on the iPhone screen.</p>
-          <p><span className="font-medium">Android:</span> In your phone settings search for <span className="font-medium">USB tethering</span> and enable it while the cable is plugged in.</p>
-          <p>Once connected, press Refresh above.</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {adapters.map((a) => {
-            const relay = relays.find(r => r.bindIp === a.ip);
-            return (
-              <div key={a.ip} className="flex items-center justify-between gap-2 rounded-md bg-background border border-border px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium truncate">{a.name}</p>
-                  <p className="text-xs text-muted-foreground">{a.ip}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {relay ? (
-                    <>
-                      <span className="text-xs text-green-600 font-medium">Port {relay.port}</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        disabled={loading}
-                        onClick={() => handleStopRelay(a.ip)}
-                      >
-                        Stop
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      disabled={loading}
-                      onClick={() => handleStartRelay(a.ip)}
-                    >
-                      Start relay
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        Traffic for this account will route through the phone's mobile data connection.
-      </p>
-    </div>
-  );
-}
 
 export function ProfileDetailsPage() {
   const params = useParams();
@@ -673,8 +480,7 @@ export function ProfileDetailsPage() {
         syncIntervalMin: profile.syncIntervalMin ?? 60,
         syncIntervalMax: profile.syncIntervalMax ?? 120,
         syncUseHiker: profile.syncUseHiker ?? false,
-        // Hotspot
-        useHotspot: profile.useHotspot ?? false,
+
       });
     }
   }, [profile]);
@@ -1321,20 +1127,9 @@ export function ProfileDetailsPage() {
                   </div>
 
                   <div className="space-y-3 pt-4 border-t border-border mt-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <Checkbox
-                          checked={!!formData.useHotspot}
-                          onCheckedChange={(checked) => updateField({ useHotspot: !!checked })}
-                        />
-                        <span className="text-xs font-medium text-muted-foreground">Use Hotspot</span>
-                      </label>
-                    </div>
+                    <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
 
-                    {formData.useHotspot ? (
-                      <HotspotAdapterPicker profileId={profileId} />
-                    ) : (() => {
+                    {(() => {
                       const linked = proxies?.find(p => p.id === profile.proxyId);
                       if (linked) {
                         return (

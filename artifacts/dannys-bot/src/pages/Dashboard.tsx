@@ -56,11 +56,10 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.487",
+    version: "1.0.488",
     date: "23 May 2026",
     items: [
-      { category: "Fix", text: "The 'Fix routing' button now triggers a Windows permission prompt (UAC) when admin rights are needed — click Yes on the prompt and the fix applies permanently without needing to relaunch Equinox as administrator." },
-      { category: "Improved", text: "Clearer wording in the USB Hotspot panel explaining the routing issue and what to do." },
+      { category: "Removed", text: "Removed the USB Hotspot / phone tethering relay feature entirely." },
     ],
   },
   {

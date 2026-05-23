@@ -56,7 +56,6 @@ import {
 import { automationEngine } from "../instagram/automationEngine";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 import { userAgents as UA_POOL } from "../shared/userAgents";
-import * as hotspotRelay from "../mobile/hotspotRelay";
 
 // ── Deterministic UA picker ─────────────────────────────────────────────────
 // Picks a paired { api, embedded } UA from the pool based on the account's
@@ -90,26 +89,12 @@ let SERVER_START = new Date().toISOString();
 
 async function resolveProxyConfig(profile: {
   browserDirectConnection?: boolean | null;
-  useHotspot?: boolean | null;
   proxyId?: number | null;
   proxyHost?: string | null;
   proxyPort?: number | null;
   proxyUsername?: string | null;
   proxyPassword?: string | null;
 }): Promise<ProxyConfig | undefined> {
-  // Hotspot relay — traffic exits through the USB-tethered phone adapter.
-  // Must be checked before the proxy fields so the EB also routes through the phone.
-  if (profile.useHotspot) {
-    const adapters = hotspotRelay.listAdapters();
-    const bindIp = adapters[0]?.ip;
-    if (bindIp) {
-      const port = await hotspotRelay.startRelay(bindIp);
-      return { host: "127.0.0.1", port };
-    }
-    // No tethered adapter found — fall through to direct (no proxy)
-    return undefined;
-  }
-
   // Proxy assignment always wins — if an account has a proxy configured, use it.
   // browserDirectConnection is only respected when NO proxy is configured at all.
   if (profile.proxyId) {
@@ -156,47 +141,6 @@ export async function registerInstagramRoutes(
   storage.resetStuckVerifyingAccounts().catch(() => {});
 
   automationEngine.start();
-
-  // ── Hotspot relay ────────────────────────────────────────────────────────
-  app.get("/api/hotspot/adapters", (_req, res) => {
-    try {
-      const adapters = hotspotRelay.listAdapters();
-      res.json({ adapters });
-    } catch (e: any) {
-      res.status(500).json({ error: e?.message ?? "Failed to list adapters" });
-    }
-  });
-
-  app.post("/api/hotspot/relay/start", async (req, res) => {
-    try {
-      const { bindIp } = z.object({ bindIp: z.string().min(1) }).parse(req.body);
-      const port = await hotspotRelay.startRelay(bindIp);
-      res.json({ ok: true, bindIp, port });
-    } catch (e: any) {
-      res.status(400).json({ ok: false, error: e?.message ?? "Failed to start relay" });
-    }
-  });
-
-  app.post("/api/hotspot/relay/stop", (req, res) => {
-    try {
-      const { bindIp } = z.object({ bindIp: z.string().min(1) }).parse(req.body);
-      hotspotRelay.releaseRelay(bindIp);
-      res.json({ ok: true });
-    } catch (e: any) {
-      res.status(400).json({ ok: false, error: e?.message ?? "Failed to stop relay" });
-    }
-  });
-
-  app.get("/api/hotspot/relay/status", (_req, res) => {
-    res.json({ relays: hotspotRelay.getAllRelays() });
-  });
-
-  app.post("/api/hotspot/fix-routing", async (req, res) => {
-    const { bindIp } = req.body ?? {};
-    if (!bindIp) return res.status(400).json({ ok: false, error: "bindIp required" });
-    const result = await hotspotRelay.fixWindowsRouting(bindIp);
-    res.json(result);
-  });
 
   // Proxies
   app.get(api.proxies.list.path, async (_req, res) => {
@@ -1712,8 +1656,7 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
-    // Block EB access when no proxy is assigned AND the account is not using the hotspot relay.
-    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort) || profile.useHotspot);
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
     if (!hasProxy) return res.status(403).json({ error: "No proxy assigned — assign a proxy to this account before using the embedded browser." });
     // ── UA BLOCK — per USER-AGENT RULE ─────────────────────────────────────────
     if (!profile.userAgentEmbedded) {
@@ -1931,7 +1874,7 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { socket.destroy(); return; }
 
-    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort) || profile.useHotspot);
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
     if (!hasProxy) {
       // Send a WS close with an error message then destroy the socket
       wss.handleUpgrade(request, socket, head, (ws) => {

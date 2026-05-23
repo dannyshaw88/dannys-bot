@@ -118,18 +118,6 @@ async function logApiCall(
 }
 
 async function buildProxyUrl(profile: Profile): Promise<{ url: string; host: string } | null> {
-  // Hotspot relay — route verify traffic through the USB-tethered phone adapter.
-  if (profile.useHotspot) {
-    const { listAdapters, startRelay } = await import("../mobile/hotspotRelay");
-    const adapters = listAdapters();
-    const bindIp = adapters[0]?.ip;
-    if (bindIp) {
-      const port = await startRelay(bindIp);
-      return { url: `http://127.0.0.1:${port}`, host: "127.0.0.1" };
-    }
-    // No tethered adapter found — proceed without proxy (allows verify to continue)
-    return null;
-  }
   // proxyId (Proxy Manager entry) takes priority over inline proxyHost/proxyPort fields.
   if (profile.proxyId) {
     const proxies = await storage.getProxies();
@@ -605,7 +593,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   const caller = new Error().stack?.split("\n").slice(2, 4).join(" | ") ?? "unknown";
   console.log(`[verify-audit] verifyInstagramCredentials called for @${profile.username} (status="${profile.accountStatus}") caller=${caller}`);
   const resolved = await buildProxyUrl(profile);
-  if (!resolved && !profile.useHotspot) {
+  if (!resolved) {
     return {
       ok: false,
       message: `@${profile.username} — no proxy assigned. Assign a proxy before verifying.`,
@@ -614,7 +602,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
   }
   const proxyUrl = resolved?.url ?? null;
   const proxyIp = resolved?.host ?? "direct";
-  console.error(`[instagramLogin] @${profile.username} proxy=${resolved?.host ?? "direct (hotspot)"}`);
+  console.error(`[instagramLogin] @${profile.username} proxy=${resolved?.host}`);
 
   // ── Verification priority ─────────────────────────────────────────────────
   // 1. Fresh password login — used when a password is stored.
