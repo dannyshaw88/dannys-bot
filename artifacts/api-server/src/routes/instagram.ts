@@ -191,6 +191,13 @@ export async function registerInstagramRoutes(
     res.json({ relays: hotspotRelay.getAllRelays() });
   });
 
+  app.post("/api/hotspot/fix-routing", async (req, res) => {
+    const { bindIp } = req.body ?? {};
+    if (!bindIp) return res.status(400).json({ ok: false, error: "bindIp required" });
+    const result = await hotspotRelay.fixWindowsRouting(bindIp);
+    res.json(result);
+  });
+
   // Proxies
   app.get(api.proxies.list.path, async (_req, res) => {
     const data = await storage.getProxies();

@@ -234,6 +234,8 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
   const [relays, setRelays] = useState<RelayInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fixResult, setFixResult] = useState<{ ok: boolean; needsAdmin?: boolean; error?: string } | null>(null);
+  const [fixing, setFixing] = useState(false);
 
   const refresh = async () => {
     try {
@@ -289,6 +291,24 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
     }
   };
 
+  const handleFixRouting = async (ip: string) => {
+    setFixing(true);
+    setFixResult(null);
+    try {
+      const res = await fetch("/api/hotspot/fix-routing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bindIp: ip }),
+      });
+      const data = await res.json();
+      setFixResult(data);
+    } catch (e: any) {
+      setFixResult({ ok: false, error: e?.message ?? "Request failed" });
+    } finally {
+      setFixing(false);
+    }
+  };
+
   const activeRelay = relays[0];
   const topAdapter = adapters[0];
 
@@ -303,6 +323,41 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
           <RefreshCw className="w-3 h-3 mr-1" /> Refresh
         </Button>
       </div>
+
+      {/* Windows routing warning — shown whenever an adapter is detected */}
+      {adapters.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-amber-800">
+            ⚠ Windows may be routing ALL your computer&apos;s traffic through the phone
+          </p>
+          <p className="text-xs text-amber-700">
+            Plugging in a USB-tethered phone can cause Windows to send every app&apos;s internet through the phone instead of your main connection. Equinox tries to fix this automatically when you start a relay — use the button below to apply it now if your main connection is affected.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {adapters.map(a => (
+              <Button
+                key={a.ip}
+                variant="outline"
+                size="sm"
+                className="h-6 px-2 text-xs border-amber-400 text-amber-800 hover:bg-amber-100"
+                disabled={fixing}
+                onClick={() => handleFixRouting(a.ip)}
+              >
+                {fixing ? "Fixing…" : `Fix routing for ${a.ip}`}
+              </Button>
+            ))}
+          </div>
+          {fixResult && (
+            <p className={`text-xs font-medium ${fixResult.ok ? "text-green-700" : "text-red-700"}`}>
+              {fixResult.ok
+                ? "✓ Done — Windows will now use your main connection for everything except this account."
+                : fixResult.needsAdmin
+                  ? "Needs admin rights — right-click Equinox and choose Run as administrator, then try again. Or go to Network Connections → right-click the phone adapter → Properties → IPv4 → Advanced → uncheck Automatic metric and enter 9999."
+                  : `Failed: ${fixResult.error}`}
+            </p>
+          )}
+        </div>
+      )}
 
       {error && (
         <p className="text-xs text-destructive">{error}</p>

@@ -15,6 +15,7 @@
 
 import * as net from "net";
 import * as os from "os";
+import { exec } from "child_process";
 
 export interface AdapterInfo {
   name: string;
@@ -32,6 +33,53 @@ interface RelayEntry {
 }
 
 const relays = new Map<string, RelayEntry>();
+
+// ── Windows default-route suppression ────────────────────────────────────────
+//
+// When a USB-tethered phone is plugged in, Windows automatically adds a default
+// route (0.0.0.0/0) through the phone adapter and may give it a lower metric
+// than the main adapter — causing ALL machine traffic to exit through the phone.
+// Setting a very high interface metric (9999) tells Windows to prefer the main
+// adapter for everything, while still allowing our relay to bind/send through
+// the phone adapter via `localAddress`.
+
+function getAdapterNameByIp(ip: string): string | null {
+  const ifaces = os.networkInterfaces();
+  for (const [name, addrs] of Object.entries(ifaces)) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family === "IPv4" && addr.address === ip) return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * On Windows: set the interface metric of the tethered adapter to 9999 so
+ * Windows stops routing all machine traffic through the phone.
+ * No-op on non-Windows platforms.
+ * Returns { ok, needsAdmin?, error? }.
+ */
+export function fixWindowsRouting(bindIp: string): Promise<{ ok: boolean; needsAdmin?: boolean; error?: string }> {
+  if (process.platform !== "win32") return Promise.resolve({ ok: true });
+
+  const adapterName = getAdapterNameByIp(bindIp);
+  if (!adapterName) return Promise.resolve({ ok: false, error: `No adapter found for IP ${bindIp}` });
+
+  return new Promise(resolve => {
+    exec(`netsh interface ip set interface "${adapterName}" metric=9999`, (err) => {
+      if (!err) {
+        console.log(`[hotspotRelay] Set metric=9999 on "${adapterName}" — Windows will no longer use it as default route`);
+        resolve({ ok: true });
+        return;
+      }
+      const msg = err.message ?? "";
+      const needsAdmin = /access denied|administrator|elevation|5\b/i.test(msg);
+      console.warn(`[hotspotRelay] Could not set metric on "${adapterName}": ${msg}`);
+      resolve({ ok: false, needsAdmin, error: msg });
+    });
+  });
+}
 
 // ── Adapter detection ────────────────────────────────────────────────────────
 
@@ -96,13 +144,22 @@ export async function startRelay(bindIp: string): Promise<number> {
   server.on("error", () => {});
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(0, bindIp, () => resolve());
+    // Listen on loopback so the proxy URL is always http://127.0.0.1:port —
+    // outbound connections still exit through bindIp via localAddress: bindIp.
+    server.listen(0, "127.0.0.1", () => resolve());
     server.once("error", reject);
   });
 
   const port = (server.address() as net.AddressInfo).port;
   relays.set(bindIp, { server, port, bindIp, refCount: 1 });
   console.log(`[hotspotRelay] relay started on ${bindIp}:${port}`);
+
+  // Automatically suppress Windows default-route hijack — fire and forget.
+  // If it fails (e.g. needs admin), the UI exposes a manual "Fix Routing" button.
+  fixWindowsRouting(bindIp).then(r => {
+    if (!r.ok) console.warn(`[hotspotRelay] auto fix-routing failed: ${r.error}`);
+  }).catch(() => {});
+
   return port;
 }
 

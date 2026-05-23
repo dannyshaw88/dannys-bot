@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.484",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Plugging in a USB-tethered phone no longer reroutes your entire computer's internet through it — Equinox now automatically sets a high routing metric on the phone adapter the moment the relay starts, so Windows keeps using your main connection for everything else." },
+      { category: "New", text: "A warning banner now appears in the USB Hotspot panel whenever a phone adapter is detected, with a 'Fix routing' button in case the automatic fix needs a retry or admin rights." },
+    ],
+  },
+  {
     version: "1.0.483",
     date: "23 May 2026",
     items: [
