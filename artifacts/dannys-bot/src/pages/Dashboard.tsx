@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.485",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "The 'Fix routing' button now works correctly — it uses the right Windows command (netsh interface ipv4) and also tries PowerShell as a fallback, so the metric change reliably applies." },
+      { category: "Fix", text: "The warning banner and Fix routing button no longer appear for your regular WiFi adapter — they now only show for the USB-tethered phone adapter." },
+    ],
+  },
+  {
     version: "1.0.484",
     date: "23 May 2026",
     items: [

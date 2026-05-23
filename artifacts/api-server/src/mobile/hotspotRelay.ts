@@ -66,19 +66,40 @@ export function fixWindowsRouting(bindIp: string): Promise<{ ok: boolean; needsA
   const adapterName = getAdapterNameByIp(bindIp);
   if (!adapterName) return Promise.resolve({ ok: false, error: `No adapter found for IP ${bindIp}` });
 
-  return new Promise(resolve => {
-    exec(`netsh interface ip set interface "${adapterName}" metric=9999`, (err) => {
-      if (!err) {
-        console.log(`[hotspotRelay] Set metric=9999 on "${adapterName}" — Windows will no longer use it as default route`);
-        resolve({ ok: true });
-        return;
-      }
-      const msg = err.message ?? "";
-      const needsAdmin = /access denied|administrator|elevation|5\b/i.test(msg);
-      console.warn(`[hotspotRelay] Could not set metric on "${adapterName}": ${msg}`);
-      resolve({ ok: false, needsAdmin, error: msg });
+  // Try the modern IPv4 subcommand first, then fall back to the old "ip" alias
+  const tryCmd = (cmd: string): Promise<{ ok: boolean; needsAdmin?: boolean; error?: string }> =>
+    new Promise(resolve => {
+      exec(cmd, (err) => {
+        if (!err) {
+          console.log(`[hotspotRelay] ${cmd} — success`);
+          resolve({ ok: true });
+          return;
+        }
+        const msg = (err.message ?? "").trim();
+        const needsAdmin = /access.?denied|administrator|elevation|requires.*elevation|error.*5\b/i.test(msg);
+        resolve({ ok: false, needsAdmin, error: msg });
+      });
     });
-  });
+
+  // netsh interface ipv4 set interface is the correct modern syntax
+  const primary = await tryCmd(`netsh interface ipv4 set interface "${adapterName}" metric=9999`);
+  if (primary.ok) {
+    console.log(`[hotspotRelay] Set metric=9999 on "${adapterName}" — Windows will no longer use it as default route`);
+    return primary;
+  }
+
+  // Fallback: PowerShell (available on all modern Windows)
+  const ps = await tryCmd(
+    `powershell.exe -NoProfile -Command "Set-NetIPInterface -InterfaceAlias '${adapterName.replace(/'/g, "''")}' -InterfaceMetric 9999"`
+  );
+  if (ps.ok) {
+    console.log(`[hotspotRelay] Set metric=9999 via PowerShell on "${adapterName}"`);
+    return ps;
+  }
+
+  const needsAdmin = primary.needsAdmin || ps.needsAdmin;
+  console.warn(`[hotspotRelay] Could not set metric on "${adapterName}": ${primary.error}`);
+  return { ok: false, needsAdmin, error: primary.error };
 }
 
 // ── Adapter detection ────────────────────────────────────────────────────────

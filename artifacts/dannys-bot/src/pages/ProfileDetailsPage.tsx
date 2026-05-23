@@ -324,17 +324,17 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
         </Button>
       </div>
 
-      {/* Windows routing warning — shown whenever an adapter is detected */}
-      {adapters.length > 0 && (
+      {/* Windows routing warning — only shown when a tethering adapter (score > 0) is detected */}
+      {adapters.some(a => a.score > 0) && (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 space-y-1.5">
           <p className="text-xs font-semibold text-amber-800">
             ⚠ Windows may be routing ALL your computer&apos;s traffic through the phone
           </p>
           <p className="text-xs text-amber-700">
-            Plugging in a USB-tethered phone can cause Windows to send every app&apos;s internet through the phone instead of your main connection. Equinox tries to fix this automatically when you start a relay — use the button below to apply it now if your main connection is affected.
+            Plugging in a USB-tethered phone can cause Windows to send every app&apos;s internet through the phone instead of your main connection. Equinox tries to fix this automatically when you start a relay — press the button below if your main connection is still going through the phone.
           </p>
           <div className="flex items-center gap-2 flex-wrap">
-            {adapters.map(a => (
+            {adapters.filter(a => a.score > 0).map(a => (
               <Button
                 key={a.ip}
                 variant="outline"
@@ -343,7 +343,7 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
                 disabled={fixing}
                 onClick={() => handleFixRouting(a.ip)}
               >
-                {fixing ? "Fixing…" : `Fix routing for ${a.ip}`}
+                {fixing ? "Fixing…" : `Fix routing (${a.ip})`}
               </Button>
             ))}
           </div>
@@ -352,7 +352,7 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
               {fixResult.ok
                 ? "✓ Done — Windows will now use your main connection for everything except this account."
                 : fixResult.needsAdmin
-                  ? "Needs admin rights — right-click Equinox and choose Run as administrator, then try again. Or go to Network Connections → right-click the phone adapter → Properties → IPv4 → Advanced → uncheck Automatic metric and enter 9999."
+                  ? "Needs admin rights. Right-click Equinox and choose Run as administrator, then press Fix routing again. Or manually: Network Connections → right-click the phone adapter → Properties → IPv4 → Advanced → uncheck Automatic metric → enter 9999."
                   : `Failed: ${fixResult.error}`}
             </p>
           )}
