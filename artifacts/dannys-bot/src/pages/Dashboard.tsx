@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.476",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Fix ABD now calls the Instagram dismiss endpoint directly using the stored account credentials — no browser, no challenge flow, no re-probing. If Instagram accepts the dismiss the account is immediately restored to valid." },
+    ],
+  },
+  {
     version: "1.0.475",
     date: "23 May 2026",
     items: [

@@ -844,6 +844,44 @@ export class InstagramWebClient {
     return this.mobileSessionReady && this.mobileCookieJar.some(c => c.startsWith("sessionid="));
   }
 
+  /**
+   * Direct ABD dismiss — calls POST /api/v1/users/self/banner_dismiss/ with the
+   * stored identity (uuid, uid, csrftoken from igApiCookies / igDeviceState).
+   * Returns the raw Instagram response object so the caller can decide what to do.
+   * No probing, no challenge flow, no EB dependency.
+   */
+  async bannerDismiss(): Promise<{ raw: any; ok: boolean }> {
+    const cookieParts = (this.igApiCookies ?? "").split(";").map((s: string) => s.trim());
+    const userId   = cookieParts.find((c: string) => c.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+    const cookieCsrf = cookieParts.find((c: string) => c.startsWith("csrftoken="))?.split("=")[1] ?? "";
+    const csrf     = this.mobileCsrf || cookieCsrf;
+    let uuid = "", deviceId = "";
+    if (this.igDeviceState) {
+      try {
+        const ds = JSON.parse(this.igDeviceState);
+        uuid     = ds.uuid     ?? "";
+        deviceId = ds.deviceId ?? ds.device_id ?? "";
+      } catch { /* ignore */ }
+    }
+    const body = new URLSearchParams({
+      _uuid:       uuid || deviceId,
+      _uid:        userId,
+      _csrftoken:  csrf,
+      device_id:   deviceId || uuid,
+    }).toString();
+    console.log(`[webClient] @${this.username} bannerDismiss → POST /api/v1/users/self/banner_dismiss/ uid=${userId} uuid=${uuid.slice(0,8)}...`);
+    let raw: any = null;
+    try {
+      raw = await this.mobileSessionPost("/api/v1/users/self/banner_dismiss/", body);
+    } catch (e: any) {
+      console.warn(`[webClient] @${this.username} bannerDismiss error: ${e?.message}`);
+      raw = { _error: e?.message, statusCode: e?.response?.statusCode };
+    }
+    console.log(`[webClient] @${this.username} bannerDismiss ← ${JSON.stringify(raw)?.slice(0, 300)}`);
+    const ok = raw?.status === "ok";
+    return { raw, ok };
+  }
+
   // ── Mobile API login (i.instagram.com) ─────────────────────────────────────
   // Establishes a separate mobile session used only for DM sending.
   // The web session (www.instagram.com) cannot send DMs — Instagram's DM write

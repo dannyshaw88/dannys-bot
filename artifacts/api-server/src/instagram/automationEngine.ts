@@ -3562,63 +3562,39 @@ class AutomationEngine {
   }
 
   // ── Manual "Fix ABD" — called from POST /api/profiles/:id/fix-abd ──────────
-  // Builds (or reuses) a live client for the profile, probes the mobile API to
-  // detect which ABD variant is active, then calls the appropriate dismiss path:
-  //   • feedback_required + challenge_url  → tryDismissABD()
-  //   • 403 login_required (no challenge)  → tryDismissABD_loginRequired()
-  //                                           (posts to /api/v1/users/self/banner_dismiss/)
-  // Updates accountStatus in DB on success/failure and returns a result object.
+  // Calls POST /api/v1/users/self/banner_dismiss/ directly using the stored
+  // igApiCookies identity. No probing, no challenge flow, no EB dependency.
+  // If Instagram returns status=ok the account is marked valid.
   async dismissABDForProfile(profileId: number): Promise<{ ok: boolean; message: string }> {
     const profile = await storage.getProfile(profileId);
     if (!profile) return { ok: false, message: "Profile not found" };
 
-    const proxyUrl = await this.buildProxyUrl(profile);
-    if (!proxyUrl) return { ok: false, message: "No proxy assigned to this account — assign a proxy first" };
-
-    // Reuse the live runner client if available, otherwise build a fresh one.
-    const liveState =
-      this.unfollowStates.get(profileId) ??
-      this.contactStates.get(profileId) ??
-      this.dmStates.get(profileId);
-
-    let client = liveState?.client ?? null;
-    if (!client) {
-      client = new InstagramWebClient(proxyUrl, profileId);
-      client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
-      if (profile.userAgentEmbedded) client.setWebUserAgent(profile.userAgentEmbedded);
-      client.loadBrowserCookies();
+    if (!profile.igApiCookies) {
+      return { ok: false, message: "No stored session credentials — run Verify Credentials first" };
     }
+
+    const proxyUrl = await this.buildProxyUrl(profile);
+
+    const client = new InstagramWebClient(proxyUrl ?? "", profileId);
+    client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
     client.username = profile.username;
 
-    if (!client.isMobileLoggedIn()) {
-      return { ok: false, message: "No mobile session — run Verify Credentials first so the account has an active session before dismissing ABD" };
-    }
+    console.log(`[engine] @${profile.username}: Fix ABD — calling banner_dismiss directly`);
 
-    console.log(`[engine] @${profile.username}: manual Fix ABD triggered`);
-    await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected" });
-
-    let ok = await client.probeAndDismissABD();
-
-    // Path C: hard logout_reason:8 — probes couldn't surface a challenge URL.
-    // Use stored password to perform a fresh mobile login; Instagram returns
-    // IgCheckpointError containing the ABD challenge URL which we dismiss with choice=0.
-    if (!ok && profile.password) {
-      console.log(`[engine] @${profile.username}: probeAndDismissABD failed — trying freshLogin dismiss (logout_reason:8 path)`);
-      ok = await client.dismissABD_freshLogin(profile.username, profile.password);
-    }
+    const { raw, ok } = await client.bannerDismiss();
 
     if (ok) {
       await storage.updateProfile(profileId, { accountStatus: "valid" });
       await storage.incrementStat(profileId, "abd");
-      this.logAction(profileId, 0, "abd_dismissed", "", "", "", "ok", "Automated Behaviour warning manually dismissed via Fix ABD");
-      console.log(`[engine] @${profile.username}: Fix ABD SUCCESS ✓ — account restored to valid`);
-      return { ok: true, message: "ABD warning dismissed — account status restored to valid" };
-    } else {
-      await storage.updateProfile(profileId, { accountStatus: "automated_behaviour_detected" });
-      this.logAction(profileId, 0, "abd_dismissed", "", "", "", "error", "Fix ABD attempted but block was not lifted — may need manual review in browser");
-      console.warn(`[engine] @${profile.username}: Fix ABD FAILED ✗ — block not lifted`);
-      return { ok: false, message: "ABD dismiss call sent but the block was not lifted — the account may need manual review in the embedded browser" };
+      this.logAction(profileId, 0, "abd_dismissed", "", "", "", "ok", "ABD warning dismissed via banner_dismiss");
+      console.log(`[engine] @${profile.username}: Fix ABD SUCCESS ✓`);
+      return { ok: true, message: "ABD warning dismissed — account restored to valid" };
     }
+
+    const detail = raw?._error ?? raw?.message ?? JSON.stringify(raw)?.slice(0, 120) ?? "no response";
+    console.warn(`[engine] @${profile.username}: Fix ABD FAILED — Instagram returned: ${detail}`);
+    this.logAction(profileId, 0, "abd_dismissed", "", "", "", "error", `banner_dismiss failed: ${detail}`);
+    return { ok: false, message: `Instagram rejected the dismiss request: ${detail}` };
   }
 
   // Force an immediate new-follower extraction for the given profile,
