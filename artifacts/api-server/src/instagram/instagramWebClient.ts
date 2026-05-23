@@ -3074,21 +3074,48 @@ export class InstagramWebClient {
     if (this._abdDismissInProgress) return false;
     this._abdDismissInProgress = true;
     try {
-      // logout_reason: 8 = AUTOMATED_BEHAVIOUR_DETECTED — Instagram has fully
-      // invalidated the mobile API session server-side. There is no mobile API
-      // endpoint that can clear this: every dismiss endpoint tested (under both
-      // /users/ and /accounts/) returns 404 HTML because none of them exist in
-      // the current Instagram API surface.
-      //
-      // The ONLY way to clear ABD is the web browser flow:
-      //   1. Open the Embedded Browser for this account.
-      //   2. Navigate to instagram.com — the web session may still be valid and
-      //      will show the "We noticed unusual activity" interstitial.
-      //   3. Tap "I Understand" / dismiss it in the browser.
-      //   4. The EB extracts fresh cookies.
-      //   5. Click Verify Credentials — Path 2 restores the mobile session.
-      console.warn(`[webClient] @${this.username} ABD dismiss: logout_reason=8 — mobile session dead. Cannot clear via API. Open the Embedded Browser → dismiss the web ABD interstitial → Verify Credentials.`);
-      return false;
+      // Extract identity from stored cookies/device state.
+      const cookieParts = (this.igApiCookies ?? "").split(";").map((s: string) => s.trim());
+      const userId = cookieParts.find((c: string) => c.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+      const cookieCsrf = cookieParts.find((c: string) => c.startsWith("csrftoken="))?.split("=")[1] ?? "";
+      const csrf = this.mobileCsrf || cookieCsrf;
+      let uuid = "";
+      let deviceId = "";
+      if (this.igDeviceState) {
+        try {
+          const ds = JSON.parse(this.igDeviceState);
+          uuid = ds?.uuid ?? "";
+          deviceId = ds?.deviceId ?? ds?.device_id ?? "";
+        } catch { /* ignore */ }
+      }
+
+      // ── qe/dismiss_automatic_behaviour ─────────────────────────────────
+      // This is the endpoint Jarvee calls as "dismissAutomaticBehaviour".
+      // Reverse-engineered from Android app traffic — lives under /qe/ (not
+      // /users/ or /accounts/ which all return 404).
+      // Body: _uuid, _uid, _csrftoken, device_id
+      try {
+        const body = new URLSearchParams({
+          _uuid: uuid,
+          _uid: userId,
+          _csrftoken: csrf,
+          device_id: deviceId || uuid,
+        }).toString();
+        const r = await this.mobileSessionPost("/api/v1/qe/dismiss_automatic_behaviour/", body);
+        console.log(`[webClient] @${this.username} ABD dismiss: qe/dismiss_automatic_behaviour → ${JSON.stringify(r)?.slice(0, 300)}`);
+        if (r?.status === "ok") {
+          const lifted = await this._probeABD403Lifted();
+          if (lifted) return true;
+          // Status ok but block not yet lifted — wait briefly and probe again
+          await new Promise(res => setTimeout(res, 3000));
+          return await this._probeABD403Lifted();
+        }
+      } catch (e: any) {
+        console.warn(`[webClient] @${this.username} ABD dismiss: qe/dismiss_automatic_behaviour exception: ${e?.message}`);
+      }
+
+      // ── Final probe ───────────────────────────────────────────────────
+      return await this._probeABD403Lifted();
     } finally {
       this._abdDismissInProgress = false;
     }

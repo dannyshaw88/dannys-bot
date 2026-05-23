@@ -221,11 +221,11 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
-    version: "1.0.473",
+    version: "1.0.474",
     date: "23 May 2026",
     items: [
       { category: "Fixed", text: "Apply IP to LD Player button is back in the Create & Spoof proxy section — clicking it pushes the selected proxy to the Android device via ADB so LD Player routes through it immediately." },
-      { category: "Improved", text: "When an account is in Automated Behaviour Detected state, the app now immediately tells you what to do instead of making silent API calls that always fail. Open the Embedded Browser for the account, navigate to Instagram, dismiss the warning that appears, then click Verify Credentials to restore the account." },
+      { category: "Fixed", text: "Automated Behaviour Detected auto-dismiss now calls the correct Instagram endpoint — the same one Jarvee uses — so the ABD warning is cleared and the account is restored to valid without any manual steps." },
     ],
   },
   {
