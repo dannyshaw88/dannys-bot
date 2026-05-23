@@ -331,7 +331,7 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
             ⚠ Windows may be routing ALL your computer&apos;s traffic through the phone
           </p>
           <p className="text-xs text-amber-700">
-            Plugging in a USB-tethered phone can cause Windows to send every app&apos;s internet through the phone instead of your main connection. Equinox tries to fix this automatically when you start a relay — press the button below if your main connection is still going through the phone.
+            Plugging in a USB-tethered phone can cause Windows to route your entire computer&apos;s internet through the phone. Press the button below — Windows will ask for permission (click <strong>Yes</strong>). This is a one-time fix that Windows remembers permanently.
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             {adapters.filter(a => a.score > 0).map(a => (
@@ -350,10 +350,10 @@ function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
           {fixResult && (
             <p className={`text-xs font-medium ${fixResult.ok ? "text-green-700" : "text-red-700"}`}>
               {fixResult.ok
-                ? "✓ Done — Windows will now use your main connection for everything except this account."
-                : fixResult.needsAdmin
-                  ? "Needs admin rights. Right-click Equinox and choose Run as administrator, then press Fix routing again. Or manually: Network Connections → right-click the phone adapter → Properties → IPv4 → Advanced → uncheck Automatic metric → enter 9999."
-                  : `Failed: ${fixResult.error}`}
+                ? (fixResult as any).uacPending
+                  ? "✓ A Windows permission prompt should have appeared on your screen — click Yes to apply the fix. This is a one-time action and Windows will remember it permanently."
+                  : "✓ Done — Windows will now use your main connection for everything except this account."
+                : `Failed: ${fixResult.error} — Right-click Equinox and choose Run as administrator, then press Fix routing again.`}
             </p>
           )}
         </div>

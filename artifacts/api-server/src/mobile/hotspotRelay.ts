@@ -66,40 +66,51 @@ export async function fixWindowsRouting(bindIp: string): Promise<{ ok: boolean; 
   const adapterName = getAdapterNameByIp(bindIp);
   if (!adapterName) return Promise.resolve({ ok: false, error: `No adapter found for IP ${bindIp}` });
 
-  // Try the modern IPv4 subcommand first, then fall back to the old "ip" alias
-  const tryCmd = (cmd: string): Promise<{ ok: boolean; needsAdmin?: boolean; error?: string }> =>
+  const tryCmd = (cmd: string): Promise<{ ok: boolean; error?: string }> =>
     new Promise(resolve => {
       exec(cmd, (err) => {
-        if (!err) {
-          console.log(`[hotspotRelay] ${cmd} — success`);
-          resolve({ ok: true });
-          return;
-        }
-        const msg = (err.message ?? "").trim();
-        const needsAdmin = /access.?denied|administrator|elevation|requires.*elevation|error.*5\b/i.test(msg);
-        resolve({ ok: false, needsAdmin, error: msg });
+        if (!err) { resolve({ ok: true }); return; }
+        resolve({ ok: false, error: (err.message ?? "").trim() });
       });
     });
 
-  // netsh interface ipv4 set interface is the correct modern syntax
-  const primary = await tryCmd(`netsh interface ipv4 set interface "${adapterName}" metric=9999`);
-  if (primary.ok) {
-    console.log(`[hotspotRelay] Set metric=9999 on "${adapterName}" — Windows will no longer use it as default route`);
-    return primary;
+  // 1. Try directly (works if Equinox is already running as administrator)
+  const direct = await tryCmd(`netsh interface ipv4 set interface "${adapterName}" metric=9999`);
+  if (direct.ok) {
+    console.log(`[hotspotRelay] Set metric=9999 on "${adapterName}" directly`);
+    return { ok: true };
   }
 
-  // Fallback: PowerShell (available on all modern Windows)
-  const ps = await tryCmd(
-    `powershell.exe -NoProfile -Command "Set-NetIPInterface -InterfaceAlias '${adapterName.replace(/'/g, "''")}' -InterfaceMetric 9999"`
+  // 2. Try via PowerShell directly (same admin requirement, different syntax)
+  const psAlias = adapterName.replace(/'/g, "''");
+  const psDirect = await tryCmd(
+    `powershell.exe -NoProfile -Command "Set-NetIPInterface -InterfaceAlias '${psAlias}' -InterfaceMetric 9999"`
   );
-  if (ps.ok) {
+  if (psDirect.ok) {
     console.log(`[hotspotRelay] Set metric=9999 via PowerShell on "${adapterName}"`);
-    return ps;
+    return { ok: true };
   }
 
-  const needsAdmin = primary.needsAdmin || ps.needsAdmin;
-  console.warn(`[hotspotRelay] Could not set metric on "${adapterName}": ${primary.error}`);
-  return { ok: false, needsAdmin, error: primary.error };
+  // 3. Both failed (need admin) — trigger a Windows UAC elevation prompt.
+  //    Start-Process -Verb RunAs shows the "Do you want to allow this app to
+  //    make changes?" dialog.  The user clicks Yes and the metric is set
+  //    permanently.  We fire-and-forget (detached) and tell the UI to wait for
+  //    the UAC prompt.
+  console.log(`[hotspotRelay] Triggering UAC elevation for metric fix on "${adapterName}"`);
+  try {
+    const { spawn } = await import("child_process");
+    // Use cmd /c so we can hide the console window
+    const psCmd = `Start-Process -FilePath cmd -ArgumentList '/c netsh interface ipv4 set interface \\"${adapterName}\\" metric=9999' -Verb RunAs -Wait -WindowStyle Hidden`;
+    const proc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", psCmd], {
+      detached: true,
+      stdio: "ignore",
+    });
+    proc.unref();
+    return { ok: true, uacPending: true } as any;
+  } catch (e: any) {
+    console.warn(`[hotspotRelay] UAC elevation spawn failed: ${e?.message}`);
+    return { ok: false, error: direct.error };
+  }
 }
 
 // ── Adapter detection ────────────────────────────────────────────────────────
