@@ -359,7 +359,8 @@ class AutomationEngine {
       const activeCookieBaker = new Set<number>();
       for (const bp of allProfilesForBaker) {
         const cbs = (bp.cookieBakerSettings as any) ?? {};
-        if (cbs.enabled) {
+        const bpHasProxy = bp.proxyId ? true : !!(bp.proxyHost && bp.proxyPort);
+        if (cbs.enabled && bpHasProxy) {
           activeCookieBaker.add(bp.id);
           if (!this.cookieBakerStates.has(bp.id)) this.launchCookieBaker(bp);
         }
@@ -375,6 +376,8 @@ class AutomationEngine {
       // ── Profile sync timers (independent of any tool runner) ──────────────
       for (const profile of profiles) {
         if (!profile.syncEnabled || !profile.syncIntervalMin) continue;
+        const syncHasProxy = profile.proxyId ? true : !!(profile.proxyHost && profile.proxyPort);
+        if (!syncHasProxy) continue;
         const nextAt = this.syncTimers.get(profile.id);
         // Seed from lastSyncedAt on first encounter
         if (nextAt === undefined) {
@@ -439,6 +442,10 @@ class AutomationEngine {
       stats = await hikerClient.getProfileStats(profile.username);
     } else {
       const proxyUrl = await this.buildProxyUrl(profile);
+      if (!proxyUrl) {
+        console.warn(`[engine] @${profile.username}: skipping profile sync — no proxy assigned`);
+        return null;
+      }
       const client = new InstagramWebClient(proxyUrl, profile.id);
       if (profile.userAgentEmbedded) client.setWebUserAgent(profile.userAgentEmbedded);
       if (profile.apiLimits) client.setApiLimits(profile.apiLimits as any);
@@ -3570,7 +3577,8 @@ class AutomationEngine {
     if (!profile) return { ok: false, message: "Profile not found" };
 
     const proxyUrl = await this.buildProxyUrl(profile);
-    const client = new InstagramWebClient(proxyUrl ?? "", profileId);
+    if (!proxyUrl) return { ok: false, message: "No proxy assigned — assign a proxy to this account before fixing ABD." };
+    const client = new InstagramWebClient(proxyUrl, profileId);
     client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
     client.username = profile.username;
 

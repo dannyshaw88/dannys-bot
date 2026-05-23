@@ -639,7 +639,7 @@ export function ProfilesPage() {
       // Restore to the exact status the account had before being stopped.
       // Use localStorage so the mapping survives page reloads.
       const map = getPreStopMap();
-      const restore = map[String(id)] ?? preStoppedStatus.current.get(id) ?? "pending";
+      const restore = map[String(id)] ?? preStoppedStatus.current.get(id) ?? "valid";
       delete map[String(id)];
       localStorage.setItem(PRESTOP_KEY, JSON.stringify(map));
       preStoppedStatus.current.delete(id);
@@ -1100,12 +1100,12 @@ export function ProfilesPage() {
                     );
                     if (key === "active") return (
                       <div key={key} style={{ width: profColWidths.active }} className="flex items-center justify-center shrink-0" onMouseDown={e => e.stopPropagation()}>
-                        <Switch checked={!isStopped} onCheckedChange={() => toggleStopped(profile.id, acctStatus)} data-testid={`switch-active-${profile.id}`} className="data-[state=checked]:bg-green-500" />
+                        <Switch checked={!isStopped} onCheckedChange={() => toggleStopped(profile.id, acctStatus)} data-testid={`switch-active-${profile.id}`} className="data-[state=checked]:bg-green-500" disabled={!hasProxy} title={!hasProxy ? "Assign a proxy before enabling this account" : undefined} />
                       </div>
                     );
                     if (key === "actions") return (
                       <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden" onMouseDown={e => e.stopPropagation()}>
-                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title="Open embedded browser" data-testid={`btn-open-browser-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-primary transition-colors">Browser</button>
+                        <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`text-[11px] transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}>Browser</button>
                         <Link href={`/profiles/${profile.id}`} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Config</Link>
                         <button onClick={() => setDeleteConfirm({ ids: [profile.id] })} data-testid={`button-delete-${profile.id}`} className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">Delete</button>
                       </div>

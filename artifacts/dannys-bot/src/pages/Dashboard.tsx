@@ -56,6 +56,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.498",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Active toggle in the Accounts page now responds instantly instead of appearing frozen after clicking." },
+      { category: "Fix", text: "Accounts imported from EQX files that were in a stopped state can now be re-activated correctly." },
+      { category: "Fix", text: "No account can now run tools, sync stats, bake cookies, fix ABD, or open the browser without a proxy assigned — your home IP can no longer be used." },
+      { category: "Fix", text: "Active toggle and Browser button in the Accounts page are now disabled for accounts that have no proxy, with a tooltip explaining why." },
+      { category: "Fix", text: "Copy Settings now remembers the last selected accounts across all tools — selecting accounts in one tool's Copy Settings is reflected when opening Copy Settings from any other tool." },
+    ],
+  },
+  {
     version: "1.0.497",
     date: "23 May 2026",
     items: [

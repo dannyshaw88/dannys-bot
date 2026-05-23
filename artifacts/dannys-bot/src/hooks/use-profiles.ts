@@ -110,19 +110,22 @@ export function useUpdateAccountStatus() {
     },
     onMutate: async ({ id, accountStatus }) => {
       await queryClient.cancelQueries({ queryKey: [api.profiles.list.path] });
-      const prevList = queryClient.getQueryData([api.profiles.list.path]);
-      const prevItem = queryClient.getQueryData([api.profiles.get.path, id]);
-      queryClient.setQueryData([api.profiles.list.path], (old: any) =>
-        Array.isArray(old) ? old.map((p: any) => p.id === id ? { ...p, accountStatus } : p) : old
-      );
+      const prevAutomation = queryClient.getQueryData([api.profiles.list.path, "automation"]);
+      const prevCreator    = queryClient.getQueryData([api.profiles.list.path, "creator"]);
+      const prevItem       = queryClient.getQueryData([api.profiles.get.path, id]);
+      const patchList = (old: any) =>
+        Array.isArray(old) ? old.map((p: any) => p.id === id ? { ...p, accountStatus } : p) : old;
+      queryClient.setQueryData([api.profiles.list.path, "automation"], patchList);
+      queryClient.setQueryData([api.profiles.list.path, "creator"],    patchList);
       queryClient.setQueryData([api.profiles.get.path, id], (old: any) =>
         old ? { ...old, accountStatus } : old
       );
-      return { prevList, prevItem };
+      return { prevAutomation, prevCreator, prevItem };
     },
     onError: (_err, { id }, context: any) => {
-      if (context?.prevList) queryClient.setQueryData([api.profiles.list.path], context.prevList);
-      if (context?.prevItem) queryClient.setQueryData([api.profiles.get.path, id], context.prevItem);
+      if (context?.prevAutomation) queryClient.setQueryData([api.profiles.list.path, "automation"], context.prevAutomation);
+      if (context?.prevCreator)    queryClient.setQueryData([api.profiles.list.path, "creator"],    context.prevCreator);
+      if (context?.prevItem)       queryClient.setQueryData([api.profiles.get.path, id],             context.prevItem);
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
