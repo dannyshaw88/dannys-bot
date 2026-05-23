@@ -60,7 +60,7 @@ function getAdapterNameByIp(ip: string): string | null {
  * No-op on non-Windows platforms.
  * Returns { ok, needsAdmin?, error? }.
  */
-export function fixWindowsRouting(bindIp: string): Promise<{ ok: boolean; needsAdmin?: boolean; error?: string }> {
+export async function fixWindowsRouting(bindIp: string): Promise<{ ok: boolean; needsAdmin?: boolean; error?: string }> {
   if (process.platform !== "win32") return Promise.resolve({ ok: true });
 
   const adapterName = getAdapterNameByIp(bindIp);

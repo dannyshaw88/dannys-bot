@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.486",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed a build error that prevented the installer from being created — the Windows routing fix function was missing the async keyword." },
+    ],
+  },
+  {
     version: "1.0.485",
     date: "23 May 2026",
     items: [
