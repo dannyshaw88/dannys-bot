@@ -145,6 +145,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProxy(id: number): Promise<void> {
+    await db.update(profiles).set({ proxyId: null }).where(eq(profiles.proxyId, id));
     await db.delete(proxies).where(eq(proxies.id, id));
   }
 

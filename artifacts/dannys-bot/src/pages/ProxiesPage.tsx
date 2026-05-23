@@ -247,7 +247,9 @@ export function ProxiesPage() {
   });
   const [keepValid, setKeepValid] = useState<boolean>(() => localStorage.getItem("proxies:keepAccountsValid") === "true");
   const [splitting, setSplitting] = useState(false);
-  const [autoLinking, setAutoLinking] = useState(false);
+  const [isPasteImportOpen, setIsPasteImportOpen] = useState(false);
+  const [pasteRaw, setPasteRaw] = useState("");
+  const [pasteImporting, setPasteImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [splitGroup, setSplitGroup] = useState<string>("");
 
@@ -325,7 +327,8 @@ export function ProxiesPage() {
   const [pingingAll, setPingingAll] = useState(false);
   const autoPingedRef = useRef(false);
 
-  const unassignedProfiles = allProfiles.filter(p => !p.proxyId);
+  const validProxyIds = useMemo(() => new Set(proxies.map(px => px.id)), [proxies]);
+  const unassignedProfiles = allProfiles.filter(p => !p.proxyId || !validProxyIds.has(p.proxyId));
 
   // Unique non-empty group names from ALL profiles (assigned or not)
   const allGroupNames = useMemo(() => {
@@ -402,26 +405,48 @@ export function ProxiesPage() {
     }
   };
 
-  const handleAutoLink = async () => {
-    setAutoLinking(true);
-    try {
-      const res = await apiRequest("POST", "/api/proxies/auto-link");
-      const { linked, created, skipped } = await res.json();
-      await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/proxies"] });
-      const parts: string[] = [];
-      if (linked > 0) parts.push(`${linked} ${linked === 1 ? "account" : "accounts"} linked`);
-      if (created > 0) parts.push(`${created} new ${created === 1 ? "proxy" : "proxies"} created`);
-      toast({
-        title: parts.length > 0 ? parts.join(", ") : "Nothing to link",
-        description: parts.length > 0
-          ? "All accounts with proxy data are now linked to Proxy Manager entries."
-          : `${skipped} ${skipped === 1 ? "account" : "accounts"} already had proxies or had no proxy data.`,
+  const handlePasteImport = async () => {
+    const lines = pasteRaw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) {
+      toast({ title: "Nothing to import", description: "Paste at least one proxy line.", variant: "destructive" });
+      return;
+    }
+    const parsed: { host: string; port: number; username: string | null; password: string | null }[] = [];
+    const bad: string[] = [];
+    for (const line of lines) {
+      const parts = line.split(":");
+      if (parts.length < 2) { bad.push(line); continue; }
+      const port = Number(parts[1]);
+      if (!parts[0] || isNaN(port) || port < 1 || port > 65535) { bad.push(line); continue; }
+      parsed.push({
+        host: parts[0].trim(),
+        port,
+        username: parts[2]?.trim() || null,
+        password: parts[3]?.trim() || null,
       });
+    }
+    if (!parsed.length) {
+      toast({ title: "No valid proxies found", description: `Expected format: ip:port or ip:port:user:pass`, variant: "destructive" });
+      return;
+    }
+    setPasteImporting(true);
+    try {
+      const res = await apiRequest("POST", "/api/proxies/import", { proxies: parsed });
+      const { imported, skipped } = await res.json();
+      await queryClient.invalidateQueries({ queryKey: ["/api/proxies"] });
+      toast({
+        title: `Imported ${imported} ${imported === 1 ? "proxy" : "proxies"}`,
+        description: [
+          skipped > 0 ? `${skipped} already existed and were skipped.` : null,
+          bad.length > 0 ? `${bad.length} line(s) could not be parsed.` : null,
+        ].filter(Boolean).join(" ") || undefined,
+      });
+      setPasteRaw("");
+      setIsPasteImportOpen(false);
     } catch {
-      toast({ title: "Auto-link failed", variant: "destructive" });
+      toast({ title: "Import failed", variant: "destructive" });
     } finally {
-      setAutoLinking(false);
+      setPasteImporting(false);
     }
   };
 
@@ -648,6 +673,31 @@ export function ProxiesPage() {
             </form>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={isPasteImportOpen} onOpenChange={open => { setIsPasteImportOpen(open); if (!open) setPasteRaw(""); }}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" className="gap-1.5 shrink-0">
+              <Upload className="w-4 h-4" /> Import Proxies
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Import Proxies</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-2">
+              <p className="text-sm text-muted-foreground">Paste one proxy per line. Supported formats:</p>
+              <pre className="text-xs bg-muted rounded px-3 py-2 font-mono">ip:port{"\n"}ip:port:username:password</pre>
+              <textarea
+                className="w-full h-48 rounded border border-border bg-background px-3 py-2 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder={"37.97.115.122:29842:afitne:1j3mz6nJ\n37.97.112.154:29842:afitne:1j3mz6nJ"}
+                value={pasteRaw}
+                onChange={e => setPasteRaw(e.target.value)}
+                disabled={pasteImporting}
+              />
+              <Button className="w-full" onClick={handlePasteImport} disabled={pasteImporting || !pasteRaw.trim()}>
+                {pasteImporting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : "Import"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* ── Main card ──────────────────────────────────────────────────────── */}
@@ -812,15 +862,6 @@ export function ProxiesPage() {
 
         {/* Bottom toolbar */}
         <div className="flex items-center gap-2 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0 flex-wrap">
-          <button
-            onClick={handleAutoLink}
-            disabled={autoLinking}
-            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap disabled:opacity-50"
-          >
-            {autoLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-            {autoLinking ? "Linking…" : "Auto-link"}
-          </button>
-          <span className="text-border">|</span>
           <button
             onClick={handlePingAll}
             disabled={pingingAll || !proxies.length}

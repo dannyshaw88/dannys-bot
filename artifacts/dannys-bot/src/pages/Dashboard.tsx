@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.496",
+    date: "23 May 2026",
+    items: [
+      { category: "Improvement", text: "Import Proxies button added next to Add Proxy — paste a list of proxies in ip:port or ip:port:username:password format to bulk import them instantly." },
+      { category: "Fix", text: "Accounts cleared of their proxy now correctly appear as unassigned in the Proxy Manager, so the Split function can assign them to proxies again." },
+      { category: "Fix", text: "Deleting a proxy now automatically clears the proxy assignment from all accounts that were using it." },
+      { category: "Removed", text: "Auto-link button removed from the Proxy Manager." },
+    ],
+  },
+  {
     version: "1.0.495",
     date: "23 May 2026",
     items: [
