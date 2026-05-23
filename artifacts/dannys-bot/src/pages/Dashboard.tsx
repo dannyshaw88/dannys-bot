@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.481",
+    date: "23 May 2026",
+    items: [
+      { category: "New", text: "Use Hotspot — tick the checkbox on any account and its traffic will automatically route through your phone's mobile data via USB tethering, leaving your main internet connection completely untouched." },
+      { category: "New", text: "The Proxy Settings panel now shows a USB adapter picker when Use Hotspot is on — detected adapters are listed with Start/Stop relay buttons so you can confirm which phone connection is active before running." },
+      { category: "New", text: "The relay starts automatically when the automation engine runs a hotspot-enabled account, so no manual setup is needed beyond ticking the checkbox and plugging in the phone." },
+    ],
+  },
+  {
     version: "1.0.480",
     date: "23 May 2026",
     items: [

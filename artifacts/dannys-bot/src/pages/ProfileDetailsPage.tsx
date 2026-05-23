@@ -225,6 +225,142 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
   );
 }
 
+// ── Hotspot adapter picker ────────────────────────────────────────────────
+type AdapterInfo = { name: string; ip: string; score: number };
+type RelayInfo = { bindIp: string; port: number; refCount: number };
+
+function HotspotAdapterPicker({ profileId }: { profileId: string | number }) {
+  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
+  const [relays, setRelays] = useState<RelayInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    try {
+      const [aRes, rRes] = await Promise.all([
+        fetch("/api/hotspot/adapters"),
+        fetch("/api/hotspot/relay/status"),
+      ]);
+      const aData = await aRes.json();
+      const rData = await rRes.json();
+      setAdapters(aData.adapters ?? []);
+      setRelays(rData.relays ?? []);
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load adapters");
+    }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const handleStartRelay = async (ip: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/hotspot/relay/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bindIp: ip }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to start relay");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStopRelay = async (ip: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/hotspot/relay/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bindIp: ip }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to stop relay");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const activeRelay = relays[0];
+  const topAdapter = adapters[0];
+
+  return (
+    <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Wifi className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">USB Hotspot Relay</span>
+        </div>
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={refresh}>
+          <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
+
+      {adapters.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No USB-tethered adapter detected. Connect your phone via USB and enable USB tethering on the phone.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {adapters.map((a) => {
+            const relay = relays.find(r => r.bindIp === a.ip);
+            return (
+              <div key={a.ip} className="flex items-center justify-between gap-2 rounded-md bg-background border border-border px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate">{a.name}</p>
+                  <p className="text-xs text-muted-foreground">{a.ip}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {relay ? (
+                    <>
+                      <span className="text-xs text-green-600 font-medium">Port {relay.port}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={loading}
+                        onClick={() => handleStopRelay(a.ip)}
+                      >
+                        Stop
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      disabled={loading}
+                      onClick={() => handleStartRelay(a.ip)}
+                    >
+                      Start relay
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Traffic for this account will route through the phone's mobile data connection.
+      </p>
+    </div>
+  );
+}
+
 export function ProfileDetailsPage() {
   const params = useParams();
   const profileId = Number(params.id);
@@ -479,6 +615,8 @@ export function ProfileDetailsPage() {
         syncIntervalMin: profile.syncIntervalMin ?? 60,
         syncIntervalMax: profile.syncIntervalMax ?? 120,
         syncUseHiker: profile.syncUseHiker ?? false,
+        // Hotspot
+        useHotspot: profile.useHotspot ?? false,
       });
     }
   }, [profile]);
@@ -1125,9 +1263,20 @@ export function ProfileDetailsPage() {
                   </div>
 
                   <div className="space-y-3 pt-4 border-t border-border mt-4">
-                    <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold flex items-center gap-2"><Globe className="w-4 h-4 text-primary" /> Proxy Settings</h4>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <Checkbox
+                          checked={!!formData.useHotspot}
+                          onCheckedChange={(checked) => updateField({ useHotspot: !!checked })}
+                        />
+                        <span className="text-xs font-medium text-muted-foreground">Use Hotspot</span>
+                      </label>
+                    </div>
 
-                    {(() => {
+                    {formData.useHotspot ? (
+                      <HotspotAdapterPicker profileId={profileId} />
+                    ) : (() => {
                       const linked = proxies?.find(p => p.id === profile.proxyId);
                       if (linked) {
                         return (

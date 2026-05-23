@@ -56,6 +56,7 @@ import {
 import { automationEngine } from "../instagram/automationEngine";
 import { MOBILE_VERSION_CODE } from "../instagram/instagramWebClient";
 import { userAgents as UA_POOL } from "../shared/userAgents";
+import * as hotspotRelay from "../mobile/hotspotRelay";
 
 // ── Deterministic UA picker ─────────────────────────────────────────────────
 // Picks a paired { api, embedded } UA from the pool based on the account's
@@ -141,6 +142,40 @@ export async function registerInstagramRoutes(
   storage.resetStuckVerifyingAccounts().catch(() => {});
 
   automationEngine.start();
+
+  // ── Hotspot relay ────────────────────────────────────────────────────────
+  app.get("/api/hotspot/adapters", (_req, res) => {
+    try {
+      const adapters = hotspotRelay.listAdapters();
+      res.json({ adapters });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Failed to list adapters" });
+    }
+  });
+
+  app.post("/api/hotspot/relay/start", async (req, res) => {
+    try {
+      const { bindIp } = z.object({ bindIp: z.string().min(1) }).parse(req.body);
+      const port = await hotspotRelay.startRelay(bindIp);
+      res.json({ ok: true, bindIp, port });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, error: e?.message ?? "Failed to start relay" });
+    }
+  });
+
+  app.post("/api/hotspot/relay/stop", (req, res) => {
+    try {
+      const { bindIp } = z.object({ bindIp: z.string().min(1) }).parse(req.body);
+      hotspotRelay.releaseRelay(bindIp);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, error: e?.message ?? "Failed to stop relay" });
+    }
+  });
+
+  app.get("/api/hotspot/relay/status", (_req, res) => {
+    res.json({ relays: hotspotRelay.getAllRelays() });
+  });
 
   // Proxies
   app.get(api.proxies.list.path, async (_req, res) => {
@@ -377,7 +412,14 @@ export async function registerInstagramRoutes(
         console.warn(`[status-guard] BLOCKED attempt to set profile ${id} → "pending" via PATCH route (current: ${current.accountStatus})`);
         delete body.accountStatus;
       }
-      if ("username" in body || "password" in body) {
+      // When the caller sets preserveAccountStatus=true (e.g. Proxy Manager with
+      // "Keep accounts valid" checked), skip all status-changing logic and restore
+      // the current status so it is never overwritten by this PATCH.
+      const preserveAccountStatus = !!body.preserveAccountStatus;
+      delete body.preserveAccountStatus;
+      if (preserveAccountStatus) {
+        delete body.accountStatus;
+      } else if ("username" in body || "password" in body) {
         const usernameChanged = current && "username" in body && body.username !== current.username;
         const passwordChanged = current && "password" in body && body.password !== current.password;
         if (usernameChanged || passwordChanged) {

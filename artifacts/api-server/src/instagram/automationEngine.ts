@@ -22,6 +22,7 @@
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import { storage } from "../storage";
 import { InstagramWebClient } from "./instagramWebClient";
+import * as hotspotRelay from "../mobile/hotspotRelay";
 import { HikerApiClient } from "./hikerApiClient";
 import { alterJpegBuffer, type AlterationLevel } from "./imageAlteration";
 import type { ProxyConfig } from "./browserSession";
@@ -262,10 +263,11 @@ class AutomationEngine {
         const tools = await storage.getToolsByProfile(profile.id);
 
         // Never run automation without a proxy — skip entirely if none is assigned
+        // Exception: useHotspot accounts intentionally use direct connection
         const hasProxy = profile.proxyId
           ? true
           : !!(profile.proxyHost && profile.proxyPort);
-        if (!hasProxy) continue;
+        if (!hasProxy && !profile.useHotspot) continue;
 
         // Per-profile runImmediately flag:
         //   • App startup (initialized=false)     → always wait X-Y (runImmediately=false)
@@ -1505,6 +1507,19 @@ class AutomationEngine {
 
   // ── Proxy URL resolver ────────────────────────────────────────────────────
   private async buildProxyUrl(profile: Profile): Promise<string | undefined> {
+    // useHotspot: traffic routes through a relay bound to the tethered adapter
+    if (profile.useHotspot) {
+      const adapters = hotspotRelay.listAdapters();
+      // Pick the best candidate (highest score = most likely USB tethering adapter)
+      const bindIp = adapters[0]?.ip;
+      if (bindIp) {
+        // Ensure relay is running (startRelay is idempotent — reuses if already up)
+        const port = await hotspotRelay.startRelay(bindIp);
+        return `http://127.0.0.1:${port}`;
+      }
+      // No tethered adapter found — allow through with no proxy
+      return undefined;
+    }
     if (profile.proxyId) {
       const proxies = await storage.getProxies();
       const p = proxies.find(px => px.id === profile.proxyId);
@@ -1549,7 +1564,7 @@ class AutomationEngine {
   // ── Ensure logged-in client ───────────────────────────────────────────────
   private async ensureClient(profile: Profile, state: ProfileState): Promise<InstagramWebClient | null> {
     const proxyUrl = await this.buildProxyUrl(profile);
-    if (!proxyUrl) {
+    if (!proxyUrl && !profile.useHotspot) {
       console.error(`[engine] @${profile.username}: no proxy assigned — refusing to connect without proxy`);
       return null;
     }
