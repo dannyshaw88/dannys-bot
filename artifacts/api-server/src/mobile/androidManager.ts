@@ -423,17 +423,23 @@ export async function setDeviceProxy(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   if (proxy) {
-    const val = `${proxy.host}:${proxy.port}`;
-    spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "http_proxy", val], { encoding: "utf8", timeout: 5000 });
+    // Include credentials in the proxy URL so Android apps that honour the
+    // system proxy setting can authenticate automatically.  The format
+    // "user:pass@host:port" is recognised by Android's HttpURLConnection
+    // and by apps using the system WebView (including Instagram on LDPlayer).
+    const val = (proxy.user && proxy.pass)
+      ? `${proxy.user}:${proxy.pass}@${proxy.host}:${proxy.port}`
+      : `${proxy.host}:${proxy.port}`;
+    const r1 = spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "http_proxy", val], { encoding: "utf8", timeout: 8000 });
+    if ((r1.status ?? 0) !== 0) throw new Error(`ADB proxy set failed: ${(r1.stderr || r1.stdout || "unknown").trim()}`);
     spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "https_proxy", val], { encoding: "utf8", timeout: 5000 });
-    if (proxy.user && proxy.pass) {
-      spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "http_proxy_user", proxy.user], { encoding: "utf8", timeout: 5000 });
-      spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "http_proxy_pass", proxy.pass], { encoding: "utf8", timeout: 5000 });
-    }
   } else {
     spawnSync(adb, ["-s", serial, "shell", "settings", "delete", "global", "http_proxy"], { encoding: "utf8", timeout: 5000 });
     spawnSync(adb, ["-s", serial, "shell", "settings", "delete", "global", "https_proxy"], { encoding: "utf8", timeout: 5000 });
   }
+  // Broadcast PROXY_CHANGE so apps already running pick up the new setting
+  // without needing a restart (equivalent to what Android Settings does).
+  spawnSync(adb, ["-s", serial, "shell", "am", "broadcast", "-a", "android.intent.action.PROXY_CHANGE"], { encoding: "utf8", timeout: 5000 });
 }
 
 export async function stopEmulator(serial: string): Promise<void> {

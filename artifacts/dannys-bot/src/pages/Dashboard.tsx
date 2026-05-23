@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.475",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Fix ABD now works on accounts with a hard session block (logout reason 8) — it performs a fresh login, catches the automated behaviour checkpoint, and dismisses it automatically using the stored password." },
+      { category: "Fixed", text: "Spoof ID in Create & Spoof no longer stays stuck on Reading — it now shows Not Set when no ID is stored and only shows Reading while it is actually loading." },
+      { category: "Fixed", text: "Apply Proxy to LDPlayer now sends the username and password along with the host and port, and broadcasts the change so Instagram picks it up immediately without needing a restart." },
+    ],
+  },
+  {
     version: "1.0.471",
     date: "23 May 2026",
     items: [

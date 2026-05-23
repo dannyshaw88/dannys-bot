@@ -74,7 +74,7 @@ function useAndroidId(serial: string) {
     const { androidId } = await api<{ androidId: string }>("POST", "/api/mobile/android-id/random");
     setEditing(androidId);
   };
-  return { androidId: q.data?.androidId ?? null, editing, setEditing, setMut, randomize };
+  return { androidId: q.data?.androidId ?? null, isLoading: q.isLoading, editing, setEditing, setMut, randomize };
 }
 
 // ─── Card colours ─────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ function DeviceCard({ device, idx, selected, proxies, savedProxyId, savedSourceI
               </div>
             ) : (
               <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                <span className="font-mono text-xs text-foreground/80 truncate flex-1">{id.androidId ?? <span className="italic text-muted-foreground">Reading…</span>}</span>
+                <span className="font-mono text-xs text-foreground/80 truncate flex-1">{id.isLoading ? <span className="italic text-muted-foreground">Reading…</span> : (id.androidId ?? <span className="italic text-muted-foreground">Not set</span>)}</span>
                 {id.androidId && <button onClick={() => navigator.clipboard.writeText(id.androidId!).then(() => toast({ title: "Copied" }))} className="p-0.5 shrink-0"><Copy className="w-3 h-3 text-muted-foreground hover:text-primary" /></button>}
                 <button onClick={e => { e.stopPropagation(); id.setEditing(id.androidId ?? ""); }} className="p-0.5 shrink-0"><Settings className="w-3 h-3 text-muted-foreground hover:text-primary" /></button>
                 <button title="Randomize" onClick={async e => { e.stopPropagation(); await id.randomize(); }} className="p-0.5 shrink-0"><Shuffle className="w-3 h-3 text-muted-foreground hover:text-primary" /></button>

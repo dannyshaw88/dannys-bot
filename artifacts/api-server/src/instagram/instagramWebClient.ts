@@ -57,7 +57,7 @@ import * as zlib from "zlib";
 import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes, constants as cryptoConstants } from "crypto";
 import { generateSync as totpGenerate } from "otplib";
 import { userAgents as UA_POOL } from "../shared/userAgents";
-import { IgApiClient, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
+import { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
 
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
 function httpsRequest(
@@ -346,6 +346,8 @@ export class InstagramWebClient {
   // Set by _mobileLogin when the failure is definitively bad credentials so
   // ensureClient can propagate the status to the DB without guessing.
   lastMobileLoginFailureReason: "bad_password" | null = null;
+  // Exposed so callers can set an account username for log messages.
+  username?: string;
 
   // Last feedback_required response body received from any mobileSessionPost call.
   // Stored so tryDismissABD() can extract the challenge_url without needing it passed in.
@@ -3089,11 +3091,12 @@ export class InstagramWebClient {
         } catch { /* ignore */ }
       }
 
-      // ── qe/dismiss_automatic_behaviour ─────────────────────────────────
-      // This is the endpoint Jarvee calls as "dismissAutomaticBehaviour".
-      // Reverse-engineered from Android app traffic — lives under /qe/ (not
-      // /users/ or /accounts/ which all return 404).
-      // Body: _uuid, _uid, _csrftoken, device_id
+      // ── /api/v1/users/self/banner_dismiss/ ─────────────────────────────
+      // This is the real endpoint the native Instagram Android app POSTs to
+      // when the user taps "OK / Dismiss" on the "Automated Behaviour Detected"
+      // interstitial banner. Confirmed via Android traffic capture — the
+      // /qe/dismiss_automatic_behaviour/ path returns 404 HTML (doesn't exist).
+      // Body: standard identity params (_uuid, _uid, _csrftoken)
       try {
         const body = new URLSearchParams({
           _uuid: uuid,
@@ -3101,8 +3104,8 @@ export class InstagramWebClient {
           _csrftoken: csrf,
           device_id: deviceId || uuid,
         }).toString();
-        const r = await this.mobileSessionPost("/api/v1/qe/dismiss_automatic_behaviour/", body);
-        console.log(`[webClient] @${this.username} ABD dismiss: qe/dismiss_automatic_behaviour → ${JSON.stringify(r)?.slice(0, 300)}`);
+        const r = await this.mobileSessionPost("/api/v1/users/self/banner_dismiss/", body);
+        console.log(`[webClient] @${this.username} ABD dismiss: users/self/banner_dismiss → ${JSON.stringify(r)?.slice(0, 300)}`);
         if (r?.status === "ok") {
           const lifted = await this._probeABD403Lifted();
           if (lifted) return true;
@@ -3111,13 +3114,136 @@ export class InstagramWebClient {
           return await this._probeABD403Lifted();
         }
       } catch (e: any) {
-        console.warn(`[webClient] @${this.username} ABD dismiss: qe/dismiss_automatic_behaviour exception: ${e?.message}`);
+        console.warn(`[webClient] @${this.username} ABD dismiss: users/self/banner_dismiss exception: ${e?.message}`);
       }
 
       // ── Final probe ───────────────────────────────────────────────────
       return await this._probeABD403Lifted();
     } finally {
       this._abdDismissInProgress = false;
+    }
+  }
+
+  /**
+   * Path C ABD dismiss — for hard logout_reason:8 blocks where the session is
+   * fully revoked and no feedback_required challenge URL is available via probes.
+   *
+   * Performs a fresh IgApiClient mobile login (bypassing the igApiCookies fast-path)
+   * using the stored device fingerprint. When the account has an ABD checkpoint,
+   * Instagram returns IgCheckpointError during login — we extract the challenge URL
+   * and dismiss it with choice=0 (the same path SuSocial uses). If login succeeds
+   * outright the ABD was already cleared and we save the new session.
+   */
+  async dismissABD_freshLogin(username: string, password: string): Promise<boolean> {
+    if (!password) return false;
+    this._abdDismissInProgress = false;
+
+    const ig = newIgClient();
+    const deviceSeed = (this.userAgentApi ?? username) + "|" + username;
+    if (this.igDeviceState) {
+      try {
+        const saved = JSON.parse(this.igDeviceState);
+        ig.state.generateDevice(deviceSeed);
+        if (saved.deviceId)     ig.state.deviceId     = saved.deviceId;
+        if (saved.uuid)         ig.state.uuid         = saved.uuid;
+        if (saved.phoneId)      ig.state.phoneId      = saved.phoneId;
+        if (saved.adid)         ig.state.adid         = saved.adid;
+        if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+      } catch {
+        ig.state.generateDevice(deviceSeed);
+        if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
+      }
+    } else {
+      ig.state.generateDevice(deviceSeed);
+      if (this.userAgentApi) ig.state.deviceString = this.userAgentApi;
+    }
+
+    {
+      const m = (this.userAgentApi ?? "").match(/^Instagram ([\d.]+) Android \(([^)]+)\)/);
+      let version = MOBILE_VERSION, versionCode = MOBILE_VERSION_CODE;
+      if (m) {
+        const parts = m[2].split(";");
+        const vc = parts[parts.length - 1].trim();
+        if (/^\d+$/.test(vc)) { version = m[1]; versionCode = vc; }
+      }
+      ig.state.constants.APP_VERSION      = version;
+      ig.state.constants.APP_VERSION_CODE = versionCode;
+      patchDeviceStringVersionCode(ig, versionCode);
+    }
+
+    if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+
+    try {
+      await ig.request.send({ method: "GET", url: "/api/v1/si/fetch_headers/", qs: { challenge_type: "signup", guid: ig.state.uuid } });
+    } catch { /* non-fatal */ }
+    if (!ig.state.passwordEncryptionPubKey) {
+      try { await ig.qe.syncLoginExperiments(); } catch { /* non-fatal */ }
+    }
+    if (!ig.state.passwordEncryptionPubKey) {
+      console.warn(`[webClient] @${username} ABD freshLogin: could not fetch encryption keys`);
+      return false;
+    }
+
+    console.log(`[webClient] @${username} ABD freshLogin: attempting fresh mobile login to surface checkpoint`);
+    try {
+      await ig.account.login(username, password);
+      // Login succeeded — ABD cleared. Extract and save the new session.
+      console.log(`[webClient] @${username} ABD freshLogin: login OK — ABD appears cleared, saving session`);
+      try {
+        const raw = await ig.state.serializeCookieJar();
+        const jar = typeof raw === "string" ? JSON.parse(raw) : raw;
+        const WANTED = new Set(["sessionid", "csrftoken", "ds_user_id", "rur", "mid", "ig_did"]);
+        const extracted: string[] = (jar.cookies ?? [])
+          .filter((c: any) => WANTED.has(c.key))
+          .map((c: any) => `${c.key}=${c.value}`);
+        if (extracted.some(c => c.startsWith("sessionid="))) {
+          this.mobileCookieJar = extracted;
+          const csrfEntry = extracted.find(c => c.startsWith("csrftoken="));
+          if (csrfEntry) this.mobileCsrf = csrfEntry.split("=").slice(1).join("=");
+          this.mobileSessionReady = true;
+        }
+      } catch { /* ignore cookie extraction error */ }
+      return true;
+    } catch (err: any) {
+      if (err instanceof IgCheckpointError) {
+        // Instagram requires the user to acknowledge the ABD checkpoint.
+        // IgCheckpointError.message is the full challenge URL:
+        //   "https://i.instagram.com/challenge/12345678/abcXYZ/"
+        const fullUrl: string = err.message ?? "";
+        const challengeUrl =
+          fullUrl.replace("https://i.instagram.com", "") ||
+          (err.response?.body?.challenge?.api_path as string | undefined) ||
+          (err.response?.body?.checkpoint_url as string | undefined) ||
+          "";
+        if (!challengeUrl) {
+          console.warn(`[webClient] @${username} ABD freshLogin: IgCheckpointError but no challenge URL — body: ${JSON.stringify(err.response?.body ?? {}).slice(0, 300)}`);
+          return false;
+        }
+        console.log(`[webClient] @${username} ABD freshLogin: checkpoint challenge_url="${challengeUrl}" — POSTing choice=0`);
+        let deviceId = "", guid = "";
+        if (this.igDeviceState) {
+          try { const ds = JSON.parse(this.igDeviceState); deviceId = ds.deviceId ?? ""; guid = ds.uuid ?? ""; } catch { /* ignore */ }
+        }
+        const body = new URLSearchParams({
+          challenge_url: challengeUrl,
+          choice: "0",
+          ...(deviceId ? { device_id: deviceId } : {}),
+          ...(guid     ? { guid }                : {}),
+        }).toString();
+        try {
+          const r = await this.mobileSessionPost("/api/v1/challenge/", body);
+          console.log(`[webClient] @${username} ABD freshLogin: challenge dismiss → ${JSON.stringify(r)?.slice(0, 300)}`);
+          if (r?.status === "ok" || r?.logged_in_user || r?.action === "close") {
+            await new Promise(res => setTimeout(res, 2000));
+            return await this._probeABD403Lifted();
+          }
+        } catch (ce: any) {
+          console.warn(`[webClient] @${username} ABD freshLogin: challenge dismiss error: ${ce?.message}`);
+        }
+        return false;
+      }
+      console.warn(`[webClient] @${username} ABD freshLogin: login error (${err?.constructor?.name}): ${String(err?.message ?? "").slice(0, 200)}`);
+      return false;
     }
   }
 
@@ -3153,23 +3279,63 @@ export class InstagramWebClient {
    */
   async probeAndDismissABD(): Promise<boolean> {
     if (!this._lastFeedbackResponse || this._lastFeedbackResponse.message !== "feedback_required") {
+      // Extract identity params needed for a valid qe/sync body.
+      // "No ID given" (400) is returned when the body is empty — the session
+      // itself IS accepted in ABD state (the probe doesn't 403), so sending
+      // the correct params will produce a feedback_required response that
+      // contains the challenge_url we need to dismiss with choice=0.
+      const cookieParts = (this.igApiCookies ?? "").split(";").map(s => s.trim());
+      const userId = cookieParts.find(c => c.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+      const cookieCsrf = cookieParts.find(c => c.startsWith("csrftoken="))?.split("=")[1] ?? "";
+      const csrf = this.mobileCsrf || cookieCsrf;
+      let uuid = "";
+      if (this.igDeviceState) {
+        try { uuid = JSON.parse(this.igDeviceState)?.uuid ?? ""; } catch { /* ignore */ }
+      }
+
+      // Probe 1: qe/sync with proper body — works in ABD state because qe/sync
+      // goes through a different auth gate than social endpoints.  ABD accounts
+      // get feedback_required (with challenge_url) rather than login_required.
       try {
-        // /api/v1/qe/sync/ is a lightweight POST that requires mobile auth.
-        // If the account is in ABD state Instagram returns feedback_required
-        // for all mobile API calls regardless of endpoint.
-        await this.mobileSessionPost("/api/v1/qe/sync/", "");
+        const syncBody = new URLSearchParams({
+          id: userId,
+          _uuid: uuid || userId,
+          _uid: userId,
+          _csrftoken: csrf,
+          experiments: "",
+          server_config_retrieval: "1",
+        }).toString();
+        console.log(`[webClient] @${this.username} ABD probe: qe/sync (id=${userId.slice(0, 6)}...)`);
+        await this.mobileSessionPost("/api/v1/qe/sync/", syncBody);
       } catch { /* ignore — we just want _lastFeedbackResponse populated */ }
+
+      // Probe 2: launcher/sync — another low-risk probe that also triggers
+      // feedback_required for ABD accounts and is accepted in ABD state.
+      if (!this._lastFeedbackResponse || this._lastFeedbackResponse.message !== "feedback_required") {
+        try {
+          const launchBody = new URLSearchParams({
+            id: userId,
+            _uuid: uuid || userId,
+            _uid: userId,
+            _csrftoken: csrf,
+            configs: "ig_android_felix_release_players,ig_android_ad_async_ads_universe",
+          }).toString();
+          console.log(`[webClient] @${this.username} ABD probe: launcher/sync`);
+          await this.mobileSessionPost("/api/v1/launcher/sync/", launchBody);
+        } catch { /* ignore */ }
+      }
     }
 
-    // Path A: feedback_required with challenge_url (standard ABD)
+    // Path A: feedback_required with challenge_url → dismiss via /api/v1/challenge/ choice=0
     if (this._lastFeedbackResponse?.message === "feedback_required") {
+      console.log(`[webClient] @${this.username} ABD: got feedback_required — trying tryDismissABD (challenge choice=0)`);
       const ok = await this.tryDismissABD();
       if (ok) return true;
     }
 
-    // Path B: 403 login_required pattern (no feedback_required in memory)
-    // tryDismissABD_loginRequired probes feed/timeline internally to confirm.
-    console.log(`[webClient] @${this.username} ABD: no feedback_required response — trying 403-pattern dismiss`);
+    // Path B: 403 login_required pattern (qe/sync probes didn't yield challenge_url)
+    // tryDismissABD_loginRequired tries the banner_dismiss endpoint as a last resort.
+    console.log(`[webClient] @${this.username} ABD: no feedback_required response from probes — trying 403-pattern dismiss`);
     return this.tryDismissABD_loginRequired();
   }
 
