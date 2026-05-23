@@ -90,12 +90,26 @@ let SERVER_START = new Date().toISOString();
 
 async function resolveProxyConfig(profile: {
   browserDirectConnection?: boolean | null;
+  useHotspot?: boolean | null;
   proxyId?: number | null;
   proxyHost?: string | null;
   proxyPort?: number | null;
   proxyUsername?: string | null;
   proxyPassword?: string | null;
 }): Promise<ProxyConfig | undefined> {
+  // Hotspot relay — traffic exits through the USB-tethered phone adapter.
+  // Must be checked before the proxy fields so the EB also routes through the phone.
+  if (profile.useHotspot) {
+    const adapters = hotspotRelay.listAdapters();
+    const bindIp = adapters[0]?.ip;
+    if (bindIp) {
+      const port = await hotspotRelay.startRelay(bindIp);
+      return { host: "127.0.0.1", port };
+    }
+    // No tethered adapter found — fall through to direct (no proxy)
+    return undefined;
+  }
+
   // Proxy assignment always wins — if an account has a proxy configured, use it.
   // browserDirectConnection is only respected when NO proxy is configured at all.
   if (profile.proxyId) {
@@ -1691,8 +1705,8 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.profileId);
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
-    // Block EB access when no proxy is assigned — accounts must have a proxy.
-    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+    // Block EB access when no proxy is assigned AND the account is not using the hotspot relay.
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort) || profile.useHotspot);
     if (!hasProxy) return res.status(403).json({ error: "No proxy assigned — assign a proxy to this account before using the embedded browser." });
     // ── UA BLOCK — per USER-AGENT RULE ─────────────────────────────────────────
     if (!profile.userAgentEmbedded) {
@@ -1910,7 +1924,7 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId).catch(() => null);
     if (!profile) { socket.destroy(); return; }
 
-    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));
+    const hasProxy = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort) || profile.useHotspot);
     if (!hasProxy) {
       // Send a WS close with an error message then destroy the socket
       wss.handleUpgrade(request, socket, head, (ws) => {

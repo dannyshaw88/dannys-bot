@@ -1188,8 +1188,8 @@ export function ProfileDetailsPage() {
                     {/* Computed identity chips — derived from the embedded UA seed */}
                     {formData.userAgentEmbedded && (() => {
                       const fp = computeFingerprint(formData.userAgentEmbedded, formData.userAgentApi);
-                      const battColor = fp.batteryPct > 60 ? "text-green-600" : fp.batteryPct > 30 ? "text-amber-600" : "text-red-600";
-                      const battBar   = fp.batteryPct > 60 ? "bg-green-400"  : fp.batteryPct > 30 ? "bg-amber-400"  : "bg-red-400";
+                      const battColor = fp.batteryPct > 25 ? "text-green-600" : fp.batteryPct > 5 ? "text-amber-600" : "text-red-600";
+                      const battBar   = fp.batteryPct > 25 ? "bg-green-400"  : fp.batteryPct > 5 ? "bg-amber-400"  : "bg-red-400";
                       const Chip = ({ icon: Icon, label, value, iconCls }: { icon: React.ElementType; label: string; value: string; iconCls?: string }) => (
                         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs">
                           <Icon className={`w-3 h-3 shrink-0 ${iconCls ?? "text-slate-500"}`} />

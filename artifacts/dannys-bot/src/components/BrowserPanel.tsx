@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ArrowLeft, ArrowRight, RotateCw, Home, Globe, Shield,
+  ChevronLeft, ChevronRight, RefreshCw, Home, Globe, Shield,
   Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -307,8 +307,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded }: Brows
         lastFrameTimeRef.current = Date.now();
         // Only flip state (→ React re-render) when actually transitioning out of frozen.
         if (isFrozenRef.current) { isFrozenRef.current = false; setIsFrozen(false); }
-        // Blank-white JPEG at quality 70 is ~5–8 KB. Real Instagram content is >10 KB.
-        if (!hasReceivedFirstFrameRef.current && evt.data.size > 10000) {
+        // Any blob frame — even a blank/white checkpoint page — counts as first frame.
+        // This ensures the "Starting browser…" overlay always clears the moment Chrome
+        // renders anything, including Instagram lock/challenge pages.
+        if (!hasReceivedFirstFrameRef.current) {
           hasReceivedFirstFrameRef.current = true;
           setWaitingFirstFrame(false);
           if (firstFrameFallbackRef.current) {
@@ -776,18 +778,18 @@ export function BrowserPanel({ profileId, userAgent, username, embedded }: Brows
           <Plus className="w-5 h-5" />
         </button>
         <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => send({ type: "back" })}    disabled={!connected} title="Back">
-          <ArrowLeft className="w-5 h-5" />
+          <ChevronLeft className="w-5 h-5" />
         </Button>
         <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => send({ type: "forward" })} disabled={!connected} title="Forward">
-          <ArrowRight className="w-5 h-5" />
+          <ChevronRight className="w-5 h-5" />
         </Button>
         <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0"
           onClick={() => { setIsLoading(true); send({ type: "reload" }); }} disabled={!connected} title="Refresh">
-          {isLoading && connected ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <RotateCw className="w-5 h-5" />}
+          {isLoading && connected ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <RefreshCw className="w-5 h-5" />}
         </Button>
         <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0"
           onClick={() => { setIsLoading(true); send({ type: "navigate", url: "https://www.instagram.com/" }); }}
-          disabled={!connected} title="Home">
+          disabled={!connected} title="Home (Instagram)">
           <Home className="w-5 h-5" />
         </Button>
 

@@ -1115,8 +1115,8 @@ export function ProfilesPage() {
                       const pct = fp?.batteryPct ?? null;
                       const chg = fp?.charging ?? false;
                       if (pct === null) return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0" />;
-                      const color = pct > 60 ? "text-green-600" : pct > 30 ? "text-amber-600" : "text-red-500";
-                      const barW  = pct > 60 ? "bg-green-400" : pct > 30 ? "bg-amber-400" : "bg-red-400";
+                      const color = pct > 25 ? "text-green-600" : pct > 5 ? "text-amber-600" : "text-red-500";
+                      const barW  = pct > 25 ? "bg-green-400" : pct > 5 ? "bg-amber-400" : "bg-red-400";
                       return (
                         <div key={key} style={{ width: profColWidths.battery }} className="shrink-0 flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
                           {chg

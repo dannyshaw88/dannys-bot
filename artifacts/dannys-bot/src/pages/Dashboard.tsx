@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.483",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser no longer gets stuck on the 'Starting browser...' spinner when Instagram shows a lock, checkpoint, or challenge page — the overlay now clears as soon as Chrome renders anything, even a blank white page." },
+      { category: "Improved", text: "Browser navigation buttons (back, forward, refresh, home) now use cleaner, crisper icons." },
+      { category: "Improved", text: "Battery percentage colour now only turns orange below 25% and red below 5%, so most accounts stay green throughout normal operation." },
+      { category: "Fix", text: "Hotspot accounts can now open the embedded browser and verify without being blocked by the 'no proxy assigned' guard — the relay is the proxy." },
+    ],
+  },
+  {
     version: "1.0.482",
     date: "23 May 2026",
     items: [
