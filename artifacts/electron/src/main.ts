@@ -756,6 +756,27 @@ function setupBackupHandlers() {
     }
   });
 
+  // open-signup-browser-window: open a native EB window for account creation.
+  // Proxy and UA are passed directly — no profile lookup needed.
+  ipcMain.handle("open-signup-browser-window", async (_event, { username, userAgent, proxyHost, proxyPort, proxyUsername, proxyPassword }: any) => {
+    try {
+      const proxy = proxyHost && proxyPort ? {
+        host: proxyHost,
+        port: Number(proxyPort),
+        user: proxyUsername || undefined,
+        pass: proxyPassword || undefined,
+      } : undefined;
+      await openEbWindow({
+        profileId: -1,
+        username: username || "Signup",
+        proxy,
+        userAgent,
+      });
+    } catch (err: any) {
+      console.error("[EB] open-signup-browser-window error:", err?.message);
+    }
+  });
+
   // focus-browser-window: bring an already-open native EB window to the front.
   ipcMain.handle("focus-browser-window", (_event, profileId: number) => {
     focusEbWindow(profileId);

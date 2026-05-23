@@ -637,7 +637,22 @@ export function CreateAccountApiPage() {
   const selectedDevice = UA_POOL.find(d => d.api === userAgentApi) ?? UA_POOL[0];
   const ebUA = selectedDevice.embedded;
 
+  const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
+
   const handleOpenBrowser = useCallback(async () => {
+    if (IS_ELECTRON) {
+      // Native Electron path — opens a real Chrome window exactly like the Accounts EB.
+      (window as any).electronAPI.openSignupBrowserWindow({
+        username:      "Signup Browser",
+        userAgent:     ebUA,
+        proxyHost:     selectedProxy?.host,
+        proxyPort:     selectedProxy?.port,
+        proxyUsername: selectedProxy?.username ?? undefined,
+        proxyPassword: selectedProxy?.password ?? undefined,
+      });
+      return;
+    }
+    // Non-Electron (dev/web) path — stream via Puppeteer WebSocket.
     setEbOpening(true);
     try {
       await fetch("/api/signup/browser/open", {
@@ -654,14 +669,17 @@ export function CreateAccountApiPage() {
     } catch {}
     setEbOpening(false);
     setEbPanelOpen(true);
-  }, [selectedProxy, ebUA]);
+  }, [IS_ELECTRON, selectedProxy, ebUA]);
 
   const handleResetBrowser = useCallback(async () => {
+    if (IS_ELECTRON) {
+      return;
+    }
     setEbResetBusy(true);
     try { await fetch("/api/signup/browser/reset", { method: "POST" }); } catch {}
     setEbResetBusy(false);
     setEbPanelOpen(false);
-  }, []);
+  }, [IS_ELECTRON]);
 
   const deviceLabel = (() => {
     const parts = userAgentApi.split(";").map(s => s.trim());

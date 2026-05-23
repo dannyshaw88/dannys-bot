@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.494",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Signup browser now opens a proper native Chrome window exactly like the Accounts EB — no streaming, no workarounds, just the real thing." },
+    ],
+  },
+  {
     version: "1.0.493",
     date: "23 May 2026",
     items: [

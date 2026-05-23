@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("backup-schedule-update", { enabled, intervalDays }),
   openBrowserWindow: (profileId: number, username: string, userAgent: string) =>
     ipcRenderer.invoke("open-browser-window", { profileId, username, userAgent }),
+  openSignupBrowserWindow: (opts: { username?: string; userAgent?: string; proxyHost?: string; proxyPort?: number; proxyUsername?: string; proxyPassword?: string }) =>
+    ipcRenderer.invoke("open-signup-browser-window", opts),
   openCsvTemp: (args: { content: string; filename: string }) =>
     ipcRenderer.invoke("open-csv-temp", args),
   pickEqxFolder: () =>
