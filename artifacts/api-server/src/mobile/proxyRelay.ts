@@ -7,10 +7,12 @@
  * gets a 407, so traffic silently falls back to a direct connection.
  *
  * Solution: for each device we start a lightweight TCP server on the Windows
- * host (0.0.0.0:random).  Android's system proxy is pointed at
- * <gateway-ip>:<relay-port> (no credentials).  The relay forwards every
- * request to the real upstream, injecting the Proxy-Authorization header
- * automatically.  Both CONNECT (HTTPS tunnels) and plain HTTP are supported.
+ * host (127.0.0.1:random) and register an ADB reverse port-forward so that
+ * Android's own localhost:PORT connects back through the ADB tunnel to the
+ * host relay — no Windows Firewall rules needed.  Android is pointed at
+ * 127.0.0.1:<relay-port> (no credentials).  The relay forwards every request
+ * to the real upstream, injecting Proxy-Authorization automatically.  Both
+ * CONNECT (HTTPS tunnels) and plain HTTP are supported.
  */
 
 import * as net from "net";
@@ -41,7 +43,7 @@ export async function startRelay(serial: string, upstream: Upstream): Promise<nu
   server.on("error", () => {});
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(0, "0.0.0.0", () => resolve());
+    server.listen(0, "127.0.0.1", () => resolve());
     server.once("error", reject);
   });
 

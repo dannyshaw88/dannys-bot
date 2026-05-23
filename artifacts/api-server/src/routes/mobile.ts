@@ -230,7 +230,7 @@ export function registerMobileRoutes(app: Express) {
       const proxy = proxies.find(pr => pr.id === proxyId);
       if (!proxy) return res.status(404).json({ ok: false, error: "Proxy not found" });
 
-      // Start (or restart) the local relay for this device
+      // Start (or restart) the local relay on 127.0.0.1 (localhost only)
       const relayPort = await proxyRelay.startRelay(serial, {
         host: proxy.host,
         port: proxy.port,
@@ -238,13 +238,14 @@ export function registerMobileRoutes(app: Express) {
         pass: proxy.password ?? undefined,
       });
 
-      // Detect the host machine's IP as seen from inside Android
-      const gatewayIp = await android.getGatewayIp(serial);
+      // Register adb reverse so Android's localhost:relayPort tunnels through
+      // the ADB connection to the host relay — no Windows Firewall rules needed.
+      android.adbReverse(serial, relayPort);
 
-      // Point Android at the relay — no credentials needed on the device side
-      await android.setDeviceProxy(serial, { host: gatewayIp, port: relayPort });
+      // Point Android at its own loopback — the ADB tunnel does the rest
+      await android.setDeviceProxy(serial, { host: "127.0.0.1", port: relayPort });
 
-      res.json({ ok: true, message: `Relay ${gatewayIp}:${relayPort} → ${proxy.host}:${proxy.port} applied` });
+      res.json({ ok: true, message: `Relay (adb reverse :${relayPort}) → ${proxy.host}:${proxy.port} applied` });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message ?? "Apply proxy failed" });
     }
@@ -514,7 +515,8 @@ export function registerMobileRoutes(app: Express) {
       // 3. Clear proxy from the device's global settings
       await android.setDeviceProxy(serial, null);
 
-      // 4. Stop the relay and remove proxy assignment from instance config
+      // 4. Stop the relay, remove adb reverse tunnel, and clear instance config
+      android.adbReverseRemove(serial);
       proxyRelay.stopRelayForDevice(serial);
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], proxyId: null };
@@ -555,7 +557,8 @@ export function registerMobileRoutes(app: Express) {
       await android.setDeviceProxy(serial, null);
       steps.push("✓ Proxy cleared");
 
-      // 4. Stop relay and clear instance config
+      // 4. Stop relay, remove adb reverse tunnel, and clear instance config
+      android.adbReverseRemove(serial);
       proxyRelay.stopRelayForDevice(serial);
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], proxyId: null, proxyPort: null, proxyProtocol: null as any };

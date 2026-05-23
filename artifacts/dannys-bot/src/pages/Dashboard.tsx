@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.480",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Apply Proxy to LDPlayer now routes through an ADB reverse tunnel instead of a direct network connection — eliminating the need to detect the gateway IP and removing any dependency on Windows Firewall rules." },
+      { category: "Fixed", text: "ADB commands (device list, android ID, proxy set, package check) are no longer blocking — they were freezing the entire app for 5–40 seconds at a time. They now run asynchronously so Instagram automation and all other activity continues normally while ADB is waiting." },
+    ],
+  },
+  {
     version: "1.0.479",
     date: "23 May 2026",
     items: [

@@ -1,8 +1,38 @@
-import { spawn, spawnSync, ChildProcess } from "child_process";
+import { spawn, spawnSync, execFile, ChildProcess } from "child_process";
+import { promisify } from "util";
 import path from "path";
 import fs from "fs";
 import os from "os";
 import { logger } from "../lib/logger";
+
+const execFileP = promisify(execFile);
+
+/**
+ * Non-blocking ADB runner. Returns stdout on success OR on timeout/error
+ * (empty string), never throws. Keeps the event loop free — unlike spawnSync.
+ */
+async function runAdb(adbPath: string, args: string[], timeoutMs = 8000): Promise<string> {
+  try {
+    const { stdout } = await execFileP(adbPath, args, { encoding: "utf8", timeout: timeoutMs } as any);
+    return (stdout as string) ?? "";
+  } catch (e: any) {
+    return (e.stdout as string | undefined) ?? "";
+  }
+}
+
+/**
+ * Non-blocking ADB runner that throws on non-zero exit or timeout.
+ */
+async function runAdbStrict(adbPath: string, args: string[], timeoutMs = 8000): Promise<string> {
+  try {
+    const { stdout } = await execFileP(adbPath, args, { encoding: "utf8", timeout: timeoutMs } as any);
+    return (stdout as string) ?? "";
+  } catch (e: any) {
+    if (e.killed || e.signal) throw new Error(`adb timed out (args: ${args.slice(0, 3).join(" ")})`);
+    const msg = ((e.stderr as string | undefined) || (e.stdout as string | undefined) || "unknown").trim();
+    throw new Error(msg || `adb exited with code ${e.code}`);
+  }
+}
 
 export type ToolStatus = {
   found: boolean;
@@ -260,15 +290,16 @@ function requireTool(t: ToolStatus, name: string): string {
 export async function listAvds(): Promise<string[]> {
   const tools = detectToolset();
   if (!tools.emulator.found || !tools.emulator.path) return [];
-  const r = spawnSync(tools.emulator.path, ["-list-avds"], { encoding: "utf8", timeout: 8000 });
-  return (r.stdout || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const stdout = await runAdb(tools.emulator.path, ["-list-avds"], 8000);
+  return stdout.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 }
 
 export async function listDevices(): Promise<DeviceInfo[]> {
   const tools = detectToolset();
   if (!tools.adb.found || !tools.adb.path) return [];
-  const r = spawnSync(tools.adb.path, ["devices", "-l"], { encoding: "utf8", timeout: 8000 });
-  const lines = (r.stdout || "").split(/\r?\n/).slice(1);
+  const adb = tools.adb.path;
+  const stdout = await runAdb(adb, ["devices", "-l"], 8000);
+  const lines = stdout.split(/\r?\n/).slice(1);
   const out: DeviceInfo[] = [];
   for (const line of lines) {
     const s = line.trim();
@@ -281,11 +312,9 @@ export async function listDevices(): Promise<DeviceInfo[]> {
       if (m) (dev as any)[m[1]] = m[2];
     }
     if (dev.serial.startsWith("emulator-")) {
-      try {
-        const ar = spawnSync(tools.adb.path, ["-s", dev.serial, "emu", "avd", "name"], { encoding: "utf8", timeout: 4000 });
-        const first = (ar.stdout || "").split(/\r?\n/)[0]?.trim();
-        if (first) dev.avdName = first;
-      } catch { /* ignore */ }
+      const avdOut = await runAdb(adb, ["-s", dev.serial, "emu", "avd", "name"], 4000);
+      const first = avdOut.split(/\r?\n/)[0]?.trim();
+      if (first) dev.avdName = first;
     }
     out.push(dev);
   }
@@ -305,31 +334,50 @@ export async function getAvdInfo(): Promise<AvdInfo[]> {
 // Instagram uses android_id + advertising ID to fingerprint devices; setting a
 // unique android_id per instance gives each emulator a distinct identity.
 
+/**
+ * adb reverse tcp:PORT tcp:PORT
+ * Makes Android's localhost:PORT tunnel through ADB to the host's localhost:PORT.
+ * This is how the proxy relay is reached without any Windows Firewall rules.
+ */
+export async function adbReverse(serial: string, port: number): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  await runAdbStrict(adb, ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`], 8000);
+}
+
+/**
+ * Remove a specific adb reverse rule, or all rules if port is not given.
+ * Called on proxy clear / reset / deep-reset.
+ */
+export async function adbReverseRemove(serial: string, port?: number): Promise<void> {
+  const tools = detectToolset();
+  if (!tools.adb.found || !tools.adb.path) return;
+  const args = port
+    ? ["-s", serial, "reverse", "--remove", `tcp:${port}`]
+    : ["-s", serial, "reverse", "--remove-all"];
+  await runAdb(tools.adb.path, args, 5000);
+}
+
 export async function getAndroidId(serial: string): Promise<string | null> {
   const tools = detectToolset();
   if (!tools.adb.found || !tools.adb.path) return null;
-  const r = spawnSync(tools.adb.path, ["-s", serial, "shell", "settings", "get", "secure", "android_id"], {
-    encoding: "utf8", timeout: 5000,
-  });
-  const val = (r.stdout || "").trim();
+  const stdout = await runAdb(
+    tools.adb.path,
+    ["-s", serial, "shell", "settings", "get", "secure", "android_id"],
+    5000,
+  );
+  const val = stdout.trim();
   return val && val !== "null" ? val : null;
 }
 
 export async function setAndroidId(serial: string, id: string): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  // Try direct settings put first (works on most emulators without root)
-  const r = spawnSync(adb, ["-s", serial, "shell", "settings", "put", "secure", "android_id", id], {
-    encoding: "utf8", timeout: 10000,
-  });
-  // r.status is null when spawnSync kills the process due to timeout (signal is set instead)
-  if (r.error || r.signal || (r.status !== null && r.status !== 0)) {
-    throw new Error(
-      r.signal ? `adb timed out setting android_id (signal: ${r.signal})` :
-      r.error ? `adb error: ${r.error.message}` :
-      `Could not set android_id: ${r.stderr || r.stdout || "adb error"}`
-    );
-  }
+  await runAdbStrict(
+    adb,
+    ["-s", serial, "shell", "settings", "put", "secure", "android_id", id],
+    10000,
+  );
 }
 
 export function randomAndroidId(): string {
@@ -432,16 +480,17 @@ export async function setDeviceProxy(
     // cannot be embedded in this field.  Using any other format (e.g. user:pass@host:port)
     // silently breaks the setting and traffic bypasses the proxy entirely.
     const val = `${proxy.host}:${proxy.port}`;
-    const r1 = spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "http_proxy", val], { encoding: "utf8", timeout: 8000 });
-    if ((r1.status ?? 0) !== 0) throw new Error(`ADB proxy set failed: ${(r1.stderr || r1.stdout || "unknown").trim()}`);
-    spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "https_proxy", val], { encoding: "utf8", timeout: 5000 });
+    await runAdbStrict(adb, ["-s", serial, "shell", "settings", "put", "global", "http_proxy", val], 8000);
+    await runAdb(adb, ["-s", serial, "shell", "settings", "put", "global", "https_proxy", val], 5000);
   } else {
-    spawnSync(adb, ["-s", serial, "shell", "settings", "delete", "global", "http_proxy"], { encoding: "utf8", timeout: 5000 });
-    spawnSync(adb, ["-s", serial, "shell", "settings", "delete", "global", "https_proxy"], { encoding: "utf8", timeout: 5000 });
+    await Promise.all([
+      runAdb(adb, ["-s", serial, "shell", "settings", "delete", "global", "http_proxy"], 5000),
+      runAdb(adb, ["-s", serial, "shell", "settings", "delete", "global", "https_proxy"], 5000),
+    ]);
   }
   // Broadcast PROXY_CHANGE so apps already running pick up the new setting
   // without needing a restart (equivalent to what Android Settings does).
-  spawnSync(adb, ["-s", serial, "shell", "am", "broadcast", "-a", "android.intent.action.PROXY_CHANGE"], { encoding: "utf8", timeout: 5000 });
+  await runAdb(adb, ["-s", serial, "shell", "am", "broadcast", "-a", "android.intent.action.PROXY_CHANGE"], 5000);
 }
 
 export async function stopEmulator(serial: string): Promise<void> {
@@ -513,8 +562,8 @@ export async function uninstallPackage(serial: string, pkg: string): Promise<voi
 export async function isPackageInstalled(serial: string, pkg: string): Promise<boolean> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const r = spawnSync(adb, ["-s", serial, "shell", "pm", "list", "packages", pkg], { encoding: "utf8", timeout: 5000 });
-  return (r.stdout || "").split(/\r?\n/).some(l => l.trim() === `package:${pkg}`);
+  const stdout = await runAdb(adb, ["-s", serial, "shell", "pm", "list", "packages", pkg], 5000);
+  return stdout.split(/\r?\n/).some(l => l.trim() === `package:${pkg}`);
 }
 
 export async function launchInstagram(serial: string): Promise<void> {
