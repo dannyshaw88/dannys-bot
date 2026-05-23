@@ -1261,6 +1261,24 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           console.error(`[instagramLogin] @${profile.username} — qe/sync ABD probe: non-fatal error (HTTP ${abdProbeErr?.response?.statusCode ?? "n/a"}): ${abdProbeErr?.message ?? ""}`);
         }
 
+        // Helper: detects 403 login_required on cold-start calls AFTER the session has
+        // been confirmed alive via users/info.  When the session is valid but Instagram
+        // blocks most API endpoints with 403 login_required, that is the ABD/restricted
+        // state (Instagram shows an "automated behaviour detected" prompt in-app).
+        // This is different from feedback_required — some account types return this
+        // instead, particularly on the cold-start sequence.
+        const isLoginRequiredBlock = (e: any): boolean => {
+          const sc: number | undefined = e?.response?.statusCode;
+          const body: any = e?.response?.body ?? {};
+          const igMsg: string = (typeof body === "object" && body !== null ? (body?.message ?? "") : "").toLowerCase();
+          const errMsg: string = (e?.message ?? "").toLowerCase();
+          return sc === 403 && (igMsg === "login_required" || errMsg.includes("login_required"));
+        };
+
+        // Count how many cold-start calls are blocked with 403 login_required.
+        // 2+ blocks after a confirmed session = automated_behaviour_detected.
+        let coldStartBlockedCount = 0;
+
         // ── Phase 2b: GetTimeLine cold_start_fetch (feed/timeline) ────────
         // NOTE: checkpoint_required here is NOT treated as a hard gate.
         // If get_account_family returned 200, the session is valid.  Instagram
@@ -1278,7 +1296,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — feed/timeline: feedback_required (ABD) → automated_behaviour_detected`);
             return abdResult();
           }
-          console.error(`[instagramLogin] @${profile.username} — feed/timeline failed (non-fatal): ${msg}`);
+          if (isLoginRequiredBlock(tlErr)) {
+            coldStartBlockedCount++;
+            console.error(`[instagramLogin] @${profile.username} — feed/timeline: 403 login_required after confirmed session (ABD signal ${coldStartBlockedCount})`);
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — feed/timeline failed (non-fatal): ${msg}`);
+          }
           // Intentionally not returning captcha here — get_account_family is the
           // authoritative checkpoint check.  Timeline soft-checkpoints are ignored.
         }
@@ -1293,7 +1316,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — reels_tray: feedback_required (ABD) → automated_behaviour_detected`);
             return abdResult();
           }
-          console.error(`[instagramLogin] @${profile.username} — reels_tray failed (non-fatal): ${e?.message}`);
+          if (isLoginRequiredBlock(e)) {
+            coldStartBlockedCount++;
+            console.error(`[instagramLogin] @${profile.username} — reels_tray: 403 login_required after confirmed session (ABD signal ${coldStartBlockedCount})`);
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — reels_tray failed (non-fatal): ${e?.message}`);
+          }
         }
 
         // ── Phase 2d: ExecuteNotificationsBadge (news/inbox) ─────────────
@@ -1305,7 +1333,18 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — news/inbox: feedback_required (ABD) → automated_behaviour_detected`);
             return abdResult();
           }
-          console.error(`[instagramLogin] @${profile.username} — news/inbox failed (non-fatal): ${e?.message}`);
+          if (isLoginRequiredBlock(e)) {
+            coldStartBlockedCount++;
+            console.error(`[instagramLogin] @${profile.username} — news/inbox: 403 login_required after confirmed session (ABD signal ${coldStartBlockedCount})`);
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — news/inbox failed (non-fatal): ${e?.message}`);
+          }
+        }
+
+        // Early exit: 2 cold-start blocks already detected — no need to continue
+        if (coldStartBlockedCount >= 2) {
+          console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start endpoints returned 403 login_required after session confirmed → automated_behaviour_detected`);
+          return abdResult();
         }
 
         // ── Phase 2e: FetchConfig (qe/sync) ──────────────────────────────
@@ -1318,7 +1357,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — qe/sync: feedback_required (ABD) → automated_behaviour_detected`);
             return abdResult();
           }
-          console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
+          if (isLoginRequiredBlock(e)) {
+            coldStartBlockedCount++;
+            console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig): 403 login_required after confirmed session (ABD signal ${coldStartBlockedCount})`);
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) failed (non-fatal): ${e?.message}`);
+          }
         }
 
         // ── Phase 2f: GetBanyan (banyan/banyan) ───────────────────────────
@@ -1343,7 +1387,12 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — banyan: feedback_required (ABD) → automated_behaviour_detected`);
             return abdResult();
           }
-          console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
+          if (isLoginRequiredBlock(e)) {
+            coldStartBlockedCount++;
+            console.error(`[instagramLogin] @${profile.username} — banyan/banyan: 403 login_required after confirmed session (ABD signal ${coldStartBlockedCount})`);
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — banyan/banyan failed (non-fatal): ${e?.message}`);
+          }
         }
 
         // ── Phase 2g: ExecuteDiscoverExplore (discover/topical_explore) ───
@@ -1356,7 +1405,18 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             console.error(`[instagramLogin] @${profile.username} — topical_explore: feedback_required (ABD) → automated_behaviour_detected`);
             return abdResult();
           }
-          console.error(`[instagramLogin] @${profile.username} — discover/topical_explore failed (non-fatal): ${e?.message}`);
+          if (isLoginRequiredBlock(e)) {
+            coldStartBlockedCount++;
+            console.error(`[instagramLogin] @${profile.username} — discover/topical_explore: 403 login_required after confirmed session (ABD signal ${coldStartBlockedCount})`);
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — discover/topical_explore failed (non-fatal): ${e?.message}`);
+          }
+        }
+
+        // Final ABD check — any 2+ blocked endpoints after confirmed session = ABD
+        if (coldStartBlockedCount >= 2) {
+          console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start endpoints returned 403 login_required after session confirmed → automated_behaviour_detected`);
+          return abdResult();
         }
 
         console.error(`[instagramLogin] @${profile.username} — cold-start handshake complete ✓`);
