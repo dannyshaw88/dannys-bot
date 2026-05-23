@@ -6,6 +6,7 @@ import path from "path";
 import * as http from "http";
 import * as os from "os";
 import * as android from "../mobile/androidManager";
+import * as proxyRelay from "../mobile/proxyRelay";
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
 
@@ -202,28 +203,43 @@ export function registerMobileRoutes(app: Express) {
     }
   });
 
-  // Apply the saved proxy directly to a running Android device via ADB.
-  // Sets the device's global http_proxy / https_proxy system settings so all
-  // Android traffic routes through the proxy without needing to restart LD Player.
+  // Apply the saved proxy to a running Android device via a host-side relay.
+  //
+  // Why a relay instead of setting http_proxy directly?
+  //   Android's `settings put global http_proxy` only accepts "host:port" — it
+  //   cannot carry credentials.  Authenticated proxies silently fail (407) and
+  //   apps fall back to a direct connection.  We start a local TCP relay that
+  //   forwards traffic to the real upstream and injects Proxy-Authorization
+  //   automatically.  Android is pointed at gateway_ip:relay_port (no creds).
   app.post("/api/mobile/devices/:serial/apply-proxy", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
       const proxyId = cfg[serial]?.proxyId ?? null;
       if (!proxyId) {
+        proxyRelay.stopRelayForDevice(serial);
         await android.setDeviceProxy(serial, null);
         return res.json({ ok: true, message: "Proxy cleared on device" });
       }
       const proxies = await storage.getProxies();
       const proxy = proxies.find(pr => pr.id === proxyId);
       if (!proxy) return res.status(404).json({ ok: false, error: "Proxy not found" });
-      await android.setDeviceProxy(serial, {
+
+      // Start (or restart) the local relay for this device
+      const relayPort = await proxyRelay.startRelay(serial, {
         host: proxy.host,
         port: proxy.port,
         user: proxy.username ?? undefined,
         pass: proxy.password ?? undefined,
       });
-      res.json({ ok: true, message: `Proxy ${proxy.host}:${proxy.port} applied to device` });
+
+      // Detect the host machine's IP as seen from inside Android
+      const gatewayIp = await android.getGatewayIp(serial);
+
+      // Point Android at the relay — no credentials needed on the device side
+      await android.setDeviceProxy(serial, { host: gatewayIp, port: relayPort });
+
+      res.json({ ok: true, message: `Relay ${gatewayIp}:${relayPort} → ${proxy.host}:${proxy.port} applied` });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message ?? "Apply proxy failed" });
     }
@@ -485,18 +501,10 @@ export function registerMobileRoutes(app: Express) {
       await android.setDeviceProxy(serial, null);
 
       // 4. Stop the relay and remove proxy assignment from instance config
+      proxyRelay.stopRelayForDevice(serial);
       const cfg = loadInstanceConfigs();
-      const proxyId = cfg[serial]?.proxyId ?? null;
-      const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
-      if (proxyId) {
-        const proxies = await storage.getProxies();
-        const px = proxies.find(pr => pr.id === proxyId);
-        if (px) {
-          await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined, protocol: proxyProtocol as "http" | "socks5" });
-        }
-        cfg[serial] = { ...cfg[serial], proxyId: null };
-        saveInstanceConfigs(cfg);
-      }
+      cfg[serial] = { ...cfg[serial], proxyId: null };
+      saveInstanceConfigs(cfg);
 
       // 5. Disconnect the device from ADB so it disappears from the device list
       try {
@@ -533,17 +541,9 @@ export function registerMobileRoutes(app: Express) {
       steps.push("✓ Proxy cleared");
 
       // 4. Stop relay and clear instance config
+      proxyRelay.stopRelayForDevice(serial);
       const cfg = loadInstanceConfigs();
-      const proxyId = cfg[serial]?.proxyId ?? null;
-      const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
-      if (proxyId) {
-        const proxies = await storage.getProxies();
-        const px = proxies.find(pr => pr.id === proxyId);
-        if (px) {
-          await stopRelay(px.host, px.port, proxyProtocol as "http" | "socks5");
-        }
-      }
-      cfg[serial] = { ...cfg[serial], proxyId: null, proxyPort: null, proxyProtocol: null };
+      cfg[serial] = { ...cfg[serial], proxyId: null, proxyPort: null, proxyProtocol: null as any };
       saveInstanceConfigs(cfg);
 
       // 5. Disconnect ADB

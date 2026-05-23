@@ -72,10 +72,11 @@ interface ProxyRowProps {
   even: boolean;
   colOrder: ProxyCol[];
   colWidths: Record<ProxyCol, number>;
+  keepValid: boolean;
 }
 
 function ProxyRow({
-  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing, even, colOrder, colWidths,
+  proxy, allProfiles, unassignedProfiles, pingResult, pinging, onPing, even, colOrder, colWidths, keepValid,
 }: ProxyRowProps) {
   const deleteProxyMutation = useDeleteProxy();
   const updateProxyMutation = useUpdateProxy();
@@ -117,11 +118,19 @@ function ProxyRow({
   const totalCount = assigned.length;
 
   const handleAssign = (profileId: number) => {
-    updateProfileMutation.mutate({ id: profileId, proxyId: proxy.id });
+    updateProfileMutation.mutate({
+      id: profileId,
+      proxyId: proxy.id,
+      ...(keepValid ? { preserveAccountStatus: true } : {}),
+    } as any);
   };
 
   const handleUnassign = (profile: Profile) => {
-    updateProfileMutation.mutate({ id: profile.id, proxyId: null });
+    updateProfileMutation.mutate({
+      id: profile.id,
+      proxyId: null,
+      ...(keepValid ? { preserveAccountStatus: true } : {}),
+    } as any);
   };
 
   const rowBg = even ? "bg-slate-50/60" : "bg-white";
@@ -236,6 +245,7 @@ export function ProxiesPage() {
     const saved = localStorage.getItem("proxies:maxPerProxy");
     return saved ? parseInt(saved, 10) || 5 : 5;
   });
+  const [keepValid, setKeepValid] = useState<boolean>(() => localStorage.getItem("proxies:keepAccountsValid") === "true");
   const [splitting, setSplitting] = useState(false);
   const [autoLinking, setAutoLinking] = useState(false);
   const [search, setSearch] = useState("");
@@ -530,7 +540,10 @@ export function ProxiesPage() {
       if (!assignments.length) { toast({ title: "All proxies are already at the maximum account limit" }); setSplitting(false); return; }
       await Promise.all(
         assignments.map(a => new Promise<void>((resolve, reject) =>
-          updateProfileMutation.mutate({ id: a.profileId, proxyId: a.proxyId }, { onSuccess: () => resolve(), onError: reject })
+          updateProfileMutation.mutate(
+            { id: a.profileId, proxyId: a.proxyId, ...(keepValid ? { preserveAccountStatus: true } : {}) } as any,
+            { onSuccess: () => resolve(), onError: reject }
+          )
         ))
       );
       await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
@@ -731,6 +744,7 @@ export function ProxiesPage() {
                 even={idx % 2 === 1}
                 colOrder={proxyColOrder}
                 colWidths={proxyColWidths}
+                keepValid={keepValid}
               />
             ))
           )}
@@ -825,6 +839,16 @@ export function ProxiesPage() {
             {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash className="w-3.5 h-3.5" />}
             {deletingAll ? "Deleting…" : "Delete All"}
           </button>
+          <span className="text-border">|</span>
+          <label className="flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={keepValid}
+              onChange={e => { setKeepValid(e.target.checked); localStorage.setItem("proxies:keepAccountsValid", String(e.target.checked)); }}
+              className="w-3.5 h-3.5 accent-sky-500"
+            />
+            <span className="text-[13px] font-bold uppercase tracking-wide text-foreground">Keep accounts valid</span>
+          </label>
         </div>
       </div>
       </div>

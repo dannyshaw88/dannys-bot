@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.478",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Proxy assignment to LDPlayer now works correctly for authenticated proxies — a local relay running on the host injects credentials automatically so Android never sees a 407 and traffic routes through the real proxy IP." },
+      { category: "Fixed", text: "Keep accounts valid checkbox added to the Proxy Manager — tick it before assigning or splitting proxies to prevent accounts from dropping to pending status." },
+    ],
+  },
+  {
     version: "1.0.477",
     date: "23 May 2026",
     items: [

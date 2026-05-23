@@ -738,6 +738,22 @@ export async function getDeviceProps(serial: string): Promise<DeviceProps> {
   return { manufacturer, model, brand, androidVersion, sdkInt, density, width, height, board, deviceString, userAgent };
 }
 
+/**
+ * Returns the IP address of the host machine as seen from inside Android —
+ * i.e. the default gateway used by the emulator.  This is how we tell Android
+ * where our local proxy relay is listening.
+ * Falls back to 10.0.2.2 (the standard Android emulator / LDPlayer gateway).
+ */
+export async function getGatewayIp(serial: string): Promise<string> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const r = spawnSync(adb, ["-s", serial, "shell", "ip", "route", "show", "default"], { encoding: "utf8", timeout: 5000 });
+  const out = (r.stdout || "").trim();
+  const m = out.match(/via\s+([\d.]+)/);
+  if (m?.[1]) return m[1];
+  return "10.0.2.2";
+}
+
 /** Reads the http_proxy global setting currently configured on the device. */
 export async function getDeviceProxySetting(serial: string): Promise<string | null> {
   const tools = detectToolset();
