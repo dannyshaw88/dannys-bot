@@ -6,7 +6,6 @@ import path from "path";
 import * as http from "http";
 import * as os from "os";
 import * as android from "../mobile/androidManager";
-import * as proxyRelay from "../mobile/proxyRelay";
 import { storage } from "../storage";
 import { logger } from "../lib/logger";
 
@@ -203,108 +202,16 @@ export function registerMobileRoutes(app: Express) {
     }
   });
 
-  // ── Relay status for a device ─────────────────────────────────────────────
-  app.get("/api/mobile/devices/:serial/relay-status", async (req: Request, res: Response) => {
-    try {
-      const serial = p(req, "serial");
-      const cfg = loadInstanceConfigs();
-      const proxyId = cfg[serial]?.proxyId ?? null;
-      const proxyProtocol = cfg[serial]?.proxyProtocol ?? "http";
-      if (!proxyId) { res.json({ active: false, relayPort: null, deviceProxy: null }); return; }
-      const proxies = await storage.getProxies();
-      const px = proxies.find(pr => pr.id === proxyId);
-      if (!px) { res.json({ active: false, relayPort: null, deviceProxy: null }); return; }
-      const upstream: proxyRelay.RelayUpstream = {
-        host: px.host, port: px.port,
-        user: px.username ?? undefined, pass: px.password ?? undefined,
-        protocol: proxyProtocol as "http" | "socks5",
-      };
-      const relayPort = proxyRelay.getRelayPort(upstream);
-      const deviceProxy = await android.getDeviceProxySetting(serial);
-      res.json({ active: !!relayPort && !!deviceProxy, relayPort, deviceProxy });
-    } catch (e: any) { res.status(500).json({ error: e?.message }); }
-  });
-
-  const deviceProxySchema = z.object({
-    proxyId: z.number().nullable(),
-    proxyProtocol: z.enum(["http", "socks5"]).optional(),
-    sourceInterface: z.string().nullable().optional(), // local adapter IP to bind relay to
-  });
+  // Save proxy assignment for a device (no relay — user configures proxy directly in LD Player)
+  const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
       const input = deviceProxySchema.parse(req.body);
       const serial = p(req, "serial");
-      const localAddress = input.sourceInterface ?? undefined;
-
-      if (input.proxyId) {
-        const proxies = await storage.getProxies();
-        const proxy = proxies.find(pr => pr.id === input.proxyId);
-        if (!proxy) { res.status(404).json({ error: "Proxy not found" }); return; }
-
-        const proto = input.proxyProtocol ?? "http";
-
-        // 1. Start (or reuse) the local relay for this upstream
-        const upstream: proxyRelay.RelayUpstream = {
-          host: proxy.host,
-          port: proxy.port,
-          user: proxy.username ?? undefined,
-          pass: proxy.password ?? undefined,
-          protocol: proto,
-          localAddress,
-        };
-        const relayPort = await proxyRelay.getOrCreateRelay(upstream);
-
-        // 2. Find the gateway IP so Android can reach the Windows host
-        const gateway = android.getDeviceGateway(serial);
-
-        // 3. Save config
-        const cfg = loadInstanceConfigs();
-        cfg[serial] = { ...cfg[serial], proxyId: input.proxyId, proxyProtocol: proto, sourceInterface: input.sourceInterface ?? null };
-        saveInstanceConfigs(cfg);
-
-        // 4. Point Android's global proxy at the relay
-        await android.setDeviceProxy(serial, { host: gateway, port: relayPort });
-
-        const ifaceNote = localAddress ? ` via ${localAddress}` : "";
-        logger.info(
-          { serial, relay: `${gateway}:${relayPort}`, upstream: `${proto}://${proxy.host}:${proxy.port}`, localAddress },
-          "mobile proxy relay applied",
-        );
-        res.json({ ok: true, relay: `${gateway}:${relayPort}`, upstream: `${proxy.host}:${proxy.port}${ifaceNote}` });
-
-      } else if (localAddress) {
-        // Direct mode: no upstream proxy, but bind to a specific adapter (e.g. iPhone hotspot)
-        const upstream: proxyRelay.RelayUpstream = { localAddress };
-        const relayPort = await proxyRelay.getOrCreateRelay(upstream);
-        const gateway = android.getDeviceGateway(serial);
-
-        const cfg = loadInstanceConfigs();
-        cfg[serial] = { ...cfg[serial], proxyId: null, proxyProtocol: null, sourceInterface: localAddress };
-        saveInstanceConfigs(cfg);
-
-        await android.setDeviceProxy(serial, { host: gateway, port: relayPort });
-
-        logger.info({ serial, relay: `${gateway}:${relayPort}`, localAddress }, "mobile direct relay applied");
-        res.json({ ok: true, relay: `${gateway}:${relayPort}`, upstream: `direct via ${localAddress}` });
-
-      } else {
-        // Clear everything
-        const cfg = loadInstanceConfigs();
-        const existingCfg = cfg[serial];
-        if (existingCfg?.proxyId) {
-          const proxies = await storage.getProxies();
-          const px = proxies.find(pr => pr.id === existingCfg.proxyId);
-          if (px) await proxyRelay.stopRelay({ host: px.host, port: px.port, user: px.username ?? undefined, pass: px.password ?? undefined, protocol: (existingCfg.proxyProtocol ?? "http") as "http" | "socks5" });
-        }
-        if (existingCfg?.sourceInterface && !existingCfg?.proxyId) {
-          // Stop any direct relay
-          await proxyRelay.stopRelay({ localAddress: existingCfg.sourceInterface });
-        }
-        cfg[serial] = { ...existingCfg, proxyId: null, proxyProtocol: null, sourceInterface: null };
-        saveInstanceConfigs(cfg);
-        await android.setDeviceProxy(serial, null);
-        res.json({ ok: true });
-      }
+      const cfg = loadInstanceConfigs();
+      cfg[serial] = { ...cfg[serial], proxyId: input.proxyId ?? null };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 

@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Smartphone, Download, MonitorPlay, RefreshCw, Save, Shuffle,
   CheckCircle2, Loader2, Copy, Settings, Keyboard, Trash2, X,
-  ExternalLink, Shield, Plug, Search, Link2Off, Play, RotateCcw,
+  ExternalLink, Shield, Plug, Search, Link2Off,
   AlertTriangle, Info, ChevronDown, ChevronUp,
 } from "lucide-react";
 
@@ -35,7 +35,6 @@ async function api<T>(method: string, path: string, body?: any): Promise<T> {
 type DeviceInfo   = { serial: string; state: string; product?: string; model?: string };
 type ProxyEntry   = { id: number; name?: string | null; host: string; port: number; username?: string | null; password?: string | null };
 type ConfigResp   = { instanceConfigs: Record<string, { proxyId?: number | null; sourceInterface?: string | null }>; proxies: ProxyEntry[] };
-type NetIface     = { name: string; ip: string; family: string };
 type DevicePropsResp = { manufacturer: string; model: string; androidVersion: string; sdkInt: string; density: string; width: string; height: string; board: string; deviceString: string; userAgent: string };
 
 const randHex16 = () => Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
@@ -86,161 +85,6 @@ const COLORS = [
   "from-pink-600 to-pink-800", "from-teal-600 to-teal-800",
 ];
 
-// ─── Proxy relay section ───────────────────────────────────────────────────────
-
-function ProxyRelaySection({ serial, savedProxyId, savedSourceInterface, onApplied }: { serial: string; savedProxyId?: number | null; savedSourceInterface?: string | null; onApplied?: () => void }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [protocol, setProtocol] = useState<"http" | "socks5">("http");
-  const [sourceIface, setSourceIface] = useState<string>(savedSourceInterface ?? "");
-
-  const ifacesQ = useQuery({
-    queryKey: ["network-interfaces"],
-    queryFn: () => api<NetIface[]>("GET", "/api/network/interfaces"),
-    staleTime: 15000,
-  });
-
-  const hasSource = !!(sourceIface && sourceIface !== "default");
-  const canApply = !!(savedProxyId || hasSource);
-
-  const statusQ = useQuery({
-    queryKey: ["relay-status", serial],
-    queryFn: () => api<{ active: boolean; relayPort?: number | null; deviceProxy?: string | null }>("GET", `/api/mobile/devices/${serial}/relay-status`),
-    refetchInterval: 5000,
-    retry: false,
-    enabled: canApply,
-  });
-
-  const applyMut = useMutation({
-    mutationFn: () => api<{ ok: boolean; relay?: string; upstream?: string }>("POST", `/api/mobile/devices/${serial}/proxy`, {
-      proxyId: savedProxyId ?? null,
-      proxyProtocol: protocol,
-      sourceInterface: hasSource ? sourceIface : null,
-    }),
-    onSuccess: (r) => {
-      if (r.ok) {
-        toast({ title: "Applied", description: `LD Player traffic routing via ${r.upstream}.` });
-        onApplied?.();
-      }
-      qc.invalidateQueries({ queryKey: ["relay-status", serial] });
-    },
-    onError: (e: any) => toast({ title: "Failed to apply", description: e?.message, variant: "destructive" }),
-  });
-
-  const clearMut = useMutation({
-    mutationFn: () => api("POST", `/api/mobile/devices/${serial}/proxy`, { proxyId: null, sourceInterface: null }),
-    onSuccess: () => { toast({ title: "Relay cleared" }); qc.invalidateQueries({ queryKey: ["relay-status", serial] }); },
-    onError: (e: any) => toast({ title: "Failed to clear", description: e?.message, variant: "destructive" }),
-  });
-
-  const status = statusQ.data;
-  const isActive = !!(status?.active && status?.relayPort);
-  const relayDown = !isActive && !!status?.deviceProxy;
-
-  const ifaceLabel = (ip: string) => {
-    const iface = ifacesQ.data?.find(i => i.ip === ip);
-    return iface ? `${iface.name} (${ip})` : ip;
-  };
-
-  return (
-    <div className="space-y-1.5 pt-1 border-t border-border/60">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
-          <span className="text-[10px] font-semibold text-muted-foreground">
-            Relay —{" "}
-            {!canApply ? "not configured" : !status ? "checking…" : isActive ? "active" : relayDown ? "stopped" : "inactive"}
-          </span>
-          {statusQ.isFetching && <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground/50" />}
-        </div>
-        {isActive && (
-          <button
-            className="text-[9px] text-destructive/70 hover:text-destructive underline"
-            disabled={clearMut.isPending}
-            onClick={() => clearMut.mutate()}
-          >
-            {clearMut.isPending ? "Clearing…" : "Clear"}
-          </button>
-        )}
-      </div>
-
-      {/* Source network adapter picker */}
-      <div className="space-y-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground shrink-0">Source network</span>
-          <select
-            className="flex-1 text-[10px] bg-background border border-border rounded px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            value={sourceIface}
-            onChange={e => setSourceIface(e.target.value)}
-            disabled={applyMut.isPending || isActive}
-          >
-            <option value="default">Default (regular internet)</option>
-            {ifacesQ.data?.filter(i => i.family === "IPv4").map(i => (
-              <option key={i.ip} value={i.ip}>{i.name} — {i.ip}</option>
-            ))}
-          </select>
-        </div>
-        {hasSource && !savedProxyId && (
-          <p className="text-[9px] text-blue-500 leading-tight">Direct mode — LD Player traffic will go through {ifaceLabel(sourceIface)} with no upstream proxy.</p>
-        )}
-        {hasSource && savedProxyId && (
-          <p className="text-[9px] text-muted-foreground/60 leading-tight">Proxy traffic will leave via {ifaceLabel(sourceIface)}.</p>
-        )}
-      </div>
-
-      {canApply && !isActive && (
-        <div className="space-y-1.5">
-          {savedProxyId && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-muted-foreground shrink-0">Protocol</span>
-              <select
-                className="flex-1 text-[10px] bg-background border border-border rounded px-1.5 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                value={protocol}
-                onChange={e => setProtocol(e.target.value as "http" | "socks5")}
-                disabled={applyMut.isPending}
-              >
-                <option value="http">HTTP / HTTPS (most common)</option>
-                <option value="socks5">SOCKS5</option>
-              </select>
-            </div>
-          )}
-          {relayDown && (
-            <p className="text-[9px] text-amber-600">Relay stopped (server restarted?) — click Apply to restart.</p>
-          )}
-          <Button
-            size="sm"
-            className="w-full h-8 text-xs gap-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0"
-            disabled={applyMut.isPending}
-            onClick={() => applyMut.mutate()}
-          >
-            {applyMut.isPending
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Applying…</>
-              : <><Play className="w-3.5 h-3.5" />Apply</>}
-          </Button>
-          <p className="text-[9px] text-muted-foreground/60 text-center leading-tight">
-            No VPN needed — Equinox relays traffic internally.
-          </p>
-        </div>
-      )}
-
-      {!canApply && (
-        <p className="text-[10px] text-muted-foreground/60 italic">Select a proxy or a source network above.</p>
-      )}
-
-      {isActive && (
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-green-500/10 border border-green-500/20">
-          <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-          <span className="text-[10px] text-green-700 font-medium flex-1">
-            Proxy active — relay on port {status?.relayPort}
-          </span>
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled={applyMut.isPending} onClick={() => applyMut.mutate()} title="Re-apply proxy">
-            {applyMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ProxySelector({ serial, proxies, savedProxyId, savedSourceInterface, onAutoSelect }: { serial: string; proxies: ProxyEntry[]; savedProxyId?: number | null; savedSourceInterface?: string | null; onAutoSelect?: () => void }) {
   const { toast } = useToast();
@@ -307,8 +151,6 @@ function ProxySelector({ serial, proxies, savedProxyId, savedSourceInterface, on
         </div>
       )}
 
-      {/* Proxy relay — routes all traffic through the proxy, no VPN app needed */}
-      <ProxyRelaySection serial={serial} savedProxyId={savedProxyId} savedSourceInterface={savedSourceInterface} onApplied={onAutoSelect} />
     </div>
   );
 }

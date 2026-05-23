@@ -56,9 +56,10 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.468",
+    version: "1.0.469",
     date: "22 May 2026",
     items: [
+      { category: "Fixed", text: "Removed the proxy relay server from Create & Spoof — it was binding to all network adapters and causing home internet connection drops." },
       { category: "Removed", text: "CloakBrowser tab has been removed." },
       { category: "Changed", text: "Create & Spoof now uses LD Player instead of BlueStacks — setup guide, address hints, and all references updated." },
     ],
