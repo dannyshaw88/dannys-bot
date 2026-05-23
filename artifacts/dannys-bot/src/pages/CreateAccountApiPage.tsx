@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
   User, KeyRound, Calendar, Globe, ShieldCheck,
-  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Phone, Smartphone, Monitor, RotateCcw,
+  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Phone, Smartphone, Monitor,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
@@ -671,15 +671,20 @@ export function CreateAccountApiPage() {
     setEbPanelOpen(true);
   }, [IS_ELECTRON, selectedProxy, ebUA]);
 
-  const handleResetBrowser = useCallback(async () => {
+  const clearEbSession = useCallback(async () => {
     if (IS_ELECTRON) {
-      return;
+      try { await (window as any).electronAPI.clearSignupBrowserCache(); } catch {}
+    } else {
+      try { await fetch("/api/signup/browser/reset", { method: "POST" }); } catch {}
+      setEbPanelOpen(false);
     }
-    setEbResetBusy(true);
-    try { await fetch("/api/signup/browser/reset", { method: "POST" }); } catch {}
-    setEbResetBusy(false);
-    setEbPanelOpen(false);
   }, [IS_ELECTRON]);
+
+  const handleResetBrowser = useCallback(async () => {
+    setEbResetBusy(true);
+    await clearEbSession();
+    setEbResetBusy(false);
+  }, [clearEbSession]);
 
   const deviceLabel = (() => {
     const parts = userAgentApi.split(";").map(s => s.trim());
@@ -930,6 +935,7 @@ export function CreateAccountApiPage() {
                   <Smartphone className="w-4 h-4 text-cyan-500 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold truncate">{deviceLabel || "Unknown Device"}</p>
+                    <p className="text-[10px] font-mono text-muted-foreground/70 truncate">{userAgentApi}</p>
                     <p className="text-[10px] font-mono text-muted-foreground truncate">{ebUA}</p>
                   </div>
                 </div>
@@ -939,7 +945,7 @@ export function CreateAccountApiPage() {
                     size="sm"
                     className="h-7 px-2 text-[10px]"
                     disabled={locked}
-                    onClick={() => setUserAgentApi(randomUA())}
+                    onClick={async () => { setUserAgentApi(randomUA()); await clearEbSession(); }}
                   >
                     <RefreshCw className="w-3 h-3 mr-1" />Randomise
                   </Button>
@@ -959,9 +965,9 @@ export function CreateAccountApiPage() {
                     className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive"
                     onClick={handleResetBrowser}
                     disabled={ebResetBusy}
-                    title="Close browser and wipe all cookies / device data"
+                    title="Close browser and wipe all cookies / session data"
                   >
-                    {ebResetBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                    {ebResetBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                   </Button>
                 </div>
               </div>

@@ -756,6 +756,32 @@ function setupBackupHandlers() {
     }
   });
 
+  // clear-signup-browser-cache: wipe the Electron session + cookie file for the signup EB.
+  ipcMain.handle("clear-signup-browser-cache", async () => {
+    try {
+      const pid = -1;
+      // Destroy the window if it is open
+      const existing = ebMap.get(pid);
+      if (existing && !existing.win.isDestroyed()) {
+        existing.win.destroy();
+        await new Promise(r => setTimeout(r, 200));
+        ebMap.delete(pid);
+      }
+      // Wipe session storage
+      const ses = electronSession.fromPartition(`persist:eb-${pid}`);
+      await ses.clearStorageData({
+        storages: ["cookies", "localstorage", "cachestorage", "shadercache", "websql", "serviceworkers", "indexdb"],
+      }).catch(() => {});
+      await ses.clearCache().catch(() => {});
+      // Delete cookie file
+      const fp = cookieFilePath(pid);
+      try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch {}
+      console.log("[EB] Signup browser cache cleared.");
+    } catch (err: any) {
+      console.error("[EB] clear-signup-browser-cache error:", err?.message);
+    }
+  });
+
   // open-signup-browser-window: open a native EB window for account creation.
   // Proxy and UA are passed directly — no profile lookup needed.
   ipcMain.handle("open-signup-browser-window", async (_event, { username, userAgent, proxyHost, proxyPort, proxyUsername, proxyPassword }: any) => {

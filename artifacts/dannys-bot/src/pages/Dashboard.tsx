@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.495",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Clear Data button on Create an Account now actually closes the signup browser and wipes all its cookies and session storage." },
+      { category: "Improvement", text: "Clear Data button is now a bin icon instead of a refresh icon so it's obvious what it does." },
+      { category: "Improvement", text: "Randomise now also clears the signup browser session — since you're picking a new device, the old cookies don't belong to it." },
+      { category: "Improvement", text: "Device card now shows the API UA string alongside the browser UA so you can see both at a glance." },
+    ],
+  },
+  {
     version: "1.0.494",
     date: "23 May 2026",
     items: [

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("open-browser-window", { profileId, username, userAgent }),
   openSignupBrowserWindow: (opts: { username?: string; userAgent?: string; proxyHost?: string; proxyPort?: number; proxyUsername?: string; proxyPassword?: string }) =>
     ipcRenderer.invoke("open-signup-browser-window", opts),
+  clearSignupBrowserCache: () => ipcRenderer.invoke("clear-signup-browser-cache"),
   openCsvTemp: (args: { content: string; filename: string }) =>
     ipcRenderer.invoke("open-csv-temp", args),
   pickEqxFolder: () =>
