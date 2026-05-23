@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.491",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Signup browser now shows the live Instagram stream instead of a blank placeholder — you can interact with it directly in the window." },
+      { category: "Fix", text: "Signup browser window now drags freely anywhere on screen without snapping to edges." },
+      { category: "Fix", text: "Removed the pointless 'Bring to Front' button from the signup browser toolbar." },
+    ],
+  },
+  {
     version: "1.0.490",
     date: "23 May 2026",
     items: [

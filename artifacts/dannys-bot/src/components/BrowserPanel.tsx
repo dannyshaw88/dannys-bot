@@ -31,6 +31,8 @@ interface BrowserPanelProps {
   streamUrl?: string;
   /** Override the input POST URL (default: /api/browser/:profileId/input). */
   inputUrl?: string;
+  /** Force canvas stream mode even in Electron (use for server-side Puppeteer streams like signup browser). */
+  forceStream?: boolean;
 }
 
 type SSEStatus = "idle" | "connecting" | "connected" | "error";
@@ -63,7 +65,7 @@ function nowTs() {
 // Detect Electron native EB mode (window.electronAPI exposed by preload)
 const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl }: BrowserPanelProps) {
+export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream }: BrowserPanelProps) {
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const esRef = useRef<WebSocket | null>(null);
@@ -962,7 +964,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           onClick={clearSession} disabled={!connected} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
         </Button>
-        {IS_ELECTRON && (
+        {IS_ELECTRON && !forceStream && (
           <Button
             variant="outline"
             size="sm"
@@ -1092,7 +1094,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       <div className="flex-1 relative bg-white min-h-0 overflow-hidden flex items-center justify-center">
 
         {/* ── Electron native EB mode — viewport shows info; toolbar above has all controls ── */}
-        {IS_ELECTRON ? (
+        {IS_ELECTRON && !forceStream ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 select-none">
             <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
               <MonitorPlay className="w-6 h-6 text-primary" />

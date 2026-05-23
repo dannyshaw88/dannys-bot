@@ -151,9 +151,7 @@ function SignupBrowserWindow({
     dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
     const onMove = (ev: MouseEvent) => {
       if (!dragging.current) return;
-      const nx = Math.max(0, Math.min(ev.clientX - dragOffset.current.x, window.innerWidth - SIGNUP_WIN_W));
-      const ny = Math.max(0, Math.min(ev.clientY - dragOffset.current.y, window.innerHeight - SIGNUP_WIN_H));
-      setPos({ x: nx, y: ny });
+      setPos({ x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y });
     };
     const onUp = () => {
       dragging.current = false;
@@ -205,6 +203,7 @@ function SignupBrowserWindow({
           username="signup"
           streamUrl="/api/signup/browser/stream"
           inputUrl="/api/signup/browser/input"
+          forceStream
         />
       </div>
     </div>
