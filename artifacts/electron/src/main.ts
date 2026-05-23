@@ -7,7 +7,8 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { startEbIpcServer, openEbWindow, focusEbWindow } from "./ebManager";
+import { startEbIpcServer, openEbWindow, focusEbWindow, ebMap, cookieFilePath } from "./ebManager";
+import { session as electronSession } from "electron";
 
 const execAsync = promisify(exec);
 

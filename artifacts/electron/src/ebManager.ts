@@ -10,77 +10,44 @@
  * server at serverPort via HTTP.
  */
 
-import { BrowserWindow, Menu, session as electronSession, ipcMain } from "electron";
+import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain } from "electron";
 import http from "http";
 import fs from "fs";
 import path from "path";
 import net from "net";
 import { createHmac } from "crypto";
 
-// ── Toolbar injection script ───────────────────────────────────────────────────
-// Injected via executeJavaScript into the EB window after every full page load.
-// Uses window.__eq (exposed by ebToolbarPreload.ts via contextBridge) to route
-// all button actions through IPC → ipcMain handler → eb-toolbar-cmd.
-// username is embedded via JSON.stringify so any character is safe.
-function buildToolbarJs(_username: string): string {
+// ── Native toolbar (BrowserView) ───────────────────────────────────────────────
+// The toolbar now lives in a native Electron BrowserView that floats on top of
+// the Instagram window at the OS compositor level.  It is completely independent
+// of the page DOM, so challenge pages, iframes, CSS transforms, overflow:hidden,
+// and any other page-level styling CANNOT hide or remove it.
+function buildNativeToolbarHtml(): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{height:52px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;-webkit-user-select:none;user-select:none}button{height:38px;min-width:38px;padding:0 10px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap}button:hover{background:#f3f4f6}button:disabled{opacity:.5;cursor:default}.sep{width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:38px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{border-color:#3b82f6}#lbtn{border-color:#3b82f6;color:#1d4ed8}#timer{font-size:11px;color:#6b7280;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}</style></head><body><button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button title="Reload" onclick="cmd('reload')">&#8635;</button><button title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})">&#8962;</button><button title="New tab" onclick="cmd('new-tab')">&#43;</button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button id="lbtn" title="Fill login fields on this page and submit" onclick="doLogin()">&#8594; Login</button><button title="Generate TOTP code and type it into the focused field" onclick="cmd('totp')">&#128273; 2FA</button><button title="Type pre-filled phone number into the focused field" onclick="cmd('phone')">&#128242; Phone</button><button title="Type email address into the focused field" onclick="cmd('email-user')">&#9993; Email</button><button title="Type email password into the focused field" onclick="cmd('email-pass')">&#128274; Email Pass</button><span class="sep"></span><span id="timer">0:00</span><script>
+function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
+function doLogin(){var b=document.getElementById('lbtn');b.disabled=true;Promise.resolve(cmd('login')).then(function(){b.disabled=false;});}
+var u=document.getElementById('url');
+u.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();var v=u.value.trim();if(v&&v.indexOf('http')!==0)v='https://'+v;cmd('navigate',{url:v});}});
+window.updateUrl=function(url){if(document.activeElement!==u)u.value=url;};
+var _s=Date.now();
+function tick(){var s=Math.floor((Date.now()-_s)/1000),m=Math.floor(s/60);s=s%60;document.getElementById('timer').textContent=m+':'+(s<10?'0':'')+s;}
+tick();setInterval(tick,1000);
+</script></body></html>`;
+}
+
+// ── Minimal page-level utilities ───────────────────────────────────────────────
+// Injected into the Instagram page on every navigation (not into the toolbar).
+// Tracks the last focused input so paste-style buttons (Phone, Email, etc.)
+// can target it after focus shifts to the toolbar button click.
+// Also auto-dismisses Instagram's cookie consent banner.
+function buildPageUtilsJs(): string {
   return `(function(){
-  if(document.getElementById('__eq_bar__'))return;
-  var bar=document.createElement('div');
-  bar.id='__eq_bar__';
-  bar.style.cssText='position:fixed;top:0;left:0;right:0;height:52px;z-index:2147483647;background:#ffffff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);';
-  function mkBtn(title,html,onclick,extra){
-    var b=document.createElement('button');
-    b.title=title;b.innerHTML=html;b.onclick=onclick;
-    b.style.cssText='height:38px;min-width:38px;padding:0 10px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;'+(extra||'');
-    b.onmouseenter=function(){b.style.background='#f3f4f6';};
-    b.onmouseleave=function(){b.style.background='transparent';};
-    return b;
-  }
-  function sep(){var s=document.createElement('span');s.style.cssText='width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0;';return s;}
-  function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
-  // Track the last input/textarea the user focused so paste-style buttons
-  // (Phone, Email, etc.) can target it even after focus shifts to the button.
+  if(window.__eq_utils_loaded)return;window.__eq_utils_loaded=true;
   window.__eq_lastInput=null;
   document.addEventListener('focusin',function(e){
     var t=e.target;
-    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')&&t.id!=='__eq_url__'){
-      window.__eq_lastInput=t;
-    }
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')){window.__eq_lastInput=t;}
   },true);
-  bar.appendChild(mkBtn('Back','&#9664;',function(){cmd('back');}));
-  bar.appendChild(mkBtn('Forward','&#9654;',function(){cmd('forward');}));
-  bar.appendChild(mkBtn('Reload','&#8635;',function(){cmd('reload');}));
-  bar.appendChild(mkBtn('Instagram Home','&#8962;',function(){cmd('navigate',{url:'https://www.instagram.com/'});}));
-  bar.appendChild(mkBtn('New tab','&#43;',function(){cmd('new-tab');}));
-  bar.appendChild(sep());
-  var inp=document.createElement('input');
-  inp.id='__eq_url__';inp.value=location.href;
-  inp.style.cssText='flex:1;min-width:0;height:38px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;box-sizing:border-box;';
-  inp.onfocus=function(){inp.style.borderColor='#3b82f6';inp.select();};
-  inp.onblur=function(){inp.style.borderColor='#d1d5db';};
-  inp.onkeydown=function(e){if(e.key==='Enter'){e.preventDefault();var u=inp.value.trim();if(u&&u.indexOf('http')!==0)u='https://'+u;cmd('navigate',{url:u});}};
-  bar.appendChild(inp);
-  bar.appendChild(sep());
-  var loginBtn=mkBtn('Find username & password fields on this page and fill them in','&#8594; Login',function(){loginBtn.disabled=true;loginBtn.style.opacity='0.5';Promise.resolve(cmd('login')).then(function(){loginBtn.disabled=false;loginBtn.style.opacity='1';});},'border-color:#3b82f6;color:#1d4ed8;');
-  bar.appendChild(loginBtn);
-  bar.appendChild(mkBtn('Generate TOTP code and type it into the focused field','&#128273; 2FA',function(){cmd('totp');}));
-  bar.appendChild(mkBtn('Type pre-filled phone number into the focused field','&#128242; Phone',function(){cmd('phone');}));
-  bar.appendChild(mkBtn('Type email address into the focused field','&#9993; Email',function(){cmd('email-user');}));
-  bar.appendChild(mkBtn('Type email password into the focused field','&#128274; Email Pass',function(){cmd('email-pass');}));
-  bar.appendChild(sep());
-  var timerEl=document.createElement('span');
-  timerEl.title='Time since browser was opened';
-  timerEl.style.cssText='font-size:11px;color:#6b7280;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px;';
-  var _start=parseInt(sessionStorage.getItem('__eq_open_ts')||'0',10);
-  if(!_start){_start=Date.now();try{sessionStorage.setItem('__eq_open_ts',String(_start));}catch(e){}}
-  function _tick(){var s=Math.floor((Date.now()-_start)/1000),m=Math.floor(s/60);s=s%60;timerEl.textContent=m+':'+(s<10?'0':'')+s;}
-  _tick();setInterval(_tick,1000);
-  bar.appendChild(timerEl);
-  (function tryPrepend(){if(!document.body){setTimeout(tryPrepend,80);return;}document.body.prepend(bar);})();
-  setInterval(function(){if(!document.getElementById('__eq_bar__')&&document.body){document.body.prepend(bar);}},3000);
-  window.__eq_syncUrl=function(u){var el=document.getElementById('__eq_url__');if(el&&document.activeElement!==el)el.value=u;};
-  // Auto-dismiss Instagram cookie consent banner every 8s.
-  // One interval per window lifetime — the __eq_cookie_tick flag prevents stacking.
   if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
     var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]')||Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});
@@ -100,11 +67,13 @@ interface EbEntry {
   username: string;
   proxy?: { host: string; port: number; user?: string; pass?: string };
 }
-const ebMap = new Map<number, EbEntry>();
+export const ebMap = new Map<number, EbEntry>();
+// Native toolbar BrowserView per profile — floats above all page content.
+const toolbarViewMap = new Map<number, BrowserView>();
 
 // ── Cookie file helpers ────────────────────────────────────────────────────────
 
-function cookieFilePath(profileId: number): string {
+export function cookieFilePath(profileId: number): string {
   return path.join(_cookiesDir, `cookies-${profileId}.json`);
 }
 
@@ -395,16 +364,14 @@ export async function openEbWindow(opts: {
     if (existing.win.isMinimized()) existing.win.restore();
     if (!existing.win.isVisible()) existing.win.show();
     existing.win.focus();
-    // Re-inject toolbar — it may have been lost if the page failed to load last time
-    // (e.g. chrome-error:// from a bad proxy) and executeJavaScript silently rejected.
-    existing.win.webContents.executeJavaScript(buildToolbarJs(existing.username))
-      .catch((e: any) => console.error(`[ebManager] toolbar re-inject failed (existing win):`, e?.message));
+    // Toolbar is a native BrowserView — it is always present; nothing to re-inject.
     // If the current page is a chrome error or about:blank, navigate back to Instagram
     const currentUrl: string = existing.win.webContents.getURL();
     if (!currentUrl || currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank") {
-      const hasCk = fs.existsSync(cookieFilePath(profileId));
+      const existingSes = electronSession.fromPartition(`persist:eb-${profileId}`);
+      const existingSessionCks = await existingSes.cookies.get({ name: "sessionid", domain: ".instagram.com" });
       existing.win.webContents.loadURL(
-        hasCk ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+        existingSessionCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
       ).catch(() => {});
     }
     return;
@@ -498,9 +465,9 @@ export async function openEbWindow(opts: {
         // Wait 2 s then navigate directly to Instagram, bypassing the broken chain
         await new Promise(r => setTimeout(r, 2000));
         if (!win.isDestroyed()) {
-          const hasCk = fs.existsSync(cookieFilePath(profileId));
+          const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
           win.webContents.loadURL(
-            hasCk ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/",
+            recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/",
           ).catch(() => {});
         }
       }
@@ -513,40 +480,64 @@ export async function openEbWindow(opts: {
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ url: navUrl }),
     }).catch(() => {});
+    // Also update the native toolbar's URL bar
+    {
+      const tv = toolbarViewMap.get(profileId);
+      if (tv && !tv.webContents.isDestroyed()) {
+        tv.webContents.executeJavaScript(
+          `window.updateUrl && window.updateUrl(${JSON.stringify(navUrl)})`
+        ).catch(() => {});
+      }
+    }
     if (!navUrl.includes("instagram.com")) return;
     await new Promise(r => setTimeout(r, 600));
     await syncCookies(profileId, ses);
   });
 
-  // ── Toolbar injection — three independent triggers ────────────────────────
-  // 1. dom-ready   — earliest point where JS can run; fires on all pages
-  //                  including chrome-error://.
-  // 2. did-navigate — fires once when the committed URL changes (after any
-  //                  redirect chain settles). Catches rapid post-2FA redirects
-  //                  where the dom-ready executeJavaScript gets killed by the
-  //                  next redirect before it finishes.
-  // 3. did-finish-load — final pass once all resources are loaded. If it
-  //                  fails (frame detached / rapid nav) we retry once after
-  //                  800 ms so the toolbar always eventually appears.
-  // Inside buildToolbarJs, tryPrepend() retries every 80 ms until document.body
-  // exists, and a 3-second setInterval re-adds the bar if Instagram's SPA
-  // ever removes it.
-  const injectToolbar = (label: string) => {
-    win.webContents.executeJavaScript(buildToolbarJs(username)).catch((e: any) => {
-      console.error(`[ebManager] toolbar inject ${label} failed for @${username}:`, e?.message);
-    });
+  // ── Native toolbar BrowserView ────────────────────────────────────────────
+  // Floats above the Instagram window at the OS compositor level.  The toolbar
+  // is completely independent of the page DOM — challenge pages, iframes, CSS
+  // transforms, overflow:hidden, and z-index stacking can NEVER hide it.
+  const toolbarView = new BrowserView({
+    webPreferences: {
+      partition,                   // same session so cookies are visible if needed
+      preload: path.join(__dirname, "ebToolbarPreload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  win.addBrowserView(toolbarView);
+  toolbarViewMap.set(profileId, toolbarView);
+
+  // Position the toolbar at the very top of the window (52 px).
+  // setAutoResize keeps the width in sync with window resize automatically.
+  const updateToolbarBounds = () => {
+    if (win.isDestroyed()) return;
+    const [w] = win.getContentSize();
+    toolbarView.setBounds({ x: 0, y: 0, width: w, height: 52 });
   };
-  const injectToolbarWithRetry = () => {
-    win.webContents.executeJavaScript(buildToolbarJs(username)).catch((e: any) => {
-      console.error(`[ebManager] toolbar did-finish-load failed for @${username}:`, e?.message);
-      setTimeout(() => {
-        win.webContents.executeJavaScript(buildToolbarJs(username)).catch(() => {});
-      }, 800);
-    });
+  toolbarView.setAutoResize({ width: true, height: false });
+  win.on("resize", updateToolbarBounds);
+  // Also update once immediately after ready-to-show / maximize.
+  win.once("ready-to-show", () => setImmediate(updateToolbarBounds));
+
+  // Load the toolbar HTML from a base64 data URI.
+  // The preload (ebToolbarPreload.js) exposes window.__eq so the toolbar
+  // buttons can call cmd() → ipcRenderer.invoke('eb-toolbar-cmd', ...).
+  const toolbarHtml = buildNativeToolbarHtml();
+  toolbarView.webContents.loadURL(
+    `data:text/html;base64,${Buffer.from(toolbarHtml).toString("base64")}`
+  ).catch(() => {});
+
+  // ── Page-level utilities ────────────────────────────────────────────────
+  // Injected into the Instagram page (NOT the toolbar) on every navigation.
+  // Tracks the last focused input field and auto-dismisses cookie banners.
+  const injectPageUtils = () => {
+    win.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {});
   };
-  win.webContents.on("dom-ready",       () => injectToolbar("dom-ready"));
-  win.webContents.on("did-navigate",    () => setTimeout(() => injectToolbar("did-navigate"), 100));
-  win.webContents.on("did-finish-load", () => injectToolbarWithRetry());
+  win.webContents.on("dom-ready",       () => injectPageUtils());
+  win.webContents.on("did-finish-load", () => injectPageUtils());
+
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
     // Push the error to the server log AND to the address bar relay so it's visible
@@ -576,31 +567,30 @@ export async function openEbWindow(opts: {
     Menu.buildFromTemplate(tpl).popup({ window: win });
   });
 
-  // SPA navigations (Instagram pushState) don't fire did-finish-load —
-  // the toolbar DOM survives, just update the URL bar.
+  // SPA navigations (Instagram pushState) don't fire did-navigate/did-finish-load —
+  // update the toolbar URL bar directly from the main process.
   win.webContents.on("did-navigate-in-page", (_e, navUrl) => {
-    win.webContents.executeJavaScript(
-      `window.__eq_syncUrl && window.__eq_syncUrl(${JSON.stringify(navUrl)})`
-    ).catch(() => {});
+    const tv = toolbarViewMap.get(profileId);
+    if (tv && !tv.webContents.isDestroyed()) {
+      tv.webContents.executeJavaScript(
+        `window.updateUrl && window.updateUrl(${JSON.stringify(navUrl)})`
+      ).catch(() => {});
+    }
   });
 
-  // ── Main-process toolbar heartbeat ────────────────────────────────────────
-  // Runs every 4 s from Node.js — completely independent of renderer events.
-  // This is the final safety net: even if every renderer-side event fires
-  // during a transitional state (post-2FA redirect chain, SPA re-renders,
-  // chrome-error pages), the toolbar will reappear within 4 s.
-  // buildToolbarJs starts with: if(document.getElementById('__eq_bar__'))return;
-  // so when the toolbar already exists this is effectively a no-op.
-  const toolbarHeartbeat = setInterval(() => {
-    if (win.isDestroyed()) { clearInterval(toolbarHeartbeat); return; }
-    win.webContents.executeJavaScript(buildToolbarJs(username)).catch(() => {});
-  }, 4000);
-  win.on("closed", () => clearInterval(toolbarHeartbeat));
+  win.on("closed", () => {
+    toolbarViewMap.delete(profileId);
+  });
 
-  // Navigate to Instagram
-  const hasCookies = fs.existsSync(cookieFilePath(profileId));
+  // Navigate to Instagram.
+  // Only go to the homepage if there is already an active sessionid in the
+  // Electron session (loaded from the cookie file above). When only device
+  // tokens (mid, ig_did) exist but no sessionid, navigate directly to the
+  // login page so the auto-fill handler fires immediately without the user
+  // having to do anything.
+  const sessionCksForNav = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
   win.webContents.loadURL(
-    hasCookies
+    sessionCksForNav.length > 0
       ? "https://www.instagram.com/"
       : "https://www.instagram.com/accounts/login/",
   ).catch(() => {});
@@ -724,15 +714,30 @@ function setupToolbarIpc(): void {
   _toolbarIpcRegistered = true;
 
   ipcMain.handle("eb-toolbar-cmd", async (event, cmd: string, payload?: any) => {
-    // Identify which profile's EB window sent this command
+    // Identify which profile's EB window sent this command.
+    // Commands can come from the native toolbar BrowserView OR (for new-tab windows)
+    // from the Instagram page webContents. Check both sources.
     const sender = event.sender;
     let foundPid = 0;
     let foundWin: BrowserWindow | null = null;
-    for (const [pid, entry] of ebMap.entries()) {
-      if (!entry.win.isDestroyed() && entry.win.webContents === sender) {
+
+    // 1. Check if sender is a toolbar BrowserView webContents
+    for (const [pid, tv] of toolbarViewMap.entries()) {
+      if (!tv.webContents.isDestroyed() && tv.webContents === sender) {
         foundPid = pid;
-        foundWin = entry.win;
+        foundWin = ebMap.get(pid)?.win ?? null;
         break;
+      }
+    }
+    // 2. Fall back: check if sender is the EB window's own webContents
+    //    (used by new-tab windows that still inject the toolbar into the page)
+    if (!foundPid) {
+      for (const [pid, entry] of ebMap.entries()) {
+        if (!entry.win.isDestroyed() && entry.win.webContents === sender) {
+          foundPid = pid;
+          foundWin = entry.win;
+          break;
+        }
       }
     }
     if (!foundPid || !foundWin) return;
@@ -827,14 +832,31 @@ function setupToolbarIpc(): void {
           },
         });
         const tabUsr = entry?.username ?? String(foundPid);
-        tabWin.webContents.on("dom-ready", () => {
-          tabWin.webContents.executeJavaScript(buildToolbarJs(tabUsr))
-            .catch((e: any) => console.error(`[ebManager] tab toolbar dom-ready failed:`, e?.message));
+        // Give the new-tab window its own native toolbar BrowserView
+        const tabToolbarView = new BrowserView({
+          webPreferences: {
+            partition,
+            preload: path.join(__dirname, "ebToolbarPreload.js"),
+            contextIsolation: true,
+            nodeIntegration: false,
+          },
         });
-        tabWin.webContents.on("did-finish-load", () => {
-          tabWin.webContents.executeJavaScript(buildToolbarJs(tabUsr))
-            .catch((e: any) => console.error(`[ebManager] tab toolbar did-finish-load failed:`, e?.message));
+        tabWin.addBrowserView(tabToolbarView);
+        tabToolbarView.setAutoResize({ width: true, height: false });
+        tabWin.once("ready-to-show", () => {
+          const [tw] = tabWin.getContentSize();
+          tabToolbarView.setBounds({ x: 0, y: 0, width: tw, height: 52 });
         });
+        tabToolbarView.webContents.loadURL(
+          `data:text/html;base64,${Buffer.from(buildNativeToolbarHtml()).toString("base64")}`
+        ).catch(() => {});
+        // Register the tab toolbar in the map so IPC commands route correctly.
+        // We share the profile's pid so toolbar commands act on the same profile.
+        toolbarViewMap.set(-foundPid * 1000 - tabWin.id, tabToolbarView as any);
+        tabWin.on("closed", () => toolbarViewMap.delete(-foundPid * 1000 - tabWin.id));
+        // Inject page utilities (focusin tracking + cookie banner) on every page load
+        tabWin.webContents.on("dom-ready",       () => tabWin.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
+        tabWin.webContents.on("did-finish-load", () => tabWin.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
         tabWin.webContents.on("did-fail-load", (_e: any, code: number, desc: string) => {
           console.error(`[ebManager] tab did-fail-load: code=${code} desc=${desc}`);
         });

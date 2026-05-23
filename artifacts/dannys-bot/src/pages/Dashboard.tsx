@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.497",
+    date: "23 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser toolbar is now a native window overlay — it can no longer be hidden by challenge pages, iframes, or anything Instagram's page does." },
+      { category: "Fix", text: "Opening the embedded browser now goes straight to the login page when no active session exists, so the auto-fill fires immediately without extra clicks." },
+    ],
+  },
+  {
     version: "1.0.496",
     date: "23 May 2026",
     items: [
