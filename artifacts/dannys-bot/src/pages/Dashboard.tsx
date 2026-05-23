@@ -63,6 +63,16 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.472",
+    date: "23 May 2026",
+    items: [
+      { category: "Fixed", text: "Clicking a device in Create & Spoof no longer causes a white screen crash." },
+      { category: "Fixed", text: "Open EB and Login EB are now on separate rows in the Actions menu instead of squashed side by side." },
+      { category: "Fixed", text: "Keyboard shortcut labels in the Actions menu are now black and sit inline next to each item instead of faint grey aligned to the far right." },
+      { category: "Improved", text: "Fix Auto-Behaviour now tries additional dismiss endpoints including the one the native Instagram app uses when the user taps Dismiss on the automated behavior interstitial." },
+    ],
+  },
+  {
     version: "1.0.470",
     date: "23 May 2026",
     items: [

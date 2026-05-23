@@ -347,6 +347,12 @@ export class InstagramWebClient {
   // ensureClient can propagate the status to the DB without guessing.
   lastMobileLoginFailureReason: "bad_password" | null = null;
 
+  // Last feedback_required response body received from any mobileSessionPost call.
+  // Stored so tryDismissABD() can extract the challenge_url without needing it passed in.
+  private _lastFeedbackResponse: any = null;
+  // Re-entry guard: prevents the ABD dismiss POST itself from triggering another dismiss loop.
+  private _abdDismissInProgress = false;
+
   // Set by _login (web login) before each failure return — gives loginDetailed() the error reason.
   private _webLoginLastError: { reason: 'bad_password' | 'email_confirmation' | 'two_factor_failed' | 'network_error'; message: string } | null = null;
 
@@ -2959,7 +2965,7 @@ export class InstagramWebClient {
       // as needing refresh so the next isMobileLoggedIn() call returns false and the
       // engine surfaces a clear "re-run Verify Credentials" message instead of the
       // cryptic "POST returned null despite session check passing".
-      if (res.status >= 400 || !res.json) {
+      if ((res.status >= 400 || !res.json) && !this._abdDismissInProgress) {
         this.mobileSessionReady = false;
       }
     } else {
@@ -2968,7 +2974,230 @@ export class InstagramWebClient {
         console.log(`[webClient] mobileSessionPost ${path} status=${res.status} feed_items=${feedLen} (status="${res.json?.status}")`);
       }
     }
+    // Capture feedback_required responses so tryDismissABD() can access the
+    // challenge_url without needing it threaded all the way up to the caller.
+    if (res.json?.message === "feedback_required" && !this._abdDismissInProgress) {
+      this._lastFeedbackResponse = res.json;
+    }
     return res.json;
+  }
+
+  // ── Jarvee-style "Auto Verify Automatic Behaviour Detected" dismiss ────────
+  // When Instagram's server-side bot detector fires a SOFT feedback_required
+  // warning (the kind that has an "OK / Dismiss" option), Jarvee would POST
+  // choice=0 to the challenge endpoint to acknowledge it and let automation
+  // continue without triggering a 24-hour suspension.
+  //
+  // This is NOT for full security challenges (checkpoint_required, phone/email
+  // verify). Those still require the embedded browser. Only soft ABD warnings
+  // that include a challenge_url + a dismiss path are handled here.
+  //
+  // Returns true if the dismiss succeeded (automation can continue),
+  // false if not applicable or if Instagram rejected the dismiss.
+  async tryDismissABD(): Promise<boolean> {
+    const j = this._lastFeedbackResponse;
+    if (!j || j?.message !== "feedback_required") return false;
+    if (this._abdDismissInProgress) return false;
+
+    const fbTitle: string  = (j?.feedback_title   ?? "").toLowerCase();
+    const fbMsg: string    = (j?.feedback_message  ?? "").toLowerCase();
+    const ignoreLabel: string = j?.feedback_ignore_label ?? "";
+
+    // Only auto-dismiss "Automated Behavior Detected" family warnings.
+    // Hard blocks (spam, phone/email verify required) do NOT qualify.
+    const isAutomatedBehavior =
+      /automated.?behav|automatic.?behav|unusual.?activ|restrict.*activ|restrict.*communit/i
+        .test(fbTitle + " " + fbMsg);
+
+    // Proceed when it's the ABD variant OR there's an explicit "OK/Dismiss" label
+    // (Instagram signals a soft/acknowledge-only block by providing feedback_ignore_label).
+    if (!isAutomatedBehavior && !ignoreLabel) {
+      console.log(`[webClient] @${this.username} ABD: feedback_required is not ABD/dismissible (title="${j?.feedback_title}") — leaving for suspension handler`);
+      return false;
+    }
+
+    const challengeUrl: string = j?.challenge_url ?? j?.feedback_url ?? "";
+    if (!challengeUrl) {
+      console.warn(`[webClient] @${this.username} ABD: no challenge_url/feedback_url in response — cannot dismiss`);
+      return false;
+    }
+
+    console.log(`[webClient] @${this.username} ABD dismiss — title="${j?.feedback_title}" ignore_label="${ignoreLabel}" challenge_url="${challengeUrl}"`);
+
+    // Extract device IDs for the dismiss payload.
+    // Instagram's challenge endpoint validates these match the device that triggered the warning.
+    let deviceId = "";
+    let guid = "";
+    if (this.igDeviceState) {
+      try {
+        const ds = JSON.parse(this.igDeviceState);
+        deviceId = ds.deviceId ?? "";
+        guid     = ds.uuid     ?? "";
+      } catch { /* ignore */ }
+    }
+
+    const body = new URLSearchParams({
+      challenge_url: challengeUrl,
+      choice:        "0",       // "0" = OK / dismiss / "it was me"
+      ...(deviceId ? { device_id: deviceId } : {}),
+      ...(guid     ? { guid }                : {}),
+    }).toString();
+
+    this._abdDismissInProgress = true;
+    try {
+      const result = await this.mobileSessionPost(`/api/v1/challenge/`, body);
+      const ok = result?.status === "ok" || !!result?.logged_in_user || result?.action === "close";
+      console.log(`[webClient] @${this.username} ABD dismiss ${ok ? "SUCCESS ✓" : "FAILED ✗"} — ${JSON.stringify(result)?.slice(0, 200)}`);
+      if (ok) this._lastFeedbackResponse = null; // clear so stale dismiss isn't reused
+      return ok;
+    } catch (e: any) {
+      console.warn(`[webClient] @${this.username} ABD dismiss exception: ${e?.message}`);
+      return false;
+    } finally {
+      this._abdDismissInProgress = false;
+    }
+  }
+
+  /**
+   * Dismiss path for the 403 login_required ABD variant.
+   *
+   * When Instagram signals ABD via 403 login_required on social endpoints
+   * (rather than feedback_required), there is no challenge_url — tryDismissABD()
+   * won't work. This path tries the interstitial-complete endpoint that the
+   * native Instagram app calls when the user taps "Dismiss" on the
+   * "We suspect automated behavior on your account" screen, then re-probes
+   * feed/timeline to confirm whether the block was lifted.
+   *
+   * Returns true if the block was lifted (timeline returned 200 after the call).
+   */
+  async tryDismissABD_loginRequired(): Promise<boolean> {
+    if (this._abdDismissInProgress) return false;
+    this._abdDismissInProgress = true;
+    try {
+      // Extract identity from stored cookies/device state.
+      const cookieParts = (this.igApiCookies ?? "").split(";").map((s: string) => s.trim());
+      const userId = cookieParts.find((c: string) => c.startsWith("ds_user_id="))?.split("=")[1] ?? "";
+      const cookieCsrf = cookieParts.find((c: string) => c.startsWith("csrftoken="))?.split("=")[1] ?? "";
+      const csrf = this.mobileCsrf || cookieCsrf;
+      let uuid = "";
+      if (this.igDeviceState) {
+        try { uuid = JSON.parse(this.igDeviceState)?.uuid ?? ""; } catch { /* ignore */ }
+      }
+
+      const baseParams = { _csrftoken: csrf, _uuid: uuid, _uid: userId };
+
+      // ── Attempt 1: user_interstitial_complete ──────────────────────────
+      // The native Instagram app calls this endpoint when the user taps "Dismiss"
+      // on the "We suspect automated behavior" interstitial screen.
+      try {
+        const body1 = new URLSearchParams({ type: "automated_behavior", ...baseParams }).toString();
+        const r1 = await this.mobileSessionPost("/api/v1/users/user_interstitial_complete/", body1);
+        console.log(`[webClient] @${this.username} ABD 403-dismiss: user_interstitial_complete → ${JSON.stringify(r1)?.slice(0, 300)}`);
+        if (r1?.status === "ok") {
+          const lifted = await this._probeABD403Lifted();
+          if (lifted) return true;
+        }
+      } catch (e: any) {
+        console.warn(`[webClient] @${this.username} ABD 403-dismiss: user_interstitial_complete exception: ${e?.message}`);
+      }
+
+      // ── Attempt 2: acknowledge_interstitial ───────────────────────────
+      // Native Instagram app calls this when the user taps OK/Dismiss on the
+      // "We suspect automated behavior" full-screen interstitial.
+      try {
+        const body2 = new URLSearchParams({ type: "automated_behavior_detected", ...baseParams }).toString();
+        const r2 = await this.mobileSessionPost("/api/v1/users/acknowledge_interstitial/", body2);
+        console.log(`[webClient] @${this.username} ABD 403-dismiss: acknowledge_interstitial → ${JSON.stringify(r2)?.slice(0, 300)}`);
+        if (r2?.status === "ok") {
+          const lifted = await this._probeABD403Lifted();
+          if (lifted) return true;
+        }
+      } catch (e: any) {
+        console.warn(`[webClient] @${this.username} ABD 403-dismiss: acknowledge_interstitial exception: ${e?.message}`);
+      }
+
+      // ── Attempt 3: check_for_spam_account ─────────────────────────────
+      // Jarvee's AutomaticBehaviourDetectedDismiss maps to this endpoint in
+      // some firmware/app versions — sends a device ping that acknowledges
+      // the ABD state and requests the block be reviewed.
+      try {
+        const body3 = new URLSearchParams({ ...baseParams, device_id: uuid }).toString();
+        const r3 = await this.mobileSessionPost("/api/v1/users/check_for_spam_account/", body3);
+        console.log(`[webClient] @${this.username} ABD 403-dismiss: check_for_spam_account → ${JSON.stringify(r3)?.slice(0, 300)}`);
+        if (r3?.status === "ok") {
+          const lifted = await this._probeABD403Lifted();
+          if (lifted) return true;
+        }
+      } catch (e: any) {
+        console.warn(`[webClient] @${this.username} ABD 403-dismiss: check_for_spam_account exception: ${e?.message}`);
+      }
+
+      // ── Attempt 4: consent/existing_user_flow_new_feature ─────────────
+      try {
+        const body4 = new URLSearchParams({ ...baseParams, flow: "ABD_INTERSTITIAL" }).toString();
+        const r4 = await this.mobileSessionPost("/api/v1/consent/existing_user_flow_new_feature/", body4);
+        console.log(`[webClient] @${this.username} ABD 403-dismiss: consent/existing_user_flow → ${JSON.stringify(r4)?.slice(0, 300)}`);
+      } catch (e: any) {
+        console.warn(`[webClient] @${this.username} ABD 403-dismiss: consent/existing_user_flow exception: ${e?.message}`);
+      }
+
+      // ── Final probe ───────────────────────────────────────────────────
+      return await this._probeABD403Lifted();
+    } finally {
+      this._abdDismissInProgress = false;
+    }
+  }
+
+  /** Re-probe feed/timeline to confirm whether the 403 block was lifted. */
+  private async _probeABD403Lifted(): Promise<boolean> {
+    try {
+      const r = await this.mobileSessionPost(
+        "/api/v1/feed/timeline/",
+        new URLSearchParams({ reason: "cold_start_fetch" }).toString(),
+      );
+      const ok = Array.isArray(r?.feed_items) || r?.status === "ok";
+      console.log(`[webClient] @${this.username} ABD 403-dismiss re-probe: timeline ${ok ? "UNBLOCKED ✓" : "still blocked ✗"} → ${JSON.stringify(r)?.slice(0, 200)}`);
+      return ok;
+    } catch (e: any) {
+      const sc: number | undefined = (e as any)?.response?.statusCode;
+      console.warn(`[webClient] @${this.username} ABD 403-dismiss re-probe: timeline still blocked (${sc ?? "?"}): ${e?.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Manual "Fix ABD" path — probes the mobile API if no feedback_required
+   * response is already in memory, then calls tryDismissABD().
+   *
+   * Handles both ABD variants:
+   *   • feedback_required (challenge_url) → tryDismissABD()
+   *   • 403 login_required (no challenge_url) → tryDismissABD_loginRequired()
+   *
+   * Any authenticated mobile POST to an account in ABD state returns
+   * {message:"feedback_required"} which mobileSessionPost captures
+   * automatically in _lastFeedbackResponse, so the probe populates the
+   * field without any special handling.
+   */
+  async probeAndDismissABD(): Promise<boolean> {
+    if (!this._lastFeedbackResponse || this._lastFeedbackResponse.message !== "feedback_required") {
+      try {
+        // /api/v1/qe/sync/ is a lightweight POST that requires mobile auth.
+        // If the account is in ABD state Instagram returns feedback_required
+        // for all mobile API calls regardless of endpoint.
+        await this.mobileSessionPost("/api/v1/qe/sync/", "");
+      } catch { /* ignore — we just want _lastFeedbackResponse populated */ }
+    }
+
+    // Path A: feedback_required with challenge_url (standard ABD)
+    if (this._lastFeedbackResponse?.message === "feedback_required") {
+      const ok = await this.tryDismissABD();
+      if (ok) return true;
+    }
+
+    // Path B: 403 login_required pattern (no feedback_required in memory)
+    // tryDismissABD_loginRequired probes feed/timeline internally to confirm.
+    console.log(`[webClient] @${this.username} ABD: no feedback_required response — trying 403-pattern dismiss`);
+    return this.tryDismissABD_loginRequired();
   }
 
   // ── Multipart/form-data POST to i.instagram.com ──────────────────────────

@@ -1490,29 +1490,27 @@ export function ProfilesPage() {
                 <Download className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <div className="flex">
-                <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex flex-1 items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                  <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>
-                </button>
-                <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex flex-1 items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed border-l border-border">
-                  <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Login EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+L</span>
-                </button>
-              </div>
+              <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>
+              </button>
+              <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Login EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+L</span>
+              </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                <span className="flex-1">Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""}</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+R</span>
+                <span className="flex-1">Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+R</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                <span className="flex-1">Fix Captcha</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+F</span>
+                <span className="flex-1">Fix Captcha</span><span className="ml-1 text-[7px] text-foreground">Ctrl+F</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkFixAbd(); }} disabled={fixingAbd} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingAbd ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ShieldCheck className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1">Fix Auto-Behaviour ({selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length})</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkRemoveProxies(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Remove Proxies</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+P</span>
+                <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="flex-1">Remove Proxies</span><span className="ml-1 text-[7px] text-foreground">Ctrl+P</span>
               </button>
               <button onClick={() => { setActionsOpen(false); setResetDeviceConfirmOpen(true); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
@@ -1538,7 +1536,7 @@ export function ProfilesPage() {
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1">Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+C</span>
+                <span className="flex-1">Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+C</span>
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button

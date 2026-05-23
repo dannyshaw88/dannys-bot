@@ -12,7 +12,7 @@ import {
   Smartphone, Download, MonitorPlay, RefreshCw, Save, Shuffle,
   CheckCircle2, Loader2, Copy, Settings, Keyboard, Trash2, X,
   ExternalLink, Shield, Plug, Search, Link2Off,
-  AlertTriangle, Info, ChevronDown, ChevronUp,
+  AlertTriangle, Info, ChevronDown, ChevronUp, RotateCcw, Play,
 } from "lucide-react";
 
 // ─── API helper ───────────────────────────────────────────────────────────────
