@@ -3074,75 +3074,21 @@ export class InstagramWebClient {
     if (this._abdDismissInProgress) return false;
     this._abdDismissInProgress = true;
     try {
-      // Extract identity from stored cookies/device state.
-      const cookieParts = (this.igApiCookies ?? "").split(";").map((s: string) => s.trim());
-      const userId = cookieParts.find((c: string) => c.startsWith("ds_user_id="))?.split("=")[1] ?? "";
-      const cookieCsrf = cookieParts.find((c: string) => c.startsWith("csrftoken="))?.split("=")[1] ?? "";
-      const csrf = this.mobileCsrf || cookieCsrf;
-      let uuid = "";
-      if (this.igDeviceState) {
-        try { uuid = JSON.parse(this.igDeviceState)?.uuid ?? ""; } catch { /* ignore */ }
-      }
-
-      const baseParams = { _csrftoken: csrf, _uuid: uuid, _uid: userId };
-
-      // ── Attempt 1: user_interstitial_complete ──────────────────────────
-      // The native Instagram app calls this endpoint when the user taps "Dismiss"
-      // on the "We suspect automated behavior" interstitial screen.
-      try {
-        const body1 = new URLSearchParams({ type: "automated_behavior", ...baseParams }).toString();
-        const r1 = await this.mobileSessionPost("/api/v1/users/user_interstitial_complete/", body1);
-        console.log(`[webClient] @${this.username} ABD 403-dismiss: user_interstitial_complete → ${JSON.stringify(r1)?.slice(0, 300)}`);
-        if (r1?.status === "ok") {
-          const lifted = await this._probeABD403Lifted();
-          if (lifted) return true;
-        }
-      } catch (e: any) {
-        console.warn(`[webClient] @${this.username} ABD 403-dismiss: user_interstitial_complete exception: ${e?.message}`);
-      }
-
-      // ── Attempt 2: acknowledge_interstitial ───────────────────────────
-      // Native Instagram app calls this when the user taps OK/Dismiss on the
-      // "We suspect automated behavior" full-screen interstitial.
-      try {
-        const body2 = new URLSearchParams({ type: "automated_behavior_detected", ...baseParams }).toString();
-        const r2 = await this.mobileSessionPost("/api/v1/users/acknowledge_interstitial/", body2);
-        console.log(`[webClient] @${this.username} ABD 403-dismiss: acknowledge_interstitial → ${JSON.stringify(r2)?.slice(0, 300)}`);
-        if (r2?.status === "ok") {
-          const lifted = await this._probeABD403Lifted();
-          if (lifted) return true;
-        }
-      } catch (e: any) {
-        console.warn(`[webClient] @${this.username} ABD 403-dismiss: acknowledge_interstitial exception: ${e?.message}`);
-      }
-
-      // ── Attempt 3: check_for_spam_account ─────────────────────────────
-      // Jarvee's AutomaticBehaviourDetectedDismiss maps to this endpoint in
-      // some firmware/app versions — sends a device ping that acknowledges
-      // the ABD state and requests the block be reviewed.
-      try {
-        const body3 = new URLSearchParams({ ...baseParams, device_id: uuid }).toString();
-        const r3 = await this.mobileSessionPost("/api/v1/users/check_for_spam_account/", body3);
-        console.log(`[webClient] @${this.username} ABD 403-dismiss: check_for_spam_account → ${JSON.stringify(r3)?.slice(0, 300)}`);
-        if (r3?.status === "ok") {
-          const lifted = await this._probeABD403Lifted();
-          if (lifted) return true;
-        }
-      } catch (e: any) {
-        console.warn(`[webClient] @${this.username} ABD 403-dismiss: check_for_spam_account exception: ${e?.message}`);
-      }
-
-      // ── Attempt 4: consent/existing_user_flow_new_feature ─────────────
-      try {
-        const body4 = new URLSearchParams({ ...baseParams, flow: "ABD_INTERSTITIAL" }).toString();
-        const r4 = await this.mobileSessionPost("/api/v1/consent/existing_user_flow_new_feature/", body4);
-        console.log(`[webClient] @${this.username} ABD 403-dismiss: consent/existing_user_flow → ${JSON.stringify(r4)?.slice(0, 300)}`);
-      } catch (e: any) {
-        console.warn(`[webClient] @${this.username} ABD 403-dismiss: consent/existing_user_flow exception: ${e?.message}`);
-      }
-
-      // ── Final probe ───────────────────────────────────────────────────
-      return await this._probeABD403Lifted();
+      // logout_reason: 8 = AUTOMATED_BEHAVIOUR_DETECTED — Instagram has fully
+      // invalidated the mobile API session server-side. There is no mobile API
+      // endpoint that can clear this: every dismiss endpoint tested (under both
+      // /users/ and /accounts/) returns 404 HTML because none of them exist in
+      // the current Instagram API surface.
+      //
+      // The ONLY way to clear ABD is the web browser flow:
+      //   1. Open the Embedded Browser for this account.
+      //   2. Navigate to instagram.com — the web session may still be valid and
+      //      will show the "We noticed unusual activity" interstitial.
+      //   3. Tap "I Understand" / dismiss it in the browser.
+      //   4. The EB extracts fresh cookies.
+      //   5. Click Verify Credentials — Path 2 restores the mobile session.
+      console.warn(`[webClient] @${this.username} ABD dismiss: logout_reason=8 — mobile session dead. Cannot clear via API. Open the Embedded Browser → dismiss the web ABD interstitial → Verify Credentials.`);
+      return false;
     } finally {
       this._abdDismissInProgress = false;
     }

@@ -91,6 +91,7 @@ function ProxySelector({ serial, proxies, savedProxyId, savedSourceInterface, on
   const qc = useQueryClient();
   const [ipResult, setIpResult] = useState<{ ip?: string; error?: string } | null>(null);
   const [checkingIp, setCheckingIp] = useState(false);
+  const [applyingProxy, setApplyingProxy] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: (proxyId: number | null) => api("POST", `/api/mobile/instances/${encodeURIComponent(serial)}/config`, { proxyId }),
@@ -118,6 +119,19 @@ function ProxySelector({ serial, proxies, savedProxyId, savedSourceInterface, on
     }
   };
 
+  const applyProxyToDevice = async () => {
+    setApplyingProxy(true);
+    try {
+      const r = await api<{ ok: boolean; message?: string; error?: string }>("POST", `/api/mobile/devices/${encodeURIComponent(serial)}/apply-proxy`);
+      if (r.ok) toast({ title: "Proxy applied", description: r.message ?? "Proxy set on device via ADB" });
+      else toast({ title: "Apply failed", description: r.error, variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Apply failed", description: e?.message ?? "Could not apply proxy", variant: "destructive" });
+    } finally {
+      setApplyingProxy(false);
+    }
+  };
+
   const uniqueProxies = proxies.filter((px, idx, arr) => arr.findIndex(p => p.id === px.id) === idx);
 
   return (
@@ -137,9 +151,14 @@ function ProxySelector({ serial, proxies, savedProxyId, savedSourceInterface, on
       </div>
 
       {savedProxyId && (
-        <Button size="sm" variant="outline" className="w-full h-7 text-[10px]" disabled={checkingIp} onClick={checkProxyIp} title="Confirms the proxy is reachable from this PC and shows its external IP">
-          {checkingIp ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Test proxy reachability
-        </Button>
+        <div className="flex gap-1.5">
+          <Button size="sm" variant="outline" className="flex-1 h-7 text-[10px]" disabled={checkingIp} onClick={checkProxyIp} title="Confirms the proxy is reachable from this PC and shows its external IP">
+            {checkingIp ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Test proxy reachability
+          </Button>
+          <Button size="sm" className="flex-1 h-7 text-[10px] bg-green-600 hover:bg-green-700 text-white" disabled={applyingProxy} onClick={applyProxyToDevice} title="Push this proxy to the Android device via ADB — sets the system-level proxy so LD Player routes through it">
+            {applyingProxy ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Apply IP to LD Player
+          </Button>
+        </div>
       )}
 
       {ipResult && (

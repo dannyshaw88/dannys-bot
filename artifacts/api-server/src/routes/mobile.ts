@@ -202,6 +202,33 @@ export function registerMobileRoutes(app: Express) {
     }
   });
 
+  // Apply the saved proxy directly to a running Android device via ADB.
+  // Sets the device's global http_proxy / https_proxy system settings so all
+  // Android traffic routes through the proxy without needing to restart LD Player.
+  app.post("/api/mobile/devices/:serial/apply-proxy", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      const proxyId = cfg[serial]?.proxyId ?? null;
+      if (!proxyId) {
+        await android.setDeviceProxy(serial, null);
+        return res.json({ ok: true, message: "Proxy cleared on device" });
+      }
+      const proxies = await storage.getProxies();
+      const proxy = proxies.find(pr => pr.id === proxyId);
+      if (!proxy) return res.status(404).json({ ok: false, error: "Proxy not found" });
+      await android.setDeviceProxy(serial, {
+        host: proxy.host,
+        port: proxy.port,
+        user: proxy.username ?? undefined,
+        pass: proxy.password ?? undefined,
+      });
+      res.json({ ok: true, message: `Proxy ${proxy.host}:${proxy.port} applied to device` });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? "Apply proxy failed" });
+    }
+  });
+
   // Save proxy assignment for a device (no relay — user configures proxy directly in LD Player)
   const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
