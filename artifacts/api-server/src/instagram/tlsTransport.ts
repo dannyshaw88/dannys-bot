@@ -174,6 +174,14 @@ export async function tlsRequest(opts: {
           proxy: proxyUrl,
           timeout: 30,
           disableRedirect: false,
+          // Some proxy providers do SSL inspection (MITM) inside the CONNECT
+          // tunnel — they present their own cert instead of Instagram's.
+          // CycleTLS's Go binary verifies certs strictly by default, so it
+          // rejects the proxy cert and returns status=0 with an empty body.
+          // Node.js avoids this via NODE_TLS_REJECT_UNAUTHORIZED=0 in the
+          // fallback path.  Setting insecureSkipVerify here gives the Go
+          // binary the same leniency so it can route through MITM proxies.
+          insecureSkipVerify: true,
         },
         method.toLowerCase(),
       );
