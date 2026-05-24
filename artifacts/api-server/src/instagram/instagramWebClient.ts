@@ -103,6 +103,8 @@ async function igReq(opts: {
   body?: string;
   cookieJar?: string[];
   proxyUrl?: string;
+  /** Pass through to tlsRequest — bypasses CycleTLS when true (see tlsRequest docs). */
+  forceNodeTls?: boolean;
 }): Promise<{ status: number; cookies: string[]; json: any; rawBody: string; responseHeaders: Record<string, string | string[] | undefined> }> {
   // Delegate entirely to tlsTransport.ts which routes all Instagram API calls
   // through the CycleTLS OkHttp4 TLS stack (or falls back to Node.js HTTPS if
@@ -3804,6 +3806,7 @@ export async function createInstagramAccountViaApi(params: {
       }),
       cookieJar,
       proxyUrl,
+      forceNodeTls: true,
     });
     cookieJar = mergeCookies(cookieJar, launcherRes.cookies);
     step(`launcher/sync HTTP ${launcherRes.status} — cookies: [${launcherRes.cookies.map(c => c.split("=")[0]).join(", ") || "none"}]`);
@@ -3837,6 +3840,7 @@ export async function createInstagramAccountViaApi(params: {
       body: signBody({ id: guid, _uid: "0", server_config_retrieval: "1", _csrftoken: csrfToken, _uuid: guid, experiments: LOGIN_EXPERIMENTS }),
       cookieJar,
       proxyUrl,
+      forceNodeTls: true,
     });
     cookieJar = mergeCookies(cookieJar, syncRes.cookies);
     // CRITICAL: re-sync csrfToken from jar — qe/sync may have set a real csrftoken cookie.
@@ -3882,6 +3886,7 @@ export async function createInstagramAccountViaApi(params: {
       body: new URLSearchParams({ username, _uuid: guid, _csrftoken: csrfToken }).toString(),
       cookieJar,
       proxyUrl,
+      forceNodeTls: true,
     });
     const j = res.json;
     // Only merge cookies if we got a valid JSON API response — HTML 404 pages from some
@@ -4004,6 +4009,7 @@ export async function createInstagramAccountViaApi(params: {
       body: currentBody,
       cookieJar: createCookieJar,
       proxyUrl,
+      forceNodeTls: true,
     });
     cookieJar = mergeCookies(cookieJar, res.cookies);
     j = res.json;
@@ -4037,7 +4043,11 @@ export async function createInstagramAccountViaApi(params: {
       // reproducible but unique per account (same pattern used for DM sending).
       igLib.state.generateDevice(`${username}|${email}|${Date.now()}`);
       if (proxyUrl) igLib.state.proxyUrl = proxyUrl;
-      patchIgClientTls(igLib, proxyUrl);
+      // Do NOT call patchIgClientTls here — for account creation we want the library
+      // to use its native Node.js HTTPS stack (not CycleTLS OkHttp4 JA3).  There is
+      // no existing device fingerprint to preserve for a new account, and using
+      // Node.js TLS avoids the OkHttp4 JA3 fingerprint that triggers Instagram's
+      // bot detection on the account creation endpoint.
 
       // Run the standard pre-login warm-up (launcher.preLoginSync → qe.syncLoginExperiments).
       // Non-fatal — continue even if it throws so we still attempt account.create().
@@ -4143,6 +4153,7 @@ export async function createInstagramAccountViaApi(params: {
         body: webBody,
         cookieJar,
         proxyUrl,
+        forceNodeTls: true,
       });
       cookieJar = mergeCookies(cookieJar, webRes.cookies);
       const wj = webRes.json;

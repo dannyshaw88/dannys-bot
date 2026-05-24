@@ -131,6 +131,16 @@ export async function tlsRequest(opts: {
   body?: string;
   cookieJar?: string[];
   proxyUrl?: string;
+  /**
+   * Skip CycleTLS (OkHttp4 JA3) and use Node.js HTTPS directly.
+   *
+   * Use this when the request must appear to come from a standard TLS client
+   * (e.g. Chrome/Node.js) rather than an Android OkHttp4 client.  The primary
+   * use-case is account *creation*: there is no existing device fingerprint to
+   * preserve, so CycleTLS's Android JA3 fingerprint offers no benefit and can
+   * trigger Instagram's bot detection when paired with a non-Android User-Agent.
+   */
+  forceNodeTls?: boolean;
 }): Promise<{
   status: number;
   cookies: string[];
@@ -146,6 +156,7 @@ export async function tlsRequest(opts: {
     body,
     cookieJar = [],
     proxyUrl,
+    forceNodeTls = false,
   } = opts;
 
   // ── IP-LEAK PREVENTION ──────────────────────────────────────────────────────
@@ -165,7 +176,7 @@ export async function tlsRequest(opts: {
   const client = await getClient();
 
   // ── CycleTLS path (OkHttp4 JA3) ─────────────────────────────────────────────
-  if (client) {
+  if (client && !forceNodeTls) {
     const url = `https://${host}${path}`;
     const userAgent = allHeaders["User-Agent"] ?? "";
     // CycleTLS takes User-Agent as a dedicated field — remove from header map
@@ -247,9 +258,14 @@ export async function tlsRequest(opts: {
   }
 
   // ── Node.js TLS fallback ──────────────────────────────────────────────────
-  // Reached when: (a) CycleTLS never initialised, or (b) CycleTLS returned
-  // status 0 (proxy blocked the Go subprocess connection).
-  if (client) {
+  // Reached when: (a) CycleTLS never initialised, (b) CycleTLS returned
+  // status 0 (proxy blocked the Go subprocess connection), or (c) the caller
+  // passed forceNodeTls=true to bypass CycleTLS entirely (e.g. account creation
+  // where there is no stored device fingerprint and the OkHttp4 JA3 fingerprint
+  // is not required).
+  if (forceNodeTls) {
+    console.log(`[tls:req] forceNodeTls — using Node.js TLS for ${method} ${host}${path}`);
+  } else if (client) {
     console.warn(`[tls:req] CycleTLS→Node.js fallback for ${method} ${host}${path}`);
   } else {
     console.warn(`[tls:req] CycleTLS unavailable — using Node.js TLS for ${method} ${host}${path}`);
@@ -267,7 +283,7 @@ export async function tlsRequest(opts: {
       body: string;
     }>((resolve, reject) => {
       const req = https.request(
-        { host, port: 443, path, method, headers: allHeaders, agent },
+        { host, port: 443, path, method, headers: allHeaders, agent, rejectUnauthorized: false },
         (r) => {
           const chunks: Buffer[] = [];
           r.on("data", (chunk: Buffer) => chunks.push(chunk));

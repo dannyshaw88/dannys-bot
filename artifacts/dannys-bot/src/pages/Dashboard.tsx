@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.524",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Account creation now uses standard Node.js HTTPS for all signup API calls instead of the Android OkHttp4 transport — eliminates the TLS fingerprint mismatch that was triggering Instagram's bot detection on the create-account endpoint." },
+      { category: "Fix", text: "The library fallback path during account creation no longer applies the Android TLS transport either, giving it a genuinely different network path from the primary attempts." },
+      { category: "Fix", text: "The web registration fallback now also uses standard HTTPS, fixing the mismatch between a Chrome User-Agent and an Android TLS fingerprint on that request." },
+    ],
+  },
+  {
     version: "1.0.523",
     date: "24 May 2026",
     items: [
