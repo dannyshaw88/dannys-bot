@@ -56,9 +56,12 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.516",
+    version: "1.0.517",
     date: "24 May 2026",
     items: [
+      { category: "Fix", text: "Fixed the root cause of the Android TLS fingerprint never being used: the library changed its response format in a recent update (body moved from .body to .data) and our code was reading the wrong field, so the fingerprint was always silently bypassed and fell back to standard TLS for every request." },
+      { category: "Fix", text: "The actual error from the TLS library is now shown in the log when it fails, instead of always showing '(empty)' — this will finally reveal what the proxy is rejecting." },
+      { category: "Fix", text: "Sync now writes each call to the API calls export file, including whether the data came from HikerAPI or the account's own session." },
       { category: "Fix", text: "The Android TLS fingerprint library can now route through proxies that do SSL inspection — it was rejecting the proxy's certificate and silently falling back to standard Node.js TLS on every request, which is why needs_upgrade kept appearing despite the fingerprint being loaded." },
       { category: "Fix", text: "Fixed a crash introduced in v1.0.514 that broke every signup attempt — the new debug logging code called .slice() on an undefined value, which crashed every TLS call before any request could reach Instagram." },
       { category: "Fix", text: "When the Android TLS fingerprint library fails to route through a proxy, the exact error from the underlying library is now logged — this will show whether it is a proxy authentication issue, a connection refusal, or something else, so the root cause can be fixed directly." },

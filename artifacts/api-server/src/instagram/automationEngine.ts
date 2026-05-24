@@ -436,10 +436,24 @@ class AutomationEngine {
 
     let stats: { followersCount: number; followingCount: number; postsCount: number } | null = null;
 
+    const syncSource = useHiker ? "HikerAPI" : "account";
+    const syncT0 = Date.now();
+
     if (useHiker) {
       const { HikerApiClient } = await import("./hikerApiClient");
       const hikerClient = new HikerApiClient(globalSettings.hikerApiToken!);
       stats = await hikerClient.getProfileStats(profile.username);
+      storage.createInstagramApiCall({
+        profileId: profile.id,
+        username: profile.username,
+        operationName: "ProfileSync",
+        date: new Date().toISOString(),
+        source: "HikerAPI",
+        message: stats
+          ? `followers=${stats.followersCount} following=${stats.followingCount} posts=${stats.postsCount}`
+          : "no data returned",
+        durationMs: Date.now() - syncT0,
+      }).catch(() => {});
     } else {
       const proxyUrl = await this.buildProxyUrl(profile);
       if (!proxyUrl) {
@@ -456,10 +470,30 @@ class AutomationEngine {
       client.loadBrowserCookies();
       try {
         stats = await client.getOwnProfileStats();
+        storage.createInstagramApiCall({
+          profileId: profile.id,
+          username: profile.username,
+          operationName: "ProfileSync",
+          date: new Date().toISOString(),
+          source: "account",
+          message: stats
+            ? `followers=${stats.followersCount} following=${stats.followingCount} posts=${stats.postsCount}`
+            : "no data returned",
+          durationMs: Date.now() - syncT0,
+        }).catch(() => {});
       } catch (syncErr: any) {
         // getOwnProfileStats re-throws account-level errors (banned, suspended,
         // logged_out, challenge, etc.) so we can update accountStatus immediately
         // rather than leaving the account showing as "valid" indefinitely.
+        storage.createInstagramApiCall({
+          profileId: profile.id,
+          username: profile.username,
+          operationName: "ProfileSync",
+          date: new Date().toISOString(),
+          source: "account",
+          message: `error: ${syncErr?.message ?? "unknown"}`,
+          durationMs: Date.now() - syncT0,
+        }).catch(() => {});
         const applied = await this.applyAccountLevelError(profile.id, syncErr?.message ?? "");
         if (applied) {
           console.warn(`[engine] @${profile.username}: profile sync detected account issue — status set to "${applied}"`);

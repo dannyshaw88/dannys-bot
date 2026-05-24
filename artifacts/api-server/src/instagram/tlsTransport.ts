@@ -42,7 +42,11 @@ const OKHTTP4_JA3 =
 type CycleTLSClient = {
   (url: string, options: Record<string, unknown>, method: string): Promise<{
     status: number;
-    body: string;
+    // CycleTLS v2.x changed the response field name from `.body` to `.data`.
+    // `.data` holds the parsed body (JSON object) or the raw string, depending
+    // on the responseType option.  `.body` no longer exists in v2.x.
+    data: any;
+    body?: never; // explicitly absent — do not read this
     headers: Record<string, string | string[]>;
   }>;
   exit(): void;
@@ -203,24 +207,33 @@ export async function tlsRequest(opts: {
     // Status 0 = CycleTLS got no HTTP response (proxy blocked the Go subprocess,
     // CONNECT tunnel rejected, or connection refused).  Fall through to the
     // Node.js HTTPS fallback so the request still has a chance of succeeding.
+    //
+    // NOTE: CycleTLS v2.x stores the response body in `.data`, NOT `.body`.
+    // `.data` is an already-parsed JSON object (or a raw string) when the
+    // request succeeds, or the Go error message string when status === 0.
     if (resp.status !== 0) {
       const cookies = extractSetCookies(resp.headers);
-      const rawBody = typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
+      const rawBody = typeof resp.data === "string"
+        ? resp.data
+        : (resp.data != null ? JSON.stringify(resp.data) : "");
       let json: any = null;
-      try { json = JSON.parse(rawBody); } catch {}
+      try { json = JSON.parse(rawBody); } catch {
+        // resp.data may already be a parsed object when responseType==="json"
+        if (resp.data != null && typeof resp.data === "object") json = resp.data;
+      }
       return { status: resp.status, cookies, json, rawBody, responseHeaders: resp.headers };
     }
 
-    // Log the body the Go subprocess returned — this contains the actual error
-    // message (e.g. "proxy authentication required", "connection refused", "EOF")
-    // which tells us exactly why the proxy/tunnel failed.
-    const cycleTlsErrBody = resp.body != null
-      ? (typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body))
+    // Log the error the Go subprocess returned.  In CycleTLS v2.x the error
+    // message (e.g. "proxyconnect tcp: EOF", "x509: certificate signed by
+    // unknown authority") lives in resp.data (not resp.body which no longer exists).
+    const cycleTlsErr = resp.data != null
+      ? (typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data))
       : "";
     console.warn(
       `[tls:req] CycleTLS returned status 0 for ${method} ${host}${path}` +
       ` elapsed=${elapsed}ms proxy=${proxyHost(proxyUrl)}` +
-      ` body=${cycleTlsErrBody.slice(0, 300) || "(empty)"}` +
+      ` err=${cycleTlsErr.slice(0, 300) || "(empty)"}` +
       ` — retrying via Node.js HTTPS`,
     );
   }
@@ -434,9 +447,17 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
     }
 
     // ── Parse response body ───────────────────────────────────────────────────
-    const rawBody = typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
-    let parsedBody: any = rawBody;
-    try { parsedBody = JSON.parse(rawBody); } catch {}
+    // CycleTLS v2.x: body is in .data (already-parsed JSON or raw string).
+    const rawBody = typeof resp.data === "string"
+      ? resp.data
+      : (resp.data != null ? JSON.stringify(resp.data) : "");
+    // .data may already be a parsed object when responseType==="json"
+    let parsedBody: any = (resp.data != null && typeof resp.data === "object")
+      ? resp.data
+      : rawBody;
+    if (typeof parsedBody === "string") {
+      try { parsedBody = JSON.parse(parsedBody); } catch {}
+    }
 
     // ── Return synthetic response in the shape instagram-private-api expects ──
     // The library's Request.send() reads:
