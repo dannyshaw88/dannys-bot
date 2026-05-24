@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.501",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser toolbar changes (bigger Reload/Home buttons, compass icon, monochrome buttons, Google new tab) now correctly apply to the Windows native browser window — the previous version only updated the web panel." },
+    ],
+  },
+  {
     version: "1.0.500",
     date: "24 May 2026",
     items: [

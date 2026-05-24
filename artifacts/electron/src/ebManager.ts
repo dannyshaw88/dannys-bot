@@ -23,7 +23,7 @@ import { createHmac } from "crypto";
 // of the page DOM, so challenge pages, iframes, CSS transforms, overflow:hidden,
 // and any other page-level styling CANNOT hide or remove it.
 function buildNativeToolbarHtml(): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{height:52px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;-webkit-user-select:none;user-select:none}button{height:38px;min-width:38px;padding:0 10px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap}button:hover{background:#f3f4f6}button:disabled{opacity:.5;cursor:default}.sep{width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:38px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{border-color:#3b82f6}#lbtn{border-color:#3b82f6;color:#1d4ed8}#timer{font-size:11px;color:#6b7280;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}</style></head><body><button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button title="Reload" onclick="cmd('reload')">&#8635;</button><button title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})">&#8962;</button><button title="New tab" onclick="cmd('new-tab')">&#43;</button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button id="lbtn" title="Fill login fields on this page and submit" onclick="doLogin()">&#8594; Login</button><button title="Generate TOTP code and type it into the focused field" onclick="cmd('totp')">&#128273; 2FA</button><button title="Type pre-filled phone number into the focused field" onclick="cmd('phone')">&#128242; Phone</button><button title="Type email address into the focused field" onclick="cmd('email-user')">&#9993; Email</button><button title="Type email password into the focused field" onclick="cmd('email-pass')">&#128274; Email Pass</button><span class="sep"></span><span id="timer">0:00</span><script>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{height:58px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;-webkit-user-select:none;user-select:none}button{height:38px;min-width:38px;padding:0 10px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap}button:hover{background:#f3f4f6}button:disabled{opacity:.5;cursor:default}.big{height:50px;min-width:50px;font-size:20px;padding:0 12px;justify-content:center}.sep{width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:38px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{border-color:#3b82f6}#timer{font-size:11px;color:#6b7280;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}</style></head><body><button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button class="big" title="Reload" onclick="cmd('reload')">&#8635;</button><button class="big" title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></button><button title="New tab (Google)" onclick="cmd('new-tab')">&#43;</button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button title="Fill login fields on this page and submit" onclick="doLogin()">&#8594; Login</button><button title="Generate TOTP code and type it into the focused field" onclick="cmd('totp')">&#128273; 2FA</button><button title="Type pre-filled phone number into the focused field" onclick="cmd('phone')">&#128242; Phone</button><button title="Type email address into the focused field" onclick="cmd('email-user')">&#9993; Email</button><button title="Type email password into the focused field" onclick="cmd('email-pass')">&#128274; Email Pass</button><span class="sep"></span><span id="timer">0:00</span><script>
 function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
 function doLogin(){var b=document.getElementById('lbtn');b.disabled=true;Promise.resolve(cmd('login')).then(function(){b.disabled=false;});}
 var u=document.getElementById('url');
@@ -514,7 +514,7 @@ export async function openEbWindow(opts: {
   const updateToolbarBounds = () => {
     if (win.isDestroyed()) return;
     const [w] = win.getContentSize();
-    toolbarView.setBounds({ x: 0, y: 0, width: w, height: 52 });
+    toolbarView.setBounds({ x: 0, y: 0, width: w, height: 58 });
   };
   toolbarView.setAutoResize({ width: true, height: false });
   win.on("resize", updateToolbarBounds);
@@ -845,7 +845,7 @@ function setupToolbarIpc(): void {
         tabToolbarView.setAutoResize({ width: true, height: false });
         tabWin.once("ready-to-show", () => {
           const [tw] = tabWin.getContentSize();
-          tabToolbarView.setBounds({ x: 0, y: 0, width: tw, height: 52 });
+          tabToolbarView.setBounds({ x: 0, y: 0, width: tw, height: 58 });
         });
         tabToolbarView.webContents.loadURL(
           `data:text/html;base64,${Buffer.from(buildNativeToolbarHtml()).toString("base64")}`
@@ -872,7 +872,7 @@ function setupToolbarIpc(): void {
           tpl.push({ type: "separator" }, { role: "selectAll" });
           Menu.buildFromTemplate(tpl).popup({ window: tabWin });
         });
-        tabWin.loadURL("https://www.instagram.com/").catch(() => {});
+        tabWin.loadURL("https://www.google.com/").catch(() => {});
         tabWin.show();
         break;
       }
