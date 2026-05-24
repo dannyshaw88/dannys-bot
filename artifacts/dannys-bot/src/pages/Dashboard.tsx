@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.523",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account errors now show exactly what Instagram returned instead of a generic message — no more guessing about proxies or giving advice that doesn't match the actual rejection reason." },
+    ],
+  },
+  {
     version: "1.0.522",
     date: "24 May 2026",
     items: [

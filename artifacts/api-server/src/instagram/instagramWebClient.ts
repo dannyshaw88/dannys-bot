@@ -3780,14 +3780,6 @@ export async function createInstagramAccountViaApi(params: {
   // Log proxy being used (or lack of one) so we can verify it in diagnostics
   step(`Using proxy: ${proxyUrl ? proxyUrl.replace(/:[^@]*@/, ":***@") : "none (direct connection)"}`);
 
-  // Proxy health tracker — counts how many of the two pre-signup sync calls
-  // (launcher/sync + qe/sync) returned ANY HTTP response from Instagram.
-  // If both calls throw a network error (0 responses) the proxy is likely
-  // blocking before Instagram's CDN.  We intentionally do NOT check cookies
-  // here — Instagram's mobile sync endpoints often return HTTP 200 with zero
-  // cookies on a perfectly healthy proxy, so cookie-presence is not a reliable
-  // indicator of proxy health.
-  let syncResponsesSeen = 0;
 
   // Step 1b: launcher/sync — warm up device fingerprint on Instagram's servers.
   // instagram-private-api always calls this as part of preLoginFlow() before any
@@ -3814,7 +3806,6 @@ export async function createInstagramAccountViaApi(params: {
       proxyUrl,
     });
     cookieJar = mergeCookies(cookieJar, launcherRes.cookies);
-    syncResponsesSeen++;
     step(`launcher/sync HTTP ${launcherRes.status} — cookies: [${launcherRes.cookies.map(c => c.split("=")[0]).join(", ") || "none"}]`);
     console.log(`[accountCreator] launcher/sync HTTP=${launcherRes.status}:`, JSON.stringify(launcherRes.json ?? {}).slice(0, 200));
   } catch (e: any) {
@@ -3848,7 +3839,6 @@ export async function createInstagramAccountViaApi(params: {
       proxyUrl,
     });
     cookieJar = mergeCookies(cookieJar, syncRes.cookies);
-    syncResponsesSeen++;
     // CRITICAL: re-sync csrfToken from jar — qe/sync may have set a real csrftoken cookie.
     // If the jar now has a real token but we keep "missing" in the body, Instagram's CSRF
     // check will see a mismatch on accounts/create/ and return "There was an error".
@@ -4173,14 +4163,7 @@ export async function createInstagramAccountViaApi(params: {
     if (!j) {
       const bodyPreview = res.rawBody?.slice(0, 300) ?? "(empty)";
       step(`Instagram returned HTTP ${res.status} — body: ${bodyPreview}`);
-      // Give an actionable message depending on whether the proxy appears to be
-      // blocking (syncResponsesSeen === 0 means both launcher/sync and qe/sync threw
-      // network errors — the proxy is likely unreachable or blocking all traffic).
-      const proxyBlocked = syncResponsesSeen === 0;
-      const hint = proxyBlocked
-        ? "The warm-up calls to Instagram failed with a network error — the proxy may be unreachable or blocking outbound traffic entirely. Try a different proxy."
-        : "Instagram rejected the signup request after multiple attempts. Try a different proxy or wait a few minutes before retrying.";
-      return { status: "error", steps, message: hint };
+      return { status: "error", steps, message: `Instagram returned HTTP ${res.status}: ${bodyPreview}` };
     }
 
     // ── Success ────────────────────────────────────────────────────────────
@@ -4233,8 +4216,9 @@ export async function createInstagramAccountViaApi(params: {
 
     // ── Challenge ──────────────────────────────────────────────────────────
     if (j.challenge) {
+      const detail = j.message ?? j.challenge?.api_path ?? "unknown";
       step(`Challenge required: ${j.challenge?.api_path ?? "unknown"}`);
-      return { status: "error", steps, message: "Instagram requires a challenge — try a different proxy or IP", rawResponse: j };
+      return { status: "error", steps, message: `Instagram requires a challenge: ${detail}`, rawResponse: j };
     }
 
     // ── Business-logic field errors (email_is_taken, username_is_taken, etc.) ─
@@ -4271,12 +4255,7 @@ export async function createInstagramAccountViaApi(params: {
     if (j.error_type === "signup_block" || j.spam) {
       const detail = j.feedback_message ?? j.feedback_title ?? j.message ?? "Signup blocked";
       step(`Signup blocked by Instagram (signup_block): ${detail}`);
-      return {
-        status: "error",
-        steps,
-        message: `Signup blocked — ${detail}. Try a different proxy or email address, and wait a few minutes before retrying.`,
-        rawResponse: j,
-      };
+      return { status: "error", steps, message: detail, rawResponse: j };
     }
 
     // ── needs_upgrade (stale app version) ────────────────────────────────────
@@ -4285,7 +4264,7 @@ export async function createInstagramAccountViaApi(params: {
       return {
         status: "error",
         steps,
-        message: "Instagram rejected the signup request: app version not recognised. Try switching to a different proxy or wait a few minutes and try again.",
+        message: j.message ?? "needs_upgrade",
         rawResponse: j,
       };
     }
