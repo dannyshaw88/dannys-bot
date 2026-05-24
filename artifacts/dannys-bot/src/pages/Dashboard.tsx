@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.507",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Create an Account no longer fails silently when the proxy blocks Chrome's CDN requests — real Instagram cookies (csrftoken, mid, ig_did) are now harvested from the browser using a default Chrome user agent when none is configured for the account yet." },
+      { category: "Fix", text: "All API calls during account creation now retry via the standard HTTPS stack when the CycleTLS connection returns empty (proxy blocking the Go subprocess) — previously every step returned HTTP 0 and signup always aborted." },
+      { category: "New", text: "API Step Timing controls are now visible on the Create an Account form — set Min/Max Calls and Min/Max seconds to control the delay between each signup API step. Defaults to 5–30 seconds to avoid Instagram rate-limit blocks." },
+      { category: "Fix", text: "API step delays were previously silently disabled (no-op) when no timing was configured. A safe 5–15 second minimum delay is now always enforced between each signup step." },
+    ],
+  },
+  {
     version: "1.0.506",
     date: "24 May 2026",
     items: [

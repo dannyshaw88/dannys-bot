@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
   User, Calendar, Globe, ShieldCheck, Mail,
-  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Monitor,
+  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Monitor, Zap,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -489,7 +489,7 @@ const SS_ALL_KEYS = [
 ];
 function ssClearAll() { SS_ALL_KEYS.forEach(k => sessionStorage.removeItem(k)); }
 
-const DEFAULT_API_LIMITS = { requestsMin: 5, requestsMax: 10, everySecondsMin: 30, everySecondsMax: 60 };
+const DEFAULT_API_LIMITS = { requestsMin: 1, requestsMax: 2, everySecondsMin: 10, everySecondsMax: 30 };
 
 function loadApiLimits() {
   try {
@@ -994,7 +994,61 @@ export function CreateAccountApiPage() {
               )}
             </div>
 
-
+            {/* ── API Timing ── */}
+            <div className="desktop-card p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-yellow-500" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">API Step Timing</p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
+                  <Input
+                    type="number" min={1} max={99}
+                    className="h-7 text-xs w-[72px]"
+                    value={apiLimits.requestsMin}
+                    onChange={e => setApiLimits({ ...apiLimits, requestsMin: Math.max(1, Number(e.target.value)) })}
+                    disabled={locked}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
+                  <Input
+                    type="number" min={1} max={99}
+                    className="h-7 text-xs w-[72px]"
+                    value={apiLimits.requestsMax}
+                    onChange={e => setApiLimits({ ...apiLimits, requestsMax: Math.max(1, Number(e.target.value)) })}
+                    disabled={locked}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min secs</Label>
+                  <Input
+                    type="number" min={1} max={3600}
+                    className="h-7 text-xs w-[72px]"
+                    value={apiLimits.everySecondsMin}
+                    onChange={e => setApiLimits({ ...apiLimits, everySecondsMin: Math.max(1, Number(e.target.value)) })}
+                    disabled={locked}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max secs</Label>
+                  <Input
+                    type="number" min={1} max={3600}
+                    className="h-7 text-xs w-[72px]"
+                    value={apiLimits.everySecondsMax}
+                    onChange={e => setApiLimits({ ...apiLimits, everySecondsMax: Math.max(1, Number(e.target.value)) })}
+                    disabled={locked}
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                Delay between each API step (launcher/sync → qe/sync → username check → create).
+                Calculated as: <span className="font-mono">min…max seconds ÷ calls</span>.
+                Defaults (1–2 calls / 10–30 s) give ~5–30 s per step.
+                Increase if you hit "Try Again Later" blocks.
+              </p>
+            </div>
 
             {/* ── Submit ── */}
             {!result && (

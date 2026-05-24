@@ -192,16 +192,28 @@ export async function tlsRequest(opts: {
       );
     }
 
-    const cookies = extractSetCookies(resp.headers);
-    const rawBody = typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
-    let json: any = null;
-    try { json = JSON.parse(rawBody); } catch {}
+    // Status 0 = CycleTLS got no HTTP response (proxy blocked the Go subprocess,
+    // CONNECT tunnel rejected, or connection refused).  Fall through to the
+    // Node.js HTTPS fallback so the request still has a chance of succeeding.
+    if (resp.status !== 0) {
+      const cookies = extractSetCookies(resp.headers);
+      const rawBody = typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
+      let json: any = null;
+      try { json = JSON.parse(rawBody); } catch {}
+      return { status: resp.status, cookies, json, rawBody, responseHeaders: resp.headers };
+    }
 
-    return { status: resp.status, cookies, json, rawBody, responseHeaders: resp.headers };
+    console.warn(`[tls:req] CycleTLS returned status 0 for ${method} ${host}${path} — retrying via Node.js HTTPS`);
   }
 
   // ── Node.js TLS fallback ──────────────────────────────────────────────────
-  console.warn(`[tls:req] CycleTLS unavailable — using Node.js TLS for ${method} ${host}${path}`);
+  // Reached when: (a) CycleTLS never initialised, or (b) CycleTLS returned
+  // status 0 (proxy blocked the Go subprocess connection).
+  if (client) {
+    console.warn(`[tls:req] CycleTLS→Node.js fallback for ${method} ${host}${path}`);
+  } else {
+    console.warn(`[tls:req] CycleTLS unavailable — using Node.js TLS for ${method} ${host}${path}`);
+  }
   const { HttpsProxyAgent } = await import("https-proxy-agent");
   const https = await import("node:https");
   const zlib = await import("node:zlib");

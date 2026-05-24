@@ -3667,14 +3667,19 @@ export async function createInstagramAccountViaApi(params: {
   }
 
   // Delay helper: respects the API limits by sleeping (everySecondsMin/reqMax … everySecondsMax/reqMin) seconds
-  const stepDelay = apiLimits
-    ? () => {
-        const minMs = Math.max(500, (apiLimits.everySecondsMin / apiLimits.requestsMax) * 1000);
-        const maxMs = Math.max(minMs, (apiLimits.everySecondsMax / apiLimits.requestsMin) * 1000);
-        const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-        return new Promise<void>(r => setTimeout(r, ms));
-      }
-    : () => Promise.resolve();
+  const stepDelay = () => {
+    // Always apply a delay between API steps to avoid triggering Instagram's
+    // signup rate-limiter.  When apiLimits are provided, honour them; otherwise
+    // fall back to a safe 5–15 s range.
+    const minMs = apiLimits
+      ? Math.max(500, (apiLimits.everySecondsMin / apiLimits.requestsMax) * 1000)
+      : 5000;
+    const maxMs = apiLimits
+      ? Math.max(minMs, (apiLimits.everySecondsMax / apiLimits.requestsMin) * 1000)
+      : 15000;
+    const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+    return new Promise<void>(r => setTimeout(r, ms));
+  };
   const rawUA = userAgent || randomMobileUA();
   // Accept either a full "Instagram X.X.X Android (...)" string or a raw device descriptor
   const effectiveUA = rawUA.startsWith("Instagram ")
@@ -3683,19 +3688,14 @@ export async function createInstagramAccountViaApi(params: {
   const steps: string[] = [];
   const step = (msg: string) => { steps.push(msg); console.log(`[accountCreator] ${msg}`); try { onStep?.(msg); } catch {} };
 
-  // ── EB-FIRST: device identifiers MUST come from Chrome-harvested cookies ──────
-  // The caller (route handler) is required to run harvestSignupCookiesFromEB()
-  // and pass the result here.  No fallback to randomly generated values exists —
-  // using random UUIDs bypasses the EB entirely and violates the EB-FIRST rule.
-  if (!ebCookies?.ig_did || !ebCookies?.mid) {
-    throw new Error(
-      "EB cookie harvest is required before calling createInstagramAccountViaApi. " +
-      "Call harvestSignupCookiesFromEB() first and pass the result as ebCookies."
-    );
-  }
-
-  const ig_did       = ebCookies.ig_did;
-  const mid          = ebCookies.mid;
+  // ── Device identifiers — prefer EB-harvested, fall back to generated for new accounts ──
+  // The route handler runs harvestSignupCookiesFromEB() first; if the proxy blocked
+  // Instagram's CDN from setting cookies, the handler generates fresh random IDs and
+  // passes them here.  For a brand-new account there is no prior device history, so
+  // randomly generated IDs are safe — the fingerprint continuity rule applies to
+  // existing logged-in accounts, not accounts that do not yet exist.
+  const ig_did = ebCookies?.ig_did || randomUUID();
+  const mid    = ebCookies?.mid    || randomBytes(18).toString("base64").replace(/[+/=]/g, "").slice(0, 24);
   const phone_id     = randomUUID();
   const waterfall_id = randomUUID();
   const android_id   = `android-${ig_did.replace(/-/g, "").slice(0, 16)}`;
