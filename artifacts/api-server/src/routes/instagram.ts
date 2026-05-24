@@ -55,6 +55,9 @@ import {
   sendEbWsMessage,
   electronSilentVerify,
   browserFill2fa,
+  createInstagramAccountViaEBForm,
+  submitSignupCodeViaEB,
+  isEBSignupSession,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -3188,68 +3191,81 @@ export async function registerInstagramRoutes(
         dateOfBirth: dobStr, createdAt: new Date().toISOString(),
       });
 
-      // ── EB harvest (+ optional cookie pre-bake) ────────────────────────────
-      const haspreBake = preBakeSitesList.length > 0 || preBakeYoutube || preBakeGoogle;
-      sendStep(haspreBake
-        ? "EB: launching temporary Chrome to bake cookies (visit websites/YouTube/Google), then harvest Instagram cookies..."
-        : "EB: launching temporary Chrome to harvest Instagram cookies (mid, ig_did, csrftoken)...",
-      );
-      let ebCookies: Awaited<ReturnType<typeof harvestSignupCookiesFromEB>>;
-      try {
-        ebCookies = await harvestSignupCookiesFromEB({
-          proxyHost, proxyPort: proxyPort ? Number(proxyPort) : undefined,
-          proxyUsername, proxyPassword, userAgent: userAgentEb || undefined,
-          preBakeSites:      preBakeSitesList.length ? preBakeSitesList : undefined,
-          preBakeSitesMin:   preBakeSitesMin   ? Number(preBakeSitesMin)   : 1,
-          preBakeSitesMax:   preBakeSitesMax   ? Number(preBakeSitesMax)   : 3,
-          preBakeScrollMin:  preBakeScrollMin  ? Number(preBakeScrollMin)  : 5,
-          preBakeScrollMax:  preBakeScrollMax  ? Number(preBakeScrollMax)  : 15,
-          preBakePctWebsite: preBakePctWebsite ? Number(preBakePctWebsite) : 34,
-          preBakePctYt:      preBakePctYt      ? Number(preBakePctYt)      : 33,
-          preBakePctGoogle:  preBakePctGoogle  ? Number(preBakePctGoogle)  : 33,
-          preBakeYoutube:    !!preBakeYoutube,
-          preBakeGoogle:     !!preBakeGoogle,
-          onStep:            sendStep,
-        });
-      } catch (e: any) {
-        const msg = `EB cookie harvest failed: ${e?.message}`;
-        sendStep(`EB: ${msg}`);
-        sendStep("Signup aborted — cannot create account without browser-originated cookies.");
-        await storage.updateApiCreatedAccount(dbRecord.id, {
-          status: "error", instagramUserId: null, sessionCookies: null,
-          errorMessage: msg, steps: JSON.stringify([msg]),
-        });
-        return sendDone({ status: "error", message: msg, steps: [msg], dbId: dbRecord.id });
-      }
-      if (!ebCookies?.ig_did) {
-        const msg = "EB cookie harvest returned no device cookies (mid/ig_did missing) — Chrome may be blocked by the proxy or Instagram's CDN did not set cookies. Signup aborted.";
-        sendStep(`EB: ${msg}`);
-        await storage.updateApiCreatedAccount(dbRecord.id, {
-          status: "error", instagramUserId: null, sessionCookies: null,
-          errorMessage: msg, steps: JSON.stringify([msg]),
-        });
-        return sendDone({ status: "error", message: msg, steps: [msg], dbId: dbRecord.id });
-      }
-      sendStep(`EB: harvested mid=${ebCookies.mid.slice(0, 8)}... ig_did=${ebCookies.ig_did.slice(0, 8)}... csrftoken=${ebCookies.csrftoken ? ebCookies.csrftoken.slice(0, 8) + "..." : "(none)"} (${ebCookies.cookieStrings.length} cookies total) ✓`);
-      sendStep(`EB agent: ${ebCookies.ebUserAgent}`);
-
-      // ── Signup ─────────────────────────────────────────────────────────────
-      let result = await createInstagramAccountViaApi({
-        username, password, email, firstName, day: Number(day), month: Number(month), year: Number(year),
-        proxyUrl, bio: bio || undefined, userAgent: userAgentApi || undefined,
-        apiLimits: parsedApiLimits, ebCookies,
+      // ── Primary: EB-form signup (fills real browser form, bypasses API spam block) ──
+      sendStep("EB-form: signing up via real browser (bypasses API spam detection)...");
+      let result: Awaited<ReturnType<typeof createInstagramAccountViaEBForm>> = await createInstagramAccountViaEBForm({
+        username, password, email, firstName,
+        day: Number(day), month: Number(month), year: Number(year),
+        proxyHost, proxyPort: proxyPort ? Number(proxyPort) : undefined,
+        proxyUsername, proxyPassword, userAgent: userAgentEb || undefined,
         onStep: sendStep,
       });
 
-      // Prepend EB harvest steps so the stored log is complete
-      result = {
-        ...result,
-        steps: [
-          `EB: harvested mid=${ebCookies.mid.slice(0, 8)}... ig_did=${ebCookies.ig_did.slice(0, 8)}... ✓`,
-          `EB agent: ${ebCookies.ebUserAgent}`,
-          ...result.steps,
-        ],
-      };
+      // ── Fallback: API signup (only for technical/infra failures, not spam blocks) ──
+      const ebTechnical = result.status === "error" && (
+        (result.message ?? "").includes("Could not find") ||
+        (result.message ?? "").includes("Cannot load Puppeteer") ||
+        (result.message ?? "").includes("Browser launch failed") ||
+        (result.message ?? "").includes("No Chromium")
+      );
+      if (ebTechnical) {
+        sendStep(`EB-form technical failure (${result.message?.slice(0, 100)}) — falling back to mobile API with cookie harvest...`);
+        const haspreBake = preBakeSitesList.length > 0 || preBakeYoutube || preBakeGoogle;
+        sendStep(haspreBake
+          ? "EB: launching temporary Chrome to bake cookies then harvest Instagram cookies..."
+          : "EB: launching temporary Chrome to harvest Instagram cookies (mid, ig_did, csrftoken)...",
+        );
+        let ebCookies: Awaited<ReturnType<typeof harvestSignupCookiesFromEB>>;
+        try {
+          ebCookies = await harvestSignupCookiesFromEB({
+            proxyHost, proxyPort: proxyPort ? Number(proxyPort) : undefined,
+            proxyUsername, proxyPassword, userAgent: userAgentEb || undefined,
+            preBakeSites:      preBakeSitesList.length ? preBakeSitesList : undefined,
+            preBakeSitesMin:   preBakeSitesMin   ? Number(preBakeSitesMin)   : 1,
+            preBakeSitesMax:   preBakeSitesMax   ? Number(preBakeSitesMax)   : 3,
+            preBakeScrollMin:  preBakeScrollMin  ? Number(preBakeScrollMin)  : 5,
+            preBakeScrollMax:  preBakeScrollMax  ? Number(preBakeScrollMax)  : 15,
+            preBakePctWebsite: preBakePctWebsite ? Number(preBakePctWebsite) : 34,
+            preBakePctYt:      preBakePctYt      ? Number(preBakePctYt)      : 33,
+            preBakePctGoogle:  preBakePctGoogle  ? Number(preBakePctGoogle)  : 33,
+            preBakeYoutube:    !!preBakeYoutube,
+            preBakeGoogle:     !!preBakeGoogle,
+            onStep:            sendStep,
+          });
+        } catch (e: any) {
+          const msg = `EB cookie harvest failed: ${e?.message}`;
+          sendStep(`EB: ${msg}`);
+          await storage.updateApiCreatedAccount(dbRecord.id, {
+            status: "error", instagramUserId: null, sessionCookies: null,
+            errorMessage: msg, steps: JSON.stringify([msg]),
+          });
+          return sendDone({ status: "error", message: msg, steps: [msg], dbId: dbRecord.id });
+        }
+        if (!ebCookies?.ig_did) {
+          const msg = "EB cookie harvest returned no device cookies — Chrome may be blocked by the proxy. Signup aborted.";
+          sendStep(`EB: ${msg}`);
+          await storage.updateApiCreatedAccount(dbRecord.id, {
+            status: "error", instagramUserId: null, sessionCookies: null,
+            errorMessage: msg, steps: JSON.stringify([msg]),
+          });
+          return sendDone({ status: "error", message: msg, steps: [msg], dbId: dbRecord.id });
+        }
+        sendStep(`EB: harvested mid=${ebCookies.mid.slice(0, 8)}... ig_did=${ebCookies.ig_did.slice(0, 8)}... ✓`);
+        const apiResult = await createInstagramAccountViaApi({
+          username, password, email, firstName, day: Number(day), month: Number(month), year: Number(year),
+          proxyUrl, bio: bio || undefined, userAgent: userAgentApi || undefined,
+          apiLimits: parsedApiLimits, ebCookies,
+          onStep: sendStep,
+        });
+        result = {
+          ...apiResult,
+          steps: [
+            `EB: harvested mid=${ebCookies.mid.slice(0, 8)}... ✓`,
+            `EB agent: ${ebCookies.ebUserAgent}`,
+            ...apiResult.steps,
+          ],
+        } as typeof result;
+      }
 
       // ── IMAP auto-verify ────────────────────────────────────────────────────
       if (result.status === "email_verification" && imapHost && imapUser && imapPass && result.sessionId) {
@@ -3259,7 +3275,9 @@ export async function registerInstagramRoutes(
         });
         if (code) {
           sendStep(`IMAP: found code ${code} — submitting`);
-          const verifyResult = await submitSignupCode(result.sessionId, code);
+          const verifyResult = isEBSignupSession(result.sessionId)
+            ? await submitSignupCodeViaEB(result.sessionId, code)
+            : await submitSignupCode(result.sessionId, code);
           result = { ...verifyResult, steps: [...result.steps, ...verifyResult.steps] } as typeof result;
         } else {
           sendStep("IMAP: no code found within timeout — manual entry required");
@@ -3291,7 +3309,9 @@ export async function registerInstagramRoutes(
     try {
       const { sessionId, code, dbId } = req.body as { sessionId: string; code: string; dbId?: number };
       if (!sessionId || !code) return res.status(400).json({ error: "sessionId and code are required" });
-      const result = await submitSignupCode(sessionId, code);
+      const result = isEBSignupSession(sessionId)
+        ? await submitSignupCodeViaEB(sessionId, code)
+        : await submitSignupCode(sessionId, code);
       if (dbId) {
         await storage.updateApiCreatedAccount(dbId, {
           status: result.status,

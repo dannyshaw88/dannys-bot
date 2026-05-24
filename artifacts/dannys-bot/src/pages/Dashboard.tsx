@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.526",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account now uses the real browser (Chrome) to fill and submit Instagram's signup form instead of calling the mobile API — this bypasses the 'signup_block / spam' error that Instagram was returning for API-based requests." },
+      { category: "Fix", text: "Email verification during account creation is now handled end-to-end in the same browser session — the code is submitted directly into the live Chrome page, so the signup completes without needing to restart." },
+      { category: "Improvement", text: "The mobile API remains as an automatic fallback if Chrome cannot be launched or the form layout cannot be detected, so account creation still works even in edge cases." },
+    ],
+  },
+  {
     version: "1.0.525",
     date: "24 May 2026",
     items: [

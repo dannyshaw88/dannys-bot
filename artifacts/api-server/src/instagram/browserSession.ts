@@ -6052,6 +6052,362 @@ export function sendEbWsMessage(profileId: number, msg: object): void {
 // Finds the OTP code input on the current page, fills it with the supplied code,
 // then finds and clicks the Continue / Submit button.  Safe to call at any time —
 // does nothing if no OTP input is visible.
+// ── EB-form account creation ──────────────────────────────────────────────────
+// Fills and submits the Instagram web signup form in a real Chrome browser
+// instead of calling the mobile API. Avoids signup_block rejections that the
+// mobile API receives on datacenter/residential proxy traffic.
+
+interface _EBSignupSession {
+  browser: any;
+  page: any;
+  tmpDataDir: string;
+  steps: string[];
+}
+const _pendingEBSignups = new Map<string, _EBSignupSession>();
+
+async function _fillSignupInput(page: any, selectors: string[], value: string): Promise<boolean> {
+  const d = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  for (const sel of selectors) {
+    try {
+      const el = await page.$(sel);
+      if (!el) continue;
+      const box = await el.boundingBox();
+      if (!box || box.width === 0 || box.height === 0) continue;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await d(150);
+      await page.keyboard.down("Control");
+      await page.keyboard.press("a");
+      await page.keyboard.up("Control");
+      await d(80);
+      await page.keyboard.press("Backspace");
+      await d(100);
+      await page.keyboard.type(value, { delay: 55 + Math.random() * 45 });
+      await d(200);
+      return true;
+    } catch { continue; }
+  }
+  return false;
+}
+
+/** Returns true if sessionId is a pending EB signup (vs API-based signup). */
+export function isEBSignupSession(sessionId: string): boolean {
+  return _pendingEBSignups.has(sessionId);
+}
+
+export async function createInstagramAccountViaEBForm(params: {
+  username: string;
+  password: string;
+  email: string;
+  firstName: string;
+  month: number;
+  day: number;
+  year: number;
+  proxyHost?: string;
+  proxyPort?: number;
+  proxyUsername?: string;
+  proxyPassword?: string;
+  userAgent?: string;
+  onStep?: (s: string) => void;
+}): Promise<{
+  status: "success" | "email_verification" | "phone_verification" | "error";
+  message?: string;
+  steps: string[];
+  sessionCookies?: string[];
+  sessionId?: string;
+}> {
+  const { username, password, email, firstName, month, day, year,
+    proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent, onStep } = params;
+  const steps: string[] = [];
+  const step = (msg: string) => { steps.push(msg); onStep?.(msg); console.log(`[ebSignup] ${msg}`); };
+  const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+  if (!proxyHost) {
+    const msg = "[IP-LEAK BLOCKED] No proxy configured — a proxy is required for EB-form account creation";
+    step(msg);
+    return { status: "error", message: msg, steps };
+  }
+
+  let puppeteerLib: any;
+  try {
+    puppeteerLib = (await import("puppeteer-core")).default;
+  } catch {
+    try { puppeteerLib = (await import("puppeteer")).default; }
+    catch (e: any) { return { status: "error", message: `Cannot load Puppeteer: ${e?.message}`, steps }; }
+  }
+  if (!CHROMIUM_PATH) return { status: "error", message: "No Chromium executable found", steps };
+
+  const tmpDataDir = path.join(COOKIES_DIR, `signup-eb-form-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  fs.mkdirSync(tmpDataDir, { recursive: true });
+
+  const browserArgs = [...HARVEST_ARGS, `--user-data-dir=${tmpDataDir}`, `--proxy-server=${proxyHost}:${proxyPort ?? 80}`];
+
+  let browser: any;
+  try {
+    browser = await puppeteerLib.launch({ headless: true, executablePath: CHROMIUM_PATH, args: browserArgs, ignoreHTTPSErrors: true });
+    step("EB: Chrome launched ✓");
+  } catch (e: any) {
+    try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+    return { status: "error", message: `Browser launch failed: ${e?.message}`, steps };
+  }
+
+  const cleanup = async () => {
+    try { await browser.close(); } catch {}
+    try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+  };
+
+  try {
+    const [page] = await browser.pages();
+    const effectiveUA = userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+    await page.setUserAgent(effectiveUA);
+    await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1 });
+    if (proxyUsername) await page.authenticate({ username: proxyUsername, password: proxyPassword ?? "" });
+
+    step("EB: visiting instagram.com homepage (seeding device cookies)...");
+    try { await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
+    catch (e: any) { step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`); }
+    await delay(3000);
+    await dismissCookieBanner(page);
+    await delay(1000);
+
+    step("EB: navigating to email signup form...");
+    try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
+    catch (e: any) { step(`EB: signup page nav warning: ${e?.message?.slice(0, 80)}`); }
+    await delay(3500);
+    await dismissCookieBanner(page);
+    await delay(1000);
+
+    step("EB: filling signup form...");
+
+    const emailFilled = await _fillSignupInput(page, [
+      'input[name="emailOrPhone"]', 'input[type="email"]',
+      'input[placeholder*="email" i]', 'input[placeholder*="mobile" i]',
+    ], email);
+    if (!emailFilled) {
+      step("EB: could not find email input — Instagram may have changed their form layout");
+      await cleanup();
+      return { status: "error", message: "Could not find email field on Instagram's signup page — the form layout may have changed", steps };
+    }
+    step("EB: email filled ✓");
+    await delay(400);
+
+    await _fillSignupInput(page, ['input[name="fullName"]', 'input[placeholder*="full name" i]', 'input[placeholder*="name" i]'], firstName);
+    step("EB: full name filled ✓");
+    await delay(400);
+
+    await _fillSignupInput(page, ['input[name="username"]', 'input[placeholder*="username" i]'], username);
+    step("EB: username filled ✓");
+    await delay(400);
+
+    await _fillSignupInput(page, ['input[name="password"]', 'input[type="password"]', 'input[placeholder*="password" i]'], password);
+    step("EB: password filled ✓");
+    await delay(800);
+
+    const signUpClicked = await page.evaluate(() => {
+      const LABELS = ["next", "sign up", "register", "create account", "continue"];
+      for (const btn of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'))) {
+        const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+        if (LABELS.some(l => txt.includes(l))) {
+          const r = btn.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) { btn.click(); return true; }
+        }
+      }
+      const sub = document.querySelector<HTMLElement>('button[type="submit"]');
+      if (sub) { sub.click(); return true; }
+      return false;
+    });
+    if (!signUpClicked) {
+      step("EB: could not find Sign Up button");
+      await cleanup();
+      return { status: "error", message: "Could not find Sign Up button on Instagram's signup form", steps };
+    }
+    step("EB: clicked Sign Up ✓");
+    await delay(4500);
+
+    const onBirthday = await page.evaluate(() => {
+      const t = document.body.innerText.toLowerCase();
+      return t.includes("birthday") || t.includes("date of birth") || t.includes("your age");
+    }).catch(() => false);
+
+    if (onBirthday) {
+      step("EB: filling birthday form...");
+      const MONTHS = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      await page.evaluate((m: number, mName: string, d: number, y: number) => {
+        for (const sel of Array.from(document.querySelectorAll<HTMLSelectElement>("select"))) {
+          const lbl = (sel.title || sel.getAttribute("aria-label") || "").toLowerCase();
+          if (lbl.includes("month")) {
+            for (const opt of Array.from(sel.options)) {
+              if (opt.value === String(m) || opt.text === mName || opt.text.startsWith(mName.slice(0, 3))) {
+                sel.value = opt.value; sel.dispatchEvent(new Event("change", { bubbles: true })); break;
+              }
+            }
+          }
+          if (lbl.includes("day")) {
+            for (const opt of Array.from(sel.options)) {
+              if (opt.value === String(d) || opt.text === String(d)) {
+                sel.value = opt.value; sel.dispatchEvent(new Event("change", { bubbles: true })); break;
+              }
+            }
+          }
+          if (lbl.includes("year")) {
+            for (const opt of Array.from(sel.options)) {
+              if (opt.value === String(y) || opt.text === String(y)) {
+                sel.value = opt.value; sel.dispatchEvent(new Event("change", { bubbles: true })); break;
+              }
+            }
+          }
+        }
+        for (const inp of Array.from(document.querySelectorAll<HTMLInputElement>("input"))) {
+          const lbl = (inp.getAttribute("aria-label") || inp.placeholder || "").toLowerCase();
+          if (lbl.includes("month")) { inp.value = String(m); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true })); }
+          else if (lbl.includes("day")) { inp.value = String(d); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true })); }
+          else if (lbl.includes("year")) { inp.value = String(y); inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true })); }
+        }
+      }, month, MONTHS[month] ?? "", day, year);
+      await delay(600);
+      step("EB: birthday filled ✓");
+
+      await page.evaluate(() => {
+        for (const btn of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'))) {
+          const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+          if (["next", "continue", "done", "confirm"].some(l => txt.includes(l))) {
+            const r = btn.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) { btn.click(); return; }
+          }
+        }
+      });
+      step("EB: clicked Next on birthday ✓");
+      await delay(4500);
+    }
+
+    const finalUrl = page.url();
+    const finalText = await page.evaluate(() => document.body.innerText).catch(() => "");
+    step(`EB: result URL: ${finalUrl}`);
+
+    if (finalUrl.includes("instagram.com") && !finalUrl.includes("/accounts/") && !finalUrl.includes("emailsignup")) {
+      const allCookies = await page.cookies("https://www.instagram.com", "https://i.instagram.com") as Array<{ name: string; value: string }>;
+      const cookieStrings = allCookies.map((c: any) => `${c.name}=${c.value}`);
+      step(`EB: signup successful ✓ — ${cookieStrings.length} cookies extracted`);
+      await cleanup();
+      return { status: "success", steps, sessionCookies: cookieStrings };
+    }
+
+    const lowerText = finalText.toLowerCase();
+    const needsEmailVerify = lowerText.includes("confirmation code") || lowerText.includes("confirm your email") ||
+      lowerText.includes("we sent") || lowerText.includes("enter the code") || lowerText.includes("verification code") ||
+      finalUrl.includes("confirm") || finalUrl.includes("verification");
+    const needsPhoneVerify = !needsEmailVerify && lowerText.includes("phone") && (lowerText.includes("verify") || lowerText.includes("sms") || lowerText.includes("confirm"));
+
+    if (needsEmailVerify || needsPhoneVerify) {
+      const kind = needsEmailVerify ? "email" : "phone";
+      step(`EB: ${kind} verification required`);
+      const { randomUUID } = await import("node:crypto");
+      const sessionId = randomUUID();
+      _pendingEBSignups.set(sessionId, { browser, page, tmpDataDir, steps: [...steps] });
+      setTimeout(async () => {
+        const s = _pendingEBSignups.get(sessionId);
+        if (s) {
+          _pendingEBSignups.delete(sessionId);
+          try { await s.browser.close(); } catch {}
+          try { fs.rmSync(s.tmpDataDir, { recursive: true, force: true }); } catch {}
+        }
+      }, 15 * 60 * 1000);
+      const msg = needsEmailVerify ? `Check ${email} for a 6-digit code` : "Enter the SMS code sent to your phone";
+      return { status: needsEmailVerify ? "email_verification" : "phone_verification", steps, sessionId, message: msg };
+    }
+
+    const errEl = await page.evaluate(() => {
+      for (const sel of ['[role="alert"]', 'p[id*="error"]', 'span[id*="error"]', 'div[class*="error" i] p']) {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (el?.innerText?.trim()) return el.innerText.trim();
+      }
+      return null;
+    }).catch(() => null);
+
+    const errMsg = errEl ?? finalText.slice(0, 400);
+    step(`EB: signup did not complete — ${errMsg.slice(0, 200)}`);
+    await cleanup();
+    return { status: "error", message: errMsg.slice(0, 400), steps };
+  } catch (e: any) {
+    step(`EB: unhandled exception — ${e?.message}`);
+    await cleanup();
+    return { status: "error", message: e?.message ?? "Unknown EB error", steps };
+  }
+}
+
+export async function submitSignupCodeViaEB(sessionId: string, code: string): Promise<{
+  status: "success" | "error";
+  message?: string;
+  steps: string[];
+  sessionCookies?: string[];
+}> {
+  const session = _pendingEBSignups.get(sessionId);
+  if (!session) return { status: "error", steps: [], message: "EB session not found — it may have expired" };
+
+  const { browser, page, tmpDataDir, steps: prevSteps } = session;
+  const steps = [...prevSteps];
+  const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  const step = (msg: string) => { steps.push(msg); console.log(`[ebSignup] ${msg}`); };
+
+  step(`EB: entering verification code...`);
+  try {
+    let filled = false;
+    for (const sel of [
+      'input[name="email_confirmation_code"]', 'input[autocomplete="one-time-code"]',
+      'input[inputmode="numeric"]', 'input[name="verificationCode"]', 'input[name="code"]',
+    ]) {
+      const el = await page.$(sel).catch(() => null);
+      if (!el) continue;
+      const box = await el.boundingBox().catch(() => null);
+      if (!box || box.width === 0) continue;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await delay(150);
+      await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");
+      await delay(80);
+      await page.keyboard.press("Backspace");
+      await delay(100);
+      await page.keyboard.type(code, { delay: 70 });
+      filled = true;
+      break;
+    }
+    if (!filled) return { status: "error", steps, message: "Could not find the verification code input on the page" };
+
+    await delay(500);
+    await page.evaluate(() => {
+      for (const btn of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'))) {
+        const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+        if (["confirm", "next", "continue", "verify", "submit"].some(l => txt.includes(l))) {
+          const r = btn.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) { btn.click(); return; }
+        }
+      }
+    });
+    step("EB: clicked Confirm ✓");
+    await delay(5000);
+
+    const url = page.url();
+    const allCookies = await page.cookies("https://www.instagram.com", "https://i.instagram.com") as Array<{ name: string; value: string }>;
+    const cookieStrings = allCookies.map((c: any) => `${c.name}=${c.value}`);
+    const hasSession = cookieStrings.some(c => c.startsWith("sessionid="));
+
+    if (hasSession || (url.includes("instagram.com") && !url.includes("/accounts/"))) {
+      step(`EB: verification successful ✓ — ${cookieStrings.length} cookies extracted`);
+      _pendingEBSignups.delete(sessionId);
+      try { await browser.close(); } catch {}
+      try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
+      return { status: "success", steps, sessionCookies: cookieStrings };
+    }
+
+    const pageText = await page.evaluate(() => document.body.innerText).catch(() => "");
+    step(`EB: code submission did not complete — ${pageText.slice(0, 200)}`);
+    return { status: "error", steps, message: `Verification failed — ${pageText.slice(0, 200)}` };
+  } catch (e: any) {
+    step(`EB: exception during code submit: ${e?.message}`);
+    return { status: "error", steps, message: e?.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function browserFill2fa(profileId: number, code: string): Promise<void> {
   const s = sessions.get(profileId);
   if (!s) return;
