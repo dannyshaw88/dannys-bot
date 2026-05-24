@@ -791,7 +791,7 @@ function setupToolbarIpc(): void {
           const p = await r.json() as any;
           const usr = JSON.stringify(p.username ?? "");
           const pwd = JSON.stringify(p.password ?? "");
-          await wc.executeJavaScript(`(async () => {
+          const _needsNav = await wc.executeJavaScript(`(async () => {
             const wait = ms => new Promise(res => setTimeout(res, ms));
             const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
             const fill = (el, val) => {
@@ -799,19 +799,58 @@ function setupToolbarIpc(): void {
               el.dispatchEvent(new Event('input',  { bubbles: true }));
               el.dispatchEvent(new Event('change', { bubbles: true }));
             };
-            let uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
-            let pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
-            if (!uInp && !pInp) {
-              window.location.href = 'https://www.instagram.com/accounts/login/';
-              return;
+            // Poll up to 10 × 300 ms for React to mount the login form
+            let uInp, pInp, t = 0;
+            while (t++ < 10) {
+              uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
+              pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
+              if (uInp || pInp) break;
+              await wait(300);
             }
+            if (!uInp && !pInp) return 'navigate';
             if (uInp) { fill(uInp, ${usr}); uInp.focus(); }
             await wait(250);
             if (pInp) { fill(pInp, ${pwd}); pInp.focus(); }
             await wait(400);
             const btn = document.querySelector('button[type="submit"]');
             if (btn && !btn.disabled) btn.click();
-          })()`).catch(() => {});
+          })()`).catch(() => 'navigate');
+        if (_needsNav === 'navigate') {
+          // Not on the login page — navigate there and fill after load using the
+          // freshly-fetched credentials (avoids relying on stale did-navigate creds).
+          const _fillAfterLoad = async () => {
+            if (wc.isDestroyed()) return;
+            await new Promise(r => setTimeout(r, 1500));
+            if (wc.isDestroyed()) return;
+            await wc.executeJavaScript(`(async () => {
+              const wait = ms => new Promise(r => setTimeout(r, ms));
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+              const fill = (el, val) => {
+                setter.call(el, val);
+                el.dispatchEvent(new Event('input',  { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              };
+              let uInp, pInp, t = 0;
+              while (t++ < 20) {
+                uInp = document.querySelector('input[name="username"]') || document.querySelector('input[autocomplete="username"]');
+                pInp = document.querySelector('input[name="password"]') || document.querySelector('input[type="password"]');
+                if (uInp && pInp) break;
+                await wait(500);
+              }
+              if (!uInp || !pInp) return;
+              fill(uInp, ${usr}); uInp.focus();
+              await wait(300);
+              fill(pInp, ${pwd}); pInp.focus();
+              await wait(400);
+              const btn = document.querySelector('button[type="submit"]');
+              if (btn && !btn.disabled) btn.click();
+            })()`).catch(() => {});
+          };
+          wc.once('did-finish-load', _fillAfterLoad);
+          wc.loadURL('https://www.instagram.com/accounts/login/').catch(() => {
+            wc.removeListener('did-finish-load', _fillAfterLoad);
+          });
+        }
         } catch {}
         break;
       }

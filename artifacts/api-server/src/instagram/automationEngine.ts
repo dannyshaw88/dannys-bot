@@ -2470,7 +2470,9 @@ class AutomationEngine {
             await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: expReason });
             this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", expReason);
             state.client = null;
-            sessionError = "logged_out";
+            // Do NOT set sessionError here — the DM check uses the mobile API (igApiCookies)
+            // independently of the web session and may still succeed even when the web session
+            // has expired. Only checkSessionErr (mobile-API-level errors) should break the queue.
             return;
           }
           viewed = vtfResult.viewed;
@@ -2498,7 +2500,7 @@ class AutomationEngine {
               await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: expReason });
               this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", expReason);
               state.client = null;
-              sessionError = "logged_out";
+              // Do NOT set sessionError — allow DM check (mobile API) to continue.
               return;
             }
             const summary = watched > 0
@@ -2633,7 +2635,7 @@ class AutomationEngine {
             await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: expReason });
             this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", expReason);
             state.client = null;
-            sessionError = "logged_out";
+            // Do NOT set sessionError — allow DM check (mobile API) to continue.
             return;
           }
           const summary = watched > 0

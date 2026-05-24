@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.528",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Check DMs now runs even when the View Timeline Feed or Like Posts action detects a web-session expiry — the DM check uses a separate mobile API path that can still succeed independently." },
+      { category: "Fix", text: "The Login button in the embedded browser now polls for the username and password fields instead of checking once — handles pages where the form takes a moment to appear." },
+      { category: "Fix", text: "Clicking Login when not on the Instagram login page now navigates there and fills the form automatically with fresh credentials after the page loads, instead of leaving the fields empty." },
+    ],
+  },
+  {
     version: "1.0.527",
     date: "24 May 2026",
     items: [
