@@ -358,9 +358,19 @@ async function ensureEncryptionKeys(ig: IgApiClient): Promise<void> {
     console.error(`[instagramLogin] si/fetch_headers failed: ${e?.message}`);
   }
 
-  // Strategy 2: qe/syncLoginExperiments
+  // Strategy 2: qe/sync (minimal — no experiments field to avoid "400 Invalid experiment"
+  // from the library's outdated LOGIN_EXPERIMENTS list vs our declared app version)
   try {
-    await ig.qe.syncLoginExperiments();
+    await ig.request.send({
+      url: "/api/v1/qe/sync/",
+      method: "POST",
+      form: ig.request.sign({
+        id: ig.state.uuid,
+        server_config_retrieval: "1",
+        _csrftoken: ig.state.cookieCsrfToken,
+        _uuid: ig.state.uuid,
+      }),
+    });
     if (ig.state.passwordEncryptionPubKey) {
       console.error(`[instagramLogin] Got encryption keys via qe/sync (keyId=${ig.state.passwordEncryptionKeyId})`);
       return;
@@ -511,7 +521,7 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   // Falls back to MOBILE_VERSION when userAgentApi is device-params-only (format B).
   // BLOKS_VERSION_ID and SIGNATURE_KEY must match the declared app version —
   // the library ships v222-era values which Instagram detects as a mismatch.
-  ig.state.constants.BLOKS_VERSION_ID = "3f4e55a5a3f13abe38d703b5fd6d2f678bd00ab21e71e74cd4dc62e08a9a3c27";
+  ig.state.constants.BLOKS_VERSION_ID = "16b7bd25c6c06886d57c4d455265669345a2d96625385b8ee30026ac2dc5ed97";
   ig.state.capabilitiesHeader = "3brTvwQ=";
   ig.state.constants.SIGNATURE_KEY = "fc4e50e6811bb3ff04fb58c49a70b8c9b23a9cde8d74e574c5987d9ebfbf1818";
 
@@ -671,7 +681,16 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
     // If they weren't captured (proxy stripped them), fall back to qe/sync.
     if (!igPw.state.passwordEncryptionPubKey) {
       try {
-        await igPw.qe.syncLoginExperiments();
+        await igPw.request.send({
+          url: "/api/v1/qe/sync/",
+          method: "POST",
+          form: igPw.request.sign({
+            id: igPw.state.uuid,
+            server_config_retrieval: "1",
+            _csrftoken: igPw.state.cookieCsrfToken,
+            _uuid: igPw.state.uuid,
+          }),
+        });
         console.error(`[instagramLogin] @${profile.username} — encryption keys via qe/sync fallback (keyId=${igPw.state.passwordEncryptionKeyId})`);
       } catch (e: any) {
         console.error(`[instagramLogin] @${profile.username} — qe/sync fallback failed: ${e?.message}`);
@@ -1349,8 +1368,19 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
         // ── Phase 2e: FetchConfig (qe/sync) ──────────────────────────────
         // Jarvee calls FetchConfig after notifications (step 10 in cold-start).
+        // Minimal form — no experiments field to avoid "400 Invalid experiment"
+        // from the library's outdated LOGIN_EXPERIMENTS list vs our app version.
         try {
-          await ig.qe.syncLoginExperiments();
+          await ig.request.send({
+            url: "/api/v1/qe/sync/",
+            method: "POST",
+            form: ig.request.sign({
+              id: ig.state.uuid,
+              server_config_retrieval: "1",
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uuid: ig.state.uuid,
+            }),
+          });
           console.error(`[instagramLogin] @${profile.username} — qe/sync (FetchConfig) OK`);
         } catch (e: any) {
           if (isABDError(e)) {

@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.503",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Verify no longer shows 'FetchConfig 400 Invalid experiment' errors — the outdated experiment list sent to Instagram has been replaced with a minimal config-only request that Instagram accepts correctly." },
+      { category: "Fix", text: "Updated the BLOKS version ID used during verify and login to match the current app version, removing a mismatch that could cause Instagram to flag requests." },
+    ],
+  },
+  {
     version: "1.0.502",
     date: "24 May 2026",
     items: [

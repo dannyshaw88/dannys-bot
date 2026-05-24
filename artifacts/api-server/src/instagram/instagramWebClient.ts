@@ -948,7 +948,18 @@ export class InstagramWebClient {
     } catch { /* non-fatal — try next strategy */ }
 
     if (!ig.state.passwordEncryptionPubKey) {
-      try { await ig.qe.syncLoginExperiments(); } catch { /* non-fatal */ }
+      try {
+        await ig.request.send({
+          url: "/api/v1/qe/sync/",
+          method: "POST",
+          form: ig.request.sign({
+            id: ig.state.uuid,
+            server_config_retrieval: "1",
+            _csrftoken: ig.state.cookieCsrfToken,
+            _uuid: ig.state.uuid,
+          }),
+        });
+      } catch { /* non-fatal */ }
     }
 
     if (!ig.state.passwordEncryptionPubKey) {
@@ -1482,7 +1493,16 @@ export class InstagramWebClient {
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — news/inbox (notifications badge) OK");
     } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: news/inbox (non-fatal): ${e?.message}`); }
     try {
-      await ig.qe.syncLoginExperiments();
+      await ig.request.send({
+        url: "/api/v1/qe/sync/",
+        method: "POST",
+        form: ig.request.sign({
+          id: ig.state.uuid,
+          server_config_retrieval: "1",
+          _csrftoken: ig.state.cookieCsrfToken,
+          _uuid: ig.state.uuid,
+        }),
+      });
       console.log("[webClient] _buildWarmedIgClient: Phase 2 — qe/sync (FetchConfig) OK");
     } catch (e: any) { console.warn(`[webClient] _buildWarmedIgClient: qe/sync (non-fatal): ${e?.message}`); }
 
@@ -3175,7 +3195,18 @@ export class InstagramWebClient {
       await ig.request.send({ method: "GET", url: "/api/v1/si/fetch_headers/", qs: { challenge_type: "signup", guid: ig.state.uuid } });
     } catch { /* non-fatal */ }
     if (!ig.state.passwordEncryptionPubKey) {
-      try { await ig.qe.syncLoginExperiments(); } catch { /* non-fatal */ }
+      try {
+        await ig.request.send({
+          url: "/api/v1/qe/sync/",
+          method: "POST",
+          form: ig.request.sign({
+            id: ig.state.uuid,
+            server_config_retrieval: "1",
+            _csrftoken: ig.state.cookieCsrfToken,
+            _uuid: ig.state.uuid,
+          }),
+        });
+      } catch { /* non-fatal */ }
     }
     if (!ig.state.passwordEncryptionPubKey) {
       console.warn(`[webClient] @${username} ABD freshLogin: could not fetch encryption keys`);
@@ -4000,7 +4031,16 @@ export async function createInstagramAccountViaApi(params: {
         step(`Library: launcher/sync error (non-fatal): ${e?.message}`);
       }
       try {
-        await igLib.qe.syncLoginExperiments();
+        await igLib.request.send({
+          url: "/api/v1/qe/sync/",
+          method: "POST",
+          form: igLib.request.sign({
+            id: igLib.state.uuid,
+            server_config_retrieval: "1",
+            _csrftoken: igLib.state.cookieCsrfToken,
+            _uuid: igLib.state.uuid,
+          }),
+        });
         step("Library: qe/sync OK");
       } catch (e: any) {
         step(`Library: qe/sync error (non-fatal): ${e?.message}`);
