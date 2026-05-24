@@ -221,11 +221,13 @@ export async function tlsRequest(opts: {
       const cookies = extractSetCookies(resp.headers);
       const rawBody = typeof resp.data === "string"
         ? resp.data
-        : (resp.data != null ? JSON.stringify(resp.data) : "");
+        : Buffer.isBuffer(resp.data)
+          ? (resp.data as Buffer).toString("utf8")
+          : (resp.data != null ? JSON.stringify(resp.data) : "");
       let json: any = null;
       try { json = JSON.parse(rawBody); } catch {
         // resp.data may already be a parsed object when responseType==="json"
-        if (resp.data != null && typeof resp.data === "object") json = resp.data;
+        if (resp.data != null && typeof resp.data === "object" && !Buffer.isBuffer(resp.data)) json = resp.data;
       }
       return { status: resp.status, cookies, json, rawBody, responseHeaders: resp.headers };
     }
@@ -454,11 +456,16 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
 
     // ── Parse response body ───────────────────────────────────────────────────
     // CycleTLS v2.x: body is in .data (already-parsed JSON or raw string).
+    // When .data is a Buffer (binary response), convert to UTF-8 string first —
+    // JSON.stringify(Buffer) produces {"type":"Buffer","data":[...]} which is
+    // not useful and breaks error message display.
     const rawBody = typeof resp.data === "string"
       ? resp.data
-      : (resp.data != null ? JSON.stringify(resp.data) : "");
+      : Buffer.isBuffer(resp.data)
+        ? (resp.data as Buffer).toString("utf8")
+        : (resp.data != null ? JSON.stringify(resp.data) : "");
     // .data may already be a parsed object when responseType==="json"
-    let parsedBody: any = (resp.data != null && typeof resp.data === "object")
+    let parsedBody: any = (resp.data != null && typeof resp.data === "object" && !Buffer.isBuffer(resp.data))
       ? resp.data
       : rawBody;
     if (typeof parsedBody === "string") {

@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.519",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Account creation error messages now show the actual text from Instagram instead of a raw binary blob — CycleTLS was returning responses as a Buffer object which got serialised as JSON bytes instead of readable text." },
+      { category: "Fix", text: "CycleTLS (Android TLS fingerprinting) is now a proper dependency of the API server — it was only installed inside the Electron package so the server could not find it and silently fell back to standard Node.js TLS on every request." },
+    ],
+  },
+  {
     version: "1.0.518",
     date: "24 May 2026",
     items: [
