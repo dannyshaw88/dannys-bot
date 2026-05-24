@@ -56,7 +56,7 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.511",
+    version: "1.0.512",
     date: "24 May 2026",
     items: [
       { category: "Fix", text: "CycleTLS (the OkHttp4 Android TLS fingerprint library) is now correctly included in every Windows installer — it was silently missing from every build, so all signup requests were using a plain Node.js connection that Instagram's bot detection rejects." },
