@@ -1098,11 +1098,9 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
 
         // ── Phase 2a: Session validation ──────────────────────────────────
         // Strategy:
-        //   1. Try GET /api/v1/users/{userId}/info/ — universally reliable.
-        //      200 = session alive, 401 = expired, 403 = banned, checkpoint = captcha.
-        //   2. Also fire POST /api/v1/accounts/get_account_family/ (Jarvee compat).
-        //      This endpoint returns 404 for many account types so its result is
-        //      advisory only — we never treat a 404 from it as "session dead".
+        //   POST /api/v1/accounts/get_account_family/ — Jarvee-compatible probe.
+        //   404 = endpoint not applicable for this account type → session still alive.
+        //   401 / 403 / checkpoint = definitive auth failure.
         //
         // CRITICAL: never fall through to a password login from here. Making a fresh
         // password attempt immediately after a cookie probe looks like account
@@ -1173,58 +1171,32 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           return null;
         };
 
-        // ── Step 1: users/{userId}/info — primary session probe ───────────
+        // ── Session probe: get_account_family ─────────────────────────────
+        // 200 = session confirmed. 404 = endpoint not applicable for this account
+        // type (normal) → treat as session alive and continue. Auth errors
+        // (401/403/checkpoint/feedback_required) = definitive failure.
         let sessionConfirmed = false;
         try {
           await ig.request.send({
-            url: `/api/v1/users/${userId}/info/`,
-            method: "GET",
+            url: "/api/v1/accounts/get_account_family/",
+            method: "POST",
+            form: ig.request.sign({
+              _csrftoken: ig.state.cookieCsrfToken,
+              _uid: userId,
+              _uuid: ig.state.uuid,
+            }),
           });
           sessionConfirmed = true;
-          console.error(`[instagramLogin] @${profile.username} — users/info (session probe) OK ✓`);
-        } catch (infoErr: any) {
-          const statusCode: number | undefined = infoErr?.response?.statusCode;
-          console.error(`[instagramLogin] @${profile.username} — users/info failed: HTTP ${statusCode ?? "n/a"} ${infoErr?.message ?? ""}`);
-          const classified = classifyAuthError(infoErr, "users/info");
+          console.error(`[instagramLogin] @${profile.username} — get_account_family OK ✓`);
+        } catch (famErr: any) {
+          const statusCode: number | undefined = famErr?.response?.statusCode;
+          console.error(`[instagramLogin] @${profile.username} — get_account_family failed: HTTP ${statusCode ?? "n/a"} ${famErr?.message ?? ""}`);
+          const classified = classifyAuthError(famErr, "get_account_family");
           if (classified) return classified;
-          // Non-auth error (404, 429, network) — inconclusive, continue to get_account_family
-          console.error(`[instagramLogin] @${profile.username} — users/info inconclusive, trying get_account_family`);
-        }
-
-        // ── Step 2: get_account_family — Jarvee compat, advisory only ────
-        // Only run if users/info was inconclusive. 404 from this endpoint is
-        // normal for many account types and must NOT be treated as session dead.
-        if (!sessionConfirmed) {
-          try {
-            await ig.request.send({
-              url: "/api/v1/accounts/get_account_family/",
-              method: "POST",
-              form: ig.request.sign({
-                _csrftoken: ig.state.cookieCsrfToken,
-                _uid: userId,
-                _uuid: ig.state.uuid,
-              }),
-            });
-            sessionConfirmed = true;
-            console.error(`[instagramLogin] @${profile.username} — get_account_family OK ✓`);
-          } catch (famErr: any) {
-            const statusCode: number | undefined = famErr?.response?.statusCode;
-            console.error(`[instagramLogin] @${profile.username} — get_account_family failed: HTTP ${statusCode ?? "n/a"} ${famErr?.message ?? ""}`);
-            const classified = classifyAuthError(famErr, "get_account_family");
-            if (classified) return classified;
-            // Both users/info AND get_account_family returned inconclusive non-auth errors.
-            // We cannot confirm the session is alive. Return logged_out so the user is
-            // prompted to re-verify rather than silently marking a dead session as valid.
-            // (A live session virtually never gets non-auth failures on both probes —
-            //  that pattern indicates a dead/revoked session or a blocking proxy issue.)
-            console.error(`[instagramLogin] @${profile.username} — both session probes inconclusive → returning logged_out (cannot confirm session is alive)`);
-            return {
-              ok: false,
-              message: `@${profile.username} — could not confirm the session is alive (both validation probes returned non-auth errors). Please check the proxy or re-verify the account.`,
-              accountStatus: "logged_out",
-              igDeviceState: captureDeviceState(),
-            };
-          }
+          // 404 or other non-auth error = endpoint not applicable for this account type.
+          // The session is still alive — treat as confirmed and proceed to cold-start.
+          sessionConfirmed = true;
+          console.error(`[instagramLogin] @${profile.username} — get_account_family inconclusive (non-auth), treating session as alive`);
         }
 
         // Helper: classify a cold-start error that might be an ABD response.

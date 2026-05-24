@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.527",
+    date: "24 May 2026",
+    items: [
+      { category: "Improvement", text: "Account verification now makes one fewer API call — the GetUserProfile lookup has been removed from the login sequence entirely." },
+    ],
+  },
+  {
     version: "1.0.526",
     date: "24 May 2026",
     items: [
