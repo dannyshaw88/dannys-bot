@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.521",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings no longer shows a phantom selected count — stale account IDs left in storage from deleted or renamed accounts are now cleaned up automatically when the dialog opens." },
+      { category: "Fix", text: "Create Account now shows a clear, actionable error message when Instagram rejects the signup — if the proxy blocked the warm-up calls entirely you are told to try a different proxy; otherwise you are told to wait a few minutes and retry." },
+    ],
+  },
+  {
     version: "1.0.520",
     date: "24 May 2026",
     items: [

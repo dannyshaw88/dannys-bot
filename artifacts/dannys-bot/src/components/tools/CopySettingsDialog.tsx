@@ -86,7 +86,10 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [targets, setTargets]    = useState<Set<number>>(() => {
     try {
       const stored = localStorage.getItem(SHARED_TARGETS_KEY);
-      return stored ? new Set(JSON.parse(stored) as number[]) : new Set();
+      if (!stored) return new Set();
+      const ids = JSON.parse(stored) as number[];
+      const validIds = new Set(profiles.map(p => p.id));
+      return new Set(ids.filter(id => validIds.has(id)));
     } catch { return new Set(); }
   });
   const [search, setSearch]      = useState("");
@@ -102,6 +105,17 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       localStorage.setItem(SHARED_TARGETS_KEY, JSON.stringify([...targets]));
     } catch {}
   }, [targets]);
+
+  // Keep targets in sync with the profiles list — remove any stale IDs that no
+  // longer correspond to an existing profile (e.g. after an account is deleted).
+  useEffect(() => {
+    const validIds = new Set(profiles.map(p => p.id));
+    setTargets(prev => {
+      const filtered = new Set([...prev].filter(id => validIds.has(id)));
+      if (filtered.size === prev.size) return prev;
+      return filtered;
+    });
+  }, [profiles]);
 
   useEffect(() => {
     if (open) {

@@ -4172,7 +4172,14 @@ export async function createInstagramAccountViaApi(params: {
     if (!j) {
       const bodyPreview = res.rawBody?.slice(0, 300) ?? "(empty)";
       step(`Instagram returned HTTP ${res.status} — body: ${bodyPreview}`);
-      return { status: "error", steps, message: `Instagram returned HTTP ${res.status}: ${bodyPreview}` };
+      // Give an actionable message depending on whether the proxy appears to be
+      // blocking (syncCookiesSeen === 0 means launcher/sync + qe/sync both returned
+      // zero cookies — the proxy is likely intercepting before Instagram's CDN).
+      const proxyBlocked = syncCookiesSeen === 0;
+      const hint = proxyBlocked
+        ? "The proxy did not return any Instagram cookies during the warm-up calls — it may be blocked by Instagram's CDN or incorrectly configured. Try a different proxy."
+        : "Instagram rejected the signup request after multiple attempts. Try a different proxy or wait a few minutes before retrying.";
+      return { status: "error", steps, message: hint };
     }
 
     // ── Success ────────────────────────────────────────────────────────────
