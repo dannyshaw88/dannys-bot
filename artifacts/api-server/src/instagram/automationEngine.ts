@@ -3198,16 +3198,18 @@ class AutomationEngine {
         this.logAction(profile.id, tool.id, "follow_blocked", user.username, source.value, source.type, "skipped", reason);
         blocked++;
 
-        // Session expired — mark logged_out and abort immediately
-        if (reason.includes("login_required") || reason.includes("logged out") || reason.includes("logout")) {
-          console.warn(`[engine] @${profile.username}: session expired (login_required) — marking logged_out, aborting session`);
+        // Session expired — mark logged_out and abort immediately.
+        // "session expired — re-verify account" is the string returned by followUser when
+        // the mobile API responds with login_required / 401, so we also match that phrase.
+        if (reason.includes("login_required") || reason.includes("session expired") || reason.includes("logged out") || reason.includes("logout")) {
+          console.warn(`[engine] @${profile.username}: session expired — marking logged_out, aborting session`);
           await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: reason.slice(0, 500) });
           this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", reason.slice(0, 300));
           state.client = null;
           hitHardLimit = true; break;
         }
 
-        // Only apply suspension for explicit Instagram account-level blocks
+        // Explicit Instagram account-level block (feedback_required / "Please wait" / "something went wrong")
         const isLegitBlock = reason.includes("Please wait") || reason.includes("feedback_required") || reason.includes("something went wrong");
         if (isLegitBlock) {
           // Jarvee "Auto Verify Automatic Behaviour Detected": if the block is a soft
@@ -3234,6 +3236,17 @@ class AutomationEngine {
             this.logAction(profile.id, tool.id, "action_suspended", user.username, source.value, source.type, "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
           }
           hitHardLimit = true; break; // Abort session immediately when legitimately blocked
+        }
+
+        // Catch-all: any other follow_blocked result (e.g. "200 undefined", unknown errors).
+        // If Stop Tool if Blocked is enabled, honour it for ALL block types — not just the
+        // named ones above.
+        if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+          const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
+          const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+          await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
+          this.logAction(profile.id, tool.id, "action_suspended", user.username, source.value, source.type, "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
+          hitHardLimit = true; break;
         }
 
         // Blocked attempts count against the session limit (users per session = real API calls)
@@ -3378,7 +3391,7 @@ class AutomationEngine {
           if (result.status === "follow_blocked") {
             blocked++;
             const reason = result.reason ?? "Instagram declined";
-            if (reason.includes("login_required") || reason.includes("logged out") || reason.includes("logout")) {
+            if (reason.includes("login_required") || reason.includes("session expired") || reason.includes("logged out") || reason.includes("logout")) {
               await storage.updateProfile(profile.id, { accountStatus: "logged_out", statusMessage: reason.slice(0, 500) });
               this.logAction(profile.id, tool.id, "logged_out", "", "", "", "error", reason.slice(0, 300));
               state.client = null; hitHardLimit = true; break;
@@ -3401,6 +3414,14 @@ class AutomationEngine {
               this.recordActionBlock(state, profile.id, tool.id, "follow", "Follow", user.username, rescrapeSource.value, rescrapeSource.type);
               hitHardLimit = true; break;
             }
+            // Catch-all: honour stopOnBlock for any unclassified block type
+            if (s.stopOnBlockEnabled && (s.stopOnBlockMinutes ?? 0) > 0) {
+              const _blockedUntilMs = Date.now() + (s.stopOnBlockMinutes * 60_000);
+              const _untilStr = new Date(_blockedUntilMs).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+              await storage.updateTool(tool.id, { settings: { ...s, toolBlockedUntil: _blockedUntilMs } });
+              this.logAction(profile.id, tool.id, "action_suspended", user.username, rescrapeSource.value, rescrapeSource.type, "suspended", `Tool stopped — blocked by Instagram. Suspended until ${_untilStr}`);
+              hitHardLimit = true; break;
+            }
             if (followed + blocked >= processCount) break;
             await sleep(randInt(followMin, followMax)); continue;
           }
@@ -3414,6 +3435,13 @@ class AutomationEngine {
           followed++;
           console.log(`[engine] @${profile.username}: ✓ @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
           await sleep(randInt(followMin, followMax));
+        }
+        // Guard: if we've run out of process slots via blocks alone (0 successful follows),
+        // the session/account is dead — stop re-scraping immediately instead of running all
+        // 20 rounds and hammering the sources for nothing.
+        if (!hitHardLimit && followed === 0 && blocked >= processCount) {
+          engineLog("WARN", `@${profile.username}: re-scrape aborted after round ${extraRound} — ${blocked} block(s), 0 follows (session dead or action-blocked)`);
+          hitHardLimit = true;
         }
       }
     }

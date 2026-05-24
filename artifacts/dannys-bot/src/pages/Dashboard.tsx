@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.529",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Session-expired blocks (\"session expired — re-verify account\") now immediately stop the follow session and mark the account logged out, instead of being silently ignored and triggering 20 rounds of re-scraping." },
+      { category: "Fix", text: "The re-scrape loop now aborts as soon as all follow slots have been consumed by blocks with no successful follows — prevents pointless re-scraping when the account is dead or action-blocked." },
+      { category: "Fix", text: "Stop Tool if Blocked now activates for all block types, including unexpected responses (e.g. \"200 undefined\") — previously it only fired for the specific Instagram block messages." },
+    ],
+  },
+  {
     version: "1.0.528",
     date: "24 May 2026",
     items: [
