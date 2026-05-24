@@ -56,9 +56,10 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.514",
+    version: "1.0.515",
     date: "24 May 2026",
     items: [
+      { category: "Fix", text: "Fixed a crash introduced in v1.0.514 that broke every signup attempt — the new debug logging code called .slice() on an undefined value, which crashed every TLS call before any request could reach Instagram." },
       { category: "Fix", text: "When the Android TLS fingerprint library fails to route through a proxy, the exact error from the underlying library is now logged — this will show whether it is a proxy authentication issue, a connection refusal, or something else, so the root cause can be fixed directly." },
       { category: "Fix", text: "CycleTLS is now a proper dependency of the Windows app — it was being copied into the wrong folder inside the build and then not found at runtime. It now installs via npm alongside the other app dependencies so the Android TLS fingerprint is active from first launch." },
       { category: "Fix", text: "Profile Sync no longer always returns 'Sync Failed' — the mobile session was not being initialised from stored cookies before the stats fetch, so every sync request returned null." },

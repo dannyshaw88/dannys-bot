@@ -206,7 +206,9 @@ export async function tlsRequest(opts: {
     // Log the body the Go subprocess returned — this contains the actual error
     // message (e.g. "proxy authentication required", "connection refused", "EOF")
     // which tells us exactly why the proxy/tunnel failed.
-    const cycleTlsErrBody = typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
+    const cycleTlsErrBody = resp.body != null
+      ? (typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body))
+      : "";
     console.warn(
       `[tls:req] CycleTLS returned status 0 for ${method} ${host}${path}` +
       ` elapsed=${elapsed}ms proxy=${proxyHost(proxyUrl)}` +
