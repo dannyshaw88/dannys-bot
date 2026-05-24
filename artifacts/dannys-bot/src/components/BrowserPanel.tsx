@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ChevronLeft, ChevronRight, RefreshCw, Home, Globe, Shield,
+  ChevronLeft, ChevronRight, RefreshCw, Compass, Globe, Shield,
   Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -779,10 +779,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       {/* Toolbar */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-background shrink-0">
         <button
-          onClick={() => send({ type: "newTab" })}
+          onClick={() => { send({ type: "newTab" }); setTimeout(() => send({ type: "navigate", url: "https://www.google.com/" }), 300); }}
           disabled={!connected}
           className="flex items-center justify-center h-10 w-10 rounded-md hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-          title="Open new tab"
+          title="Open new tab (Google)"
         >
           <Plus className="w-5 h-5" />
         </button>
@@ -792,14 +792,14 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => send({ type: "forward" })} disabled={!connected} title="Forward">
           <ChevronRight className="w-5 h-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0"
+        <Button variant="ghost" size="icon" className="h-12 w-12 shrink-0"
           onClick={() => { setIsLoading(true); send({ type: "reload" }); }} disabled={!connected} title="Refresh">
-          {isLoading && connected ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <RefreshCw className="w-5 h-5" />}
+          {isLoading && connected ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : <RefreshCw className="w-6 h-6" />}
         </Button>
-        <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0"
+        <Button variant="ghost" size="icon" className="h-12 w-12 shrink-0"
           onClick={() => { setIsLoading(true); send({ type: "navigate", url: "https://www.instagram.com/" }); }}
           disabled={!connected} title="Home (Instagram)">
-          <Home className="w-5 h-5" />
+          <Compass className="w-6 h-6" />
         </Button>
 
         <form onSubmit={onAddressSubmit} className="flex-1 min-w-0">
@@ -821,10 +821,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           variant="outline"
           size="sm"
           className={`h-8 px-3 text-xs gap-1.5 shrink-0 font-semibold transition-colors ${
-            loginState === "ok"      ? "border-green-400 text-green-700 bg-green-50 cursor-default pointer-events-none" :
-            loginState === "fail"    ? "border-red-300 text-red-700 bg-red-50" :
-            loginState === "running" ? "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" :
-            "border-primary/40 text-primary hover:bg-primary/5"
+            loginState === "ok"      ? "cursor-default pointer-events-none opacity-70" :
+            ""
           }`}
           onClick={loginState === "ok" ? undefined : doLogin}
           disabled={!connected}
@@ -853,11 +851,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               onClick={() => generateTotp((code) => send({ type: "fill2fa", code }))}
               disabled={!connected}
               title="Generate a live 2FA code, paste it into the 2FA field on screen, and auto-click Continue"
-              className={`h-8 px-3 rounded-md border text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
-                totpCopied  ? "border-green-400 text-green-700 bg-green-50" :
-                totpNoKey   ? "border-red-300 text-red-700 bg-red-50" :
-                "border-border bg-muted hover:bg-accent"
-              }`}
+              className="h-8 px-3 rounded-md border border-border bg-muted text-xs font-semibold transition-colors shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent text-foreground"
             >
               {totpCopied ? `✓ ${totpCode}` : totpNoKey ? "No 2FA key" : "2FA Code"}
             </button>

@@ -82,11 +82,11 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, actions: true, battery: false, connection: false, abd: true, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "actions", "battery", "connection", "abd", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, followers: 72, following: 72, sync: 88, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, followers: true, following: true, sync: true, actions: true, battery: false, connection: false, abd: true, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "followers", "following", "sync", "actions", "battery", "connection", "abd", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", active: "Active", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
+  account: "Account", status: "Status", active: "Active", followers: "Followers", following: "Following", sync: "Last Sync", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -135,35 +135,39 @@ export function ProfilesPage() {
   const { openWindow, closeWindow } = useBrowserWindows();
   const { data: proxies } = useProxies();
 
-  // Per-account in-flight tracking — avoids the React Query single-mutation
-  // callback-replacement bug where calling verifyMutation.mutate() a second time
-  // before the first resolves silently replaces the onError closure, causing the
-  // wrong account to be reset to "pending" on failure.
+  // Per-account in-flight tracking.
+  // verifyingInProgress ref: guards against double-submit with no stale-closure risk
+  // (a Set in a ref is always current — no dependency array needed).
+  // verifyingIds state: drives the visual disabled/spinner state in the render.
+  const verifyingInProgress = useRef(new Set<number>());
   const [verifyingIds, setVerifyingIds] = useState<Set<number>>(new Set());
 
   const handleVerify = useCallback(async (id: number) => {
-    if (verifyingIds.has(id)) return;
+    // Guard using the ref — always reads the live set, never stale.
+    if (verifyingInProgress.current.has(id)) return;
+    verifyingInProgress.current.add(id);
     setVerifyingIds(prev => { const n = new Set(prev); n.add(id); return n; });
-    updateAccountStatus.mutate({ id, accountStatus: "verifying" });
+    // Do NOT call updateAccountStatus.mutate("verifying") here — the verify
+    // endpoint sets accountStatus="verifying" itself (line 900 in routes).
+    // A competing PATCH running in parallel can land in the DB AFTER the verify
+    // has already written the final status, silently overriding "valid" → "verifying".
     try {
       const res  = await fetch(`/api/profiles/${id}/verify`, { method: "POST", credentials: "include" });
       const data = await res.json() as { ok: boolean; message: string };
-      if (!res.ok || !data.ok) {
-        updateAccountStatus.mutate({ id, accountStatus: "pending" });
-      }
       toast({
         title: data.ok ? "Verified" : "Verification Failed",
         description: data.message,
         variant: data.ok ? "default" : "destructive",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
     } catch {
-      updateAccountStatus.mutate({ id, accountStatus: "pending" });
       toast({ title: "Error", description: "Could not reach Instagram.", variant: "destructive" });
     } finally {
+      verifyingInProgress.current.delete(id);
       setVerifyingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+      // Always refetch so the UI shows whatever status the server actually set.
+      queryClient.invalidateQueries({ queryKey: [api.profiles.list.path] });
     }
-  }, [verifyingIds, updateAccountStatus, toast, queryClient]);
+  }, [toast, queryClient]);
 
   const [profColWidths, setProfColWidths] = useState<typeof DEFAULT_PROFILES_COL_WIDTHS>(() => {
     try {
@@ -232,9 +236,9 @@ export function ProfilesPage() {
   const [fixingAbd, setFixingAbd] = useState(false);
   const [fixingAbdIds, setFixingAbdIds] = useState<Set<number>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
-  const [sortField, setSortField] = useState<"account" | "status" | "ip" | null>(() => {
+  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | null>(() => {
     const v = sessionStorage.getItem("profiles:sortField");
-    return (v === "account" || v === "status" || v === "ip") ? v : null;
+    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following") ? v as any : null;
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (sessionStorage.getItem("profiles:sortDir") as "asc" | "desc") ?? "asc"
@@ -342,6 +346,11 @@ export function ProfilesPage() {
         const pb = b.proxyPort ?? 0;
         return sortDir === "asc" ? pa - pb : pb - pa;
       }
+      if (sortField === "followers" || sortField === "following") {
+        const na = sortField === "followers" ? (a.followersCount ?? -1) : (a.followingCount ?? -1);
+        const nb = sortField === "followers" ? (b.followersCount ?? -1) : (b.followingCount ?? -1);
+        return sortDir === "asc" ? na - nb : nb - na;
+      }
       let va = "", vb = "";
       if (sortField === "account") {
         va = (a.accountLabel || a.username || "").toLowerCase();
@@ -389,7 +398,7 @@ export function ProfilesPage() {
     });
   };
 
-  const cycleSort = (field: "account" | "status" | "ip") => {
+  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following") => {
     let newDir: "asc" | "desc";
     if (sortField !== field) {
       setSortField(field); setSortDir("asc");
@@ -970,17 +979,28 @@ export function ProfilesPage() {
               >
                 Account
                 <span className="text-[9px]">
-                  {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                  {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}
                 </span>
               </button>
             </div>
             {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
               if (key === "status") return (
                 <button key={key} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
-                  Status<span className="text-[9px]">{sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}</span>
+                  Status<span className="text-[9px]">{sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
               if (key === "active") return <div key={key} style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>;
+              if (key === "followers") return (
+                <button key={key} onClick={() => cycleSort("followers")} style={{ width: profColWidths.followers }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
+                  Followers<span className="text-[9px]">{sortField === "followers" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                </button>
+              );
+              if (key === "following") return (
+                <button key={key} onClick={() => cycleSort("following")} style={{ width: profColWidths.following }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
+                  Following<span className="text-[9px]">{sortField === "following" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                </button>
+              );
+              if (key === "sync") return <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 text-left">Last Sync</div>;
               if (key === "actions") return <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>;
               if (key === "battery") return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0 text-left">Battery</div>;
               if (key === "connection") return <div key={key} style={{ width: profColWidths.connection }} className="shrink-0 text-left">Mbps</div>;
@@ -996,7 +1016,7 @@ export function ProfilesPage() {
               >
                 IP:PORT
                 <span className="text-[9px]">
-                  {sortField === "ip" ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                  {sortField === "ip" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}
                 </span>
               </button>
             )}
@@ -1093,8 +1113,10 @@ export function ProfilesPage() {
                               <Globe className="w-2.5 h-2.5" />No Proxy
                             </span>
                         }
-                        {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && acctStatus !== "verifying" && (
-                          <button onClick={() => handleVerify(profile.id)} disabled={verifyingIds.has(profile.id)} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors">Verify</button>
+                        {hasProxy && (acctStatus !== "valid" || profile.credentialsDirty) && !isStopped && (acctStatus !== "verifying" || verifyingIds.has(profile.id)) && (
+                          <button onClick={() => handleVerify(profile.id)} disabled={verifyingIds.has(profile.id) || acctStatus === "verifying"} data-testid={`button-verify-${profile.id}`} className="text-[9px] font-bold text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors">
+                            {verifyingIds.has(profile.id) ? "…" : "Verify"}
+                          </button>
                         )}
                       </div>
                     );
@@ -1103,6 +1125,39 @@ export function ProfilesPage() {
                         <Switch checked={!isStopped} onCheckedChange={() => toggleStopped(profile.id, acctStatus)} data-testid={`switch-active-${profile.id}`} className="data-[state=checked]:bg-green-500" disabled={!hasProxy} title={!hasProxy ? "Assign a proxy before enabling this account" : undefined} />
                       </div>
                     );
+                    if (key === "followers") return (
+                      <div key={key} style={{ width: profColWidths.followers }} className="shrink-0 flex items-center" onMouseDown={e => e.stopPropagation()}>
+                        <span className="text-[11px] font-mono text-foreground/80">
+                          {profile.followersCount != null ? profile.followersCount.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
+                        </span>
+                      </div>
+                    );
+                    if (key === "following") return (
+                      <div key={key} style={{ width: profColWidths.following }} className="shrink-0 flex items-center" onMouseDown={e => e.stopPropagation()}>
+                        <span className="text-[11px] font-mono text-foreground/80">
+                          {profile.followingCount != null ? profile.followingCount.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
+                        </span>
+                      </div>
+                    );
+                    if (key === "sync") {
+                      const syncAt = profile.lastSyncedAt ? new Date(profile.lastSyncedAt) : null;
+                      let syncLabel = <span className="text-muted-foreground/40">Never</span>;
+                      if (syncAt) {
+                        const diffMs = Date.now() - syncAt.getTime();
+                        const diffMin = Math.floor(diffMs / 60_000);
+                        const diffHr  = Math.floor(diffMin / 60);
+                        const diffDay = Math.floor(diffHr / 24);
+                        if (diffMin < 1)        syncLabel = <span>Just now</span>;
+                        else if (diffMin < 60)  syncLabel = <span>{diffMin}m ago</span>;
+                        else if (diffHr  < 24)  syncLabel = <span>{diffHr}h ago</span>;
+                        else                    syncLabel = <span>{diffDay}d ago</span>;
+                      }
+                      return (
+                        <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 flex items-center" title={syncAt?.toLocaleString() ?? "Never synced"} onMouseDown={e => e.stopPropagation()}>
+                          <span className="text-[10px] text-muted-foreground truncate">{syncLabel}</span>
+                        </div>
+                      );
+                    }
                     if (key === "actions") return (
                       <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 flex items-center justify-start gap-3 overflow-hidden" onMouseDown={e => e.stopPropagation()}>
                         <button onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded ?? "")} title={!hasProxy ? "Assign a proxy before using the browser" : "Open embedded browser"} data-testid={`btn-open-browser-${profile.id}`} disabled={!hasProxy} className={`text-[11px] transition-colors ${!hasProxy ? "text-muted-foreground/40 cursor-not-allowed" : "text-muted-foreground hover:text-primary"}`}>Browser</button>

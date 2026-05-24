@@ -56,6 +56,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.500",
+    date: "24 May 2026",
+    items: [
+      { category: "Improvement", text: "Embedded browser toolbar: Reload and Home buttons are now larger and more prominent for easier access." },
+      { category: "Improvement", text: "Embedded browser Home button icon updated to a compass — clearer navigation symbol." },
+      { category: "Improvement", text: "Login, 2FA, Phone, Email, and Email Password buttons in the embedded browser toolbar are now clean black and white — no more coloured states." },
+      { category: "Improvement", text: "New tab button (+) now opens a built-in tab inside the browser panel, landing on Google.com instead of Instagram." },
+      { category: "Improvement", text: "Accounts column sort icons changed from shuffle-style arrows to clear up/down arrows so they no longer look like a randomiser." },
+      { category: "Improvement", text: "CycleTLS OkHttp4 fingerprinting now active — all Instagram API calls use an Android device TLS profile for improved session security." },
+    ],
+  },
+  {
     version: "1.0.499",
     date: "23 May 2026",
     items: [

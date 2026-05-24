@@ -58,6 +58,11 @@ import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes, con
 import { generateSync as totpGenerate } from "otplib";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 import { IgApiClient, IgCheckpointError, IgLoginTwoFactorRequiredError, IgLoginBadPasswordError } from "instagram-private-api";
+import { tlsRequest, tlsMultipartPost, patchIgClientTls, warmupTls } from "./tlsTransport.js";
+
+// Warm up the CycleTLS Go subprocess at module load so the first real request
+// doesn't pay the ~300 ms startup cost.
+warmupTls();
 
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
 function httpsRequest(
@@ -99,73 +104,11 @@ async function igReq(opts: {
   cookieJar?: string[];
   proxyUrl?: string;
 }): Promise<{ status: number; cookies: string[]; json: any; rawBody: string; responseHeaders: Record<string, string | string[] | undefined> }> {
-  const { host = "www.instagram.com", path, method, headers, body, cookieJar = [], proxyUrl } = opts;
-
-  // ── IP-LEAK PREVENTION ────────────────────────────────────────────────────
-  // Every Instagram API request MUST go through the account's assigned proxy.
-  // A missing proxyUrl means the request would exit via the server/home IP —
-  // Instagram will fingerprint the mismatch and lock the account.
-  // This throw is intentional: callers must always supply a proxyUrl.
-  if (!proxyUrl) {
-    throw new Error(
-      `[IP-LEAK BLOCKED] Instagram request ${method} ${path} refused — no proxy configured. ` +
-      "Assign a proxy to this account before performing any actions."
-    );
-  }
-
-  const reqHeaders: Record<string, string> = {
-    ...headers,
-    ...(cookieJar.length ? { Cookie: cookieJar.join("; ") } : {}),
-    ...(body ? { "Content-Length": String(Buffer.byteLength(body)) } : {}),
-  };
-
-  let agent: any;
-  if (proxyUrl) {
-    const { HttpsProxyAgent } = await import("https-proxy-agent");
-    // keepAlive: false — do not pool CONNECT-tunnel sockets across requests.
-    // With the default (keepAlive: true) each igReq() call leaves a dangling
-    // CONNECT tunnel open in the agent's socket pool.  After 30-60 min the proxy
-    // provider's own session timer closes the tunnel on its side; the agent still
-    // thinks it's open and hangs the next attempt until the 25 s request_timeout
-    // fires.  Disabling keepAlive forces a fresh TCP connection every time and
-    // eliminates the stale-socket accumulation bug.
-    agent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
-  }
-
-  const t0 = Date.now();
-  let res: Awaited<ReturnType<typeof httpsRequest>>;
-  try {
-    res = await httpsRequest(
-      { host, port: 443, path, method, headers: reqHeaders, ...(agent ? { agent } : {}) },
-      body,
-    );
-  } catch (err: any) {
-    // Log proxy failures with enough detail to diagnose the degradation cause
-    // (ECONNRESET = stale socket reused, ETIMEDOUT = proxy unreachable,
-    //  ECONNREFUSED = proxy port closed, request_timeout = proxy hung).
-    if (proxyUrl) {
-      const proxyHost = (() => { try { return new URL(proxyUrl).hostname; } catch { return proxyUrl; } })();
-      console.error(`[proxy:diag] ${method} ${host}${path} FAILED after ${Date.now() - t0}ms — proxy=${proxyHost} code=${err?.code ?? "?"} msg=${err?.message ?? err}`);
-    }
-    throw err;
-  } finally {
-    // Always destroy the agent so the CONNECT-tunnel socket is released
-    // immediately rather than lingering in the pool until GC.
-    if (agent) agent.destroy();
-  }
-
-  if (proxyUrl && Date.now() - t0 > 10000) {
-    const proxyHost = (() => { try { return new URL(proxyUrl).hostname; } catch { return proxyUrl; } })();
-    console.warn(`[proxy:diag] ${method} ${host}${path} SLOW ${Date.now() - t0}ms via proxy=${proxyHost} status=${res.status}`);
-  }
-
-  const raw = res.headers["set-cookie"];
-  const newCookies: string[] = (Array.isArray(raw) ? raw : raw ? [raw] : []).map(c => c.split(";")[0]);
-
-  let json: any = null;
-  try { json = JSON.parse(res.body); } catch {}
-
-  return { status: res.status, cookies: newCookies, json, rawBody: res.body, responseHeaders: res.headers };
+  // Delegate entirely to tlsTransport.ts which routes all Instagram API calls
+  // through the CycleTLS OkHttp4 TLS stack (or falls back to Node.js HTTPS if
+  // the CycleTLS binary is unavailable). IP-leak prevention and slow-request
+  // logging are both enforced inside tlsRequest().
+  return tlsRequest(opts);
 }
 
 function mergeCookies(base: string[], overrides: string[]): string[] {
@@ -993,6 +936,7 @@ export class InstagramWebClient {
     }
 
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
 
     // Fetch RSA encryption keys — required before login or Instagram rejects
     try {
@@ -1358,6 +1302,7 @@ export class InstagramWebClient {
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
     patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
 
     // Pre-warm the cookie jar so Instagram sets a fresh csrftoken cookie
     // before we make the friendship.create POST. Without this, cookieCsrfToken
@@ -1485,6 +1430,7 @@ export class InstagramWebClient {
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
     patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
 
     // ── Phase 0: unauthenticated probe calls (no cookies) ────────────────────
     // Jarvee fires these BEFORE loading the session cookie. Instagram sees a
@@ -1613,6 +1559,7 @@ export class InstagramWebClient {
     ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
     patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
 
     // Pre-warm: GET /media/info/ sets a fresh csrftoken cookie before the like POST.
     // Without this, cookieCsrfToken is "missing" and Instagram rejects the write.
@@ -1855,16 +1802,27 @@ export class InstagramWebClient {
   // ── Fetch own profile stats (followers / following / posts) ───────────────
   // Uses the same current_user endpoint but extracts the counts.
   async getOwnProfileStats(): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
+    const ACCT_LEVEL_RE = /checkpoint_required|challenge_required|login_required|not authorized|session expired|logged.?out|not logged in|suspended|disabled|account_disabled|compromised|phone.*verif|verify.*phone|email.*confirm|confirm.*email|email.*verif|verify.*email/i;
     try {
       const j = await this.mobileSessionGet(`/api/v1/accounts/current_user/?edit=true`);
       const u = j?.user;
-      if (!u) return null;
+      if (!u) {
+        // Surface account-level failures buried in the response body so the caller
+        // can update accountStatus — don't silently swallow them.
+        const msg = (j?.message ?? "") as string;
+        if (j?.status === "fail" && msg && ACCT_LEVEL_RE.test(msg)) throw new Error(msg);
+        return null;
+      }
       return {
         followersCount: Number(u.follower_count ?? u.followed_by_count ?? 0),
         followingCount: Number(u.following_count ?? 0),
         postsCount:     Number(u.media_count ?? 0),
       };
-    } catch {
+    } catch (e: any) {
+      const msg = (e?.message ?? "") as string;
+      // Re-throw account-level errors so runProfileSync can update accountStatus.
+      // Swallow transient network/timeout errors — those don't affect account standing.
+      if (ACCT_LEVEL_RE.test(msg)) throw e;
       return null;
     }
   }
@@ -2583,6 +2541,7 @@ export class InstagramWebClient {
     patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
 
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
 
     try {
       console.log(`[webClient] sendDM ${userId}: via IgApiClient broadcastText (uuid=${ig.state.uuid.slice(0,8)}… v${MOBILE_VERSION})`);
@@ -3210,6 +3169,7 @@ export class InstagramWebClient {
     }
 
     if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+    patchIgClientTls(ig, this.proxyUrl);
 
     try {
       await ig.request.send({ method: "GET", url: "/api/v1/si/fetch_headers/", qs: { challenge_type: "signup", guid: ig.state.uuid } });
@@ -3413,24 +3373,8 @@ export class InstagramWebClient {
       Cookie: this.cookieJar.join("; "),
     };
 
-    let agent: any;
-    if (this.proxyUrl) {
-      const { HttpsProxyAgent } = await import("https-proxy-agent");
-      agent = new HttpsProxyAgent(this.proxyUrl, { keepAlive: false });
-    }
-
-    let res: Awaited<ReturnType<typeof httpsRequest>>;
-    try {
-      res = await httpsRequest(
-        { host: "i.instagram.com", port: 443, path, method: "POST", headers, ...(agent ? { agent } : {}) },
-        body,
-      );
-    } finally {
-      if (agent) agent.destroy();
-    }
-    let json: any = null;
-    try { json = JSON.parse(res.body); } catch {}
-    if (!json) console.log(`[webClient] mobilePostMultipart ${path} status=${res.status} body:`, res.body.slice(0, 400));
+    const json = await tlsMultipartPost("i.instagram.com", path, headers, body, this.proxyUrl);
+    if (!json) console.log(`[webClient] mobilePostMultipart ${path} returned null — upload may have failed`);
     return json;
   }
 
@@ -4044,6 +3988,7 @@ export async function createInstagramAccountViaApi(params: {
       // reproducible but unique per account (same pattern used for DM sending).
       igLib.state.generateDevice(`${username}|${email}|${Date.now()}`);
       if (proxyUrl) igLib.state.proxyUrl = proxyUrl;
+      patchIgClientTls(igLib, proxyUrl);
 
       // Run the standard pre-login warm-up (launcher.preLoginSync → qe.syncLoginExperiments).
       // Non-fatal — continue even if it throws so we still attempt account.create().
