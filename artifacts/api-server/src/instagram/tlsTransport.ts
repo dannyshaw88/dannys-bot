@@ -203,7 +203,16 @@ export async function tlsRequest(opts: {
       return { status: resp.status, cookies, json, rawBody, responseHeaders: resp.headers };
     }
 
-    console.warn(`[tls:req] CycleTLS returned status 0 for ${method} ${host}${path} — retrying via Node.js HTTPS`);
+    // Log the body the Go subprocess returned — this contains the actual error
+    // message (e.g. "proxy authentication required", "connection refused", "EOF")
+    // which tells us exactly why the proxy/tunnel failed.
+    const cycleTlsErrBody = typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
+    console.warn(
+      `[tls:req] CycleTLS returned status 0 for ${method} ${host}${path}` +
+      ` elapsed=${elapsed}ms proxy=${proxyHost(proxyUrl)}` +
+      ` body=${cycleTlsErrBody.slice(0, 300) || "(empty)"}` +
+      ` — retrying via Node.js HTTPS`,
+    );
   }
 
   // ── Node.js TLS fallback ──────────────────────────────────────────────────
