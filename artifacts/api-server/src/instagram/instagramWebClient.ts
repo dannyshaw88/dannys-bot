@@ -3700,6 +3700,12 @@ export async function createInstagramAccountViaApi(params: {
   const waterfall_id = randomUUID();
   const android_id   = `android-${ig_did.replace(/-/g, "").slice(0, 16)}`;
   const guid         = ig_did;
+  // X-Pigeon headers: Instagram's app emits these on every request.
+  // Session ID is stable per app launch; rawclienttime is the unix epoch with µs precision.
+  // Without them the request pattern doesn't match a real Android app and Instagram's
+  // bot-detection layer is more likely to fire signup_block on new IPs.
+  const pigeonSessionId = randomUUID();
+  const pigeonRawclienttime = () => `${(Date.now() / 1000).toFixed(7)}`;
 
   // Seed the cookie jar from the full EB cookie set
   let cookieJar: string[] = ebCookies.cookieStrings.length
@@ -3726,6 +3732,7 @@ export async function createInstagramAccountViaApi(params: {
     "X-IG-App-Version": MOBILE_VERSION,
     "X-IG-Capabilities": "3brTv10=",
     "X-IG-Connection-Type": "WIFI",
+    "X-IG-Connection-Speed": "-1kbps",
     "X-IG-Bandwidth-Speed-KBPS": "-1.000",
     "X-IG-Bandwidth-TotalBytes-B": "0",
     "X-IG-Bandwidth-TotalTime-MS": "0",
@@ -3736,6 +3743,8 @@ export async function createInstagramAccountViaApi(params: {
     "X-Bloks-Is-Layout-RTL": "false",
     "X-FB-HTTP-Engine": "Liger",
     "X-IG-WWW-Claim": "0",
+    "X-Pigeon-Session-Id": pigeonSessionId,
+    "X-Pigeon-Rawclienttime": pigeonRawclienttime(),
   };
 
   // CSRF strategy: use the real csrftoken the EB harvested from instagram.com if one
@@ -3925,6 +3934,12 @@ export async function createInstagramAccountViaApi(params: {
     year: String(year),
     guid,
     device_id: android_id,
+    // phone_id and client_id: the real Instagram app always includes these.
+    // phone_id ties the signup to the specific device's phone identifier.
+    // client_id is the ig_did UUID — Instagram uses it to correlate the signup
+    // with the launcher/sync + qe/sync warm-up calls made earlier in the flow.
+    phone_id,
+    client_id: guid,
     _csrftoken: "missing",
     force_sign_up_code: "",
     qs_stamp: "",

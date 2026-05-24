@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.508",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Account creation requests now include the X-Pigeon-Session-Id and X-Pigeon-Rawclienttime headers that the real Instagram app sends on every call — without these, Instagram's bot detection is more likely to fire the signup_block error." },
+      { category: "Fix", text: "The signup request body now includes phone_id and client_id fields, matching what the real Instagram Android app sends when creating an account." },
+      { category: "Fix", text: "Added X-IG-Connection-Speed header to signup requests to complete the standard Android API header set." },
+    ],
+  },
+  {
     version: "1.0.507",
     date: "24 May 2026",
     items: [
