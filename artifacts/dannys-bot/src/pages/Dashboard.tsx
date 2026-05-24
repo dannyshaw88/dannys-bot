@@ -56,9 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.517",
+    version: "1.0.518",
     date: "24 May 2026",
     items: [
+      { category: "Fix", text: "Fixed the Android TLS fingerprint (CycleTLS) so it now actually makes requests — it was advertising a TLS extension in the handshake (compress_certificate, ext 98) that its own library cannot handle, causing every request to fail before connecting and fall back to standard TLS." },
+      { category: "Feature", text: "Column headers FOLLOWERS, FOLLOWING, and SYNC are now displayed in uppercase in the accounts table." },
+      { category: "Feature", text: "Follow tool: added 'Enable Automatic Unfollows' — set a followings count threshold (X–Y); when synced followings reaches it, the follow tool is disabled and the unfollow tool is activated automatically." },
+      { category: "Feature", text: "Follow tool: added 'Activate tool after X–Y minutes' checkbox to stagger the activation of the unfollow tool when the threshold is hit." },
+      { category: "Feature", text: "Unfollow tool: added 'Enable Automatic Follows' — set a followings count threshold (X–Y); when synced followings drops to it, the unfollow tool is disabled and the follow tool is activated automatically." },
+      { category: "Feature", text: "Unfollow tool: added 'Activate tool after X–Y minutes' checkbox to stagger the activation of the follow tool when the threshold is hit." },
       { category: "Fix", text: "Fixed the root cause of the Android TLS fingerprint never being used: the library changed its response format in a recent update (body moved from .body to .data) and our code was reading the wrong field, so the fingerprint was always silently bypassed and fell back to standard TLS for every request." },
       { category: "Fix", text: "The actual error from the TLS library is now shown in the log when it fails, instead of always showing '(empty)' — this will finally reveal what the proxy is rejecting." },
       { category: "Fix", text: "Sync now writes each call to the API calls export file, including whether the data came from HikerAPI or the account's own session." },

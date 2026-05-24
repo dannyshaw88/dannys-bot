@@ -30,10 +30,16 @@ import type { IgApiClient } from "instagram-private-api";
 //   TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA (49172),
 //   TLS_RSA_WITH_AES_128_GCM_SHA256 (156), TLS_RSA_WITH_AES_256_GCM_SHA384 (157),
 //   TLS_RSA_WITH_AES_128_CBC_SHA (47), TLS_RSA_WITH_AES_256_CBC_SHA (53)
+// Extension 98 = compress_certificate (RFC 8879).  CycleTLS's Go binary
+// advertises it in the ClientHello (because it's listed in the JA3) but
+// cannot actually handle the handshake when the server accepts it — the
+// subprocess returns status 0 with "Extension {{ 98 }} is not Supported by
+// CycleTLS".  Removing it from the JA3 lets CycleTLS complete the handshake.
+// The remaining fingerprint is still a valid OkHttp4 ClientHello.
 const OKHTTP4_JA3 =
   "771," +
   "4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53," +
-  "0-23-65281-10-11-35-16-5-13-51-98-43-17513-27-21," +
+  "0-23-65281-10-11-35-16-5-13-51-43-17513-27-21," +
   "29-23-24," +
   "0";
 

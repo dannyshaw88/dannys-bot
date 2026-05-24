@@ -86,7 +86,7 @@ const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, foll
 const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, followers: true, following: true, sync: true, actions: true, battery: false, connection: false, abd: true, ip: true };
 const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "followers", "following", "sync", "actions", "battery", "connection", "abd", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", active: "Active", followers: "Followers", following: "Following", sync: "Last Sync", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
+  account: "Account", status: "Status", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -992,15 +992,15 @@ export function ProfilesPage() {
               if (key === "active") return <div key={key} style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>;
               if (key === "followers") return (
                 <button key={key} onClick={() => cycleSort("followers")} style={{ width: profColWidths.followers }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
-                  Followers<span className="text-[9px]">{sortField === "followers" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  FOLLOWERS<span className="text-[9px]">{sortField === "followers" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
               if (key === "following") return (
                 <button key={key} onClick={() => cycleSort("following")} style={{ width: profColWidths.following }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
-                  Following<span className="text-[9px]">{sortField === "following" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  FOLLOWING<span className="text-[9px]">{sortField === "following" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
-              if (key === "sync") return <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 text-left">Last Sync</div>;
+              if (key === "sync") return <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 text-left">SYNC</div>;
               if (key === "actions") return <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>;
               if (key === "battery") return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0 text-left">Battery</div>;
               if (key === "connection") return <div key={key} style={{ width: profColWidths.connection }} className="shrink-0 text-left">Mbps</div>;
