@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.502",
+    date: "24 May 2026",
+    items: [
+      { category: "Improvement", text: "Account creation step panel now shows full detail from the cookie harvest phase — Chrome launch status, proxy used, UA applied, and cookie detection result after each page visit." },
+      { category: "Improvement", text: "Server debug log is now written to disk (equinox-debug.log next to your database) and is viewable and downloadable from the Settings page without needing DevTools." },
+    ],
+  },
+  {
     version: "1.0.501",
     date: "24 May 2026",
     items: [

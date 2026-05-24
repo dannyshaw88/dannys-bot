@@ -490,6 +490,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
 }): Promise<{ mid: string; ig_did: string; csrftoken: string; cookieStrings: string[]; ebUserAgent: string } | null> {
   const logPfx = "[harvestSignupCookies]";
   log(`${logPfx} Starting EB cookie harvest for signup...`);
+  opts?.onStep?.("EB harvest: starting temporary Chrome for cookie collection...");
 
   // Throwaway data dir — deleted after harvest.  Using COOKIES_DIR (not os.tmpdir)
   // keeps it on the same volume as the rest of browser-data and avoids tmpfs limits.
@@ -508,6 +509,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
       puppeteerLib = (await import("puppeteer")).default;
     } catch (e: any) {
       log(`${logPfx} Cannot load puppeteer: ${e?.message}`);
+      opts?.onStep?.(`EB harvest failed: Puppeteer not available (${e?.message})`);
       try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
       return null;
     }
@@ -515,6 +517,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
   if (!CHROMIUM_PATH) {
     log(`${logPfx} No CHROMIUM_PATH — cannot harvest cookies`);
+    opts?.onStep?.("EB harvest failed: Chrome executable not found (CHROMIUM_PATH not set) — cannot harvest cookies");
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
     return null;
   }
@@ -525,6 +528,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
   // and may flag the account before it is even created.  Block early.
   if (!opts?.proxyHost) {
     log(`${logPfx} No proxy configured — refusing to harvest EB cookies without a proxy (home IP would be exposed)`);
+    opts?.onStep?.("EB harvest blocked: no proxy configured — a proxy is required to prevent IP exposure during signup");
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
     return null;
   }
@@ -545,8 +549,10 @@ export async function harvestSignupCookiesFromEB(opts?: {
       ignoreHTTPSErrors: true,
     });
     log(`${logPfx} Temporary Chrome launched`);
+    opts?.onStep?.(`EB harvest: Chrome launched ✓ (proxy: ${opts?.proxyHost}:${opts?.proxyPort ?? 80})`);
   } catch (e: any) {
     log(`${logPfx} Browser launch failed: ${e?.message}`);
+    opts?.onStep?.(`EB harvest failed: Chrome could not launch — ${e?.message}`);
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
     return null;
   }
@@ -558,6 +564,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
   // Block here — the caller must supply the account's EB UA.
   if (!opts?.userAgent) {
     log(`${logPfx} No EB user-agent configured — refusing to harvest cookies (generic UA would mismatch account fingerprint)`);
+    opts?.onStep?.("EB harvest blocked: no EB User-Agent set for this account — set one in account settings before creating");
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
     return null;
   }
@@ -569,6 +576,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
       _startSignupScreencast().catch(() => {});
     }
     await page.setUserAgent(effectiveUA);
+    opts?.onStep?.(`EB harvest: using UA: ${effectiveUA.slice(0, 80)}${effectiveUA.length > 80 ? "..." : ""}`);
     // Explicitly force desktop viewport — isMobile/hasTouch must be false or
     // sites like YouTube will serve the mobile version in headless Chrome.
     await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
@@ -748,6 +756,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
     let { mid, ig_did, csrftoken } = await readIgCookies();
     log(`${logPfx} After homepage+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
+    opts?.onStep?.(`EB harvest step 1 (instagram.com): mid=${mid ? "✓" : "✗ not yet"} ig_did=${ig_did ? "✓" : "✗ not yet"} csrftoken=${csrftoken ? "✓" : "✗ not yet"}`);
 
     // ── Step 2: Navigate to the signup page (always) ─────────────────────────
     // This gives the user a visible signup form in the EB stream and often
@@ -772,6 +781,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
       if (after.csrftoken) csrftoken = after.csrftoken;
     }
     log(`${logPfx} After signup page+6s: mid=${mid ? "✓" : "✗"} ig_did=${ig_did ? "✓" : "✗"} csrftoken=${csrftoken ? "✓" : "✗"}`);
+    opts?.onStep?.(`EB harvest step 2 (emailsignup): mid=${mid ? "✓" : "✗ MISSING"} ig_did=${ig_did ? "✓" : "✗ MISSING"} csrftoken=${csrftoken ? "✓" : "✗ missing"}`);
 
     // ── Step 3: Poll until all three cookies appear (up to 15 s more) ─────────
     const deadline = Date.now() + 15000;
@@ -802,9 +812,11 @@ export async function harvestSignupCookiesFromEB(opts?: {
       ` csrftoken=${csrftoken ? csrftoken.slice(0, 8) + "..." : "(none)"}` +
       ` total_cookies=${cookieStrings.length}`
     );
+    opts?.onStep?.(`EB harvest result: mid=${mid ? mid.slice(0, 8) + "..." : "MISSING"} ig_did=${ig_did ? ig_did.slice(0, 8) + "..." : "MISSING"} csrftoken=${csrftoken ? "✓" : "missing"} — ${cookieStrings.length} cookies total`);
 
     if (!mid && !ig_did) {
       log(`${logPfx} No IG device cookies harvested — harvest failed`);
+      opts?.onStep?.("EB harvest FAILED: Instagram did not set mid/ig_did cookies — proxy may be blocked at CDN level, or Chrome fingerprinting scripts were blocked");
       return null;
     }
 
@@ -818,6 +830,7 @@ export async function harvestSignupCookiesFromEB(opts?: {
     try { await browser.close(); } catch {}
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
     log(`${logPfx} Temporary Chrome closed and data dir cleaned up`);
+    opts?.onStep?.("EB harvest: temporary Chrome closed and cleaned up ✓");
   }
 }
 

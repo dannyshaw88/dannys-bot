@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -1161,6 +1161,11 @@ export function SettingsPage() {
 
         <div className="border-t border-border/60" />
 
+        {/* Server Debug Log */}
+        <ServerLogCard />
+
+        <div className="border-t border-border/60" />
+
         {/* Data Management */}
         <div className="desktop-card p-6">
           <h3 className="text-base font-semibold mb-2">Data Management</h3>
@@ -1174,5 +1179,122 @@ export function SettingsPage() {
 
       </div>
     </AppLayout>
+  );
+}
+
+function ServerLogCard() {
+  const { toast } = useToast();
+  const [lines, setLines] = useState<string[]>([]);
+  const [logPath, setLogPath] = useState<string | null>(null);
+  const [totalLines, setTotalLines] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const tailRef = useRef<HTMLDivElement>(null);
+
+  const fetchLog = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/logs/server?lines=200", { credentials: "include" });
+      const data = await res.json();
+      if (data.error) { setError(data.error); setLines([]); }
+      else { setLines(data.lines ?? []); setLogPath(data.path ?? null); setTotalLines(data.totalLines ?? 0); }
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to fetch log");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadLog = async () => {
+    try {
+      const res = await fetch("/api/logs/server?lines=5000", { credentials: "include" });
+      const data = await res.json();
+      if (data.error) { toast({ title: "Download failed", description: data.error, variant: "destructive" }); return; }
+      const text = (data.lines as string[]).join("\n");
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "equinox-debug.log";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e?.message, variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    if (expanded && lines.length === 0) fetchLog();
+  }, [expanded]);
+
+  useEffect(() => {
+    if (tailRef.current) tailRef.current.scrollTop = tailRef.current.scrollHeight;
+  }, [lines]);
+
+  return (
+    <div className="desktop-card p-6">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
+            <Terminal className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold">Server Debug Log</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Full server output written to disk — includes all account creation steps, EB harvest details, and automation events.
+            </p>
+          </div>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setExpanded(v => !v)} className="shrink-0 text-xs">
+          {expanded ? "Hide" : "Show"}
+        </Button>
+      </div>
+
+      {expanded && (
+        <div className="mt-4 space-y-3">
+          {logPath && (
+            <p className="text-xs font-mono text-muted-foreground bg-muted/40 rounded px-2 py-1 break-all">
+              {logPath}
+            </p>
+          )}
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={fetchLog} disabled={loading} className="gap-1.5">
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadLog} className="gap-1.5">
+              <Download className="w-3.5 h-3.5" />
+              Download Full Log
+            </Button>
+            {totalLines > 200 && (
+              <span className="text-xs text-muted-foreground self-center">
+                Showing last 200 of {totalLines.toLocaleString()} lines
+              </span>
+            )}
+          </div>
+
+          {error && (
+            <p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1.5">{error}</p>
+          )}
+
+          {lines.length > 0 && (
+            <div
+              ref={tailRef}
+              className="bg-black/90 rounded-md p-3 h-72 overflow-y-auto font-mono text-[11px] leading-relaxed text-green-300 space-y-0.5"
+            >
+              {lines.map((line, i) => (
+                <div key={i} className="whitespace-pre-wrap break-all opacity-90 hover:opacity-100">{line}</div>
+              ))}
+            </div>
+          )}
+
+          {lines.length === 0 && !loading && !error && (
+            <p className="text-xs text-muted-foreground">No log lines yet — the file is created when the server starts.</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

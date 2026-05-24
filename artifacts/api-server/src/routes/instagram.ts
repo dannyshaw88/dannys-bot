@@ -1521,6 +1521,29 @@ export async function registerInstagramRoutes(
     res.json(enriched);
   });
 
+  // ── GET /api/logs/server — tail of the on-disk server debug log ─────────────
+  // Returns the last N lines of equinox-debug.log so the Settings page can show
+  // a live tail and offer a download button without requiring DevTools or a shell.
+  app.get("/api/logs/server", async (req, res) => {
+    try {
+      const logPath = (global as any).__SERVER_LOG_PATH as string | undefined;
+      if (!logPath) {
+        return res.json({ lines: [], path: null, error: "Log file path not initialised (server too old)" });
+      }
+      const fsSync = await import("fs");
+      if (!fsSync.default.existsSync(logPath)) {
+        return res.json({ lines: [], path: logPath, error: "Log file not found yet — it is created on first server startup" });
+      }
+      const content = fsSync.default.readFileSync(logPath, "utf8");
+      const allLines = content.split("\n").filter(Boolean);
+      const tailCount = Math.min(Number((req.query as any).lines ?? 500), 5000);
+      const lines = allLines.slice(-tailCount);
+      res.json({ lines, path: logPath, totalLines: allLines.length });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message });
+    }
+  });
+
   app.get("/api/logs/export", async (req, res) => {
     try {
       const [allProfiles, allProxies] = await Promise.all([
@@ -2331,7 +2354,17 @@ export async function registerInstagramRoutes(
       }
     };
 
-    Promise.allSettled(eligible.map(verifyOne)).catch(() => {});
+    // Run accounts sequentially with a random delay between each so Instagram
+    // doesn't see a burst of logins from the same server IP at once.
+    (async () => {
+      for (let idx = 0; idx < eligible.length; idx++) {
+        await verifyOne(eligible[idx]);
+        if (idx < eligible.length - 1) {
+          const delaySec = delayMin + Math.random() * Math.max(0, delayMax - delayMin);
+          await new Promise(r => setTimeout(r, Math.round(delaySec * 1000)));
+        }
+      }
+    })().catch(() => {});
   });
 
   // ── Fix Captcha via 2captcha ──────────────────────────────────────────────
@@ -2839,17 +2872,19 @@ export async function registerInstagramRoutes(
 
       const created = await storage.createProfile(cleanProfile);
 
-      // Force the correct accountStatus with an unconditional UPDATE whenever the
-      // exported status is anything other than "pending".  We cannot rely on the
-      // RETURNING value from the INSERT — Drizzle's SQLite dialect may report the
-      // column default ("pending") even when an explicit value was provided via
-      // object spread, meaning the conditional guard in earlier versions never fired.
-      // Always writing the intended status here guarantees the imported account
-      // shows the correct status regardless of what createProfile returned.
-      if (intendedStatus !== "pending") {
-        await storage.updateProfile(created.id, { accountStatus: intendedStatus });
-        (created as any).accountStatus = intendedStatus;
-      }
+      // Force the correct accountStatus and credentialsDirty with an unconditional
+      // UPDATE.  We cannot rely on the RETURNING value from the INSERT — Drizzle's
+      // SQLite dialect may apply column SQL defaults ("pending" / true) even when
+      // explicit values were provided via object spread.
+      // credentialsDirty is always reset to false on import: the imported credentials
+      // are exactly as they were at export time, so they are not dirty and the account
+      // must not show a spurious "Verify" button next to a valid status.
+      await storage.updateProfile(created.id, {
+        accountStatus: intendedStatus,
+        credentialsDirty: false,
+      });
+      (created as any).accountStatus = intendedStatus;
+      (created as any).credentialsDirty = false;
 
       // Seed the browser cookie file so Chrome starts with the correct device
       // identity (mid, ig_did, sessionid) on its very first launch.
