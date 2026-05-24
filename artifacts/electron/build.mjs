@@ -79,6 +79,22 @@ if (existsSync(assetsSrc)) {
   await cp(assetsSrc, path.join(dist, "assets"), { recursive: true });
 }
 
+// 4b. Copy cycletls package into dist/server/node_modules/cycletls/
+// The api-server esbuild config marks cycletls as `external` so the bundled
+// index.mjs expects to resolve it from a real node_modules directory at runtime.
+// cycletls ships a pre-compiled Go binary (index.exe on Windows) alongside its
+// JS wrapper — both must be present for the OkHttp4 TLS fingerprinting to work.
+// Without this copy the binary is never included in the installer and every
+// startup falls back to Node.js TLS (no Android fingerprint).
+const cycletlsSrc = path.join(__dirname, "../api-server/node_modules/cycletls");
+if (existsSync(cycletlsSrc)) {
+  await mkdir(path.join(dist, "server", "node_modules"), { recursive: true });
+  await cp(cycletlsSrc, path.join(dist, "server", "node_modules", "cycletls"), { recursive: true });
+  console.log("Copied cycletls package → dist/server/node_modules/cycletls/");
+} else {
+  console.warn("WARNING: cycletls not found in api-server/node_modules — TLS fingerprinting will fall back to Node.js TLS");
+}
+
 // 5. Generate a crash-logging wrapper that is the real entry point
 const wrapper = `
 import { writeFileSync, mkdirSync } from 'fs';

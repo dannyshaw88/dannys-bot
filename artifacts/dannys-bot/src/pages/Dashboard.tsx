@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.504",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "CycleTLS (OkHttp4 Android TLS fingerprint) now loads correctly in the installed app — the Go binary was never being included in the installer, causing every session to silently fall back to Node.js TLS with no Android fingerprint." },
+    ],
+  },
+  {
     version: "1.0.503",
     date: "24 May 2026",
     items: [
