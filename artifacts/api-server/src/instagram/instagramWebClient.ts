@@ -216,14 +216,15 @@ type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 
 // Keep this version current — Instagram rejects signup requests from versions
 // older than a few months with error_type:"needs_upgrade".
-// Play Store confirmed 427.0.0.47.73 on 2026-05-11.
-// Version codes confirmed from instagrapi constants.py (updated 2026-05-24):
+// Play Store confirmed 431.0.0.37.82 on 2026-05-24.
+// Version codes confirmed from instagrapi / APKMirror data (updated 2026-05-24):
 //   222.0.0.13.114 → 350696709
 //   384.0.0.36.112 → 663869969
 //   427.0.0.47.73  → 746996204
-//   428.0.0.47.67  → 961145276  ← current
-export const MOBILE_VERSION      = "428.0.0.47.67";
-export const MOBILE_VERSION_CODE = "961145276";
+//   428.0.0.47.67  → 961145276
+//   431.0.0.37.82  → 383708339  ← current (APKMirror arm base variant)
+export const MOBILE_VERSION      = "431.0.0.37.82";
+export const MOBILE_VERSION_CODE = "383708339";
 // Date this version was last confirmed / updated. Warn after 90 days so there
 // is time to update before Instagram starts rejecting the version.
 const MOBILE_VERSION_DATE = "2026-05-24";
@@ -3728,11 +3729,12 @@ export async function createInstagramAccountViaApi(params: {
   // (commit 57e5f68 / 44b34a0 — before gzip fix, before X-FB-Client-IP was added).
   // Do NOT add X-FB-Client-IP or X-FB-Server-Cluster — those were added AFTER
   // the 200 as speculative improvements and are absent from the working config.
-  // BLOKS_VERSION_ID: updated 2026-05-24 — confirmed current via instagrapi constants.py.
+  // BLOKS_VERSION_ID: updated 2026-05-24 — confirmed current via instagrapi master (auth.py bloks_versioning_id).
   // Old v222 value (388ece79...) caused error_type:"needs_upgrade" on accounts/create/.
   // Old v427 value (16b7bd25...) also caused "needs_upgrade" after Instagram bumped minimum version.
+  // Old v428 value (7189b949...) caused "needs_upgrade" after Instagram bumped to v431.
   // Update this alongside MOBILE_VERSION when Instagram bumps its minimum accepted version.
-  const BLOKS_VERSION_ID = "7189b949425f9bf80ea8bd880cf5a3080b292d9b1c4b38a18d112f7c4b71e7a8";
+  const BLOKS_VERSION_ID = "ce555e5500576acd8e84a66018f54a05720f2dce29f0bb5a1f97f0c10d6fac48";
   const baseHeaders: Record<string, string> = {
     "Host": "i.instagram.com",
     "User-Agent": effectiveUA,
@@ -4042,6 +4044,12 @@ export async function createInstagramAccountViaApi(params: {
       // Generate a fresh device fingerprint keyed to username+email so it's
       // reproducible but unique per account (same pattern used for DM sending).
       igLib.state.generateDevice(`${username}|${email}|${Date.now()}`);
+      // CRITICAL: patch APP_VERSION here — same as every other IgApiClient usage in
+      // this file (login, verify, DM, etc.).  Without this the library uses its bundled
+      // default (~v222.x.x) which Instagram immediately rejects with needs_upgrade.
+      igLib.state.constants.APP_VERSION      = MOBILE_VERSION;
+      igLib.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+      patchDeviceStringVersionCode(igLib, MOBILE_VERSION_CODE);
       if (proxyUrl) igLib.state.proxyUrl = proxyUrl;
       // Do NOT call patchIgClientTls here — for account creation we want the library
       // to use its native Node.js HTTPS stack (not CycleTLS OkHttp4 JA3).  There is

@@ -3273,6 +3273,13 @@ export async function registerInstagramRoutes(
         steps: JSON.stringify(result.steps),
       });
 
+      req.log.info({
+        signup_result: result.status,
+        signup_message: result.message ?? null,
+        signup_steps: result.steps,
+        signup_raw: (result as any).rawResponse ?? null,
+      }, `signup/start-stream result: ${result.status}`);
+
       sendDone({ ...result, dbId: dbRecord.id });
     } catch (e: any) {
       req.log.error({ err: e }, "signup/start-stream failed");

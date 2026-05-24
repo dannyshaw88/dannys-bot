@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.525",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account now uses Instagram app version 431 — the previous version (428) was being rejected by Instagram as too old." },
+      { category: "Fix", text: "The library fallback during account creation is now also patched to use version 431, so all three signup paths send a consistent, current app version." },
+      { category: "Improvement", text: "Every signup attempt now writes a full diagnostic entry to the server log — all steps and the raw Instagram response are recorded, making it possible to see exactly what Instagram returned." },
+    ],
+  },
+  {
     version: "1.0.524",
     date: "24 May 2026",
     items: [
