@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.505",
+    date: "24 May 2026",
+    items: [
+      { category: "Change", text: "Removed the Phone Auto-Verify panel from the Create an Account page — phone verification is no longer used for email-based signups." },
+      { category: "New", text: "When Instagram asks for an email verification code during account creation, a clear amber prompt now appears with a large code input box so you can enter the code and continue without starting over." },
+    ],
+  },
+  {
     version: "1.0.504",
     date: "24 May 2026",
     items: [

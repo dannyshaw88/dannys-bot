@@ -10,10 +10,9 @@ import { userAgents as UA_POOL } from "@/shared/userAgents";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
-  User, KeyRound, Calendar, Globe, ShieldCheck,
-  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Phone, Smartphone, Monitor,
+  User, Calendar, Globe, ShieldCheck, Mail,
+  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Monitor,
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -463,13 +462,6 @@ function CreatedAccountsTab() {
 
 const LS_KEY_USERNAME_SPIN     = "equinox_api_username_spin";
 const LS_KEY_BIO_SPIN          = "equinox_api_bio_spin";
-const LS_KEY_SMS_MAN_KEY       = "equinox_sms_man_key";
-const LS_KEY_SMS_MAN_COUNTRY   = "equinox_sms_man_country";
-const LS_KEY_SMS_MAN_ENABLED   = "equinox_sms_man_enabled";
-const LS_KEY_SMS_PROVIDER      = "equinox_sms_provider";
-const LS_KEY_5SIM_KEY          = "equinox_5sim_key";
-const LS_KEY_5SIM_COUNTRY      = "equinox_5sim_country";
-
 const SS_KEY_PASSWORD   = "equinox_api_password";
 const SS_KEY_FIRSTNAME  = "equinox_api_firstname";
 const SS_KEY_DOB        = "equinox_api_dob";
@@ -575,29 +567,6 @@ export function CreateAccountApiPage() {
   const [ebPanelOpen, setEbPanelOpen]  = useState(false);
   const [ebOpening, setEbOpening]      = useState(false);
   const [ebResetBusy, setEbResetBusy]  = useState(false);
-
-  // ── SMS state ──────────────────────────────────────────────────────────────
-  const [smsManEnabled, setSmsManEnabledRaw] = useState(() => localStorage.getItem(LS_KEY_SMS_MAN_ENABLED) === "true");
-  const [smsProvider, setSmsProviderRaw]     = useState<"sms-man" | "5sim">(() => (localStorage.getItem(LS_KEY_SMS_PROVIDER) as "sms-man" | "5sim") || "sms-man");
-  const [smsManApiKey, setSmsManApiKeyRaw]   = useState(() => lsGet(LS_KEY_SMS_MAN_KEY));
-  const [smsManCountry, setSmsManCountryRaw] = useState(() => lsGet(LS_KEY_SMS_MAN_COUNTRY) || "0");
-  const [fiveSimApiKey, setFiveSimApiKeyRaw]   = useState(() => lsGet(LS_KEY_5SIM_KEY));
-  const [fiveSimCountry, setFiveSimCountryRaw] = useState(() => lsGet(LS_KEY_5SIM_COUNTRY) || "any");
-  const setSmsManEnabled  = (v: boolean) => { setSmsManEnabledRaw(v);  lsSet(LS_KEY_SMS_MAN_ENABLED, String(v)); };
-  const setSmsProvider    = (v: "sms-man" | "5sim") => { setSmsProviderRaw(v);    lsSet(LS_KEY_SMS_PROVIDER,    v); };
-  const setSmsManApiKey   = (v: string)  => { setSmsManApiKeyRaw(v);   lsSet(LS_KEY_SMS_MAN_KEY,     v); };
-  const setSmsManCountry  = (v: string)  => { setSmsManCountryRaw(v);  lsSet(LS_KEY_SMS_MAN_COUNTRY, v); };
-  const setFiveSimApiKey  = (v: string)  => { setFiveSimApiKeyRaw(v);  lsSet(LS_KEY_5SIM_KEY,        v); };
-  const setFiveSimCountry = (v: string)  => { setFiveSimCountryRaw(v); lsSet(LS_KEY_5SIM_COUNTRY,    v); };
-
-  type SmsState =
-    | { status: "idle" }
-    | { status: "requesting" }
-    | { status: "polling"; id: string; phone: string }
-    | { status: "got_code"; code: string; phone: string }
-    | { status: "error"; error: string };
-  const [smsState, setSmsState] = useState<SmsState>({ status: "idle" });
-  const smsCancelRef = useRef(false);
 
   const createProxy = useCreateProxy();
   const [showAddProxy, setShowAddProxy] = useState(false);
@@ -776,87 +745,7 @@ export function CreateAccountApiPage() {
     }
   };
 
-  // ── Phone auto-poll ───────────────────────────────────────────────────────
-  // When Instagram returns phone_verification and a phone provider is enabled,
-  // automatically request a temp number and poll for the SMS code.
-  useEffect(() => {
-    if (!smsManEnabled) return;
-    if (smsProvider === "sms-man" && !smsManApiKey.trim()) return;
-    if (smsProvider === "5sim" && !fiveSimApiKey.trim()) return;
-    if (result?.status !== "phone_verification") return;
-    if (loading) return;
-    if (smsState.status !== "idle") return;
-
-    smsCancelRef.current = false;
-
-    const run = async () => {
-      setSmsState({ status: "requesting" });
-      try {
-        let id: string, phone: string;
-        if (smsProvider === "sms-man") {
-          const r = await fetch("/api/sms-man/get-number", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ apiKey: smsManApiKey.trim(), countryId: smsManCountry }),
-          });
-          const data = await r.json();
-          if (!data.ok || smsCancelRef.current) {
-            if (!smsCancelRef.current) setSmsState({ status: "error", error: data.error ?? "Failed to get number from SMS-man" });
-            return;
-          }
-          id = data.id; phone = data.phone;
-        } else {
-          const r = await fetch("/api/5sim/get-number", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ apiKey: fiveSimApiKey.trim(), country: fiveSimCountry }),
-          });
-          const data = await r.json();
-          if (!data.ok || smsCancelRef.current) {
-            if (!smsCancelRef.current) setSmsState({ status: "error", error: data.error ?? "Failed to get number from 5sim" });
-            return;
-          }
-          id = data.id; phone = data.phone;
-        }
-
-        setSmsState({ status: "polling", id, phone });
-
-        let attempts = 0;
-        const poll = async () => {
-          if (smsCancelRef.current || attempts >= 75) {
-            if (!smsCancelRef.current) setSmsState({ status: "error", error: "Timed out waiting for SMS (5 min)" });
-            return;
-          }
-          attempts++;
-          try {
-            const smsUrl = smsProvider === "sms-man"
-              ? `/api/sms-man/get-sms/${encodeURIComponent(id)}?apiKey=${encodeURIComponent(smsManApiKey.trim())}`
-              : `/api/5sim/get-sms/${encodeURIComponent(id)}?apiKey=${encodeURIComponent(fiveSimApiKey.trim())}`;
-            const sr = await fetch(smsUrl);
-            const sd = await sr.json();
-            if (sd.ok && sd.code && !smsCancelRef.current) {
-              setSmsState({ status: "got_code", code: sd.code, phone });
-              setVerifyCode(sd.code);
-            } else if (!smsCancelRef.current) {
-              setTimeout(poll, 4000);
-            }
-          } catch {
-            if (!smsCancelRef.current) setTimeout(poll, 4000);
-          }
-        };
-        setTimeout(poll, 4000);
-      } catch (e: any) {
-        if (!smsCancelRef.current) setSmsState({ status: "error", error: e?.message ?? "Request failed" });
-      }
-    };
-
-    run();
-    return () => { smsCancelRef.current = true; };
-  }, [result?.status, smsManEnabled, smsProvider, smsManApiKey, smsManCountry, fiveSimApiKey, fiveSimCountry, loading]);
-
   const handleReset = () => {
-    smsCancelRef.current = true;
-    setSmsState({ status: "idle" });
     ssClearAll();
     setResult(null);
     setVerifyCode("");
@@ -932,7 +821,7 @@ export function CreateAccountApiPage() {
             <div className="desktop-card p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Smartphone className="w-4 h-4 text-cyan-500 shrink-0" />
+                  <Monitor className="w-4 h-4 text-cyan-500 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold truncate">{deviceLabel || "Unknown Device"}</p>
                     <p className="text-[10px] font-mono text-muted-foreground/70 truncate">{userAgentApi}</p>
@@ -989,7 +878,7 @@ export function CreateAccountApiPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1">
-                  <KeyRound className="w-3 h-3" />Password
+                  <Eye className="w-3 h-3" />Password
                   <span className="ml-1 text-[10px] text-muted-foreground">(auto-generated)</span>
                 </Label>
                 <Input value={password} onChange={e => setPassword(e.target.value)} className="h-8 text-sm font-mono" disabled={locked} />
@@ -1086,161 +975,6 @@ export function CreateAccountApiPage() {
               )}
             </div>
 
-            {/* ── Phone Auto-Verify ── */}
-            <div className={`desktop-card p-4 space-y-3 transition-colors ${smsManEnabled ? "border-green-400 dark:border-green-700" : ""}`}>
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-green-500" />Phone Auto-Verify
-                </p>
-                <Switch checked={smsManEnabled} onCheckedChange={setSmsManEnabled} disabled={locked} />
-              </div>
-              {smsManEnabled && (
-                <div className="space-y-3">
-                  {/* Provider selector */}
-                  <div className="flex gap-1 p-1 rounded-md bg-muted/50 border border-border">
-                    {(["sms-man", "5sim"] as const).map(p => (
-                      <button
-                        key={p}
-                        onClick={() => setSmsProvider(p)}
-                        disabled={locked}
-                        className={`flex-1 py-1 rounded text-xs font-medium transition-colors ${
-                          smsProvider === p
-                            ? "bg-background border border-border shadow-sm text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {p === "sms-man" ? "SMS-man" : "5sim"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {smsProvider === "sms-man" ? (
-                    <>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs flex items-center gap-1"><KeyRound className="w-3 h-3" />API Key</Label>
-                        <Input
-                          value={smsManApiKey}
-                          onChange={e => setSmsManApiKey(e.target.value)}
-                          placeholder="Your sms-man.com API key"
-                          className="h-8 text-sm font-mono"
-                          disabled={locked}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Country</Label>
-                        <select
-                          value={smsManCountry}
-                          onChange={e => setSmsManCountry(e.target.value)}
-                          disabled={locked}
-                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                        >
-                          <option value="0">Any (cheapest)</option>
-                          <option value="187">United States</option>
-                          <option value="22">United Kingdom</option>
-                          <option value="6">India</option>
-                          <option value="1">Russia</option>
-                          <option value="2">Ukraine</option>
-                        </select>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        Requests a temp number from <strong>sms-man.com</strong> and auto-fills the SMS code when Instagram asks for phone verification.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs flex items-center gap-1"><KeyRound className="w-3 h-3" />API Key</Label>
-                        <Input
-                          value={fiveSimApiKey}
-                          onChange={e => setFiveSimApiKey(e.target.value)}
-                          placeholder="Your 5sim.net API key"
-                          className="h-8 text-sm font-mono"
-                          disabled={locked}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Country</Label>
-                        <select
-                          value={fiveSimCountry}
-                          onChange={e => setFiveSimCountry(e.target.value)}
-                          disabled={locked}
-                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                        >
-                          <option value="any">Any (cheapest)</option>
-                          <option value="usa">United States</option>
-                          <option value="england">United Kingdom</option>
-                          <option value="india">India</option>
-                          <option value="russia">Russia</option>
-                          <option value="ukraine">Ukraine</option>
-                          <option value="germany">Germany</option>
-                          <option value="france">France</option>
-                          <option value="brazil">Brazil</option>
-                          <option value="indonesia">Indonesia</option>
-                        </select>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        Requests a temp number from <strong>5sim.net</strong> and auto-fills the SMS code when Instagram asks for phone verification.
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-              {/* Live SMS state */}
-              {smsManEnabled && smsState.status !== "idle" && (
-                <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1.5">
-                  {smsState.status === "requesting" && (
-                    <div className="flex items-center gap-2 text-xs text-sky-600 dark:text-sky-400">
-                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />Requesting temp number from {smsProvider === "sms-man" ? "SMS-man" : "5sim"}...
-                    </div>
-                  )}
-                  {smsState.status === "polling" && (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-                        <Loader2 className="w-3 h-3 animate-spin shrink-0" />Waiting for SMS code (polling every 4s)...
-                      </div>
-                      <div className="text-xs font-mono font-semibold text-foreground">
-                        Number: +{smsState.phone}
-                      </div>
-                      <button
-                        onClick={async () => {
-                          smsCancelRef.current = true;
-                          if ("id" in smsState) {
-                            const cancelUrl = smsProvider === "sms-man"
-                              ? `/api/sms-man/cancel/${encodeURIComponent((smsState as any).id)}`
-                              : `/api/5sim/cancel/${encodeURIComponent((smsState as any).id)}`;
-                            const cancelKey = smsProvider === "sms-man" ? smsManApiKey : fiveSimApiKey;
-                            await fetch(cancelUrl, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ apiKey: cancelKey }),
-                            }).catch(() => {});
-                          }
-                          setSmsState({ status: "idle" });
-                        }}
-                        className="text-[10px] text-red-500 hover:text-red-700 underline"
-                      >
-                        Cancel number
-                      </button>
-                    </div>
-                  )}
-                  {smsState.status === "got_code" && (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                        <CheckCircle2 className="w-3 h-3 shrink-0" />SMS code received — auto-filled below
-                      </div>
-                      <div className="text-xs font-mono text-foreground">
-                        Number: +{smsState.phone} &nbsp;|&nbsp; Code: <strong>{smsState.code}</strong>
-                      </div>
-                    </div>
-                  )}
-                  {smsState.status === "error" && (
-                    <div className="flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
-                      <XCircle className="w-3 h-3 shrink-0" />{smsState.error}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
 
 
             {/* ── Submit ── */}
@@ -1325,12 +1059,20 @@ export function CreateAccountApiPage() {
                 )}
 
                 {(result.status === "email_verification" || result.status === "phone_verification") && result.sessionId && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-cyan-700 dark:text-cyan-400">
-                      {result.status === "email_verification"
-                        ? "Instagram sent a verification code to your email. Enter it below."
-                        : "Instagram sent an SMS to your phone number. Enter the code below."}
-                    </p>
+                  <div className="space-y-3 rounded-lg border-2 border-amber-400 bg-amber-50/60 dark:bg-amber-950/20 p-4">
+                    <div className="flex items-start gap-2">
+                      <Mail className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                          {result.status === "email_verification" ? "Email Verification Required" : "Phone Verification Required"}
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 leading-snug">
+                          {result.status === "email_verification"
+                            ? "Instagram sent a 6-digit code to your email address. Check your inbox, then enter it here to continue."
+                            : "Instagram sent a 6-digit SMS code to your phone number. Enter it here to continue."}
+                        </p>
+                      </div>
+                    </div>
                     <div className="flex gap-2 items-center">
                       <Input
                         value={verifyCode}
@@ -1338,16 +1080,19 @@ export function CreateAccountApiPage() {
                         placeholder="000000"
                         maxLength={6}
                         autoFocus
-                        className="h-10 text-center text-xl font-mono tracking-[0.4em] w-40 border-cyan-400 focus:border-cyan-500"
+                        className="h-12 text-center text-2xl font-mono tracking-[0.5em] w-44 border-amber-400 focus:border-amber-500 bg-white dark:bg-black/20"
                       />
                       <Button
                         onClick={handleVerify}
                         disabled={verifying || verifyCode.length < 6}
-                        className="h-10 px-5 bg-cyan-500 hover:bg-cyan-600 text-white border-0 font-semibold"
+                        className="h-12 px-6 bg-amber-500 hover:bg-amber-600 text-white border-0 font-semibold text-sm"
                       >
                         {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Code"}
                       </Button>
                     </div>
+                    <p className="text-[10px] text-amber-600/80 dark:text-amber-500/60">
+                      The code expires in a few minutes. If it doesn't arrive, check your spam folder.
+                    </p>
                   </div>
                 )}
 
