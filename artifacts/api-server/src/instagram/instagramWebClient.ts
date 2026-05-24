@@ -3781,12 +3781,13 @@ export async function createInstagramAccountViaApi(params: {
   step(`Using proxy: ${proxyUrl ? proxyUrl.replace(/:[^@]*@/, ":***@") : "none (direct connection)"}`);
 
   // Proxy health tracker — counts how many of the two pre-signup sync calls
-  // (launcher/sync + qe/sync) returned any cookies.  If both return zero cookies
-  // it almost always means Instagram's edge/CDN is silently blocking the proxy IP
-  // before the request reaches the real signup backend.  We use this flag to give
-  // a more accurate error message if accounts/create/ then returns a misleading
-  // business-logic error (e.g. "email_is_taken" when the email is actually free).
-  let syncCookiesSeen = 0;
+  // (launcher/sync + qe/sync) returned ANY HTTP response from Instagram.
+  // If both calls throw a network error (0 responses) the proxy is likely
+  // blocking before Instagram's CDN.  We intentionally do NOT check cookies
+  // here — Instagram's mobile sync endpoints often return HTTP 200 with zero
+  // cookies on a perfectly healthy proxy, so cookie-presence is not a reliable
+  // indicator of proxy health.
+  let syncResponsesSeen = 0;
 
   // Step 1b: launcher/sync — warm up device fingerprint on Instagram's servers.
   // instagram-private-api always calls this as part of preLoginFlow() before any
@@ -3813,7 +3814,7 @@ export async function createInstagramAccountViaApi(params: {
       proxyUrl,
     });
     cookieJar = mergeCookies(cookieJar, launcherRes.cookies);
-    if (launcherRes.cookies.length) syncCookiesSeen++;
+    syncResponsesSeen++;
     step(`launcher/sync HTTP ${launcherRes.status} — cookies: [${launcherRes.cookies.map(c => c.split("=")[0]).join(", ") || "none"}]`);
     console.log(`[accountCreator] launcher/sync HTTP=${launcherRes.status}:`, JSON.stringify(launcherRes.json ?? {}).slice(0, 200));
   } catch (e: any) {
@@ -3847,7 +3848,7 @@ export async function createInstagramAccountViaApi(params: {
       proxyUrl,
     });
     cookieJar = mergeCookies(cookieJar, syncRes.cookies);
-    if (syncRes.cookies.length) syncCookiesSeen++;
+    syncResponsesSeen++;
     // CRITICAL: re-sync csrfToken from jar — qe/sync may have set a real csrftoken cookie.
     // If the jar now has a real token but we keep "missing" in the body, Instagram's CSRF
     // check will see a mismatch on accounts/create/ and return "There was an error".
@@ -4173,11 +4174,11 @@ export async function createInstagramAccountViaApi(params: {
       const bodyPreview = res.rawBody?.slice(0, 300) ?? "(empty)";
       step(`Instagram returned HTTP ${res.status} — body: ${bodyPreview}`);
       // Give an actionable message depending on whether the proxy appears to be
-      // blocking (syncCookiesSeen === 0 means launcher/sync + qe/sync both returned
-      // zero cookies — the proxy is likely intercepting before Instagram's CDN).
-      const proxyBlocked = syncCookiesSeen === 0;
+      // blocking (syncResponsesSeen === 0 means both launcher/sync and qe/sync threw
+      // network errors — the proxy is likely unreachable or blocking all traffic).
+      const proxyBlocked = syncResponsesSeen === 0;
       const hint = proxyBlocked
-        ? "The proxy did not return any Instagram cookies during the warm-up calls — it may be blocked by Instagram's CDN or incorrectly configured. Try a different proxy."
+        ? "The warm-up calls to Instagram failed with a network error — the proxy may be unreachable or blocking outbound traffic entirely. Try a different proxy."
         : "Instagram rejected the signup request after multiple attempts. Try a different proxy or wait a few minutes before retrying.";
       return { status: "error", steps, message: hint };
     }

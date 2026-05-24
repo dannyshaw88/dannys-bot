@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.522",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account no longer blames the proxy when Instagram rejects the signup — the proxy warning now only appears if the warm-up network calls actually fail with a connection error, not just because Instagram returned no cookies (which is normal)." },
+    ],
+  },
+  {
     version: "1.0.521",
     date: "24 May 2026",
     items: [
