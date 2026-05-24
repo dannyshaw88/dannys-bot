@@ -4274,7 +4274,7 @@ export async function createInstagramAccountViaApi(params: {
       return {
         status: "error",
         steps,
-        message: "Instagram rejected the signup request (app version too old). The Bloks version ID has been updated — rebuild and redeploy to apply the fix.",
+        message: "Instagram rejected the signup request: app version not recognised. Try switching to a different proxy or wait a few minutes and try again.",
         rawResponse: j,
       };
     }

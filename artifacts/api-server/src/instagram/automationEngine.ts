@@ -449,8 +449,25 @@ class AutomationEngine {
       const client = new InstagramWebClient(proxyUrl, profile.id);
       if (profile.userAgentEmbedded) client.setWebUserAgent(profile.userAgentEmbedded);
       if (profile.apiLimits) client.setApiLimits(profile.apiLimits as any);
+      // setDeviceInfo MUST be called before loadBrowserCookies so that stored
+      // igApiCookies seed the mobile session (mobileSessionReady=true).
+      // Without it mobileSessionGet returns null immediately and sync always fails.
+      client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
       client.loadBrowserCookies();
-      stats = await client.getOwnProfileStats();
+      try {
+        stats = await client.getOwnProfileStats();
+      } catch (syncErr: any) {
+        // getOwnProfileStats re-throws account-level errors (banned, suspended,
+        // logged_out, challenge, etc.) so we can update accountStatus immediately
+        // rather than leaving the account showing as "valid" indefinitely.
+        const applied = await this.applyAccountLevelError(profile.id, syncErr?.message ?? "");
+        if (applied) {
+          console.warn(`[engine] @${profile.username}: profile sync detected account issue — status set to "${applied}"`);
+        } else {
+          console.warn(`[engine] @${profile.username}: profile sync threw unexpected error: ${syncErr?.message}`);
+        }
+        return null;
+      }
     }
 
     if (!stats) {

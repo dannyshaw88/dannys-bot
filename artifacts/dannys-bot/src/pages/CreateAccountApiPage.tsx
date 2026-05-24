@@ -55,7 +55,11 @@ const MONTHS = [
 ];
 
 function randomUA(): string {
-  return UA_POOL[Math.floor(Math.random() * UA_POOL.length)].api;
+  // v428 targets Android 14 — only use Android 14+ (34/14 or 35/15) entries so the
+  // UA is consistent with the app version. Android 13 + v428 triggers needs_upgrade.
+  const eligible = UA_POOL.filter(e => parseInt(e.api.split("/")[0], 10) >= 34);
+  const pool = eligible.length > 0 ? eligible : UA_POOL;
+  return pool[Math.floor(Math.random() * pool.length)].api;
 }
 
 function parseSpin(template: string): string {

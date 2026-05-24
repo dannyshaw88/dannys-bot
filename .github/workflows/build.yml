@@ -62,6 +62,10 @@ jobs:
         working-directory: artifacts/electron
         run: npm install
 
+      - name: Install cycletls (Windows Go binary for OkHttp4 TLS fingerprint)
+        working-directory: artifacts/api-server
+        run: npm install cycletls
+
       - name: Build Electron
         working-directory: artifacts/electron
         env:
