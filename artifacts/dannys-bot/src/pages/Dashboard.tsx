@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.506",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Create an Account now has an Email Address field — it was missing, causing every signup attempt to fail immediately with a validation error." },
+      { category: "Change", text: "Email is now a required field on the Create an Account page. Instagram sends the verification code to this address during signup." },
+    ],
+  },
+  {
     version: "1.0.505",
     date: "24 May 2026",
     items: [

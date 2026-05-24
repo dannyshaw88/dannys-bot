@@ -462,6 +462,7 @@ function CreatedAccountsTab() {
 
 const LS_KEY_USERNAME_SPIN     = "equinox_api_username_spin";
 const LS_KEY_BIO_SPIN          = "equinox_api_bio_spin";
+const LS_KEY_EMAIL      = "equinox_api_email";
 const SS_KEY_PASSWORD   = "equinox_api_password";
 const SS_KEY_FIRSTNAME  = "equinox_api_firstname";
 const SS_KEY_DOB        = "equinox_api_dob";
@@ -519,8 +520,10 @@ export function CreateAccountApiPage() {
   const setBioSpin      = (v: string) => { setBioSpinRaw(v);      lsSet(LS_KEY_BIO_SPIN, v);      };
 
   const [password, setPasswordRaw]   = useState(() => ssGet(SS_KEY_PASSWORD) || generatePassword());
+  const [email, setEmailRaw]         = useState(() => lsGet(LS_KEY_EMAIL));
   const [firstName, setFirstNameRaw] = useState(() => ssGet(SS_KEY_FIRSTNAME));
   const setPassword  = (v: string) => { setPasswordRaw(v);  ssSet(SS_KEY_PASSWORD,  v); };
+  const setEmail     = (v: string) => { setEmailRaw(v);     lsSet(LS_KEY_EMAIL,      v); };
   const setFirstName = (v: string) => { setFirstNameRaw(v); ssSet(SS_KEY_FIRSTNAME, v); };
 
   const [dob, setDobRaw] = useState(() =>
@@ -601,7 +604,7 @@ export function CreateAccountApiPage() {
   const days  = Array.from({ length: 31 }, (_, i) => i + 1);
 
   const selectedProxy = proxies?.find(p => p.id === Number(selectedProxyId));
-  const canSubmit = usernameSpin.trim() && password && selectedProxyId;
+  const canSubmit = usernameSpin.trim() && password && email.trim() && selectedProxyId;
 
   const selectedDevice = UA_POOL.find(d => d.api === userAgentApi) ?? UA_POOL[0];
   const ebUA = selectedDevice.embedded;
@@ -675,6 +678,7 @@ export function CreateAccountApiPage() {
       const body: Record<string, unknown> = {
         username: spunUsername,
         password,
+        email: email.trim(),
         firstName: firstName.trim() || undefined,
         day: dob.day,
         month: dob.month,
@@ -882,6 +886,21 @@ export function CreateAccountApiPage() {
                   <span className="ml-1 text-[10px] text-muted-foreground">(auto-generated)</span>
                 </Label>
                 <Input value={password} onChange={e => setPassword(e.target.value)} className="h-8 text-sm font-mono" disabled={locked} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1">
+                  <Mail className="w-3 h-3" />Email Address
+                  <span className="ml-1 text-[10px] text-red-500 font-medium">required</span>
+                </Label>
+                <Input
+                  value={email}
+                  onChange={e => setEmail(e.target.value.trim())}
+                  placeholder="e.g. user@gmail.com"
+                  type="email"
+                  className="h-8 text-sm"
+                  disabled={locked}
+                />
+                <p className="text-[10px] text-muted-foreground">Instagram sends a verification code here during signup. Use a real inbox you can check.</p>
               </div>
             </div>
 
