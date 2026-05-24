@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.520",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account no longer stops at the first 'Bad request' response from Instagram — it now tries the library fallback and web registration fallback paths before giving up, matching the retry behaviour that applies to all other generic 400 responses." },
+      { category: "Fix", text: "Fixed a second instance of the CycleTLS .data vs .body bug in the multipart photo upload path — responses were being read from the wrong field and silently returning null." },
+    ],
+  },
+  {
     version: "1.0.519",
     date: "24 May 2026",
     items: [

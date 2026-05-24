@@ -537,9 +537,16 @@ export async function tlsMultipartPost(
         },
         "post",
       );
-      const rawBody = typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body);
+      // CycleTLS v2.x stores the response in .data, not .body
+      const rawBody = typeof resp.data === "string"
+        ? resp.data
+        : Buffer.isBuffer(resp.data)
+          ? (resp.data as Buffer).toString("utf8")
+          : (resp.data != null ? JSON.stringify(resp.data) : "");
       let json: any = null;
-      try { json = JSON.parse(rawBody); } catch {}
+      try { json = JSON.parse(rawBody); } catch {
+        if (resp.data != null && typeof resp.data === "object" && !Buffer.isBuffer(resp.data)) json = resp.data;
+      }
       return json;
     } catch (err: any) {
       console.error(`[tls:multipart] POST ${host}${path} FAILED — err=${err?.message ?? err}`);

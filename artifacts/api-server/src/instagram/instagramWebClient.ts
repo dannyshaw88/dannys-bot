@@ -4016,7 +4016,9 @@ export async function createInstagramAccountViaApi(params: {
     });
     cookieJar = mergeCookies(cookieJar, res.cookies);
     j = res.json;
-    const isGeneric400 = res.status === 400 && j?.status === "fail" && !j?.error_type;
+    // Treat plain-text 400 (no JSON body) the same as a generic JSON 400 — both
+    // mean Instagram's edge/WAF rejected the request before parsing our payload.
+    const isGeneric400 = res.status === 400 && (!j || (j?.status === "fail" && !j?.error_type));
     const igDiagHeaders = Object.entries(res.responseHeaders ?? {})
       .filter(([k]) => /^(x-ig-|x-fb-|www-auth|content-type)/i.test(k))
       .map(([k, v]) => `${k}=${Array.isArray(v) ? v[0] : v}`)
@@ -4034,7 +4036,8 @@ export async function createInstagramAccountViaApi(params: {
   // implementation for this API and uses a plaintext password (the library predates
   // enc_password for signup).  If this succeeds, or gets a *different* error than the
   // generic 400, it tells us the block is our HTTP stack, not Instagram policy.
-  const allMobileFailed = (j?.status === "fail" && !j?.error_type) || j?.error_type === "needs_upgrade";
+  // Also trigger library fallback when j is null (plain-text 400 — no JSON from Instagram)
+  const allMobileFailed = (j?.status === "fail" && !j?.error_type) || j?.error_type === "needs_upgrade" || (res.status === 400 && !j);
   if (allMobileFailed) {
     step("Custom HTTP stack blocked — trying instagram-private-api library path...");
     try {
@@ -4112,7 +4115,7 @@ export async function createInstagramAccountViaApi(params: {
   }
 
   // ── Web registration fallback ───────────────────────────────────────────────
-  const stillFailed = (j?.status === "fail" && !j?.error_type) || j?.error_type === "needs_upgrade";
+  const stillFailed = (j?.status === "fail" && !j?.error_type) || j?.error_type === "needs_upgrade" || (res.status === 400 && !j);
   if (stillFailed) {
     step("Library path also blocked — trying web registration endpoint...");
     try {
