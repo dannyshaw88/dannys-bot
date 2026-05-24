@@ -79,21 +79,14 @@ if (existsSync(assetsSrc)) {
   await cp(assetsSrc, path.join(dist, "assets"), { recursive: true });
 }
 
-// 4b. Copy cycletls package into dist/server/node_modules/cycletls/
-// The api-server esbuild config marks cycletls as `external` so the bundled
-// index.mjs expects to resolve it from a real node_modules directory at runtime.
-// cycletls ships a pre-compiled Go binary (index.exe on Windows) alongside its
-// JS wrapper — both must be present for the OkHttp4 TLS fingerprinting to work.
-// Without this copy the binary is never included in the installer and every
-// startup falls back to Node.js TLS (no Android fingerprint).
-const cycletlsSrc = path.join(__dirname, "../api-server/node_modules/cycletls");
-if (existsSync(cycletlsSrc)) {
-  await mkdir(path.join(dist, "server", "node_modules"), { recursive: true });
-  await cp(cycletlsSrc, path.join(dist, "server", "node_modules", "cycletls"), { recursive: true });
-  console.log("Copied cycletls package → dist/server/node_modules/cycletls/");
-} else {
-  console.warn("WARNING: cycletls not found in api-server/node_modules — TLS fingerprinting will fall back to Node.js TLS");
-}
+// 4b. cycletls — the OkHttp4 JA3 TLS fingerprint library.
+// cycletls is listed in this package's own dependencies so `npm install` on the
+// Windows CI runner installs the correct Windows Go binary automatically.
+// electron-builder's "node_modules/**" files glob then includes it in the
+// installer alongside the other deps, and index.mjs resolves it via normal
+// Node.js module resolution walking up from dist/server/ to node_modules/.
+// No manual copy needed — putting it in package.json is the correct approach.
+console.log("cycletls will be bundled via node_modules (listed in package.json dependencies)");
 
 // 5. Generate a crash-logging wrapper that is the real entry point
 const wrapper = `

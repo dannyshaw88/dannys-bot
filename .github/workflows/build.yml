@@ -62,13 +62,6 @@ jobs:
         working-directory: artifacts/electron
         run: npm install
 
-      - name: Install cycletls (Windows Go binary for OkHttp4 TLS fingerprint)
-        shell: pwsh
-        run: |
-          npm install cycletls --prefix "$env:RUNNER_TEMP\cycletls"
-          New-Item -ItemType Directory -Path "artifacts\api-server\node_modules" -Force
-          Copy-Item -Recurse -Force "$env:RUNNER_TEMP\cycletls\node_modules\cycletls" "artifacts\api-server\node_modules\cycletls"
-
       - name: Build Electron
         working-directory: artifacts/electron
         env:

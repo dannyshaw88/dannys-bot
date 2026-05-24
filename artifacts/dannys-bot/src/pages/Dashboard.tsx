@@ -56,10 +56,10 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
-    version: "1.0.512",
+    version: "1.0.513",
     date: "24 May 2026",
     items: [
-      { category: "Fix", text: "CycleTLS (the OkHttp4 Android TLS fingerprint library) is now correctly included in every Windows installer — it was silently missing from every build, so all signup requests were using a plain Node.js connection that Instagram's bot detection rejects." },
+      { category: "Fix", text: "CycleTLS is now a proper dependency of the Windows app — it was being copied into the wrong folder inside the build and then not found at runtime. It now installs via npm alongside the other app dependencies so the Android TLS fingerprint is active from first launch." },
       { category: "Fix", text: "Profile Sync no longer always returns 'Sync Failed' — the mobile session was not being initialised from stored cookies before the stats fetch, so every sync request returned null." },
       { category: "Fix", text: "The 'app version too old' error message no longer says to rebuild and redeploy — that was a leftover dev note; the message now tells you to switch proxy or retry." },
       { category: "Fix", text: "The device UA picker on Create an Account now only draws from Android 14+ profiles, matching the server-side selection." },
