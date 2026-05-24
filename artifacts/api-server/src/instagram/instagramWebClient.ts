@@ -235,7 +235,7 @@ const MOBILE_VERSION_DATE = "2026-05-24";
     );
   }
 })();
-const MOBILE_UA  = `Instagram ${MOBILE_VERSION} Android (33/13; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
+const MOBILE_UA  = `Instagram ${MOBILE_VERSION} Android (34/14; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US; ${MOBILE_VERSION_CODE})`;
 const MOBILE_AID = "567067343352427";
 // HMAC-SHA256 signing key used by Instagram's mobile API.
 // Instagram stopped validating the HMAC value itself around 2022, but the
@@ -259,7 +259,14 @@ function signBody(params: Record<string, unknown>): string {
  * Call once per account-creation attempt — never share the same string across accounts.
  */
 export function randomMobileUA(): string {
-  const entry = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+  // v428 targets Android 14 — only pick entries with Android 14+ (34/14 or 35/15) so the
+  // UA is internally consistent. Instagram rejects v428 + Android 13 with needs_upgrade.
+  const eligible = UA_POOL.filter(e => {
+    const av = parseInt(e.api.split("/")[0], 10);
+    return av >= 34;
+  });
+  const pool = eligible.length > 0 ? eligible : UA_POOL;
+  const entry = pool[Math.floor(Math.random() * pool.length)];
   return `Instagram ${MOBILE_VERSION} Android (${entry.api}; ${MOBILE_VERSION_CODE})`;
 }
 
@@ -3732,7 +3739,7 @@ export async function createInstagramAccountViaApi(params: {
     "Accept-Encoding": "gzip, deflate",
     "X-IG-App-ID": MOBILE_AID,
     "X-IG-App-Version": MOBILE_VERSION,
-    "X-IG-Capabilities": "3brTv10=",
+    "X-IG-Capabilities": "3brTvwE=",
     "X-IG-Connection-Type": "WIFI",
     "X-IG-Connection-Speed": "-1kbps",
     "X-IG-Bandwidth-Speed-KBPS": "-1.000",

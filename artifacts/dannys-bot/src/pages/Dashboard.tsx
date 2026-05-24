@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.510",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed the capabilities header sent during account creation — the old value was flagging the request as an outdated app version even though the version number itself was already correct." },
+      { category: "Fix", text: "Account creation now only uses Android 14+ device profiles — mixing Instagram 428 with an Android 13 device string was another trigger for the 'needs_upgrade' rejection." },
+      { category: "Fix", text: "Updated the fallback mobile device profile to Android 14 to keep all mobile API calls internally consistent." },
+    ],
+  },
+  {
     version: "1.0.509",
     date: "24 May 2026",
     items: [
