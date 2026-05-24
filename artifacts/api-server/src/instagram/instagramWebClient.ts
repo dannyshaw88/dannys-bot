@@ -215,15 +215,16 @@ type ApiCallLogger = (op: string, durationMs: number, message?: string) => void;
 // Keep this version current — Instagram rejects signup requests from versions
 // older than a few months with error_type:"needs_upgrade".
 // Play Store confirmed 427.0.0.47.73 on 2026-05-11.
-// Version code estimated from the linear progression between known pairs:
+// Version codes confirmed from instagrapi constants.py (updated 2026-05-24):
 //   222.0.0.13.114 → 350696709
-//   384.0.0.36.112 → 663869969  (rate ≈ 1,933,168 / major version)
-//   427.0.0.47.73  → 746996204  (estimated; update if Instagram rejects again)
-export const MOBILE_VERSION      = "427.0.0.47.73";
-export const MOBILE_VERSION_CODE = "746996204";
+//   384.0.0.36.112 → 663869969
+//   427.0.0.47.73  → 746996204
+//   428.0.0.47.67  → 961145276  ← current
+export const MOBILE_VERSION      = "428.0.0.47.67";
+export const MOBILE_VERSION_CODE = "961145276";
 // Date this version was last confirmed / updated. Warn after 90 days so there
 // is time to update before Instagram starts rejecting the version.
-const MOBILE_VERSION_DATE = "2026-05-11";
+const MOBILE_VERSION_DATE = "2026-05-24";
 (() => {
   const ageMs = Date.now() - new Date(MOBILE_VERSION_DATE).getTime();
   const ageDays = Math.floor(ageMs / 86_400_000);
@@ -3718,10 +3719,11 @@ export async function createInstagramAccountViaApi(params: {
   // (commit 57e5f68 / 44b34a0 — before gzip fix, before X-FB-Client-IP was added).
   // Do NOT add X-FB-Client-IP or X-FB-Server-Cluster — those were added AFTER
   // the 200 as speculative improvements and are absent from the working config.
-  // BLOKS_VERSION_ID: updated 2026-05-18 — confirmed current via instaloader project.
+  // BLOKS_VERSION_ID: updated 2026-05-24 — confirmed current via instagrapi constants.py.
   // Old v222 value (388ece79...) caused error_type:"needs_upgrade" on accounts/create/.
+  // Old v427 value (16b7bd25...) also caused "needs_upgrade" after Instagram bumped minimum version.
   // Update this alongside MOBILE_VERSION when Instagram bumps its minimum accepted version.
-  const BLOKS_VERSION_ID = "16b7bd25c6c06886d57c4d455265669345a2d96625385b8ee30026ac2dc5ed97";
+  const BLOKS_VERSION_ID = "7189b949425f9bf80ea8bd880cf5a3080b292d9b1c4b38a18d112f7c4b71e7a8";
   const baseHeaders: Record<string, string> = {
     "Host": "i.instagram.com",
     "User-Agent": effectiveUA,

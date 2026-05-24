@@ -521,7 +521,7 @@ function buildIgClient(profile: Profile, proxyUrl: string | null): { ig: IgApiCl
   // Falls back to MOBILE_VERSION when userAgentApi is device-params-only (format B).
   // BLOKS_VERSION_ID and SIGNATURE_KEY must match the declared app version —
   // the library ships v222-era values which Instagram detects as a mismatch.
-  ig.state.constants.BLOKS_VERSION_ID = "16b7bd25c6c06886d57c4d455265669345a2d96625385b8ee30026ac2dc5ed97";
+  ig.state.constants.BLOKS_VERSION_ID = "7189b949425f9bf80ea8bd880cf5a3080b292d9b1c4b38a18d112f7c4b71e7a8";
   ig.state.capabilitiesHeader = "3brTvwQ=";
   ig.state.constants.SIGNATURE_KEY = "fc4e50e6811bb3ff04fb58c49a70b8c9b23a9cde8d74e574c5987d9ebfbf1818";
 

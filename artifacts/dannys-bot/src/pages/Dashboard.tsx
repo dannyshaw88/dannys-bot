@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.509",
+    date: "24 May 2026",
+    items: [
+      { category: "Fix", text: "Resolved 'Update Instagram to sign up' error — the app version used for account creation has been updated to Instagram 428 (the current version Instagram accepts for mobile signup)." },
+      { category: "Fix", text: "Updated the Bloks version ID to match Instagram 428 — a mismatch between these two values also triggers the needs_upgrade rejection from Instagram's signup backend." },
+    ],
+  },
+  {
     version: "1.0.508",
     date: "24 May 2026",
     items: [
