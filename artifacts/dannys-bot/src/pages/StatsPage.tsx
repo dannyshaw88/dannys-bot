@@ -198,8 +198,7 @@ export function StatsPage() {
       setSortDir("desc");
       localStorage.setItem("stats:sortDir", "desc");
     } else {
-      setSortKey(null); setSortDir("asc");
-      localStorage.removeItem("stats:sortKey");
+      setSortDir("asc");
       localStorage.setItem("stats:sortDir", "asc");
     }
   };

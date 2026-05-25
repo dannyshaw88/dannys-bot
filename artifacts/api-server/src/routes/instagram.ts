@@ -1371,7 +1371,7 @@ export async function registerInstagramRoutes(
       if (stagger != null && stagger > 0) {
         req.log.info(`[copySettings] tool ${req.params.id} — staggerOffsetMins=${stagger} saved to DB`);
       }
-      const updated = await storage.updateTool(Number(req.params.id), input);
+      let updated = await storage.updateTool(Number(req.params.id), input);
       if (input.enabled === true) {
         if (cold) {
           // Copy-settings path: stop the existing runner and relaunch with startup wait + stagger
@@ -1380,6 +1380,17 @@ export async function registerInstagramRoutes(
         } else {
           // Manual toggle path: clear any block suspensions so the runner retries
           // immediately rather than waiting out the remainder of a 24/50-hour block.
+          // Also clear the DB-persisted toolBlockedUntil — clearSuspensions only clears
+          // the in-memory actionSuspensions map, so without this the block gate in
+          // runSession reads the stale toolBlockedUntil from DB and keeps returning
+          // "nothing to do" even after the user has toggled the tool back on.
+          const s = (updated.settings ?? {}) as any;
+          if (s.toolBlockedUntil) {
+            const cleared = { ...s };
+            delete cleared.toolBlockedUntil;
+            updated = await storage.updateTool(updated.id, { settings: cleared });
+            req.log.info(`[toggle-on] tool ${updated.id} (${updated.type}) — cleared toolBlockedUntil from DB`);
+          }
           automationEngine.clearSuspensions(updated.profileId, updated.type);
           // Wake existing runner immediately (or launch fresh)
           if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);

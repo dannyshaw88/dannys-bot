@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -55,6 +55,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.545",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Statistics page: column sort arrows now toggle between ascending and descending only — clicking a sorted column no longer resets it to unsorted as a third state." },
+      { category: "Improvement", text: "Dashboard activity log now loads noticeably faster — the feed is capped at 2,000 entries and only renders the most recent 500 rows at a time, eliminating the slowdown caused by thousands of DOM rows." },
+    ],
+  },
   {
     version: "1.0.544",
     date: "25 May 2026",
@@ -2752,12 +2760,12 @@ export function Dashboard() {
       }));
 
       if (isInitial) {
-        const all = [...newApiRows, ...newSessionItems].sort((a, b) => b.ts - a.ts);
+        const all = [...newApiRows, ...newSessionItems].sort((a, b) => b.ts - a.ts).slice(0, 2000);
         setFeedItems(all);
       } else {
         const incoming = [...newApiRows, ...newSessionItems];
         if (incoming.length > 0) {
-          setFeedItems(prev => [...incoming, ...prev].sort((a, b) => b.ts - a.ts));
+          setFeedItems(prev => [...incoming, ...prev].sort((a, b) => b.ts - a.ts).slice(0, 2000));
         }
       }
     } catch { /* ignore */ } finally {
@@ -2798,7 +2806,13 @@ export function Dashboard() {
 
   const selectedProfile = profiles?.find(p => p.id === selectedProfileId) ?? null;
 
-  const filteredFeed = feedItems
+  const profileLookup = useMemo(() => {
+    const m = new Map<number, string>();
+    (profiles ?? []).forEach(p => m.set(p.id, p.accountLabel || p.username));
+    return m;
+  }, [profiles]);
+
+  const filteredFeed = useMemo(() => feedItems
     .filter((item) => clearedAt === 0 || item.ts > clearedAt)
     .filter((item) => {
       if (errorsCleared === 0 || item.ts > errorsCleared) return true;
@@ -2809,7 +2823,7 @@ export function Dashboard() {
     .filter((item) => {
       if (!apiLogSearch.trim()) return true;
       const q = apiLogSearch.toLowerCase();
-      const label = getUsername(item.profileId, item.profileLabel).toLowerCase();
+      const label = (profileLookup.get(item.profileId) ?? item.profileLabel ?? `#${item.profileId}`).toLowerCase();
       if (item.kind === "api") {
         return (
           label.includes(q) ||
@@ -2823,7 +2837,7 @@ export function Dashboard() {
         (item.targetUsername ?? "").toLowerCase().includes(q) ||
         (item.detail ?? "").toLowerCase().includes(q)
       );
-    });
+    }), [feedItems, clearedAt, errorsCleared, showOnlyErrors, selectedProfileId, apiLogSearch, profileLookup]);
 
   const filteredProfileOptions = (profiles ?? []).filter(p =>
     !profileSearch.trim() ||
@@ -3199,7 +3213,7 @@ export function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    displayFeed.map((item) => {
+                    displayFeed.slice(0, 500).map((item) => {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
@@ -3278,8 +3292,9 @@ export function Dashboard() {
         {activeTab === "api-log" && (
           <div className="flex items-center justify-between px-4 py-2 border-t border-border/40 bg-muted/20 rounded-b-xl">
             <span className="text-xs text-muted-foreground">
-              {displayFeed.length.toLocaleString()} {displayFeed.length === 1 ? "row" : "rows"}
-              {(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}
+              {displayFeed.length > 500
+                ? `showing 500 of ${displayFeed.length.toLocaleString()} rows${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`
+                : `${displayFeed.length.toLocaleString()} ${displayFeed.length === 1 ? "row" : "rows"}${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`}
             </span>
             <button
               onClick={exportCsv}

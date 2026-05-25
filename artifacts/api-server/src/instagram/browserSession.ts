@@ -5982,7 +5982,13 @@ export async function openSignupBrowser(opts?: {
   const dataDir = path.join(COOKIES_DIR, "signup-browser");
   fs.mkdirSync(dataDir, { recursive: true });
 
-  const args: string[] = [...HARVEST_ARGS, `--user-data-dir=${dataDir}`];
+  // Use the full LAUNCH_ARGS set (same as the regular per-account EB) so the signup browser
+  // gets all memory/performance flags: --renderer-process-limit=1, --js-flags heap cap,
+  // --aggressive-cache-discard, etc.  Without these the heap can grow to 1.5 GB and
+  // Chrome spawns extra processes — both cause the freezing the user sees.
+  // We intentionally do NOT use HARVEST_ARGS here: those are for throwaway harvest sessions
+  // where memory optimisation is irrelevant.
+  const args: string[] = [...LAUNCH_ARGS, `--user-data-dir=${dataDir}`];
   if (opts?.proxyHost) args.push(`--proxy-server=${opts.proxyHost}:${opts.proxyPort ?? 80}`);
 
   let browser: any;
@@ -6087,8 +6093,22 @@ export async function closeSignupBrowser(): Promise<void> {
 
 export async function resetSignupBrowser(): Promise<void> {
   await closeSignupBrowser();
+  // browser.close() resolves when Puppeteer's CDP connection closes, but the
+  // Chrome process can still be writing its final state to the user-data-dir
+  // for a moment afterward, holding file locks.  If rmSync fires immediately it
+  // silently fails (caught by the try/catch) and the directory survives — the
+  // next open then inherits all cookies, cache, and history from the previous
+  // session.  Wait for Chrome to fully flush, then retry up to 3 times.
+  await new Promise(r => setTimeout(r, 600));
   const dataDir = path.join(COOKIES_DIR, "signup-browser");
-  try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch {}
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+      break;
+    } catch {
+      if (attempt < 2) await new Promise(r => setTimeout(r, 400));
+    }
+  }
 }
 
 // ── Electron EB — push arbitrary WS message to the BrowserPanel ──────────────
