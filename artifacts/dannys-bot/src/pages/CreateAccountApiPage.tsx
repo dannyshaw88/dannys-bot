@@ -780,7 +780,7 @@ export function CreateAccountApiPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Create an Account</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Creates an Instagram account via the mobile API using the embedded browser.
+            Creates an Instagram account via the embedded browser.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

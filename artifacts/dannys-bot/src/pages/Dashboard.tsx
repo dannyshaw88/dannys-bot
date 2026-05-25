@@ -157,6 +157,16 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.550",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Create an Account: fixed the 'Sign up with email' button click — the code was clicking the centre of the form instead of the actual link because parent containers were being matched by mistake. The correct link is now found and clicked reliably." },
+      { category: "Fix", text: "Create an Account: switched from old headless Chrome mode to the new headless mode which is much harder for Instagram to detect as a bot." },
+      { category: "Fix", text: "Create an Account: stealth scripts (hide automation fingerprints) are now applied before the browser visits Instagram, so the signup session looks like a real Chrome browser from the first request." },
+      { category: "Fix", text: "Create an Account page subheader no longer incorrectly says 'via the mobile API' — account creation is entirely through the embedded browser." },
+    ],
+  },
+  {
     version: "1.0.538",
     date: "25 May 2026",
     items: [
