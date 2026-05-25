@@ -58,6 +58,9 @@ import {
   createInstagramAccountViaEBForm,
   submitSignupCodeViaEB,
   isEBSignupSession,
+  sendSignupWsMsg,
+  storePendingAutomateSession,
+  consumePendingAutomateSession,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
@@ -2067,6 +2070,71 @@ export async function registerInstagramRoutes(
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err?.message });
     }
+  });
+
+  // ── EB form automation: fire-and-forget; results arrive via WS signupStep/signupDone/signupPaused ──
+  app.post("/api/signup/browser/automate", async (req, res) => {
+    const { email, password, username, firstName, dob, userAgent,
+            proxyHost, proxyPort, proxyUsername, proxyPassword } = req.body as {
+      email: string; password: string; username: string; firstName?: string;
+      dob?: { day: number; month: number; year: number };
+      userAgent?: string;
+      proxyHost?: string; proxyPort?: number;
+      proxyUsername?: string; proxyPassword?: string;
+    };
+    if (!proxyHost || !proxyPort) {
+      return res.status(400).json({ ok: false, error: "A proxy is required for EB account creation" });
+    }
+    // Acknowledge immediately — result arrives via WebSocket
+    res.json({ ok: true });
+
+    (async () => {
+      try {
+        const result = await createInstagramAccountViaEBForm({
+          email, password, username,
+          firstName: firstName ?? "",
+          month: dob?.month ?? 6,
+          day:   dob?.day   ?? 15,
+          year:  dob?.year  ?? 1995,
+          proxyHost, proxyPort, proxyUsername, proxyPassword,
+          userAgent,
+          onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg }),
+        });
+
+        if (result.status === "email_verification" || result.status === "phone_verification") {
+          if (result.sessionId) storePendingAutomateSession(result.sessionId);
+          sendSignupWsMsg({ type: "signupPaused", message: result.message });
+        } else {
+          sendSignupWsMsg({ type: "signupDone", status: result.status, message: result.message });
+        }
+      } catch (e: any) {
+        sendSignupWsMsg({ type: "signupDone", status: "error", message: e?.message ?? "Automation error" });
+      }
+    })().catch(() => {});
+  });
+
+  // ── EB form automation continue: submit the email/phone verification code ──
+  app.post("/api/signup/browser/automate-continue", async (req, res) => {
+    const { code } = req.body as { code: string };
+    if (!code) return res.status(400).json({ ok: false, error: "code is required" });
+
+    const sessionId = consumePendingAutomateSession();
+    if (!sessionId) return res.status(400).json({ ok: false, error: "No pending EB signup session — it may have expired" });
+
+    res.json({ ok: true });
+
+    (async () => {
+      try {
+        const result = await submitSignupCodeViaEB(sessionId, code);
+        // Forward the last few step messages so they appear in the UI
+        for (const msg of result.steps.slice(-5)) {
+          sendSignupWsMsg({ type: "signupStep", msg });
+        }
+        sendSignupWsMsg({ type: "signupDone", status: result.status, message: result.message });
+      } catch (e: any) {
+        sendSignupWsMsg({ type: "signupDone", status: "error", message: e?.message ?? "Code submission error" });
+      }
+    })().catch(() => {});
   });
 
   // Accept a user-picked file and upload it to the pending Puppeteer file chooser

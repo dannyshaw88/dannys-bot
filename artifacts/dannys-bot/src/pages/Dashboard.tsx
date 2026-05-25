@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.549",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account: the automation was silently doing nothing after clicking Create — the two server routes that run the headless signup browser were completely missing and have now been added." },
+      { category: "Fix", text: "Create Account: step-by-step progress messages (navigating, filling form, detecting gate page, etc.) now appear in the live trace panel as the automation runs." },
+      { category: "Fix", text: "Create Account: entering the email verification code and clicking Confirm now correctly resumes the paused automation instead of returning an error." },
+    ],
+  },
+  {
     version: "1.0.548",
     date: "25 May 2026",
     items: [

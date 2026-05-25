@@ -985,6 +985,23 @@ let _signupBrowser: any | null = null;
 let _signupDataDir: string | null = null; // per-attempt unique dir, wiped on every close
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
+// ── Signup automation WS helpers ─────────────────────────────────────────────
+/** Send a JSON message to the signup browser WebSocket (if connected). */
+export function sendSignupWsMsg(msg: object): void {
+  if (_signupWs && _signupWs.readyState === 1 /* OPEN */) {
+    try { _signupWs.send(JSON.stringify(msg)); } catch {}
+  }
+}
+
+/** Session ID storage for the pause/continue flow (email verification mid-signup). */
+let _pendingAutomateEBSession: string | null = null;
+export function storePendingAutomateSession(id: string): void { _pendingAutomateEBSession = id; }
+export function consumePendingAutomateSession(): string | null {
+  const id = _pendingAutomateEBSession;
+  _pendingAutomateEBSession = null;
+  return id;
+}
+
 // ── Graceful shutdown: save all open EB sessions before the process exits ────
 // Without this, cookies are only saved on navigation events and every 60s in
 // the frame loop. If the app is closed between ticks (or Instagram rotated the
@@ -6252,20 +6269,56 @@ export async function createInstagramAccountViaEBForm(params: {
     await dismissCookieBanner(page);
     await delay(500);
 
-    // Always navigate directly to the email signup form — no button-click intermediary.
+    // Navigate to the email signup form.
     step("EB: navigating to email signup form...");
     try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 60000 }); }
     catch (e: any) { step(`EB: signup page nav warning: ${e?.message?.slice(0, 80)}`); }
+    await dismissCookieBanner(page);
 
-    // Poll for the email input to be present (up to 20 s) before trying to fill the form.
+    // Instagram sometimes redirects emailsignup to a "What's your mobile number?" gate
+    // with a "Sign up with email address" link at the bottom.  Poll for either the
+    // email input (form ready) or that link (gate page), up to 20 s.
+    const EMAIL_LABELS = ["sign up with email address", "sign up with email", "use email address", "use email"];
     for (let _i = 0; _i < 40; _i++) {
       await delay(500);
-      const formReady = await page.evaluate(() => {
-        return !!document.querySelector('input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i]');
-      }).catch(() => false);
-      if (formReady) break;
+      const state = await page.evaluate((labels: string[]) => {
+        if (document.querySelector('input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i]'))
+          return "form";
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>("a,button,[role='button']"))) {
+          const txt = ((el as any).innerText || el.textContent || "").trim().toLowerCase();
+          if (labels.some(l => txt.includes(l))) {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) return "gate";
+          }
+        }
+        return "waiting";
+      }, EMAIL_LABELS).catch(() => "waiting");
+
+      if (state === "form") break;
+
+      if (state === "gate") {
+        step("EB: mobile gate detected — clicking 'Sign up with email address'...");
+        await page.evaluate((labels: string[]) => {
+          for (const el of Array.from(document.querySelectorAll<HTMLElement>("a,button,[role='button']"))) {
+            const txt = ((el as any).innerText || el.textContent || "").trim().toLowerCase();
+            if (labels.some(l => txt.includes(l))) {
+              const r = el.getBoundingClientRect();
+              if (r.width > 0 && r.height > 0) { el.click(); return; }
+            }
+          }
+        }, EMAIL_LABELS).catch(() => {});
+        // Now wait for the email form to appear (up to 15 s)
+        for (let _j = 0; _j < 30; _j++) {
+          await delay(500);
+          const formReady = await page.evaluate(() =>
+            !!document.querySelector('input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i]')
+          ).catch(() => false);
+          if (formReady) break;
+        }
+        await dismissCookieBanner(page);
+        break;
+      }
     }
-    await dismissCookieBanner(page);
     await delay(400);
 
     step("EB: filling signup form...");
