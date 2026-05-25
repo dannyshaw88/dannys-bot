@@ -839,6 +839,9 @@ export function CreateAccountApiPage() {
                     className="h-7 px-2 text-[10px]"
                     onClick={async () => {
                       setUserAgentApi(randomUA());
+                      setPassword(generatePassword());
+                      setDob(randomDob());
+                      setFirstName("");
                       setEbVisible(false);
                       setLoading(false);
                       setResult(null);

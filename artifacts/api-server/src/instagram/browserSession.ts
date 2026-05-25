@@ -2832,8 +2832,8 @@ export function scheduleAutoLogin(
     if (!s || s.autoLoginInProgress) return;
     let url = "";
     try { url = s.page.url(); } catch { return; }
-    if (!url.includes("accounts/login") && !url.includes("/login")) return;
-    log(`[autoLogin:${profileId}] auto-trigger: login page detected after initial navigation`, "browser");
+    if (!url.includes("instagram.com")) return;
+    log(`[autoLogin:${profileId}] auto-trigger: Instagram page detected after initial navigation (${url.slice(0, 60)})`, "browser");
     browserAutoLogin(profileId, username, password, twoFAKey)
       .then(result => sendLoginDone(profileId, result.ok, result.message))
       .catch(err  => sendLoginDone(profileId, false, String(err)));

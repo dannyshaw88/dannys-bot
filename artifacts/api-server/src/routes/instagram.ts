@@ -1378,7 +1378,10 @@ export async function registerInstagramRoutes(
           req.log.info(`[copySettings] tool ${req.params.id} (${updated.type}) cold restart — stagger will apply`);
           automationEngine.restartColdWithWait(updated.profileId, updated.type);
         } else {
-          // Manual toggle path: wake existing runner immediately (or launch fresh)
+          // Manual toggle path: clear any block suspensions so the runner retries
+          // immediately rather than waiting out the remainder of a 24/50-hour block.
+          automationEngine.clearSuspensions(updated.profileId, updated.type);
+          // Wake existing runner immediately (or launch fresh)
           if (updated.type === "human_sessions") automationEngine.triggerHumanSession(updated.profileId);
           if (updated.type === "unfollow")       automationEngine.triggerUnfollow(updated.profileId);
           if (updated.type === "follow")         automationEngine.triggerFollow(updated.profileId);

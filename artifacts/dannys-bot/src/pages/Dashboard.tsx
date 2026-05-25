@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.544",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Tools: toggling a tool off and back on now immediately clears any active block suspension — the tool retries straight away instead of waiting out the remainder of a 24- or 50-hour pause." },
+      { category: "Fix", text: "Create Account: the Randomise button now generates a fresh password, date of birth, and first name alongside the new device fingerprint — every press produces a fully new identity." },
+      { category: "Fix", text: "Accounts page: opening the embedded browser now triggers auto-login even when Chrome loads Instagram's home page (existing cookies) — previously auto-login only fired when Chrome opened directly on the login form." },
+    ],
+  },
+  {
     version: "1.0.543",
     date: "25 May 2026",
     items: [

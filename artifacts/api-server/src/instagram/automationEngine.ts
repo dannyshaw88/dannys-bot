@@ -3654,6 +3654,25 @@ class AutomationEngine {
     }
   }
 
+  // Called when a tool is manually toggled on from the UI.
+  // Clears any active block suspensions so the runner tries again immediately
+  // instead of sitting out the remainder of a 24- or 50-hour wait.
+  clearSuspensions(profileId: number, toolType: string): void {
+    if (toolType === "follow") {
+      const state = this.states.get(profileId);
+      if (state) { state.actionSuspensions = {}; }
+    } else if (toolType === "unfollow") {
+      const state = this.unfollowStates.get(profileId);
+      if (state) { state.actionSuspensions = {}; }
+    } else if (toolType === "dm") {
+      const state = this.dmStates.get(profileId);
+      if (state) { state.actionSuspensions = {}; }
+    } else if (toolType === "contact") {
+      const state = this.contactStates.get(profileId);
+      if (state) { state.actionSuspensions = {}; }
+    }
+  }
+
   // Called by copy-settings when enabling a tool with a stagger offset.
   // Stops the existing runner (if any) so the next reconcile re-launches it
   // from scratch, respecting the startup wait + staggerOffsetMins from DB.
