@@ -2985,6 +2985,85 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Jarvee binary account file import ────────────────────────────────────
+  // Accepts the raw binary as base64.  Decodes, XOR-reverses, parses the
+  // .NET BinaryFormatter stream, and creates one profile per account found.
+
+  app.post("/api/profiles/import-jarvee", async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: "fileBase64 is required" });
+
+      let buf: Buffer;
+      try { buf = Buffer.from(fileBase64, "base64"); }
+      catch { return res.status(400).json({ error: "Invalid base64 data" }); }
+
+      const { parseJarveeBinary } = await import("../instagram/jarveeParser.js");
+      let jarveeAccounts: Awaited<ReturnType<typeof parseJarveeBinary>>;
+      try {
+        jarveeAccounts = parseJarveeBinary(buf);
+      } catch (e: any) {
+        return res.status(400).json({ error: e?.message ?? "Failed to parse Jarvee file" });
+      }
+
+      if (jarveeAccounts.length === 0) {
+        return res.status(400).json({ error: "No accounts found in this Jarvee file" });
+      }
+
+      const results: { username: string; ok: boolean; error?: string }[] = [];
+
+      for (const ja of jarveeAccounts) {
+        try {
+          const autoUA = pickUAForAccount(ja.username);
+          const igDeviceState = ja.deviceString
+            ? JSON.stringify({ deviceString: ja.deviceString })
+            : null;
+
+          let proxyStr: string | null = null;
+          if (ja.proxyHost && ja.proxyPort) {
+            const auth = ja.proxyUsername
+              ? `${encodeURIComponent(ja.proxyUsername)}${ja.proxyPassword ? `:${encodeURIComponent(ja.proxyPassword)}` : ""}@`
+              : "";
+            proxyStr = `http://${auth}${ja.proxyHost}:${ja.proxyPort}`;
+          }
+
+          const profileData: any = {
+            username:           ja.username,
+            password:           ja.password,
+            proxyHost:          ja.proxyHost   ?? null,
+            proxyPort:          ja.proxyPort   ?? null,
+            proxyUsername:      ja.proxyUsername ?? null,
+            proxyPassword:      ja.proxyPassword ?? null,
+            accountStatus:      "pending",
+            userAgentEmbedded:  autoUA.embedded,
+            userAgentApi:       ja.userAgentWeb ?? autoUA.api,
+            igDeviceState:      igDeviceState,
+            notes:              ja.note ? `Imported from Jarvee. Email: ${ja.email ?? "N/A"}. Note: ${ja.note}` : (ja.email ? `Imported from Jarvee. Email: ${ja.email}` : "Imported from Jarvee"),
+          };
+
+          if (proxyStr) profileData.proxy = proxyStr;
+
+          const created = await storage.createProfile(profileData);
+          await storage.updateProfile(created.id, { accountStatus: "pending", credentialsDirty: false });
+          results.push({ username: ja.username, ok: true });
+        } catch (e: any) {
+          results.push({ username: ja.username, ok: false, error: e?.message ?? "Failed to create profile" });
+        }
+      }
+
+      const ok  = results.filter(r => r.ok);
+      const bad = results.filter(r => !r.ok);
+      return res.json({
+        imported: ok.length,
+        failed:   bad.length,
+        accounts: results,
+      });
+    } catch (e: any) {
+      req.log.error({ err: e }, "import-jarvee failed");
+      return res.status(500).json({ error: e?.message });
+    }
+  });
+
   // ── API Account Creator ───────────────────────────────────────────────────
 
   app.post("/api/signup/start", async (req, res) => {

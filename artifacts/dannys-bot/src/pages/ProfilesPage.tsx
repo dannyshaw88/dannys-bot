@@ -229,6 +229,8 @@ export function ProfilesPage() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [eqxImporting, setEqxImporting] = useState(false);
   const eqxImportRef = useRef<HTMLInputElement>(null);
+  const [jarveeImporting, setJarveeImporting] = useState(false);
+  const jarveeImportRef = useRef<HTMLInputElement>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
   const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
   const [verifyingAll, setVerifyingAll] = useState(false);
@@ -1355,6 +1357,72 @@ export function ProfilesPage() {
 
       <ImportProfilesDialog open={importOpen} onOpenChange={setImportOpen} />
 
+      {/* Hidden Jarvee binary import file input */}
+      <input
+        ref={jarveeImportRef}
+        type="file"
+        accept="*"
+        multiple
+        className="hidden"
+        onChange={async (e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (!jarveeImportRef.current) return;
+          jarveeImportRef.current.value = "";
+          if (!files.length) return;
+          setJarveeImporting(true);
+
+          let totalImported = 0;
+          let totalFailed = 0;
+          const allErrors: string[] = [];
+
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (files.length > 1) {
+              toast({ title: `Parsing ${i + 1} of ${files.length}…`, description: file.name });
+            }
+            try {
+              const buffer = await file.arrayBuffer();
+              const bytes = new Uint8Array(buffer);
+              let binary = "";
+              const CHUNK = 8192;
+              for (let j = 0; j < bytes.length; j += CHUNK) {
+                binary += String.fromCharCode(...bytes.subarray(j, j + CHUNK));
+              }
+              const fileBase64 = btoa(binary);
+              const res = await fetch("/api/profiles/import-jarvee", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ fileBase64 }),
+              });
+              const data = await res.json();
+              if (!res.ok) {
+                allErrors.push(`${file.name}: ${data.error ?? "Unknown error"}`);
+              } else {
+                totalImported += data.imported ?? 0;
+                totalFailed   += data.failed   ?? 0;
+                if (data.failed > 0) {
+                  const failNames = (data.accounts ?? []).filter((a: any) => !a.ok).map((a: any) => a.username).join(", ");
+                  allErrors.push(`${file.name}: failed for ${failNames}`);
+                }
+              }
+            } catch (err: any) {
+              allErrors.push(`${file.name}: ${err?.message ?? "Could not read file"}`);
+            }
+          }
+
+          if (allErrors.length === 0) {
+            toast({ title: "Jarvee import complete", description: `${totalImported} account${totalImported === 1 ? "" : "s"} imported successfully. All accounts set to Pending — verify before running.` });
+          } else if (totalImported > 0) {
+            toast({ title: `Jarvee import: ${totalImported} imported, ${totalFailed + allErrors.length} failed`, description: allErrors.join("; "), variant: "destructive" });
+          } else {
+            toast({ title: "Jarvee import failed", description: allErrors.join("; "), variant: "destructive" });
+          }
+
+          setJarveeImporting(false);
+        }}
+      />
+
       {/* Hidden EQX import file input — multiple allowed */}
       <input
         ref={eqxImportRef}
@@ -1451,6 +1519,14 @@ export function ProfilesPage() {
               >
                 {eqxImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-primary" />}
                 Import EQX File
+              </button>
+              <button
+                onClick={() => { setActionsOpen(false); jarveeImportRef.current?.click(); }}
+                disabled={jarveeImporting}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {jarveeImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                Import Binary File
               </button>
               <button
                 onClick={async () => {

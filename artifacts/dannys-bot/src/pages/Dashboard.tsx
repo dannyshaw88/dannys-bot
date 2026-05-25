@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.531",
+    date: "25 May 2026",
+    items: [
+      { category: "New", text: "Import Binary File — you can now import Jarvee account export files directly from the Actions menu. Equinox reads the username, password, proxy, and device info from the file and creates the account as Pending ready to verify." },
+    ],
+  },
+  {
     version: "1.0.530",
     date: "25 May 2026",
     items: [
