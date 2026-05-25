@@ -71,7 +71,7 @@ export interface IStorage {
   deleteFollowedUser(id: number): Promise<void>;
   countFollowsToday(profileId: number, todayPrefix: string): Promise<number>;
   countFollowsThisHour(profileId: number, hourPrefix: string): Promise<number>;
-  bulkImportFollowedUsers(profileId: number, entries: { username: string; userId: string; followedAt: string }[]): Promise<{ imported: number; skipped: number }>;
+  bulkImportFollowedUsers(profileId: number, entries: { username: string; userId: string; followedAt: string; sourceType?: string }[]): Promise<{ imported: number; skipped: number }>;
 
   // Session Actions
   getSessionActionsByProfile(profileId: number, limit?: number): Promise<SessionAction[]>;
@@ -408,7 +408,7 @@ export class DatabaseStorage implements IStorage {
 
   async bulkImportFollowedUsers(
     profileId: number,
-    entries: { username: string; userId: string; followedAt: string }[]
+    entries: { username: string; userId: string; followedAt: string; sourceType?: string }[]
   ): Promise<{ imported: number; skipped: number }> {
     if (!entries.length) return { imported: 0, skipped: 0 };
     // Load existing usernames for this profile to deduplicate
@@ -427,8 +427,8 @@ export class DatabaseStorage implements IStorage {
           profileId,
           instagramUsername: e.username,
           instagramUserId: e.userId,
-          sourceValue: "jarvee_import",
-          sourceType: "jarvee_import",
+          sourceValue: e.sourceType ?? "jarvee_import",
+          sourceType: e.sourceType ?? "jarvee_import",
           followedAt: e.followedAt,
         }))
       );

@@ -55,6 +55,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.533",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Jarvee import now correctly assigns the Chrome user agent to the embedded browser instead of the API client." },
+      { category: "New", text: "Jarvee import now restores the follow tool source list — all target accounts whose followers you were following are imported automatically." },
+      { category: "New", text: "Jarvee import now restores the followed users dedup list so Equinox won't re-follow anyone already followed in Jarvee." },
+      { category: "New", text: "Jarvee import now restores the DM recipients list so Equinox won't re-DM anyone already messaged in Jarvee." },
+    ],
+  },
     {
       version: "1.0.532",
       date: "25 May 2026",

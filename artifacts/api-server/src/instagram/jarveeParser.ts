@@ -7,12 +7,15 @@
  * Key observations from reverse-engineering:
  *  - All string values are stored as BinaryObjectString records:
  *      byte 0x06 | int32-LE objectId | LengthPrefixedString
- *  - Instagram usernames are base64-encoded
+ *  - Instagram usernames are base64-encoded in the account header
  *  - Passwords, proxies, and other fields are plain text
  *  - Per-account cluster (sorted by file offset):
  *      [status text] [2FA codes] [b64 username] [smtp host] [email pass]
  *      [IG password] [proxy host:port] [proxy username] [proxy password?]
- *      [full name] [note/label] [web UA] [device string …]
+ *      [full name] [note/label] [web UA (Chrome)] [device string …]
+ *  - Follow sources appear as "followers/X" strings (X = target account)
+ *  - Followed users appear as a large consecutive run of IG usernames
+ *  - DM recipients: IG username appears 2 records after each large sent-DM text
  */
 
 export interface JarveeAccount {
@@ -26,6 +29,9 @@ export interface JarveeAccount {
   deviceString?: string;
   userAgentWeb?: string;
   note?: string;
+  followSources: string[];       // usernames to follow followers of (target_followers)
+  followedUsernames: string[];   // already-followed IG usernames (dedup list)
+  dmRecipients: string[];        // already-DM'd IG usernames (dedup list)
 }
 
 interface StringRecord {
@@ -46,7 +52,7 @@ function readLPS(buf: Buffer, pos: number): { value: string; endPos: number } | 
     if (!(b & 0x80)) { i++; break; }
   }
   const strStart = pos + i;
-  if (strStart + length > buf.length || length > 100_000) return null;
+  if (strStart + length > buf.length || length > 500_000) return null;
   try {
     const value = buf.slice(strStart, strStart + length).toString("utf8");
     return { value, endPos: strStart + length };
@@ -55,27 +61,30 @@ function readLPS(buf: Buffer, pos: number): { value: string; endPos: number } | 
   }
 }
 
-function extractBinaryObjectStrings(decoded: Buffer): StringRecord[] {
+function extractAllStrings(decoded: Buffer): StringRecord[] {
   const records: StringRecord[] = [];
   for (let pos = 0; pos < decoded.length - 6; pos++) {
     if (decoded[pos] !== 0x06) continue;
     const objId = decoded.readInt32LE(pos + 1);
-    if (objId <= 0 || objId >= 2_000_000) continue;
+    if (objId <= 0 || objId >= 100_000_000) continue;
     const r = readLPS(decoded, pos + 5);
-    if (r && r.value.length <= 5000) {
+    if (r && r.value.length <= 200_000) {
       records.push({ offset: pos, id: objId, value: r.value });
     }
   }
   return records;
 }
 
-const PROXY_RE = /^[\w.-]+:\d{2,5}$/;
-const B64_RE   = /^[A-Za-z0-9+/]+=*$/;
-const IG_UN_RE = /^[a-zA-Z0-9_.]{3,30}$/;
-const SMTP_RE  = /^smtp\./i;
-const EMAIL_RE = /^[^@]+@[^@]+\.[^@]+$/;
-const URL_RE   = /^https?:\/\//i;
-const DEVICE_RE = /^\d+\/\d+;\s+\d+dpi;/;
+const PROXY_RE   = /^[\w.-]+:\d{2,5}$/;
+const B64_RE     = /^[A-Za-z0-9+/]+=*$/;
+const IG_UN_RE   = /^[a-zA-Z0-9_.]{3,30}$/;
+const SMTP_RE    = /^smtp\./i;
+const EMAIL_RE   = /^[^@]+@[^@]+\.[^@]+$/;
+const URL_RE     = /^https?:\/\//i;
+const DEVICE_RE  = /^\d+\/\d+;\s+\d+dpi;/;
+const FOL_SRC_RE = /^followers\/([a-zA-Z0-9_.]{3,30})$/;
+const NUMERIC_RE = /^\d+$/;
+const SENT_DM_RE = /(?:Hey|Hiii|Hii|Hi|Heyy|Hows it going)/i;
 
 function decodeB64Username(s: string): string | null {
   if (!B64_RE.test(s) || s.length < 8 || s.length > 60) return null;
@@ -107,6 +116,74 @@ function isLikelyPassword(s: string): boolean {
   return true;
 }
 
+/** Extract the "followed users" list from the first large run of IG usernames
+ *  that contains a mix of styles (not pure fitness-hashtag words).
+ *  Runs of ≥50 entries where >25% have digits or underscores → real accounts. */
+function extractFollowedUsers(sortedById: StringRecord[]): string[] {
+  const DAYS = new Set(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+
+  let bestRun: string[] = [];
+  let i = 0;
+  while (i < sortedById.length) {
+    const s = sortedById[i].value;
+    if (!IG_UN_RE.test(s) || DAYS.has(s) || NUMERIC_RE.test(s) || FOL_SRC_RE.test(s) || s.length <= 2) {
+      i++;
+      continue;
+    }
+    // Potential start of a run
+    const run: string[] = [s];
+    let j = i + 1;
+    while (j < sortedById.length) {
+      const v = sortedById[j].value;
+      if (IG_UN_RE.test(v) && !DAYS.has(v) && !NUMERIC_RE.test(v) && v.length >= 4) {
+        run.push(v);
+        j++;
+      } else if (v.length <= 2 || v === "" || NUMERIC_RE.test(v) || DAYS.has(v)) {
+        j++;
+      } else {
+        break;
+      }
+    }
+    if (run.length >= 50) {
+      const withDigitOrUnderscore = run.filter(u => /[0-9_]/.test(u)).length;
+      const ratio = withDigitOrUnderscore / run.length;
+      if (ratio > 0.25 && run.length > bestRun.length) {
+        bestRun = run;
+      }
+    }
+    i = j;
+  }
+  // Deduplicate while preserving order
+  return [...new Set(bestRun)];
+}
+
+/** Extract DM recipients: the IG username that appears 1-3 records (by ID) after
+ *  each large sent-DM text. */
+function extractDmRecipients(sortedById: StringRecord[]): string[] {
+  const idMap = new Map(sortedById.map(r => [r.id, r.value]));
+  const sortedIds = sortedById.map(r => r.id).sort((a, b) => a - b);
+  const idIndex = new Map(sortedIds.map((id, idx) => [id, idx]));
+
+  const recipients = new Set<string>();
+  for (const rec of sortedById) {
+    if (rec.value.length < 80 || !SENT_DM_RE.test(rec.value)) continue;
+    if (!rec.value.includes("\n") && rec.value.length < 120) continue;
+    const idx = idIndex.get(rec.id);
+    if (idx == null) continue;
+    // Check next 4 sibling IDs for a valid IG username
+    for (let k = 1; k <= 4; k++) {
+      const nextId = sortedIds[idx + k];
+      if (nextId == null) break;
+      const v = idMap.get(nextId) ?? "";
+      if (IG_UN_RE.test(v) && v.length >= 4 && !NUMERIC_RE.test(v)) {
+        recipients.add(v);
+        break;
+      }
+    }
+  }
+  return [...recipients];
+}
+
 export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
   if (buffer.length < 20) throw new Error("File too small to be a Jarvee binary export");
 
@@ -116,24 +193,44 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     throw new Error("Not a valid Jarvee binary file (unexpected header after XOR decode)");
   }
 
-  const strings = extractBinaryObjectStrings(decoded);
-  if (strings.length === 0) throw new Error("No string records found — file may be corrupted");
+  const allRecords = extractAllStrings(decoded);
+  if (allRecords.length === 0) throw new Error("No string records found — file may be corrupted");
 
+  // Sort two ways: by offset (for proximity analysis) and by ID (for run detection)
+  const sortedByOffset = [...allRecords].sort((a, b) => a.offset - b.offset);
+  const sortedById     = [...allRecords].sort((a, b) => a.id - b.id);
+
+  // ── Global data extraction (file-level, not per-account) ──────────────────
+
+  // Follow sources: all unique "followers/X" strings
+  const followSourceSet = new Set<string>();
+  for (const r of allRecords) {
+    const m = FOL_SRC_RE.exec(r.value);
+    if (m) followSourceSet.add(m[1]);
+  }
+  const followSources = [...followSourceSet];
+
+  // Followed users (largest real-account username run)
+  const followedUsernames = extractFollowedUsers(sortedById);
+
+  // DM recipients
+  const dmRecipients = extractDmRecipients(sortedById);
+
+  // ── Per-account extraction ────────────────────────────────────────────────
   const accounts: JarveeAccount[] = [];
   const usedOffsets = new Set<number>();
 
-  for (let i = 0; i < strings.length; i++) {
-    const s = strings[i];
+  for (let i = 0; i < sortedByOffset.length; i++) {
+    const s = sortedByOffset[i];
     const username = decodeB64Username(s.value);
     if (!username || usedOffsets.has(s.offset)) continue;
 
-    const window = strings.slice(i + 1, i + 50);
+    const window = sortedByOffset.slice(i + 1, i + 50);
 
     const proxyIdx = window.findIndex(w => parseProxyStr(w.value) !== null);
     if (proxyIdx < 0) continue;
 
-    const proxyRecord = window[proxyIdx];
-    const proxy = parseProxyStr(proxyRecord.value)!;
+    const proxy = parseProxyStr(window[proxyIdx].value)!;
 
     const password = (() => {
       for (let k = proxyIdx - 1; k >= 0; k--) {
@@ -155,12 +252,12 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const emailItem = window.find(w => EMAIL_RE.test(w.value));
     const email = emailItem?.value ?? "";
 
-    const deviceItem = [...window, ...strings.slice(i + 50, i + 150)]
-      .find(w => DEVICE_RE.test(w.value));
+    const searchWindow = [...window, ...sortedByOffset.slice(i + 50, i + 150)];
+
+    const deviceItem = searchWindow.find(w => DEVICE_RE.test(w.value));
     const deviceString = deviceItem?.value ?? "";
 
-    const uaItem = [...window, ...strings.slice(i + 50, i + 150)]
-      .find(w => /Mozilla\/5\.0/.test(w.value));
+    const uaItem = searchWindow.find(w => /Mozilla\/5\.0/.test(w.value));
     const userAgentWeb = uaItem?.value ?? "";
 
     const noteItem = window.slice(proxyIdx + 1).find(w =>
@@ -175,14 +272,17 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     accounts.push({
       username,
       password,
-      proxyHost: proxy.host,
-      proxyPort: proxy.port,
-      proxyUsername: proxyUsername || undefined,
-      proxyPassword: proxyPassword || undefined,
-      email: email || undefined,
-      deviceString: deviceString || undefined,
-      userAgentWeb: userAgentWeb || undefined,
-      note: note || undefined,
+      proxyHost:         proxy.host,
+      proxyPort:         proxy.port,
+      proxyUsername:     proxyUsername || undefined,
+      proxyPassword:     proxyPassword || undefined,
+      email:             email || undefined,
+      deviceString:      deviceString || undefined,
+      userAgentWeb:      userAgentWeb || undefined,
+      note:              note || undefined,
+      followSources,
+      followedUsernames,
+      dmRecipients,
     });
 
     usedOffsets.add(s.offset);

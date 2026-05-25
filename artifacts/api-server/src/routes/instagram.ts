@@ -3030,22 +3030,92 @@ export async function registerInstagramRoutes(
           const profileData: any = {
             username:           ja.username,
             password:           ja.password,
-            proxyHost:          ja.proxyHost   ?? null,
-            proxyPort:          ja.proxyPort   ?? null,
+            proxyHost:          ja.proxyHost    ?? null,
+            proxyPort:          ja.proxyPort    ?? null,
             proxyUsername:      ja.proxyUsername ?? null,
             proxyPassword:      ja.proxyPassword ?? null,
             accountStatus:      "pending",
-            userAgentEmbedded:  autoUA.embedded,
-            userAgentApi:       ja.userAgentWeb ?? autoUA.api,
+            // Jarvee's web UA is a Chrome mobile UA — use it for the embedded browser.
+            // The mobile API UA is a separate Instagram-app UA that auto-assign handles.
+            userAgentEmbedded:  ja.userAgentWeb ?? autoUA.embedded,
+            userAgentApi:       autoUA.api,
             igDeviceState:      igDeviceState,
-            notes:              ja.note ? `Imported from Jarvee. Email: ${ja.email ?? "N/A"}. Note: ${ja.note}` : (ja.email ? `Imported from Jarvee. Email: ${ja.email}` : "Imported from Jarvee"),
+            notes:              ja.note
+              ? `Imported from Jarvee. Email: ${ja.email ?? "N/A"}. Note: ${ja.note}`
+              : ja.email
+                ? `Imported from Jarvee. Email: ${ja.email}`
+                : "Imported from Jarvee",
           };
 
           if (proxyStr) profileData.proxy = proxyStr;
 
           const created = await storage.createProfile(profileData);
           await storage.updateProfile(created.id, { accountStatus: "pending", credentialsDirty: false });
-          results.push({ username: ja.username, ok: true });
+
+          // ── Restore follow tool sources ──────────────────────────────────
+          if (ja.followSources.length > 0) {
+            try {
+              const tools = await storage.getToolsByProfile(created.id);
+              const followTool = tools.find(t => t.type === "follow");
+              if (followTool) {
+                await storage.createSourcesBulk(
+                  ja.followSources.map(src => ({
+                    toolId:        followTool.id,
+                    type:          "target_followers",
+                    value:         src,
+                    rank:          null,
+                    nrPosts:       null,
+                    targetUserId:  "",
+                    hashtagCursor: "",
+                  }))
+                );
+              }
+            } catch (e) {
+              req.log.warn({ err: e }, "import-jarvee: failed to restore follow sources (non-fatal)");
+            }
+          }
+
+          // ── Restore followed users list (dedup) ──────────────────────────
+          const now = new Date().toISOString();
+          if (ja.followedUsernames.length > 0) {
+            try {
+              await storage.bulkImportFollowedUsers(
+                created.id,
+                ja.followedUsernames.map(u => ({
+                  username:   u,
+                  userId:     "",
+                  followedAt: now,
+                }))
+              );
+            } catch (e) {
+              req.log.warn({ err: e }, "import-jarvee: failed to restore followed users (non-fatal)");
+            }
+          }
+
+          // ── Restore DM recipients as already-contacted users ─────────────
+          if (ja.dmRecipients.length > 0) {
+            try {
+              await storage.bulkImportFollowedUsers(
+                created.id,
+                ja.dmRecipients.map(u => ({
+                  username:   u,
+                  userId:     "",
+                  followedAt: now,
+                  sourceType: "dm",
+                }))
+              );
+            } catch (e) {
+              req.log.warn({ err: e }, "import-jarvee: failed to restore DM recipients (non-fatal)");
+            }
+          }
+
+          results.push({
+            username:         ja.username,
+            ok:               true,
+            sourcesImported:  ja.followSources.length,
+            followedImported: ja.followedUsernames.length,
+            dmRecipients:     ja.dmRecipients.length,
+          } as any);
         } catch (e: any) {
           results.push({ username: ja.username, ok: false, error: e?.message ?? "Failed to create profile" });
         }
