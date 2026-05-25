@@ -56,6 +56,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.539",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Login button in the embedded browser toolbar now works — clicking it fills the username and password and submits the form." },
+      { category: "Fix", text: "Cookie consent banner is now dismissed in under a second instead of waiting up to 8 seconds." },
+      { category: "Fix", text: "Login button also dismisses the cookie banner before filling the form so the submit click is never blocked." },
+      { category: "Improvement", text: "Reload and Home buttons in the browser toolbar are now the same compact size as all other buttons." },
+      { category: "Improvement", text: "Home button now shows a house icon instead of the old compass/navigation icon." },
+      { category: "Improvement", text: "All toolbar buttons now use a consistent grey colour scheme — no more coloured emoji icons." },
+      { category: "New", text: "Browser toolbar now has a tab bar — press + to open a new Google tab inside the same browser window, switch between tabs by clicking them, and close extra tabs with the × button." },
+    ],
+  },
+  {
     version: "1.0.538",
     date: "25 May 2026",
     items: [

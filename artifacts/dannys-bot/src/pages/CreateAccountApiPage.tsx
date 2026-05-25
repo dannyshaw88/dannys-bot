@@ -572,8 +572,8 @@ export function CreateAccountApiPage() {
   const [copied, setCopied]            = useState(false);
   const [liveSteps, setLiveSteps]      = useState<Array<{msg: string; ts: number}>>([]);
   const [ebPanelOpen, setEbPanelOpen]  = useState(false);
-  const [ebOpening, setEbOpening]      = useState(false);
   const [ebResetBusy, setEbResetBusy]  = useState(false);
+  const [ebVisible, setEbVisible]      = useState(false);
 
   const createProxy = useCreateProxy();
   const [showAddProxy, setShowAddProxy] = useState(false);
@@ -615,37 +615,6 @@ export function CreateAccountApiPage() {
 
   const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-  const handleOpenBrowser = useCallback(async () => {
-    if (IS_ELECTRON) {
-      // Native Electron path — opens a real Chrome window exactly like the Accounts EB.
-      (window as any).electronAPI.openSignupBrowserWindow({
-        username:      "Signup Browser",
-        userAgent:     ebUA,
-        proxyHost:     selectedProxy?.host,
-        proxyPort:     selectedProxy?.port,
-        proxyUsername: selectedProxy?.username ?? undefined,
-        proxyPassword: selectedProxy?.password ?? undefined,
-      });
-      return;
-    }
-    // Non-Electron (dev/web) path — stream via Puppeteer WebSocket.
-    setEbOpening(true);
-    try {
-      await fetch("/api/signup/browser/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proxyHost:     selectedProxy?.host,
-          proxyPort:     selectedProxy?.port,
-          proxyUsername: selectedProxy?.username ?? undefined,
-          proxyPassword: selectedProxy?.password ?? undefined,
-          userAgent:     ebUA,
-        }),
-      });
-    } catch {}
-    setEbOpening(false);
-  }, [IS_ELECTRON, selectedProxy, ebUA]);
-
   const clearEbSession = useCallback(async () => {
     if (IS_ELECTRON) {
       try { await (window as any).electronAPI.clearSignupBrowserCache(); } catch {}
@@ -657,6 +626,7 @@ export function CreateAccountApiPage() {
 
   const handleResetBrowser = useCallback(async () => {
     setEbResetBusy(true);
+    setEbVisible(false);
     await clearEbSession();
     setEbResetBusy(false);
   }, [clearEbSession]);
@@ -702,6 +672,7 @@ export function CreateAccountApiPage() {
     } : {};
 
     // Step 1: open the signup browser (no-op if already running)
+    setEbVisible(true);
     try {
       await fetch("/api/signup/browser/open", {
         method: "POST",
@@ -848,10 +819,10 @@ export function CreateAccountApiPage() {
       ) : (
         <div className="flex gap-3" style={{ height: "calc(100vh - 200px)" }}>
           {/* ── Left column: scrollable form ── */}
-          <div className="overflow-y-auto shrink-0 w-[400px] space-y-3 pb-4 pr-1">
+          <div className="overflow-y-auto shrink-0 w-[380px] space-y-2 pb-4 pr-1">
 
             {/* ── Browser / Device ── */}
-            <div className="desktop-card p-3">
+            <div className="desktop-card p-2.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Monitor className="w-4 h-4 text-cyan-500 shrink-0" />
@@ -867,57 +838,36 @@ export function CreateAccountApiPage() {
                     size="sm"
                     className="h-7 px-2 text-[10px]"
                     disabled={locked}
-                    onClick={async () => { setUserAgentApi(randomUA()); await clearEbSession(); }}
+                    onClick={async () => { setUserAgentApi(randomUA()); setEbVisible(false); await clearEbSession(); }}
                   >
                     <RefreshCw className="w-3 h-3 mr-1" />Randomise
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2.5 text-[10px] border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300"
-                    onClick={handleOpenBrowser}
-                    disabled={ebOpening}
-                  >
-                    {ebOpening ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Monitor className="w-3 h-3 mr-1" />}
-                    {ebOpening ? "Starting…" : "Open Browser"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[10px] text-muted-foreground hover:text-destructive"
-                    onClick={handleResetBrowser}
-                    disabled={ebResetBusy}
-                    title="Close browser and wipe all cookies / session data"
-                  >
-                    {ebResetBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                   </Button>
                 </div>
               </div>
             </div>
 
             {/* ── Account Details ── */}
-            <div className="desktop-card p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account Details</p>
-              <div className="space-y-1.5">
-                <Label className="text-xs flex items-center gap-1"><User className="w-3 h-3" />Username Spin</Label>
+            <div className="desktop-card p-2.5 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Account Details</p>
+              <div className="space-y-1">
+                <Label className="text-[10px] flex items-center gap-1"><User className="w-3 h-3" />Username Spin</Label>
                 <Input
                   value={usernameSpin}
                   onChange={e => setUsernameSpin(e.target.value)}
                   placeholder="{Maia|Mila|Nina}_{fox|wolf}_{1234|5678}"
-                  className="h-8 text-xs font-mono"
+                  className="h-7 text-xs font-mono"
                   disabled={locked}
                 />
-                <p className="text-[10px] text-muted-foreground">Jarvee spin syntax — spun &amp; sanitised automatically on submit.</p>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs flex items-center gap-1">
+              <div className="space-y-1">
+                <Label className="text-[10px] flex items-center gap-1">
                   <Eye className="w-3 h-3" />Password
                   <span className="ml-1 text-[10px] text-muted-foreground">(auto-generated)</span>
                 </Label>
-                <Input value={password} onChange={e => setPassword(e.target.value)} className="h-8 text-sm font-mono" disabled={locked} />
+                <Input value={password} onChange={e => setPassword(e.target.value)} className="h-7 text-xs font-mono" disabled={locked} />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs flex items-center gap-1">
+              <div className="space-y-1">
+                <Label className="text-[10px] flex items-center gap-1">
                   <Mail className="w-3 h-3" />Email Address
                   <span className="ml-1 text-[10px] text-red-500 font-medium">required</span>
                 </Label>
@@ -926,57 +876,58 @@ export function CreateAccountApiPage() {
                   onChange={e => setEmail(e.target.value.trim())}
                   placeholder="e.g. user@gmail.com"
                   type="email"
-                  className="h-8 text-sm"
+                  className="h-7 text-xs"
                   disabled={locked}
                 />
-                <p className="text-[10px] text-muted-foreground">Instagram sends a verification code here during signup. Use a real inbox you can check.</p>
               </div>
             </div>
 
             {/* ── Profile Info ── */}
-            <div className="desktop-card p-4 space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs flex items-center gap-1">
-                  <User className="w-3 h-3" />Full Name
-                  <span className="ml-1 text-[10px] text-muted-foreground">(optional)</span>
-                </Label>
-                <Input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="e.g. Alex Johnson" className="h-8 text-sm" disabled={locked} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Bio Spin <span className="text-muted-foreground/60">(optional)</span></Label>
-                <Input
-                  value={bioSpin}
-                  onChange={e => setBioSpin(e.target.value)}
-                  placeholder="{Fitness lover|Coffee addict} 🌍 {Living life|Exploring the world} ✨"
-                  className="h-8 text-xs font-mono"
-                  disabled={locked}
-                />
+            <div className="desktop-card p-2.5 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] flex items-center gap-1">
+                    <User className="w-3 h-3" />Full Name
+                    <span className="ml-1 text-[10px] text-muted-foreground/60">(opt)</span>
+                  </Label>
+                  <Input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Alex Johnson" className="h-7 text-xs" disabled={locked} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Bio Spin <span className="text-muted-foreground/60">(opt)</span></Label>
+                  <Input
+                    value={bioSpin}
+                    onChange={e => setBioSpin(e.target.value)}
+                    placeholder="Fitness lover 🌍"
+                    className="h-7 text-xs font-mono"
+                    disabled={locked}
+                  />
+                </div>
               </div>
             </div>
 
             {/* ── Date of Birth ── */}
-            <div className="desktop-card p-4 space-y-2">
-              <Label className="text-xs flex items-center gap-1">
+            <div className="desktop-card p-2.5 space-y-1.5">
+              <Label className="text-[10px] flex items-center gap-1">
                 <Calendar className="w-3 h-3" />Date of Birth
                 <span className="ml-1 text-[10px] text-muted-foreground">(auto-randomised 18–45 yrs)</span>
               </Label>
               <div className="grid grid-cols-3 gap-2">
-                <select value={dob.day}   onChange={e => setDob({ ...dob, day:   Number(e.target.value) })} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.day}   onChange={e => setDob({ ...dob, day:   Number(e.target.value) })} disabled={locked} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
                   {days.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                <select value={dob.month} onChange={e => setDob({ ...dob, month: Number(e.target.value) })} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.month} onChange={e => setDob({ ...dob, month: Number(e.target.value) })} disabled={locked} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
                   {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>
-                <select value={dob.year}  onChange={e => setDob({ ...dob, year:  Number(e.target.value) })} disabled={locked} className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.year}  onChange={e => setDob({ ...dob, year:  Number(e.target.value) })} disabled={locked} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
             </div>
 
             {/* ── Proxy ── */}
-            <div className="desktop-card p-4 space-y-2">
+            <div className="desktop-card p-2.5 space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs flex items-center gap-1"><Globe className="w-3 h-3" />Proxy <span className="text-red-500 ml-0.5">*</span></Label>
+                <Label className="text-[10px] flex items-center gap-1"><Globe className="w-3 h-3" />Proxy <span className="text-red-500 ml-0.5">*</span></Label>
                 {!locked && (
                   <button type="button" onClick={() => { setShowAddProxy(v => !v); setAddProxyErr(""); }} className="flex items-center gap-1 text-[10px] text-sky-500 hover:text-sky-600 font-medium">
                     {showAddProxy ? <><X className="w-3 h-3" />Cancel</> : <><Plus className="w-3 h-3" />Add new</>}
@@ -1024,17 +975,17 @@ export function CreateAccountApiPage() {
             </div>
 
             {/* ── API Timing ── */}
-            <div className="desktop-card p-4 space-y-3">
+            <div className="desktop-card p-2.5 space-y-2">
               <div className="flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5 text-yellow-500" />
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">API Step Timing</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">API Step Timing</p>
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="grid grid-cols-4 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
                   <Input
                     type="number" min={1} max={99}
-                    className="h-7 text-xs w-[72px]"
+                    className="h-7 text-xs w-full"
                     value={apiLimits.requestsMin}
                     onChange={e => setApiLimits({ ...apiLimits, requestsMin: Math.max(1, Number(e.target.value)) })}
                     disabled={locked}
@@ -1044,7 +995,7 @@ export function CreateAccountApiPage() {
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
                   <Input
                     type="number" min={1} max={99}
-                    className="h-7 text-xs w-[72px]"
+                    className="h-7 text-xs w-full"
                     value={apiLimits.requestsMax}
                     onChange={e => setApiLimits({ ...apiLimits, requestsMax: Math.max(1, Number(e.target.value)) })}
                     disabled={locked}
@@ -1054,7 +1005,7 @@ export function CreateAccountApiPage() {
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min secs</Label>
                   <Input
                     type="number" min={1} max={3600}
-                    className="h-7 text-xs w-[72px]"
+                    className="h-7 text-xs w-full"
                     value={apiLimits.everySecondsMin}
                     onChange={e => setApiLimits({ ...apiLimits, everySecondsMin: Math.max(1, Number(e.target.value)) })}
                     disabled={locked}
@@ -1064,25 +1015,19 @@ export function CreateAccountApiPage() {
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max secs</Label>
                   <Input
                     type="number" min={1} max={3600}
-                    className="h-7 text-xs w-[72px]"
+                    className="h-7 text-xs w-full"
                     value={apiLimits.everySecondsMax}
                     onChange={e => setApiLimits({ ...apiLimits, everySecondsMax: Math.max(1, Number(e.target.value)) })}
                     disabled={locked}
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
-                Delay between each API step (launcher/sync → qe/sync → username check → create).
-                Calculated as: <span className="font-mono">min…max seconds ÷ calls</span>.
-                Defaults (1–2 calls / 10–30 s) give ~5–30 s per step.
-                Increase if you hit "Try Again Later" blocks.
-              </p>
             </div>
 
             {/* ── Submit ── */}
             {!result && (
               <Button
-                className="w-full h-11 bg-cyan-500 hover:bg-cyan-600 text-white border-0 text-sm font-semibold"
+                className="w-full h-9 bg-cyan-500 hover:bg-cyan-600 text-white border-0 text-sm font-semibold"
                 onClick={handleCreate}
                 disabled={loading || !canSubmit}
               >
@@ -1207,16 +1152,23 @@ export function CreateAccountApiPage() {
 
           {/* ── Right column: inline embedded browser ── */}
           <div className="flex-1 min-w-0 rounded-lg border border-border overflow-hidden">
-            <BrowserPanel
-              profileId={0}
-              userAgent={ebUA}
-              username="signup"
-              streamUrl="/api/signup/browser/stream"
-              inputUrl="/api/signup/browser/input"
-              forceStream
-              embedded
-              onMessage={handleBrowserMessage}
-            />
+            {ebVisible ? (
+              <BrowserPanel
+                profileId={0}
+                userAgent={ebUA}
+                username="signup"
+                streamUrl="/api/signup/browser/stream"
+                inputUrl="/api/signup/browser/input"
+                forceStream
+                embedded
+                onMessage={handleBrowserMessage}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                <Monitor className="w-14 h-14 opacity-15" />
+                <p className="text-sm">Browser opens when you click <strong className="text-foreground">Create Account</strong></p>
+              </div>
+            )}
           </div>
         </div>
       )}

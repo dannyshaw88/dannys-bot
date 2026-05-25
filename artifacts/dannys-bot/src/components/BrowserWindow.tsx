@@ -3,8 +3,8 @@ import { BrowserPanel } from "./BrowserPanel";
 import { useBrowserWindows, type BrowserWindowEntry } from "@/contexts/BrowserWindowsContext";
 import { Minus, X, Monitor, Maximize2, Minimize2 } from "lucide-react";
 
-const WIN_W = 1100;
-const WIN_H = 680;
+const WIN_W = 935;
+const WIN_H = 578;
 const TASKBAR_H = 40;
 
 interface Props {

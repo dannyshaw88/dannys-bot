@@ -23,16 +23,35 @@ import { createHmac } from "crypto";
 // of the page DOM, so challenge pages, iframes, CSS transforms, overflow:hidden,
 // and any other page-level styling CANNOT hide or remove it.
 function buildNativeToolbarHtml(): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{height:58px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;padding:0 8px;font-family:-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;-webkit-user-select:none;user-select:none}button{height:38px;min-width:38px;padding:0 10px;background:transparent;border:1px solid #d1d5db;color:#374151;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap}button:hover{background:#f3f4f6}button:disabled{opacity:.5;cursor:default}.big{height:50px;min-width:50px;font-size:20px;padding:0 12px;justify-content:center}.sep{width:1px;height:20px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:38px;padding:0 10px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{border-color:#3b82f6}#timer{font-size:11px;color:#6b7280;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}</style></head><body><button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button class="big" title="Reload" onclick="cmd('reload')">&#8635;</button><button class="big" title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></button><button title="New tab (Google)" onclick="cmd('new-tab')">&#43;</button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button title="Fill login fields on this page and submit" onclick="doLogin()">&#8594; Login</button><button title="Generate TOTP code and type it into the focused field" onclick="cmd('totp')">&#128273; 2FA</button><button title="Type pre-filled phone number into the focused field" onclick="cmd('phone')">&#128242; Phone</button><button title="Type email address into the focused field" onclick="cmd('email-user')">&#9993; Email</button><button title="Type email password into the focused field" onclick="cmd('email-pass')">&#128274; Email Pass</button><span class="sep"></span><span id="timer">0:00</span><script>
-function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
-function doLogin(){var b=document.getElementById('lbtn');b.disabled=true;Promise.resolve(cmd('login')).then(function(){b.disabled=false;});}
+  const styles = `*{box-sizing:border-box;margin:0;padding:0}body{height:92px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;flex-direction:column;font-family:-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none}#navbar{height:58px;display:flex;align-items:center;gap:4px;padding:0 8px;flex-shrink:0}button{height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #d1d5db;color:#6b7280;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap}button:hover{background:#f3f4f6;color:#374151}button:disabled{opacity:.5;cursor:default}.sep{width:1px;height:18px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:30px;padding:0 8px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{border-color:#3b82f6}#timer{font-size:11px;color:#9ca3af;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}#tabbar{height:34px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:2px;padding:0 6px;overflow-x:auto;overflow-y:hidden;flex-shrink:0}#tabbar::-webkit-scrollbar{height:3px}#tabbar::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}.tab{height:26px;max-width:160px;min-width:56px;display:flex;align-items:center;gap:3px;padding:0 8px;border-radius:4px;cursor:pointer;font-size:11px;color:#9ca3af;border:1px solid transparent;flex-shrink:0;overflow:hidden}.tab:hover{background:#f1f5f9;color:#374151}.tab.active{background:#fff;border-color:#d1d5db;color:#374151}.tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.tab-x{border:none!important;min-width:0!important;height:14px!important;width:14px!important;padding:0!important;font-size:13px!important;line-height:1;color:#9ca3af;flex-shrink:0;background:none!important}.tab-x:hover{color:#374151!important}.newtab{height:22px;min-width:22px;max-width:22px;padding:0!important;font-size:13px;border-style:dashed!important;color:#9ca3af;flex-shrink:0}`;
+
+  const navHtml = `<button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button title="Reload" onclick="cmd('reload')">&#8635;</button><button title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button id="lbtn" title="Fill login fields and submit" onclick="doLogin()">Login</button><button title="Generate TOTP code" onclick="cmd('totp')">2FA</button><button title="Type phone number" onclick="cmd('phone')">Phone</button><button title="Type email address" onclick="cmd('email-user')">Email</button><button title="Type email password" onclick="cmd('email-pass')">Email Pass</button><span class="sep"></span><span id="timer">0:00</span>`;
+
+  const script = `function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
+function doLogin(){var b=document.getElementById('lbtn');if(!b)return;b.disabled=true;Promise.resolve(cmd('login')).then(function(){b.disabled=false;}).catch(function(){b.disabled=false;});}
 var u=document.getElementById('url');
 u.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();var v=u.value.trim();if(v&&v.indexOf('http')!==0)v='https://'+v;cmd('navigate',{url:v});}});
 window.updateUrl=function(url){if(document.activeElement!==u)u.value=url;};
 var _s=Date.now();
 function tick(){var s=Math.floor((Date.now()-_s)/1000),m=Math.floor(s/60);s=s%60;document.getElementById('timer').textContent=m+':'+(s<10?'0':'')+s;}
 tick();setInterval(tick,1000);
-</script></body></html>`;
+var _tabs=[{id:0,title:'Instagram',url:''}],_aid=0;
+window.updateTabs=function(tabs,activeId){_tabs=tabs;_aid=activeId;renderTabs();};
+function renderTabs(){
+  var tb=document.getElementById('tabbar');if(!tb)return;tb.innerHTML='';
+  for(var i=0;i<_tabs.length;i++){(function(t){
+    var d=document.createElement('div');d.className='tab'+(_aid===t.id?' active':'');
+    var sp=document.createElement('span');sp.className='tab-title';sp.textContent=t.title||'New Tab';d.appendChild(sp);
+    if(_tabs.length>1){var x=document.createElement('button');x.className='tab-x';x.title='Close tab';x.innerHTML='&times;';x.onclick=function(e){e.stopPropagation();cmd('close-tab',{id:t.id});};d.appendChild(x);}
+    d.onclick=function(){cmd('switch-tab',{id:t.id});};
+    tb.appendChild(d);
+  })(_tabs[i]);}
+  var nb=document.createElement('button');nb.className='newtab';nb.title='New tab';nb.textContent='+';nb.onclick=function(){cmd('new-tab');};
+  tb.appendChild(nb);
+}
+renderTabs();`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body><div id="navbar">${navHtml}</div><div id="tabbar"></div><script>${script}<\/script></body></html>`;
 }
 
 // ── Minimal page-level utilities ───────────────────────────────────────────────
@@ -51,8 +70,8 @@ function buildPageUtilsJs(): string {
   if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
     var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]')||Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});
-    if(btn)btn.click();
-  },8000);}
+    if(btn){btn.click();clearInterval(window.__eq_cookie_tick);window.__eq_cookie_tick=null;}
+  },500);}
 })();`;
 }
 
@@ -70,6 +89,66 @@ interface EbEntry {
 export const ebMap = new Map<number, EbEntry>();
 // Native toolbar BrowserView per profile — floats above all page content.
 const toolbarViewMap = new Map<number, BrowserView>();
+
+// ── Tab state ──────────────────────────────────────────────────────────────────
+
+const TOOLBAR_H = 92; // nav row (58 px) + tab bar (34 px)
+
+interface TabState {
+  tabs: Array<{ id: number; url: string; title: string }>;
+  activeId: number;
+  nextId: number;
+  views: Map<number, BrowserView>;
+}
+const tabsStateMap = new Map<number, TabState>();
+
+function pushTabUpdate(profileId: number): void {
+  const tv = toolbarViewMap.get(profileId);
+  if (!tv || tv.webContents.isDestroyed()) return;
+  const state = tabsStateMap.get(profileId);
+  if (!state) return;
+  tv.webContents.executeJavaScript(
+    `window.updateTabs && window.updateTabs(${JSON.stringify(state.tabs)}, ${state.activeId})`
+  ).catch(() => {});
+}
+
+function getActiveWc(profileId: number): Electron.WebContents | null {
+  const entry = ebMap.get(profileId);
+  if (!entry || entry.win.isDestroyed()) return null;
+  const state = tabsStateMap.get(profileId);
+  if (!state || state.activeId === 0) return entry.win.webContents;
+  const view = state.views.get(state.activeId);
+  if (!view || view.webContents.isDestroyed()) return entry.win.webContents;
+  return view.webContents;
+}
+
+function switchToTab(profileId: number, tabId: number): void {
+  const state = tabsStateMap.get(profileId);
+  const entry = ebMap.get(profileId);
+  if (!state || !entry || entry.win.isDestroyed()) return;
+  const win = entry.win;
+  state.activeId = tabId;
+  // Remove all content BrowserViews from window
+  for (const view of state.views.values()) {
+    win.removeBrowserView(view);
+  }
+  // Add active content view if it's not tab 0 (tab 0 = window's own webContents)
+  if (tabId !== 0) {
+    const view = state.views.get(tabId);
+    if (view && !view.webContents.isDestroyed()) {
+      win.addBrowserView(view);
+      const [w, h] = win.getContentSize();
+      view.setBounds({ x: 0, y: TOOLBAR_H, width: w, height: Math.max(1, h - TOOLBAR_H) });
+    }
+  }
+  // Re-add toolbar BrowserView on top of everything
+  const tv = toolbarViewMap.get(profileId);
+  if (tv && !tv.webContents.isDestroyed()) {
+    win.removeBrowserView(tv);
+    win.addBrowserView(tv);
+  }
+  pushTabUpdate(profileId);
+}
 
 // ── Cookie file helpers ────────────────────────────────────────────────────────
 
@@ -509,12 +588,30 @@ export async function openEbWindow(opts: {
   win.addBrowserView(toolbarView);
   toolbarViewMap.set(profileId, toolbarView);
 
-  // Position the toolbar at the very top of the window (52 px).
+  // Initialise tab state for this profile.
+  tabsStateMap.set(profileId, {
+    tabs: [{ id: 0, url: "", title: `@${username}` }],
+    activeId: 0,
+    nextId: 1,
+    views: new Map(),
+  });
+  // Push initial tab list to toolbar once its BrowserView has loaded.
+  toolbarView.webContents.once("did-finish-load", () => pushTabUpdate(profileId));
+
+  // Position the toolbar at the very top of the window.
   // setAutoResize keeps the width in sync with window resize automatically.
   const updateToolbarBounds = () => {
     if (win.isDestroyed()) return;
-    const [w] = win.getContentSize();
-    toolbarView.setBounds({ x: 0, y: 0, width: w, height: 58 });
+    const [w, h] = win.getContentSize();
+    toolbarView.setBounds({ x: 0, y: 0, width: w, height: TOOLBAR_H });
+    // Also resize the active content BrowserView (for tab > 0)
+    const ts = tabsStateMap.get(profileId);
+    if (ts && ts.activeId !== 0) {
+      const cv = ts.views.get(ts.activeId);
+      if (cv && !cv.webContents.isDestroyed()) {
+        cv.setBounds({ x: 0, y: TOOLBAR_H, width: w, height: Math.max(1, h - TOOLBAR_H) });
+      }
+    }
   };
   toolbarView.setAutoResize({ width: true, height: false });
   win.on("resize", updateToolbarBounds);
@@ -555,6 +652,8 @@ export async function openEbWindow(opts: {
   win.webContents.on("page-title-updated", (e) => {
     e.preventDefault();
     win.setTitle(`@${username} — Equinox Browser`);
+    const ts = tabsStateMap.get(profileId);
+    if (ts && ts.tabs[0]) { ts.tabs[0].title = `@${username}`; pushTabUpdate(profileId); }
   });
 
   // Right-click context menu: cut / copy / paste / select-all
@@ -576,10 +675,19 @@ export async function openEbWindow(opts: {
         `window.updateUrl && window.updateUrl(${JSON.stringify(navUrl)})`
       ).catch(() => {});
     }
+    const ts = tabsStateMap.get(profileId);
+    if (ts && ts.tabs[0] && ts.activeId === 0) ts.tabs[0].url = navUrl;
   });
 
   win.on("closed", () => {
     toolbarViewMap.delete(profileId);
+    const ts = tabsStateMap.get(profileId);
+    if (ts) {
+      for (const v of ts.views.values()) {
+        try { (v.webContents as any).destroy?.(); } catch {}
+      }
+    }
+    tabsStateMap.delete(profileId);
   });
 
   // Navigate to Instagram.
@@ -742,7 +850,7 @@ function setupToolbarIpc(): void {
     }
     if (!foundPid || !foundWin) return;
 
-    const wc = foundWin.webContents;
+    const wc = getActiveWc(foundPid) ?? foundWin.webContents;
 
     // Helper: type text into the renderer's currently-focused input (same script
     // used by /eb/input so behaviour is identical to BrowserPanel typing)
@@ -799,6 +907,19 @@ function setupToolbarIpc(): void {
               el.dispatchEvent(new Event('input',  { bubbles: true }));
               el.dispatchEvent(new Event('change', { bubbles: true }));
             };
+            // Dismiss cookie consent banner first (up to 5 s)
+            for (let cb = 0; cb < 10; cb++) {
+              const ckBtn = (
+                document.querySelector('[data-cookiebanner="accept_button"]') ||
+                document.querySelector('[data-testid="cookie-policy-banner-accept"]') ||
+                [...document.querySelectorAll('button,[role="button"]')].find(b =>
+                  /allow all cookies|accept all|alle zulassen|aceptar todo|accepter tout/i.test(b.textContent) &&
+                  b.getBoundingClientRect().width > 0
+                )
+              );
+              if (ckBtn) { ckBtn.click(); await wait(800); break; }
+              await wait(500);
+            }
             // Poll up to 10 × 300 ms for React to mount the login form
             let uInp, pInp, t = 0;
             while (t++ < 10) {
@@ -856,54 +977,42 @@ function setupToolbarIpc(): void {
       }
 
       case "new-tab": {
-        // Open a second browser window sharing the same session partition
+        // Open a new tab as a BrowserView within the same EB window.
         const entry = ebMap.get(foundPid);
+        const state = tabsStateMap.get(foundPid);
+        if (!entry || entry.win.isDestroyed() || !state) break;
+        const tabWin = entry.win;
+        const newTabId = state.nextId++;
         const partition = `persist:eb-${foundPid}`;
-        const tabWin = new BrowserWindow({
-          width: 1280, height: 900,
-          title: `@${entry?.username ?? foundPid} — Equinox Browser`,
-          icon: _iconPath || undefined,
-          webPreferences: {
-            partition,
-            preload: require("path").join(__dirname, "ebToolbarPreload.js"),
-            contextIsolation: true,
-            nodeIntegration: false,
-          },
+        const tabView = new BrowserView({
+          webPreferences: { partition, contextIsolation: true, nodeIntegration: false },
         });
-        const tabUsr = entry?.username ?? String(foundPid);
-        // Give the new-tab window its own native toolbar BrowserView
-        const tabToolbarView = new BrowserView({
-          webPreferences: {
-            partition,
-            preload: path.join(__dirname, "ebToolbarPreload.js"),
-            contextIsolation: true,
-            nodeIntegration: false,
-          },
+        state.views.set(newTabId, tabView);
+        state.tabs.push({ id: newTabId, url: "https://www.google.com/", title: "New Tab" });
+        const _pushNavUrl = (navUrl: string) => {
+          const s = tabsStateMap.get(foundPid);
+          if (!s) return;
+          const tab = s.tabs.find(t => t.id === newTabId);
+          if (tab) tab.url = navUrl;
+          if (s.activeId === newTabId) {
+            const tv = toolbarViewMap.get(foundPid);
+            if (tv && !tv.webContents.isDestroyed()) {
+              tv.webContents.executeJavaScript(
+                `window.updateUrl && window.updateUrl(${JSON.stringify(navUrl)})`
+              ).catch(() => {});
+            }
+          }
+        };
+        tabView.webContents.on("did-navigate",         (_e: any, u: string) => _pushNavUrl(u));
+        tabView.webContents.on("did-navigate-in-page", (_e: any, u: string) => _pushNavUrl(u));
+        tabView.webContents.on("page-title-updated", (_e: any, title: string) => {
+          const s = tabsStateMap.get(foundPid);
+          if (!s) return;
+          const tab = s.tabs.find(t => t.id === newTabId);
+          if (tab) tab.title = title.slice(0, 25) || "New Tab";
+          pushTabUpdate(foundPid);
         });
-        tabWin.addBrowserView(tabToolbarView);
-        tabToolbarView.setAutoResize({ width: true, height: false });
-        tabWin.once("ready-to-show", () => {
-          const [tw] = tabWin.getContentSize();
-          tabToolbarView.setBounds({ x: 0, y: 0, width: tw, height: 58 });
-        });
-        tabToolbarView.webContents.loadURL(
-          `data:text/html;base64,${Buffer.from(buildNativeToolbarHtml()).toString("base64")}`
-        ).catch(() => {});
-        // Register the tab toolbar in the map so IPC commands route correctly.
-        // We share the profile's pid so toolbar commands act on the same profile.
-        toolbarViewMap.set(-foundPid * 1000 - tabWin.id, tabToolbarView as any);
-        tabWin.on("closed", () => toolbarViewMap.delete(-foundPid * 1000 - tabWin.id));
-        // Inject page utilities (focusin tracking + cookie banner) on every page load
-        tabWin.webContents.on("dom-ready",       () => tabWin.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
-        tabWin.webContents.on("did-finish-load", () => tabWin.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
-        tabWin.webContents.on("did-fail-load", (_e: any, code: number, desc: string) => {
-          console.error(`[ebManager] tab did-fail-load: code=${code} desc=${desc}`);
-        });
-        tabWin.webContents.on("page-title-updated", (e) => {
-          e.preventDefault();
-          tabWin.setTitle(`@${tabUsr} — Equinox Browser`);
-        });
-        tabWin.webContents.on("context-menu", (_e, params) => {
+        tabView.webContents.on("context-menu", (_e: any, params: any) => {
           const tpl: Electron.MenuItemConstructorOptions[] = [];
           if (params.editFlags.canCut)   tpl.push({ role: "cut" });
           if (params.editFlags.canCopy)  tpl.push({ role: "copy" });
@@ -911,8 +1020,54 @@ function setupToolbarIpc(): void {
           tpl.push({ type: "separator" }, { role: "selectAll" });
           Menu.buildFromTemplate(tpl).popup({ window: tabWin });
         });
-        tabWin.loadURL("https://www.google.com/").catch(() => {});
-        tabWin.show();
+        tabView.webContents.on("dom-ready",       () => tabView.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
+        tabView.webContents.on("did-finish-load", () => tabView.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
+        tabView.webContents.loadURL("https://www.google.com/").catch(() => {});
+        switchToTab(foundPid, newTabId);
+        break;
+      }
+
+      case "switch-tab": {
+        if (payload?.id !== undefined) {
+          const switchState = tabsStateMap.get(foundPid);
+          const switchTabId = Number(payload.id);
+          switchToTab(foundPid, switchTabId);
+          if (switchState) {
+            const tv = toolbarViewMap.get(foundPid);
+            if (tv && !tv.webContents.isDestroyed()) {
+              let url = "";
+              if (switchTabId === 0) {
+                url = foundWin.webContents.getURL();
+              } else {
+                const sv = switchState.views.get(switchTabId);
+                url = (sv && !sv.webContents.isDestroyed()) ? sv.webContents.getURL() : "";
+              }
+              tv.webContents.executeJavaScript(
+                `window.updateUrl && window.updateUrl(${JSON.stringify(url)})`
+              ).catch(() => {});
+            }
+          }
+        }
+        break;
+      }
+
+      case "close-tab": {
+        const closeState = tabsStateMap.get(foundPid);
+        const closeId = Number(payload?.id ?? 0);
+        if (!closeState || closeId === 0) break; // never close tab 0
+        const viewToClose = closeState.views.get(closeId);
+        closeState.views.delete(closeId);
+        closeState.tabs = closeState.tabs.filter(t => t.id !== closeId);
+        if (closeState.activeId === closeId) {
+          const nextTab = closeState.tabs[closeState.tabs.length - 1];
+          switchToTab(foundPid, nextTab?.id ?? 0);
+        } else {
+          pushTabUpdate(foundPid);
+        }
+        if (viewToClose && !viewToClose.webContents.isDestroyed()) {
+          foundWin.removeBrowserView(viewToClose);
+          try { (viewToClose.webContents as any).destroy?.(); } catch {}
+        }
         break;
       }
 
