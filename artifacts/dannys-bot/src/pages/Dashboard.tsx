@@ -66,6 +66,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
     {
+      version: "1.0.537",
+      date: "25 May 2026",
+      items: [
+        { category: "Fix", text: "Sessions no longer expire while automation is running. After every follow, unfollow, DM, and contact cycle the app now saves the refreshed session token back to the database — exactly the way Jarvee kept accounts permanently alive. Accounts that were running tools daily should never need a manual re-verify again." },
+      ],
+    },
+    {
       version: "1.0.536",
       date: "25 May 2026",
       items: [

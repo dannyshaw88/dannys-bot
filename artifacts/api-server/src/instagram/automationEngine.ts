@@ -663,6 +663,9 @@ class AutomationEngine {
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
           if (acctStatus) break;
         }
+        // Persist refreshed mobile session cookies to DB so the stored sessionid
+        // never ages out between cycles (Jarvee-parity session keep-alive).
+        await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
 
         if (state.stop.stopped) break;
 
@@ -877,6 +880,7 @@ class AutomationEngine {
           console.error(`[engine] @${freshProfile.username}: unfollow session error: ${err?.message}`);
           if (acctStatus) break;
         }
+        await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
 
         if (state.stop.stopped) break;
 
@@ -987,6 +991,7 @@ class AutomationEngine {
           console.error(`[engine] @${freshProfile.username}: DM session error: ${err?.message}`);
           if (acctStatus) break;
         }
+        await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
 
         if (state.stop.stopped) break;
         const s = dmTool.settings as any;
@@ -1100,6 +1105,7 @@ class AutomationEngine {
               this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "error", `Check new followers error: ${err?.message ?? "unknown"}`);
               console.error(`[engine] @${freshProfile.username}: new-follower contact session error: ${err?.message}`);
             }
+            await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
           }
           const waitMs = randInt(
             (s.contactCheckIntervalMin ?? 30) * 60_000,
@@ -1125,6 +1131,7 @@ class AutomationEngine {
               this.logAction(freshProfile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool DM send error: ${err?.message ?? "unknown"}`);
               console.error(`[engine] @${freshProfile.username}: contact-users send session error: ${err?.message}`);
             }
+            await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
           }
           const waitMs = randInt(
             (s.contactUsersWaitMin ?? 30) * 60_000,
@@ -1704,6 +1711,33 @@ class AutomationEngine {
     // the embedded browser first (Verify Credentials button).
     console.warn(`[engine] @${profile.username}: no EB session and no stored mobile session — skipping run (verify the account in the browser first)`);
     return null;
+  }
+
+  // ── Session cookie persistence ────────────────────────────────────────────
+  // Called after every follow / unfollow / DM / contact cycle.
+  //
+  // Why this is needed (the Jarvee parity problem):
+  //   mobileSessionPost() already merges Instagram's Set-Cookie response headers
+  //   into mobileCookieJar on every API call, so the IN-MEMORY jar is always
+  //   fresh.  BUT ensureClient() calls setDeviceInfo(profile.igApiCookies) at the
+  //   start of every cycle, which reloads the DB copy and clobbers the fresh
+  //   in-memory state.  The DB copy is only written by Verify Credentials — never
+  //   by normal automation.  So after the first verify, the stored sessionid ages
+  //   until Instagram invalidates it server-side, even though every live session
+  //   actually refreshed it.  Jarvee serialised and saved cookies after every
+  //   cycle; this method does the same.
+  private async persistSessionCookies(state: ProfileState, profileId: number, username: string): Promise<void> {
+    const client = state.client;
+    if (!client) return;
+    const fresh = client.getSerializedIgApiCookies();
+    if (!fresh) return;
+    try {
+      await storage.updateProfile(profileId, { igApiCookies: fresh });
+      const snip = fresh.split(";").find(s => s.trim().startsWith("sessionid="))?.split("=")[1]?.slice(0, 8) ?? "?";
+      console.log(`[engine] @${username}: session cookies refreshed in DB (sessionid=...${snip})`);
+    } catch (e: any) {
+      console.warn(`[engine] @${username}: failed to persist session cookies: ${e?.message}`);
+    }
   }
 
   // ── Session action logger ─────────────────────────────────────────────────
