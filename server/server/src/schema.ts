@@ -285,6 +285,28 @@ export const insertContactPendingMessageSchema = createInsertSchema(contactPendi
 export type ContactPendingMessage = typeof contactPendingMessages.$inferSelect;
 export type InsertContactPendingMessage = z.infer<typeof insertContactPendingMessageSchema>;
 
+export const createdAccounts = sqliteTable("created_accounts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull().default(""),
+  password: text("password").notNull().default(""),
+  email: text("email").notNull().default(""),
+  proxyHost: text("proxy_host"),
+  proxyPort: integer("proxy_port"),
+  bio: text("bio"),
+  status: text("status").notNull().default("pending"),
+  instagramUserId: text("instagram_user_id"),
+  errorMessage: text("error_message"),
+  steps: text("steps"),
+  addedToAccounts: integer("added_to_accounts", { mode: "boolean" }).default(false),
+  profileId: integer("profile_id"),
+  userAgentApi: text("user_agent_api"),
+  apiLimits: text("api_limits"),
+  createdAt: text("created_at").notNull(),
+});
+
+export type CreatedAccount = typeof createdAccounts.$inferSelect;
+export type InsertCreatedAccount = typeof createdAccounts.$inferInsert;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
 });

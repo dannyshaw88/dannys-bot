@@ -33,6 +33,8 @@ interface BrowserPanelProps {
   inputUrl?: string;
   /** Force canvas stream mode even in Electron (use for server-side Puppeteer streams like signup browser). */
   forceStream?: boolean;
+  /** Called for every non-binary WS message (after internal handling). Use to receive signupStep / signupPaused / signupDone events. */
+  onMessage?: (msg: any) => void;
 }
 
 type SSEStatus = "idle" | "connecting" | "connected" | "error";
@@ -65,7 +67,7 @@ function nowTs() {
 // Detect Electron native EB mode (window.electronAPI exposed by preload)
 const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream }: BrowserPanelProps) {
+export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream, onMessage }: BrowserPanelProps) {
   const { windows, clearPendingUrl } = useBrowserWindows();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const esRef = useRef<WebSocket | null>(null);
@@ -450,6 +452,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             wsGenRef.current++;
             break;
         }
+        try { onMessage?.(msg); } catch {}
       } catch {}
     };
 

@@ -644,7 +644,6 @@ export function CreateAccountApiPage() {
       });
     } catch {}
     setEbOpening(false);
-    setEbPanelOpen(true);
   }, [IS_ELECTRON, selectedProxy, ebUA]);
 
   const clearEbSession = useCallback(async () => {
@@ -669,73 +668,98 @@ export function CreateAccountApiPage() {
     return [brand, model].filter(Boolean).join(" ");
   })();
 
+  const handleBrowserMessage = useCallback((msg: any) => {
+    if (msg.type === "signupStep") {
+      setLiveSteps(prev => [...prev, { msg: msg.msg as string, ts: Date.now() }]);
+    } else if (msg.type === "signupPaused") {
+      setLoading(false);
+      setResult({ status: "email_verification", steps: [], sessionId: "eb" });
+    } else if (msg.type === "signupDone") {
+      setLoading(false);
+      setResult({
+        status: msg.status === "success" ? "success" : "error",
+        steps: [],
+        message: msg.message,
+        username: msg.username,
+        userId: msg.userId,
+      });
+    }
+  }, []);
+
   const handleCreate = async () => {
     if (!canSubmit) return;
-    window.scrollTo({ top: 0, behavior: "smooth" });
     setLoading(true);
     setResult(null);
     setVerifyCode("");
     setLiveSteps([]);
     const spunUsername = sanitizeUsername(parseSpin(usernameSpin));
-    const spunBio      = bioSpin.trim() ? parseSpin(bioSpin) : undefined;
+
+    const proxyPayload = selectedProxy ? {
+      proxyHost:     selectedProxy.host,
+      proxyPort:     selectedProxy.port,
+      proxyUsername: selectedProxy.username ?? undefined,
+      proxyPassword: selectedProxy.password ?? undefined,
+    } : {};
+
+    // Step 1: open the signup browser (no-op if already running)
     try {
-      const body: Record<string, unknown> = {
-        username: spunUsername,
-        password,
-        email: email.trim(),
-        firstName: firstName.trim() || undefined,
-        day: dob.day,
-        month: dob.month,
-        year: dob.year,
-        bio: spunBio,
-        userAgentApi,
-        apiLimits,
-      };
-      if (selectedProxy) {
-        body.proxyHost     = selectedProxy.host;
-        body.proxyPort     = selectedProxy.port;
-        body.proxyUsername = selectedProxy.username ?? undefined;
-        body.proxyPassword = selectedProxy.password ?? undefined;
-      }
-      const res = await fetch("/api/signup/start-stream", {
+      await fetch("/api/signup/browser/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...proxyPayload, userAgent: ebUA }),
       });
-      if (!res.body) throw new Error("No streaming body from server");
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const events = buf.split("\n\n");
-        buf = events.pop() ?? "";
-        for (const ev of events) {
-          const dataLine = ev.split("\n").find(l => l.startsWith("data: "));
-          if (!dataLine) continue;
-          try {
-            const data = JSON.parse(dataLine.slice(6));
-            if (data.type === "step") {
-              setLiveSteps(prev => [...prev, { msg: data.msg, ts: data.ts ?? Date.now() }]);
-            } else if (data.type === "done") {
-              setResult(data.result as SignupResult);
-              setLoading(false);
-            }
-          } catch {}
-        }
+    } catch {}
+
+    // Step 2: start the EB automation (fire-and-forget; results come via WS → handleBrowserMessage)
+    try {
+      const res = await fetch("/api/signup/browser/automate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email:     email.trim(),
+          password,
+          username:  spunUsername,
+          firstName: firstName.trim() || undefined,
+          dob,
+          userAgent: ebUA,
+          ...proxyPayload,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed to start automation" }));
+        throw new Error((err as any).message ?? "Failed to start automation");
       }
     } catch (e: any) {
-      setResult({ status: "error", steps: [], message: e?.message ?? "Network error" });
-    } finally {
+      setResult({ status: "error", steps: [], message: e?.message ?? "Failed to start EB automation" });
       setLoading(false);
     }
+    // loading stays true until signupDone or signupPaused arrives via WS
   };
 
   const handleVerify = async () => {
     if (!result?.sessionId || !verifyCode.trim()) return;
     setVerifying(true);
+
+    if (result.sessionId === "eb") {
+      // EB automation flow — unblock the automation with the email code
+      try {
+        await fetch("/api/signup/browser/automate-continue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: verifyCode.trim() }),
+        });
+        setVerifyCode("");
+        setResult(null);
+        setLoading(true);
+      } catch (e: any) {
+        setResult(prev => prev ? { ...prev, message: e?.message ?? "Network error" } : null);
+      } finally {
+        setVerifying(false);
+      }
+      return;
+    }
+
+    // Legacy API flow
     try {
       const res = await fetch("/api/signup/verify", {
         method: "POST",
@@ -822,8 +846,9 @@ export function CreateAccountApiPage() {
           <CreatedAccountsTab />
         </div>
       ) : (
-        <div className="overflow-auto" style={{ height: "calc(100vh - 200px)" }}>
-          <div className="max-w-2xl space-y-3">
+        <div className="flex gap-3" style={{ height: "calc(100vh - 200px)" }}>
+          {/* ── Left column: scrollable form ── */}
+          <div className="overflow-y-auto shrink-0 w-[400px] space-y-3 pb-4 pr-1">
 
             {/* ── Browser / Device ── */}
             <div className="desktop-card p-3">
@@ -1179,13 +1204,22 @@ export function CreateAccountApiPage() {
               </div>
             )}
           </div>
+
+          {/* ── Right column: inline embedded browser ── */}
+          <div className="flex-1 min-w-0 rounded-lg border border-border overflow-hidden">
+            <BrowserPanel
+              profileId={0}
+              userAgent={ebUA}
+              username="signup"
+              streamUrl="/api/signup/browser/stream"
+              inputUrl="/api/signup/browser/input"
+              forceStream
+              embedded
+              onMessage={handleBrowserMessage}
+            />
+          </div>
         </div>
       )}
-      <SignupBrowserWindow
-        open={ebPanelOpen}
-        onClose={() => setEbPanelOpen(false)}
-        ebUA={ebUA}
-      />
     </AppLayout>
   );
 }

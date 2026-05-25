@@ -174,6 +174,25 @@ sqlite.exec(`
     dm_item_id TEXT,
     unsend_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS created_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL DEFAULT '',
+    password TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    proxy_host TEXT,
+    proxy_port INTEGER,
+    bio TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    instagram_user_id TEXT,
+    error_message TEXT,
+    steps TEXT,
+    added_to_accounts INTEGER DEFAULT 0,
+    profile_id INTEGER,
+    user_agent_api TEXT,
+    api_limits TEXT,
+    created_at TEXT NOT NULL
+  );
 `);
 
 export const db = drizzle(sqlite, { schema });

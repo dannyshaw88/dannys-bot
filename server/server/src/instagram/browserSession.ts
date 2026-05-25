@@ -690,3 +690,417 @@ export async function browserAutoLogin(
     return { ok: false, message: msg };
   }
 }
+
+// ── Signup Browser Singleton ──────────────────────────────────────────────────
+// Uses profile ID 0 — never a real account. One global signup browser at a time.
+
+const SIGNUP_DATA_DIR = path.join(COOKIES_DIR, "signup-userdata");
+
+let _signupBrowser: Browser | null = null;
+let _signupPage:    Page    | null = null;
+let _signupWs:   WebSocket | null = null;
+let _signupFrameLoop: ReturnType<typeof setInterval> | null = null;
+let _signupCodeResolver: ((code: string) => void) | null = null;
+
+async function getOrCreateSignupPage(userAgent: string, proxy?: ProxyConfig): Promise<Page> {
+  if (_signupBrowser && _signupPage) {
+    try { await _signupPage.title(); return _signupPage; } catch {}
+    // page is stale — close and recreate
+    try { await _signupBrowser.close(); } catch {}
+    _signupBrowser = null; _signupPage = null;
+  }
+
+  const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
+  fs.mkdirSync(SIGNUP_DATA_DIR, { recursive: true });
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: CHROMIUM_PATH,
+    args: [
+      ...LAUNCH_ARGS,
+      ...proxyArg,
+      `--user-data-dir=${SIGNUP_DATA_DIR}`,
+    ],
+    ignoreHTTPSErrors: true,
+  });
+
+  const [page] = await browser.pages();
+  await page.setUserAgent(userAgent);
+  await page.setViewport({ width: 1280, height: 760 });
+
+  if (proxy?.username) {
+    await page.authenticate({ username: proxy.username, password: proxy.password ?? "" });
+  }
+
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
+
+  _signupBrowser = browser;
+  _signupPage    = page;
+  return page;
+}
+
+export async function openSignupBrowser(userAgent: string, proxy?: ProxyConfig): Promise<void> {
+  const page = await getOrCreateSignupPage(userAgent, proxy);
+  const url = page.url();
+  if (!url || url === "about:blank") {
+    page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+  }
+}
+
+export function attachSignupWS(ws: WebSocket): void {
+  if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+    _signupWs.close();
+  }
+  _signupWs = ws;
+
+  if (_signupFrameLoop) clearInterval(_signupFrameLoop);
+
+  _signupFrameLoop = setInterval(async () => {
+    if (!_signupPage || !_signupWs || _signupWs.readyState !== WebSocket.OPEN) return;
+    try {
+      // Send raw JPEG buffer — BrowserPanel expects binary Blobs, not base64 JSON
+      const screenshot = await _signupPage.screenshot({ type: "jpeg", quality: 65 }) as Buffer;
+      const currentUrl = _signupPage.url();
+      _signupWs.send(screenshot);
+      _signupWs.send(JSON.stringify({ type: "urlChange", url: currentUrl }));
+    } catch { /* page navigating — skip frame */ }
+  }, 100);
+
+  ws.on("close", () => {
+    if (_signupFrameLoop) { clearInterval(_signupFrameLoop); _signupFrameLoop = null; }
+  });
+}
+
+export async function signupBrowserInput(msg: any): Promise<void> {
+  if (!_signupPage) return;
+  const p = _signupPage;
+  try {
+    switch (msg.type) {
+      case "navigate":
+        await p.goto(msg.url, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+        break;
+      case "click":
+        await p.mouse.move(msg.x, msg.y);
+        await p.mouse.click(msg.x, msg.y);
+        break;
+      case "mousemove": await p.mouse.move(msg.x, msg.y); break;
+      case "scroll":
+        await p.mouse.move(msg.x, msg.y);
+        await p.mouse.wheel({ deltaX: msg.deltaX ?? 0, deltaY: msg.deltaY ?? 0 });
+        break;
+      case "keydown":
+        try { await p.keyboard.press((msg.key === "Space" ? " " : msg.key) as any); } catch {}
+        break;
+      case "keyup": break;
+      case "type": await p.keyboard.type(msg.text, { delay: 30 }); break;
+      case "back":    await p.goBack({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => {}); break;
+      case "forward": await p.goForward({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => {}); break;
+      case "reload":  await p.reload({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => {}); break;
+    }
+  } catch { /* ignore input errors */ }
+}
+
+export async function wipeSignupBrowser(): Promise<void> {
+  if (_signupFrameLoop) { clearInterval(_signupFrameLoop); _signupFrameLoop = null; }
+  if (_signupWs) { try { _signupWs.close(); } catch {} _signupWs = null; }
+  if (_signupBrowser) { try { await _signupBrowser.close(); } catch {} _signupBrowser = null; }
+  _signupPage = null;
+  _signupCodeResolver = null;
+  try {
+    if (fs.existsSync(SIGNUP_DATA_DIR)) fs.rmSync(SIGNUP_DATA_DIR, { recursive: true, force: true });
+  } catch {}
+}
+
+export function submitSignupCode(code: string): void {
+  if (_signupCodeResolver) {
+    _signupCodeResolver(code);
+    _signupCodeResolver = null;
+  }
+}
+
+function sendSignupMsg(msg: object): void {
+  if (_signupWs?.readyState === WebSocket.OPEN) {
+    _signupWs.send(JSON.stringify(msg));
+  }
+}
+
+function step(msg: string): void {
+  log(`[signup] ${msg}`, "signup");
+  sendSignupMsg({ type: "signupStep", msg });
+}
+
+// Click any visible button/link whose text matches one of the provided strings (case-insensitive).
+async function clickByText(page: Page, texts: string[]): Promise<boolean> {
+  const found = await page.evaluate((texts: string[]) => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"], a, span'));
+    for (const el of els) {
+      const txt = (el.innerText || el.textContent || "").trim().toLowerCase();
+      if (texts.some(t => txt === t.toLowerCase() || txt.includes(t.toLowerCase()))) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) { el.click(); return true; }
+      }
+    }
+    return false;
+  }, texts);
+  return found;
+}
+
+// Wait for a selector with multiple fallback selectors.
+async function waitForAny(page: Page, selectors: string[], timeoutMs = 12000): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const sel of selectors) {
+      try {
+        const el = await page.$(sel);
+        if (el) return sel;
+      } catch {}
+    }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  return null;
+}
+
+// Fill a field robustly using keyboard events so React controlled inputs update correctly.
+async function fillAny(page: Page, selectors: string[], text: string): Promise<boolean> {
+  for (const sel of selectors) {
+    try {
+      const el = await page.$(sel);
+      if (!el) continue;
+      await page.click(sel);
+      await new Promise(r => setTimeout(r, 100));
+      await page.keyboard.down("Control");
+      await page.keyboard.press("a");
+      await page.keyboard.up("Control");
+      await page.keyboard.press("Backspace");
+      await page.type(sel, text, { delay: 45 });
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
+export interface SignupParams {
+  email:      string;
+  password:   string;
+  username:   string;
+  firstName?: string;
+  dob: { day: number; month: number; year: number };
+  userAgent:  string;
+  proxy?:     ProxyConfig;
+}
+
+export async function automateSignupEB(params: SignupParams): Promise<void> {
+  const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+  try {
+    const page = await getOrCreateSignupPage(params.userAgent, params.proxy);
+
+    // ── Step 1: Navigate to Instagram ──────────────────────────────────────
+    step("Navigating to instagram.com…");
+    await page.goto("https://www.instagram.com/", {
+      waitUntil: "domcontentloaded", timeout: 30000,
+    }).catch(() => {});
+    await delay(2000);
+
+    // ── Step 2: Accept cookie banner ───────────────────────────────────────
+    step("Accepting cookies…");
+    await dismissCookieBanner(page);
+    await delay(800);
+
+    // ── Step 3: Navigate to signup page ────────────────────────────────────
+    step("Opening signup form…");
+    const onSignup = await clickByText(page, ["Create new account", "Sign up"]);
+    if (!onSignup) {
+      await page.goto("https://www.instagram.com/accounts/emailsignup/", {
+        waitUntil: "domcontentloaded", timeout: 20000,
+      }).catch(() => {});
+    }
+    await delay(1500);
+    await dismissCookieBanner(page);
+
+    // If there's a "Sign up with email" option, click it
+    await clickByText(page, ["Sign up with email", "Sign up with email address"]);
+    await delay(800);
+
+    // ── Step 4: Enter email ─────────────────────────────────────────────────
+    step(`Entering email ${params.email}…`);
+    const emailSels = [
+      'input[name="emailOrPhone"]',
+      'input[name="email"]',
+      'input[type="email"]',
+      'input[placeholder*="email" i]',
+      'input[aria-label*="email" i]',
+    ];
+    const emailFound = await waitForAny(page, emailSels, 15000);
+    if (!emailFound) throw new Error("Could not find email input field on signup page");
+
+    await fillAny(page, emailSels, params.email);
+    await delay(600);
+
+    step("Clicking Next after email…");
+    const nextAfterEmail = await clickByText(page, ["Next"]);
+    if (!nextAfterEmail) await page.keyboard.press("Enter");
+    await delay(2000);
+
+    // ── Step 5: Wait for email verification code ───────────────────────────
+    step("⏸ Waiting for email verification code — enter it below");
+    sendSignupMsg({ type: "signupPaused" });
+
+    const code = await new Promise<string>(resolve => {
+      _signupCodeResolver = resolve;
+    });
+
+    step(`Entering verification code ${code}…`);
+    const codeSels = [
+      'input[name="validationCode"]',
+      'input[name="emailCode"]',
+      'input[inputmode="numeric"]',
+      'input[autocomplete*="one-time" i]',
+      'input[placeholder*="code" i]',
+      'input[aria-label*="code" i]',
+    ];
+    const codeFound = await waitForAny(page, codeSels, 12000);
+    if (codeFound) {
+      await fillAny(page, codeSels, code);
+      await delay(500);
+      const nextAfterCode = await clickByText(page, ["Next", "Confirm", "Continue", "Submit"]);
+      if (!nextAfterCode) await page.keyboard.press("Enter");
+      await delay(2000);
+    } else {
+      step("⚠ Code field not found — check browser");
+    }
+
+    // ── Step 6: Enter password ─────────────────────────────────────────────
+    step("Entering password…");
+    const pwSels = ['input[name="password"]', 'input[type="password"]'];
+    const pwFound = await waitForAny(page, pwSels, 12000);
+    if (pwFound) {
+      await fillAny(page, pwSels, params.password);
+      await delay(500);
+      const nextAfterPw = await clickByText(page, ["Next"]);
+      if (!nextAfterPw) await page.keyboard.press("Enter");
+      await delay(2000);
+    } else {
+      step("⚠ Password field not found — check browser");
+    }
+
+    // ── Step 7: Enter date of birth ────────────────────────────────────────
+    step(`Entering date of birth ${params.dob.day}/${params.dob.month}/${params.dob.year}…`);
+    // Month names (1-indexed): Instagram uses full month names
+    const monthNames = [
+      "January","February","March","April","May","June",
+      "July","August","September","October","November","December",
+    ];
+    const monthName = monthNames[params.dob.month - 1];
+
+    try {
+      // Wait for birthday selects to appear
+      const dobFound = await waitForAny(page, [
+        'select[title="Month"]', 'select[aria-label="Month"]',
+        'select[name="month"]', 'select option[value="1"]',
+      ], 10000);
+
+      if (dobFound) {
+        // Try selecting by various strategies
+        await page.evaluate((month: string, day: number, year: number, monthIdx: number) => {
+          const selects = Array.from(document.querySelectorAll<HTMLSelectElement>("select"));
+          for (const sel of selects) {
+            const opts = Array.from(sel.options).map(o => o.text.toLowerCase().trim());
+            // Month select: options are month names
+            if (opts.some(o => ["january","february","march"].includes(o))) {
+              sel.value = String(monthIdx);
+              sel.dispatchEvent(new Event("change", { bubbles: true }));
+              continue;
+            }
+            // Day select: options are 1-31
+            if (opts.length >= 28 && opts.length <= 32 && opts.some(o => o === "1" || o === "01")) {
+              sel.value = String(day);
+              sel.dispatchEvent(new Event("change", { bubbles: true }));
+              continue;
+            }
+            // Year select: options are years
+            if (opts.some(o => parseInt(o) >= 1900 && parseInt(o) <= 2020)) {
+              sel.value = String(year);
+              sel.dispatchEvent(new Event("change", { bubbles: true }));
+              continue;
+            }
+          }
+        }, monthName, params.dob.day, params.dob.year, params.dob.month);
+
+        await delay(800);
+        const nextAfterDob = await clickByText(page, ["Next"]);
+        if (!nextAfterDob) await page.keyboard.press("Enter");
+        await delay(1500);
+      } else {
+        step("⚠ DOB selects not found — check browser");
+      }
+    } catch (e: any) {
+      step(`⚠ DOB step error: ${e?.message ?? "unknown"}`);
+    }
+
+    // ── Step 8: Enter full name (optional) ────────────────────────────────
+    if (params.firstName?.trim()) {
+      step(`Entering name "${params.firstName}"…`);
+      const nameSels = [
+        'input[name="fullName"]',
+        'input[name="name"]',
+        'input[placeholder*="name" i]',
+        'input[aria-label*="name" i]',
+      ];
+      const nameFound = await waitForAny(page, nameSels, 8000);
+      if (nameFound) {
+        await fillAny(page, nameSels, params.firstName.trim());
+        await delay(500);
+        const nextAfterName = await clickByText(page, ["Next"]);
+        if (!nextAfterName) await page.keyboard.press("Enter");
+        await delay(1500);
+      }
+    }
+
+    // ── Step 9: Enter username ─────────────────────────────────────────────
+    step(`Entering username @${params.username}…`);
+    const userSels = [
+      'input[name="username"]',
+      'input[placeholder*="username" i]',
+      'input[aria-label*="username" i]',
+    ];
+    const userFound = await waitForAny(page, userSels, 10000);
+    if (userFound) {
+      await fillAny(page, userSels, params.username);
+      await delay(800);
+      const nextAfterUser = await clickByText(page, ["Next"]);
+      if (!nextAfterUser) await page.keyboard.press("Enter");
+      await delay(1500);
+    } else {
+      step("⚠ Username field not found — check browser");
+    }
+
+    // ── Step 10: Agree to terms ────────────────────────────────────────────
+    step("Agreeing to terms…");
+    await delay(1000);
+    const agreed = await clickByText(page, [
+      "I agree", "Agree", "Next", "Continue", "I accept",
+      "Accept", "Done", "Finish",
+    ]);
+    if (!agreed) await page.keyboard.press("Enter");
+    await delay(2000);
+
+    // ── Done ───────────────────────────────────────────────────────────────
+    const finalUrl = page.url();
+    step(`EB: Signup flow complete — URL: ${finalUrl}`);
+
+    sendSignupMsg({
+      type: "signupDone",
+      status: "success",
+      username: params.username,
+      message: "Signup flow completed in embedded browser",
+    });
+
+  } catch (err: any) {
+    const msg = err?.message ?? "Unknown error";
+    step(`EB: Error — ${msg}`);
+    sendSignupMsg({ type: "signupDone", status: "error", message: msg });
+  }
+}

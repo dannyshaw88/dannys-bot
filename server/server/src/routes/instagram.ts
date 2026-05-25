@@ -21,9 +21,18 @@ import {
   clearSession,
   browserAutoLogin,
   sendLoginDone,
+  openSignupBrowser,
+  attachSignupWS,
+  signupBrowserInput,
+  wipeSignupBrowser,
+  automateSignupEB,
+  submitSignupCode,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { automationEngine } from "../instagram/automationEngine";
+import { db } from "../db";
+import { createdAccounts } from "../schema";
+import { eq } from "drizzle-orm";
 
 async function resolveProxyConfig(profile: {
   browserDirectConnection?: boolean | null;
@@ -482,6 +491,14 @@ export async function registerInstagramRoutes(
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", async (req, socket, head) => {
+    // Signup browser stream — profile-independent singleton
+    if (req.url === "/api/signup/browser/stream") {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        attachSignupWS(ws);
+      });
+      return;
+    }
+
     const match = req.url?.match(/^\/api\/browser\/(\d+)\/stream/);
     if (!match) return;
 
@@ -640,5 +657,110 @@ export async function registerInstagramRoutes(
   // Engine status
   app.get("/api/engine/status", (_req, res) => {
     res.json(automationEngine.getStatus());
+  });
+
+  // ── Signup Browser ──────────────────────────────────────────────────────────
+
+  app.post("/api/signup/browser/open", async (req, res) => {
+    try {
+      const { userAgent, proxyHost, proxyPort, proxyUsername, proxyPassword } = req.body;
+      const proxy = proxyHost && proxyPort ? {
+        host: proxyHost, port: Number(proxyPort),
+        username: proxyUsername ?? undefined, password: proxyPassword ?? undefined,
+      } : undefined;
+      await openSignupBrowser(userAgent ?? "Mozilla/5.0", proxy);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, message: err?.message ?? "Failed to open browser" });
+    }
+  });
+
+  app.post("/api/signup/browser/input", async (req, res) => {
+    try { await signupBrowserInput(req.body); } catch {}
+    res.json({ ok: true });
+  });
+
+  app.post("/api/signup/browser/reset", async (_req, res) => {
+    await wipeSignupBrowser();
+    res.json({ ok: true });
+  });
+
+  app.post("/api/signup/browser/automate", async (req, res) => {
+    const { email, password, username, firstName, dob, userAgent, proxyHost, proxyPort, proxyUsername, proxyPassword } = req.body;
+    if (!email || !password || !username || !dob) {
+      return res.status(400).json({ ok: false, message: "Missing required fields (email, password, username, dob)" });
+    }
+    const proxy = proxyHost && proxyPort ? {
+      host: proxyHost, port: Number(proxyPort),
+      username: proxyUsername ?? undefined, password: proxyPassword ?? undefined,
+    } : undefined;
+
+    automateSignupEB({
+      email, password, username,
+      firstName: firstName ?? undefined,
+      dob,
+      userAgent: userAgent ?? "Mozilla/5.0",
+      proxy,
+    }).then(async () => {
+      // Automation complete — result was already sent via WS signupDone message
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  });
+
+  app.post("/api/signup/browser/automate-continue", (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ ok: false, message: "code is required" });
+    submitSignupCode(String(code));
+    res.json({ ok: true });
+  });
+
+  // ── Created Accounts ────────────────────────────────────────────────────────
+
+  app.get("/api/signup/created-accounts", async (_req, res) => {
+    try {
+      const rows = await db.select().from(createdAccounts).all();
+      res.json(rows.map(r => ({ ...r, addedToAccounts: !!r.addedToAccounts })));
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "DB error" });
+    }
+  });
+
+  app.delete("/api/signup/created-accounts/:id", async (req, res) => {
+    try {
+      await db.delete(createdAccounts).where(eq(createdAccounts.id, Number(req.params.id)));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, message: err?.message ?? "DB error" });
+    }
+  });
+
+  app.post("/api/signup/created-accounts/:id/add-to-accounts", async (req, res) => {
+    try {
+      const row = await db.select().from(createdAccounts).where(eq(createdAccounts.id, Number(req.params.id))).get();
+      if (!row) return res.status(404).json({ ok: false, message: "Not found" });
+      const profile = await storage.createProfile({
+        username: row.username,
+        password: row.password,
+        email: row.email,
+        proxyHost: row.proxyHost ?? null,
+        proxyPort: row.proxyPort ?? null,
+      });
+      await db.update(createdAccounts)
+        .set({ addedToAccounts: true, profileId: profile.id })
+        .where(eq(createdAccounts.id, Number(req.params.id)));
+      res.json({ ok: true, profileId: profile.id });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, message: err?.message ?? "DB error" });
+    }
+  });
+
+  // Legacy stubs — kept for any existing callers
+  app.post("/api/signup/start-stream", (_req, res) => {
+    res.status(410).json({ ok: false, message: "Use /api/signup/browser/automate instead" });
+  });
+
+  app.post("/api/signup/verify", (_req, res) => {
+    res.status(410).json({ ok: false, message: "Use /api/signup/browser/automate-continue instead" });
   });
 }

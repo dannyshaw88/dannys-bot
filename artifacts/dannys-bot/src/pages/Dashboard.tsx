@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.538",
+    date: "25 May 2026",
+    items: [
+      { category: "New", text: "Create an Account page now shows an embedded browser panel on the right side of the form — you can watch the signup happen live as it types each field." },
+      { category: "New", text: "Clicking Create Account now drives the embedded browser through the full Instagram signup flow automatically: cookies, email entry, verification code pause, password, date of birth, name, username, and terms." },
+      { category: "New", text: "Email verification step pauses the automation and shows the code input box — enter the 6-digit code and hit Submit to resume the browser." },
+      { category: "New", text: "Created accounts are stored in the database and visible on the Created Accounts tab with options to add them to your main accounts list." },
+    ],
+  },
+  {
     version: "1.0.533",
     date: "25 May 2026",
     items: [
