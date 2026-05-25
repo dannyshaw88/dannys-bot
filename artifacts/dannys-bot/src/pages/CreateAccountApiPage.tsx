@@ -846,7 +846,9 @@ export function CreateAccountApiPage() {
                       setLoading(false);
                       setResult(null);
                       setLiveSteps([]);
+                      setEbResetBusy(true);
                       await clearEbSession();
+                      setEbResetBusy(false);
                     }}
                   >
                     <RefreshCw className="w-3 h-3 mr-1" />Randomise
@@ -1038,7 +1040,7 @@ export function CreateAccountApiPage() {
               <Button
                 className="w-full h-9 bg-cyan-500 hover:bg-cyan-600 text-white border-0 text-sm font-semibold"
                 onClick={handleCreate}
-                disabled={loading || !canSubmit}
+                disabled={loading || !canSubmit || ebResetBusy}
               >
                 {loading ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating Account…</>

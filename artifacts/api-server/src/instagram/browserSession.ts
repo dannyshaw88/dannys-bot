@@ -6046,8 +6046,23 @@ export async function openSignupBrowser(opts?: {
       }).catch(() => false);
 
       if (clicked) {
-        // Instagram often shows a mobile-number page first — click "Sign up with email address"
-        await new Promise(r => setTimeout(r, 2500));
+        // Instagram often shows a mobile-number page first — poll for "Sign up with email address" (up to 15 s)
+        for (let _i = 0; _i < 30; _i++) {
+          await new Promise(r => setTimeout(r, 500));
+          if (!_signupPage || (_signupPage as any).isClosed?.()) return;
+          const linkVisible = await (_signupPage as any).evaluate(() => {
+            var L = ["sign up with email address", "sign up with email", "use email address", "use email"];
+            for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
+              var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
+              if (L.some(function(l: string) { return txt.includes(l); })) {
+                var r = (el as any).getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) return true;
+              }
+            }
+            return false;
+          }).catch(() => false);
+          if (linkVisible) break;
+        }
         if (!_signupPage || (_signupPage as any).isClosed?.()) return;
         await (_signupPage as any).evaluate(() => {
           var LABELS = ["sign up with email address", "sign up with email", "use email address", "use email"];
@@ -6258,10 +6273,23 @@ export async function createInstagramAccountViaEBForm(params: {
     }).catch(() => false);
 
     if (signupBtnClicked) {
-      step("EB: clicked Sign Up button ✓ — waiting for next step...");
-      await delay(3000);
+      step("EB: clicked Sign Up button ✓ — waiting for email link...");
+      // Poll for "Sign up with email address" to appear (up to 12 s) instead of a fixed delay
+      for (let _i = 0; _i < 24; _i++) {
+        await delay(500);
+        const linkReady = await page.evaluate(() => {
+          var L = ["sign up with email address", "sign up with email", "use email address", "use email"];
+          for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
+            var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
+            if (L.some(function(l: string) { return txt.includes(l); })) {
+              var r = (el as any).getBoundingClientRect(); if (r.width > 0 && r.height > 0) return true;
+            }
+          }
+          return false;
+        }).catch(() => false);
+        if (linkReady) break;
+      }
       await dismissCookieBanner(page);
-      await delay(800);
 
       // Instagram often shows a mobile-number-first page after clicking "Sign up".
       // Click "Sign up with email address" if that prompt is visible.
@@ -6279,9 +6307,15 @@ export async function createInstagramAccountViaEBForm(params: {
 
       if (emailLinkClicked) {
         step("EB: clicked 'Sign up with email address' ✓ — waiting for email form...");
-        await delay(2500);
+        // Poll for the email input to appear instead of a fixed delay (up to 10 s)
+        for (let _i = 0; _i < 20; _i++) {
+          await delay(500);
+          const formReady = await page.evaluate(() => {
+            return !!document.querySelector('input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i]');
+          }).catch(() => false);
+          if (formReady) break;
+        }
         await dismissCookieBanner(page);
-        await delay(600);
       }
     } else {
       step("EB: no Sign Up button on homepage — navigating directly to email signup form...");
@@ -6336,8 +6370,19 @@ export async function createInstagramAccountViaEBForm(params: {
       await cleanup();
       return { status: "error", message: "Could not find Sign Up button on Instagram's signup form", steps };
     }
-    step("EB: clicked Sign Up ✓");
-    await delay(4500);
+    step("EB: clicked Sign Up ✓ — waiting for next page...");
+    // Poll for birthday form, verification step, or any sign of progress (up to 15 s)
+    for (let _i = 0; _i < 30; _i++) {
+      await delay(500);
+      const nextReady = await page.evaluate(() => {
+        const t = document.body.innerText.toLowerCase();
+        return t.includes("birthday") || t.includes("date of birth") || t.includes("your age") ||
+               t.includes("confirmation code") || t.includes("verify your email") ||
+               t.includes("welcome") || t.includes("check your email") ||
+               t.includes("we sent a code");
+      }).catch(() => false);
+      if (nextReady) break;
+    }
 
     const onBirthday = await page.evaluate(() => {
       const t = document.body.innerText.toLowerCase();
@@ -6391,8 +6436,20 @@ export async function createInstagramAccountViaEBForm(params: {
           }
         }
       });
-      step("EB: clicked Next on birthday ✓");
-      await delay(4500);
+      step("EB: clicked Next on birthday ✓ — waiting for result...");
+      // Poll for URL change or verification/welcome content (up to 20 s)
+      const _preUrl = page.url();
+      for (let _i = 0; _i < 40; _i++) {
+        await delay(500);
+        if (page.url() !== _preUrl) break;
+        const nextReady = await page.evaluate(() => {
+          const t = document.body.innerText.toLowerCase();
+          return t.includes("confirmation code") || t.includes("verify your email") ||
+                 t.includes("we sent a code") || t.includes("check your email") ||
+                 t.includes("welcome") || t.includes("phone number");
+        }).catch(() => false);
+        if (nextReady) break;
+      }
     }
 
     const finalUrl = page.url();

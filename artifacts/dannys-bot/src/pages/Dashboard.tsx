@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.546",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account: the browser no longer hangs for 10 seconds between signup steps — each stage now waits for the next element to actually appear on the page instead of using a fixed timer." },
+      { category: "Fix", text: "Create Account: pressing Randomise then immediately pressing Create Account no longer loads the previous browser session — the Create Account button stays disabled until the reset fully completes." },
+    ],
+  },
+  {
     version: "1.0.545",
     date: "25 May 2026",
     items: [
