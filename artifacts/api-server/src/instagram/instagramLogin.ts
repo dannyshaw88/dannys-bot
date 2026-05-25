@@ -1175,7 +1175,14 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
         // 200 = session confirmed. 404 = endpoint not applicable for this account
         // type (normal) → treat as session alive and continue. Auth errors
         // (401/403/checkpoint/feedback_required) = definitive failure.
+        //
+        // sessionPositivelyConfirmed = true ONLY when we receive a 200 (positive
+        // proof the session is alive).  A 404 is inconclusive — it just means the
+        // endpoint doesn't apply for this account type.  This distinction matters
+        // for ABD detection below: if the session was only inconclusive-confirmed
+        // and cold-start endpoints return 403, that is session expiry, not ABD.
         let sessionConfirmed = false;
+        let sessionPositivelyConfirmed = false;
         try {
           await ig.request.send({
             url: "/api/v1/accounts/get_account_family/",
@@ -1187,6 +1194,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
             }),
           });
           sessionConfirmed = true;
+          sessionPositivelyConfirmed = true;
           console.error(`[instagramLogin] @${profile.username} — get_account_family OK ✓`);
         } catch (famErr: any) {
           const statusCode: number | undefined = famErr?.response?.statusCode;
@@ -1195,6 +1203,7 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           if (classified) return classified;
           // 404 or other non-auth error = endpoint not applicable for this account type.
           // The session is still alive — treat as confirmed and proceed to cold-start.
+          // sessionPositivelyConfirmed stays false — 404 is inconclusive, not a 200.
           sessionConfirmed = true;
           console.error(`[instagramLogin] @${profile.username} — get_account_family inconclusive (non-auth), treating session as alive`);
         }
@@ -1332,10 +1341,18 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           }
         }
 
-        // Early exit: 2 cold-start blocks already detected — no need to continue
+        // Early exit: 2 cold-start blocks already detected — no need to continue.
+        // Only treat as ABD if the session was POSITIVELY confirmed (200 from
+        // get_account_family).  If it was only inconclusive (404), the 403s mean
+        // the stored session cookie is expired — return logged_out, not ABD.
         if (coldStartBlockedCount >= 2) {
-          console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start endpoints returned 403 login_required after session confirmed → automated_behaviour_detected`);
-          return abdResult();
+          if (sessionPositivelyConfirmed) {
+            console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start 403s after confirmed session → automated_behaviour_detected`);
+            return abdResult();
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start 403s but session was NOT positively confirmed (get_account_family=404) → logged_out (session expired, not ABD)`);
+            return { ok: false, message: `@${profile.username} — session expired. Open the embedded browser, log in, then re-verify.`, accountStatus: "logged_out", igDeviceState: captureDeviceState() };
+          }
         }
 
         // ── Phase 2e: FetchConfig (qe/sync) ──────────────────────────────
@@ -1415,10 +1432,16 @@ export async function verifyInstagramCredentials(profile: Profile): Promise<Veri
           }
         }
 
-        // Final ABD check — any 2+ blocked endpoints after confirmed session = ABD
+        // Final ABD check — only fire ABD if session was POSITIVELY confirmed (200).
+        // If only inconclusive (get_account_family=404), 403s = session expired, not ABD.
         if (coldStartBlockedCount >= 2) {
-          console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start endpoints returned 403 login_required after session confirmed → automated_behaviour_detected`);
-          return abdResult();
+          if (sessionPositivelyConfirmed) {
+            console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start 403s after confirmed session → automated_behaviour_detected`);
+            return abdResult();
+          } else {
+            console.error(`[instagramLogin] @${profile.username} — ${coldStartBlockedCount} cold-start 403s but session was NOT positively confirmed (get_account_family=404) → logged_out (session expired, not ABD)`);
+            return { ok: false, message: `@${profile.username} — session expired. Open the embedded browser, log in, then re-verify.`, accountStatus: "logged_out", igDeviceState: captureDeviceState() };
+          }
         }
 
         console.error(`[instagramLogin] @${profile.username} — cold-start handshake complete ✓`);

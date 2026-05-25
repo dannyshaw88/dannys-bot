@@ -66,6 +66,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
     {
+      version: "1.0.536",
+      date: "25 May 2026",
+      items: [
+        { category: "Fix", text: "Verify Credentials no longer falsely reports 'Automated Behaviour Detected' when the mobile API session is expired. If Instagram's session probe returns inconclusive (endpoint not available) and follow-up calls return 403, the account is now correctly marked as 'Logged Out' instead — open the embedded browser and re-verify to refresh it." },
+      ],
+    },
+    {
       version: "1.0.535",
       date: "25 May 2026",
       items: [
