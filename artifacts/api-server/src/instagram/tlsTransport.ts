@@ -179,8 +179,12 @@ export async function tlsRequest(opts: {
   if (client && !forceNodeTls) {
     const url = `https://${host}${path}`;
     const userAgent = allHeaders["User-Agent"] ?? "";
-    // CycleTLS takes User-Agent as a dedicated field — remove from header map
-    const { "User-Agent": _ua, ...headersWithoutUA } = allHeaders;
+    // CycleTLS takes User-Agent as a dedicated field — remove from header map.
+    // Also strip Accept-Encoding and force "identity": CycleTLS does NOT
+    // auto-decompress gzip responses, so we prevent Instagram from sending
+    // compressed bodies here.  The Node.js fallback path handles gzip itself.
+    const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = allHeaders;
+    headersWithoutUA["Accept-Encoding"] = "identity";
 
     const t0 = Date.now();
     let resp: { status: number; body: string; headers: Record<string, string | string[]> };
@@ -425,9 +429,15 @@ export function patchIgClientTls(ig: IgApiClient, proxyUrl: string | undefined):
       body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
     }
 
-    // CycleTLS takes User-Agent as a dedicated field
+    // CycleTLS takes User-Agent as a dedicated field.
+    // Also strip Accept-Encoding and force "identity": CycleTLS does NOT
+    // auto-decompress gzip responses — if Instagram returns a compressed body
+    // the raw gzip bytes land in resp.data and JSON.parse fails with
+    // "200 undefined".  The Node.js fallback path decompresses explicitly
+    // (lines ~292-297), so this override is only needed here.
     const userAgent = headers["User-Agent"] ?? "";
-    const { "User-Agent": _ua, ...headersWithoutUA } = headers;
+    const { "User-Agent": _ua, "Accept-Encoding": _ae, ...headersWithoutUA } = headers;
+    headersWithoutUA["Accept-Encoding"] = "identity";
 
     const t0 = Date.now();
     let resp: { status: number; body: string; headers: Record<string, string | string[]> };

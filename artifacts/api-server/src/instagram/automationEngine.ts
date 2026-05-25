@@ -2938,7 +2938,10 @@ class AutomationEngine {
     }
 
     const client = await this.ensureClient(profile, state);
-    if (!client) return zero;
+    if (!client) {
+      this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No active session — verify the account in the embedded browser first (Verify Credentials)");
+      return zero;
+    }
 
     // Pick source
     const sources = await storage.getSourcesByTool(tool.id);

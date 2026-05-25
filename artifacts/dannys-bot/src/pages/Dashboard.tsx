@@ -66,6 +66,14 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
     {
+      version: "1.0.535",
+      date: "25 May 2026",
+      items: [
+        { category: "Fix", text: "Follow tool no longer reports 'blocked' when it was actually receiving a compressed (gzip) response from Instagram — the API transport now always requests uncompressed responses so follow calls are parsed correctly." },
+        { category: "Fix", text: "Follow tool sessions that had no active session (account not yet verified in the browser) now show a clear 'No active session — verify the account' message in the activity log instead of the misleading 'nothing to do'." },
+      ],
+    },
+    {
       version: "1.0.534",
       date: "25 May 2026",
       items: [
