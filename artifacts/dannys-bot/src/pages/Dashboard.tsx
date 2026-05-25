@@ -55,6 +55,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+    {
+      version: "1.0.532",
+      date: "25 May 2026",
+      items: [
+        { category: "Tweak", text: "Moved Import Binary File above Import EQX File in the Actions menu." },
+      ],
+    },
   {
     version: "1.0.531",
     date: "25 May 2026",

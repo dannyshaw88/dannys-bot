@@ -1513,20 +1513,20 @@ export function ProfilesPage() {
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles
               </button>
               <button
-                onClick={() => { setActionsOpen(false); eqxImportRef.current?.click(); }}
-                disabled={eqxImporting}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {eqxImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-primary" />}
-                Import EQX File
-              </button>
-              <button
                 onClick={() => { setActionsOpen(false); jarveeImportRef.current?.click(); }}
                 disabled={jarveeImporting}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {jarveeImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 Import Binary File
+              </button>
+              <button
+                onClick={() => { setActionsOpen(false); eqxImportRef.current?.click(); }}
+                disabled={eqxImporting}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {eqxImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-primary" />}
+                Import EQX File
               </button>
               <button
                 onClick={async () => {
