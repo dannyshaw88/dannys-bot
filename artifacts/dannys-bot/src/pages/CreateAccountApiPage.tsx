@@ -837,7 +837,14 @@ export function CreateAccountApiPage() {
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2 text-[10px]"
-                    onClick={async () => { setUserAgentApi(randomUA()); setEbVisible(false); await clearEbSession(); }}
+                    onClick={async () => {
+                      setUserAgentApi(randomUA());
+                      setEbVisible(false);
+                      setLoading(false);
+                      setResult(null);
+                      setLiveSteps([]);
+                      await clearEbSession();
+                    }}
                   >
                     <RefreshCw className="w-3 h-3 mr-1" />Randomise
                   </Button>

@@ -74,41 +74,48 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
   },true);
 
   // ── Credential-aware auto-fill ───────────────────────────────────────────
-  // Injected once per page. Works regardless of URL — handles Instagram's SPA
-  // pushState navigations (which don't fire did-navigate in the main process).
+  // Works on any URL — handles hard navigations, SPA pushState, and inline
+  // login forms. Uses MutationObserver for instant reaction + polling fallback.
   var AF=${afJson};
 
-  // Fill the login form if it is present and not already filled.
-  window.__eq_doAutoFill=function(){
-    if(!AF||window.__eq_fill_done)return false;
-    var uInp=document.querySelector('input[name="username"]');
-    var pInp=document.querySelector('input[name="password"]');
-    if(!uInp||!pInp)return false;
-    window.__eq_fill_done=true;
-    var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-    setter.call(uInp,AF.username);
-    uInp.dispatchEvent(new Event('input',{bubbles:true}));
-    setTimeout(function(){
-      setter.call(pInp,AF.password);
-      pInp.dispatchEvent(new Event('input',{bubbles:true}));
-      setTimeout(function(){
-        var btn=document.querySelector('button[type="submit"]');
-        if(btn&&!btn.disabled)btn.click();
-      },500);
-    },300);
-    return true;
-  };
-
-  // Poll every 500 ms for the login form (handles SPA navigations + inline forms).
-  // Stops after 45 s to avoid running forever on non-login pages.
-  if(AF&&!window.__eq_fill_poll){
-    window.__eq_fill_poll=setInterval(function(){
-      if(window.__eq_fill_done){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;return;}
-      if(window.__eq_doAutoFill()){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;}
-    },500);
-    setTimeout(function(){
+  if(AF&&!window.__eq_fill_done){
+    var _doFill=function(){
+      if(window.__eq_fill_done)return;
+      var uInp=document.querySelector('input[name="username"]');
+      var pInp=document.querySelector('input[name="password"]');
+      if(!uInp||!pInp)return;
+      if(!uInp.getBoundingClientRect().width)return; // hidden / not yet visible
+      window.__eq_fill_done=true;
+      if(window.__eq_mo){window.__eq_mo.disconnect();window.__eq_mo=null;}
       if(window.__eq_fill_poll){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;}
-    },45000);
+      var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+      setter.call(uInp,AF.username);
+      uInp.dispatchEvent(new Event('input',{bubbles:true}));
+      setTimeout(function(){
+        setter.call(pInp,AF.password);
+        pInp.dispatchEvent(new Event('input',{bubbles:true}));
+        setTimeout(function(){
+          var btn=document.querySelector('button[type="submit"]');
+          if(btn&&!btn.disabled)btn.click();
+        },500);
+      },300);
+    };
+    // 1. Try immediately (form may already be in the DOM)
+    _doFill();
+    // 2. MutationObserver — fires instantly whenever DOM changes
+    if(!window.__eq_fill_done&&!window.__eq_mo){
+      window.__eq_mo=new MutationObserver(function(){_doFill();});
+      window.__eq_mo.observe(document.documentElement,{childList:true,subtree:true});
+      setTimeout(function(){if(window.__eq_mo){window.__eq_mo.disconnect();window.__eq_mo=null;}},120000);
+    }
+    // 3. Polling fallback every 800 ms (belt-and-suspenders)
+    if(!window.__eq_fill_done&&!window.__eq_fill_poll){
+      window.__eq_fill_poll=setInterval(function(){
+        if(window.__eq_fill_done){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;return;}
+        _doFill();
+      },800);
+      setTimeout(function(){if(window.__eq_fill_poll){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;}},120000);
+    }
   }
 
   // ── Cookie consent banner dismiss ────────────────────────────────────────

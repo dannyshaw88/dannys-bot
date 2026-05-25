@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.543",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account: after 'Sign up' is clicked and Instagram shows the phone-number form, the browser now automatically clicks 'Sign up with email address' to reach the email form — the process no longer stops at the mobile-number prompt." },
+      { category: "Fix", text: "Create Account: the Randomise button now fully resets the tool — the 'Create Account' button at the bottom is no longer stuck on 'Creating Account…' after clicking Randomise following a failed attempt." },
+      { category: "Fix", text: "Electron EB: auto-login now uses a DOM MutationObserver so the username/password form is filled the instant it appears in the page — no longer misses it due to timing." },
+    ],
+  },
+  {
     version: "1.0.542",
     date: "25 May 2026",
     items: [

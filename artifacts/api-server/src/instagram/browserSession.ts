@@ -6039,8 +6039,23 @@ export async function openSignupBrowser(opts?: {
         return false;
       }).catch(() => false);
 
-      // Fall back to direct navigation if no button was found
-      if (!clicked && _signupPage && !(_signupPage as any).isClosed?.()) {
+      if (clicked) {
+        // Instagram often shows a mobile-number page first — click "Sign up with email address"
+        await new Promise(r => setTimeout(r, 2500));
+        if (!_signupPage || (_signupPage as any).isClosed?.()) return;
+        await (_signupPage as any).evaluate(() => {
+          var LABELS = ["sign up with email address", "sign up with email", "use email address", "use email"];
+          for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
+            var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
+            if (LABELS.some((l: string) => txt.includes(l))) {
+              var r = (el as any).getBoundingClientRect();
+              if (r.width > 0 && r.height > 0) { (el as any).click(); return true; }
+            }
+          }
+          return false;
+        }).catch(() => {});
+      } else {
+        // Fall back to direct navigation if no button was found
         await (_signupPage as any).goto(
           "https://www.instagram.com/accounts/emailsignup/",
           { waitUntil: "domcontentloaded", timeout: 20000 }
@@ -6223,10 +6238,31 @@ export async function createInstagramAccountViaEBForm(params: {
     }).catch(() => false);
 
     if (signupBtnClicked) {
-      step("EB: clicked Sign Up button ✓ — waiting for signup form...");
+      step("EB: clicked Sign Up button ✓ — waiting for next step...");
       await delay(3000);
       await dismissCookieBanner(page);
       await delay(800);
+
+      // Instagram often shows a mobile-number-first page after clicking "Sign up".
+      // Click "Sign up with email address" if that prompt is visible.
+      const emailLinkClicked = await page.evaluate(() => {
+        var LABELS = ["sign up with email address", "sign up with email", "use email address", "use email", "email address"];
+        for (var el of Array.from(document.querySelectorAll<HTMLElement>("a,button,[role=\"button\"]"))) {
+          var txt = ((el as any).innerText || el.textContent || "").trim().toLowerCase();
+          if (LABELS.some(l => txt.includes(l))) {
+            var r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) { el.click(); return true; }
+          }
+        }
+        return false;
+      }).catch(() => false);
+
+      if (emailLinkClicked) {
+        step("EB: clicked 'Sign up with email address' ✓ — waiting for email form...");
+        await delay(2500);
+        await dismissCookieBanner(page);
+        await delay(600);
+      }
     } else {
       step("EB: no Sign Up button on homepage — navigating directly to email signup form...");
       try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
