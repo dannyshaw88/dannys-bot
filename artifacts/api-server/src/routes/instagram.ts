@@ -3042,23 +3042,23 @@ export async function registerInstagramRoutes(
           }
 
           const profileData: any = {
-            username:           ja.username,
-            password:           ja.password,
-            proxyHost:          ja.proxyHost    ?? null,
-            proxyPort:          ja.proxyPort    ?? null,
-            proxyUsername:      ja.proxyUsername ?? null,
-            proxyPassword:      ja.proxyPassword ?? null,
-            accountStatus:      "pending",
+            username:                ja.username,
+            password:                ja.password,
+            accountLabel:            ja.accountLabel ?? null,
+            proxyHost:               ja.proxyHost    ?? null,
+            proxyPort:               ja.proxyPort    ?? null,
+            proxyUsername:           ja.proxyUsername ?? null,
+            proxyPassword:           ja.proxyPassword ?? null,
+            accountStatus:           "pending",
             // Jarvee's web UA is a Chrome mobile UA — use it for the embedded browser.
             // The mobile API UA is a separate Instagram-app UA that auto-assign handles.
-            userAgentEmbedded:  ja.userAgentWeb ?? autoUA.embedded,
-            userAgentApi:       autoUA.api,
-            igDeviceState:      igDeviceState,
-            notes:              ja.note
-              ? `Imported from Jarvee. Email: ${ja.email ?? "N/A"}. Note: ${ja.note}`
-              : ja.email
-                ? `Imported from Jarvee. Email: ${ja.email}`
-                : "Imported from Jarvee",
+            userAgentEmbedded:       ja.userAgentWeb ?? autoUA.embedded,
+            userAgentApi:            autoUA.api,
+            igDeviceState:           igDeviceState,
+            twoFASecretKey:          ja.twoFASecret ?? null,
+            emailValidationUsername: ja.email ?? null,
+            emailValidationPassword: ja.emailPassword ?? null,
+            notes:                   "Imported from Jarvee",
           };
 
           if (proxyStr) profileData.proxy = proxyStr;

@@ -26,9 +26,11 @@ export interface JarveeAccount {
   proxyUsername?: string;
   proxyPassword?: string;
   email?: string;
+  emailPassword?: string;        // password for the recovery email account
+  twoFASecret?: string;          // TOTP 2FA secret key (base32)
   deviceString?: string;
   userAgentWeb?: string;
-  note?: string;
+  accountLabel?: string;         // Jarvee account name/label (not the IG username)
   followSources: string[];       // usernames to follow followers of (target_followers)
   followedUsernames: string[];   // already-followed IG usernames (dedup list)
   dmRecipients: string[];        // already-DM'd IG usernames (dedup list)
@@ -85,6 +87,9 @@ const DEVICE_RE  = /^\d+\/\d+;\s+\d+dpi;/;
 const FOL_SRC_RE = /^followers\/([a-zA-Z0-9_.]{3,30})$/;
 const NUMERIC_RE = /^\d+$/;
 const SENT_DM_RE = /(?:Hey|Hiii|Hii|Hi|Heyy|Hows it going)/i;
+// TOTP 2FA secrets use base32 alphabet (A-Z, 2-7), typically 16-64 chars.
+// This discriminates them from base64 IG usernames (which contain lowercase/+//).
+const TOTP_RE    = /^[A-Z2-7]{16,64}=*$/;
 
 function decodeB64Username(s: string): string | null {
   if (!B64_RE.test(s) || s.length < 8 || s.length > 60) return null;
@@ -232,12 +237,17 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
 
     const proxy = parseProxyStr(window[proxyIdx].value)!;
 
-    const password = (() => {
-      for (let k = proxyIdx - 1; k >= 0; k--) {
-        if (isLikelyPassword(window[k].value)) return window[k].value;
+    // Collect passwords backwards from proxy: first = IG password, second = email password.
+    // Binary layout before proxy: [smtp host] [email pass] [IG password] [proxy]
+    const passwordsFound: string[] = [];
+    for (let k = proxyIdx - 1; k >= 0; k--) {
+      if (isLikelyPassword(window[k].value)) {
+        passwordsFound.push(window[k].value);
+        if (passwordsFound.length >= 2) break;
       }
-      return "";
-    })();
+    }
+    const password      = passwordsFound[0] ?? "";
+    const emailPassword = passwordsFound[1] ?? "";
 
     let proxyUsername = "";
     let proxyPassword = "";
@@ -252,6 +262,12 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const emailItem = window.find(w => EMAIL_RE.test(w.value));
     const email = emailItem?.value ?? "";
 
+    // 2FA TOTP secret: appears before the b64 username anchor in the binary cluster.
+    // Look at the 15 records immediately preceding the anchor (reversed = nearest first).
+    const priorWindow = sortedByOffset.slice(Math.max(0, i - 15), i).reverse();
+    const twoFAItem = priorWindow.find(w => TOTP_RE.test(w.value));
+    const twoFASecret = twoFAItem?.value ?? "";
+
     const searchWindow = [...window, ...sortedByOffset.slice(i + 50, i + 150)];
 
     const deviceItem = searchWindow.find(w => DEVICE_RE.test(w.value));
@@ -260,14 +276,24 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const uaItem = searchWindow.find(w => /Mozilla\/5\.0/.test(w.value));
     const userAgentWeb = uaItem?.value ?? "";
 
-    const noteItem = window.slice(proxyIdx + 1).find(w =>
-      w.value.length >= 3 && w.value.length <= 100 &&
+    // Account label: Jarvee's "Name" field.
+    // Binary layout after proxy: [proxy user] [proxy pass?] [full name] [label] [web UA] [device]
+    // We skip proxy creds, UA, device string, emails, URLs, and proxy-like strings.
+    // Of the remaining candidates, prefer strings with spaces or mixed case (typical label style)
+    // over plain single-word values (which are more likely the IG full name).
+    const afterProxyCandidates = window.slice(proxyIdx + 1).filter(w =>
+      w.value.length >= 2 && w.value.length <= 120 &&
       !EMAIL_RE.test(w.value) && !URL_RE.test(w.value) &&
-      !PROXY_RE.test(w.value) && !DEVICE_RE.test(w.value) &&
+      !PROXY_RE.test(w.value) && !DEVICE_RE.test(w.value) && !TOTP_RE.test(w.value) &&
       w.value !== proxyUsername && w.value !== proxyPassword &&
-      !/Mozilla/.test(w.value)
+      !/Mozilla/.test(w.value) && !SMTP_RE.test(w.value)
     );
-    const note = noteItem?.value ?? "";
+    // Prefer a value that contains a space or is mixed-case (account labels often are),
+    // otherwise fall back to the first candidate (which could be the IG full name / label).
+    const accountLabelItem =
+      afterProxyCandidates.find(w => w.value.includes(" ") || /[A-Z]/.test(w.value)) ??
+      afterProxyCandidates[0];
+    const accountLabel = accountLabelItem?.value ?? "";
 
     accounts.push({
       username,
@@ -277,9 +303,11 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       proxyUsername:     proxyUsername || undefined,
       proxyPassword:     proxyPassword || undefined,
       email:             email || undefined,
+      emailPassword:     emailPassword || undefined,
+      twoFASecret:       twoFASecret || undefined,
       deviceString:      deviceString || undefined,
       userAgentWeb:      userAgentWeb || undefined,
-      note:              note || undefined,
+      accountLabel:      accountLabel || undefined,
       followSources,
       followedUsernames,
       dmRecipients,

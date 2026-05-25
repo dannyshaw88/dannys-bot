@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.548",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Import Binary File: the account label (Name field from Jarvee) is now imported and shown as the account label in Equinox instead of being silently dropped." },
+      { category: "Fix", text: "Import Binary File: the recovery email address and its password are now correctly imported into the Email Validation fields." },
+      { category: "Fix", text: "Import Binary File: the 2FA secret key is now extracted from the binary and saved to the account's 2FA Secret Key field." },
+    ],
+  },
+  {
     version: "1.0.547",
     date: "25 May 2026",
     items: [
