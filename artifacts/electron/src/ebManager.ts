@@ -59,14 +59,59 @@ renderTabs();`;
 // Tracks the last focused input so paste-style buttons (Phone, Email, etc.)
 // can target it after focus shifts to the toolbar button click.
 // Also auto-dismisses Instagram's cookie consent banner.
-function buildPageUtilsJs(): string {
+// autoFill is only supplied when called from inside openEbWindow (main EB window).
+// Tab BrowserViews and other callers pass nothing so they only get cookie dismiss + focus tracking.
+function buildPageUtilsJs(autoFill?: { username: string; password: string }): string {
+  const afJson = autoFill ? JSON.stringify(autoFill) : "null";
   return `(function(){
   if(window.__eq_utils_loaded)return;window.__eq_utils_loaded=true;
+
+  // ── Focus tracking (for toolbar paste buttons) ───────────────────────────
   window.__eq_lastInput=null;
   document.addEventListener('focusin',function(e){
     var t=e.target;
     if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')){window.__eq_lastInput=t;}
   },true);
+
+  // ── Credential-aware auto-fill ───────────────────────────────────────────
+  // Injected once per page. Works regardless of URL — handles Instagram's SPA
+  // pushState navigations (which don't fire did-navigate in the main process).
+  var AF=${afJson};
+
+  // Fill the login form if it is present and not already filled.
+  window.__eq_doAutoFill=function(){
+    if(!AF||window.__eq_fill_done)return false;
+    var uInp=document.querySelector('input[name="username"]');
+    var pInp=document.querySelector('input[name="password"]');
+    if(!uInp||!pInp)return false;
+    window.__eq_fill_done=true;
+    var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+    setter.call(uInp,AF.username);
+    uInp.dispatchEvent(new Event('input',{bubbles:true}));
+    setTimeout(function(){
+      setter.call(pInp,AF.password);
+      pInp.dispatchEvent(new Event('input',{bubbles:true}));
+      setTimeout(function(){
+        var btn=document.querySelector('button[type="submit"]');
+        if(btn&&!btn.disabled)btn.click();
+      },500);
+    },300);
+    return true;
+  };
+
+  // Poll every 500 ms for the login form (handles SPA navigations + inline forms).
+  // Stops after 45 s to avoid running forever on non-login pages.
+  if(AF&&!window.__eq_fill_poll){
+    window.__eq_fill_poll=setInterval(function(){
+      if(window.__eq_fill_done){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;return;}
+      if(window.__eq_doAutoFill()){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;}
+    },500);
+    setTimeout(function(){
+      if(window.__eq_fill_poll){clearInterval(window.__eq_fill_poll);window.__eq_fill_poll=null;}
+    },45000);
+  }
+
+  // ── Cookie consent banner dismiss ────────────────────────────────────────
   if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
     var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]')||Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});
@@ -74,11 +119,10 @@ function buildPageUtilsJs(): string {
       btn.click();
       clearInterval(window.__eq_cookie_tick);
       window.__eq_cookie_tick=null;
-      // After cookie dismiss: if we're on the homepage (not yet on the login form),
-      // auto-click the "Log in" button (top-right) so the login form appears and
-      // the auto-fill handler can fill credentials and submit.
+      // After cookie dismiss: try to fill the login form immediately (it may
+      // already be on the page), or click the "Log in" button to navigate to it.
       setTimeout(function(){
-        if(document.querySelector('input[name="username"]'))return; // already on login form
+        if(AF&&window.__eq_doAutoFill())return;
         var LOGIN_RE=/^log\s*in$/i;
         var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
         if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
@@ -642,9 +686,11 @@ export async function openEbWindow(opts: {
 
   // ── Page-level utilities ────────────────────────────────────────────────
   // Injected into the Instagram page (NOT the toolbar) on every navigation.
-  // Tracks the last focused input field and auto-dismisses cookie banners.
+  // Tracks the last focused input field, auto-dismisses cookie banners, and
+  // (when credentials are available) polls for the login form and fills it.
   const injectPageUtils = () => {
-    win.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {});
+    const af = password ? { username, password } : undefined;
+    win.webContents.executeJavaScript(buildPageUtilsJs(af)).catch(() => {});
   };
   win.webContents.on("dom-ready",       () => injectPageUtils());
   win.webContents.on("did-finish-load", () => injectPageUtils());
