@@ -6010,6 +6010,18 @@ export async function openSignupBrowser(opts?: {
       _startSignupScreencast().catch(() => {});
     }
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+
+    // Auto-dismiss cookie consent banner — it appears ~1-2 s after DOM load.
+    // Run up to 10 attempts (5 s) in the background so the function returns
+    // immediately and the browser stream can start while we wait for the banner.
+    (async () => {
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        if (!_signupPage || (_signupPage as any).isClosed?.()) break;
+        await dismissCookieBanner(_signupPage).catch(() => {});
+      }
+    })().catch(() => {});
+
     return { ok: true };
   } catch (e: any) {
     await closeSignupBrowser();

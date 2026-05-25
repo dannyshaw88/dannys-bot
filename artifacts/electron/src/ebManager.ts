@@ -70,7 +70,21 @@ function buildPageUtilsJs(): string {
   if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
     var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]')||Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});
-    if(btn){btn.click();clearInterval(window.__eq_cookie_tick);window.__eq_cookie_tick=null;}
+    if(btn){
+      btn.click();
+      clearInterval(window.__eq_cookie_tick);
+      window.__eq_cookie_tick=null;
+      // After cookie dismiss: if we're on the homepage (not yet on the login form),
+      // auto-click the "Log in" button (top-right) so the login form appears and
+      // the auto-fill handler can fill credentials and submit.
+      setTimeout(function(){
+        if(document.querySelector('input[name="username"]'))return; // already on login form
+        var LOGIN_RE=/^log\s*in$/i;
+        var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
+        if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
+        if(loginEl){loginEl.click();}
+      },1200);
+    }
   },500);}
 })();`;
 }

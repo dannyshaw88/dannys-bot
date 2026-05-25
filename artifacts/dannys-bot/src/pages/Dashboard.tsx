@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.540",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account browser now automatically dismisses the cookie consent banner as soon as it appears after the Instagram page loads." },
+      { category: "Fix", text: "Embedded browser no longer shows the 'Browser appears frozen' overlay when sitting idle — the threshold has been raised to 10 minutes so it only appears if the browser truly stops responding." },
+      { category: "Fix", text: "Clear / Reset session button in the browser toolbar is now always clickable, even when the browser is not connected." },
+      { category: "Fix", text: "Electron embedded browser now automatically clicks the Log In button (top-right of the Instagram homepage) after dismissing the cookie banner, then fills in your credentials and submits — the full login flow runs hands-free." },
+    ],
+  },
+  {
     version: "1.0.539",
     date: "25 May 2026",
     items: [

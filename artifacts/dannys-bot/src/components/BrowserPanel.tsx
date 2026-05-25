@@ -540,7 +540,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   }, [elapsedSecs]);
 
   // Stale-frame detector: if connected AND at least one frame was received but then
-  // no new frame arrives for 60 s, flag as frozen.
+  // no new frame arrives for 10 minutes, flag as frozen.
+  // A 10-minute threshold means an idle browser (e.g. waiting for user input on a
+  // cookie banner or login form) will never trigger this overlay during normal use.
   // hasReceivedFirstFrameRef prevents false "frozen" during Chrome's startup window
   // (the SSE stream opens before Chrome has launched, so there's a gap before first frame).
   useEffect(() => {
@@ -550,7 +552,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       if (
         statusRef.current === "connected" &&
         hasReceivedFirstFrameRef.current &&
-        Date.now() - lastFrameTimeRef.current > 60000
+        Date.now() - lastFrameTimeRef.current > 600000
       ) {
         isFrozenRef.current = true;
         setIsFrozen(true);
@@ -960,7 +962,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           </>
         )}
         <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
-          onClick={clearSession} disabled={!connected} title="Clear session">
+          onClick={clearSession} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
         </Button>
         {IS_ELECTRON && !forceStream && (
