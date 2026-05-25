@@ -66,6 +66,15 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
     {
+      version: "1.0.534",
+      date: "25 May 2026",
+      items: [
+        { category: "Fix", text: "View Timeline Feed — Like% now works correctly. Setting 5% no longer always likes at least 1 post; it now likes proportionally (e.g. 5% of 5 posts = 0 likes most of the time, 1 like occasionally)." },
+        { category: "New", text: "View Timeline Feed — new Reel View% setting. Set a min/max percentage of each reel's length to watch (e.g. 10–15% of a 60-second reel = 6–9 seconds watched). Leave at 0% to use the previous default behaviour." },
+        { category: "Fix", text: "Account name in the profile picker dropdown no longer gets cut off with '...' — the button now sizes to fit the full name." },
+      ],
+    },
+    {
       version: "1.0.532",
       date: "25 May 2026",
       items: [

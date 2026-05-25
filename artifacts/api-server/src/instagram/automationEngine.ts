@@ -2461,9 +2461,11 @@ class AutomationEngine {
       "viewTimelineFeedOrderMin",   "viewTimelineFeedOrderMax",
       async () => {
         const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
+        const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
+        const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
         let viewed = 0;
         try {
-          const vtfResult = await client.viewTimelineFeed(feedCount);
+          const vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, reelWatchPctMax);
           if (vtfResult.sessionExpired) {
             const expReason = vtfResult.reason ?? "session expired (login_required) — viewTimelineFeed";
             console.warn(`[engine] @${profile.username}: viewTimelineFeed — session expired, marking logged_out`);
@@ -2487,13 +2489,18 @@ class AutomationEngine {
         const likePctMin = Number(s.likeTimelinePostsPercentMin ?? 0);
         const likePctMax = Number(s.likeTimelinePostsPercentMax ?? 0);
         if (viewed > 0 && likePctMax > 0) {
-          console.log(`[engine] @${profile.username}: ▶ INLINE LIKE% FIRED from viewTimelineFeed (likeTimelinePostsPercentMax=${likePctMax}). This is the source of any likes logged below.`);
           const pct = randInt(likePctMin, likePctMax);
-          const likeCount = Math.max(1, Math.round(viewed * pct / 100));
+          const exactCount = viewed * pct / 100;
+          // Stochastic rounding: e.g. 5% of 5 posts = 0.25 → like 1 post 25% of the time, 0 posts 75% of the time
+          const likeCount = Math.floor(exactCount) + (Math.random() < (exactCount % 1) ? 1 : 0);
+          if (likeCount <= 0) {
+            console.log(`[engine] @${profile.username}: ⏭ like% rolled 0 this session (${pct}% of ${viewed} viewed posts = ${exactCount.toFixed(2)}) — skipping likes`);
+          } else {
+          console.log(`[engine] @${profile.username}: ▶ INLINE LIKE% FIRED from viewTimelineFeed (${pct}% of ${viewed} viewed = ${likeCount} post(s)). This is the source of any likes logged below.`);
           const likeDelayMin = Number(s.likeTimelinePostsDelayMin ?? 3);
           const likeDelayMax = Number(s.likeTimelinePostsDelayMax ?? 8);
           try {
-            const { liked, watched, likedPosts, sessionExpired, sessionExpiredReason } = await client.likeTimelinePosts(likeCount, likeDelayMin, likeDelayMax);
+            const { liked, watched, likedPosts, sessionExpired, sessionExpiredReason } = await client.likeTimelinePosts(likeCount, likeDelayMin, likeDelayMax, reelWatchPctMin, reelWatchPctMax);
             if (sessionExpired) {
               const expReason = sessionExpiredReason ?? "session expired (login_required) — likeTimelinePosts";
               console.warn(`[engine] @${profile.username}: likeTimelinePosts (from viewTimeline) — session expired, marking logged_out`);
@@ -2536,6 +2543,7 @@ class AutomationEngine {
             if (await checkSessionErr(e, "like_timeline_posts")) return;
             console.warn(`[engine] @${profile.username}: like timeline posts error: ${e?.message}`);
           }
+          } // end likeCount > 0
         }
       },
     );

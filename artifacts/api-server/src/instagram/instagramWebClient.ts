@@ -1888,7 +1888,7 @@ export class InstagramWebClient {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count: number = 5): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string }> {
+  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string }> {
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
     const j = await this.mobileSessionPost(
@@ -1931,11 +1931,18 @@ export class InstagramWebClient {
       const mediaId = String(media?.id ?? media?.pk ?? "");
       if (!mediaId) continue;
       const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+      const isReel = media?.media_type === 2 || media?.product_type === "clips";
+      let watchDuration = 3;
+      if (isReel && reelWatchPercentMax > 0) {
+        const reelDuration = Number(media.video_duration ?? 30);
+        const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
+        watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
+      }
       // One seen call per post — matches Jarvee's per-post call pattern and is
       // more authentic than batching (real app reports seen as user scrolls past).
       await this.timed("ViewTimelineFeedSeen", async () => {
         await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-          reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
+          reels: `${mediaId}_${takenAt}_${takenAt + watchDuration}`,
           live_vods_skipped: "",
           nuxes_skipped: "",
         }).toString());
@@ -2353,7 +2360,7 @@ export class InstagramWebClient {
     }, `Like DM thread=${threadId} item=${itemId}`);
   }
 
-  async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }>; sessionExpired?: boolean; sessionExpiredReason?: string }> {
+  async likeTimelinePosts(count: number = 3, delayMinSec: number = 3, delayMaxSec: number = 8, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0): Promise<{ liked: number; watched: number; likedPosts: Array<{ shortcode: string; ownerUsername: string; mediaId: string }>; sessionExpired?: boolean; sessionExpiredReason?: string }> {
     // No timed() wrapper here — individual likeMedia() calls each produce their
     // own LikeMedia log entry. A LikeTimelinePosts summary on top would cause
     // two entries at the same timestamp and make rate-limit audits confusing.
@@ -2414,8 +2421,14 @@ export class InstagramWebClient {
         // so there is no overlap.
         try {
           const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+          let watchDuration = 4;
+          if (reelWatchPercentMax > 0) {
+            const reelDuration = Number(media.video_duration ?? 30);
+            const pct = reelWatchPercentMin + Math.random() * Math.max(0, reelWatchPercentMax - reelWatchPercentMin);
+            watchDuration = Math.max(1, Math.round(reelDuration * pct / 100));
+          }
           const seenBody = new URLSearchParams({
-            reels: `${mediaId}_${takenAt}_${takenAt + 4}`,
+            reels: `${mediaId}_${takenAt}_${takenAt + watchDuration}`,
             live_vods_skipped: "",
             nuxes_skipped: "",
           }).toString();

@@ -60,9 +60,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_count",      label: "Posts per session (min / max)",                 settingKeys: ["viewTimelineFeedMin","viewTimelineFeedMax"] },
         { key: "vtf_order",      label: "Execution order (min / max)",                   settingKeys: ["viewTimelineFeedOrderMin","viewTimelineFeedOrderMax"] },
         { key: "vtf_chance",     label: "Skip chance % (0=always run, 100=never)",       settingKeys: ["viewTimelineFeedNotUsedMin","viewTimelineFeedNotUsedMax"] },
-        { key: "vtf_like_pct",   label: "% posts to like (min / max)",                  settingKeys: ["likeTimelinePostsPercentMin","likeTimelinePostsPercentMax"] },
-        { key: "vtf_like_delay", label: "Delay between likes in sec (min / max)",        settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
-        { key: "vtf_save_media", label: "Save liked media (enabled + %)",                settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
+        { key: "vtf_like_pct",    label: "% posts to like (min / max)",                  settingKeys: ["likeTimelinePostsPercentMin","likeTimelinePostsPercentMax"] },
+        { key: "vtf_reel_view",   label: "% of each reel to watch (min / max)",          settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
+        { key: "vtf_like_delay",  label: "Delay between likes in sec (min / max)",       settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
+        { key: "vtf_save_media",  label: "Save liked media (enabled + %)",               settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
       ]},
       { key: "humanSession", label: "Human Session (Visit Profile)", description: "Core session order and cool-down", subOptions: [
         { key: "hs_enabled", label: "Enabled",                            settingKeys: ["humanSessionEnabled"] },
@@ -342,6 +343,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like%</span>
                 {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
+                {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
               </div>
             </div>
           </div>

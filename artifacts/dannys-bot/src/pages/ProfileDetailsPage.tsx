@@ -822,9 +822,9 @@ export function ProfileDetailsPage() {
                 </button>
                 <DropdownMenu onOpenChange={open => { if (!open) setProfileSearch(""); }}>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent transition-colors max-w-md">
+                    <button className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent transition-colors">
                       <Instagram className="w-4 h-4 text-primary shrink-0" />
-                      <span className="text-2xl font-bold tracking-tight text-foreground truncate">
+                      <span className="text-2xl font-bold tracking-tight text-foreground">
                         {profile.accountLabel || profile.username}
                       </span>
                       <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
