@@ -2191,10 +2191,19 @@ export class InstagramWebClient {
     };
 
     // ── Step 2: fetch inbox overview (1 API call — GetDirectMessages) ───────
+    // Use mobileSessionGet instead of ig.feed.directInbox().items().
+    // The IgApiClient library's directInbox request is rejected with 400 by
+    // Instagram (its header set diverges from what Instagram now expects).
+    // mobileSessionGet uses the exact same headers as every other working
+    // mobile API call in this client and is the correct transport here.
     let inboxThreads: any[] = [];
     try {
       const inboxResult = await this.timed("GetDirectMessages", async () => {
-        const items = await ig.feed.directInbox().items();
+        const j = await this.mobileSessionGet(
+          `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20`
+        );
+        if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
+        const items: any[] = j?.inbox?.threads ?? j?.threads ?? [];
         return { items, ok: true as const };
       }, (r) => `Inbox overview: ${r.items.length} thread${r.items.length === 1 ? "" : "s"}`,
       (r) => r.ok);
@@ -2231,7 +2240,13 @@ export class InstagramWebClient {
       if (!threadId) continue;
       try {
         await this.timed("GetDirectMessageThread", async () => {
-          const msgs = await ig.feed.directThread({ thread_id: threadId, oldest_cursor: "" }).items();
+          // Use mobileSessionGet — same reason as inbox fetch above
+          // (ig.feed.directThread also gets 400 from the library transport).
+          const j = await this.mobileSessionGet(
+            `/api/v1/direct_v2/threads/${threadId}/?visual_message_return_type=unseen&limit=10`
+          );
+          if (!j) throw new Error(`thread ${threadId} returned null (HTTP 4xx)`);
+          const msgs: any[] = j?.thread?.items ?? [];
           return { ok: true as const, count: msgs.length };
         }, (r) => `Opened DM thread: ${r.count} message${r.count === 1 ? "" : "s"}`,
         (r) => r.ok);
@@ -2297,7 +2312,14 @@ export class InstagramWebClient {
       const results: ReturnType<typeof mapThread>[] = [];
 
       try {
-        const mainThreads = await ig.feed.directInbox().items();
+        // Use mobileSessionGet — ig.feed.directInbox().items() gets 400 from
+        // Instagram (library transport header mismatch). mobileSessionGet uses
+        // the correct header set that all other working calls use.
+        const j = await this.mobileSessionGet(
+          `/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=${count}`
+        );
+        if (!j) throw new Error("DM inbox returned null (HTTP 4xx)");
+        const mainThreads: any[] = j?.inbox?.threads ?? j?.threads ?? [];
         inboxOk = true; // Instagram responded — record as a real API call
         console.log(`[webClient] getDMThreadsWithContent: ${mainThreads.length} thread(s), myUserId=${myUserId || "unknown"}`);
         for (const t of mainThreads.slice(0, count)) results.push(mapThread(t));

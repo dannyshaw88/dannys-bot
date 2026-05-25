@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.530",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Check Direct Messages now works — the DM inbox was getting a 400 error because the Instagram API client library sends a different set of headers than Instagram expects. Switched to the same transport used by all other working mobile API calls." },
+      { category: "Fix", text: "Auto-reply DM scanning (getDMThreadsWithContent) had the same inbox 400 issue and is also fixed." },
+    ],
+  },
+  {
     version: "1.0.529",
     date: "24 May 2026",
     items: [
