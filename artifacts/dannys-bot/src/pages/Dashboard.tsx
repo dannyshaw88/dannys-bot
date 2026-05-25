@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.542",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account: after the cookie banner is accepted, the browser now clicks the 'Sign up' or 'Create an account' button automatically before filling the form — works correctly regardless of which user agent model is selected." },
+      { category: "Fix", text: "Create Account: if no Sign Up button is found on the homepage (e.g. on certain mobile UAs), the browser falls back to navigating directly to the email signup form so the process never gets stuck." },
+      { category: "Fix", text: "Create Account: the streaming browser panel now also navigates to the signup form after cookie dismiss so you can watch the process live." },
+      { category: "Fix", text: "Randomise button at the top of the Create Account page is no longer greyed out while an account is being created — it can always be clicked." },
+    ],
+  },
+  {
     version: "1.0.541",
     date: "25 May 2026",
     items: [

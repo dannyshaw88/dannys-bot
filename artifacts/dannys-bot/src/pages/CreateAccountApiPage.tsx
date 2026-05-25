@@ -837,7 +837,6 @@ export function CreateAccountApiPage() {
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2 text-[10px]"
-                    disabled={locked}
                     onClick={async () => { setUserAgentApi(randomUA()); setEbVisible(false); await clearEbSession(); }}
                   >
                     <RefreshCw className="w-3 h-3 mr-1" />Randomise

@@ -6011,14 +6011,40 @@ export async function openSignupBrowser(opts?: {
     }
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    // Auto-dismiss cookie consent banner — it appears ~1-2 s after DOM load.
-    // Run up to 10 attempts (5 s) in the background so the function returns
-    // immediately and the browser stream can start while we wait for the banner.
+    // Auto-dismiss cookie consent banner, then navigate to the signup form so the
+    // user can see it in the streaming panel. Runs in the background so the
+    // function returns immediately and the stream starts right away.
     (async () => {
+      // Wait for and dismiss the cookie banner (up to 5 s)
       for (let i = 0; i < 10; i++) {
         await new Promise(r => setTimeout(r, 500));
-        if (!_signupPage || (_signupPage as any).isClosed?.()) break;
+        if (!_signupPage || (_signupPage as any).isClosed?.()) return;
         await dismissCookieBanner(_signupPage).catch(() => {});
+      }
+      if (!_signupPage || (_signupPage as any).isClosed?.()) return;
+      await new Promise(r => setTimeout(r, 800));
+      if (!_signupPage || (_signupPage as any).isClosed?.()) return;
+
+      // After cookie dismiss: try clicking "Sign up" / "Create an account" button
+      // so the streaming panel shows the signup form to the user.
+      const clicked = await (_signupPage as any).evaluate(() => {
+        var labels = ["sign up", "create an account", "create account", "get started", "register", "sign up for instagram"];
+        for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
+          var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
+          if (labels.some((l: string) => txt === l) || txt.startsWith("sign up") || txt.startsWith("create")) {
+            var r = (el as any).getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) { (el as any).click(); return true; }
+          }
+        }
+        return false;
+      }).catch(() => false);
+
+      // Fall back to direct navigation if no button was found
+      if (!clicked && _signupPage && !(_signupPage as any).isClosed?.()) {
+        await (_signupPage as any).goto(
+          "https://www.instagram.com/accounts/emailsignup/",
+          { waitUntil: "domcontentloaded", timeout: 20000 }
+        ).catch(() => {});
       }
     })().catch(() => {});
 
@@ -6179,14 +6205,36 @@ export async function createInstagramAccountViaEBForm(params: {
     catch (e: any) { step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`); }
     await delay(3000);
     await dismissCookieBanner(page);
-    await delay(1000);
+    await delay(800);
 
-    step("EB: navigating to email signup form...");
-    try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
-    catch (e: any) { step(`EB: signup page nav warning: ${e?.message?.slice(0, 80)}`); }
-    await delay(3500);
-    await dismissCookieBanner(page);
-    await delay(1000);
+    // After cookie dismiss: try clicking "Sign up" / "Create an account" on the homepage
+    // (more robust than direct navigation — works across all user-agent models including mobile).
+    step("EB: looking for Sign Up / Create an Account button on homepage...");
+    const signupBtnClicked = await page.evaluate(() => {
+      var labels = ["sign up", "create an account", "create account", "get started", "register", "sign up for instagram"];
+      for (var el of Array.from(document.querySelectorAll<HTMLElement>("a,button,[role=\"button\"]"))) {
+        var txt = ((el as any).innerText || el.textContent || "").trim().toLowerCase();
+        if (labels.some(l => txt === l) || txt.startsWith("sign up") || txt.startsWith("create")) {
+          var r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) { el.click(); return true; }
+        }
+      }
+      return false;
+    }).catch(() => false);
+
+    if (signupBtnClicked) {
+      step("EB: clicked Sign Up button ✓ — waiting for signup form...");
+      await delay(3000);
+      await dismissCookieBanner(page);
+      await delay(800);
+    } else {
+      step("EB: no Sign Up button on homepage — navigating directly to email signup form...");
+      try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
+      catch (e: any) { step(`EB: signup page nav warning: ${e?.message?.slice(0, 80)}`); }
+      await delay(3500);
+      await dismissCookieBanner(page);
+      await delay(800);
+    }
 
     step("EB: filling signup form...");
 
