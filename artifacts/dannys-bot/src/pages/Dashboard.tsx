@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.547",
+    date: "25 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account: the signup form now always opens in a completely clean browser — no cookies, cache, or history from a previous attempt can carry over, even if the last attempt crashed mid-way." },
+      { category: "Fix", text: "Create Account: the EB no longer stalls on the homepage waiting for a Sign Up button — it seeds device cookies then navigates directly to the email signup form, cutting the wait from 60+ seconds to a few seconds." },
+    ],
+  },
+  {
     version: "1.0.546",
     date: "25 May 2026",
     items: [

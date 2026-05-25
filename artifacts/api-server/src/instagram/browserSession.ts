@@ -982,6 +982,7 @@ let _signupPage:    any | null = null;
 let _signupCdp:     any | null = null;
 let _signupWs:      WebSocket | null = null;
 let _signupBrowser: any | null = null;
+let _signupDataDir: string | null = null; // per-attempt unique dir, wiped on every close
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
 // ── Graceful shutdown: save all open EB sessions before the process exits ────
@@ -5956,17 +5957,9 @@ export async function openSignupBrowser(opts?: {
   proxyPassword?: string;
   userAgent?: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  // Already running — just ensure the screencast is going.
-  if (_signupPage) {
-    try { if (!(_signupPage as any).isClosed()) {
-      if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
-        _startSignupScreencast().catch(() => {});
-      }
-      return { ok: true };
-    }} catch {}
-  }
-
-  // Close any stale browser before launching a new one.
+  // Always close any existing browser and wipe its data dir before launching a
+  // fresh one.  This guarantees every attempt starts as a brand-new device with
+  // no cookies, cache, or history carried over from the previous attempt.
   await closeSignupBrowser();
 
   let puppeteerLib: any;
@@ -5979,7 +5972,10 @@ export async function openSignupBrowser(opts?: {
 
   if (!CHROMIUM_PATH) return { ok: false, error: "No Chromium executable found" };
 
-  const dataDir = path.join(COOKIES_DIR, "signup-browser");
+  // Per-attempt unique data dir — same pattern as createInstagramAccountViaEBForm.
+  // A unique dir means Chrome never inherits cookies/cache from a previous attempt.
+  const dataDir = path.join(COOKIES_DIR, `signup-browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  _signupDataDir = dataDir;
   fs.mkdirSync(dataDir, { recursive: true });
 
   // Use the full LAUNCH_ARGS set (same as the regular per-account EB) so the signup browser
@@ -6104,26 +6100,22 @@ export async function closeSignupBrowser(): Promise<void> {
   if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
     try { _signupWs.send(JSON.stringify({ type: "waiting", message: "Browser closed." })); } catch {}
   }
+  // Wipe the per-attempt data dir so no cookies/cache survive into the next attempt.
+  // Chrome can still be flushing to disk after close(), so retry a few times.
+  if (_signupDataDir) {
+    const dirToDelete = _signupDataDir;
+    _signupDataDir = null;
+    await new Promise(r => setTimeout(r, 600));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { fs.rmSync(dirToDelete, { recursive: true, force: true }); break; }
+      catch { if (attempt < 2) await new Promise(r => setTimeout(r, 400)); }
+    }
+  }
 }
 
 export async function resetSignupBrowser(): Promise<void> {
+  // closeSignupBrowser now handles both the browser teardown and the data dir wipe.
   await closeSignupBrowser();
-  // browser.close() resolves when Puppeteer's CDP connection closes, but the
-  // Chrome process can still be writing its final state to the user-data-dir
-  // for a moment afterward, holding file locks.  If rmSync fires immediately it
-  // silently fails (caught by the try/catch) and the directory survives — the
-  // next open then inherits all cookies, cache, and history from the previous
-  // session.  Wait for Chrome to fully flush, then retry up to 3 times.
-  await new Promise(r => setTimeout(r, 600));
-  const dataDir = path.join(COOKIES_DIR, "signup-browser");
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      fs.rmSync(dataDir, { recursive: true, force: true });
-      break;
-    } catch {
-      if (attempt < 2) await new Promise(r => setTimeout(r, 400));
-    }
-  }
 }
 
 // ── Electron EB — push arbitrary WS message to the BrowserPanel ──────────────
@@ -6250,81 +6242,31 @@ export async function createInstagramAccountViaEBForm(params: {
     await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1 });
     if (proxyUsername) await page.authenticate({ username: proxyUsername, password: proxyPassword ?? "" });
 
+    // Visit homepage first to seed device cookies (mid, ig_did) — allow up to 60 s since
+    // some proxies are slow.  We do NOT try to click "Sign Up" here; we navigate directly to
+    // the email signup form afterwards, which is faster and avoids the flaky button-click flow.
     step("EB: visiting instagram.com homepage (seeding device cookies)...");
-    try { await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
+    try { await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 60000 }); }
     catch (e: any) { step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`); }
-    await delay(3000);
+    await delay(2000);
     await dismissCookieBanner(page);
-    await delay(800);
+    await delay(500);
 
-    // After cookie dismiss: try clicking "Sign up" / "Create an account" on the homepage
-    // (more robust than direct navigation — works across all user-agent models including mobile).
-    step("EB: looking for Sign Up / Create an Account button on homepage...");
-    const signupBtnClicked = await page.evaluate(() => {
-      var labels = ["sign up", "create an account", "create account", "get started", "register", "sign up for instagram"];
-      for (var el of Array.from(document.querySelectorAll<HTMLElement>("a,button,[role=\"button\"]"))) {
-        var txt = ((el as any).innerText || el.textContent || "").trim().toLowerCase();
-        if (labels.some(l => txt === l) || txt.startsWith("sign up") || txt.startsWith("create")) {
-          var r = el.getBoundingClientRect();
-          if (r.width > 0 && r.height > 0) { el.click(); return true; }
-        }
-      }
-      return false;
-    }).catch(() => false);
+    // Always navigate directly to the email signup form — no button-click intermediary.
+    step("EB: navigating to email signup form...");
+    try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 60000 }); }
+    catch (e: any) { step(`EB: signup page nav warning: ${e?.message?.slice(0, 80)}`); }
 
-    if (signupBtnClicked) {
-      step("EB: clicked Sign Up button ✓ — waiting for email link...");
-      // Poll for "Sign up with email address" to appear (up to 12 s) instead of a fixed delay
-      for (let _i = 0; _i < 24; _i++) {
-        await delay(500);
-        const linkReady = await page.evaluate(() => {
-          var L = ["sign up with email address", "sign up with email", "use email address", "use email"];
-          for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
-            var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
-            if (L.some(function(l: string) { return txt.includes(l); })) {
-              var r = (el as any).getBoundingClientRect(); if (r.width > 0 && r.height > 0) return true;
-            }
-          }
-          return false;
-        }).catch(() => false);
-        if (linkReady) break;
-      }
-      await dismissCookieBanner(page);
-
-      // Instagram often shows a mobile-number-first page after clicking "Sign up".
-      // Click "Sign up with email address" if that prompt is visible.
-      const emailLinkClicked = await page.evaluate(() => {
-        var LABELS = ["sign up with email address", "sign up with email", "use email address", "use email", "email address"];
-        for (var el of Array.from(document.querySelectorAll<HTMLElement>("a,button,[role=\"button\"]"))) {
-          var txt = ((el as any).innerText || el.textContent || "").trim().toLowerCase();
-          if (LABELS.some(l => txt.includes(l))) {
-            var r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) { el.click(); return true; }
-          }
-        }
-        return false;
+    // Poll for the email input to be present (up to 20 s) before trying to fill the form.
+    for (let _i = 0; _i < 40; _i++) {
+      await delay(500);
+      const formReady = await page.evaluate(() => {
+        return !!document.querySelector('input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i]');
       }).catch(() => false);
-
-      if (emailLinkClicked) {
-        step("EB: clicked 'Sign up with email address' ✓ — waiting for email form...");
-        // Poll for the email input to appear instead of a fixed delay (up to 10 s)
-        for (let _i = 0; _i < 20; _i++) {
-          await delay(500);
-          const formReady = await page.evaluate(() => {
-            return !!document.querySelector('input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i]');
-          }).catch(() => false);
-          if (formReady) break;
-        }
-        await dismissCookieBanner(page);
-      }
-    } else {
-      step("EB: no Sign Up button on homepage — navigating directly to email signup form...");
-      try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 30000 }); }
-      catch (e: any) { step(`EB: signup page nav warning: ${e?.message?.slice(0, 80)}`); }
-      await delay(3500);
-      await dismissCookieBanner(page);
-      await delay(800);
+      if (formReady) break;
     }
+    await dismissCookieBanner(page);
+    await delay(400);
 
     step("EB: filling signup form...");
 
