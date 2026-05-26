@@ -56,11 +56,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.573",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser clicks are responsive again. The cookie auto-dismiss was injecting fake OS-level mouse events every 800ms, competing with your real clicks and making the EB feel frozen. These injected events have been removed — the dismiss now uses JavaScript only." },
+      { category: "Fix", text: "Cookie banner no longer spam-clicks the wrong buttons. The previous fix matched any button containing the word 'cookie', which also matched category toggles like 'Functional cookies' on Instagram's preference page. The selector now uses an exact whitelist of accept-all phrases only." },
+    ],
+  },
+  {
     version: "1.0.572",
     date: "26 May 2026",
     items: [
-      { category: "Fix", text: "Cookie policy banner no longer gets stuck on new logins. The auto-dismiss now keeps retrying every 500ms until the banner is actually gone from the page — previously it gave up after a single click attempt even if React silently dropped the event." },
-      { category: "Fix", text: "Cookie banner detection now also matches 'Allow all' and 'Accept all' buttons (without the word 'cookie') when the page is a cookie consent page — catches Instagram's latest banner variants." },
+      { category: "Fix", text: "Cookie policy banner no longer gets stuck on new logins. The auto-dismiss now keeps retrying until the banner is actually gone from the page — previously it gave up after a single click attempt even if React silently dropped the event." },
+      { category: "Fix", text: "Cookie banner detection now also matches 'Allow all' and 'Accept all' buttons — catches Instagram's latest banner variants." },
     ],
   },
   {

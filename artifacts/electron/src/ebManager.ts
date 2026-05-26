@@ -120,19 +120,16 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
 
   // ── Cookie consent banner dismiss ────────────────────────────────────────
   // Retries every 500ms until the button disappears (confirmed dismissed).
-  // Does NOT clear on first click — React may silently drop programmatic
-  // events; we keep firing until the banner is actually gone.
-  // Two-tier text match:
-  //   1. Button text includes "cookie" but not "decline/reject/refuse/..."
-  //   2. Button text is exactly "allow all" or "accept all" AND the page
-  //      body contains the word "cookie" (consent-page context check).
+  // Uses an exact whitelist of known accept-all phrases — never a broad
+  // includes('cookie') check, which would match cookie-category toggle
+  // buttons on Instagram's full preference page ("Functional cookies", etc.)
+  // and cause spam-clicks on every tick.
   if(!window.__eq_cookie_tick){var __eq_ck_clicked=false;window.__eq_cookie_tick=setInterval(function(){
+    var __ACCEPT=['allow all cookies','accept all cookies','allow all','accept all','allow essential and optional cookies','accept cookies','allow cookies','alle cookies akzeptieren','accepter tout','aceptar todo','accetta tutto','tillåt alla','alle accepteren'];
     function _isCookieAcceptBtn(b){
       if(!b||!b.getBoundingClientRect||b.getBoundingClientRect().width<=0)return false;
       var t=(b.innerText||b.textContent||'').trim().toLowerCase();
-      if(t.includes('cookie')&&!/decline|reject|refuse|necessary only|essential only/.test(t))return true;
-      if(/^(allow all|accept all)$/.test(t)&&(document.body.innerText||'').toLowerCase().includes('cookie'))return true;
-      return false;
+      return __ACCEPT.indexOf(t)!==-1;
     }
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
     if(!btn){
@@ -750,15 +747,32 @@ export async function openEbWindow(opts: {
   // IMPORTANT: selectors must be SPECIFIC to the cookie banner.  Never use
   // "last button in any dialog" — Instagram shows Save-Login, 2FA, and other
   // persistent dialogs that would cause infinite click loops.
+  // Exact whitelist of accept-all button labels (lower-cased).
+  // Using t.includes('cookie') is WRONG — Instagram's full cookie preference page
+  // has category toggles ("Functional cookies", "Analytics cookies", etc.) that
+  // all contain the word "cookie" and would be spam-clicked on every timer tick.
+  // This list must match only the primary "accept all" action button.
+  const _COOKIE_ACCEPT_LABELS = [
+    'allow all cookies', 'accept all cookies',
+    'allow all', 'accept all',
+    'allow essential and optional cookies',
+    'accept cookies', 'allow cookies',
+    'alle cookies akzeptieren',  // German
+    'accepter tout',             // French
+    'aceptar todo',              // Spanish
+    'accetta tutto',             // Italian
+    'tillåt alla',               // Swedish
+    'alle accepteren',           // Dutch
+  ];
+
   const _COOKIE_BANNER_JS = `(() => {
+    const ACCEPT = ${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
     function isCookieAcceptBtn(b) {
       if (!b || !b.getBoundingClientRect) return false;
       const r = b.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return false;
       const t = (b.innerText||b.textContent||'').trim().toLowerCase();
-      if (t.includes('cookie') && !/decline|reject|refuse|necessary only|essential only/.test(t)) return true;
-      if (/^(allow all|accept all)$/.test(t) && (document.body.innerText||'').toLowerCase().includes('cookie')) return true;
-      return false;
+      return ACCEPT.indexOf(t) !== -1;
     }
     let btn = document.querySelector('[data-cookiebanner="accept_button"]')
            || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
@@ -769,8 +783,7 @@ export async function openEbWindow(opts: {
     }
     if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(isCookieAcceptBtn) || null;
     if (!btn) return null;
-    const r = btn.getBoundingClientRect();
-    // Fire the full event sequence that React listens to
+    // Fire the full event sequence that React listens to, then call .click()
     try { btn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     try { btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
     try { btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
@@ -778,37 +791,32 @@ export async function openEbWindow(opts: {
     try { btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     try { btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     btn.click();
-    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+    return true;
   })()`;
 
-  // Keep firing until the banner is CONFIRMED GONE (not just on first click attempt).
-  // If React silently drops the programmatic events the timer keeps retrying — it
-  // only clears when the button is no longer in the DOM (= dismiss actually worked).
+  // JS-only approach — NO sendInputEvent, NO webContents.focus().
+  // sendInputEvent injects OS-level synthetic mouse events that compete with
+  // real user input and make the EB feel completely unresponsive to clicks.
+  // The JS dispatchEvent + btn.click() inside the script is sufficient.
+  // Timer retries until the button is confirmed gone so a single missed
+  // click doesn't leave the banner stuck, but at a slow interval (2s) to
+  // avoid spamming the renderer with executeJavaScript calls.
   let _cookieBannerClicked = false;
   const _cookieDismissTimer = setInterval(async () => {
     if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
     try {
-      const btnPos = await win.webContents.executeJavaScript(_COOKIE_BANNER_JS).catch(() => null);
-      if (btnPos && typeof (btnPos as any).x === "number") {
-        const { x, y } = btnPos as { x: number; y: number };
-        // sendInputEvent needs the renderer focused on Windows or it is silently dropped
-        win.webContents.focus();
-        win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
-        await new Promise(r => setTimeout(r, 60));
-        win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
-        console.log(`[ebManager:${profileId}] Cookie banner click at (${x}, ${y})`);
+      const found = await win.webContents.executeJavaScript(_COOKIE_BANNER_JS).catch(() => null);
+      if (found) {
+        console.log(`[ebManager:${profileId}] Cookie banner: JS click fired`);
         _cookieBannerClicked = true;
-        // Do NOT clear here — wait for the button to disappear on the next tick.
       } else if (_cookieBannerClicked) {
-        // We clicked it and now it's gone — dismiss confirmed.
         clearInterval(_cookieDismissTimer);
         console.log(`[ebManager:${profileId}] Cookie banner confirmed dismissed`);
       }
     } catch {}
-  }, 800);
+  }, 2000);
   win.once("closed", () => clearInterval(_cookieDismissTimer));
-  // Hard stop after 90 seconds — if still not gone, give up
-  setTimeout(() => clearInterval(_cookieDismissTimer), 90000);
+  setTimeout(() => clearInterval(_cookieDismissTimer), 60000);
 
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);

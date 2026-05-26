@@ -4565,8 +4565,11 @@ async function dismissCookieBanner(page: Page): Promise<void> {
   // may not pick up.  Instead, get the button's bounding rect from the DOM and
   // send a real Puppeteer mouse click (CDP Input.dispatchMouseEvent) which the
   // browser treats identically to a real user interaction.
+  // Exact whitelist only — never txt.includes(t) which would match cookie
+  // category toggles ("Functional cookies", "Analytics cookies", etc.)
   const ACCEPT_TEXTS = [
     "allow all cookies",
+    "accept all cookies",
     "allow essential and optional cookies",
     "accept all",
     "accept cookies",
@@ -4586,12 +4589,7 @@ async function dismissCookieBanner(page: Page): Promise<void> {
         const r = btn.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) return false;
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-        // Primary: matches known accept phrases (incl. "allow all", "accept all" standalone)
-        if (texts.some(t => txt === t || txt.includes(t))) return true;
-        // Secondary: "allow all" / "accept all" when page has cookie context
-        if (/^(allow all|accept all)$/.test(txt) &&
-            (document.body.innerText || "").toLowerCase().includes("cookie")) return true;
-        return false;
+        return texts.indexOf(txt) !== -1;
       }
       // 1. Try Instagram's own data attribute first
       const attrBtn = document.querySelector<HTMLElement>('[data-cookiebanner="accept_button"]');
