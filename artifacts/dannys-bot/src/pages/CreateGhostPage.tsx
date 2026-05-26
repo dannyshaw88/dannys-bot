@@ -8,7 +8,7 @@ import { useProxies } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
   Ghost, ShieldCheck, Flame, Globe, Monitor,
-  Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus,
+  Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -187,20 +187,20 @@ export function CreateGhostPage() {
   // Browser
   const [browserState, setBrowserState]   = useState<BrowserState>("closed");
   const [activeProxyLabel, setActiveProxyLabel] = useState<string>("");
+  // true when running inside the Electron desktop app (native detached window)
+  const [isNative, setIsNative] = useState(false);
 
   const isOpen = browserState === "open";
 
-  // On mount, check if the ghost browser is already running on the server.
-  // Replit's preview panel reloads the React app frequently, which resets all
-  // local state to "closed". This call restores the correct state so the
-  // BrowserPanel reconnects to the live session instead of showing "not started".
+  // On mount, detect Electron mode and check if the ghost browser is already running.
   useEffect(() => {
-    fetch("/api/signup/browser/status")
-      .then(r => r.json())
-      .then((data: { running: boolean }) => {
-        if (data.running) setBrowserState("open");
-      })
-      .catch(() => {});
+    Promise.all([
+      fetch("/api/is-electron").then(r => r.json()).catch(() => ({ electron: false })),
+      fetch("/api/signup/browser/status").then(r => r.json()).catch(() => ({ running: false })),
+    ]).then(([elData, statusData]) => {
+      setIsNative(!!(elData as any).electron);
+      if ((statusData as any).running) setBrowserState("open");
+    });
   }, []);
 
   // Resolve proxy config for the open call
@@ -463,9 +463,35 @@ export function CreateGhostPage() {
         {/* ── Right: Browser ── */}
         <div className={cn(
           "flex-1 min-w-0 rounded-lg border border-border overflow-hidden flex flex-col",
-          !isOpen && "items-center justify-center bg-muted/20"
+          (!isOpen || isNative) && "items-center justify-center bg-muted/20"
         )}>
-          {isOpen ? (
+          {isOpen && isNative ? (
+            /* Electron: browser is a detached native window — no embedded panel */
+            <div className="flex flex-col items-center justify-center gap-4 text-center p-8">
+              <div className="w-20 h-20 rounded-3xl bg-green-50 dark:bg-green-950/40 flex items-center justify-center">
+                <Monitor className="w-10 h-10 text-green-600" />
+              </div>
+              <div className="space-y-1.5 max-w-xs">
+                <p className="text-base font-semibold text-foreground">Browser is open</p>
+                <p className="text-sm text-muted-foreground">
+                  The Ghost Browser is running as its own window. Check your taskbar to find it.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                onClick={() => fetch("/api/profiles/-1/eb-input", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ type: "navigate", url: "https://www.instagram.com/" }),
+                }).catch(() => {})}
+              >
+                <ExternalLink className="w-4 h-4" />
+                Bring Window to Front
+              </Button>
+            </div>
+          ) : isOpen ? (
+            /* Dev / non-Electron: embedded Puppeteer screencast */
             <BrowserPanel
               profileId={0}
               userAgent={activeUA.embedded}

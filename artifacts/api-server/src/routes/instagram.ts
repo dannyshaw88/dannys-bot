@@ -2008,6 +2008,7 @@ export async function registerInstagramRoutes(
   });
 
   // Signup browser input — routes mouse/keyboard/nav commands to the signup Puppeteer page
+  // (only used in non-Electron / Puppeteer-screencast mode)
   app.post("/api/signup/browser/input", async (req, res) => {
     try {
       await signupBrowserInput(req.body as any);
@@ -2017,8 +2018,39 @@ export async function registerInstagramRoutes(
     }
   });
 
-  // Open the standalone signup browser (user-driven EB signup)
+  // ── Is-Electron probe — used by the frontend to decide which UI to show ──
+  app.get("/api/is-electron", (_req, res) => {
+    res.json({ electron: !!process.env.EB_IPC_PORT });
+  });
+
+  // Open the standalone signup / Ghost browser.
+  // In Electron: opens profileId=-1 as a native detached BrowserWindow (same as
+  //              every other account EB — no embedded screencast).
+  // Otherwise:   falls back to the Puppeteer + CDP screencast pipeline.
   app.post("/api/signup/browser/open", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      try {
+        const { proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent } = req.body as any;
+        const body = {
+          profileId: -1,
+          username: "Ghost",
+          proxy: proxyHost && proxyPort
+            ? { host: proxyHost, port: Number(proxyPort), user: proxyUsername ?? undefined, pass: proxyPassword ?? undefined }
+            : undefined,
+          userAgent: userAgent ?? undefined,
+        };
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(body),
+        });
+        return res.json({ ok: true });
+      } catch (err: any) {
+        return res.status(500).json({ ok: false, error: err?.message });
+      }
+    }
+    // Non-Electron: Puppeteer screencast
     try {
       const { proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent } = req.body as any;
       const result = await openSignupBrowser({ proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent });
@@ -2029,12 +2061,35 @@ export async function registerInstagramRoutes(
   });
 
   // Status check — lets the frontend detect a running browser after a page reload
-  app.get("/api/signup/browser/status", (_req, res) => {
-    res.json({ running: isSignupBrowserOpen() });
+  app.get("/api/signup/browser/status", async (_req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${ipcPort}/eb/state?profileId=-1`);
+        const data = await r.json().catch(() => ({ open: false })) as any;
+        return res.json({ running: !!data.open, native: true });
+      } catch {
+        return res.json({ running: false, native: true });
+      }
+    }
+    res.json({ running: isSignupBrowserOpen(), native: false });
   });
 
-  // Close the standalone signup browser
+  // Close the standalone signup / Ghost browser
   app.post("/api/signup/browser/close", async (_req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      try {
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/close`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ profileId: -1 }),
+        });
+        return res.json({ ok: true });
+      } catch (err: any) {
+        return res.status(500).json({ ok: false, error: err?.message });
+      }
+    }
     try {
       await closeSignupBrowser();
       res.json({ ok: true });
@@ -2043,8 +2098,21 @@ export async function registerInstagramRoutes(
     }
   });
 
-  // Reset signup browser — close + wipe persistent data dir (fresh device identity)
+  // Reset signup / Ghost browser — wipe session so next open is a fresh device identity
   app.post("/api/signup/browser/reset", async (_req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      try {
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/wipe`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ profileId: -1 }),
+        });
+        return res.json({ ok: true });
+      } catch (err: any) {
+        return res.status(500).json({ ok: false, error: err?.message });
+      }
+    }
     try {
       await resetSignupBrowser();
       res.json({ ok: true });

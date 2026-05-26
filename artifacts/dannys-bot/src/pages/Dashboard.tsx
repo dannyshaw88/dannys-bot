@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.566",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser now opens as a proper detached native window (same as account EBs) instead of an embedded screencast panel." },
+      { category: "Fix", text: "Cookie consent dialog on newly opened EBs is now auto-dismissed reliably regardless of how many browser windows are open simultaneously." },
+    ],
+  },
+  {
     version: "1.0.564",
     date: "26 May 2026",
     items: [

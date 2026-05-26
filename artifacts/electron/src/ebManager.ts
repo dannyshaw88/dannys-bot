@@ -702,6 +702,41 @@ export async function openEbWindow(opts: {
   win.webContents.on("dom-ready",       () => injectPageUtils());
   win.webContents.on("did-finish-load", () => injectPageUtils());
 
+  // ── Main-process cookie banner auto-dismiss ───────────────────────────────
+  // Uses sendInputEvent (real OS-level input) rather than a synthetic JS
+  // .click() so Instagram's React handlers respond reliably even when many
+  // EB windows are open simultaneously and JavaScript timing is under pressure.
+  // Runs every 800 ms, clears itself once the banner is dismissed.
+  const _cookieDismissTimer = setInterval(async () => {
+    if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
+    try {
+      const btnPos = await win.webContents.executeJavaScript(`(() => {
+        const TEXTS = /allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
+        const btn = document.querySelector('[data-cookiebanner="accept_button"]')
+          || document.querySelector('[data-testid="cookie-policy-banner-accept"]')
+          || Array.from(document.querySelectorAll('button,[role="button"]')).find(b => {
+            const t = (b.innerText||b.textContent||'').trim();
+            return TEXTS.test(t) && b.getBoundingClientRect().width > 0;
+          });
+        if (!btn) return null;
+        const r = btn.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return null;
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+      })()`).catch(() => null);
+      if (btnPos && typeof (btnPos as any).x === "number") {
+        const { x, y } = btnPos as { x: number; y: number };
+        win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+        await new Promise(r => setTimeout(r, 60));
+        win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
+        console.log(`[ebManager:${profileId}] Cookie banner dismissed via sendInputEvent at (${x}, ${y})`);
+        clearInterval(_cookieDismissTimer);
+      }
+    } catch {}
+  }, 800);
+  win.once("closed", () => clearInterval(_cookieDismissTimer));
+  // Stop trying after 90 seconds — if the banner isn't gone by then, give up
+  setTimeout(() => clearInterval(_cookieDismissTimer), 90000);
+
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
     // Push the error to the server log AND to the address bar relay so it's visible
