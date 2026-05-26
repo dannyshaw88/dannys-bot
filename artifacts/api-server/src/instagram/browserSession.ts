@@ -6110,12 +6110,15 @@ export async function openSignupBrowser(opts?: {
     }
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    // Auto-dismiss cookie consent banner only. Runs in the background so the
-    // function returns immediately and the stream starts right away.
-    // After the banner is dismissed the EB stays on instagram.com — no redirect.
+    // Auto-dismiss cookie consent banner only. Two attempts (at 1 s and 2.5 s)
+    // are enough to catch the banner on first load. We deliberately avoid 10×
+    // rapid retries because accepting cookies triggers an Instagram redirect —
+    // firing again mid-redirect clicks random elements and causes the "constantly
+    // refreshing" loop the user sees. Two tries with a gap between them handles
+    // both a slow-loading banner and a post-redirect banner without racing.
     (async () => {
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 500));
+      for (let i = 0; i < 2; i++) {
+        await new Promise(r => setTimeout(r, i === 0 ? 1000 : 1500));
         if (!_signupPage || (_signupPage as any).isClosed?.()) return;
         await dismissCookieBanner(_signupPage).catch(() => {});
       }

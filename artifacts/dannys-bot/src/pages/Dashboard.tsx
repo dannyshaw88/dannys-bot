@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.555",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Device picker: the picker now shows the correct 86 curated devices instead of a 1,000-entry list with hundreds of duplicate Samsung models." },
+      { category: "Fix", text: "Create Account browser: reduced the cookie-banner dismissal loop from 10 rapid retries to 2 spaced attempts so accepting cookies no longer triggers constant page refreshing." },
+      { category: "Fix", text: "Embedded browser: mouse movement is now throttled to 20 updates per second — previously the unthrottled mousemove flood could jam Puppeteer's command queue and cause Chrome to become unresponsive after a few minutes of use." },
+    ],
+  },
+  {
     version: "1.0.554",
     date: "26 May 2026",
     items: [

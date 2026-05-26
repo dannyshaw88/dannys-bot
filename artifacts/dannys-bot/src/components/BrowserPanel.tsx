@@ -603,8 +603,12 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     canvasRef.current?.focus();
   };
 
+  const lastMouseMoveRef = useRef<number>(0);
   const onCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (status !== "connected") return;
+    const now = Date.now();
+    if (now - lastMouseMoveRef.current < 50) return;
+    lastMouseMoveRef.current = now;
     const { x, y } = scale(e);
     send({ type: "mousemove", x, y });
   };
