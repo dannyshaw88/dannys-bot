@@ -177,8 +177,8 @@ export function Sidebar() {
         <div className="bg-background rounded-lg p-3 border border-border">
           <p className="text-xs font-medium text-foreground">System Status</p>
           <div className="flex items-center mt-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
-            <span className="text-xs text-muted-foreground">All services operational</span>
+            <span className="w-2 h-2 rounded-full bg-amber-400 mr-2"></span>
+            <span className="text-xs text-muted-foreground">In Development</span>
           </div>
         </div>
       </div>

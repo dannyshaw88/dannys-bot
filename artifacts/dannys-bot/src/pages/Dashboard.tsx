@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.560",
+    date: "26 May 2026",
+    items: [
+      { category: "UI", text: "System Status indicator in the sidebar now shows amber 'In Development' instead of green 'All services operational'." },
+    ],
+  },
+  {
       version: "1.0.559",
       date: "26 May 2026",
       items: [
