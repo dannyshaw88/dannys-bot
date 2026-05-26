@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.568",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser (Create-a-Ghost) now uses a completely fresh in-memory browser session every time it opens — no cookies, IndexedDB, cache, or any other state can carry over from a previous session, eliminating the device leak that linked new accounts to each other." },
+      { category: "Fix", text: "Cookie banner: added IndexedDB and File System to the storage clear list on every session wipe — Instagram stores its device token (mid) in IndexedDB as a backup and was silently restoring it after cookie clears." },
+    ],
+  },
+  {
     version: "1.0.567",
     date: "26 May 2026",
     items: [

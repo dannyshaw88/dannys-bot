@@ -120,9 +120,20 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
 
   // ── Cookie consent banner dismiss ────────────────────────────────────────
   if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
-    var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
-    var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]')||Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});
+    var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional/i;
+    // Selector 1: legacy data-attribute buttons
+    var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+    // Selector 2: text-based match across all buttons/role=button elements
+    if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});}
+    // Selector 3: last primary-action button inside any modal/dialog (Bloks-based cookie dialog)
+    if(!btn){var dlg=document.querySelector('[role="dialog"]');if(dlg){var btns=Array.from(dlg.querySelectorAll('button,[role="button"]')).filter(function(b){return b.getBoundingClientRect().width>0;});if(btns.length>0)btn=btns[btns.length-1];}}
+    // Selector 4: aria-label fallback
+    if(!btn){btn=document.querySelector('button[aria-label*="Allow"],button[aria-label*="Accept"],button[aria-label*="allow"],button[aria-label*="accept"]');}
     if(btn){
+      // Fire the full pointer+mouse event sequence that React event delegation listens to
+      try{btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+      try{btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+      try{btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
       btn.click();
       clearInterval(window.__eq_cookie_tick);
       window.__eq_cookie_tick=null;
@@ -150,8 +161,16 @@ interface EbEntry {
   win: BrowserWindow;
   username: string;
   proxy?: { host: string; port: number; user?: string; pass?: string };
+  partition: string;
 }
 export const ebMap = new Map<number, EbEntry>();
+
+// Return the Electron session partition name for a profile.
+// For regular accounts this is always 'persist:eb-{pid}'.
+// For the Ghost (pid=-1) it varies per session — look it up in ebMap.
+function ebPartition(pid: number): string {
+  return ebMap.get(pid)?.partition ?? `persist:eb-${pid}`;
+}
 // Native toolbar BrowserView per profile — floats above all page content.
 const toolbarViewMap = new Map<number, BrowserView>();
 
@@ -373,7 +392,7 @@ async function doAutoLogin(
   twoFAKey: string,
 ): Promise<{ ok: boolean; message: string }> {
   const wc  = win.webContents;
-  const ses = electronSession.fromPartition(`persist:eb-${profileId}`);
+  const ses = electronSession.fromPartition(ebPartition(profileId));
   const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
   // Navigate to login page
@@ -512,7 +531,7 @@ export async function openEbWindow(opts: {
     // If the current page is a chrome error or about:blank, navigate back to Instagram
     const currentUrl: string = existing.win.webContents.getURL();
     if (!currentUrl || currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank") {
-      const existingSes = electronSession.fromPartition(`persist:eb-${profileId}`);
+      const existingSes = electronSession.fromPartition(existing.partition);
       const existingSessionCks = await existingSes.cookies.get({ name: "sessionid", domain: ".instagram.com" });
       existing.win.webContents.loadURL(
         existingSessionCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
@@ -521,7 +540,13 @@ export async function openEbWindow(opts: {
     return;
   }
 
-  const partition = `persist:eb-${profileId}`;
+  // Ghost browser (profileId=-1) always gets a completely fresh in-memory session
+  // (no 'persist:' prefix → Chromium never writes cookies, IndexedDB, cache, or
+  //  any other state to disk → zero leakage into the next Ghost session).
+  // Regular account EBs keep 'persist:eb-{id}' so their session survives app restarts.
+  const partition = profileId === -1
+    ? `eb-ghost-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    : `persist:eb-${profileId}`;
   const ses = electronSession.fromPartition(partition);
 
   // Configure proxy
@@ -584,7 +609,7 @@ export async function openEbWindow(opts: {
   }
 
   // Store in map
-  ebMap.set(profileId, { win, username, proxy });
+  ebMap.set(profileId, { win, username, proxy, partition });
 
   // Chrome-error recovery: auto-navigate back to Instagram when the page hits
   // chrome-error://. This handles ERR_TOO_MANY_REDIRECTS (Instagram's post-2FA
@@ -703,33 +728,88 @@ export async function openEbWindow(opts: {
   win.webContents.on("did-finish-load", () => injectPageUtils());
 
   // ── Main-process cookie banner auto-dismiss ───────────────────────────────
-  // Uses sendInputEvent (real OS-level input) rather than a synthetic JS
-  // .click() so Instagram's React handlers respond reliably even when many
-  // EB windows are open simultaneously and JavaScript timing is under pressure.
-  // Runs every 800 ms, clears itself once the banner is dismissed.
+  // Primary path: find the button's CSS-pixel centre → webContents.focus() →
+  // sendInputEvent (real OS-level click).  If the button is still visible
+  // 300 ms later (sendInputEvent silently missed — e.g. window wasn't active)
+  // we fall back to dispatching PointerEvent + MouseEvent + .click() from JS.
+  // Runs every 800 ms, clears itself once the banner is gone.
+  const _COOKIE_SELECTOR_JS = `(() => {
+    const TEXTS = /allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional/i;
+    let btn = document.querySelector('[data-cookiebanner="accept_button"]')
+           || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+    if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(b => {
+      const t = (b.innerText||b.textContent||'').trim();
+      return TEXTS.test(t) && b.getBoundingClientRect().width > 0;
+    });
+    if (!btn) {
+      const dlg = document.querySelector('[role="dialog"]');
+      if (dlg) {
+        const visible = Array.from(dlg.querySelectorAll('button,[role="button"]')).filter(b => b.getBoundingClientRect().width > 0);
+        if (visible.length) btn = visible[visible.length - 1];
+      }
+    }
+    if (!btn) btn = document.querySelector('button[aria-label*="Allow"],button[aria-label*="Accept"],button[aria-label*="allow"],button[aria-label*="accept"]');
+    if (!btn) return null;
+    const r = btn.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  })()`;
+
+  const _COOKIE_CLICK_JS = `(() => {
+    const TEXTS = /allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional/i;
+    let btn = document.querySelector('[data-cookiebanner="accept_button"]')
+           || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+    if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(b => {
+      const t = (b.innerText||b.textContent||'').trim();
+      return TEXTS.test(t) && b.getBoundingClientRect().width > 0;
+    });
+    if (!btn) {
+      const dlg = document.querySelector('[role="dialog"]');
+      if (dlg) {
+        const visible = Array.from(dlg.querySelectorAll('button,[role="button"]')).filter(b => b.getBoundingClientRect().width > 0);
+        if (visible.length) btn = visible[visible.length - 1];
+      }
+    }
+    if (!btn) btn = document.querySelector('button[aria-label*="Allow"],button[aria-label*="Accept"],button[aria-label*="allow"],button[aria-label*="accept"]');
+    if (!btn) return false;
+    try { btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
+    try { btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
+    try { btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
+    btn.click();
+    return true;
+  })()`;
+
+  let _cookieDismissAttempts = 0;
   const _cookieDismissTimer = setInterval(async () => {
     if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
     try {
-      const btnPos = await win.webContents.executeJavaScript(`(() => {
-        const TEXTS = /allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla/i;
-        const btn = document.querySelector('[data-cookiebanner="accept_button"]')
-          || document.querySelector('[data-testid="cookie-policy-banner-accept"]')
-          || Array.from(document.querySelectorAll('button,[role="button"]')).find(b => {
-            const t = (b.innerText||b.textContent||'').trim();
-            return TEXTS.test(t) && b.getBoundingClientRect().width > 0;
-          });
-        if (!btn) return null;
-        const r = btn.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) return null;
-        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-      })()`).catch(() => null);
+      const btnPos = await win.webContents.executeJavaScript(_COOKIE_SELECTOR_JS).catch(() => null);
       if (btnPos && typeof (btnPos as any).x === "number") {
         const { x, y } = btnPos as { x: number; y: number };
+        // Focus the renderer so sendInputEvent is not dropped on Windows
+        win.webContents.focus();
         win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
-        await new Promise(r => setTimeout(r, 60));
-        win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
-        console.log(`[ebManager:${profileId}] Cookie banner dismissed via sendInputEvent at (${x}, ${y})`);
-        clearInterval(_cookieDismissTimer);
+        await new Promise(r => setTimeout(r, 80));
+        win.webContents.sendInputEvent({ type: "mouseUp",   x, y, button: "left", clickCount: 1 });
+        console.log(`[ebManager:${profileId}] Cookie banner: sendInputEvent at (${x}, ${y}) attempt #${++_cookieDismissAttempts}`);
+        // 350 ms later: verify the button is gone; if not, fire JS fallback too
+        await new Promise(r => setTimeout(r, 350));
+        if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
+        const stillThere = await win.webContents.executeJavaScript(_COOKIE_SELECTOR_JS).catch(() => null);
+        if (!stillThere) {
+          console.log(`[ebManager:${profileId}] Cookie banner dismissed (sendInputEvent confirmed gone)`);
+          clearInterval(_cookieDismissTimer);
+        } else {
+          // sendInputEvent didn't land — fire JS PointerEvent fallback
+          const clicked = await win.webContents.executeJavaScript(_COOKIE_CLICK_JS).catch(() => false);
+          if (clicked) console.log(`[ebManager:${profileId}] Cookie banner: JS PointerEvent fallback fired`);
+        }
+      } else {
+        // Log once every ~5 s so we can see what's happening without spam
+        if (_cookieDismissAttempts % 6 === 0) {
+          console.log(`[ebManager:${profileId}] Cookie banner: no button found yet (tick ${_cookieDismissAttempts})`);
+        }
+        _cookieDismissAttempts++;
       }
     } catch {}
   }, 800);
@@ -851,6 +931,9 @@ export async function openEbWindow(opts: {
                   document.querySelector('[class*="cookie"] button:last-of-type')
                 );
                 if (cookieBtn) {
+                  try{cookieBtn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+                  try{cookieBtn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+                  try{cookieBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
                   cookieBtn.click();
                   await wait(1000); // wait for the banner to dismiss
                   break;
@@ -1272,9 +1355,9 @@ function setupToolbarIpc(): void {
         foundWin.destroy();
         await new Promise(r => setTimeout(r, 200));
         ebMap.delete(foundPid);
-        const ses = electronSession.fromPartition(`persist:eb-${foundPid}`);
+        const ses = electronSession.fromPartition(ebPartition(foundPid));
         await ses.clearStorageData({
-          storages: ["cookies", "localstorage", "cachestorage", "shadercache", "websql", "serviceworkers"],
+          storages: ["cookies", "localstorage", "indexdb", "filesystem", "cachestorage", "shadercache", "websql", "serviceworkers"],
         }).catch(() => {});
         const fp = cookieFilePath(foundPid);
         try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch {}
@@ -1334,7 +1417,7 @@ export function startEbIpcServer(
       // ── GET /eb/cookies ────────────────────────────────────────────────────────
       if (req.method === "GET" && u.pathname === "/eb/cookies") {
         const pid = Number(u.searchParams.get("profileId"));
-        const ses = electronSession.fromPartition(`persist:eb-${pid}`);
+        const ses = electronSession.fromPartition(ebPartition(pid));
         const c1  = await ses.cookies.get({ domain: ".instagram.com" });
         const c2  = await ses.cookies.get({ domain:  "instagram.com" });
         const c3  = await ses.cookies.get({ domain: ".i.instagram.com" });
@@ -1378,7 +1461,7 @@ export function startEbIpcServer(
         const e = ebMap.get(pid);
         if (e && !e.win.isDestroyed()) {
           // Save cookies before closing
-          const ses = electronSession.fromPartition(`persist:eb-${pid}`);
+          const ses = electronSession.fromPartition(ebPartition(pid));
           await saveCookiesToFile(pid, ses);
           // destroy() bypasses the "close" event handler that hides the window,
           // so this actually removes the window rather than hiding it to tray.
@@ -1407,7 +1490,7 @@ export function startEbIpcServer(
 
       // ── POST /eb/set-cookies ───────────────────────────────────────────────────
       if (req.method === "POST" && u.pathname === "/eb/set-cookies") {
-        const ses = electronSession.fromPartition(`persist:eb-${pid}`);
+        const ses = electronSession.fromPartition(ebPartition(pid));
         for (const c of (body.cookies ?? [])) {
           await ses.cookies.set({
             url:      "https://www.instagram.com",
@@ -1424,7 +1507,7 @@ export function startEbIpcServer(
 
       // ── POST /eb/delete-cookies ────────────────────────────────────────────────
       if (req.method === "POST" && u.pathname === "/eb/delete-cookies") {
-        const ses = electronSession.fromPartition(`persist:eb-${pid}`);
+        const ses = electronSession.fromPartition(ebPartition(pid));
         for (const name of (body.names ?? [])) {
           await ses.cookies.remove("https://www.instagram.com", name).catch(() => {});
           await ses.cookies.remove("https://instagram.com",     name).catch(() => {});
@@ -1455,7 +1538,7 @@ export function startEbIpcServer(
       // Opens hidden window → loads existing cookies → auto-login → extract cookies
       // → destroy window → return { ok, message, cookies }.
       if (req.method === "POST" && u.pathname === "/eb/silent-verify") {
-        const partition = `persist:eb-${pid}`;
+        const partition = ebPartition(pid);
         const ses = electronSession.fromPartition(partition);
         if (body.proxy) {
           await ses.setProxy({ proxyRules: `${body.proxy.host}:${body.proxy.port}` });
@@ -1590,9 +1673,15 @@ export function startEbIpcServer(
         }
         ebMap.delete(pid);
 
-        const ses = electronSession.fromPartition(`persist:eb-${pid}`);
+        const ses = electronSession.fromPartition(ebPartition(pid));
+        // indexdb and filesystem are intentionally included — Instagram stores
+        // device tokens (mid, ig_did) in IndexedDB as a backup. Omitting indexdb
+        // from the clear list causes those tokens to survive the wipe and get
+        // re-set as cookies the next time Instagram loads, leaking the device
+        // identity into the next session. This was the root cause of Ghost browser
+        // sessions being linked to the same device after "Start from Fresh".
         await ses.clearStorageData({
-          storages: ["cookies", "localstorage", "cachestorage", "shadercache", "websql", "serviceworkers"],
+          storages: ["cookies", "localstorage", "indexdb", "filesystem", "cachestorage", "shadercache", "websql", "serviceworkers"],
         }).catch(() => {});
 
         const fp = cookieFilePath(pid);
