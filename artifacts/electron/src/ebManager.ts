@@ -119,15 +119,28 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
   }
 
   // ── Cookie consent banner dismiss ────────────────────────────────────────
-  // Selectors must be SPECIFIC — never "last button in any dialog" because
-  // Instagram shows Save-Login/2FA dialogs that would cause infinite click loops.
+  // Safe discriminator: any button whose text INCLUDES the word "cookie" (case-
+  // insensitive) that does NOT say "decline/reject/refuse/necessary only".
+  // No Instagram Save-Login, 2FA, or other persistent dialog ever contains the
+  // word "cookie" — so this cannot cause click loops on other dialogs.
   if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
-    var ACCEPT=/^(allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional cookies)$/i;
+    function _isCookieAcceptBtn(b){
+      if(!b||!b.getBoundingClientRect||b.getBoundingClientRect().width<=0)return false;
+      var t=(b.innerText||b.textContent||'').trim().toLowerCase();
+      return t.includes('cookie')&&!/decline|reject|refuse|necessary only|essential only/.test(t);
+    }
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
-    if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});}
+    if(!btn){
+      var container=document.querySelector('[data-cookiebanner]')||document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
+      if(container){btn=Array.from(container.querySelectorAll('button,[role="button"]')).find(_isCookieAcceptBtn)||null;}
+    }
+    if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"]')).find(_isCookieAcceptBtn)||null;}
     if(btn){
+      try{btn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window}));}catch(e){}
       try{btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+      try{btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));}catch(e){}
       try{btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+      try{btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}
       try{btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
       btn.click();
       clearInterval(window.__eq_cookie_tick);
@@ -730,19 +743,29 @@ export async function openEbWindow(opts: {
   // "last button in any dialog" — Instagram shows Save-Login, 2FA, and other
   // persistent dialogs that would cause infinite click loops.
   const _COOKIE_BANNER_JS = `(() => {
-    const TEXTS = /^(allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional cookies)$/i;
+    function isCookieAcceptBtn(b) {
+      if (!b || !b.getBoundingClientRect) return false;
+      const r = b.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      const t = (b.innerText||b.textContent||'').trim().toLowerCase();
+      return t.includes('cookie') && !/decline|reject|refuse|necessary only|essential only/.test(t);
+    }
     let btn = document.querySelector('[data-cookiebanner="accept_button"]')
            || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
-    if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(b => {
-      const t = (b.innerText||b.textContent||'').trim();
-      return TEXTS.test(t) && b.getBoundingClientRect().width > 0;
-    });
+    if (!btn) {
+      const container = document.querySelector('[data-cookiebanner]')
+                     || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
+      if (container) btn = Array.from(container.querySelectorAll('button,[role="button"]')).find(isCookieAcceptBtn) || null;
+    }
+    if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(isCookieAcceptBtn) || null;
     if (!btn) return null;
     const r = btn.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return null;
     // Fire the full event sequence that React listens to
+    try { btn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     try { btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
+    try { btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     try { btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
+    try { btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     try { btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     btn.click();
     return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
@@ -868,24 +891,31 @@ export async function openEbWindow(opts: {
               const wait = ms => new Promise(r => setTimeout(r, ms));
 
               // ── Step 1: dismiss cookie consent banner if present ──────────────
-              // Instagram shows a GDPR cookie dialog in many regions. It sits on
-              // top of the login form. We must click "Allow all cookies" before
-              // the login inputs become interactive.
-              // Try for up to 5 s; skip if not present.
+              // Safe discriminator: button text includes "cookie" but not
+              // "decline/reject/refuse" — no Login/2FA/Save dialog uses that word.
+              function _isCkBtn(b) {
+                if (!b || !b.getBoundingClientRect) return false;
+                if (b.getBoundingClientRect().width <= 0) return false;
+                const t = (b.innerText||b.textContent||'').trim().toLowerCase();
+                return t.includes('cookie') && !/decline|reject|refuse|necessary only|essential only/.test(t);
+              }
               for (let t = 0; t < 10; t++) {
-                // Selector set covers current and past Instagram cookie banners
                 const cookieBtn = (
-                  document.querySelector('button[data-cookiebanner="accept_button"]') ||
-                  [...document.querySelectorAll('button')].find(b =>
-                    /allow all cookies|accept all|consenti a|accepter tous|alle zulassen|aceptar todo|tillåt alla/i
-                      .test(b.textContent)
-                  ) ||
+                  document.querySelector('[data-cookiebanner="accept_button"]') ||
                   document.querySelector('[data-testid="cookie-policy-banner-accept"]') ||
-                  document.querySelector('[class*="cookie"] button:last-of-type')
+                  (() => {
+                    const c = document.querySelector('[data-cookiebanner]') || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
+                    if (c) return Array.from(c.querySelectorAll('button,[role="button"]')).find(_isCkBtn) || null;
+                    return null;
+                  })() ||
+                  Array.from(document.querySelectorAll('button,[role="button"]')).find(_isCkBtn)
                 );
                 if (cookieBtn) {
+                  try{cookieBtn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window}));}catch(e){}
                   try{cookieBtn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+                  try{cookieBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));}catch(e){}
                   try{cookieBtn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+                  try{cookieBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}
                   try{cookieBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
                   cookieBtn.click();
                   await wait(1000); // wait for the banner to dismiss
@@ -1046,16 +1076,26 @@ function setupToolbarIpc(): void {
               el.dispatchEvent(new Event('change', { bubbles: true }));
             };
             // Dismiss cookie consent banner first (up to 5 s)
+            // Safe: matches any button containing "cookie" but not "decline/reject/refuse"
+            function _ckOk(b){if(!b||!b.getBoundingClientRect)return false;if(b.getBoundingClientRect().width<=0)return false;var t=(b.innerText||b.textContent||'').trim().toLowerCase();return t.includes('cookie')&&!/decline|reject|refuse|necessary only|essential only/.test(t);}
             for (let cb = 0; cb < 10; cb++) {
               const ckBtn = (
                 document.querySelector('[data-cookiebanner="accept_button"]') ||
                 document.querySelector('[data-testid="cookie-policy-banner-accept"]') ||
-                [...document.querySelectorAll('button,[role="button"]')].find(b =>
-                  /allow all cookies|accept all|alle zulassen|aceptar todo|accepter tout/i.test(b.textContent) &&
-                  b.getBoundingClientRect().width > 0
-                )
+                (()=>{const c=document.querySelector('[data-cookiebanner]')||document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');return c?Array.from(c.querySelectorAll('button,[role="button"]')).find(_ckOk)||null:null;})() ||
+                Array.from(document.querySelectorAll('button,[role="button"]')).find(_ckOk)
               );
-              if (ckBtn) { ckBtn.click(); await wait(800); break; }
+              if (ckBtn) {
+                try{ckBtn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window}));}catch(e){}
+                try{ckBtn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+                try{ckBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));}catch(e){}
+                try{ckBtn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
+                try{ckBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}
+                try{ckBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
+                ckBtn.click();
+                await wait(800);
+                break;
+              }
               await wait(500);
             }
             // Poll up to 10 × 300 ms for React to mount the login form

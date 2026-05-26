@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.571",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie banner auto-dismiss now uses a smarter detection rule: any button whose text includes the word 'cookie' (in any language variant) is matched, instead of a fixed list of exact phrases. This catches Instagram's current and future button wording without risking clicks on Save Login or 2FA dialogs." },
+    ],
+  },
+  {
     version: "1.0.570",
     date: "26 May 2026",
     items: [
