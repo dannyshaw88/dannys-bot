@@ -3901,7 +3901,6 @@ export async function createInstagramAccountViaApi(params: {
       }),
       cookieJar,
       proxyUrl,
-      forceNodeTls: true,
     });
     cookieJar = mergeCookies(cookieJar, launcherRes.cookies);
     step(`launcher/sync HTTP ${launcherRes.status} — cookies: [${launcherRes.cookies.map(c => c.split("=")[0]).join(", ") || "none"}]`);
@@ -3935,7 +3934,6 @@ export async function createInstagramAccountViaApi(params: {
       body: signBody({ id: guid, _uid: "0", server_config_retrieval: "1", _csrftoken: csrfToken, _uuid: guid, experiments: LOGIN_EXPERIMENTS }),
       cookieJar,
       proxyUrl,
-      forceNodeTls: true,
     });
     cookieJar = mergeCookies(cookieJar, syncRes.cookies);
     // CRITICAL: re-sync csrfToken from jar — qe/sync may have set a real csrftoken cookie.
@@ -3981,7 +3979,6 @@ export async function createInstagramAccountViaApi(params: {
       body: new URLSearchParams({ username, _uuid: guid, _csrftoken: csrfToken }).toString(),
       cookieJar,
       proxyUrl,
-      forceNodeTls: true,
     });
     const j = res.json;
     // Only merge cookies if we got a valid JSON API response — HTML 404 pages from some
@@ -4104,7 +4101,6 @@ export async function createInstagramAccountViaApi(params: {
       body: currentBody,
       cookieJar: createCookieJar,
       proxyUrl,
-      forceNodeTls: true,
     });
     cookieJar = mergeCookies(cookieJar, res.cookies);
     j = res.json;

@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.553",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account: the embedded browser now browses the Instagram homepage and explore page for ~60–90 seconds before signup, giving the device organic session history that Instagram requires before trusting a new account." },
+      { category: "Fix", text: "Create Account: all signup API calls now use the Android OkHttp4 TLS fingerprint instead of Node.js — eliminates the server-software TLS signal that caused Instagram to flag the environment as unrecognised." },
+    ],
+  },
+  {
     version: "1.0.552",
     date: "26 May 2026",
     items: [

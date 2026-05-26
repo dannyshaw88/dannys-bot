@@ -839,6 +839,37 @@ export async function harvestSignupCookiesFromEB(opts?: {
       if (poll.csrftoken) csrftoken = poll.csrftoken;
     }
 
+    // ── Warm-up: organic Instagram browsing to age the mid/ig_did session ─────
+    // A brand-new mid with zero activity is Instagram's clearest bot signal —
+    // real devices have months of browsing history on that mid before ever
+    // creating an account.  We browse the homepage and explore page for ~60–90 s
+    // to give this device organic activity before the API signup calls start.
+    // All navigation is wrapped in try/catch so failures are non-fatal.
+    {
+      const warmUpScroll = async (ms: number) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          try { await page.evaluate(() => { window.scrollBy(0, 80 + Math.random() * 200); }); } catch {}
+          await new Promise(r => setTimeout(r, 700 + Math.random() * 1100));
+        }
+      };
+      opts?.onStep?.("EB warm-up: browsing Instagram to build session history before signup...");
+      // Scroll homepage feed 25–40 s
+      try { await warmUpScroll(25000 + Math.random() * 15000); } catch {}
+      // Navigate to explore and scroll 20–35 s
+      try {
+        await page.goto("https://www.instagram.com/explore/", { waitUntil: "domcontentloaded", timeout: 15000 });
+        await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+        await warmUpScroll(20000 + Math.random() * 15000);
+      } catch {}
+      // Re-read cookies — warm-up browsing may have refreshed or added tokens
+      const postWarm = await readIgCookies();
+      if (postWarm.mid)       mid       = postWarm.mid;
+      if (postWarm.ig_did)    ig_did    = postWarm.ig_did;
+      if (postWarm.csrftoken) csrftoken = postWarm.csrftoken;
+      opts?.onStep?.("EB warm-up: Instagram session browsing complete ✓");
+    }
+
     // Build a clean cookie string array from whatever Instagram set
     const allCookies = await page.cookies(
       "https://www.instagram.com",
