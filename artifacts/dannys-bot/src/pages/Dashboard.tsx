@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.567",
+    date: "26 May 2026",
+    items: [
+      { category: "Feature", text: "Human Sessions — View Timeline Feed now has a cascading browsing chain: set a % to open posts from the feed, then a % to visit that post's author profile, then a % to scroll their profile feed (with post count), then a count and % to open individual posts from that profile." },
+    ],
+  },
+  {
     version: "1.0.566",
     date: "26 May 2026",
     items: [

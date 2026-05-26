@@ -2579,6 +2579,93 @@ class AutomationEngine {
           }
           } // end likeCount > 0
         }
+
+        // ── Click on a % of viewed feed posts ────────────────────────────────
+        // Simulates a user tapping into a post they noticed while scrolling.
+        // Each clicked post can then cascade into: visit profile → scroll their
+        // feed → open individual posts from that feed.
+        const clickPctMin = Number(s.clickPostPercentMin ?? 0);
+        const clickPctMax = Number(s.clickPostPercentMax ?? 0);
+        if (viewed > 0 && clickPctMax > 0 && vtfResult.items.length > 0) {
+          const clickPct     = randInt(clickPctMin, clickPctMax);
+          const exactClick   = vtfResult.items.length * clickPct / 100;
+          const clickCount   = Math.floor(exactClick) + (Math.random() < (exactClick % 1) ? 1 : 0);
+          if (clickCount > 0) {
+            const toClick = [...vtfResult.items].sort(() => 0.5 - Math.random()).slice(0, clickCount);
+            for (const item of toClick) {
+              try {
+                await client.viewFeedPost(item.mediaId);
+                console.log(`[engine] @${profile.username}: 🔍 opened post ${item.shortcode} by @${item.username} from feed`);
+                this.logAction(profile.id, tool.id, "view_post", item.username, item.shortcode, "post", "ok", "Opened post from feed");
+              } catch (e: any) {
+                if (await checkSessionErr(e, "view_post")) return;
+                console.warn(`[engine] @${profile.username}: view post error: ${e?.message}`);
+                continue;
+              }
+
+              // ── Visit the post author's profile ────────────────────────────
+              const vpPctMin = Number(s.viewPostProfilePercentMin ?? 0);
+              const vpPctMax = Number(s.viewPostProfilePercentMax ?? 0);
+              if (vpPctMax > 0 && item.userId) {
+                const vpPct = randInt(vpPctMin, vpPctMax);
+                if (Math.random() * 100 >= vpPct) continue;
+                try {
+                  await client.visitUserProfile(item.userId);
+                  console.log(`[engine] @${profile.username}: 👤 visited profile of @${item.username}`);
+                  this.logAction(profile.id, tool.id, "visit_profile", item.username, "", "profile", "ok", `Visited @${item.username}'s profile`);
+                } catch (e: any) {
+                  if (await checkSessionErr(e, "visit_profile")) return;
+                  console.warn(`[engine] @${profile.username}: visit profile error: ${e?.message}`);
+                  continue;
+                }
+
+                // ── Scroll through the profile's post feed ──────────────────
+                const vfPctMin = Number(s.viewProfileFeedPercentMin ?? 0);
+                const vfPctMax = Number(s.viewProfileFeedPercentMax ?? 0);
+                if (vfPctMax > 0) {
+                  const vfPct = randInt(vfPctMin, vfPctMax);
+                  if (Math.random() * 100 < vfPct) {
+                    const profileFeedCount = randInt(
+                      s.viewProfileFeedCountMin ?? 3,
+                      s.viewProfileFeedCountMax ?? 8,
+                    );
+                    let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
+                    try {
+                      profilePosts = await client.viewUserFeed(item.userId, profileFeedCount);
+                      console.log(`[engine] @${profile.username}: 📋 scrolled ${profilePosts.length} post(s) on @${item.username}'s profile`);
+                      this.logAction(profile.id, tool.id, "view_profile_feed", item.username, "", "profile", "ok", `Scrolled ${profilePosts.length} post(s) on @${item.username}'s profile`);
+                    } catch (e: any) {
+                      if (await checkSessionErr(e, "view_profile_feed")) return;
+                      console.warn(`[engine] @${profile.username}: view profile feed error: ${e?.message}`);
+                    }
+
+                    // ── Open individual posts from the profile feed ───────────
+                    const vpPostPctMin = Number(s.viewProfilePostsPercentMin ?? 0);
+                    const vpPostPctMax = Number(s.viewProfilePostsPercentMax ?? 0);
+                    if (vpPostPctMax > 0 && profilePosts.length > 0) {
+                      const postViewMax  = randInt(s.viewProfilePostsCountMin ?? 1, s.viewProfilePostsCountMax ?? 3);
+                      const postViewPct  = randInt(vpPostPctMin, vpPostPctMax);
+                      let postsOpened = 0;
+                      for (const profilePost of profilePosts) {
+                        if (postsOpened >= postViewMax) break;
+                        if (Math.random() * 100 >= postViewPct) continue;
+                        try {
+                          await client.viewFeedPost(profilePost.mediaId);
+                          console.log(`[engine] @${profile.username}: 🖼 opened post ${profilePost.shortcode} from @${item.username}'s profile`);
+                          this.logAction(profile.id, tool.id, "view_profile_post", item.username, profilePost.shortcode, "post", "ok", `Opened post from @${item.username}'s profile`);
+                          postsOpened++;
+                        } catch (e: any) {
+                          if (await checkSessionErr(e, "view_profile_post")) return;
+                          console.warn(`[engine] @${profile.username}: view profile post error: ${e?.message}`);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
     );
 

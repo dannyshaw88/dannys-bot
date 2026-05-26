@@ -64,6 +64,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_reel_view",   label: "% of each reel to watch (min / max)",          settingKeys: ["reelWatchPercentMin","reelWatchPercentMax"] },
         { key: "vtf_like_delay",  label: "Delay between likes in sec (min / max)",       settingKeys: ["likeTimelinePostsDelayMin","likeTimelinePostsDelayMax"] },
         { key: "vtf_save_media",  label: "Save liked media (enabled + %)",               settingKeys: ["saveMediaEnabled","saveMediaPercent"] },
+        { key: "vtf_click_post",       label: "Click post % (min / max)",                settingKeys: ["clickPostPercentMin","clickPostPercentMax"] },
+        { key: "vtf_view_profile",     label: "Visit profile % (min / max)",             settingKeys: ["viewPostProfilePercentMin","viewPostProfilePercentMax"] },
+        { key: "vtf_profile_feed",     label: "View profile feed % + count (min / max)", settingKeys: ["viewProfileFeedPercentMin","viewProfileFeedPercentMax","viewProfileFeedCountMin","viewProfileFeedCountMax"] },
+        { key: "vtf_profile_posts",    label: "Open profile posts count + % (min / max)",settingKeys: ["viewProfilePostsCountMin","viewProfilePostsCountMax","viewProfilePostsPercentMin","viewProfilePostsPercentMax"] },
       ]},
       { key: "humanSession", label: "Human Session (Visit Profile)", description: "Core session order and cool-down", subOptions: [
         { key: "hs_enabled", label: "Enabled",                            settingKeys: ["humanSessionEnabled"] },
@@ -161,6 +165,18 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       saveMediaPercent: 20,
       likeTimelinePostsPercentMin: 0,
       likeTimelinePostsPercentMax: 0,
+      clickPostPercentMin: 0,
+      clickPostPercentMax: 0,
+      viewPostProfilePercentMin: 0,
+      viewPostProfilePercentMax: 0,
+      viewProfileFeedPercentMin: 0,
+      viewProfileFeedPercentMax: 0,
+      viewProfileFeedCountMin: 3,
+      viewProfileFeedCountMax: 8,
+      viewProfilePostsPercentMin: 0,
+      viewProfilePostsPercentMax: 0,
+      viewProfilePostsCountMin: 1,
+      viewProfilePostsCountMax: 3,
       repostEnabled: false,
       repostUseHikerApi: false,
       repostSourceUsername: "",
@@ -402,6 +418,78 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <Label className="text-xs text-muted-foreground">of liked saved</Label>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── Click Post → Visit Profile → View Feed → View Posts cascade ── */}
+        {!!settings.viewTimelineFeedEnabled && (
+          <div className="border-l-2 border-muted ml-1 pl-3 space-y-2.5 pt-1">
+
+            {/* Level 1: Click on Post % */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Click on Post%</span>
+              {pctInputs("clickPostPercentMin", "clickPostPercentMax")}
+              <span className="text-[10px] text-muted-foreground">chance to open a post from the feed</span>
+            </div>
+
+            {/* Level 2: Visit Profile % — shown when click% is set */}
+            {(settings.clickPostPercentMax ?? 0) > 0 && (
+              <div className="border-l-2 border-muted ml-1 pl-3 space-y-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">View Profile%</span>
+                  {pctInputs("viewPostProfilePercentMin", "viewPostProfilePercentMax")}
+                  <span className="text-[10px] text-muted-foreground">chance to visit the post author's profile</span>
+                </div>
+
+                {/* Level 3: View Profile's Feed % + Count — shown when view profile% is set */}
+                {(settings.viewPostProfilePercentMax ?? 0) > 0 && (
+                  <div className="border-l-2 border-muted ml-1 pl-3 space-y-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">View Profile's Feed%</span>
+                      {pctInputs("viewProfileFeedPercentMin", "viewProfileFeedPercentMax")}
+                      <span className="text-[10px] text-muted-foreground">chance to scroll their posts</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
+                        <Label className="text-xs text-muted-foreground">Min</Label>
+                        <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
+                          value={settings.viewProfileFeedCountMin ?? 3}
+                          onChange={(e) => setSettings({ ...settings, viewProfileFeedCountMin: Math.max(1, Number(e.target.value)) })}
+                        />
+                        <Label className="text-xs text-muted-foreground">Max</Label>
+                        <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
+                          value={settings.viewProfileFeedCountMax ?? 8}
+                          onChange={(e) => setSettings({ ...settings, viewProfileFeedCountMax: Math.max(1, Number(e.target.value)) })}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Level 4: View Posts count + % — shown when view feed% is set */}
+                    {(settings.viewProfileFeedPercentMax ?? 0) > 0 && (
+                      <div className="border-l-2 border-muted ml-1 pl-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">View Posts</span>
+                          <div className="flex items-center gap-1.5">
+                            <Label className="text-xs text-muted-foreground">Min</Label>
+                            <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
+                              value={settings.viewProfilePostsCountMin ?? 1}
+                              onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMin: Math.max(1, Number(e.target.value)) })}
+                            />
+                            <Label className="text-xs text-muted-foreground">Max</Label>
+                            <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
+                              value={settings.viewProfilePostsCountMax ?? 3}
+                              onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMax: Math.max(1, Number(e.target.value)) })}
+                            />
+                          </div>
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">at%</span>
+                          {pctInputs("viewProfilePostsPercentMin", "viewProfilePostsPercentMax")}
+                          <span className="text-[10px] text-muted-foreground">chance to open each one</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
