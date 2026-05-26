@@ -56,6 +56,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.554",
+    date: "26 May 2026",
+    items: [
+      { category: "Feature", text: "Account Settings: the API User Agent field is now a device picker grouped by brand — expand any brand to choose from all available models." },
+      { category: "Feature", text: "When you pick a device, both the API and embedded browser user agents are updated together automatically so they always match." },
+      { category: "Feature", text: "Picking a device shows a confirmation prompt and, on approval, fully resets the device identity — clears Device IDs, logs out the embedded browser session, and wipes all cookies so the account starts as a clean device." },
+      { category: "Fix", text: "Jarvee binary import: passwords were being imported incorrectly — fixed the field order detection so proxy passwords are no longer imported as Instagram passwords." },
+      { category: "Fix", text: "Jarvee binary import: 2FA secrets exported in grouped format (e.g. AAAA BBBB CCCC) are now correctly imported with spaces stripped." },
+      { category: "Fix", text: "Create Account embedded browser: removed a macro that was causing the browser to constantly refresh and redirect after accepting cookies." },
+    ],
+  },
+  {
     version: "1.0.553",
     date: "26 May 2026",
     items: [

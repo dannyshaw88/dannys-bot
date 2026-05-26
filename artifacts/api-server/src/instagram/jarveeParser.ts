@@ -89,7 +89,10 @@ const NUMERIC_RE = /^\d+$/;
 const SENT_DM_RE = /(?:Hey|Hiii|Hii|Hi|Heyy|Hows it going)/i;
 // TOTP 2FA secrets use base32 alphabet (A-Z, 2-7), typically 16-64 chars.
 // This discriminates them from base64 IG usernames (which contain lowercase/+//).
+// Jarvee sometimes exports them with spaces (grouped format, e.g. "RGG2 7WSL LXC3 K2HT").
+// We normalise (strip spaces) before testing so both forms are accepted.
 const TOTP_RE    = /^[A-Z2-7]{16,64}=*$/;
+function normaliseTOTP(s: string): string { return s.replace(/\s+/g, ""); }
 
 function decodeB64Username(s: string): string | null {
   if (!B64_RE.test(s) || s.length < 8 || s.length > 60) return null;
@@ -237,26 +240,63 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
 
     const proxy = parseProxyStr(window[proxyIdx].value)!;
 
-    // Collect passwords backwards from proxy: first = IG password, second = email password.
-    // Binary layout before proxy: [smtp host] [email pass] [IG password] [proxy]
-    const passwordsFound: string[] = [];
+    // ── True Jarvee binary layout (confirmed from hex analysis) ─────────────
+    // Before proxy (reading left→right by file offset):
+    //   [b64 username] … [IG password?] … [smtp host] [email pass] [proxy pass] [proxy host:port]
+    // After proxy:
+    //   [proxy username] …
+    //
+    // Key insight: the string IMMEDIATELY before proxy host:port is the PROXY password,
+    // not the IG password.  The IG password lives before the smtp section and is often
+    // absent (stored as a back-reference to null, invisible to the 0x06-only scanner).
+
+    // Step 1: locate smtp host in the pre-proxy window
+    const smtpIdx = window.findIndex(w => SMTP_RE.test(w.value));
+
+    // Step 2: proxy password = first password-like string working backwards from proxy,
+    //         but stopping before crossing into the smtp section.
+    let proxyPassword = "";
     for (let k = proxyIdx - 1; k >= 0; k--) {
-      if (isLikelyPassword(window[k].value)) {
-        passwordsFound.push(window[k].value);
-        if (passwordsFound.length >= 2) break;
+      const v = window[k].value;
+      if (SMTP_RE.test(v)) break;           // don't cross into smtp territory
+      if (EMAIL_RE.test(v)) continue;       // skip email addresses
+      if (isLikelyPassword(v)) { proxyPassword = v; break; }
+    }
+
+    // Step 3: email password = first password-like string after smtp, before proxy password.
+    let emailPassword = "";
+    if (smtpIdx >= 0) {
+      for (let k = smtpIdx + 1; k < proxyIdx; k++) {
+        const v = window[k].value;
+        if (v === proxyPassword) break;     // stop when we reach the proxy password
+        if (!SMTP_RE.test(v) && isLikelyPassword(v)) { emailPassword = v; break; }
       }
     }
-    const password      = passwordsFound[0] ?? "";
-    const emailPassword = passwordsFound[1] ?? "";
 
+    // Step 4: IG password = password-like string before the smtp section.
+    //         Often absent for accounts whose passwords were not exported.
+    let password = "";
+    const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
+    for (let k = smtpBoundary - 1; k >= 0; k--) {
+      if (isLikelyPassword(window[k].value)) { password = window[k].value; break; }
+    }
+
+    // Step 5: proxy username = first non-special string after proxy host:port.
+    //         Limit to 2 records; only take a proxy password from after if we
+    //         didn't already find one before the proxy.
     let proxyUsername = "";
-    let proxyPassword = "";
-    for (let k = proxyIdx + 1; k < Math.min(proxyIdx + 4, window.length); k++) {
+    for (let k = proxyIdx + 1; k < Math.min(proxyIdx + 3, window.length); k++) {
       const candidate = window[k].value;
-      if (!parseProxyStr(candidate) && !EMAIL_RE.test(candidate) && !URL_RE.test(candidate) && candidate.length <= 60) {
-        if (!proxyUsername) { proxyUsername = candidate; continue; }
-        if (!proxyPassword && isLikelyPassword(candidate)) { proxyPassword = candidate; break; }
-      }
+      if (
+        parseProxyStr(candidate) !== null ||
+        EMAIL_RE.test(candidate) ||
+        URL_RE.test(candidate) ||
+        candidate.length > 60 ||
+        candidate.includes(" ")          // labels / names have spaces — skip them
+      ) break;
+      if (!proxyUsername) { proxyUsername = candidate; continue; }
+      if (!proxyPassword && isLikelyPassword(candidate)) { proxyPassword = candidate; }
+      break;
     }
 
     const emailItem = window.find(w => EMAIL_RE.test(w.value));
@@ -264,9 +304,10 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
 
     // 2FA TOTP secret: appears before the b64 username anchor in the binary cluster.
     // Look at the 15 records immediately preceding the anchor (reversed = nearest first).
+    // Jarvee may export them space-grouped ("RGG2 7WSL LXC3 …") — normalise before testing.
     const priorWindow = sortedByOffset.slice(Math.max(0, i - 15), i).reverse();
-    const twoFAItem = priorWindow.find(w => TOTP_RE.test(w.value));
-    const twoFASecret = twoFAItem?.value ?? "";
+    const twoFAItem = priorWindow.find(w => TOTP_RE.test(normaliseTOTP(w.value)));
+    const twoFASecret = twoFAItem ? normaliseTOTP(twoFAItem.value) : "";
 
     const searchWindow = [...window, ...sortedByOffset.slice(i + 50, i + 150)];
 

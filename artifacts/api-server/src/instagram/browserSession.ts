@@ -6110,70 +6110,14 @@ export async function openSignupBrowser(opts?: {
     }
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    // Auto-dismiss cookie consent banner, then navigate to the signup form so the
-    // user can see it in the streaming panel. Runs in the background so the
+    // Auto-dismiss cookie consent banner only. Runs in the background so the
     // function returns immediately and the stream starts right away.
+    // After the banner is dismissed the EB stays on instagram.com — no redirect.
     (async () => {
-      // Wait for and dismiss the cookie banner (up to 5 s)
       for (let i = 0; i < 10; i++) {
         await new Promise(r => setTimeout(r, 500));
         if (!_signupPage || (_signupPage as any).isClosed?.()) return;
         await dismissCookieBanner(_signupPage).catch(() => {});
-      }
-      if (!_signupPage || (_signupPage as any).isClosed?.()) return;
-      await new Promise(r => setTimeout(r, 800));
-      if (!_signupPage || (_signupPage as any).isClosed?.()) return;
-
-      // After cookie dismiss: try clicking "Sign up" / "Create an account" button
-      // so the streaming panel shows the signup form to the user.
-      const clicked = await (_signupPage as any).evaluate(() => {
-        var labels = ["sign up", "create an account", "create account", "get started", "register", "sign up for instagram"];
-        for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
-          var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
-          if (labels.some((l: string) => txt === l) || txt.startsWith("sign up") || txt.startsWith("create")) {
-            var r = (el as any).getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) { (el as any).click(); return true; }
-          }
-        }
-        return false;
-      }).catch(() => false);
-
-      if (clicked) {
-        // Instagram often shows a mobile-number page first — poll for "Sign up with email address" (up to 15 s)
-        for (let _i = 0; _i < 30; _i++) {
-          await new Promise(r => setTimeout(r, 500));
-          if (!_signupPage || (_signupPage as any).isClosed?.()) return;
-          const linkVisible = await (_signupPage as any).evaluate(() => {
-            var L = ["sign up with email address", "sign up with email", "use email address", "use email"];
-            for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
-              var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
-              if (L.some(function(l: string) { return txt.includes(l); })) {
-                var r = (el as any).getBoundingClientRect();
-                if (r.width > 0 && r.height > 0) return true;
-              }
-            }
-            return false;
-          }).catch(() => false);
-          if (linkVisible) break;
-        }
-        if (!_signupPage || (_signupPage as any).isClosed?.()) return;
-        await (_signupPage as any).evaluate(() => {
-          var LABELS = ["sign up with email address", "sign up with email", "use email address", "use email"];
-          for (var el of Array.from(document.querySelectorAll("a,button,[role=\"button\"]"))) {
-            var txt = ((el as any).innerText || (el as any).textContent || "").trim().toLowerCase();
-            if (LABELS.some((l: string) => txt.includes(l))) {
-              var r = (el as any).getBoundingClientRect();
-              if (r.width > 0 && r.height > 0) { (el as any).click(); return true; }
-            }
-          }
-          return false;
-        }).catch(() => {});
-      } else {
-        // Fall back to direct navigation if no button was found
-        await (_signupPage as any).goto(
-          "https://www.instagram.com/accounts/emailsignup/",
-          { waitUntil: "domcontentloaded", timeout: 20000 }
-        ).catch(() => {});
       }
     })().catch(() => {});
 

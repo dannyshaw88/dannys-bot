@@ -38,6 +38,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { AccountStatus } from "@shared/schema";
 import { ACCOUNT_STATUSES } from "@shared/schema";
 import { userAgents } from "@shared/userAgents";
+import { UaPickerDropdown } from "@/components/ui/ua-picker";
+import type { UaEntry } from "@/components/ui/ua-picker";
 
 const STATUS_META: Record<AccountStatus, { label: string; icon: React.ElementType; pill: string; dot: string }> = {
   pending:            { label: "Pending",           icon: Clock,       pill: "bg-slate-50  text-slate-600  border-slate-200",  dot: "bg-slate-400"  },
@@ -249,6 +251,8 @@ export function ProfileDetailsPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "pending" | "ok" | "fail">("idle");
   const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
+  const [pendingUa, setPendingUa] = useState<UaEntry | null>(null);
+  const [uaChangeConfirmOpen, setUaChangeConfirmOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);
   const preStoppedStatusRef = useRef<string>("pending");
@@ -620,6 +624,40 @@ export function ProfileDetailsPage() {
         onError: () => toast({ title: "Error", description: "Failed to reset device IDs.", variant: "destructive" }),
       }
     );
+  };
+
+  const handleUaDeviceSelect = (ua: UaEntry) => {
+    setPendingUa(ua);
+    setUaChangeConfirmOpen(true);
+  };
+
+  const handleUaChangeConfirm = async () => {
+    if (!pendingUa) return;
+    try {
+      await fetch(`/api/profiles/${profileId}/reset-device-ids`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userAgentApi: pendingUa.api, userAgentEmbedded: pendingUa.embedded }),
+      });
+      await fetch(`/api/browser/${profileId}/wipe`, { method: "POST" }).catch(() => {});
+      setFormData((prev: any) => ({
+        ...prev,
+        userAgentApi: pendingUa!.api,
+        userAgentEmbedded: pendingUa!.embedded,
+      }));
+      setVerifyStatus("idle");
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+      toast({
+        title: "Device Changed",
+        description: "New device fingerprint assigned. Session cleared — re-verify to reactivate.",
+      });
+    } catch {
+      toast({ title: "Error", description: "Failed to change device.", variant: "destructive" });
+    } finally {
+      setPendingUa(null);
+      setUaChangeConfirmOpen(false);
+    }
   };
 
   const handleClearCookies = async () => {
@@ -1145,15 +1183,21 @@ export function ProfileDetailsPage() {
 
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">API User Agent</label>
-                      <input
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        value={formData.userAgentApi}
-                        onChange={e => updateField({ userAgentApi: e.target.value })}
-                        placeholder="API Fingerprint string..."
+                      <UaPickerDropdown
+                        value={formData.userAgentApi ?? ""}
+                        onSelect={handleUaDeviceSelect}
                       />
+                      {formData.userAgentApi && (
+                        <p className="text-[10px] text-muted-foreground font-mono break-all leading-relaxed">
+                          {formData.userAgentApi}
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Embedded Browser Agent</label>
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                        Embedded Browser Agent
+                        <span className="ml-2 text-[9px] font-normal text-muted-foreground/60 normal-case tracking-normal">(auto-matched when picking a device)</span>
+                      </label>
                       <input
                         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         value={formData.userAgentEmbedded}
@@ -1161,6 +1205,34 @@ export function ProfileDetailsPage() {
                         placeholder="Browser-like User Agent..."
                       />
                     </div>
+
+                    {/* ── UA device-change confirmation dialog ── */}
+                    <AlertDialog open={uaChangeConfirmOpen} onOpenChange={setUaChangeConfirmOpen}>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Change Device?</AlertDialogTitle>
+                          <AlertDialogDescription className="space-y-2">
+                            <span className="block">
+                              Switching to <strong>{pendingUa ? (() => { const p = pendingUa.api.split("; "); return `${p[3] ?? ""} ${p[4] ?? ""}`; })() : ""}</strong> will:
+                            </span>
+                            <ul className="list-disc pl-5 space-y-1 text-sm">
+                              <li>Reset all Device IDs (UUID, Phone ID, Advertising ID)</li>
+                              <li>Log you out of the current embedded browser session</li>
+                              <li>Clear all stored cookies for this account</li>
+                            </ul>
+                            <span className="block pt-1">
+                              The account will be set to <strong>Pending</strong> and will need to be re-verified before automation resumes.
+                            </span>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel onClick={() => setPendingUa(null)}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleUaChangeConfirm}>
+                            Yes, Change Device
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
 
                   <div className="space-y-3 pt-4 border-t border-border mt-4">

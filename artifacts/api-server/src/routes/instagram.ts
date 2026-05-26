@@ -438,10 +438,15 @@ export async function registerInstagramRoutes(
   // Must be registered BEFORE /api/profiles/:id so it isn't treated as an ID.
   app.post("/api/profiles/:id/reset-device-ids", async (req, res) => {
     const id = Number(req.params.id);
-    const randomUA = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+    // Accept an optional specific UA from the body (device-picker flow).
+    // Falls back to a random pool entry when no UA is supplied (existing Reset button flow).
+    const { userAgentApi, userAgentEmbedded } = (req.body ?? {}) as { userAgentApi?: string; userAgentEmbedded?: string };
+    const ua = (userAgentApi && userAgentEmbedded)
+      ? { api: userAgentApi, embedded: userAgentEmbedded }
+      : UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
     await storage.updateProfile(id, {
-      userAgentApi: randomUA.api,
-      userAgentEmbedded: randomUA.embedded,
+      userAgentApi: ua.api,
+      userAgentEmbedded: ua.embedded,
       igDeviceState: null,
       igApiCookies: null,
       accountStatus: "pending",
