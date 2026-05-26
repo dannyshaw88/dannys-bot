@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BrowserPanel } from "@/components/BrowserPanel";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -381,6 +381,7 @@ export function CreateAccountApiPage() {
   const [userAgentApi, setUserAgentApi] = useState(() => ssGet(SS_KEY_UA_API) || randomUA());
   const [ebVisible, setEbVisible]       = useState(() => lsGet(LS_KEY_EB_VISIBLE) === "1");
   const [ebResetBusy, setEbResetBusy]   = useState(false);
+  const ebResetBusyRef                  = useRef(false);
   const [ebUA, setEbUA]                 = useState(userAgentApi);
 
   // Add proxy inline form
@@ -495,6 +496,8 @@ export function CreateAccountApiPage() {
                 <Button
                   variant="ghost" size="sm" className="h-7 px-2 text-[10px] shrink-0"
                   onClick={async () => {
+                    if (ebResetBusyRef.current) return;
+                    ebResetBusyRef.current = true;
                     const ua = randomUA();
                     setUserAgentApi(ua); ssSet(SS_KEY_UA_API, ua);
                     setPassword(generatePassword()); setDob(randomDob()); setFirstName("");
@@ -502,6 +505,7 @@ export function CreateAccountApiPage() {
                     setEbResetBusy(true);
                     await clearEbSession();
                     setEbResetBusy(false);
+                    ebResetBusyRef.current = false;
                   }}
                   disabled={ebResetBusy}
                 >
@@ -677,10 +681,13 @@ export function CreateAccountApiPage() {
                 variant="outline"
                 className="w-full h-8 text-xs"
                 onClick={async () => {
+                  if (ebResetBusyRef.current) return;
+                  ebResetBusyRef.current = true;
                   setEbVisible(false); lsSet(LS_KEY_EB_VISIBLE, "0");
                   setEbResetBusy(true);
                   await clearEbSession();
                   setEbResetBusy(false);
+                  ebResetBusyRef.current = false;
                 }}
                 disabled={ebResetBusy}
               >

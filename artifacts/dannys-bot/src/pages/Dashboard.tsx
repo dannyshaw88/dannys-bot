@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.558",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Create an Account: the embedded browser no longer shows a constantly-refreshing page on the second and subsequent attempts — the screencast now starts after the page has fully loaded, preventing a silent failure that was causing Chrome to receive no frame data." },
+      { category: "Fix", text: "Create an Account: rapidly clicking Randomise multiple times no longer sends multiple browser-close requests — a ref-based guard now ensures only one reset runs at a time regardless of how fast the button is clicked." },
+      { category: "Fix", text: "Create an Account: the browser address bar now updates as Instagram navigates between pages (login, signup, challenge) so you can see exactly where the browser has landed." },
+    ],
+  },
+  {
     version: "1.0.557",
     date: "26 May 2026",
     items: [
@@ -160,6 +169,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     items: [
       { category: "Fix", text: "Statistics page: column sort arrows now toggle between ascending and descending only — clicking a sorted column no longer resets it to unsorted as a third state." },
       { category: "Improvement", text: "Dashboard activity log now loads noticeably faster — the feed is capped at 2,000 entries and only renders the most recent 500 rows at a time, eliminating the slowdown caused by thousands of DOM rows." },
+    ],
+  },
+  {
+    version: "1.0.545",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Login button in the embedded browser now only harvests session cookies from Chrome — it no longer runs the mobile API verification step or sets the account to Active. You must click Verify after logging in to activate automation, as intended." },
     ],
   },
   {

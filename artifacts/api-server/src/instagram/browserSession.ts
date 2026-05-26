@@ -6104,16 +6104,34 @@ export async function openSignupBrowser(opts?: {
       await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
     }
     _signupPage = page;
-    if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
-      _startSignupScreencast().catch(() => {});
-    }
+
+    // Forward URL changes to the BrowserPanel address bar so the user can see
+    // which page Instagram has navigated to (login, signup, challenge, etc.).
+    page.on("framenavigated", (frame: any) => {
+      if (frame !== page.mainFrame()) return;
+      const url = frame.url();
+      if (url && url !== "about:blank" && _signupWs && _signupWs.readyState === WebSocket.OPEN) {
+        try { _signupWs.send(JSON.stringify({ type: "urlChange", url })); } catch {}
+      }
+    });
+
+    // Navigate first — wait until the DOM is ready so Chrome is in a stable state.
+    // Starting the screencast BEFORE page.goto() was causing createCDPSession() to
+    // fail silently on the second and subsequent attempts (Chrome is in a transitional
+    // state during launch), which meant no frames ever arrived and the EB appeared
+    // to constantly refresh or showed a frozen/blank canvas.
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
     // Cookie banner is intentionally NOT auto-dismissed here.
-    // Auto-clicking "Accept" triggered an Instagram redirect; the second scheduled
-    // attempt then fired mid-redirect and clicked a random element on the new page,
-    // causing the "constantly refreshing" loop the user reported.
-    // The user can dismiss the banner manually with a single click in the EB.
+    // Auto-clicking "Accept" triggered an Instagram redirect; a second scheduled
+    // attempt fired mid-redirect and clicked a random element, causing the
+    // "constantly refreshing" loop. The user can dismiss the banner manually.
+
+    // Start screencast AFTER goto() — page is now in a stable state and
+    // createCDPSession() will not conflict with an in-progress navigation.
+    if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+      _startSignupScreencast().catch(() => {});
+    }
 
     return { ok: true };
   } catch (e: any) {
@@ -6128,11 +6146,15 @@ export async function closeSignupBrowser(): Promise<void> {
     try { _signupCdp.send("Page.stopScreencast").catch(() => {}); } catch {}
     _signupCdp = null;
   }
+  const wasOpen = !!_signupBrowser;
   if (_signupBrowser) {
     try { await _signupBrowser.close(); } catch {}
     _signupBrowser = null;
   }
-  if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+  // Only notify the BrowserPanel when the browser was actually running.
+  // Spurious "Browser closed." messages (from no-op calls when _signupBrowser
+  // is already null) were confusing the WS state on the second attempt.
+  if (wasOpen && _signupWs && _signupWs.readyState === WebSocket.OPEN) {
     try { _signupWs.send(JSON.stringify({ type: "waiting", message: "Browser closed." })); } catch {}
   }
   // Wipe the per-attempt data dir so no cookies/cache survive into the next attempt.
