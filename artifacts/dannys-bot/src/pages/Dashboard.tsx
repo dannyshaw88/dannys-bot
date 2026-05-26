@@ -56,6 +56,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.552",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Create Account: the embedded browser now visits Instagram as a mobile Android device instead of a Windows desktop, so device cookies match the Android API signup calls." },
+      { category: "Fix", text: "Create Account: bandwidth headers now report a realistic WiFi speed instead of the placeholder values that bot-detection flags." },
+      { category: "Fix", text: "Create Account: timezone offset header now matches the proxy IP's country — Instagram cross-checks this against the connecting IP address." },
+      { category: "Fix", text: "Create Account: missing locale headers added to every signup API request to match what a real Android Instagram app sends." },
+      { category: "Fix", text: "Create Account: when the library fallback runs it now reuses the same device IDs from the embedded browser session instead of creating a brand-new device fingerprint mid-flow." },
+    ],
+  },
+  {
     version: "1.0.551",
     date: "26 May 2026",
     items: [

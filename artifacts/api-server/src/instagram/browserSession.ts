@@ -12,6 +12,7 @@ import tls from "tls";
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
 import { storage } from "../storage";
+import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
 // When running inside Electron, `EB_IPC_PORT` is set to the port of the native
@@ -558,17 +559,53 @@ export async function harvestSignupCookiesFromEB(opts?: {
   }
 
   // ── UA-FINGERPRINT PREVENTION ─────────────────────────────────────────────
-  // For existing accounts the harvest browser must use the same User-Agent as
-  // the stored account fingerprint.  For NEW account creation no fingerprint
-  // exists yet — use a realistic Chrome desktop UA so Instagram's fingerprinting
-  // scripts run correctly and set csrftoken / mid / ig_did.
-  const DEFAULT_HARVEST_UA =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.207 Safari/537.36";
-  if (!opts?.userAgent) {
-    log(`${logPfx} No EB user-agent configured — using default Chrome UA for cookie harvest (new account, no fingerprint yet)`);
-    opts?.onStep?.("EB harvest: no UA set — using default Chrome UA to collect Instagram cookies (csrftoken, mid, ig_did)");
+  // The harvest EB MUST use a mobile Chrome UA that matches the API signup UA.
+  // Instagram tags mid/ig_did cookies with the device type that first requested
+  // them.  If those cookies are set by a desktop browser the mobile API signup
+  // call that follows will present desktop-tagged device cookies on an Android
+  // UA — an immediate fingerprint mismatch that flags every account.
+  //
+  // Resolution order:
+  //   1. opts.userAgent is already a mobile Chrome UA ("Mozilla/5.0...Android") → use it
+  //   2. opts.userAgent is an Instagram API UA format ("35/15; 480dpi; ...") → find
+  //      the matching embedded Chrome UA in the UA pool
+  //   3. No UA / no pool match → pick a random embedded Chrome mobile UA from the pool
+  //
+  // We also derive the matching API-format UA for applyStealthScripts so screen
+  // dimensions are computed from the real device specs, ensuring the JS fingerprint
+  // matches the API UA exactly.
+  let effectiveUA: string;
+  let harvestApiUA: string | undefined;
+  {
+    const provided = opts?.userAgent ?? "";
+    if (isMobileUA(provided)) {
+      // Already a valid mobile Chrome UA ("Mozilla/5.0 (Linux; Android …)")
+      effectiveUA = provided;
+      const match = UA_POOL.find(e => e.embedded === provided);
+      harvestApiUA = match?.api;
+    } else if (provided) {
+      // Likely an API-format UA ("35/15; 480dpi; Pixel 9 Pro; …")
+      // Find the pool entry whose .api field matches and use its .embedded Chrome UA.
+      const match = UA_POOL.find(e => e.api === provided || provided.includes(e.api));
+      if (match) {
+        effectiveUA = match.embedded;
+        harvestApiUA = match.api;
+        log(`${logPfx} Resolved API UA → mobile Chrome UA for harvest: ${effectiveUA.slice(0, 80)}`);
+      } else {
+        const entry = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+        effectiveUA = entry.embedded;
+        harvestApiUA = entry.api;
+        log(`${logPfx} No pool match for provided UA — using random mobile Chrome UA for harvest`);
+      }
+    } else {
+      const entry = UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+      effectiveUA = entry.embedded;
+      harvestApiUA = entry.api;
+      log(`${logPfx} No UA configured — using random mobile Chrome UA for harvest`);
+    }
   }
-  const effectiveUA = opts?.userAgent || DEFAULT_HARVEST_UA;
+  opts?.onStep?.(`EB harvest: using mobile Chrome UA: ${effectiveUA.slice(0, 80)}${effectiveUA.length > 80 ? "..." : ""}`);
+
   try {
     const [page] = await browser.pages();
     _signupPage = page;
@@ -576,16 +613,20 @@ export async function harvestSignupCookiesFromEB(opts?: {
       _startSignupScreencast().catch(() => {});
     }
     await page.setUserAgent(effectiveUA);
-    opts?.onStep?.(`EB harvest: using UA: ${effectiveUA.slice(0, 80)}${effectiveUA.length > 80 ? "..." : ""}`);
-    // Explicitly force desktop viewport — isMobile/hasTouch must be false or
-    // sites like YouTube will serve the mobile version in headless Chrome.
-    await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+    // Use a viewport that matches the mobile UA — mobile viewport (isMobile:true,
+    // hasTouch:true) ensures Instagram's JS sees a real phone and sets cookies
+    // tagged to mobile.  This must match the API UA's device type.
+    const vp = viewportForUA(effectiveUA);
+    await page.setViewport(vp);
+    log(`${logPfx} Harvest viewport: ${vp.width}×${vp.height} isMobile=${!!vp.isMobile}`);
 
     if (opts?.proxyUsername) {
       await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
     }
 
-    await applyStealthScripts(page, effectiveUA);
+    // Pass harvestApiUA so applyStealthScripts derives exact screen dims from the
+    // API UA device specs rather than using a fallback PRNG profile.
+    await applyStealthScripts(page, effectiveUA, undefined, harvestApiUA ?? undefined);
 
     // ── Pre-bake: visit websites / YouTube / Google before Instagram ──────────
     // Builds organic browsing history so Chrome's cookie jar looks natural

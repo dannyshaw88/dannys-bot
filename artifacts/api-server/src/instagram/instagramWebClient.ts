@@ -51,6 +51,7 @@
 // ║                                                                              ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 import * as https from "https";
+import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 import * as zlib from "zlib";
@@ -63,6 +64,36 @@ import { tlsRequest, tlsMultipartPost, patchIgClientTls, warmupTls } from "./tls
 // Warm up the CycleTLS Go subprocess at module load so the first real request
 // doesn't pay the ~300 ms startup cost.
 warmupTls();
+
+// ── Proxy IP timezone lookup ──────────────────────────────────────────────────
+// Queries ip-api.com (free, no key required) for the UTC offset (in seconds)
+// of the proxy's IP so X-IG-Timezone-Offset matches the IP's region.
+// Instagram cross-checks this against the connecting IP — a mismatch (e.g.
+// "UTC+0" header from a US IP) is a bot signal.  Times out in 5 s and falls
+// back to -18000 (UTC-5, US Eastern) on any error so signup is never blocked.
+async function lookupTimezoneOffset(proxyHost: string): Promise<number> {
+  return new Promise((resolve) => {
+    const fallback = -18000;
+    const timer = setTimeout(() => resolve(fallback), 5000);
+    const req = http.get(
+      `http://ip-api.com/json/${encodeURIComponent(proxyHost)}?fields=offset`,
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => {
+          clearTimeout(timer);
+          try {
+            const j = JSON.parse(Buffer.concat(chunks).toString()) as { offset?: number };
+            resolve(typeof j.offset === "number" ? j.offset : fallback);
+          } catch {
+            resolve(fallback);
+          }
+        });
+      },
+    );
+    req.on("error", () => { clearTimeout(timer); resolve(fallback); });
+  });
+}
 
 // ── Low-level HTTPS helper ────────────────────────────────────────────────────
 function httpsRequest(
@@ -3760,6 +3791,22 @@ export async function createInstagramAccountViaApi(params: {
 
   step(`EB cookies seeded: mid=${mid.slice(0, 8)}... ig_did=${ig_did.slice(0, 8)}... jar=[${cookieJar.map(c => c.split("=")[0]).join(", ")}]`);
 
+  // ── Timezone offset — must match the proxy IP's geographic region ────────────
+  // Instagram cross-checks X-IG-Timezone-Offset against the connecting IP.
+  // A mismatch (e.g. UTC+0 offset from a US proxy) is a bot-detection signal.
+  // We query ip-api.com with the proxy hostname to get the actual UTC offset
+  // for that IP's country, falling back to -18000 (UTC-5) on lookup failure.
+  let tzOffset = -18000;
+  if (proxyUrl) {
+    try {
+      const proxyHost = new URL(proxyUrl).hostname;
+      tzOffset = await lookupTimezoneOffset(proxyHost);
+      step(`Timezone: ${proxyHost} → offset ${tzOffset >= 0 ? "+" : ""}${tzOffset}s (${tzOffset >= 0 ? "+" : ""}${(tzOffset / 3600).toFixed(1)}h UTC)`);
+    } catch { /* non-fatal — keep default */ }
+  } else {
+    step("Timezone: no proxy — using default UTC-5 offset");
+  }
+
   // Headers restored to match the EXACT state of the one successful HTTP 200
   // (commit 57e5f68 / 44b34a0 — before gzip fix, before X-FB-Client-IP was added).
   // Do NOT add X-FB-Client-IP or X-FB-Server-Cluster — those were added AFTER
@@ -3775,15 +3822,19 @@ export async function createInstagramAccountViaApi(params: {
     "User-Agent": effectiveUA,
     "Accept": "*/*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate",
+    "Accept-Encoding": "gzip, deflate, br",
     "X-IG-App-ID": MOBILE_AID,
     "X-IG-App-Version": MOBILE_VERSION,
     "X-IG-Capabilities": "3brTvwE=",
     "X-IG-Connection-Type": "WIFI",
-    "X-IG-Connection-Speed": "-1kbps",
-    "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-    "X-IG-Bandwidth-TotalBytes-B": "0",
-    "X-IG-Bandwidth-TotalTime-MS": "0",
+    // Simulate a real measured WiFi speed.  The "-1kbps"/0 defaults are the
+    // "not measured" placeholder — no real Android phone ever sends these and
+    // Instagram flags them as a bot signal.  We pick a plausible WiFi range
+    // (8–40 Mbps) and compute a realistic byte count + elapsed time.
+    "X-IG-Connection-Speed": (() => { const k = 8000 + Math.floor(Math.random() * 32000); return `${k}kbps`; })(),
+    "X-IG-Bandwidth-Speed-KBPS": (() => { const k = 8000 + Math.floor(Math.random() * 32000); return `${k}.000`; })(),
+    "X-IG-Bandwidth-TotalBytes-B": String(512 * 1024 + Math.floor(Math.random() * 9 * 1024 * 1024)),
+    "X-IG-Bandwidth-TotalTime-MS": String(300 + Math.floor(Math.random() * 2000)),
     "X-IG-Device-ID": ig_did,
     "X-IG-Android-ID": android_id,
     "X-MID": mid,
@@ -3793,6 +3844,13 @@ export async function createInstagramAccountViaApi(params: {
     "X-IG-WWW-Claim": "0",
     "X-Pigeon-Session-Id": pigeonSessionId,
     "X-Pigeon-Rawclienttime": pigeonRawclienttime(),
+    // Locale headers present on every real Android Instagram request
+    "X-IG-App-Locale": "en_US",
+    "X-IG-Device-Locale": "en_US",
+    "X-IG-Mapped-Locale": "en_US",
+    // UTC offset in seconds matching the proxy IP's geographic region.
+    // Instagram cross-checks this against the connecting IP — mismatch = bot flag.
+    "X-IG-Timezone-Offset": String(tzOffset),
   };
 
   // CSRF strategy: use the real csrftoken the EB harvested from instagram.com if one
@@ -4076,9 +4134,18 @@ export async function createInstagramAccountViaApi(params: {
     step("Custom HTTP stack blocked — trying instagram-private-api library path...");
     try {
       const igLib = newIgClient();
-      // Generate a fresh device fingerprint keyed to username+email so it's
+      // Generate a base device fingerprint keyed to username+email so it's
       // reproducible but unique per account (same pattern used for DM sending).
       igLib.state.generateDevice(`${username}|${email}|${Date.now()}`);
+      // Override the freshly-generated device IDs with the EB-harvested values so
+      // the library path presents the same ig_did/mid/uuid that the EB and all
+      // prior custom-HTTP calls used.  Without this the library generates brand-new
+      // random IDs mid-signup — Instagram sees a completely different device appear
+      // after several API calls on the original device fingerprint, which is an
+      // immediate bot signal.
+      igLib.state.uuid    = ig_did;
+      igLib.state.phoneId = phone_id;
+      igLib.state.deviceId = android_id;
       // CRITICAL: patch APP_VERSION here — same as every other IgApiClient usage in
       // this file (login, verify, DM, etc.).  Without this the library uses its bundled
       // default (~v222.x.x) which Instagram immediately rejects with needs_upgrade.
@@ -4182,7 +4249,13 @@ export async function createInstagramAccountViaApi(params: {
         method: "POST",
         headers: {
           "Host": "www.instagram.com",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          // Use the same mobile Chrome UA that all prior API calls used.
+          // A hardcoded Windows desktop UA here is immediately inconsistent with
+          // the Android UA sent to i.instagram.com on every step that preceded it.
+          "User-Agent": (() => {
+            const poolEntry = UA_POOL.find(e => e.api === effectiveUA || effectiveUA.includes(e.api));
+            return poolEntry?.embedded ?? UA_POOL[Math.floor(Math.random() * UA_POOL.length)].embedded;
+          })(),
           "Accept": "*/*",
           "Accept-Language": "en-US,en;q=0.9",
           "Accept-Encoding": "gzip, deflate",
