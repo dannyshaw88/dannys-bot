@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.574",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie banner auto-dismiss now correctly registers the click. Instagram's app ignores programmatic JavaScript clicks (they are 'untrusted') — the dismiss now uses OS-level input events from the main process, which Instagram treats as real user input." },
+      { category: "Fix", text: "Cookie dismiss now clicks at most 5 times, with a 4-second gap between each attempt. This prevents any possibility of spam-clicking while still handling cases where the first click is missed." },
+      { category: "Improvement", text: "Cookie dismiss progress is now logged: each attempt shows the button label and screen coordinates so you can verify it is finding the right button." },
+    ],
+  },
+  {
     version: "1.0.573",
     date: "26 May 2026",
     items: [

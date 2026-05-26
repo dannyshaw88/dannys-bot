@@ -118,13 +118,12 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
     }
   }
 
-  // ── Cookie consent banner dismiss ────────────────────────────────────────
-  // Retries every 500ms until the button disappears (confirmed dismissed).
-  // Uses an exact whitelist of known accept-all phrases — never a broad
-  // includes('cookie') check, which would match cookie-category toggle
-  // buttons on Instagram's full preference page ("Functional cookies", etc.)
-  // and cause spam-clicks on every tick.
-  if(!window.__eq_cookie_tick){var __eq_ck_clicked=false;window.__eq_cookie_tick=setInterval(function(){
+  // ── Cookie consent banner post-dismiss navigation ────────────────────────
+  // The actual CLICK on the cookie button is done from the main process via
+  // sendInputEvent (isTrusted=true, required for Instagram's React handlers).
+  // This in-page interval only watches for the banner to disappear, then
+  // navigates to the login page if needed (one time).
+  if(!window.__eq_cookie_tick){var __eq_ck_seen=false;window.__eq_cookie_tick=setInterval(function(){
     var __ACCEPT=['allow all cookies','accept all cookies','allow all','accept all','allow essential and optional cookies','accept cookies','allow cookies','alle cookies akzeptieren','accepter tout','aceptar todo','accetta tutto','tillåt alla','alle accepteren'];
     function _isCookieAcceptBtn(b){
       if(!b||!b.getBoundingClientRect||b.getBoundingClientRect().width<=0)return false;
@@ -138,27 +137,19 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
     }
     if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"]')).find(_isCookieAcceptBtn)||null;}
     if(btn){
-      try{btn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-      try{btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
-      try{btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-      try{btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
-      try{btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-      try{btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-      btn.click();
-      if(!__eq_ck_clicked){
-        __eq_ck_clicked=true;
-        // After first click: try to navigate to login (fires once only).
-        setTimeout(function(){
-          if(AF&&window.__eq_doAutoFill())return;
-          var LOGIN_RE=/^log\s*in$/i;
-          var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
-          if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
-          if(loginEl){loginEl.click();}
-        },1200);
-      }
-    }else if(__eq_ck_clicked){
-      // Button was visible, we clicked it, and now it's gone — confirmed dismissed.
+      __eq_ck_seen=true;
+      // Do NOT click from here — untrusted JS events are ignored by Instagram's
+      // React app. The main-process sendInputEvent timer handles the click.
+    }else if(__eq_ck_seen){
+      // Banner was visible and is now gone (main process clicked it) — navigate to login.
       clearInterval(window.__eq_cookie_tick);window.__eq_cookie_tick=null;
+      setTimeout(function(){
+        if(AF&&window.__eq_doAutoFill())return;
+        var LOGIN_RE=/^log\s*in$/i;
+        var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
+        if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
+        if(loginEl){loginEl.click();}
+      },800);
     }
   },500);}
 })();`;
@@ -765,58 +756,82 @@ export async function openEbWindow(opts: {
     'alle accepteren',           // Dutch
   ];
 
-  const _COOKIE_BANNER_JS = `(() => {
+  // DETECT-ONLY — no events fired from JS (isTrusted=false events are ignored by
+  // Instagram's React app). This script only locates the button and returns its
+  // centre coordinates. The actual click is done via sendInputEvent (trusted).
+  const _COOKIE_DETECT_JS = `(() => {
     const ACCEPT = ${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
     function isCookieAcceptBtn(b) {
-      if (!b || !b.getBoundingClientRect) return false;
+      if (!b || !b.getBoundingClientRect) return null;
       const r = b.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) return false;
+      if (r.width <= 0 || r.height <= 0) return null;
       const t = (b.innerText||b.textContent||'').trim().toLowerCase();
-      return ACCEPT.indexOf(t) !== -1;
+      if (ACCEPT.indexOf(t) === -1) return null;
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), label: t };
     }
-    let btn = document.querySelector('[data-cookiebanner="accept_button"]')
-           || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
-    if (!btn) {
+    let pos = null;
+    const attr = document.querySelector('[data-cookiebanner="accept_button"]')
+              || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+    if (attr) pos = isCookieAcceptBtn(attr);
+    if (!pos) {
       const container = document.querySelector('[data-cookiebanner]')
                      || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
-      if (container) btn = Array.from(container.querySelectorAll('button,[role="button"]')).find(isCookieAcceptBtn) || null;
+      if (container) {
+        for (const b of container.querySelectorAll('button,[role="button"]')) {
+          pos = isCookieAcceptBtn(b); if (pos) break;
+        }
+      }
     }
-    if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(isCookieAcceptBtn) || null;
-    if (!btn) return null;
-    // Fire the full event sequence that React listens to, then call .click()
-    try { btn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
-    try { btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
-    try { btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
-    try { btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
-    try { btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
-    try { btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
-    btn.click();
-    return true;
+    if (!pos) {
+      for (const b of document.querySelectorAll('button,[role="button"]')) {
+        pos = isCookieAcceptBtn(b); if (pos) break;
+      }
+    }
+    return pos;
   })()`;
 
-  // JS-only approach — NO sendInputEvent, NO webContents.focus().
-  // sendInputEvent injects OS-level synthetic mouse events that compete with
-  // real user input and make the EB feel completely unresponsive to clicks.
-  // The JS dispatchEvent + btn.click() inside the script is sufficient.
-  // Timer retries until the button is confirmed gone so a single missed
-  // click doesn't leave the banner stuck, but at a slow interval (2s) to
-  // avoid spamming the renderer with executeJavaScript calls.
-  let _cookieBannerClicked = false;
+  // Cookie dismiss using sendInputEvent (produces isTrusted=true events that
+  // React accepts). Key rules to prevent EB freeze:
+  //   • DETECT first (JS only, no click in the script)
+  //   • CLICK once via sendInputEvent, then wait COOLDOWN_MS before re-checking
+  //   • Max MAX_ATTEMPTS clicks total — give up gracefully rather than loop forever
+  //   • focus() only called immediately before a click, never on idle ticks
+  const COOKIE_MAX_ATTEMPTS = 5;
+  const COOKIE_COOLDOWN_MS  = 4000; // wait 4s after each click before checking again
+  let _cookieAttempts    = 0;
+  let _cookieLastClickAt = 0;
   const _cookieDismissTimer = setInterval(async () => {
     if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
+    // Enforce cooldown — don't hammer the renderer right after a click
+    if (_cookieLastClickAt > 0 && Date.now() - _cookieLastClickAt < COOKIE_COOLDOWN_MS) return;
     try {
-      const found = await win.webContents.executeJavaScript(_COOKIE_BANNER_JS).catch(() => null);
-      if (found) {
-        console.log(`[ebManager:${profileId}] Cookie banner: JS click fired`);
-        _cookieBannerClicked = true;
-      } else if (_cookieBannerClicked) {
+      const pos = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null) as
+        { x: number; y: number; label: string } | null;
+
+      if (pos) {
+        if (_cookieAttempts >= COOKIE_MAX_ATTEMPTS) {
+          console.warn(`[ebManager:${profileId}] Cookie banner: giving up after ${_cookieAttempts} attempts — button still at (${pos.x},${pos.y}) label="${pos.label}"`);
+          clearInterval(_cookieDismissTimer);
+          return;
+        }
+        _cookieAttempts++;
+        _cookieLastClickAt = Date.now();
+        console.log(`[ebManager:${profileId}] Cookie banner attempt ${_cookieAttempts}/${COOKIE_MAX_ATTEMPTS}: sendInputEvent click at (${pos.x},${pos.y}) label="${pos.label}"`);
+        win.webContents.focus();
+        win.webContents.sendInputEvent({ type: "mouseDown", x: pos.x, y: pos.y, button: "left", clickCount: 1 });
+        await new Promise(r => setTimeout(r, 80));
+        win.webContents.sendInputEvent({ type: "mouseUp",   x: pos.x, y: pos.y, button: "left", clickCount: 1 });
+      } else if (_cookieAttempts > 0) {
+        // We clicked at least once and the button is now gone — success
         clearInterval(_cookieDismissTimer);
-        console.log(`[ebManager:${profileId}] Cookie banner confirmed dismissed`);
+        console.log(`[ebManager:${profileId}] Cookie banner dismissed after ${_cookieAttempts} click(s)`);
       }
-    } catch {}
-  }, 2000);
+    } catch (err) {
+      console.warn(`[ebManager:${profileId}] Cookie banner check error: ${err}`);
+    }
+  }, 1000); // poll every 1s, but cooldown gates how often we actually click
   win.once("closed", () => clearInterval(_cookieDismissTimer));
-  setTimeout(() => clearInterval(_cookieDismissTimer), 60000);
+  setTimeout(() => { clearInterval(_cookieDismissTimer); }, 60000);
 
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
