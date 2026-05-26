@@ -216,6 +216,8 @@ export function ProfilesPage() {
   const [manageProfileColsOpen, setManageProfileColsOpen] = useState(false);
   const manageProfileColsRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
+  const profDragColRef = useRef<string | null>(null);
+  const [profDragOverCol, setProfDragOverCol] = useState<string | null>(null);
   useScrollRestore("profiles", scrollBodyRef, !isLoading);
 
   const [selectedProfileIds, setSelectedProfileIds] = useState<number[]>([]);
@@ -986,27 +988,52 @@ export function ProfilesPage() {
               </button>
             </div>
             {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
+              const isDragTarget = profDragOverCol === key;
+              const dragBorder = isDragTarget ? "border-l-2 border-l-primary bg-primary/5" : "";
+              const dragProps = {
+                draggable: true as const,
+                onDragStart: (e: React.DragEvent) => { profDragColRef.current = key; e.dataTransfer.effectAllowed = "move"; },
+                onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (profDragColRef.current && profDragColRef.current !== key) setProfDragOverCol(key); },
+                onDrop: (e: React.DragEvent) => {
+                  e.preventDefault();
+                  const from = profDragColRef.current;
+                  profDragColRef.current = null;
+                  setProfDragOverCol(null);
+                  if (!from || from === key) return;
+                  const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
+                  const fromIdx = reorderable.indexOf(from as any);
+                  const toIdx = reorderable.indexOf(key as any);
+                  if (fromIdx === -1 || toIdx === -1) return;
+                  const next = [...reorderable];
+                  next.splice(fromIdx, 1);
+                  next.splice(toIdx, 0, from as any);
+                  const fullOrder = ["account" as const, ...next, "ip" as const];
+                  setProfColOrder(fullOrder);
+                  localStorage.setItem("profiles_col_order", JSON.stringify(fullOrder));
+                },
+                onDragEnd: () => { profDragColRef.current = null; setProfDragOverCol(null); },
+              };
               if (key === "status") return (
-                <button key={key} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
+                <button key={key} {...dragProps} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   Status<span className="text-[9px]">{sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
-              if (key === "active") return <div key={key} style={{ width: profColWidths.active }} className="shrink-0 text-left">Active</div>;
+              if (key === "active") return <div key={key} {...dragProps} style={{ width: profColWidths.active }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Active</div>;
               if (key === "followers") return (
-                <button key={key} onClick={() => cycleSort("followers")} style={{ width: profColWidths.followers }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
+                <button key={key} {...dragProps} onClick={() => cycleSort("followers")} style={{ width: profColWidths.followers }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   FOLLOWERS<span className="text-[9px]">{sortField === "followers" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
               if (key === "following") return (
-                <button key={key} onClick={() => cycleSort("following")} style={{ width: profColWidths.following }} className="shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors">
+                <button key={key} {...dragProps} onClick={() => cycleSort("following")} style={{ width: profColWidths.following }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
                   FOLLOWING<span className="text-[9px]">{sortField === "following" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
-              if (key === "sync") return <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 text-left">SYNC</div>;
-              if (key === "actions") return <div key={key} style={{ width: profColWidths.actions }} className="shrink-0 text-left">Actions</div>;
-              if (key === "battery") return <div key={key} style={{ width: profColWidths.battery }} className="shrink-0 text-left">Battery</div>;
-              if (key === "connection") return <div key={key} style={{ width: profColWidths.connection }} className="shrink-0 text-left">Mbps</div>;
-              if (key === "abd") return <div key={key} style={{ width: profColWidths.abd }} className="shrink-0 text-left">ABD</div>;
+              if (key === "sync") return <div key={key} {...dragProps} style={{ width: profColWidths.sync }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>SYNC</div>;
+              if (key === "actions") return <div key={key} {...dragProps} style={{ width: profColWidths.actions }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Actions</div>;
+              if (key === "battery") return <div key={key} {...dragProps} style={{ width: profColWidths.battery }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Battery</div>;
+              if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
+              if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>ABD</div>;
               return null;
             })}
             <div className="flex-1" />

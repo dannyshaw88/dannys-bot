@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.556",
+    date: "26 May 2026",
+    items: [
+      { category: "Feature", text: "Accounts page: column headers can now be dragged and dropped to rearrange the column order, matching the behaviour on the Statistics page." },
+      { category: "Fix", text: "Dashboard, Accounts, Proxy Manager, and Statistics pages: removed the hand/grab cursor that appeared when hovering over column headers — the normal pointer cursor is now used instead." },
+    ],
+  },
+  {
     version: "1.0.555",
     date: "26 May 2026",
     items: [
@@ -3270,7 +3278,7 @@ export function Dashboard() {
                             localStorage.setItem("dashboard_col_order", JSON.stringify(next));
                           }}
                           onDragEnd={() => { dashDragColRef.current = null; setDashDragOverCol(null); }}
-                          className={`px-3 py-4 font-bold cursor-grab active:cursor-grabbing select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                          className={`px-3 py-4 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                         >
                           {COL_LABELS[key]}
                         </th>

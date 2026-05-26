@@ -445,7 +445,7 @@ export function StatsPage() {
                           localStorage.setItem("stats_col_order", JSON.stringify(next));
                         }}
                         onDragEnd={() => { statDragColRef.current = null; setStatDragOverCol(null); }}
-                        className={`px-4 py-3 font-bold cursor-grab active:cursor-grabbing select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
+                        className={`px-4 py-3 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                       >
                         <button onClick={() => cycleSort(key)} className={`flex items-center gap-1 hover:opacity-90 transition-opacity ${st.color} ${sortKey === key ? "opacity-100" : "opacity-60"}`}>
                           {st.icon}<span className="uppercase tracking-wide text-[10px]">{st.label}</span>{sortIcon(key)}
