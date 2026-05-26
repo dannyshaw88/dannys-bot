@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.557",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Create an Account: the embedded browser no longer refreshes/navigates on its own when it first opens — the automatic cookie banner click that was triggering Instagram redirects has been removed. The banner can be dismissed with a single manual click." },
+      { category: "Fix", text: "Create an Account: background cookie-harvest operations no longer disrupt the visible browser stream — they now use their own private browser instance and no longer interfere with what you see in the panel." },
+    ],
+  },
+  {
     version: "1.0.556",
     date: "26 May 2026",
     items: [

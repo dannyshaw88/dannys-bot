@@ -608,10 +608,10 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
   try {
     const [page] = await browser.pages();
-    _signupPage = page;
-    if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
-      _startSignupScreencast().catch(() => {});
-    }
+    // NOTE: do NOT touch _signupPage / _signupWs here.  This is a throwaway
+    // harvest browser.  The user's visible signup browser (openSignupBrowser)
+    // owns those globals.  Overwriting them mid-harvest was corrupting the
+    // BrowserPanel stream and causing the "constantly refreshing" loop.
     await page.setUserAgent(effectiveUA);
     // Use a viewport that matches the mobile UA — mobile viewport (isMobile:true,
     // hasTouch:true) ensures Instagram's JS sees a real phone and sets cookies
@@ -894,11 +894,10 @@ export async function harvestSignupCookiesFromEB(opts?: {
 
     return { mid, ig_did, csrftoken, cookieStrings, ebUserAgent: effectiveUA };
   } finally {
-    _signupPage = null;
-    if (_signupCdp) {
-      try { _signupCdp.send("Page.stopScreencast").catch(() => {}); } catch {}
-      _signupCdp = null;
-    }
+    // Only close the LOCAL harvest browser.  Do NOT touch _signupPage or
+    // _signupCdp — those globals belong to the user-visible openSignupBrowser
+    // instance.  Clearing them here was silently killing the BrowserPanel
+    // stream whenever a harvest ran concurrently with the manual signup EB.
     try { await browser.close(); } catch {}
     try { fs.rmSync(tmpDataDir, { recursive: true, force: true }); } catch {}
     log(`${logPfx} Temporary Chrome closed and data dir cleaned up`);
@@ -6110,19 +6109,11 @@ export async function openSignupBrowser(opts?: {
     }
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    // Auto-dismiss cookie consent banner only. Two attempts (at 1 s and 2.5 s)
-    // are enough to catch the banner on first load. We deliberately avoid 10×
-    // rapid retries because accepting cookies triggers an Instagram redirect —
-    // firing again mid-redirect clicks random elements and causes the "constantly
-    // refreshing" loop the user sees. Two tries with a gap between them handles
-    // both a slow-loading banner and a post-redirect banner without racing.
-    (async () => {
-      for (let i = 0; i < 2; i++) {
-        await new Promise(r => setTimeout(r, i === 0 ? 1000 : 1500));
-        if (!_signupPage || (_signupPage as any).isClosed?.()) return;
-        await dismissCookieBanner(_signupPage).catch(() => {});
-      }
-    })().catch(() => {});
+    // Cookie banner is intentionally NOT auto-dismissed here.
+    // Auto-clicking "Accept" triggered an Instagram redirect; the second scheduled
+    // attempt then fired mid-redirect and clicked a random element on the new page,
+    // causing the "constantly refreshing" loop the user reported.
+    // The user can dismiss the banner manually with a single click in the EB.
 
     return { ok: true };
   } catch (e: any) {
