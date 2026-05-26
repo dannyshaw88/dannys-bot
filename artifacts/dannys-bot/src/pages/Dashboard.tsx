@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.561",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "GitHub Actions build workflow now correctly passes the compiled server and frontend to the Windows packaging step — the Windows installer will build successfully again." },
+    ],
+  },
+  {
     version: "1.0.560",
     date: "26 May 2026",
     items: [
