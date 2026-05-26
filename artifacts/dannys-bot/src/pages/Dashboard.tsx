@@ -91,6 +91,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.565",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Clicking Login in the embedded browser panel no longer marks the account as Valid. The browser login now only saves the session cookies — the account status is only updated to Valid when you explicitly click Verify Credentials." },
+    ],
+  },
+  {
       version: "1.0.559",
       date: "26 May 2026",
       items: [

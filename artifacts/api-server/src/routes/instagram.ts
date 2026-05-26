@@ -1755,7 +1755,11 @@ export async function registerInstagramRoutes(
           return;
         }
 
-        // Jarvee two-stage handshake: extract EB cookies, run mobile API verify
+        // EB login succeeded — extract and persist cookies so the session is
+        // available for the Verify flow.  We deliberately do NOT call
+        // verifyInstagramCredentials here and do NOT touch accountStatus.
+        // The only path that may set accountStatus="valid" is the explicit
+        // Verify flow (/api/profiles/:id/verify or /api/profiles/verify-all).
         const rawCookies = await getSessionPageCookies(profileId);
         const sessionid = rawCookies.find(c => c.name === "sessionid")?.value;
         const csrftoken = rawCookies.find(c => c.name === "csrftoken")?.value;
@@ -1765,7 +1769,6 @@ export async function registerInstagramRoutes(
 
         if (!sessionid) {
           sendLoginDone(profileId, false, `@${profile.username} — login appeared to succeed but no sessionid cookie was found. Try again.`);
-          await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
           return;
         }
 
@@ -1778,40 +1781,7 @@ export async function registerInstagramRoutes(
 
         await storage.updateProfile(profileId, { igApiCookies: freshCookies }).catch(() => {});
 
-        const freshProfile = await storage.getProfile(profileId);
-        if (!freshProfile) {
-          sendLoginDone(profileId, false, "Profile not found after login");
-          return;
-        }
-        const profileWithCookies = { ...freshProfile, igApiCookies: freshCookies } as typeof freshProfile;
-
-        let apiResult: Awaited<ReturnType<typeof verifyInstagramCredentials>>;
-        try {
-          apiResult = await verifyInstagramCredentials(profileWithCookies);
-        } catch (err: any) {
-          sendLoginDone(profileId, false, `@${profile.username} — mobile API check failed: ${err?.message ?? "unknown error"}`);
-          await storage.updateProfile(profileId, { accountStatus: "pending" }).catch(() => {});
-          return;
-        }
-
-        sendLoginDone(profileId, apiResult.ok, apiResult.message);
-        // Same race-condition guard as single-verify: if the mobile API says
-        // "valid" but the EB detected a challenge during this very session,
-        // keep the challenge status so the account card reflects reality.
-        let finalStatusAll = apiResult.accountStatus;
-        if (apiResult.accountStatus === "valid") {
-          const ebChallengeUrl = getSessionChallengeUrl(profileId);
-          if (ebChallengeUrl) {
-            finalStatusAll = "captcha";
-            console.log(`[verify-all:${profileId}] mobile API=valid but EB challenge active (${ebChallengeUrl.slice(0, 80)}…) — keeping status=captcha`);
-          }
-        }
-        await storage.updateProfile(profileId, {
-          accountStatus: finalStatusAll,
-          ...(finalStatusAll === "valid" ? { credentialsDirty: false } : {}),
-          ...(apiResult.igDeviceState ? { igDeviceState: apiResult.igDeviceState } : {}),
-          ...("igApiCookies" in apiResult && apiResult.igApiCookies ? { igApiCookies: apiResult.igApiCookies } : {}),
-        }).catch(() => {});
+        sendLoginDone(profileId, true, `@${profile.username} — logged in via embedded browser. Click Verify Credentials to confirm the session.`);
       })
       .catch(err => sendLoginDone(profileId, false, String(err)));
   });
