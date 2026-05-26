@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.563",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "CI now builds the Windows installer without requiring GitHub Releases access — the installer is saved directly as a downloadable Actions artifact regardless of token configuration." },
+    ],
+  },
+  {
     version: "1.0.562",
     date: "26 May 2026",
     items: [
