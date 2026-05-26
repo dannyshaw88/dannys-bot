@@ -450,6 +450,17 @@ export function CreateGhostPage() {
             </p>
           </div>
 
+          {/* Email code timing tip */}
+          <div className="desktop-card p-3 space-y-1.5 border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Email Code Tip</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Instagram's signup codes expire in ~60 seconds. Have your email open and ready before submitting — paste the code as soon as it arrives. If it's rejected, request a new code and enter it immediately.
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              The ghost browser is fully isolated — it shares no cookies or session data with your other accounts.
+            </p>
+          </div>
+
           {/* Active session info */}
           {isOpen && (
             <div className="desktop-card p-3 space-y-1.5 border-cyan-200 dark:border-cyan-800">

@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.570",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost browser clicks now use the same enhanced shadow DOM + pointer event chain as regular account browsers — cookie banners and React-driven overlays respond correctly during account creation." },
+      { category: "Improvement", text: "View Timeline Feed cascade options are now flat and left-aligned instead of nested, making the settings easier to read and configure." },
+      { category: "Improvement", text: "System Status in the sidebar now shows on a single line." },
+      { category: "Info", text: "Create a Ghost now shows an Email Code Tip explaining that Instagram codes expire in ~60 seconds — have your email open before submitting so the code is still valid when you paste it." },
+    ],
+  },
+  {
     version: "1.0.569",
     date: "26 May 2026",
     items: [

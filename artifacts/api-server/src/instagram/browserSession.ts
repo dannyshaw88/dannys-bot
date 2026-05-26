@@ -3992,26 +3992,87 @@ export async function browserClick(profileId: number, x: number, y: number) {
   if (!s) return;
   // Fire raw mouse events first (gives visual hover/active feedback in the screenshot)
   await s.page.mouse.click(x, y);
-  // Also dispatch a programmatic click via elementFromPoint — React SPAs and Instagram's
-  // SPA often attach synthetic event listeners that don't respond to raw mouse events
-  // alone (especially <a> tags handled by React Router and role="button" divs).
-  await s.page.evaluate((cx, cy) => {
-    const el = document.elementFromPoint(cx, cy) as HTMLElement | null;
-    if (el) {
-      // Walk up the DOM to find the nearest clickable ancestor if the target itself isn't interactive
-      let target: HTMLElement | null = el;
-      for (let i = 0; i < 5 && target; i++) {
-        const tag = target.tagName?.toLowerCase();
-        const role = target.getAttribute("role")?.toLowerCase();
-        if (tag === "a" || tag === "button" || role === "button" || role === "link") {
-          target.click();
-          return;
-        }
-        target = target.parentElement;
-      }
-      el.click(); // fallback: click whatever was under the cursor
+
+  // Also dispatch a programmatic click via elementFromPoint.
+  // Instagram's SPA and cookie consent banners often attach synthetic event listeners
+  // that don't respond to raw mouse events alone. We also pierce shadow roots because
+  // Instagram's cookie banner lives inside one on some surfaces.
+  const dbg = await s.page.evaluate((cx, cy) => {
+    // Helper: dispatch a full pointer+mouse+click sequence on a target element.
+    // Some Instagram overlays only listen to pointerdown/up, not the raw mouse event.
+    function fireClick(target: HTMLElement) {
+      const opts = { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy };
+      target.dispatchEvent(new PointerEvent("pointerover", opts));
+      target.dispatchEvent(new PointerEvent("pointerenter", { ...opts, bubbles: false }));
+      target.dispatchEvent(new MouseEvent("mouseover", opts));
+      target.dispatchEvent(new PointerEvent("pointerdown", opts));
+      target.dispatchEvent(new MouseEvent("mousedown", opts));
+      target.dispatchEvent(new PointerEvent("pointerup", opts));
+      target.dispatchEvent(new MouseEvent("mouseup", opts));
+      target.click();
+      target.dispatchEvent(new MouseEvent("click", opts));
     }
-  }, x, y).catch(() => null);
+
+    // Pierce shadow roots: elementFromPoint stops at shadow boundary.
+    // We walk any open shadow roots to find the deepest real target.
+    function deepElementFromPoint(root: Document | ShadowRoot, px: number, py: number): HTMLElement | null {
+      const el = root.elementFromPoint(px, py) as HTMLElement | null;
+      if (!el) return null;
+      if (el.shadowRoot) {
+        const deeper = deepElementFromPoint(el.shadowRoot, px, py);
+        if (deeper) return deeper;
+      }
+      return el;
+    }
+
+    const el = deepElementFromPoint(document, cx, cy);
+    if (!el) {
+      return { found: false, tag: null, id: null, cls: null, clickedTag: null, shadowPierced: false };
+    }
+
+    const shadowPierced = el.getRootNode() !== document;
+    const foundTag = el.tagName?.toLowerCase() ?? "?";
+    const foundId = el.id ?? "";
+    const foundCls = Array.from(el.classList).slice(0, 4).join(" ");
+
+    // Walk up to 10 levels to find the nearest semantically clickable ancestor.
+    let target: HTMLElement | null = el;
+    for (let i = 0; i < 10 && target; i++) {
+      const tag = target.tagName?.toLowerCase();
+      const role = target.getAttribute("role")?.toLowerCase();
+      const type = (target as HTMLInputElement).type?.toLowerCase();
+      if (
+        tag === "a" || tag === "button" || tag === "input" ||
+        role === "button" || role === "link" || role === "checkbox" || role === "switch" ||
+        type === "submit" || type === "button" || type === "checkbox"
+      ) {
+        fireClick(target);
+        return { found: true, tag: foundTag, id: foundId, cls: foundCls, clickedTag: tag, shadowPierced };
+      }
+      target = target.parentElement ?? (target.getRootNode() as ShadowRoot).host as HTMLElement ?? null;
+    }
+
+    // Fallback: fire on whatever was directly under the cursor.
+    fireClick(el);
+    return { found: true, tag: foundTag, id: foundId, cls: foundCls, clickedTag: foundTag, shadowPierced };
+  }, x, y).catch((err: Error) => {
+    log(`[click:${profileId}] evaluate error: ${err?.message}`, "browser");
+    return null;
+  });
+
+  if (dbg) {
+    if (!dbg.found) {
+      log(`[click:${profileId}] (${x},${y}) → no element found at point`, "browser");
+    } else {
+      log(
+        `[click:${profileId}] (${x},${y}) → found <${dbg.tag}> id="${dbg.id}" cls="${dbg.cls}"` +
+        ` | clicked <${dbg.clickedTag}>` +
+        (dbg.shadowPierced ? " [shadow-pierced]" : ""),
+        "browser"
+      );
+    }
+  }
+
   kickFrame(profileId).catch(() => {});
 }
 
@@ -5990,7 +6051,46 @@ export async function signupBrowserInput(msg: { type: string; [key: string]: any
         await page.goto(msg.url as string, { waitUntil: "domcontentloaded", timeout: 20000 });
         if (_signupWs) wsWrite(_signupWs, { type: "loading", loading: false });
         break;
-      case "click":       await page.mouse.click(msg.x as number, msg.y as number); break;
+      case "click": {
+        // Fire raw mouse click first, then dispatch a full synthetic event sequence
+        // with shadow DOM piercing — same logic as browserClick() for regular accounts.
+        // This ensures cookie banners and React-driven overlays respond in the ghost browser too.
+        const cx = msg.x as number, cy = msg.y as number;
+        await page.mouse.click(cx, cy);
+        await page.evaluate((px, py) => {
+          function fireClick(target: HTMLElement) {
+            const opts = { bubbles: true, cancelable: true, composed: true, clientX: px, clientY: py };
+            target.dispatchEvent(new PointerEvent("pointerover", opts));
+            target.dispatchEvent(new PointerEvent("pointerenter", { ...opts, bubbles: false }));
+            target.dispatchEvent(new MouseEvent("mouseover", opts));
+            target.dispatchEvent(new PointerEvent("pointerdown", opts));
+            target.dispatchEvent(new MouseEvent("mousedown", opts));
+            target.dispatchEvent(new PointerEvent("pointerup", opts));
+            target.dispatchEvent(new MouseEvent("mouseup", opts));
+            target.click();
+            target.dispatchEvent(new MouseEvent("click", opts));
+          }
+          function deepEl(root: Document | ShadowRoot, x: number, y: number): HTMLElement | null {
+            const el = root.elementFromPoint(x, y) as HTMLElement | null;
+            if (!el) return null;
+            if (el.shadowRoot) { const d = deepEl(el.shadowRoot, x, y); if (d) return d; }
+            return el;
+          }
+          const el = deepEl(document, px, py);
+          if (!el) return;
+          let t: HTMLElement | null = el;
+          for (let i = 0; i < 10 && t; i++) {
+            const tag = t.tagName?.toLowerCase();
+            const role = t.getAttribute("role")?.toLowerCase();
+            if (tag === "a" || tag === "button" || tag === "input" || role === "button" || role === "link") {
+              fireClick(t); return;
+            }
+            t = t.parentElement ?? (t.getRootNode() as ShadowRoot).host as HTMLElement ?? null;
+          }
+          fireClick(el);
+        }, cx, cy).catch(() => {});
+        break;
+      }
       case "mousemove":   await page.mouse.move(msg.x as number, msg.y as number); break;
       case "scroll":
         await page.mouse.move(msg.x as number, msg.y as number);

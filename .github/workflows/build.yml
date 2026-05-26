@@ -73,7 +73,7 @@ jobs:
 
       - name: Package Windows installer
         working-directory: artifacts/electron
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
 

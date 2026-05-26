@@ -171,13 +171,11 @@ export function Sidebar() {
         </button>
       </div>
 
-      <div className="p-4 border-t border-border/50">
-        <div className="bg-background rounded-lg p-3 border border-border">
-          <p className="text-xs font-medium text-foreground">System Status</p>
-          <div className="flex items-center mt-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 mr-2"></span>
-            <span className="text-xs text-muted-foreground">In Development</span>
-          </div>
+      <div className="px-4 pb-4 border-t border-border/50 pt-3">
+        <div className="bg-background rounded-lg px-2.5 py-1.5 border border-border flex items-center gap-1.5 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+          <span className="text-[11px] font-medium text-foreground whitespace-nowrap">System Status</span>
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap truncate">· Dev</span>
         </div>
       </div>
     </div>
