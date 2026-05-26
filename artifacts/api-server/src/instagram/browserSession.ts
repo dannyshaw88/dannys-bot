@@ -4577,22 +4577,46 @@ async function dismissCookieBanner(page: Page): Promise<void> {
     "aceptar todo",          // Spanish
     "accetta tutto",         // Italian
     "alle cookies akzeptieren",
+    "tillåt alla",           // Swedish
+    "alle accepteren",       // Dutch
   ];
   try {
     const btnRect = await page.evaluate((texts: string[]) => {
+      function isCookieAcceptBtn(btn: HTMLElement): boolean {
+        const r = btn.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return false;
+        const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+        // Primary: matches known accept phrases (incl. "allow all", "accept all" standalone)
+        if (texts.some(t => txt === t || txt.includes(t))) return true;
+        // Secondary: "allow all" / "accept all" when page has cookie context
+        if (/^(allow all|accept all)$/.test(txt) &&
+            (document.body.innerText || "").toLowerCase().includes("cookie")) return true;
+        return false;
+      }
       // 1. Try Instagram's own data attribute first
       const attrBtn = document.querySelector<HTMLElement>('[data-cookiebanner="accept_button"]');
       if (attrBtn) {
         const r = attrBtn.getBoundingClientRect();
         if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
       }
-      // 2. Walk all buttons looking for known accept text
+      // 2. Try known container selectors
+      const container = document.querySelector<HTMLElement>(
+        '[data-cookiebanner], [class*="CookieBanner"], [class*="cookie-banner"], [id*="cookie"]'
+      );
+      if (container) {
+        const btn = Array.from(container.querySelectorAll<HTMLElement>('button, [role="button"]'))
+          .find(isCookieAcceptBtn);
+        if (btn) {
+          const r = btn.getBoundingClientRect();
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        }
+      }
+      // 3. Walk all buttons looking for known accept text
       const allBtns = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
       for (const btn of allBtns) {
-        const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-        if (texts.some(t => txt.includes(t))) {
+        if (isCookieAcceptBtn(btn)) {
           const r = btn.getBoundingClientRect();
-          if (r.width > 0 && r.height > 0) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
         }
       }
       return null;

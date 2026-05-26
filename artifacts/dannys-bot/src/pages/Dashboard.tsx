@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.572",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie policy banner no longer gets stuck on new logins. The auto-dismiss now keeps retrying every 500ms until the banner is actually gone from the page — previously it gave up after a single click attempt even if React silently dropped the event." },
+      { category: "Fix", text: "Cookie banner detection now also matches 'Allow all' and 'Accept all' buttons (without the word 'cookie') when the page is a cookie consent page — catches Instagram's latest banner variants." },
+    ],
+  },
+  {
     version: "1.0.571",
     date: "26 May 2026",
     items: [

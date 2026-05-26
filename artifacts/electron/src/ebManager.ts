@@ -119,15 +119,20 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
   }
 
   // ── Cookie consent banner dismiss ────────────────────────────────────────
-  // Safe discriminator: any button whose text INCLUDES the word "cookie" (case-
-  // insensitive) that does NOT say "decline/reject/refuse/necessary only".
-  // No Instagram Save-Login, 2FA, or other persistent dialog ever contains the
-  // word "cookie" — so this cannot cause click loops on other dialogs.
-  if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
+  // Retries every 500ms until the button disappears (confirmed dismissed).
+  // Does NOT clear on first click — React may silently drop programmatic
+  // events; we keep firing until the banner is actually gone.
+  // Two-tier text match:
+  //   1. Button text includes "cookie" but not "decline/reject/refuse/..."
+  //   2. Button text is exactly "allow all" or "accept all" AND the page
+  //      body contains the word "cookie" (consent-page context check).
+  if(!window.__eq_cookie_tick){var __eq_ck_clicked=false;window.__eq_cookie_tick=setInterval(function(){
     function _isCookieAcceptBtn(b){
       if(!b||!b.getBoundingClientRect||b.getBoundingClientRect().width<=0)return false;
       var t=(b.innerText||b.textContent||'').trim().toLowerCase();
-      return t.includes('cookie')&&!/decline|reject|refuse|necessary only|essential only/.test(t);
+      if(t.includes('cookie')&&!/decline|reject|refuse|necessary only|essential only/.test(t))return true;
+      if(/^(allow all|accept all)$/.test(t)&&(document.body.innerText||'').toLowerCase().includes('cookie'))return true;
+      return false;
     }
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
     if(!btn){
@@ -143,17 +148,20 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
       try{btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}
       try{btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
       btn.click();
-      clearInterval(window.__eq_cookie_tick);
-      window.__eq_cookie_tick=null;
-      // After cookie dismiss: try to fill the login form immediately (it may
-      // already be on the page), or click the "Log in" button to navigate to it.
-      setTimeout(function(){
-        if(AF&&window.__eq_doAutoFill())return;
-        var LOGIN_RE=/^log\s*in$/i;
-        var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
-        if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
-        if(loginEl){loginEl.click();}
-      },1200);
+      if(!__eq_ck_clicked){
+        __eq_ck_clicked=true;
+        // After first click: try to navigate to login (fires once only).
+        setTimeout(function(){
+          if(AF&&window.__eq_doAutoFill())return;
+          var LOGIN_RE=/^log\s*in$/i;
+          var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
+          if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
+          if(loginEl){loginEl.click();}
+        },1200);
+      }
+    }else if(__eq_ck_clicked){
+      // Button was visible, we clicked it, and now it's gone — confirmed dismissed.
+      clearInterval(window.__eq_cookie_tick);window.__eq_cookie_tick=null;
     }
   },500);}
 })();`;
@@ -748,7 +756,9 @@ export async function openEbWindow(opts: {
       const r = b.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return false;
       const t = (b.innerText||b.textContent||'').trim().toLowerCase();
-      return t.includes('cookie') && !/decline|reject|refuse|necessary only|essential only/.test(t);
+      if (t.includes('cookie') && !/decline|reject|refuse|necessary only|essential only/.test(t)) return true;
+      if (/^(allow all|accept all)$/.test(t) && (document.body.innerText||'').toLowerCase().includes('cookie')) return true;
+      return false;
     }
     let btn = document.querySelector('[data-cookiebanner="accept_button"]')
            || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
@@ -771,6 +781,10 @@ export async function openEbWindow(opts: {
     return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
   })()`;
 
+  // Keep firing until the banner is CONFIRMED GONE (not just on first click attempt).
+  // If React silently drops the programmatic events the timer keeps retrying — it
+  // only clears when the button is no longer in the DOM (= dismiss actually worked).
+  let _cookieBannerClicked = false;
   const _cookieDismissTimer = setInterval(async () => {
     if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
     try {
@@ -782,15 +796,18 @@ export async function openEbWindow(opts: {
         win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
         await new Promise(r => setTimeout(r, 60));
         win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
-        console.log(`[ebManager:${profileId}] Cookie banner dismissed at (${x}, ${y})`);
-        // Clear immediately — do NOT re-check; re-checking causes loops when
-        // non-cookie dialogs are still visible after the banner is gone.
+        console.log(`[ebManager:${profileId}] Cookie banner click at (${x}, ${y})`);
+        _cookieBannerClicked = true;
+        // Do NOT clear here — wait for the button to disappear on the next tick.
+      } else if (_cookieBannerClicked) {
+        // We clicked it and now it's gone — dismiss confirmed.
         clearInterval(_cookieDismissTimer);
+        console.log(`[ebManager:${profileId}] Cookie banner confirmed dismissed`);
       }
     } catch {}
   }, 800);
   win.once("closed", () => clearInterval(_cookieDismissTimer));
-  // Stop trying after 90 seconds — if the banner isn't gone by then, give up
+  // Hard stop after 90 seconds — if still not gone, give up
   setTimeout(() => clearInterval(_cookieDismissTimer), 90000);
 
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
