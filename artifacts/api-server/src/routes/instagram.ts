@@ -50,6 +50,7 @@ import {
   openSignupBrowser,
   closeSignupBrowser,
   resetSignupBrowser,
+  isSignupBrowserOpen,
   getEbLiveStats,
   hasActiveWS,
   sendEbWsMessage,
@@ -2055,6 +2056,11 @@ export async function registerInstagramRoutes(
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err?.message });
     }
+  });
+
+  // Status check — lets the frontend detect a running browser after a page reload
+  app.get("/api/signup/browser/status", (_req, res) => {
+    res.json({ running: isSignupBrowserOpen() });
   });
 
   // Close the standalone signup browser

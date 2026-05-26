@@ -56,6 +56,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+      version: "1.0.559",
+      date: "26 May 2026",
+      items: [
+        { category: "Feature", text: "Create a Ghost: the proxy selector now has an \"Add Proxy\" option at the bottom of the dropdown — selecting it reveals inline IP/Host, Port, Username, and Password fields so you can use a custom proxy without adding it to Proxy Manager first." },
+        { category: "Fix", text: "Create a Ghost: \"Start from Fresh\" now also picks a new random device identity (user-agent) alongside wiping all cookies and cache, giving a completely clean slate for each new account attempt." },
+        { category: "Fix", text: "Create a Ghost: the ghost browser stream now stays live through the full Instagram signup flow — the screencast automatically reconnects after each page navigation (e.g. signup form → email verification), so the browser no longer appears to crash mid-signup." },
+        { category: "Fix", text: "Create a Ghost: if Chrome disconnects unexpectedly (OOM or force kill), the browser panel now shows a clear message instead of freezing on the last frame forever." },
+        { category: "Fix", text: "Create a Ghost: Replit preview panel refreshes no longer reset the browser to \"not started\" — on page load the app checks whether the ghost browser is still running and reconnects automatically." },
+      ],
+    },
+  {
     version: "1.0.558",
     date: "26 May 2026",
     items: [

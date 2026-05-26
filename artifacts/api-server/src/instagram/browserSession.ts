@@ -6046,6 +6046,10 @@ export function detachSignupWS(ws: WebSocket): void {
 // manually sign up. The page is streamed via the existing _signupPage / _signupWs
 // pipeline — the BrowserPanel canvas shows the live Chrome tab.
 
+export function isSignupBrowserOpen(): boolean {
+  return !!_signupBrowser && !!_signupPage;
+}
+
 export async function openSignupBrowser(opts?: {
   proxyHost?: string;
   proxyPort?: number;
@@ -6107,11 +6111,31 @@ export async function openSignupBrowser(opts?: {
 
     // Forward URL changes to the BrowserPanel address bar so the user can see
     // which page Instagram has navigated to (login, signup, challenge, etc.).
+    // Also restart the screencast after every main-frame navigation: when Instagram
+    // does a full-page navigation (signup form → email verification, etc.) the old
+    // CDP session is tied to the previous renderer and stops delivering frames.
+    // Creating a fresh CDP session after navigation keeps the stream alive.
     page.on("framenavigated", (frame: any) => {
       if (frame !== page.mainFrame()) return;
       const url = frame.url();
       if (url && url !== "about:blank" && _signupWs && _signupWs.readyState === WebSocket.OPEN) {
         try { _signupWs.send(JSON.stringify({ type: "urlChange", url })); } catch {}
+      }
+      // Wait 500 ms for the new renderer to settle, then restart the screencast.
+      // The delay prevents createCDPSession() from racing against an in-progress
+      // renderer swap and keeps frame delivery continuous across navigations.
+      setTimeout(() => { _startSignupScreencast().catch(() => {}); }, 500);
+    });
+
+    // Notify the frontend when Chrome disconnects unexpectedly (OOM crash, force
+    // kill, etc.) so the BrowserPanel can update its status rather than showing
+    // a frozen canvas forever.
+    browser.on("disconnected", () => {
+      _signupPage = null;
+      _signupCdp  = null;
+      _signupBrowser = null;
+      if (_signupWs && _signupWs.readyState === WebSocket.OPEN) {
+        try { _signupWs.send(JSON.stringify({ type: "waiting", message: "Browser disconnected unexpectedly. Click Open Ghost Browser to restart." })); } catch {}
       }
     });
 
