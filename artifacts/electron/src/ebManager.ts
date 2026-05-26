@@ -119,18 +119,13 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
   }
 
   // ── Cookie consent banner dismiss ────────────────────────────────────────
+  // Selectors must be SPECIFIC — never "last button in any dialog" because
+  // Instagram shows Save-Login/2FA dialogs that would cause infinite click loops.
   if(!window.__eq_cookie_tick){window.__eq_cookie_tick=setInterval(function(){
-    var ACCEPT=/allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional/i;
-    // Selector 1: legacy data-attribute buttons
+    var ACCEPT=/^(allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional cookies)$/i;
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
-    // Selector 2: text-based match across all buttons/role=button elements
     if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"]')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return ACCEPT.test(t)&&b.getBoundingClientRect().width>0;});}
-    // Selector 3: last primary-action button inside any modal/dialog (Bloks-based cookie dialog)
-    if(!btn){var dlg=document.querySelector('[role="dialog"]');if(dlg){var btns=Array.from(dlg.querySelectorAll('button,[role="button"]')).filter(function(b){return b.getBoundingClientRect().width>0;});if(btns.length>0)btn=btns[btns.length-1];}}
-    // Selector 4: aria-label fallback
-    if(!btn){btn=document.querySelector('button[aria-label*="Allow"],button[aria-label*="Accept"],button[aria-label*="allow"],button[aria-label*="accept"]');}
     if(btn){
-      // Fire the full pointer+mouse event sequence that React event delegation listens to
       try{btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
       try{btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
       try{btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
@@ -728,88 +723,46 @@ export async function openEbWindow(opts: {
   win.webContents.on("did-finish-load", () => injectPageUtils());
 
   // ── Main-process cookie banner auto-dismiss ───────────────────────────────
-  // Primary path: find the button's CSS-pixel centre → webContents.focus() →
-  // sendInputEvent (real OS-level click).  If the button is still visible
-  // 300 ms later (sendInputEvent silently missed — e.g. window wasn't active)
-  // we fall back to dispatching PointerEvent + MouseEvent + .click() from JS.
-  // Runs every 800 ms, clears itself once the banner is gone.
-  const _COOKIE_SELECTOR_JS = `(() => {
-    const TEXTS = /allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional/i;
+  // Fires both sendInputEvent (real OS-level click, needs webContents.focus())
+  // and a JS PointerEvent sequence simultaneously — belt-and-suspenders.
+  // Clears itself immediately after the first match so it never loops.
+  // IMPORTANT: selectors must be SPECIFIC to the cookie banner.  Never use
+  // "last button in any dialog" — Instagram shows Save-Login, 2FA, and other
+  // persistent dialogs that would cause infinite click loops.
+  const _COOKIE_BANNER_JS = `(() => {
+    const TEXTS = /^(allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional cookies)$/i;
     let btn = document.querySelector('[data-cookiebanner="accept_button"]')
            || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
     if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(b => {
       const t = (b.innerText||b.textContent||'').trim();
       return TEXTS.test(t) && b.getBoundingClientRect().width > 0;
     });
-    if (!btn) {
-      const dlg = document.querySelector('[role="dialog"]');
-      if (dlg) {
-        const visible = Array.from(dlg.querySelectorAll('button,[role="button"]')).filter(b => b.getBoundingClientRect().width > 0);
-        if (visible.length) btn = visible[visible.length - 1];
-      }
-    }
-    if (!btn) btn = document.querySelector('button[aria-label*="Allow"],button[aria-label*="Accept"],button[aria-label*="allow"],button[aria-label*="accept"]');
     if (!btn) return null;
     const r = btn.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return null;
-    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-  })()`;
-
-  const _COOKIE_CLICK_JS = `(() => {
-    const TEXTS = /allow all cookies|allow all|accept all|accept cookies|allow cookies|akzeptieren|alle cookies|accepter tout|aceptar todo|accetta tutto|tillåt alla|allow essential and optional/i;
-    let btn = document.querySelector('[data-cookiebanner="accept_button"]')
-           || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
-    if (!btn) btn = Array.from(document.querySelectorAll('button,[role="button"]')).find(b => {
-      const t = (b.innerText||b.textContent||'').trim();
-      return TEXTS.test(t) && b.getBoundingClientRect().width > 0;
-    });
-    if (!btn) {
-      const dlg = document.querySelector('[role="dialog"]');
-      if (dlg) {
-        const visible = Array.from(dlg.querySelectorAll('button,[role="button"]')).filter(b => b.getBoundingClientRect().width > 0);
-        if (visible.length) btn = visible[visible.length - 1];
-      }
-    }
-    if (!btn) btn = document.querySelector('button[aria-label*="Allow"],button[aria-label*="Accept"],button[aria-label*="allow"],button[aria-label*="accept"]');
-    if (!btn) return false;
+    // Fire the full event sequence that React listens to
     try { btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
     try { btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1})); } catch(e) {}
     try { btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); } catch(e) {}
     btn.click();
-    return true;
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
   })()`;
 
-  let _cookieDismissAttempts = 0;
   const _cookieDismissTimer = setInterval(async () => {
     if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
     try {
-      const btnPos = await win.webContents.executeJavaScript(_COOKIE_SELECTOR_JS).catch(() => null);
+      const btnPos = await win.webContents.executeJavaScript(_COOKIE_BANNER_JS).catch(() => null);
       if (btnPos && typeof (btnPos as any).x === "number") {
         const { x, y } = btnPos as { x: number; y: number };
-        // Focus the renderer so sendInputEvent is not dropped on Windows
+        // sendInputEvent needs the renderer focused on Windows or it is silently dropped
         win.webContents.focus();
         win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
-        await new Promise(r => setTimeout(r, 80));
-        win.webContents.sendInputEvent({ type: "mouseUp",   x, y, button: "left", clickCount: 1 });
-        console.log(`[ebManager:${profileId}] Cookie banner: sendInputEvent at (${x}, ${y}) attempt #${++_cookieDismissAttempts}`);
-        // 350 ms later: verify the button is gone; if not, fire JS fallback too
-        await new Promise(r => setTimeout(r, 350));
-        if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
-        const stillThere = await win.webContents.executeJavaScript(_COOKIE_SELECTOR_JS).catch(() => null);
-        if (!stillThere) {
-          console.log(`[ebManager:${profileId}] Cookie banner dismissed (sendInputEvent confirmed gone)`);
-          clearInterval(_cookieDismissTimer);
-        } else {
-          // sendInputEvent didn't land — fire JS PointerEvent fallback
-          const clicked = await win.webContents.executeJavaScript(_COOKIE_CLICK_JS).catch(() => false);
-          if (clicked) console.log(`[ebManager:${profileId}] Cookie banner: JS PointerEvent fallback fired`);
-        }
-      } else {
-        // Log once every ~5 s so we can see what's happening without spam
-        if (_cookieDismissAttempts % 6 === 0) {
-          console.log(`[ebManager:${profileId}] Cookie banner: no button found yet (tick ${_cookieDismissAttempts})`);
-        }
-        _cookieDismissAttempts++;
+        await new Promise(r => setTimeout(r, 60));
+        win.webContents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
+        console.log(`[ebManager:${profileId}] Cookie banner dismissed at (${x}, ${y})`);
+        // Clear immediately — do NOT re-check; re-checking causes loops when
+        // non-cookie dialogs are still visible after the banner is gone.
+        clearInterval(_cookieDismissTimer);
       }
     } catch {}
   }, 800);

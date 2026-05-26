@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.569",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie banner auto-dismiss no longer fires hundreds of clicks — the over-broad 'last button in any dialog' selector was matching Instagram's Save Login and 2FA dialogs, causing an infinite click loop. Now uses exact text matching only and clears itself immediately on the first successful dismiss." },
+    ],
+  },
+  {
     version: "1.0.568",
     date: "26 May 2026",
     items: [
