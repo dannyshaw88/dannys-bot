@@ -790,21 +790,37 @@ export async function openEbWindow(opts: {
     return pos;
   })()`;
 
+  // ── Diagnostic relay helper ───────────────────────────────────────────────
+  // ebManager runs in the Electron main process — its console.log does NOT
+  // appear in the API server debug log file the user reads. This helper fires
+  // a fire-and-forget POST to /api/profiles/:id/eb-diag so the message shows
+  // up in the server log, AND also writes to console for Electron DevTools.
+  const _ebLog = (msg: string) => {
+    console.log(`[ebManager:${profileId}] ${msg}`);
+    if (_serverPort) {
+      fetch(`http://127.0.0.1:${_serverPort}/api/profiles/${profileId}/eb-diag`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ message: msg }),
+      }).catch(() => {});
+    }
+  };
+
   // Cookie dismiss using sendInputEvent (produces isTrusted=true events that
   // React accepts). Key rules to prevent EB freeze:
   //   • DETECT first (JS only, no click in the script)
   //   • CLICK once via sendInputEvent, then wait COOLDOWN_MS before re-checking
   //   • Max MAX_ATTEMPTS clicks total — give up gracefully rather than loop forever
   //   • focus() only called immediately before a click, never on idle ticks
-  // Diagnostic: first 20 ticks always log url + detect result so we can see
-  // whether the timer is running and what it sees (even when no banner found).
+  // Diagnostic: first 20 ticks always relay url + detect result via _ebLog so
+  // that the messages appear in the server debug log the user can read.
   const COOKIE_MAX_ATTEMPTS = 5;
   const COOKIE_COOLDOWN_MS  = 4000; // wait 4s after each click before checking again
   const COOKIE_DIAG_TICKS   = 20;   // log every tick for the first 20 seconds
   let _cookieAttempts    = 0;
   let _cookieLastClickAt = 0;
   let _cookieTick        = 0;
-  console.log(`[ebManager:${profileId}] Cookie dismiss timer started`);
+  _ebLog("Cookie dismiss timer started");
   const _cookieDismissTimer = setInterval(async () => {
     if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
     // Enforce cooldown — don't hammer the renderer right after a click
@@ -814,23 +830,23 @@ export async function openEbWindow(opts: {
       const pos = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null) as
         { x: number; y: number; label: string } | null;
 
-      // Always log for the first COOKIE_DIAG_TICKS ticks so we can confirm the
-      // timer is running and see what the detect script returns on each tick.
+      // Always relay for the first COOKIE_DIAG_TICKS ticks so we can confirm
+      // the timer is running and see what the detect script returns on each tick.
       if (_cookieTick <= COOKIE_DIAG_TICKS) {
         const url = win.isDestroyed() ? "(destroyed)" : win.webContents.getURL().slice(0, 80);
         const det = pos ? `FOUND label="${pos.label}" at (${pos.x},${pos.y})` : "no-banner";
-        console.log(`[ebManager:${profileId}] CookieTick#${_cookieTick} url="${url}" detect=${det}`);
+        _ebLog(`CookieTick#${_cookieTick} url="${url}" detect=${det}`);
       }
 
       if (pos) {
         if (_cookieAttempts >= COOKIE_MAX_ATTEMPTS) {
-          console.warn(`[ebManager:${profileId}] Cookie banner: giving up after ${_cookieAttempts} attempts — button still at (${pos.x},${pos.y}) label="${pos.label}"`);
+          _ebLog(`Cookie banner: giving up after ${_cookieAttempts} attempts — button still at (${pos.x},${pos.y}) label="${pos.label}"`);
           clearInterval(_cookieDismissTimer);
           return;
         }
         _cookieAttempts++;
         _cookieLastClickAt = Date.now();
-        console.log(`[ebManager:${profileId}] Cookie banner attempt ${_cookieAttempts}/${COOKIE_MAX_ATTEMPTS}: sendInputEvent click at (${pos.x},${pos.y}) label="${pos.label}"`);
+        _ebLog(`Cookie banner attempt ${_cookieAttempts}/${COOKIE_MAX_ATTEMPTS}: sendInputEvent click at (${pos.x},${pos.y}) label="${pos.label}"`);
         win.webContents.focus();
         win.webContents.sendInputEvent({ type: "mouseDown", x: pos.x, y: pos.y, button: "left", clickCount: 1 });
         await new Promise(r => setTimeout(r, 80));
@@ -838,10 +854,10 @@ export async function openEbWindow(opts: {
       } else if (_cookieAttempts > 0) {
         // We clicked at least once and the button is now gone — success
         clearInterval(_cookieDismissTimer);
-        console.log(`[ebManager:${profileId}] Cookie banner dismissed after ${_cookieAttempts} click(s)`);
+        _ebLog(`Cookie banner dismissed after ${_cookieAttempts} click(s)`);
       }
     } catch (err) {
-      console.warn(`[ebManager:${profileId}] Cookie banner check error: ${err}`);
+      _ebLog(`Cookie banner check error: ${err}`);
     }
   }, 1000); // poll every 1s, but cooldown gates how often we actually click
   win.once("closed", () => clearInterval(_cookieDismissTimer));

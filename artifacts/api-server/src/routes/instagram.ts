@@ -753,6 +753,18 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── EB diagnostic log relay (Electron main process → server log) ──────────
+  // ebManager.ts runs in the Electron main process whose console.log does NOT
+  // appear in the server debug log. This endpoint lets the main process relay
+  // important diagnostic messages (cookie banner detection, etc.) so they show
+  // up in the log file the user can see.
+  app.post("/api/profiles/:id/eb-diag", (req, res) => {
+    const profileId = Number(req.params.id);
+    const { message } = req.body ?? {};
+    if (message) console.log(`[ebManager:${profileId}] ${message}`);
+    res.json({ ok: true });
+  });
+
   // ── EB Input proxy (Electron native window mode) ─────────────────────────
   // Receives the same message objects BrowserPanel's send() emits.
   // Proxies them to the ebManager IPC HTTP server which controls the native

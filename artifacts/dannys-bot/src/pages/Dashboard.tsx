@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.576",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie dismiss diagnostic logs now actually appear in the log file. The embedded browser runs in a separate process whose output was never captured — diagnostics are now relayed through the server so every CookieTick line shows up where you can see it." },
+    ],
+  },
+  {
     version: "1.0.575",
     date: "26 May 2026",
     items: [
