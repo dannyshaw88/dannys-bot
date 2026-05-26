@@ -56,6 +56,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.575",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Cookie dismiss timer now logs every detection attempt for the first 20 seconds — including the page URL and whether the button was found or not. This makes it possible to diagnose exactly what's happening on each open." },
+      { category: "Fix", text: "Auto-fill login sequence was still using the old broken cookie dismiss code. It now uses the same two-step approach as the main timer: detect-only JS returns coordinates, then the main process fires a trusted OS click, then the login form is filled." },
+    ],
+  },
+  {
     version: "1.0.574",
     date: "26 May 2026",
     items: [

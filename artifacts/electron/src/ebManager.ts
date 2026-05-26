@@ -796,17 +796,31 @@ export async function openEbWindow(opts: {
   //   • CLICK once via sendInputEvent, then wait COOLDOWN_MS before re-checking
   //   • Max MAX_ATTEMPTS clicks total — give up gracefully rather than loop forever
   //   • focus() only called immediately before a click, never on idle ticks
+  // Diagnostic: first 20 ticks always log url + detect result so we can see
+  // whether the timer is running and what it sees (even when no banner found).
   const COOKIE_MAX_ATTEMPTS = 5;
   const COOKIE_COOLDOWN_MS  = 4000; // wait 4s after each click before checking again
+  const COOKIE_DIAG_TICKS   = 20;   // log every tick for the first 20 seconds
   let _cookieAttempts    = 0;
   let _cookieLastClickAt = 0;
+  let _cookieTick        = 0;
+  console.log(`[ebManager:${profileId}] Cookie dismiss timer started`);
   const _cookieDismissTimer = setInterval(async () => {
     if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
     // Enforce cooldown — don't hammer the renderer right after a click
     if (_cookieLastClickAt > 0 && Date.now() - _cookieLastClickAt < COOKIE_COOLDOWN_MS) return;
+    _cookieTick++;
     try {
       const pos = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null) as
         { x: number; y: number; label: string } | null;
+
+      // Always log for the first COOKIE_DIAG_TICKS ticks so we can confirm the
+      // timer is running and see what the detect script returns on each tick.
+      if (_cookieTick <= COOKIE_DIAG_TICKS) {
+        const url = win.isDestroyed() ? "(destroyed)" : win.webContents.getURL().slice(0, 80);
+        const det = pos ? `FOUND label="${pos.label}" at (${pos.x},${pos.y})` : "no-banner";
+        console.log(`[ebManager:${profileId}] CookieTick#${_cookieTick} url="${url}" detect=${det}`);
+      }
 
       if (pos) {
         if (_cookieAttempts >= COOKIE_MAX_ATTEMPTS) {
@@ -926,45 +940,46 @@ export async function openEbWindow(opts: {
 
       try {
         if (onLogin) {
+          // ── Phase 1: detect cookie banner (detect-only JS, no events) ────────
+          // Returns button centre coordinates if banner is present, null otherwise.
+          // The actual click uses sendInputEvent (isTrusted=true, required for React).
+          const _afCkDetectJs = `(() => {
+            const _CK_ACCEPT = ${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
+            function _isCkBtn(b) {
+              if (!b || !b.getBoundingClientRect) return false;
+              if (b.getBoundingClientRect().width <= 0) return false;
+              const t = (b.innerText||b.textContent||'').trim().toLowerCase();
+              return _CK_ACCEPT.indexOf(t) !== -1;
+            }
+            let b = document.querySelector('[data-cookiebanner="accept_button"]')
+                 || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+            if (!b) {
+              const c = document.querySelector('[data-cookiebanner]') || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
+              if (c) b = Array.from(c.querySelectorAll('button,[role="button"]')).find(_isCkBtn) || null;
+            }
+            if (!b) b = Array.from(document.querySelectorAll('button,[role="button"]')).find(_isCkBtn) || null;
+            if (!b) return null;
+            const r = b.getBoundingClientRect();
+            return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) };
+          })()`;
+          const ckPos = await win.webContents.executeJavaScript(_afCkDetectJs).catch(() => null) as
+            { x: number; y: number } | null;
+
+          if (ckPos) {
+            console.log(`[ebManager] @${username} — auto-fill: cookie banner at (${ckPos.x},${ckPos.y}), clicking via sendInputEvent`);
+            win.webContents.focus();
+            win.webContents.sendInputEvent({ type: "mouseDown", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1 });
+            await new Promise(r => setTimeout(r, 80));
+            win.webContents.sendInputEvent({ type: "mouseUp",   x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1 });
+            // Wait for the banner to dismiss and any resulting navigation to settle
+            await new Promise(r => setTimeout(r, 3000));
+            if (win.isDestroyed()) { _autoFillBusy = false; return; }
+          }
+
+          // ── Phase 2: fill login form ─────────────────────────────────────────
           await win.webContents.executeJavaScript(`
             (async () => {
               const wait = ms => new Promise(r => setTimeout(r, ms));
-
-              // ── Step 1: dismiss cookie consent banner if present ──────────────
-              // Safe discriminator: button text includes "cookie" but not
-              // "decline/reject/refuse" — no Login/2FA/Save dialog uses that word.
-              function _isCkBtn(b) {
-                if (!b || !b.getBoundingClientRect) return false;
-                if (b.getBoundingClientRect().width <= 0) return false;
-                const t = (b.innerText||b.textContent||'').trim().toLowerCase();
-                return t.includes('cookie') && !/decline|reject|refuse|necessary only|essential only/.test(t);
-              }
-              for (let t = 0; t < 10; t++) {
-                const cookieBtn = (
-                  document.querySelector('[data-cookiebanner="accept_button"]') ||
-                  document.querySelector('[data-testid="cookie-policy-banner-accept"]') ||
-                  (() => {
-                    const c = document.querySelector('[data-cookiebanner]') || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
-                    if (c) return Array.from(c.querySelectorAll('button,[role="button"]')).find(_isCkBtn) || null;
-                    return null;
-                  })() ||
-                  Array.from(document.querySelectorAll('button,[role="button"]')).find(_isCkBtn)
-                );
-                if (cookieBtn) {
-                  try{cookieBtn.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                  try{cookieBtn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
-                  try{cookieBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                  try{cookieBtn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,composed:true,isPrimary:true,pointerId:1}));}catch(e){}
-                  try{cookieBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                  try{cookieBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}catch(e){}
-                  cookieBtn.click();
-                  await wait(1000); // wait for the banner to dismiss
-                  break;
-                }
-                await wait(500);
-              }
-
-              // ── Step 2: fill login form ───────────────────────────────────────
               const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
               let uInp, pInp, tries = 0;
               while (tries++ < 20) {
