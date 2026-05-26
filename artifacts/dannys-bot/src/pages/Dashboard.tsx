@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.562",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Windows installer CI build fixed — build outputs are now transferred between jobs using a tar archive, guaranteeing the compiled server and frontend land in exactly the right place for packaging." },
+    ],
+  },
+  {
     version: "1.0.561",
     date: "26 May 2026",
     items: [

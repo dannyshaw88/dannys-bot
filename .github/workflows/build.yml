@@ -32,13 +32,14 @@ jobs:
         env:
           REPL_ID: ci
 
+      - name: Archive build outputs
+        run: tar -czf web-builds.tar.gz artifacts/api-server/dist artifacts/dannys-bot/dist
+
       - name: Upload web builds
         uses: actions/upload-artifact@v4
         with:
           name: web-builds
-          path: |
-            artifacts/api-server/dist
-            artifacts/dannys-bot/dist
+          path: web-builds.tar.gz
           if-no-files-found: error
 
   package-windows:
@@ -56,7 +57,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-builds
-          path: ${{ github.workspace }}
+
+      - name: Extract build outputs
+        run: tar -xzf web-builds.tar.gz
 
       - name: Install Electron dependencies
         working-directory: artifacts/electron
