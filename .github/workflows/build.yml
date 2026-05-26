@@ -1,87 +1,88 @@
 name: Build Windows App
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  on:
+    push:
+      branches: [main]
+    workflow_dispatch:
 
-jobs:
-  build-web:
-    runs-on: ubuntu-latest
+  jobs:
+    build-web:
+      runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+      steps:
+        - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+        - uses: actions/setup-node@v4
+          with:
+            node-version: 24
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
+        - uses: pnpm/action-setup@v4
+          with:
+            version: latest
 
-      - name: Install workspace dependencies
-        run: pnpm install --no-frozen-lockfile --ignore-scripts
+        - name: Install workspace dependencies
+          run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-      - name: Build API server
-        run: pnpm --filter @workspace/api-server run build
+        - name: Build API server
+          run: pnpm --filter @workspace/api-server run build
 
-      - name: Build frontend
-        run: pnpm --filter @workspace/dannys-bot run build
-        env:
-          REPL_ID: ci
+        - name: Build frontend
+          run: pnpm --filter @workspace/dannys-bot run build
+          env:
+            REPL_ID: ci
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-builds
-          path: |
-            artifacts/api-server/dist
-            artifacts/dannys-bot/dist
+        - name: Upload build artifacts
+          uses: actions/upload-artifact@v4
+          with:
+            name: web-builds
+            path: |
+              artifacts/api-server/dist
+              artifacts/dannys-bot/dist
 
-  package-windows:
-    needs: build-web
-    runs-on: windows-latest
-    permissions:
-      contents: write
+    package-windows:
+      needs: build-web
+      runs-on: windows-latest
+      permissions:
+        contents: write
 
-    steps:
-      - uses: actions/checkout@v4
+      steps:
+        - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+        - uses: actions/setup-node@v4
+          with:
+            node-version: 24
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: web-builds
-          path: artifacts
+        - name: Download build artifacts
+          uses: actions/download-artifact@v4
+          with:
+            name: web-builds
+            path: artifacts
 
-      - name: Install Electron dependencies
-        working-directory: artifacts/electron
-        run: npm install
+        - name: Install Electron dependencies
+          working-directory: artifacts/electron
+          run: npm install
 
-      - name: Build Electron
-        working-directory: artifacts/electron
-        env:
-          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-        run: node build.mjs
+        - name: Build Electron
+          working-directory: artifacts/electron
+          env:
+            DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+          run: node build.mjs
 
-      - name: Package Windows installer
-        working-directory: artifacts/electron
-        run: npx electron-builder --win --publish never
+        - name: Package Windows installer
+          working-directory: artifacts/electron
+          run: npx electron-builder --win --publish never
 
-      - name: Upload installer to Actions artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Equinox-Windows-Installer
-          path: artifacts/electron/release/*.exe
-          if-no-files-found: error
+        - name: Upload installer to Actions artifacts
+          uses: actions/upload-artifact@v4
+          with:
+            name: Equinox-Windows-Installer
+            path: artifacts/electron/release/*.exe
+            if-no-files-found: error
 
-      - name: Publish to GitHub Releases (auto-updater feed)
-        working-directory: artifacts/electron
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
-        run: npx electron-builder --win --publish always
+        - name: Publish to GitHub Releases (auto-updater feed)
+          working-directory: artifacts/electron
+          continue-on-error: true
+          env:
+            GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+          run: npx electron-builder --win --publish always
+  
