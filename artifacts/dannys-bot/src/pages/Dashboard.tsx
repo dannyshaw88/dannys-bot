@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.564",
+    date: "26 May 2026",
+    items: [
+      { category: "Update", text: "Replaced the Create an Account tab with Create a Ghost — a clean, isolated browser environment with proxy selection, device identity picker, open browser button, and full session reset." },
+    ],
+  },
+  {
     version: "1.0.563",
     date: "26 May 2026",
     items: [

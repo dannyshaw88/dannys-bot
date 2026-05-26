@@ -1,7 +1,7 @@
 import { useLocation, useSearch } from "wouter";
 import {
-  LayoutDashboard, Users, UserPlus, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, PlusCircle, User, UserMinus, MessageSquare, Cookie, Upload, Globe,
+  LayoutDashboard, Users, ShieldAlert, Settings, Activity,
+  ChevronLeft, ChevronRight, Ghost, User, UserMinus, UserPlus, MessageSquare, Cookie, Upload, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
@@ -41,7 +41,7 @@ export function Sidebar() {
     { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard, iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Accounts",          path: "/profiles",            icon: Users,           iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Bulk Import Accounts", path: "/bulk-import", icon: Upload,     iconColor: undefined, iconStyle: { color: BRAND } },
-    { name: "Create an Account", path: "/create-account-api", icon: PlusCircle,     iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "Create a Ghost",    path: "/create-ghost",       icon: Ghost,           iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: undefined,  iconStyle: { color: BRAND } },
   ];
@@ -89,10 +89,8 @@ export function Sidebar() {
 
       <nav className="flex-1 px-3 py-1 space-y-0 overflow-y-auto">
         {navItems.map((item) => {
-          const fromCreateAccount = location.startsWith("/profiles/") && search.includes("from=create-account");
           const isActive = (() => {
             if (item.path === "/dashboard") return location === "/dashboard";
-            if (item.path === "/create-account") return location === "/create-account" || fromCreateAccount;
             if (item.path === "/profiles") return location === "/profiles" || location.startsWith("/profiles/");
             return location.startsWith(item.path);
           })();
