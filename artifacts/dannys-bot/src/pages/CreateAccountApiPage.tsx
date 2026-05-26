@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { BrowserPanel } from "@/components/BrowserPanel";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -9,24 +9,12 @@ import { useProxies, useCreateProxy } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw, Copy,
-  User, Calendar, Globe, ShieldCheck, Mail,
-  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Monitor, Zap,
+  CheckCircle2, XCircle, AlertCircle, Loader2, RefreshCw,
+  User, Calendar, Globe, Mail, Clipboard, ClipboardCheck,
+  List, Trash2, UserPlus, Eye, EyeOff, Plus, X, Monitor,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type SignupResult = {
-  status: "success" | "email_verification" | "phone_verification" | "error";
-  steps: string[];
-  message?: string;
-  userId?: string;
-  username?: string;
-  sessionId?: string;
-  sessionCookies?: string[];
-  rawResponse?: unknown;
-  dbId?: number;
-};
 
 type CreatedAccount = {
   id: number;
@@ -55,8 +43,6 @@ const MONTHS = [
 ];
 
 function randomUA(): string {
-  // v428 targets Android 14 — only use Android 14+ (34/14 or 35/15) entries so the
-  // UA is consistent with the app version. Android 13 + v428 triggers needs_upgrade.
   const eligible = UA_POOL.filter(e => parseInt(e.api.split("/")[0], 10) >= 34);
   const pool = eligible.length > 0 ? eligible : UA_POOL;
   return pool[Math.floor(Math.random() * pool.length)].api;
@@ -108,245 +94,110 @@ function generatePassword(): string {
   return chars.sort(() => Math.random() - 0.5).join("");
 }
 
-function stepClass(msg: string): string {
-  const m = msg.toLowerCase();
-  if (/\berror\b|fail|throw|blocked|reject|abort|invalid|exception/.test(m)) return "text-red-400";
-  if (/http [45]\d\d/.test(m)) return "text-red-400";
-  if (/✓|success|\bok\b|available|created!|harvested|seeded|obtained/.test(m)) return "text-green-400";
-  if (/http [23]\d\d/.test(m)) return "text-emerald-400";
-  if (/retry|non.fatal|warn|missing|skip|none|aborted|unknown/.test(m)) return "text-amber-300";
-  if (/^eb:/.test(m)) return "text-sky-300";
-  if (/^imap:/.test(m)) return "text-purple-300";
-  if (/^library:/.test(m)) return "text-indigo-300";
-  return "text-slate-300";
+// ── Paste to focused EB field ─────────────────────────────────────────────────
+
+async function fillEbField(text: string): Promise<void> {
+  await fetch("/api/signup/browser/input", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "fill", text }),
+  });
 }
 
-function fmtTs(ts: number): string {
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}.${String(d.getMilliseconds()).padStart(3,"0")}`;
-}
+// ── Paste button component ────────────────────────────────────────────────────
 
-// ── Signup Browser Window ─────────────────────────────────────────────────────
-
-const SIGNUP_WIN_W = 1100;
-const SIGNUP_WIN_H = 680;
-
-function SignupBrowserWindow({
-  open, onClose, ebUA,
-}: {
-  open: boolean;
-  onClose: () => void;
-  ebUA: string;
-}) {
-  const [minimized, setMinimized] = useState(false);
-  const [maximized, setMaximized] = useState(false);
-  const [pos, setPos] = useState(() => ({
-    x: Math.round((window.innerWidth - SIGNUP_WIN_W) / 2),
-    y: Math.round((window.innerHeight - SIGNUP_WIN_H) / 2),
-  }));
-  const dragging = useRef(false);
-  const dragOffset = useRef({ x: 0, y: 0 });
-
-  const onTitleMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    if (maximized) return;
-    e.preventDefault();
-    dragging.current = true;
-    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
-    const onMove = (ev: MouseEvent) => {
-      if (!dragging.current) return;
-      setPos({ x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y });
-    };
-    const onUp = () => {
-      dragging.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [maximized, pos.x, pos.y]);
-
-  if (!open) return null;
-
-  const winStyle: React.CSSProperties = maximized
-    ? { position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", zIndex: 200 }
-    : minimized
-    ? { position: "fixed", left: pos.x, top: pos.y, width: SIGNUP_WIN_W, height: "auto", zIndex: 200 }
-    : { position: "fixed", left: pos.x, top: pos.y, width: SIGNUP_WIN_W, height: SIGNUP_WIN_H, zIndex: 200 };
-
-  const btnBase = "w-8 h-8 flex items-center justify-center text-sm font-medium text-muted-foreground transition-colors";
-
+function PasteBtn({ value, onPaste }: { value: string; onPaste: () => Promise<void> }) {
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const handle = async () => {
+    if (!value.trim() || state === "busy") return;
+    setState("busy");
+    try { await onPaste(); setState("done"); } catch { setState("idle"); }
+    setTimeout(() => setState("idle"), 1200);
+  };
   return (
-    <div style={winStyle} className="flex flex-col overflow-hidden shadow-2xl border border-border bg-background select-none">
-      {/* Title bar */}
-      <div
-        onMouseDown={onTitleMouseDown}
-        className={`flex items-center px-2 h-9 bg-slate-100 dark:bg-slate-800 border-b border-border shrink-0 ${!maximized ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
-      >
-        <Monitor className="w-3.5 h-3.5 text-muted-foreground shrink-0 mr-2" />
-        <span className="text-sm font-semibold text-foreground truncate flex-1">Signup Embedded Browser</span>
-        {/* ─ Minimise */}
-        <button
-          onMouseDown={e => e.stopPropagation()}
-          onClick={() => { setMinimized(m => !m); setMaximized(false); }}
-          className={`${btnBase} hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground`}
-          title={minimized ? "Restore" : "Minimise"}
-        >
-          ─
-        </button>
-        {/* □ Maximise */}
-        <button
-          onMouseDown={e => e.stopPropagation()}
-          onClick={() => { setMaximized(m => !m); setMinimized(false); }}
-          className={`${btnBase} hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground`}
-          title={maximized ? "Restore" : "Maximise"}
-        >
-          {maximized ? "❐" : "□"}
-        </button>
-        {/* × Close */}
-        <button
-          onMouseDown={e => e.stopPropagation()}
-          onClick={onClose}
-          className={`${btnBase} hover:bg-red-500 hover:text-white`}
-          title="Close"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-      {/* Browser content — hidden when minimised */}
-      {!minimized && (
-        <div className="flex-1 min-h-0">
-          <BrowserPanel
-            profileId={0}
-            userAgent={ebUA}
-            username="signup"
-            streamUrl="/api/signup/browser/stream"
-            inputUrl="/api/signup/browser/input"
-            forceStream
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Live Trace ────────────────────────────────────────────────────────────────
-
-function LiveTracePanel({ steps, loading }: { steps: Array<{msg: string; ts: number}>; loading: boolean }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
-  return (
-    <div className="rounded-lg bg-[#0d1117] border border-[#30363d] overflow-hidden h-full flex flex-col">
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#21262d] bg-[#161b22] shrink-0">
-        {loading
-          ? <><span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" /><span className="text-[10px] font-mono text-slate-400">LIVE</span></>
-          : <><span className="w-2 h-2 rounded-full bg-slate-600 shrink-0" /><span className="text-[10px] font-mono text-slate-500">COMPLETE</span></>
-        }
-        <span className="ml-auto text-[10px] font-mono text-slate-600">{steps.length} lines</span>
-      </div>
-      <div className="flex-1 overflow-y-auto p-2 font-mono text-[10.5px] leading-relaxed space-y-0.5">
-        {steps.length === 0 && (
-          <div className="text-slate-600 italic py-2 px-1">
-            {loading ? "Waiting for first event…" : "No trace data."}
-          </div>
-        )}
-        {steps.map((s, i) => (
-          <div key={i} className="flex items-start gap-2 hover:bg-white/[0.02] px-1 rounded">
-            <span className="text-slate-700 shrink-0 select-none">{fmtTs(s.ts)}</span>
-            <span className={`break-all ${stepClass(s.msg)}`}>{s.msg}</span>
-          </div>
-        ))}
-        {loading && steps.length > 0 && (
-          <div className="flex items-center gap-1.5 px-1 pt-1">
-            <span className="inline-block w-2 h-3 bg-slate-400 animate-pulse rounded-sm" />
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-    </div>
-  );
-}
-
-// ── Step Log (restored from session) ─────────────────────────────────────────
-
-function StepLog({ steps }: { steps: string[] }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [steps]);
-  return (
-    <div className="space-y-1 font-mono text-xs max-h-52 overflow-y-auto">
-      {steps.map((s, i) => (
-        <div key={i} className="flex items-start gap-2 text-muted-foreground">
-          <span className="text-sky-500 shrink-0 mt-px">→</span>
-          <span>{s}</span>
-        </div>
-      ))}
-      <div ref={bottomRef} />
-    </div>
+    <button
+      type="button"
+      onClick={handle}
+      title="Paste into focused EB field"
+      className={`h-5 w-5 flex items-center justify-center rounded transition-colors shrink-0
+        ${state === "done" ? "text-green-500" : "text-muted-foreground hover:text-foreground"}
+        ${!value.trim() ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
+    >
+      {state === "done"
+        ? <ClipboardCheck className="w-3 h-3" />
+        : state === "busy"
+        ? <Loader2 className="w-3 h-3 animate-spin" />
+        : <Clipboard className="w-3 h-3" />}
+    </button>
   );
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-const STATUS_STYLE: Record<string, string> = {
-  success:            "bg-green-100 text-green-800 border-green-200",
-  error:              "bg-red-100 text-red-800 border-red-200",
-  failed:             "bg-red-100 text-red-800 border-red-200",
-  email_verification: "bg-amber-100 text-amber-800 border-amber-200",
-  phone_verification: "bg-amber-100 text-amber-800 border-amber-200",
-  pending:            "bg-slate-100 text-slate-600 border-slate-200",
-};
-
 function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    success: "bg-green-100 text-green-700 border-green-200",
+    error:   "bg-red-100   text-red-700   border-red-200",
+    failed:  "bg-red-100   text-red-700   border-red-200",
+    pending: "bg-amber-100 text-amber-700 border-amber-200",
+  };
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${STATUS_STYLE[status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
-      {status.replace(/_/g, " ").toUpperCase()}
+    <span className={`text-[10px] border px-1.5 py-0.5 rounded font-semibold uppercase ${map[status] ?? "bg-slate-100 text-slate-700 border-slate-200"}`}>
+      {status}
     </span>
+  );
+}
+
+// ── Step log ──────────────────────────────────────────────────────────────────
+
+function StepLog({ steps }: { steps: string[] }) {
+  return (
+    <div className="bg-black/80 rounded p-2 max-h-40 overflow-y-auto font-mono text-[10px] space-y-0.5">
+      {steps.map((s, i) => <div key={i} className="text-slate-300">{s}</div>)}
+    </div>
   );
 }
 
 // ── Created Accounts Tab ──────────────────────────────────────────────────────
 
 function CreatedAccountsTab() {
-  const [accounts, setAccounts]   = useState<CreatedAccount[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [adding, setAdding]       = useState<number | null>(null);
-  const [deleting, setDeleting]   = useState<number | null>(null);
-  const [expanded, setExpanded]   = useState<number | null>(null);
-  const [showPass, setShowPass]   = useState<number | null>(null);
-  const queryClient               = useQueryClient();
+  const qc = useQueryClient();
+  const [accounts, setAccounts] = useState<CreatedAccount[]>([]);
+  const [loading, setLoading]   = useState(false);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [showPass, setShowPass] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [adding, setAdding]     = useState<number | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/signup/created-accounts");
-      setAccounts(await res.json());
+      const r = await fetch("/api/signup/created-accounts");
+      const d = await r.json() as { accounts: CreatedAccount[] };
+      setAccounts(d.accounts ?? []);
     } finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   const handleDelete = async (id: number) => {
     setDeleting(id);
-    try {
-      await fetch(`/api/signup/created-accounts/${id}`, { method: "DELETE" });
-      setAccounts(a => a.filter(x => x.id !== id));
-    } finally { setDeleting(null); }
+    try { await fetch(`/api/signup/created-accounts/${id}`, { method: "DELETE" }); await load(); }
+    finally { setDeleting(null); }
   };
 
   const handleAdd = async (id: number) => {
     setAdding(id);
     try {
-      const res = await fetch(`/api/signup/created-accounts/${id}/add-to-accounts`, { method: "POST" });
-      if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
-        setAccounts(a => a.map(x => x.id === id ? { ...x, addedToAccounts: true } : x));
-      }
+      await fetch(`/api/signup/created-accounts/${id}/add-to-accounts`, { method: "POST" });
+      await load();
+      qc.invalidateQueries({ queryKey: ["/api/profiles"] });
     } finally { setAdding(null); }
   };
 
   const success = accounts.filter(a => a.status === "success").length;
   const failed  = accounts.filter(a => a.status === "error" || a.status === "failed").length;
-  const pending = accounts.filter(a => a.status === "pending" || a.status === "email_verification" || a.status === "phone_verification").length;
+  const pending = accounts.filter(a => a.status !== "success" && a.status !== "error" && a.status !== "failed").length;
 
   return (
     <div className="space-y-3">
@@ -375,7 +226,7 @@ function CreatedAccountsTab() {
       )}
       {!loading && accounts.length === 0 && (
         <div className="desktop-card p-8 text-center text-muted-foreground text-sm">
-          No accounts created yet. Use the Create tab to make your first account.
+          No accounts created yet.
         </div>
       )}
       <div className="space-y-2">
@@ -387,8 +238,7 @@ function CreatedAccountsTab() {
                   ? <CheckCircle2 className="w-4 h-4 text-green-500" />
                   : a.status === "error" || a.status === "failed"
                   ? <XCircle className="w-4 h-4 text-red-500" />
-                  : <AlertCircle className="w-4 h-4 text-amber-500" />
-                }
+                  : <AlertCircle className="w-4 h-4 text-amber-500" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -448,7 +298,7 @@ function CreatedAccountsTab() {
                   try { steps = JSON.parse(a.steps); } catch {}
                   return steps.length > 0 ? (
                     <div>
-                      <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">API Log</p>
+                      <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Log</p>
                       <StepLog steps={steps} />
                     </div>
                   ) : null;
@@ -464,18 +314,16 @@ function CreatedAccountsTab() {
 
 // ── LocalStorage / SessionStorage helpers ─────────────────────────────────────
 
-const LS_KEY_USERNAME_SPIN     = "equinox_api_username_spin";
-const LS_KEY_BIO_SPIN          = "equinox_api_bio_spin";
-const LS_KEY_EMAIL      = "equinox_api_email";
-const SS_KEY_PASSWORD   = "equinox_api_password";
-const SS_KEY_FIRSTNAME  = "equinox_api_firstname";
-const SS_KEY_DOB        = "equinox_api_dob";
-const SS_KEY_PROXY_ID   = "equinox_api_proxy_id";
-const SS_KEY_UA_API     = "equinox_api_ua_api";
-const SS_KEY_TAB        = "equinox_api_tab";
-const SS_KEY_RESULT     = "equinox_api_result";
-const SS_KEY_VERIFY     = "equinox_api_verify_code";
-const LS_KEY_API_LIMITS = "equinox_api_limits_v1";
+const LS_KEY_USERNAME_SPIN = "equinox_api_username_spin";
+const LS_KEY_BIO_SPIN      = "equinox_api_bio_spin";
+const LS_KEY_EMAIL         = "equinox_api_email";
+const SS_KEY_PASSWORD      = "equinox_api_password";
+const SS_KEY_FIRSTNAME     = "equinox_api_firstname";
+const SS_KEY_DOB           = "equinox_api_dob";
+const SS_KEY_PROXY_ID      = "equinox_api_proxy_id";
+const SS_KEY_UA_API        = "equinox_api_ua_api";
+const SS_KEY_TAB           = "equinox_api_tab";
+const LS_KEY_EB_VISIBLE    = "equinox_eb_open";
 
 function lsGet(key: string): string { return localStorage.getItem(key) ?? ""; }
 function lsSet(key: string, v: string) { localStorage.setItem(key, v); }
@@ -487,22 +335,6 @@ function ssGetJson<T>(key: string, fallback: T): T {
 function ssSet(key: string, v: string) { sessionStorage.setItem(key, v); }
 function ssSetJson(key: string, v: unknown) { sessionStorage.setItem(key, JSON.stringify(v)); }
 
-const SS_ALL_KEYS = [
-  SS_KEY_PASSWORD, SS_KEY_FIRSTNAME, SS_KEY_DOB, SS_KEY_PROXY_ID, SS_KEY_UA_API,
-  SS_KEY_TAB, SS_KEY_RESULT, SS_KEY_VERIFY,
-];
-function ssClearAll() { SS_ALL_KEYS.forEach(k => sessionStorage.removeItem(k)); }
-
-const DEFAULT_API_LIMITS = { requestsMin: 1, requestsMax: 2, everySecondsMin: 10, everySecondsMax: 30 };
-
-function loadApiLimits() {
-  try {
-    const raw = localStorage.getItem(LS_KEY_API_LIMITS);
-    if (raw) return { ...DEFAULT_API_LIMITS, ...JSON.parse(raw) };
-  } catch {}
-  return DEFAULT_API_LIMITS;
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function CreateAccountApiPage() {
@@ -510,6 +342,7 @@ export function CreateAccountApiPage() {
   useEffect(() => { setSlot(null); return () => setSlot(null); }, [setSlot]);
 
   const { data: proxies } = useProxies();
+  const createProxy = useCreateProxy();
 
   // Tab state
   const [tab, setTabRaw] = useState<"create" | "accounts">(() =>
@@ -517,7 +350,7 @@ export function CreateAccountApiPage() {
   );
   const setTab = (v: "create" | "accounts") => { setTabRaw(v); ssSet(SS_KEY_TAB, v); };
 
-  // ── Signup fields ──────────────────────────────────────────────────────────
+  // Signup fields
   const [usernameSpin, setUsernameSpinRaw] = useState(() => lsGet(LS_KEY_USERNAME_SPIN));
   const [bioSpin, setBioSpinRaw]           = useState(() => lsGet(LS_KEY_BIO_SPIN));
   const setUsernameSpin = (v: string) => { setUsernameSpinRaw(v); lsSet(LS_KEY_USERNAME_SPIN, v); };
@@ -544,234 +377,69 @@ export function CreateAccountApiPage() {
     ssSet(SS_KEY_PROXY_ID, v === "" ? "" : String(v));
   };
 
-  const [apiLimits, setApiLimitsRaw] = useState(loadApiLimits);
-  const setApiLimits = (v: typeof DEFAULT_API_LIMITS) => {
-    setApiLimitsRaw(v);
-    localStorage.setItem(LS_KEY_API_LIMITS, JSON.stringify(v));
-  };
+  // EB state
+  const [userAgentApi, setUserAgentApi] = useState(() => ssGet(SS_KEY_UA_API) || randomUA());
+  const [ebVisible, setEbVisible]       = useState(() => lsGet(LS_KEY_EB_VISIBLE) === "1");
+  const [ebResetBusy, setEbResetBusy]   = useState(false);
+  const [ebUA, setEbUA]                 = useState(userAgentApi);
 
-  const [userAgentApi, setUserAgentApiRaw] = useState(() => ssGet(SS_KEY_UA_API) || UA_POOL[0].api);
-  const setUserAgentApi = (v: string) => { setUserAgentApiRaw(v); ssSet(SS_KEY_UA_API, v); };
-
-  // ── Runtime state ──────────────────────────────────────────────────────────
-  const [loading, setLoading]     = useState(false);
-  const [result, setResultRaw]    = useState<SignupResult | null>(() =>
-    ssGetJson<SignupResult | null>(SS_KEY_RESULT, null)
-  );
-  const setResult = (v: SignupResult | null | ((prev: SignupResult | null) => SignupResult | null)) => {
-    setResultRaw(prev => {
-      const next = typeof v === "function" ? v(prev) : v;
-      if (next === null) sessionStorage.removeItem(SS_KEY_RESULT);
-      else ssSetJson(SS_KEY_RESULT, next);
-      return next;
-    });
-  };
-  const [verifyCode, setVerifyCodeRaw] = useState(() => ssGet(SS_KEY_VERIFY));
-  const setVerifyCode = (v: string) => { setVerifyCodeRaw(v); ssSet(SS_KEY_VERIFY, v); };
-  const [verifying, setVerifying]      = useState(false);
-  const [copied, setCopied]            = useState(false);
-  const [liveSteps, setLiveSteps]      = useState<Array<{msg: string; ts: number}>>([]);
-  const [ebPanelOpen, setEbPanelOpen]  = useState(false);
-  const [ebResetBusy, setEbResetBusy]  = useState(false);
-  const [ebVisible, setEbVisible]      = useState(false);
-
-  const createProxy = useCreateProxy();
+  // Add proxy inline form
   const [showAddProxy, setShowAddProxy] = useState(false);
   const [newProxyHostPort, setNewProxyHostPort] = useState("");
-  const [newProxyUser, setNewProxyUser] = useState("");
-  const [newProxyPass, setNewProxyPass] = useState("");
-  const [addProxyErr, setAddProxyErr]   = useState("");
+  const [newProxyUser, setNewProxyUser]         = useState("");
+  const [newProxyPass, setNewProxyPass]         = useState("");
+  const [addProxyErr, setAddProxyErr]           = useState("");
+
+  // Day/year arrays
+  const days  = Array.from({ length: 31 }, (_, i) => i + 1);
+  const now   = new Date();
+  const years = Array.from({ length: 80 }, (_, i) => now.getFullYear() - 10 - i);
+
+  const deviceLabel = userAgentApi.match(/Android [\d.]+|iPhone OS [\d_]+/)?.[0] ?? "";
+
+  const clearEbSession = async () => {
+    await fetch("/api/signup/browser/close",  { method: "POST" });
+    await fetch("/api/signup/browser/reset",  { method: "POST" });
+  };
+
+  const openEb = async () => {
+    const proxy = proxies?.find(p => p.id === selectedProxyId);
+    const ua = userAgentApi;
+    setEbUA(ua);
+    lsSet(LS_KEY_EB_VISIBLE, "1");
+    setEbVisible(true);
+    await fetch("/api/signup/browser/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userAgent: ua,
+        proxyHost: proxy?.host,
+        proxyPort: proxy?.port,
+        proxyUsername: proxy?.username,
+        proxyPassword: proxy?.password,
+      }),
+    });
+  };
 
   const handleAddProxy = async () => {
     setAddProxyErr("");
-    const raw = newProxyHostPort.trim();
-    const lastColon = raw.lastIndexOf(":");
-    const host = lastColon > 0 ? raw.slice(0, lastColon).trim() : raw;
-    const port = lastColon > 0 ? parseInt(raw.slice(lastColon + 1), 10) : NaN;
-    if (!host) return setAddProxyErr("Enter host:port (e.g. 123.45.67.89:8080)");
-    if (!port || port < 1 || port > 65535) return setAddProxyErr("Port must be 1–65535");
+    const [host, portStr] = newProxyHostPort.split(":");
+    if (!host || !portStr) { setAddProxyErr("Format: host:port"); return; }
+    const port = Number(portStr);
+    if (!port) { setAddProxyErr("Invalid port"); return; }
     try {
-      const created = await createProxy.mutateAsync({
-        host, port,
-        username: newProxyUser.trim() || null,
-        password: newProxyPass.trim() || null,
-      });
-      setSelectedProxyId(created.id);
-      setShowAddProxy(false);
+      await createProxy.mutateAsync({ host, port, username: newProxyUser || undefined, password: newProxyPass || undefined, type: "http" });
       setNewProxyHostPort(""); setNewProxyUser(""); setNewProxyPass("");
-    } catch (e: any) {
-      setAddProxyErr(e?.message ?? "Failed to save proxy");
-    }
+      setShowAddProxy(false);
+    } catch (e: any) { setAddProxyErr(e?.message ?? "Failed"); }
   };
 
-  const years = Array.from({ length: 80 }, (_, i) => 2006 - i);
-  const days  = Array.from({ length: 31 }, (_, i) => i + 1);
-
-  const selectedProxy = proxies?.find(p => p.id === Number(selectedProxyId));
-  const canSubmit = usernameSpin.trim() && password && email.trim() && selectedProxyId;
-
-  const selectedDevice = UA_POOL.find(d => d.api === userAgentApi) ?? UA_POOL[0];
-  const ebUA = selectedDevice.embedded;
-
-  const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
-
-  const clearEbSession = useCallback(async () => {
-    if (IS_ELECTRON) {
-      try { await (window as any).electronAPI.clearSignupBrowserCache(); } catch {}
-    } else {
-      try { await fetch("/api/signup/browser/reset", { method: "POST" }); } catch {}
-      setEbPanelOpen(false);
-    }
-  }, [IS_ELECTRON]);
-
-  const handleResetBrowser = useCallback(async () => {
-    setEbResetBusy(true);
-    setEbVisible(false);
-    await clearEbSession();
-    setEbResetBusy(false);
-  }, [clearEbSession]);
-
-  const deviceLabel = (() => {
-    const parts = userAgentApi.split(";").map(s => s.trim());
-    const brand = parts[3] ?? "";
-    const model = parts[4] ?? "";
-    return [brand, model].filter(Boolean).join(" ");
-  })();
-
-  const handleBrowserMessage = useCallback((msg: any) => {
-    if (msg.type === "signupStep") {
-      setLiveSteps(prev => [...prev, { msg: msg.msg as string, ts: Date.now() }]);
-    } else if (msg.type === "signupPaused") {
-      setLoading(false);
-      setResult({ status: "email_verification", steps: [], sessionId: "eb" });
-    } else if (msg.type === "signupDone") {
-      setLoading(false);
-      setResult({
-        status: msg.status === "success" ? "success" : "error",
-        steps: [],
-        message: msg.message,
-        username: msg.username,
-        userId: msg.userId,
-      });
-    }
-  }, []);
-
-  const handleCreate = async () => {
-    if (!canSubmit) return;
-    setLoading(true);
-    setResult(null);
-    setVerifyCode("");
-    setLiveSteps([]);
-    const spunUsername = sanitizeUsername(parseSpin(usernameSpin));
-
-    const proxyPayload = selectedProxy ? {
-      proxyHost:     selectedProxy.host,
-      proxyPort:     selectedProxy.port,
-      proxyUsername: selectedProxy.username ?? undefined,
-      proxyPassword: selectedProxy.password ?? undefined,
-    } : {};
-
-    // Step 1: open the signup browser (no-op if already running)
-    setEbVisible(true);
-    try {
-      await fetch("/api/signup/browser/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...proxyPayload, userAgent: ebUA }),
-      });
-    } catch {}
-
-    // Step 2: start the EB automation (fire-and-forget; results come via WS → handleBrowserMessage)
-    try {
-      const res = await fetch("/api/signup/browser/automate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email:     email.trim(),
-          password,
-          username:  spunUsername,
-          firstName: firstName.trim() || undefined,
-          dob,
-          userAgent: ebUA,
-          ...proxyPayload,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Failed to start automation" }));
-        throw new Error((err as any).message ?? "Failed to start automation");
-      }
-    } catch (e: any) {
-      setResult({ status: "error", steps: [], message: e?.message ?? "Failed to start EB automation" });
-      setLoading(false);
-    }
-    // loading stays true until signupDone or signupPaused arrives via WS
-  };
-
-  const handleVerify = async () => {
-    if (!result?.sessionId || !verifyCode.trim()) return;
-    setVerifying(true);
-
-    if (result.sessionId === "eb") {
-      // EB automation flow — unblock the automation with the email code
-      try {
-        await fetch("/api/signup/browser/automate-continue", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: verifyCode.trim() }),
-        });
-        setVerifyCode("");
-        setResult(null);
-        setLoading(true);
-      } catch (e: any) {
-        setResult(prev => prev ? { ...prev, message: e?.message ?? "Network error" } : null);
-      } finally {
-        setVerifying(false);
-      }
-      return;
-    }
-
-    // Legacy API flow
-    try {
-      const res = await fetch("/api/signup/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: result.sessionId, code: verifyCode.trim(), dbId: result.dbId }),
-      });
-      const data: SignupResult = await res.json();
-      const newSteps = data.steps ?? [];
-      setLiveSteps(prev => [...prev, ...newSteps.map(msg => ({ msg, ts: Date.now() }))]);
-      setResult(prev => prev ? { ...data, steps: [...(prev.steps ?? []), ...newSteps] } : data);
-    } catch (e: any) {
-      setResult(prev => prev ? { ...prev, message: e?.message ?? "Network error" } : null);
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleReset = () => {
-    ssClearAll();
-    setResult(null);
-    setVerifyCode("");
-    setLiveSteps([]);
-    setPassword(generatePassword());
-    setDob(randomDob());
-    setUserAgentApi(randomUA());
-    setFirstName("");
-    setSelectedProxyId("");
-  };
-
-  const locked = loading;
-
-  const numInput = (val: number, onChange: (v: number) => void, min = 0) => (
-    <Input
-      type="number"
-      min={min}
-      value={val}
-      onChange={e => onChange(Number(e.target.value))}
-      className="h-7 w-[68px] text-sm"
-      disabled={locked}
-    />
-  );
+  // Paste helpers — spin/sanitize then fill focused EB field
+  const pasteUsername = () => fillEbField(sanitizeUsername(parseSpin(usernameSpin)));
+  const pasteBio      = () => fillEbField(parseSpin(bioSpin));
+  const pasteEmail    = () => fillEbField(email);
+  const pastePassword = () => fillEbField(password);
+  const pasteName     = () => fillEbField(firstName);
 
   return (
     <AppLayout>
@@ -780,15 +448,8 @@ export function CreateAccountApiPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Create an Account</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Creates an Instagram account via the embedded browser.
+            Open the embedded browser, navigate to Instagram, then use the paste icons to fill each field.
           </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {result && tab === "create" && (
-            <Button variant="outline" size="sm" onClick={handleReset} className="h-8">
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />New Attempt
-            </Button>
-          )}
         </div>
       </div>
 
@@ -806,8 +467,7 @@ export function CreateAccountApiPage() {
           >
             {t === "create"
               ? <><UserPlus className="w-3.5 h-3.5 inline mr-1.5" />Create</>
-              : <><List className="w-3.5 h-3.5 inline mr-1.5" />Created Accounts</>
-            }
+              : <><List className="w-3.5 h-3.5 inline mr-1.5" />Created Accounts</>}
           </button>
         ))}
       </div>
@@ -818,10 +478,11 @@ export function CreateAccountApiPage() {
         </div>
       ) : (
         <div className="flex gap-3" style={{ height: "calc(100vh - 200px)" }}>
-          {/* ── Left column: scrollable form ── */}
-          <div className="overflow-y-auto shrink-0 w-[380px] space-y-2 pb-4 pr-1">
 
-            {/* ── Browser / Device ── */}
+          {/* ── Left column: fields + paste icons ── */}
+          <div className="overflow-y-auto shrink-0 w-[320px] space-y-2 pb-4 pr-1">
+
+            {/* Device */}
             <div className="desktop-card p-2.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -829,128 +490,144 @@ export function CreateAccountApiPage() {
                   <div className="min-w-0">
                     <p className="text-xs font-semibold truncate">{deviceLabel || "Unknown Device"}</p>
                     <p className="text-[10px] font-mono text-muted-foreground/70 truncate">{userAgentApi}</p>
-                    <p className="text-[10px] font-mono text-muted-foreground truncate">{ebUA}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[10px]"
-                    onClick={async () => {
-                      setUserAgentApi(randomUA());
-                      setPassword(generatePassword());
-                      setDob(randomDob());
-                      setFirstName("");
-                      setEbVisible(false);
-                      setLoading(false);
-                      setResult(null);
-                      setLiveSteps([]);
-                      setEbResetBusy(true);
-                      await clearEbSession();
-                      setEbResetBusy(false);
-                    }}
-                  >
-                    <RefreshCw className="w-3 h-3 mr-1" />Randomise
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost" size="sm" className="h-7 px-2 text-[10px] shrink-0"
+                  onClick={async () => {
+                    const ua = randomUA();
+                    setUserAgentApi(ua); ssSet(SS_KEY_UA_API, ua);
+                    setPassword(generatePassword()); setDob(randomDob()); setFirstName("");
+                    setEbVisible(false); lsSet(LS_KEY_EB_VISIBLE, "0");
+                    setEbResetBusy(true);
+                    await clearEbSession();
+                    setEbResetBusy(false);
+                  }}
+                  disabled={ebResetBusy}
+                >
+                  {ebResetBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RefreshCw className="w-3 h-3 mr-1" />Randomise</>}
+                </Button>
               </div>
             </div>
 
-            {/* ── Account Details ── */}
+            {/* Account Details */}
             <div className="desktop-card p-2.5 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Account Details</p>
+
+              {/* Username */}
               <div className="space-y-1">
-                <Label className="text-[10px] flex items-center gap-1"><User className="w-3 h-3" />Username Spin</Label>
-                <Input
-                  value={usernameSpin}
-                  onChange={e => setUsernameSpin(e.target.value)}
-                  placeholder="{Maia|Mila|Nina}_{fox|wolf}_{1234|5678}"
-                  className="h-7 text-xs font-mono"
-                  disabled={locked}
-                />
+                <Label className="text-[10px] flex items-center gap-1">
+                  <User className="w-3 h-3" />Username Spin
+                  <span className="ml-auto text-[9px] text-muted-foreground/60 font-normal italic">spun on paste</span>
+                </Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={usernameSpin}
+                    onChange={e => setUsernameSpin(e.target.value)}
+                    placeholder="{Maia|Mila|Nina}_{fox|wolf}_{1234|5678}"
+                    className="h-7 text-xs font-mono flex-1"
+                  />
+                  <PasteBtn value={usernameSpin} onPaste={pasteUsername} />
+                </div>
               </div>
+
+              {/* Password */}
               <div className="space-y-1">
                 <Label className="text-[10px] flex items-center gap-1">
                   <Eye className="w-3 h-3" />Password
                   <span className="ml-1 text-[10px] text-muted-foreground">(auto-generated)</span>
                 </Label>
-                <Input value={password} onChange={e => setPassword(e.target.value)} className="h-7 text-xs font-mono" disabled={locked} />
+                <div className="flex items-center gap-1">
+                  <Input value={password} onChange={e => setPassword(e.target.value)} className="h-7 text-xs font-mono flex-1" />
+                  <PasteBtn value={password} onPaste={pastePassword} />
+                </div>
               </div>
+
+              {/* Email */}
               <div className="space-y-1">
                 <Label className="text-[10px] flex items-center gap-1">
                   <Mail className="w-3 h-3" />Email Address
-                  <span className="ml-1 text-[10px] text-red-500 font-medium">required</span>
                 </Label>
-                <Input
-                  value={email}
-                  onChange={e => setEmail(e.target.value.trim())}
-                  placeholder="e.g. user@gmail.com"
-                  type="email"
-                  className="h-7 text-xs"
-                  disabled={locked}
-                />
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={email}
+                    onChange={e => setEmail(e.target.value.trim())}
+                    placeholder="e.g. user@gmail.com"
+                    type="email"
+                    className="h-7 text-xs flex-1"
+                  />
+                  <PasteBtn value={email} onPaste={pasteEmail} />
+                </div>
               </div>
             </div>
 
-            {/* ── Profile Info ── */}
+            {/* Profile Info */}
             <div className="desktop-card p-2.5 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] flex items-center gap-1">
-                    <User className="w-3 h-3" />Full Name
-                    <span className="ml-1 text-[10px] text-muted-foreground/60">(opt)</span>
-                  </Label>
-                  <Input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Alex Johnson" className="h-7 text-xs" disabled={locked} />
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Profile Info</p>
+
+              {/* Full Name */}
+              <div className="space-y-1">
+                <Label className="text-[10px] flex items-center gap-1">
+                  <User className="w-3 h-3" />Full Name
+                  <span className="ml-1 text-[10px] text-muted-foreground/60">(opt)</span>
+                </Label>
+                <div className="flex items-center gap-1">
+                  <Input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Alex Johnson" className="h-7 text-xs flex-1" />
+                  <PasteBtn value={firstName} onPaste={pasteName} />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Bio Spin <span className="text-muted-foreground/60">(opt)</span></Label>
+              </div>
+
+              {/* Bio */}
+              <div className="space-y-1">
+                <Label className="text-[10px] flex items-center gap-1">
+                  Bio Spin
+                  <span className="ml-1 text-muted-foreground/60">(opt)</span>
+                  <span className="ml-auto text-[9px] text-muted-foreground/60 font-normal italic">spun on paste</span>
+                </Label>
+                <div className="flex items-center gap-1">
                   <Input
                     value={bioSpin}
                     onChange={e => setBioSpin(e.target.value)}
                     placeholder="Fitness lover 🌍"
-                    className="h-7 text-xs font-mono"
-                    disabled={locked}
+                    className="h-7 text-xs font-mono flex-1"
                   />
+                  <PasteBtn value={bioSpin} onPaste={pasteBio} />
                 </div>
               </div>
             </div>
 
-            {/* ── Date of Birth ── */}
+            {/* Date of Birth */}
             <div className="desktop-card p-2.5 space-y-1.5">
               <Label className="text-[10px] flex items-center gap-1">
                 <Calendar className="w-3 h-3" />Date of Birth
                 <span className="ml-1 text-[10px] text-muted-foreground">(auto-randomised 18–45 yrs)</span>
               </Label>
               <div className="grid grid-cols-3 gap-2">
-                <select value={dob.day}   onChange={e => setDob({ ...dob, day:   Number(e.target.value) })} disabled={locked} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.day}   onChange={e => setDob({ ...dob, day:   Number(e.target.value) })} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring">
                   {days.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                <select value={dob.month} onChange={e => setDob({ ...dob, month: Number(e.target.value) })} disabled={locked} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.month} onChange={e => setDob({ ...dob, month: Number(e.target.value) })} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring">
                   {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                 </select>
-                <select value={dob.year}  onChange={e => setDob({ ...dob, year:  Number(e.target.value) })} disabled={locked} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50">
+                <select value={dob.year}  onChange={e => setDob({ ...dob, year:  Number(e.target.value) })} className="h-7 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring">
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
             </div>
 
-            {/* ── Proxy ── */}
+            {/* Proxy */}
             <div className="desktop-card p-2.5 space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] flex items-center gap-1"><Globe className="w-3 h-3" />Proxy <span className="text-red-500 ml-0.5">*</span></Label>
-                {!locked && (
-                  <button type="button" onClick={() => { setShowAddProxy(v => !v); setAddProxyErr(""); }} className="flex items-center gap-1 text-[10px] text-sky-500 hover:text-sky-600 font-medium">
-                    {showAddProxy ? <><X className="w-3 h-3" />Cancel</> : <><Plus className="w-3 h-3" />Add new</>}
-                  </button>
-                )}
+                <Label className="text-[10px] flex items-center gap-1"><Globe className="w-3 h-3" />Proxy</Label>
+                <button type="button" onClick={() => { setShowAddProxy(v => !v); setAddProxyErr(""); }} className="flex items-center gap-1 text-[10px] text-sky-500 hover:text-sky-600 font-medium">
+                  {showAddProxy ? <><X className="w-3 h-3" />Cancel</> : <><Plus className="w-3 h-3" />Add new</>}
+                </button>
               </div>
               {proxies && proxies.length > 0 && !showAddProxy && (
                 <select
                   value={selectedProxyId}
                   onChange={e => setSelectedProxyId(e.target.value ? Number(e.target.value) : "")}
-                  disabled={locked}
-                  className={`h-9 w-full rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 ${!selectedProxyId ? "border-red-300 text-muted-foreground" : "border-input"}`}
+                  className={`h-9 w-full rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring ${!selectedProxyId ? "border-red-300 text-muted-foreground" : "border-input"}`}
                 >
                   <option value="">— Select a proxy —</option>
                   {proxies.map(p => <option key={p.id} value={p.id}>{p.host}:{p.port}{p.username ? ` (${p.username})` : ""}</option>)}
@@ -958,7 +635,7 @@ export function CreateAccountApiPage() {
               )}
               {(!proxies || proxies.length === 0) && !showAddProxy && (
                 <div className="flex items-center gap-2 text-xs text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800 rounded px-3 py-2">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />No proxies yet — click <strong className="mx-0.5">Add new</strong> above.
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />No proxies — click <strong className="mx-0.5">Add new</strong> above.
                 </div>
               )}
               {showAddProxy && (
@@ -969,12 +646,12 @@ export function CreateAccountApiPage() {
                       <Input value={newProxyHostPort} onChange={e => setNewProxyHostPort(e.target.value)} placeholder="123.45.67.89:8080" className="h-7 text-xs font-mono" disabled={createProxy.isPending} />
                     </div>
                     <div className="flex-1 space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Username <span className="font-normal">(optional)</span></Label>
+                      <Label className="text-[10px] text-muted-foreground">User</Label>
                       <Input value={newProxyUser} onChange={e => setNewProxyUser(e.target.value)} placeholder="user" className="h-7 text-xs" disabled={createProxy.isPending} />
                     </div>
                     <div className="flex-1 space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Password <span className="font-normal">(optional)</span></Label>
-                      <Input type="password" value={newProxyPass} onChange={e => setNewProxyPass(e.target.value)} placeholder="••••••" className="h-7 text-xs" disabled={createProxy.isPending} />
+                      <Label className="text-[10px] text-muted-foreground">Pass</Label>
+                      <Input type="password" value={newProxyPass} onChange={e => setNewProxyPass(e.target.value)} placeholder="••••" className="h-7 text-xs" disabled={createProxy.isPending} />
                     </div>
                     <Button size="sm" className="h-7 text-xs bg-sky-500 hover:bg-sky-600 text-white border-0 shrink-0" onClick={handleAddProxy} disabled={createProxy.isPending || !newProxyHostPort.trim()}>
                       {createProxy.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Plus className="w-3 h-3 mr-1" />Save</>}
@@ -985,183 +662,36 @@ export function CreateAccountApiPage() {
               )}
             </div>
 
-            {/* ── API Timing ── */}
-            <div className="desktop-card p-2.5 space-y-2">
-              <div className="flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-yellow-500" />
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">API Step Timing</p>
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
-                  <Input
-                    type="number" min={1} max={99}
-                    className="h-7 text-xs w-full"
-                    value={apiLimits.requestsMin}
-                    onChange={e => setApiLimits({ ...apiLimits, requestsMin: Math.max(1, Number(e.target.value)) })}
-                    disabled={locked}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                  <Input
-                    type="number" min={1} max={99}
-                    className="h-7 text-xs w-full"
-                    value={apiLimits.requestsMax}
-                    onChange={e => setApiLimits({ ...apiLimits, requestsMax: Math.max(1, Number(e.target.value)) })}
-                    disabled={locked}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min secs</Label>
-                  <Input
-                    type="number" min={1} max={3600}
-                    className="h-7 text-xs w-full"
-                    value={apiLimits.everySecondsMin}
-                    onChange={e => setApiLimits({ ...apiLimits, everySecondsMin: Math.max(1, Number(e.target.value)) })}
-                    disabled={locked}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max secs</Label>
-                  <Input
-                    type="number" min={1} max={3600}
-                    className="h-7 text-xs w-full"
-                    value={apiLimits.everySecondsMax}
-                    onChange={e => setApiLimits({ ...apiLimits, everySecondsMax: Math.max(1, Number(e.target.value)) })}
-                    disabled={locked}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ── Submit ── */}
-            {!result && (
+            {/* Open Browser button */}
+            {!ebVisible && (
               <Button
                 className="w-full h-9 bg-cyan-500 hover:bg-cyan-600 text-white border-0 text-sm font-semibold"
-                onClick={handleCreate}
-                disabled={loading || !canSubmit || ebResetBusy}
+                onClick={openEb}
+                disabled={ebResetBusy}
               >
-                {loading ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating Account…</>
-                ) : (
-                  <><UserPlus className="w-4 h-4 mr-2" />Create Account</>
-                )}
+                <Monitor className="w-4 h-4 mr-2" />Open Browser
+              </Button>
+            )}
+            {ebVisible && (
+              <Button
+                variant="outline"
+                className="w-full h-8 text-xs"
+                onClick={async () => {
+                  setEbVisible(false); lsSet(LS_KEY_EB_VISIBLE, "0");
+                  setEbResetBusy(true);
+                  await clearEbSession();
+                  setEbResetBusy(false);
+                }}
+                disabled={ebResetBusy}
+              >
+                {ebResetBusy ? <Loader2 className="w-3 h-3 animate-spin mr-1.5" /> : <X className="w-3 h-3 mr-1.5" />}
+                Close &amp; Reset Browser
               </Button>
             )}
 
-            {/* ── Inline result / verification ── */}
-            {result && (
-              <div className={`desktop-card p-4 space-y-3 border-2 ${
-                result.status === "success"
-                  ? "border-green-300 bg-green-50/40 dark:bg-green-950/20"
-                  : result.status === "error"
-                  ? "border-red-300 bg-red-50/40 dark:bg-red-950/20"
-                  : "border-cyan-300 bg-cyan-50/40 dark:bg-cyan-950/20"
-              }`}>
-                <div className="flex items-center gap-2">
-                  {result.status === "success"
-                    ? <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
-                    : result.status === "error"
-                    ? <XCircle className="w-5 h-5 text-red-600 shrink-0" />
-                    : <AlertCircle className="w-5 h-5 text-cyan-600 shrink-0" />
-                  }
-                  <p className="font-semibold text-sm">
-                    {result.status === "success" ? "Account Created" :
-                     result.status === "error"   ? "Creation Failed" :
-                     "Verification Required"}
-                  </p>
-                </div>
-
-                {result.message && (
-                  <p className="text-sm text-foreground/80">{result.message}</p>
-                )}
-
-                {result.status === "success" && (
-                  <div className="space-y-2">
-                    {result.userId && (
-                      <div className="flex items-center gap-2 text-xs font-mono bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
-                        <ShieldCheck className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                        <span className="text-muted-foreground">User ID:</span>
-                        <span className="font-semibold">{result.userId}</span>
-                      </div>
-                    )}
-                    {result.username && (
-                      <div className="flex items-center gap-2 text-xs font-mono bg-white/60 dark:bg-black/20 rounded px-2 py-1.5">
-                        <User className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                        <span className="text-muted-foreground">Username:</span>
-                        <span className="font-semibold">@{result.username}</span>
-                      </div>
-                    )}
-                    <Button size="sm" className="bg-sky-500 hover:bg-sky-600 text-white border-0 text-xs h-7" onClick={() => setTab("accounts")}>
-                      <List className="w-3 h-3 mr-1" />View in Created Accounts
-                    </Button>
-                  </div>
-                )}
-
-                {result.status === "error" && result.rawResponse != null && (
-                  <div className="pt-1 border-t border-border/60">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-[10px] text-muted-foreground">Raw Response</p>
-                      <Button variant="ghost" size="sm" className="h-5 px-2 text-[10px]" onClick={() => {
-                        navigator.clipboard.writeText(JSON.stringify(result!.rawResponse, null, 2));
-                        setCopied(true); setTimeout(() => setCopied(false), 1500);
-                      }}>
-                        <Copy className="w-3 h-3 mr-1" />{copied ? "Copied" : "Copy"}
-                      </Button>
-                    </div>
-                    <pre className="text-[10px] font-mono bg-black/10 rounded p-2 overflow-auto max-h-24 whitespace-pre-wrap break-all">
-                      {JSON.stringify(result.rawResponse, null, 2)}
-                    </pre>
-                  </div>
-                )}
-
-                {(result.status === "email_verification" || result.status === "phone_verification") && result.sessionId && (
-                  <div className="space-y-3 rounded-lg border-2 border-amber-400 bg-amber-50/60 dark:bg-amber-950/20 p-4">
-                    <div className="flex items-start gap-2">
-                      <Mail className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                          {result.status === "email_verification" ? "Email Verification Required" : "Phone Verification Required"}
-                        </p>
-                        <p className="text-xs text-amber-700 dark:text-amber-400 leading-snug">
-                          {result.status === "email_verification"
-                            ? "Instagram sent a 6-digit code to your email address. Check your inbox, then enter it here to continue."
-                            : "Instagram sent a 6-digit SMS code to your phone number. Enter it here to continue."}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <Input
-                        value={verifyCode}
-                        onChange={e => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        placeholder="000000"
-                        maxLength={6}
-                        autoFocus
-                        className="h-12 text-center text-2xl font-mono tracking-[0.5em] w-44 border-amber-400 focus:border-amber-500 bg-white dark:bg-black/20"
-                      />
-                      <Button
-                        onClick={handleVerify}
-                        disabled={verifying || verifyCode.length < 6}
-                        className="h-12 px-6 bg-amber-500 hover:bg-amber-600 text-white border-0 font-semibold text-sm"
-                      >
-                        {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Code"}
-                      </Button>
-                    </div>
-                    <p className="text-[10px] text-amber-600/80 dark:text-amber-500/60">
-                      The code expires in a few minutes. If it doesn't arrive, check your spam folder.
-                    </p>
-                  </div>
-                )}
-
-                <Button variant="outline" size="sm" className="h-7 text-xs w-full" onClick={handleReset}>
-                  <RefreshCw className="w-3 h-3 mr-1.5" />New Attempt
-                </Button>
-              </div>
-            )}
           </div>
 
-          {/* ── Right column: inline embedded browser ── */}
+          {/* ── Right column: embedded browser ── */}
           <div className="flex-1 min-w-0 rounded-lg border border-border overflow-hidden">
             {ebVisible ? (
               <BrowserPanel
@@ -1172,15 +702,16 @@ export function CreateAccountApiPage() {
                 inputUrl="/api/signup/browser/input"
                 forceStream
                 embedded
-                onMessage={handleBrowserMessage}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
                 <Monitor className="w-14 h-14 opacity-15" />
-                <p className="text-sm">Browser opens when you click <strong className="text-foreground">Create Account</strong></p>
+                <p className="text-sm">Click <strong className="text-foreground">Open Browser</strong> to start</p>
+                <p className="text-xs opacity-60">Then navigate to Instagram and use the <Clipboard className="w-3 h-3 inline mx-0.5" /> icons to paste each field</p>
               </div>
             )}
           </div>
+
         </div>
       )}
     </AppLayout>

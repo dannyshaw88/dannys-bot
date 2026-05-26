@@ -5928,6 +5928,14 @@ export async function signupBrowserInput(msg: { type: string; [key: string]: any
       case "keydown":     await page.keyboard.down(msg.key as string); break;
       case "keyup":       await page.keyboard.up(msg.key as string); break;
       case "type":        await page.keyboard.type((msg.text as string) ?? "", { delay: 30 }); break;
+      case "fill": {
+        // Select-all → delete → type: fills whatever field is focused in the EB
+        const d = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+        await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");
+        await d(40); await page.keyboard.press("Backspace"); await d(40);
+        await page.keyboard.type((msg.text as string) ?? "", { delay: 35 });
+        break;
+      }
       case "keycombo":
         await page.keyboard.down(msg.modifier as string);
         await page.keyboard.press(msg.key as string);
@@ -6276,7 +6284,7 @@ export async function createInstagramAccountViaEBForm(params: {
     await delay(1500);
     await dismissCookieBanner(page);
 
-    const EMAIL_FORM_SELECTORS = 'input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i], input[autocomplete="email"], input[name="email"], input[name="emailAddress"]';
+    const EMAIL_FORM_SELECTORS = 'input[aria-label="Email"], input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i], input[autocomplete="email"], input[name="email"], input[name="emailAddress"]';
     const PHONE_GATE_LABELS = ["sign up with email address", "sign up with email", "use email address", "use email", "use your email address"];
 
     const _waitForEmailForm = async (maxMs: number): Promise<boolean> => {
@@ -6289,97 +6297,27 @@ export async function createInstagramAccountViaEBForm(params: {
       return false;
     };
 
-    // ── Navigate to email signup form ─────────────────────────────────────────
-    // Instagram's "What's your mobile number?" gate page is a React SPA.
-    // Clicking "Sign up with email" does a pushState transition — NOT a real HTTP
-    // navigation — so waitForNavigation() will ALWAYS timeout and miss it.
-    // The correct tool is page.waitForSelector(), which polls the DOM continuously
-    // and resolves the moment the email input appears, SPA or real navigation.
-    step("EB: navigating to email signup form...");
-    try { await page.goto("https://www.instagram.com/accounts/emailsignup/?next=", { waitUntil: "domcontentloaded", timeout: 60000 }); }
-    catch (e: any) { step(`EB: emailsignup nav warning: ${e?.message?.slice(0, 80)}`); }
-    await dismissCookieBanner(page);
-    await delay(800);
-
-    let emailFormReady = await _waitForEmailForm(5000);
-
-    // ── Gate-click loop (up to 3 attempts) ───────────────────────────────────
-    // IMPORTANT: use innerText (not textContent) and require short text (<60 chars)
-    // to avoid matching PARENT containers whose textContent bubbles up child text.
-    // Without this, we find the whole-form div at (640,380) instead of the link at the bottom.
-    const _findGateLinkCoords = async (): Promise<{ x: number; y: number; tag: string; txt: string } | null> => {
-      return page.evaluate((labels: string[]) => {
-        // Prefer <a> and <button> leaf elements with short text first
-        for (const tag of ["a", "button"]) {
-          for (const el of Array.from(document.querySelectorAll<HTMLElement>(tag))) {
-            const txt = (el.innerText || "").trim().toLowerCase();
-            if (txt.length > 0 && txt.length < 60 && labels.some(l => txt.includes(l))) {
-              const r = el.getBoundingClientRect();
-              if (r.width > 0 && r.height > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2, tag, txt };
-            }
-          }
-        }
-        // Fall back to span/div with short text
-        for (const el of Array.from(document.querySelectorAll<HTMLElement>("[role='button'],span,div"))) {
-          const txt = (el.innerText || "").trim().toLowerCase();
-          if (txt.length > 0 && txt.length < 60 && labels.some(l => txt.includes(l))) {
-            const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2, tag: el.tagName, txt };
-          }
-        }
-        // Last resort: <a> with emailsignup in href
-        const a = document.querySelector<HTMLAnchorElement>("a[href*='emailsignup']");
-        if (a) { const r = a.getBoundingClientRect(); if (r.width > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2, tag: "A", txt: a.innerText.trim() }; }
-        return null;
-      }, labels).catch(() => null);
-    };
-
-    for (let attempt = 1; attempt <= 3 && !emailFormReady; attempt++) {
-      const coords = await _findGateLinkCoords();
-
-      if (!coords) {
-        // No gate link visible — maybe still loading or already on email form
-        await delay(1500);
-        emailFormReady = await _waitForEmailForm(4000);
-        break;
-      }
-
-      step(`EB: phone gate — found '${coords.txt}' <${coords.tag}> at (${Math.round(coords.x)}, ${Math.round(coords.y)}) — clicking (attempt ${attempt}/3)...`);
-      await page.mouse.move(coords.x, coords.y);
-      await delay(120);
-      await page.mouse.click(coords.x, coords.y);
-
-      // Wait for email input using waitForSelector — works for SPA + real navigations
-      emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 8000 })
+    // ── Navigate directly to the email signup URL ────────────────────────────
+    // Instagram redirects / to the phone gate — skip it entirely.
+    // Navigate straight to /accounts/signup/email/ (the new SPA route) or
+    // the legacy /accounts/emailsignup/ as a fallback. Both serve the email form.
+    const EMAIL_URLS = [
+      "https://www.instagram.com/accounts/signup/email/",
+      "https://www.instagram.com/accounts/emailsignup/",
+    ];
+    let emailFormReady = false;
+    for (const url of EMAIL_URLS) {
+      step(`EB: navigating to ${url}...`);
+      try { await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 }); }
+      catch (e: any) { step(`EB: nav warning: ${e?.message?.slice(0, 80)}`); }
+      await dismissCookieBanner(page);
+      await delay(800);
+      emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 6000 })
         .then(() => true).catch(() => false);
-
-      if (!emailFormReady) {
-        // Dump diagnostic: what inputs exist + page URL right now
-        const diag = await page.evaluate(() => ({
-          url: window.location.href,
-          title: document.title,
-          inputs: Array.from(document.querySelectorAll("input")).map(el => ({
-            name: el.name, type: el.type, placeholder: el.placeholder,
-            autocomplete: el.autocomplete, id: el.id, ariaLabel: el.getAttribute("aria-label"),
-          })),
-          bodySnippet: document.body.innerText.replace(/\s+/g, " ").slice(0, 300),
-        })).catch(() => null);
-        if (diag) {
-          step(`EB diag[${attempt}]: url=${diag.url}`);
-          step(`EB diag[${attempt}]: inputs=${JSON.stringify(diag.inputs)}`);
-          step(`EB diag[${attempt}]: page="${diag.bodySnippet}"`);
-        }
-        // Save screenshot for visual inspection
-        try { await page.screenshot({ path: `/tmp/eb-diag-attempt-${attempt}.png`, fullPage: true }); } catch {}
-
-        // Try direct navigation then check again
-        step(`EB: gate click attempt ${attempt} — no form yet, trying direct URL...`);
-        try { await page.goto("https://www.instagram.com/accounts/emailsignup/", { waitUntil: "domcontentloaded", timeout: 20000 }); }
-        catch (e: any) { step(`EB: direct nav warning: ${e?.message?.slice(0, 60)}`); }
-        await dismissCookieBanner(page);
-        emailFormReady = await page.waitForSelector(EMAIL_FORM_SELECTORS, { timeout: 6000 })
-          .then(() => true).catch(() => false);
-      }
+      if (emailFormReady) { step(`EB: email form ready at ${url} ✓`); break; }
+      // Log what we see if not found
+      const diagUrl = await page.evaluate(() => `${window.location.href} | inputs: ${Array.from(document.querySelectorAll("input")).map(i => i.getAttribute("aria-label") || i.type).join(",")}`).catch(() => "");
+      step(`EB: email form not found at ${url} — ${diagUrl}`);
     }
 
     // Final diagnostic before attempting to fill
@@ -6403,7 +6341,7 @@ export async function createInstagramAccountViaEBForm(params: {
     step("EB: filling signup form...");
 
     const emailFilled = await _fillSignupInput(page, [
-      'input[name="emailOrPhone"]', 'input[type="email"]',
+      'input[aria-label="Email"]', 'input[name="emailOrPhone"]', 'input[type="email"]',
       'input[placeholder*="email" i]', 'input[autocomplete="email"]',
       'input[name="email"]', 'input[name="emailAddress"]',
     ], email);
@@ -6412,8 +6350,12 @@ export async function createInstagramAccountViaEBForm(params: {
       await cleanup();
       return { status: "error", message: "Could not find email field on Instagram's signup page — the form layout may have changed", steps };
     }
+    // Tab out of the field to fire blur/change events — Instagram's React form
+    // only enables the Next button after the email field loses focus and validates.
+    await page.keyboard.press("Tab");
+    await delay(600);
     step("EB: email filled ✓");
-    await delay(400);
+    await delay(200);
 
     await _fillSignupInput(page, ['input[name="fullName"]', 'input[placeholder*="full name" i]', 'input[placeholder*="name" i]'], firstName);
     step("EB: full name filled ✓");
@@ -6427,19 +6369,29 @@ export async function createInstagramAccountViaEBForm(params: {
     step("EB: password filled ✓");
     await delay(800);
 
-    const signUpClicked = await page.evaluate(() => {
+    // Use real mouse click (page.mouse.click) — not btn.click() inside evaluate().
+    // React's controlled forms require real OS-level pointer events; synthetic DOM
+    // clicks dispatched from page.evaluate() are ignored by React for button submission.
+    await delay(500); // let Instagram's async email-validation debounce settle
+    const nextBtnCoords = await page.evaluate(() => {
       const LABELS = ["next", "sign up", "register", "create account", "continue"];
       for (const btn of Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'))) {
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-        if (LABELS.some(l => txt.includes(l))) {
+        if (LABELS.some(l => txt === l || txt.startsWith(l))) {
           const r = btn.getBoundingClientRect();
-          if (r.width > 0 && r.height > 0) { btn.click(); return true; }
+          if (r.width > 0 && r.height > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
         }
       }
       const sub = document.querySelector<HTMLElement>('button[type="submit"]');
-      if (sub) { sub.click(); return true; }
-      return false;
+      if (sub) { const r = sub.getBoundingClientRect(); if (r.width > 0) return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+      return null;
     });
+    const signUpClicked = !!nextBtnCoords;
+    if (nextBtnCoords) {
+      await page.mouse.move(nextBtnCoords.x, nextBtnCoords.y);
+      await delay(100);
+      await page.mouse.click(nextBtnCoords.x, nextBtnCoords.y);
+    }
     if (!signUpClicked) {
       step("EB: could not find Sign Up button");
       await cleanup();

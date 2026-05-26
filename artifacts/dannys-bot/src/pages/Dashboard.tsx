@@ -56,6 +56,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.551",
+    date: "26 May 2026",
+    items: [
+      { category: "Fix", text: "Human Sessions: skip chance now works correctly — setting 75–100% skips the action 75–100% of the time instead of running it that often." },
+      { category: "Fix", text: "Account Settings: Generate Code button now shows the full 6-digit TOTP code (e.g. Copied! 123456) for 10 seconds before returning to its default label." },
+      { category: "Change", text: "Create Account: replaced the automated macro flow with a fully manual embedded-browser workflow — open the browser, navigate to Instagram, then use the clipboard icons next to each field to paste spun/sanitised values directly into the focused field." },
+    ],
+  },
+  {
     version: "1.0.549",
     date: "25 May 2026",
     items: [

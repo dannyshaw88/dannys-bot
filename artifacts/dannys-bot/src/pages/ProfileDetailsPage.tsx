@@ -335,7 +335,7 @@ export function ProfileDetailsPage() {
       setTotpCode(codeStr);
       navigator.clipboard.writeText(codeStr).catch(() => {});
       setTotpCopied(true);
-      setTimeout(() => setTotpCopied(false), 2000);
+      setTimeout(() => setTotpCopied(false), 10000);
     } catch { setTotpError("Failed to generate"); }
   };
   const [location, navigate] = useLocation();
@@ -995,7 +995,7 @@ export function ProfileDetailsPage() {
                           onClick={() => generateTotp(formData.twoFASecretKey)}
                           className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold bg-muted hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                         >
-                          {totpCopied ? "Copied!" : "Generate Code"}
+                          {totpCopied ? `Copied! ${totpCode}` : "Generate Code"}
                         </button>
                         <span className="text-border text-lg select-none">|</span>
                         <button
