@@ -57,6 +57,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.589",
+    date: "27 May 2026",
+    items: [
+      { category: "Improvement", text: "Full codebase sync — all source files verified and pushed to ensure the Windows installer includes every feature." },
+    ],
+  },
+  {
     version: "1.0.588",
     date: "27 May 2026",
     items: [
