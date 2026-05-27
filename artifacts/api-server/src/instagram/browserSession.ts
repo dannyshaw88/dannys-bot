@@ -6225,10 +6225,18 @@ export async function openSignupBrowser(opts?: {
   try {
     const [page] = await browser.pages();
     if (opts?.userAgent) await page.setUserAgent(opts.userAgent);
-    await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+    // Use a mobile-matched viewport when a mobile UA is provided so Instagram's
+    // JS sees correct screen dimensions and touch capabilities — a 1280×760 desktop
+    // viewport against a mobile UA is an immediate detection signal.
+    const vp = opts?.userAgent ? viewportForUA(opts.userAgent) : { width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true as const, hasTouch: true };
+    await page.setViewport(vp);
     if (opts?.proxyUsername) {
       await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
     }
+    // Apply full JS-layer stealth BEFORE the first navigation so all
+    // evaluateOnNewDocument hooks are registered: WebGL spoofing, canvas noise,
+    // WebRTC lockdown, battery, screen dims, platform, etc.
+    await applyStealthScripts(page, opts?.userAgent ?? "", undefined, undefined).catch(() => {});
     _signupPage = page;
 
     // Forward URL changes to the BrowserPanel address bar so the user can see

@@ -7,10 +7,27 @@ import { Input } from "@/components/ui/input";
 import { useProxies } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
-  Ghost, ShieldCheck, Bomb, Globe, Monitor,
-  Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardCopy, RefreshCw,
+  Ghost, ShieldCheck, Globe, Monitor,
+  Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardPaste, Copy, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ── Icons ──────────────────────────────────────────────────────────────────────
+
+function NukeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+      <circle cx="12" cy="12" r="2.5"/>
+      {/* Top blade (centered at 270° SVG = up), spanning 240°–300° */}
+      <path d="M10.25 8.97 A3.5 3.5 0 0 1 13.75 8.97 L16.5 4.21 A9 9 0 0 0 7.5 4.21 Z"/>
+      {/* Lower-right blade (centered at 30°), spanning 0°–60° */}
+      <path d="M15.5 12 A3.5 3.5 0 0 1 13.75 15.03 L16.5 19.79 A9 9 0 0 0 21 12 Z"/>
+      {/* Lower-left blade (centered at 150°), spanning 120°–180° */}
+      <path d="M10.25 15.03 A3.5 3.5 0 0 1 8.5 12 L3 12 A9 9 0 0 0 7.5 19.79 Z"/>
+    </svg>
+  );
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +46,7 @@ function parseDeviceLabel(api: string): string {
   return api.length > 48 ? api.slice(0, 48) + "…" : api;
 }
 
-// Jarvee-style multilayered spintax: {a|b|c}{d|e} etc.
+// Jarvee-style multilayered spintax
 function resolveSpintax(template: string): string {
   let result = template;
   let prev = "";
@@ -127,7 +144,6 @@ function ProxySelect({
 
       {open && (
         <div className="absolute left-0 right-0 z-50 mt-1 rounded-md border border-border bg-popover text-popover-foreground shadow-lg max-h-60 overflow-y-auto py-1">
-          {/* No proxy */}
           <button
             type="button"
             onClick={() => pick({ kind: "none" })}
@@ -136,8 +152,6 @@ function ProxySelect({
             <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             No proxy (direct)
           </button>
-
-          {/* Saved proxies */}
           {proxies.length === 0 && (
             <p className="px-3 py-2 text-xs text-muted-foreground text-center">No proxies saved in Proxy Manager.</p>
           )}
@@ -156,8 +170,6 @@ function ProxySelect({
               </span>
             </button>
           ))}
-
-          {/* Divider + Add Proxy */}
           <div className="border-t border-border mt-1 pt-1">
             <button
               type="button"
@@ -180,10 +192,10 @@ type BrowserState = "closed" | "opening" | "open" | "resetting";
 
 function StatusChip({ state }: { state: BrowserState }) {
   const map = {
-    closed:    { icon: WifiOff, label: "Browser closed",  cls: "text-muted-foreground bg-muted/60 border-border" },
-    opening:   { icon: Loader2, label: "Starting…",       cls: "text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800" },
-    open:      { icon: Wifi,    label: "Browser running", cls: "text-green-700 bg-green-50 border-green-200 dark:bg-green-950/40 dark:border-green-800" },
-    resetting: { icon: Bomb,    label: "Nuking session…", cls: "text-red-600 bg-red-50 border-red-200 dark:bg-red-950/40 dark:border-red-800" },
+    closed:    { icon: WifiOff,  label: "Browser closed",  cls: "text-muted-foreground bg-muted/60 border-border" },
+    opening:   { icon: Loader2,  label: "Starting…",       cls: "text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800" },
+    open:      { icon: Wifi,     label: "Browser running", cls: "text-green-700 bg-green-50 border-green-200 dark:bg-green-950/40 dark:border-green-800" },
+    resetting: { icon: NukeIcon, label: "Nuking session…", cls: "text-red-600 bg-red-50 border-red-200 dark:bg-red-950/40 dark:border-red-800" },
   }[state];
   const Icon = map.icon;
   return (
@@ -194,29 +206,56 @@ function StatusChip({ state }: { state: BrowserState }) {
   );
 }
 
-// ── Paste button ───────────────────────────────────────────────────────────────
+// ── Field action buttons (Paste into browser + Copy to clipboard) ──────────────
 
-function PasteButton({ value, className }: { value: string; className?: string }) {
+function FieldActions({ value, isOpen }: { value: string; isOpen: boolean }) {
   const [copied, setCopied] = useState(false);
+
+  const handlePaste = () => {
+    fetch("/api/signup/browser/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "fill", text: value }),
+    }).catch(() => {});
+  };
+
   const handleCopy = () => {
     navigator.clipboard.writeText(value).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title="Copy to clipboard"
-      className={cn(
-        "shrink-0 flex items-center gap-1 px-2 h-8 rounded-md border border-input bg-muted/50 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
-        copied && "text-green-600 border-green-400",
-        className
-      )}
-    >
-      <ClipboardCopy className="w-3 h-3" />
-      {copied ? "Copied" : "Paste"}
-    </button>
+    <div className="flex gap-1 shrink-0">
+      <button
+        type="button"
+        onClick={handlePaste}
+        disabled={!isOpen || !value}
+        title={isOpen ? "Paste into active browser field" : "Open browser first"}
+        className={cn(
+          "flex items-center gap-1 px-2 h-8 rounded-md border border-input text-[10px] font-medium transition-colors",
+          isOpen && value
+            ? "bg-muted/50 text-muted-foreground hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-400 dark:hover:bg-cyan-950/40"
+            : "bg-muted/30 text-muted-foreground/40 cursor-not-allowed"
+        )}
+      >
+        <ClipboardPaste className="w-3 h-3" />
+        Paste
+      </button>
+      <button
+        type="button"
+        onClick={handleCopy}
+        disabled={!value}
+        title="Copy to clipboard"
+        className={cn(
+          "flex items-center gap-1 px-2 h-8 rounded-md border border-input bg-muted/50 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
+          copied && "text-green-600 border-green-400"
+        )}
+      >
+        <Copy className="w-3 h-3" />
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
   );
 }
 
@@ -237,19 +276,17 @@ export function CreateGhostPage() {
   const [activeUA, setActiveUA]     = useState<UaEntry>(selectedUA);
 
   // Browser
-  const [browserState, setBrowserState]   = useState<BrowserState>("closed");
+  const [browserState, setBrowserState]         = useState<BrowserState>("closed");
   const [activeProxyLabel, setActiveProxyLabel] = useState<string>("");
-  const [isNative, setIsNative] = useState(false);
+  const [isNative, setIsNative]                 = useState(false);
 
-  // Username spin
+  // Account fields
   const [usernameSpin, setUsernameSpin] = useState("");
-  const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
-
-  // Password
-  const [password, setPassword] = useState(() => generatePassword());
-  const regeneratePassword = () => setPassword(generatePassword());
+  const [password, setPassword]         = useState(() => generatePassword());
 
   const isOpen = browserState === "open";
+
+  const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
 
   useEffect(() => {
     Promise.all([
@@ -321,7 +358,7 @@ export function CreateGhostPage() {
   return (
     <AppLayout>
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+      <div className="mb-2 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
             <Ghost className="w-8 h-8" style={{ color: "#1AD2F2" }} />
@@ -335,14 +372,14 @@ export function CreateGhostPage() {
       </div>
 
       {/* Body: two columns */}
-      <div className="flex gap-3" style={{ height: "calc(100vh - 175px)" }}>
+      <div className="flex gap-3" style={{ height: "calc(100vh - 170px)" }}>
 
         {/* ── Left: Controls ── */}
-        <div className="w-[272px] shrink-0 flex flex-col gap-2.5 overflow-y-auto pb-2">
+        <div className="w-[272px] shrink-0 flex flex-col gap-1.5 overflow-y-auto pb-2">
 
           {/* Proxy */}
-          <div className="desktop-card p-3 space-y-2">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="desktop-card p-2.5 space-y-1.5">
+            <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-cyan-500 shrink-0" />
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proxy</p>
             </div>
@@ -358,7 +395,6 @@ export function CreateGhostPage() {
               }}
             />
 
-            {/* Manual fields — shown only when "Add Proxy" is selected */}
             {proxySelection.kind === "manual" && (
               <div className="space-y-1.5 pt-0.5">
                 <div className="flex gap-1.5">
@@ -415,7 +451,6 @@ export function CreateGhostPage() {
               </div>
             )}
 
-            {/* No proxy warning */}
             {!hasProxy && proxySelection.kind === "none" && (
               <p className="text-[10px] text-amber-600 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -425,8 +460,8 @@ export function CreateGhostPage() {
           </div>
 
           {/* Device Identity */}
-          <div className="desktop-card p-3 space-y-2">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="desktop-card p-2.5 space-y-1.5">
+            <div className="flex items-center gap-2">
               <Monitor className="w-4 h-4 text-cyan-500 shrink-0" />
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Device Identity</p>
             </div>
@@ -437,8 +472,7 @@ export function CreateGhostPage() {
           </div>
 
           {/* Actions + Account Fields */}
-          <div className="desktop-card p-3 space-y-2">
-            {/* Open / Close button */}
+          <div className="desktop-card p-2.5 space-y-1.5">
             {!isOpen ? (
               <Button
                 className="w-full bg-cyan-500 hover:bg-cyan-600 text-white border-0 gap-2"
@@ -450,17 +484,12 @@ export function CreateGhostPage() {
                   : <><Ghost className="w-4 h-4" />Open Ghost Browser</>}
               </Button>
             ) : (
-              <Button
-                variant="outline"
-                className="w-full gap-2"
-                onClick={handleClose}
-              >
+              <Button variant="outline" className="w-full gap-2" onClick={handleClose}>
                 <WifiOff className="w-4 h-4" />
                 Close Browser
               </Button>
             )}
 
-            {/* Nuke Environment */}
             <Button
               variant="outline"
               className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
@@ -470,13 +499,13 @@ export function CreateGhostPage() {
             >
               {browserState === "resetting"
                 ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
-                : <><Bomb className="w-4 h-4" />Nuke Environment</>}
+                : <><NukeIcon className="w-4 h-4" />Nuke Environment</>}
             </Button>
 
             {/* Username Spin */}
-            <div className="pt-1 space-y-1">
+            <div className="pt-0.5 space-y-1">
               <p className="text-[10px] text-muted-foreground font-medium">Username Spin</p>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1">
                 <Input
                   value={usernameSpin}
                   onChange={e => setUsernameSpin(e.target.value)}
@@ -485,13 +514,8 @@ export function CreateGhostPage() {
                   spellCheck={false}
                   autoComplete="off"
                 />
-                <PasteButton value={generatedUsername || resolveSpintax(usernameSpin || "{user}")} />
+                <FieldActions value={generatedUsername || resolveSpintax(usernameSpin || "user")} isOpen={isOpen} />
               </div>
-              {usernameSpin.trim() && generatedUsername && (
-                <p className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 truncate">
-                  → {generatedUsername}
-                </p>
-              )}
             </div>
 
             {/* Password */}
@@ -500,7 +524,7 @@ export function CreateGhostPage() {
                 <p className="text-[10px] text-muted-foreground font-medium">Password</p>
                 <button
                   type="button"
-                  onClick={regeneratePassword}
+                  onClick={() => setPassword(generatePassword())}
                   className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   title="Generate new password"
                 >
@@ -508,7 +532,7 @@ export function CreateGhostPage() {
                   Regenerate
                 </button>
               </div>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1">
                 <Input
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -516,14 +540,14 @@ export function CreateGhostPage() {
                   spellCheck={false}
                   autoComplete="off"
                 />
-                <PasteButton value={password} />
+                <FieldActions value={password} isOpen={isOpen} />
               </div>
             </div>
           </div>
 
           {/* Active session info */}
           {isOpen && (
-            <div className="desktop-card p-3 space-y-1.5 border-cyan-200 dark:border-cyan-800">
+            <div className="desktop-card p-2.5 space-y-1 border-cyan-200 dark:border-cyan-800">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600">Active Session</p>
               <p className="text-[10px] text-muted-foreground font-medium truncate">{activeDeviceLabel}</p>
               <p className="text-[10px] font-mono text-muted-foreground truncate">{activeProxyLabel}</p>
@@ -531,8 +555,8 @@ export function CreateGhostPage() {
           )}
 
           {/* Anti-detect — always at the bottom */}
-          <div className="desktop-card p-3 space-y-1.5 mt-auto">
-            <div className="flex items-center justify-center gap-2 mb-1">
+          <div className="desktop-card p-2.5 space-y-1 mt-auto">
+            <div className="flex items-center justify-center gap-2 mb-0.5">
               <ShieldCheck className="w-4 h-4 text-cyan-500 shrink-0" />
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Anti-Detect</p>
             </div>
@@ -559,7 +583,6 @@ export function CreateGhostPage() {
           (!isOpen || isNative) && "items-center justify-center bg-muted/20"
         )}>
           {isOpen && isNative ? (
-            /* Electron: browser is a detached native window — no embedded panel */
             <div className="flex flex-col items-center justify-center gap-4 text-center p-8">
               <div className="w-20 h-20 rounded-3xl bg-green-50 dark:bg-green-950/40 flex items-center justify-center">
                 <Monitor className="w-10 h-10 text-green-600" />
@@ -584,7 +607,6 @@ export function CreateGhostPage() {
               </Button>
             </div>
           ) : isOpen ? (
-            /* Dev / non-Electron: embedded Puppeteer screencast */
             <BrowserPanel
               profileId={0}
               userAgent={activeUA.embedded}

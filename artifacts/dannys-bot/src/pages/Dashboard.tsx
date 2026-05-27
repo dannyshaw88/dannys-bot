@@ -56,6 +56,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.578",
+    date: "27 May 2026",
+    items: [
+      { category: "Improvement", text: "Nuke Environment now shows a proper nuclear trefoil icon instead of a bomb." },
+      { category: "Improvement", text: "Spintax preview removed from under the Username Spin field — less clutter." },
+      { category: "Improvement", text: "Controls panel spacing tightened — everything sits closer together above the action buttons." },
+      { category: "Feature", text: "Paste buttons now inject text directly into the active field in the ghost browser. A separate Copy button copies to clipboard." },
+      { category: "Fix", text: "Ghost browser was launching with a desktop viewport (1280×760) even when using a mobile user agent — fixed to use the correct mobile screen dimensions and touch settings." },
+      { category: "Fix", text: "Ghost browser was missing the full JS-layer stealth scripts (WebGL, canvas noise, WebRTC lockdown, battery API, screen spoofing). These are now applied before the first page load." },
+    ],
+  },
+  {
     version: "1.0.577",
     date: "27 May 2026",
     items: [
