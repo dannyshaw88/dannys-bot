@@ -62,6 +62,7 @@ export interface IStorage {
   // Instagram API Calls
   getInstagramApiCalls(limit?: number): Promise<any[]>;
   getInstagramApiCallsByProfile(profileId: number, limit?: number): Promise<any[]>;
+  getLastValidApiCallByProfile(): Promise<Record<number, string>>;
   createInstagramApiCall(call: { profileId: number; username?: string; operationName: string; date: string; message?: string; source?: string; navChain?: string; ipAddress?: string; durationMs?: number }): Promise<any>;
   resetStuckVerifyingAccounts(): Promise<number>;
 
@@ -297,6 +298,21 @@ export class DatabaseStorage implements IStorage {
       .where(eq(instagramApiCalls.profileId, profileId))
       .orderBy(desc(instagramApiCalls.id))
       .limit(limit);
+  }
+
+  async getLastValidApiCallByProfile(): Promise<Record<number, string>> {
+    // Valid = not HikerAPI, not a failed/error call, not a pre-action log.
+    // Returns the most recent date ISO string per profile.
+    const rows = sqlite.prepare(`
+      SELECT profile_id, MAX(date) AS last_date
+      FROM instagram_api_calls
+      WHERE source != 'HikerAPI'
+        AND (message IS NULL OR message NOT LIKE 'error:%')
+      GROUP BY profile_id
+    `).all() as { profile_id: number; last_date: string }[];
+    const result: Record<number, string> = {};
+    for (const row of rows) result[row.profile_id] = row.last_date;
+    return result;
   }
 
   async resetStuckVerifyingAccounts(): Promise<number> {

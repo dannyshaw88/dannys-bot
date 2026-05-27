@@ -329,6 +329,12 @@ export async function registerInstagramRoutes(
     res.json(enriched);
   });
 
+  // Must be before /:id routes so Express doesn't treat "last-api-calls" as an ID.
+  app.get("/api/profiles/last-api-calls", async (_req, res) => {
+    const data = await storage.getLastValidApiCallByProfile();
+    res.json(data);
+  });
+
   app.post("/api/profiles/:id/move-to-accounts", async (req, res) => {
     const id = Number(req.params.id);
     const updated = await storage.updateProfile(id, { creatorMode: false });

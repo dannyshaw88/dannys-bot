@@ -56,6 +56,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.579",
+    date: "27 May 2026",
+    items: [
+      { category: "Feature", text: "Accounts page: new 'Last API Call' column showing how long ago each account last made a successful API call (hidden by default — toggle it on in Manage Columns). Excludes HikerAPI calls and any failed/error calls." },
+    ],
+  },
+  {
     version: "1.0.578",
     date: "27 May 2026",
     items: [

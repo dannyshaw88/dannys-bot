@@ -82,11 +82,11 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, followers: 72, following: 72, sync: 88, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, followers: true, following: true, sync: true, actions: true, battery: false, connection: false, abd: true, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "followers", "following", "sync", "actions", "battery", "connection", "abd", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, followers: true, following: true, sync: true, lastApiCall: false, actions: true, battery: false, connection: false, abd: true, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
+  account: "Account", status: "Status", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", lastApiCall: "Last API Call", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -199,6 +199,20 @@ export function ProfilesPage() {
     };
     fetchAbd();
     const t = setInterval(fetchAbd, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // ── Last valid API call per profile ───────────────────────────────────────
+  const [lastApiCallMap, setLastApiCallMap] = useState<Record<number, string>>({});
+  useEffect(() => {
+    const fetchLastApiCalls = async () => {
+      try {
+        const r = await fetch("/api/profiles/last-api-calls");
+        if (r.ok) setLastApiCallMap(await r.json());
+      } catch { /* ignore */ }
+    };
+    fetchLastApiCalls();
+    const t = setInterval(fetchLastApiCalls, 30_000);
     return () => clearInterval(t);
   }, []);
   const moveProfCol = (key: keyof typeof DEFAULT_PROFILES_COL_WIDTHS, dir: -1 | 1) => {
@@ -1030,6 +1044,7 @@ export function ProfilesPage() {
                 </button>
               );
               if (key === "sync") return <div key={key} {...dragProps} style={{ width: profColWidths.sync }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>SYNC</div>;
+              if (key === "lastApiCall") return <div key={key} {...dragProps} style={{ width: profColWidths.lastApiCall }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Last API Call</div>;
               if (key === "actions") return <div key={key} {...dragProps} style={{ width: profColWidths.actions }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Actions</div>;
               if (key === "battery") return <div key={key} {...dragProps} style={{ width: profColWidths.battery }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Battery</div>;
               if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
@@ -1184,6 +1199,25 @@ export function ProfilesPage() {
                       return (
                         <div key={key} style={{ width: profColWidths.sync }} className="shrink-0 flex items-center" title={syncAt?.toLocaleString() ?? "Never synced"} onMouseDown={e => e.stopPropagation()}>
                           <span className="text-[10px] text-muted-foreground truncate">{syncLabel}</span>
+                        </div>
+                      );
+                    }
+                    if (key === "lastApiCall") {
+                      const lastDate = lastApiCallMap[profile.id] ? new Date(lastApiCallMap[profile.id]) : null;
+                      let label: React.ReactNode = <span className="text-muted-foreground/40">Never</span>;
+                      if (lastDate) {
+                        const diffMs  = Date.now() - lastDate.getTime();
+                        const diffMin = Math.floor(diffMs / 60_000);
+                        const diffHr  = Math.floor(diffMin / 60);
+                        const diffDay = Math.floor(diffHr / 24);
+                        if (diffMin < 1)       label = <span>Just now</span>;
+                        else if (diffMin < 60) label = <span>{diffMin}m ago</span>;
+                        else if (diffHr < 24)  label = <span>{diffHr}h ago</span>;
+                        else                   label = <span>{diffDay}d ago</span>;
+                      }
+                      return (
+                        <div key={key} style={{ width: profColWidths.lastApiCall }} className="shrink-0 flex items-center" title={lastDate?.toLocaleString() ?? "No valid API calls recorded"} onMouseDown={e => e.stopPropagation()}>
+                          <span className="text-[10px] text-muted-foreground truncate">{label}</span>
                         </div>
                       );
                     }
