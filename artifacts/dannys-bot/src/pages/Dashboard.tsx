@@ -57,6 +57,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.586",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Follow tool: inject Search by Username no longer fires when the toggle is disabled — it was always running before the first follow regardless of the setting." },
+      { category: "Fix", text: "Follow tool: inject Search by Username and inject Get Suggested Users now correctly fire based on percentage of users, not every run — when disabled, neither call is made at all." },
+      { category: "Improvement", text: "Copy Settings dialog: removed the All Statuses filter dropdown to simplify the interface." },
+      { category: "Improvement", text: "Copy Settings dialog: Select Group dropdown is now half width and placeholder text updated to Select Group." },
+      { category: "Improvement", text: "Copy Settings dialog: search field placeholder changed to Search." },
+      { category: "Feature", text: "Proxy manager: each proxy now has a Type column — select HTTP or SOCKS5 per proxy so the embedded browser routes traffic through the correct protocol and never falls back to a direct connection." },
+    ],
+  },
+  {
     version: "1.0.583",
     date: "27 May 2026",
     items: [

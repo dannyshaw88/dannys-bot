@@ -10,6 +10,7 @@ export const proxies = sqliteTable("proxies", {
   port: integer("port").notNull(),
   username: text("username"),
   password: text("password"),
+  proxyType: text("proxy_type").default("http"),
 });
 
 export const ACCOUNT_STATUSES = [
@@ -362,6 +363,7 @@ export type InsertApiCreatedAccount = z.infer<typeof insertApiCreatedAccountSche
 
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true }).extend({
   name: z.string().optional(),
+  proxyType: z.enum(["http", "socks5"]).optional().default("http"),
 });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, status: true }).extend({
   proxyHost: z.string().optional().nullable(),

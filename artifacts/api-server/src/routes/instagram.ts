@@ -115,6 +115,7 @@ async function resolveProxyConfig(profile: {
       return {
         host: linked.host,
         port: linked.port,
+        type: (linked.proxyType === "socks5" ? "socks5" : "http") as "http" | "socks5",
         username: linked.username ?? undefined,
         password: linked.password ?? undefined,
       };
@@ -125,6 +126,7 @@ async function resolveProxyConfig(profile: {
     return {
       host: profile.proxyHost,
       port: profile.proxyPort,
+      type: "http" as const,
       username: profile.proxyUsername ?? undefined,
       password: profile.proxyPassword ?? undefined,
     };

@@ -3166,9 +3166,18 @@ class AutomationEngine {
 
     engineLog("INFO", `@${profile.username}: scraped ${candidates.length} candidates (target: ${processCount})`);
 
-    // Inject /api/v1/users/search/ before the very first follow of every session.
+    const injectSuggestedEnabled = !!(s.injectSuggestedEnabled);
+    const injectSuggestedMin     = Math.max(0, Math.min(100, s.injectSuggestedMin ?? 40));
+    const injectSuggestedMax     = Math.max(0, Math.min(100, s.injectSuggestedMax ?? 60));
+
+    const injectSearchEnabled = !!(s.injectSearchEnabled);
+    const injectSearchMin     = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
+    const injectSearchMax     = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
+
+    // Inject /api/v1/users/search/ before the very first follow of every session —
+    // but ONLY when the searchByUsername inject is enabled by the user.
     // Simulates the user searching in the search bar before following — adds natural API signal.
-    if (candidates.length > 0) {
+    if (injectSearchEnabled && candidates.length > 0) {
       const searchQuery = source.type === "target_followers"
         ? source.value.replace(/^@/, "")
         : (candidates[0]?.username ?? source.value);
@@ -3179,14 +3188,6 @@ class AutomationEngine {
         } catch { /* non-critical */ }
       }
     }
-
-    const injectSuggestedEnabled = !!(s.injectSuggestedEnabled);
-    const injectSuggestedMin     = Math.max(0, Math.min(100, s.injectSuggestedMin ?? 40));
-    const injectSuggestedMax     = Math.max(0, Math.min(100, s.injectSuggestedMax ?? 60));
-
-    const injectSearchEnabled = !!(s.injectSearchEnabled);
-    const injectSearchMin     = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
-    const injectSearchMax     = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
 
     let followed = 0, dedupSkipped = 0, filterSkipped = 0, blocked = 0, skipped = 0;
     let hitHardLimit = false; // true when a real cap/block/stop occurred (not just ran out of candidates)
@@ -3998,12 +3999,20 @@ class AutomationEngine {
         const proxies = await storage.getProxies();
         const linked = proxies.find((p) => p.id === profile.proxyId);
         if (linked?.host && linked?.port) {
-          proxyArg = [`--proxy-server=${linked.host}:${linked.port}`];
-          if (linked.username) proxyAuth = { username: linked.username, password: linked.password ?? "" };
+          const isSocks5 = linked.proxyType === "socks5";
+          if (isSocks5) {
+            const auth = linked.username
+              ? `${encodeURIComponent(linked.username)}:${encodeURIComponent(linked.password ?? "")}@`
+              : "";
+            proxyArg = [`--proxy-server=socks5://${auth}${linked.host}:${linked.port}`];
+          } else {
+            proxyArg = [`--proxy-server=http://${linked.host}:${linked.port}`];
+            if (linked.username) proxyAuth = { username: linked.username, password: linked.password ?? "" };
+          }
         }
       } catch {}
     } else if (profile.proxyHost && profile.proxyPort) {
-      proxyArg = [`--proxy-server=${profile.proxyHost}:${profile.proxyPort}`];
+      proxyArg = [`--proxy-server=http://${profile.proxyHost}:${profile.proxyPort}`];
       if (profile.proxyUsername) proxyAuth = { username: profile.proxyUsername, password: profile.proxyPassword ?? "" };
     }
 

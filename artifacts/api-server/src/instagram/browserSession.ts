@@ -920,6 +920,7 @@ export function getExistingBrowser(profileId: number): any | null {
 export interface ProxyConfig {
   host: string;
   port: number;
+  type?: "http" | "socks5";
   username?: string;
   password?: string;
 }
@@ -1222,6 +1223,14 @@ const LAUNCH_ARGS_BASE = [
   // embedded: "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".
   "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
   "--enforce-webrtc-ip-permission-check",
+
+  // ── IP-leak safety net ─────────────────────────────────────────────────────
+  // When a proxy is configured and fails (wrong type, auth failure, unreachable
+  // after launch), Chrome's default behaviour is to silently fall back to a
+  // direct connection — leaking the real server IP to every Instagram endpoint.
+  // --no-proxy-fallback forces Chrome to show ERR_PROXY_CONNECTION_FAILED
+  // instead of falling back, making proxy failures visible rather than silent.
+  "--no-proxy-fallback",
 
   // Prevent Chrome from auto-playing video before a user gesture.
   // Instagram's feed auto-plays Reel videos as soon as they load. With
@@ -1944,7 +1953,7 @@ export async function getOrCreateSession(
     return {} as unknown as Session;
   }
   // ── Puppeteer mode (dev / non-Electron) ───────────────────────────────────
-  const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
+  const newProxyKey = proxy ? `${proxy.type ?? "http"}://${proxy.host}:${proxy.port}` : "direct";
   const existing = sessions.get(profileId);
 
   // Fast-path: session already exists with the same proxy — return immediately.
@@ -1978,10 +1987,15 @@ export async function getOrCreateSession(
 
   _launchingProfiles.add(profileId);
 
-  // --proxy-server accepts "host:port" only — Chromium rejects credentials in the URL
-  // (ERR_NO_SUPPORTED_PROXIES). Credentials are supplied via page.authenticate() after launch.
+  // Build the --proxy-server arg using the correct protocol prefix.
+  // HTTP proxies: "http://host:port" — credentials are supplied via page.authenticate() after launch.
+  // SOCKS5 proxies: "socks5://user:pass@host:port" — credentials must be embedded in the URL
+  //   because SOCKS5 does not use the HTTP 407 challenge that page.authenticate() intercepts.
+  // Without an explicit protocol Chrome assumes HTTP.  Feeding a SOCKS5 server to an HTTP
+  // proxy configuration causes Chrome to issue an HTTP CONNECT which SOCKS5 rejects, and
+  // Chrome then silently falls back to a direct connection — leaking the real IP.
   if (proxy) {
-    log(`Launching Chrome for profile ${profileId} via proxy ${proxy.host}:${proxy.port}${proxy.username ? ` (user: ${proxy.username})` : " (no auth)"}`, "browser");
+    log(`Launching Chrome for profile ${profileId} via ${proxy.type ?? "http"} proxy ${proxy.host}:${proxy.port}${proxy.username ? ` (user: ${proxy.username})` : " (no auth)"}`, "browser");
   } else {
     log(`Launching Chrome for profile ${profileId} — NO PROXY (direct connection)`, "browser");
   }
@@ -2000,7 +2014,17 @@ export async function getOrCreateSession(
     log(`[proxy-check:${profileId}] Proxy ${proxy.host}:${proxy.port} reachable ✓`, "browser");
   }
 
-  const proxyArg = proxy ? [`--proxy-server=${proxy.host}:${proxy.port}`] : [];
+  let proxyArg: string[] = [];
+  if (proxy) {
+    if (proxy.type === "socks5") {
+      const auth = proxy.username
+        ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password ?? "")}@`
+        : "";
+      proxyArg = [`--proxy-server=socks5://${auth}${proxy.host}:${proxy.port}`];
+    } else {
+      proxyArg = [`--proxy-server=http://${proxy.host}:${proxy.port}`];
+    }
+  }
 
   // Each session gets its OWN isolated user-data-dir so Chrome never reuses or
   // touches any existing browser session on the machine.
@@ -2095,9 +2119,10 @@ export async function getOrCreateSession(
   // the Puppeteer screenshot always matches the canvas size exactly.
   await page.setViewport({ width: 1280, height: 760 });
 
-  // Authenticate proxy if credentials supplied.
+  // Authenticate proxy if credentials supplied — HTTP proxies only.
   // page.authenticate() handles the 407 Proxy Auth challenge Chromium receives on CONNECT.
-  if (proxy?.username) {
+  // SOCKS5 proxies don't use HTTP 407 challenges; credentials are embedded in the --proxy-server URL above.
+  if (proxy?.username && proxy?.type !== "socks5") {
     await page.authenticate({ username: proxy.username, password: proxy.password ?? "" });
   }
   log(`Chrome launched for profile ${profileId}`, "browser");

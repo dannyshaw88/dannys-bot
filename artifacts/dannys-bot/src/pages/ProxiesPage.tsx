@@ -19,10 +19,10 @@ import type { Proxy, Profile } from "@shared/schema";
 
 type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
 
-type ProxyCol = "proxy" | "username" | "password" | "accounts" | "status";
-const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "username", "password", "accounts", "status"];
-const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, username: 120, password: 120, accounts: 76, status: 88 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", username: "Username", password: "Password", accounts: "Accounts", status: "Status" };
+type ProxyCol = "proxy" | "type" | "username" | "password" | "accounts" | "status";
+const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status"];
+const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, accounts: 76, status: 88 };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", type: "Type", username: "Username", password: "Password", accounts: "Accounts", status: "Status" };
 
 function parseJarveeFile(buffer: ArrayBuffer): Array<{ host: string; port: number; username: string | null; password: string | null }> {
   const text = new TextDecoder("utf-16le").decode(buffer).replace(/^\ufeff/, "");
@@ -86,14 +86,16 @@ function ProxyRow({
   const [hostPort, setHostPort] = useState(`${proxy.host}:${proxy.port}`);
   const [username, setUsername] = useState(proxy.username ?? "");
   const [password, setPassword] = useState(proxy.password ?? "");
+  const [proxyType, setProxyType] = useState<"http" | "socks5">((proxy.proxyType as "http" | "socks5") ?? "http");
 
   useEffect(() => {
     setHostPort(`${proxy.host}:${proxy.port}`);
     setUsername(proxy.username ?? "");
     setPassword(proxy.password ?? "");
+    setProxyType((proxy.proxyType as "http" | "socks5") ?? "http");
   }, [proxy]);
 
-  const saveField = useCallback((field: "hostPort" | "username" | "password") => {
+  const saveField = useCallback((field: "hostPort" | "username" | "password" | "type") => {
     let data: Record<string, string | number | null> = {};
     if (field === "hostPort") {
       const parts = hostPort.split(":");
@@ -107,11 +109,13 @@ function ProxyRow({
       data = { host, port };
     } else if (field === "username") {
       data = { username: username || null };
-    } else {
+    } else if (field === "password") {
       data = { password: password || null };
+    } else {
+      data = { proxyType };
     }
     updateProxyMutation.mutate({ id: proxy.id, data });
-  }, [hostPort, username, password, proxy, updateProxyMutation, toast]);
+  }, [hostPort, username, password, proxyType, proxy, updateProxyMutation, toast]);
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
   const validCount = assigned.filter(p => p.accountStatus === "valid").length;
@@ -142,6 +146,18 @@ function ProxyRow({
           if (col === "proxy") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
               <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full" placeholder="host:port" />
+            </div>
+          );
+          if (col === "type") return (
+            <div key={col} className="shrink-0" style={{ width: colWidths.type }}>
+              <select
+                value={proxyType}
+                onChange={e => { setProxyType(e.target.value as "http" | "socks5"); updateProxyMutation.mutate({ id: proxy.id, data: { proxyType: e.target.value } }); }}
+                className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="http">HTTP</option>
+                <option value="socks5">SOCKS5</option>
+              </select>
             </div>
           );
           if (col === "username") return (
@@ -240,6 +256,7 @@ export function ProxiesPage() {
   const [hostPort, setHostPort] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [newProxyType, setNewProxyType] = useState<"http" | "socks5">("http");
   const [importing, setImporting] = useState(false);
   const [maxPerProxy, setMaxPerProxy] = useState<number>(() => {
     const saved = localStorage.getItem("proxies:maxPerProxy");
@@ -541,8 +558,8 @@ export function ProxiesPage() {
     const host = trimmed.slice(0, lastColon);
     const port = Number(trimmed.slice(lastColon + 1));
     if (!host || isNaN(port) || port < 1 || port > 65535) { toast({ title: "Invalid format", description: "Enter a valid IP:PORT", variant: "destructive" }); return; }
-    createProxyMutation.mutate({ host, port, username: username || null, password: password || null }, {
-      onSuccess: () => { setIsAddOpen(false); setHostPort(""); setUsername(""); setPassword(""); toast({ title: "Proxy Added" }); },
+    createProxyMutation.mutate({ host, port, username: username || null, password: password || null, proxyType: newProxyType }, {
+      onSuccess: () => { setIsAddOpen(false); setHostPort(""); setUsername(""); setPassword(""); setNewProxyType("http"); toast({ title: "Proxy Added" }); },
     });
   };
 
@@ -653,9 +670,23 @@ export function ProxiesPage() {
           <DialogContent>
             <DialogHeader><DialogTitle>Add New Proxy</DialogTitle></DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="hostPort">IP Address &amp; Port</Label>
-                <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="hostPort">IP Address &amp; Port</Label>
+                  <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="newProxyType">Proxy Type</Label>
+                  <select
+                    id="newProxyType"
+                    value={newProxyType}
+                    onChange={e => setNewProxyType(e.target.value as "http" | "socks5")}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="http">HTTP</option>
+                    <option value="socks5">SOCKS5</option>
+                  </select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

@@ -16,7 +16,8 @@ sqlite.exec(`
     host TEXT NOT NULL,
     port INTEGER NOT NULL,
     username TEXT,
-    password TEXT
+    password TEXT,
+    proxy_type TEXT DEFAULT 'http'
   );
 
   CREATE TABLE IF NOT EXISTS profiles (
@@ -214,6 +215,15 @@ sqlite.exec(`
     created_at TEXT NOT NULL
   );
 `);
+
+// ── Schema migrations for existing databases ────────────────────────────────
+// SQLite does not support IF NOT EXISTS on ALTER TABLE, so we try/catch each.
+const _migrations: string[] = [
+  "ALTER TABLE proxies ADD COLUMN proxy_type TEXT DEFAULT 'http'",
+];
+for (const sql of _migrations) {
+  try { sqlite.exec(sql); } catch { /* column already exists */ }
+}
 
 // Add new columns if they don't exist yet (safe to run on existing DBs)
 const existingCols = sqlite.prepare("pragma table_info(profiles)").all() as { name: string }[];

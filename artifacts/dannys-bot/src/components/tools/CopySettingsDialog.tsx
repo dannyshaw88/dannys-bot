@@ -295,7 +295,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
             {profileGroups.size > 0 && (
               <div className="px-3 py-2 border-b border-border bg-muted/10">
                 <select
-                  className="w-full text-xs rounded-md border border-input bg-background text-foreground px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                  className="w-1/2 text-xs rounded-md border border-input bg-background text-foreground px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
                   value=""
                   onChange={e => {
                     const groupName = e.target.value;
@@ -308,7 +308,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                     });
                   }}
                 >
-                  <option value="">Select by group…</option>
+                  <option value="">Select Group</option>
                   {Array.from(profileGroups.entries()).map(([groupName, groupProfiles]) => (
                     <option key={groupName} value={groupName}>
                       {groupName} ({groupProfiles.length})
@@ -318,28 +318,18 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               </div>
             )}
 
-            {/* Search + Status filter */}
+            {/* Search */}
             <div className="px-3 py-2 border-b border-border flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search name, group…"
+                  placeholder="Search"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 />
               </div>
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="text-xs rounded-md border border-input bg-background text-foreground px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer shrink-0"
-              >
-                <option value="">All statuses</option>
-                {uniqueStatuses.map(s => (
-                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                ))}
-              </select>
             </div>
 
             {/* Column headers */}
