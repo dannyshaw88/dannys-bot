@@ -1052,18 +1052,37 @@ if (process.platform === "win32") {
 // These Chrome command-line switches apply to every Chromium renderer in this
 // Electron process — including all EB BrowserWindows and BrowserViews.
 //
-// Without this, Chromium's WebRTC stack sends UDP STUN requests DIRECTLY to
-// Google's STUN servers, completely bypassing the HTTP/SOCKS proxy set via
-// session.setProxy(). The ICE candidate callback then returns the real host
-// machine IP (and all its IPv6 addresses), exposing it to any page that calls
-// new RTCPeerConnection() — exactly what the Leak Check reports.
+// ── IP Leak Prevention (MUST be before app.whenReady) ────────────────────────
 //
-// "disable_non_proxied_udp" instructs Chromium to only generate ICE candidates
-// that flow through a configured proxy. HTTP/SOCKS proxies don't forward UDP,
-// so in practice WebRTC gets zero usable candidates and leaks nothing.
+// Problem: Chromium's WebRTC and network stacks can leak the machine's real IP
+// even when a proxy is configured, via two independent paths:
+//
+//   Path A — WebRTC / ICE candidates:
+//     RTCPeerConnection gathers ICE candidates by querying all local network
+//     interfaces directly (bypasses the HTTP/SOCKS proxy). With a SOCKS5 proxy
+//     configured, Chrome still generates ICE candidates for the IPv6 interface
+//     because it considers them "proxied" (SOCKS5 supports UDP ASSOCIATE). The
+//     IPv6 address then leaks to every page that calls new RTCPeerConnection().
+//
+//   Path B — IPv6 bypass:
+//     Most proxies are IPv4-only. When the host machine has IPv6 connectivity,
+//     Chrome prefers IPv6 for direct connections (e.g. ipify.org, my-ip.io).
+//     Those requests bypass the IPv4 proxy entirely, exposing the real IPv6.
+//
+// Fix A — disable IPv6 in Chrome's network stack:
+//   "disable-ipv6" removes IPv6 from every subsystem: DNS resolver, socket
+//   pool, WebRTC ICE gatherer. Chrome can no longer see or use IPv6 interfaces,
+//   so only IPv4 remains and all traffic routes through the configured proxy.
+//
+// Fix B — lock WebRTC to proxy-only UDP:
+//   "force-webrtc-ip-handling-policy=disable_non_proxied_udp" prevents WebRTC
+//   from generating any ICE candidate that doesn't flow through the proxy. With
+//   IPv6 already gone (Fix A) and HTTP/SOCKS unable to relay UDP, WebRTC ends
+//   up with zero usable candidates — nothing leaks.
 //
 // IMPORTANT: appendSwitch() must be called BEFORE app.whenReady() — Chrome
 // command-line args are consumed at process startup and cannot be changed later.
+app.commandLine.appendSwitch("disable-ipv6");
 app.commandLine.appendSwitch("force-webrtc-ip-handling-policy", "disable_non_proxied_udp");
 app.commandLine.appendSwitch("enforce-webrtc-ip-permission-check");
 // Prevent DNS prefetch from resolving hostnames outside the proxy tunnel.

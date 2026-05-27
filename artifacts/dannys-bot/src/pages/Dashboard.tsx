@@ -58,6 +58,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.598",
+    date: "27 May 2026",
+    items: [
+      { category: "Security", text: "IPv6 completely disabled in Chrome's network stack — the machine's real IPv6 address can no longer leak through WebRTC, DNS, or any direct connection." },
+      { category: "Security", text: "All traffic is now forced through IPv4, so every connection routes through the assigned proxy with no IPv6 bypass path possible." },
+    ],
+  },
+  {
     version: "1.0.597",
     date: "27 May 2026",
     items: [
