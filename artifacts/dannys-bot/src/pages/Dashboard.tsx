@@ -58,6 +58,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.601",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded Browser now opens correctly — the WebRTC protection setup no longer blocks the window from registering as open." },
+      { category: "Security", text: "WebRTC TCP candidate blocking still active and applied before the first page script runs, without affecting the EB opening." },
+    ],
+  },
+  {
     version: "1.0.600",
     date: "27 May 2026",
     items: [
