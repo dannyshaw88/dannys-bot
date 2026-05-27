@@ -167,7 +167,7 @@ let _iconPath    = "";
 interface EbEntry {
   win: BrowserWindow;
   username: string;
-  proxy?: { host: string; port: number; user?: string; pass?: string };
+  proxy?: { host: string; port: number; user?: string; pass?: string; type?: string };
   partition: string;
 }
 export const ebMap = new Map<number, EbEntry>();
@@ -178,6 +178,40 @@ export const ebMap = new Map<number, EbEntry>();
 function ebPartition(pid: number): string {
   return ebMap.get(pid)?.partition ?? `persist:eb-${pid}`;
 }
+
+// Build the Electron session.setProxy() proxyRules string for a given proxy config.
+// HTTP proxies: "http=host:port;https=host:port" — credentials delivered via the
+//   session "login" event (HTTP 407 Proxy-Authorization challenge).
+// SOCKS5 proxies: "socks5://user:pass@host:port" — credentials MUST be embedded in
+//   the URL because SOCKS5 has no 407 challenge.  Feeding a SOCKS5 server the HTTP
+//   format causes Chromium to issue an HTTP CONNECT that SOCKS5 rejects, then fall
+//   back to a DIRECT connection — leaking the real IP.
+function buildProxyRules(proxy: { host: string; port: number; user?: string; pass?: string; type?: string }): string {
+  if (proxy.type === "socks5") {
+    const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
+    return `socks5://${creds}${proxy.host}:${proxy.port}`;
+  }
+  // HTTP proxy (default)
+  return `http=${proxy.host}:${proxy.port};https=${proxy.host}:${proxy.port}`;
+}
+
+// JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
+// Applied via CDP Page.addScriptToEvaluateOnNewDocument (runs before any page script)
+// AND via dom-ready executeJavaScript (belt-and-suspenders if CDP is unavailable).
+const WEBRTC_BLOCKER_JS = `(function () {
+  var R = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+  if (!R) return;
+  function B() {
+    var pc = new R({});
+    pc.createOffer  = function () { return Promise.reject(new DOMException('WebRTC disabled', 'NotAllowedError')); };
+    pc.createAnswer = function () { return Promise.reject(new DOMException('WebRTC disabled', 'NotAllowedError')); };
+    return pc;
+  }
+  try { B.prototype = R.prototype; } catch {}
+  try { B.generateCertificate = R.generateCertificate.bind(R); } catch {}
+  try { Object.defineProperty(window, 'RTCPeerConnection',        { get: function () { return B; }, configurable: true }); } catch {}
+  try { Object.defineProperty(window, 'webkitRTCPeerConnection',  { get: function () { return B; }, configurable: true }); } catch {}
+})();`;
 // Native toolbar BrowserView per profile — floats above all page content.
 const toolbarViewMap = new Map<number, BrowserView>();
 
@@ -521,7 +555,7 @@ async function doAutoLogin(
 export async function openEbWindow(opts: {
   profileId: number;
   username:  string;
-  proxy?:    { host: string; port: number; user?: string; pass?: string };
+  proxy?:    { host: string; port: number; user?: string; pass?: string; type?: string };
   userAgent?: string;
   password?: string;
   twoFAKey?: string;
@@ -548,7 +582,7 @@ export async function openEbWindow(opts: {
         console.log(`[ebManager:${profileId}] Proxy changed (${oldProxyKey} → ${newProxyKey}), updating session proxy`);
         const existingSes = electronSession.fromPartition(existing.partition);
         if (proxy) {
-          await existingSes.setProxy({ proxyRules: `http=${proxy.host}:${proxy.port};https=${proxy.host}:${proxy.port}` });
+          await existingSes.setProxy({ proxyRules: buildProxyRules(proxy) });
         } else {
           await existingSes.setProxy({ proxyRules: "direct://" });
         }
@@ -585,10 +619,14 @@ export async function openEbWindow(opts: {
     : `persist:eb-${profileId}`;
   const ses = electronSession.fromPartition(partition);
 
-  // Configure proxy — use explicit per-scheme format so Chromium routes HTTPS
-  // traffic through the proxy via HTTP CONNECT (not just plain HTTP).
+  // Configure proxy.
+  // HTTP proxies: Chromium uses HTTP CONNECT for HTTPS (credentials via login event).
+  // SOCKS5 proxies: credentials are embedded in the URL — SOCKS5 has no HTTP 407
+  //   challenge, so the login event never fires for them.  If we set a SOCKS5 server
+  //   using the HTTP format Chromium sends an HTTP CONNECT, gets rejected, then falls
+  //   back to DIRECT — exposing the real IP.  buildProxyRules() picks the right format.
   if (proxy) {
-    await ses.setProxy({ proxyRules: `http=${proxy.host}:${proxy.port};https=${proxy.host}:${proxy.port}` });
+    await ses.setProxy({ proxyRules: buildProxyRules(proxy) });
   } else {
     await ses.setProxy({ proxyRules: "direct://" });
   }
@@ -637,36 +675,20 @@ export async function openEbWindow(opts: {
   // ── WebRTC TCP-candidate leak prevention (CDP page-script injection) ──────
   // Chromium's `disable_non_proxied_udp` WebRTC policy blocks UDP ICE candidates
   // but NOT TCP ICE candidates ("SPDY PUBLIC" type), which bypass the policy and
-  // can expose the real IPv6 address.  We inject a script via CDP that runs
-  // BEFORE any page script and overrides RTCPeerConnection.createOffer() to
-  // immediately reject — the leak test catches this, renders 0 candidates, and
-  // marks WebRTC as PASS ("Blocked").  Instagram does not use WebRTC.
+  // can expose the real IPv6 address.  CDP injects WEBRTC_BLOCKER_JS before any
+  // page script, so it runs at document_start on every navigation.
   //
-  // IMPORTANT: this block is intentionally fire-and-forget (no await).
-  // Awaiting the CDP sendCommand can hang in the packaged Electron app and
-  // prevent ebMap.set() from being reached, causing the EB to never register
-  // as open.  The injection completes asynchronously before the first page
-  // script runs (navigation takes hundreds of ms, CDP completes in <10ms).
+  // Page.enable() must be called before Page.addScriptToEvaluateOnNewDocument —
+  // without it the command may be silently rejected in some Electron builds.
+  //
+  // IMPORTANT: fire-and-forget (no await) — awaiting can hang in the packaged
+  // app and prevent ebMap.set() from being reached.  A dom-ready fallback below
+  // covers the rare case where CDP completes after the first navigation starts.
   void (async () => {
     try {
       try { win.webContents.debugger.attach("1.3"); } catch { /* already attached or unavailable */ }
-      await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", {
-        source: `(function () {
-  var _RTCPC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
-  if (!_RTCPC) return;
-  function _BlockedRTC(config) {
-    var pc = new _RTCPC({});
-    pc.createOffer = function () {
-      return Promise.reject(new DOMException('WebRTC disabled — proxy mode active', 'NotAllowedError'));
-    };
-    return pc;
-  }
-  try { _BlockedRTC.prototype = _RTCPC.prototype; } catch {}
-  try { _BlockedRTC.generateCertificate = _RTCPC.generateCertificate.bind(_RTCPC); } catch {}
-  try { Object.defineProperty(window, 'RTCPeerConnection', { get: function () { return _BlockedRTC; }, configurable: true }); } catch {}
-  try { Object.defineProperty(window, 'webkitRTCPeerConnection', { get: function () { return _BlockedRTC; }, configurable: true }); } catch {}
-})();`,
-      });
+      await win.webContents.debugger.sendCommand("Page.enable");
+      await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
     } catch (err) {
       console.warn(`[ebManager:${profileId}] WebRTC CDP injection failed:`, err);
     }
@@ -714,6 +736,15 @@ export async function openEbWindow(opts: {
 
   // Store in map
   ebMap.set(profileId, { win, username, proxy, partition });
+
+  // Belt-and-suspenders WebRTC block: if CDP injection didn't complete before
+  // the first navigation (e.g. debugger attach failed silently in packaged app),
+  // executeJavaScript at dom-ready overrides RTCPeerConnection in the main world.
+  // dom-ready fires after HTML parsing but before window.onload / setTimeout
+  // callbacks — earlier than any real-world leak-test gather loop.
+  win.webContents.on("dom-ready", () => {
+    win.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
+  });
 
   // Chrome-error recovery: auto-navigate back to Instagram when the page hits
   // chrome-error://. This handles ERR_TOO_MANY_REDIRECTS (Instagram's post-2FA
@@ -1712,7 +1743,7 @@ export function startEbIpcServer(
         const partition = ebPartition(pid);
         const ses = electronSession.fromPartition(partition);
         if (body.proxy) {
-          await ses.setProxy({ proxyRules: `http=${body.proxy.host}:${body.proxy.port};https=${body.proxy.host}:${body.proxy.port}` });
+          await ses.setProxy({ proxyRules: buildProxyRules(body.proxy) });
         } else {
           await ses.setProxy({ proxyRules: "direct://" });
         }
@@ -1749,16 +1780,17 @@ export function startEbIpcServer(
           },
         });
 
-        // Apply the same WebRTC TCP-candidate block as the regular EB window.
-        // Fire-and-forget — do NOT await (same reason as openEbWindow).
+        // Apply the same WebRTC block as the regular EB window (CDP + dom-ready fallback).
         void (async () => {
           try {
             try { hiddenWin.webContents.debugger.attach("1.3"); } catch {}
-            await hiddenWin.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", {
-              source: `(function(){var R=window.RTCPeerConnection||window.webkitRTCPeerConnection;if(!R)return;function B(c){var p=new R({});p.createOffer=function(){return Promise.reject(new DOMException('WebRTC disabled','NotAllowedError'));};return p;}try{B.prototype=R.prototype;}catch{}try{Object.defineProperty(window,'RTCPeerConnection',{get:function(){return B;},configurable:true});}catch{}try{Object.defineProperty(window,'webkitRTCPeerConnection',{get:function(){return B;},configurable:true});}catch{}})();`,
-            });
+            await hiddenWin.webContents.debugger.sendCommand("Page.enable");
+            await hiddenWin.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
           } catch {}
         })();
+        hiddenWin.webContents.on("dom-ready", () => {
+          hiddenWin.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
+        });
 
         if (body.proxy) {
           hiddenWin.webContents.on("login", (ev: any, _rq: any, _auth: any, cb: any) => {

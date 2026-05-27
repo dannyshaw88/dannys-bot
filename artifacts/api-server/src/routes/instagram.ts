@@ -817,7 +817,7 @@ export async function registerInstagramRoutes(
       username:  profile.username,
       password:  profile.password,
       twoFAKey:  profile.twoFASecretKey ?? "",
-      proxy:     profile.proxyHost ? { host: profile.proxyHost, port: profile.proxyPort, user: profile.proxyUsername, pass: profile.proxyPassword } : undefined,
+      proxy:     profile.proxyHost ? { host: profile.proxyHost, port: profile.proxyPort, user: profile.proxyUsername, pass: profile.proxyPassword, type: (profile as any).proxyType ?? "http" } : undefined,
       userAgent: profile.userAgentEmbedded ?? "",
     };
     try {
@@ -962,6 +962,7 @@ export async function registerInstagramRoutes(
       port: effectiveProfile.proxyPort!,
       username: effectiveProfile.proxyUsername ?? undefined,
       password: effectiveProfile.proxyPassword ?? undefined,
+      type:     ((effectiveProfile as any).proxyType === "socks5" ? "socks5" : "http") as "http" | "socks5",
     } : undefined;
 
     // ── UA BLOCK — per USER-AGENT RULE (non-negotiable) ─────────────────────────
@@ -991,7 +992,7 @@ export async function registerInstagramRoutes(
           username:  profile.username,
           password:  profile.password!,
           twoFAKey:  profile.twoFASecretKey || "",
-          proxy:     proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
+          proxy:     proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password, type: proxyConfig.type } : undefined,
           userAgent: ebUA,
         });
         loginResult    = { ok: silentRes.ok, message: silentRes.message };

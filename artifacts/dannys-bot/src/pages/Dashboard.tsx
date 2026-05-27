@@ -58,6 +58,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.602",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy traffic no longer leaks the real IP — SOCKS5 proxies are now correctly recognised and connected using the SOCKS5 protocol instead of HTTP." },
+      { category: "Fix", text: "WebRTC leak fully blocked — added a belt-and-suspenders fallback that overrides RTCPeerConnection at page load in case the earlier CDP injection missed it." },
+    ],
+  },
+  {
     version: "1.0.601",
     date: "27 May 2026",
     items: [
