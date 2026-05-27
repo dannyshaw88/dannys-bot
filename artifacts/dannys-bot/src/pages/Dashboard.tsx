@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.580",
+    date: "27 May 2026",
+    items: [
+      { category: "Feature", text: "Accounts page: groups now have an icon/favicon slot between the group name and account count — click the small dashed box to browse your files and assign any image. Click again to replace it." },
+      { category: "Improvement", text: "Last API Call column is now visible by default on the Accounts page. Shows how long ago each account last made a valid API call (excludes HikerAPI and error calls)." },
+      { category: "Fix", text: "Fixed a crash on the Accounts page that triggered a 500 error every 30 seconds due to an undefined database reference in the Last API Call lookup." },
+      { category: "Fix", text: "Ghost Browser: confirmation code entry now fires React-compatible input events so Instagram's controlled OTP fields always register the typed value correctly." },
+    ],
+  },
+  {
     version: "1.0.579",
     date: "27 May 2026",
     items: [

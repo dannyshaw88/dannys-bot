@@ -16,7 +16,7 @@ import {
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
   Smartphone, FileDown, Filter, X, Settings2,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, LockOpen, UserMinus, Camera, Eye,
-  Tag, FolderOpen, Battery, BatteryCharging, Wifi,
+  Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -83,7 +83,7 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
 }
 
 const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, followers: true, following: true, sync: true, lastApiCall: false, actions: true, battery: false, connection: false, abd: true, ip: true };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, actions: true, battery: false, connection: false, abd: true, ip: true };
 const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
   account: "Account", status: "Status", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", lastApiCall: "Last API Call", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
@@ -215,6 +215,34 @@ export function ProfilesPage() {
     const t = setInterval(fetchLastApiCalls, 30_000);
     return () => clearInterval(t);
   }, []);
+
+  // ── Group icons (favicon/image per group, stored in localStorage) ─────────
+  const [groupIcons, setGroupIcons] = useState<Record<string, string>>(() => {
+    try {
+      const s = localStorage.getItem("profiles:groupIcons");
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+  });
+  const groupIconInputRef = useRef<HTMLInputElement>(null);
+  const groupIconKeyRef   = useRef<string>("");
+
+  const handleGroupIconFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const data = ev.target?.result as string;
+      const key  = groupIconKeyRef.current;
+      if (!data || !key) return;
+      setGroupIcons(prev => {
+        const next = { ...prev, [key]: data };
+        try { localStorage.setItem("profiles:groupIcons", JSON.stringify(next)); } catch {}
+        return next;
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
   const moveProfCol = (key: keyof typeof DEFAULT_PROFILES_COL_WIDTHS, dir: -1 | 1) => {
     const reorderable = profColOrder.filter(k => k !== "account" && k !== "ip");
     const idx = reorderable.indexOf(key as any);
@@ -901,6 +929,14 @@ export function ProfilesPage() {
 
   return (
     <AppLayout>
+      {/* Hidden file input for group icon picker */}
+      <input
+        ref={groupIconInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleGroupIconFile}
+      />
       <div className="mb-3">
         <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
@@ -1307,13 +1343,26 @@ export function ProfilesPage() {
                   <div key={groupKey}>
                     {groupKey !== "__ungrouped__" && (
                       <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
-                        <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                          {isCollapsed
-                            ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                          <span className="text-sm font-bold text-foreground truncate">{displayName}</span>
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 min-w-0 text-left">
+                            {isCollapsed
+                              ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                            <span className="text-sm font-bold text-foreground truncate">{displayName}</span>
+                          </button>
+                          {/* Group icon/favicon picker — click to browse for an image, click again to replace */}
+                          <button
+                            onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
+                            title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
+                            className="shrink-0 w-[18px] h-[18px] rounded border border-dashed border-border/60 hover:border-primary/50 overflow-hidden flex items-center justify-center transition-colors bg-muted/20 hover:bg-muted/50"
+                          >
+                            {groupIcons[groupKey]
+                              ? <img src={groupIcons[groupKey]} alt="" className="w-full h-full object-cover" />
+                              : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
+                            }
+                          </button>
                           <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
-                        </button>
+                        </div>
                         <button
                           onClick={() => {
                             if (allInGroupSelected) setSelectedProfileIds(prev => prev.filter(id => !groupIds.includes(id)));

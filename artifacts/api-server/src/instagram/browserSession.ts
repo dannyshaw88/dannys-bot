@@ -6120,13 +6120,42 @@ export async function signupBrowserInput(msg: { type: string; [key: string]: any
         break;
       case "keydown":     await page.keyboard.down(msg.key as string); break;
       case "keyup":       await page.keyboard.up(msg.key as string); break;
-      case "type":        await page.keyboard.type((msg.text as string) ?? "", { delay: 30 }); break;
+      case "type": {
+        const text = (msg.text as string) ?? "";
+        await page.keyboard.type(text, { delay: 30 });
+        // Fire a React-compatible synthetic input event on the currently focused element.
+        // Instagram's React-controlled inputs (including OTP fields) need this to register
+        // the value change in React state — keyboard.type() alone sometimes only updates
+        // the DOM value without triggering React's onChange handler.
+        await page.evaluate(() => {
+          const el = document.activeElement as HTMLInputElement | null;
+          if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+          if (setter) {
+            setter.call(el, el.value);
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }).catch(() => {});
+        break;
+      }
       case "fill": {
         // Select-all → delete → type: fills whatever field is focused in the EB
         const d = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
         await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");
         await d(40); await page.keyboard.press("Backspace"); await d(40);
         await page.keyboard.type((msg.text as string) ?? "", { delay: 35 });
+        // Fire React-compatible event after fill so controlled inputs register the value.
+        await page.evaluate(() => {
+          const el = document.activeElement as HTMLInputElement | null;
+          if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+          if (setter) {
+            setter.call(el, el.value);
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }).catch(() => {});
         break;
       }
       case "keycombo":
@@ -6745,6 +6774,38 @@ export async function submitSignupCodeViaEB(sessionId: string, code: string): Pr
       if (!el) continue;
       const box = await el.boundingBox().catch(() => null);
       if (!box || box.width === 0) continue;
+
+      // Check whether Instagram is using individual single-digit input boxes
+      // (common on newer signup flows) — if so, type each digit into its own box.
+      const isMultiBox = await page.evaluate((selector: string) => {
+        const inputs = Array.from(document.querySelectorAll<HTMLInputElement>(selector));
+        const visible = inputs.filter(i => { const r = i.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+        return visible.length > 1;
+      }, sel).catch(() => false);
+
+      if (isMultiBox) {
+        // Multi-box OTP: type one digit per box, relying on auto-advance.
+        const inputs = await page.$$(sel);
+        for (let i = 0; i < inputs.length && i < code.length; i++) {
+          const b = await inputs[i].boundingBox().catch(() => null);
+          if (!b) continue;
+          await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+          await delay(80);
+          await page.keyboard.type(code[i], { delay: 50 });
+          // Fire React-compatible event on each digit box.
+          await page.evaluate(() => {
+            const el = document.activeElement as HTMLInputElement | null;
+            if (!el) return;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            if (setter) { setter.call(el, el.value); el.dispatchEvent(new Event("input", { bubbles: true })); }
+          }).catch(() => {});
+          await delay(80);
+        }
+        filled = true;
+        break;
+      }
+
+      // Single input box: click → clear → type code.
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
       await delay(150);
       await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");
@@ -6752,6 +6813,17 @@ export async function submitSignupCodeViaEB(sessionId: string, code: string): Pr
       await page.keyboard.press("Backspace");
       await delay(100);
       await page.keyboard.type(code, { delay: 70 });
+      // Fire React-compatible input event so Instagram's controlled input registers the value.
+      await page.evaluate(() => {
+        const el = document.activeElement as HTMLInputElement | null;
+        if (!el) return;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        if (setter) {
+          setter.call(el, el.value);
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }).catch(() => {});
       filled = true;
       break;
     }

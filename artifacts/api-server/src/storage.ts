@@ -23,7 +23,7 @@ import {
   type ContactPendingMessage, type InsertContactPendingMessage,
   type ApiCreatedAccount, type InsertApiCreatedAccount,
 } from "./shared/schema";
-import { eq, desc, and, sql, like, gt } from "drizzle-orm";
+import { eq, desc, and, sql, like, gt, ne, or, isNull, not } from "drizzle-orm";
 
 export interface IStorage {
   // Proxies
@@ -303,15 +303,26 @@ export class DatabaseStorage implements IStorage {
   async getLastValidApiCallByProfile(): Promise<Record<number, string>> {
     // Valid = not HikerAPI, not a failed/error call, not a pre-action log.
     // Returns the most recent date ISO string per profile.
-    const rows = sqlite.prepare(`
-      SELECT profile_id, MAX(date) AS last_date
-      FROM instagram_api_calls
-      WHERE source != 'HikerAPI'
-        AND (message IS NULL OR message NOT LIKE 'error:%')
-      GROUP BY profile_id
-    `).all() as { profile_id: number; last_date: string }[];
+    const rows = await db
+      .select({
+        profileId: instagramApiCalls.profileId,
+        lastDate: sql<string>`MAX(${instagramApiCalls.date})`,
+      })
+      .from(instagramApiCalls)
+      .where(
+        and(
+          ne(instagramApiCalls.source, "HikerAPI"),
+          or(
+            isNull(instagramApiCalls.message),
+            not(like(instagramApiCalls.message, "error:%"))
+          )
+        )
+      )
+      .groupBy(instagramApiCalls.profileId);
     const result: Record<number, string> = {};
-    for (const row of rows) result[row.profile_id] = row.last_date;
+    for (const row of rows) {
+      if (row.lastDate) result[row.profileId] = row.lastDate;
+    }
     return result;
   }
 
