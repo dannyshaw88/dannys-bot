@@ -56,6 +56,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.577",
+    date: "27 May 2026",
+    items: [
+      { category: "Improvement", text: "Create a Ghost page cleaned up — email tip removed, proxy no longer duplicates the IP string below the dropdown, and the 'Selected' device box has been removed." },
+      { category: "Improvement", text: "Device Identity now sits directly under the Proxy section with the action buttons immediately below it for a tighter layout." },
+      { category: "Feature", text: "Anti-Detect panel moved to the very bottom of the controls column with all items centred." },
+      { category: "Feature", text: "'Start from Fresh' renamed to 'Nuke Environment' with a bomb icon to better reflect what it does." },
+      { category: "Feature", text: "Username Spin field added under Nuke Environment — supports Jarvee-style multilayered spintax to generate a username, with a one-click copy button." },
+      { category: "Feature", text: "Password field added with an auto-generated strong password on load, a Regenerate button, and a one-click copy button." },
+    ],
+  },
+  {
     version: "1.0.576",
     date: "26 May 2026",
     items: [

@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { useProxies } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
-  Ghost, ShieldCheck, Flame, Globe, Monitor,
-  Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink,
+  Ghost, ShieldCheck, Bomb, Globe, Monitor,
+  Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardCopy, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +27,32 @@ function parseDeviceLabel(api: string): string {
   const android = (p[0] ?? "").split("/")[1] ?? "";
   if (brand && model) return `${brand} ${model}${android ? ` · Android ${android}` : ""}`;
   return api.length > 48 ? api.slice(0, 48) + "…" : api;
+}
+
+// Jarvee-style multilayered spintax: {a|b|c}{d|e} etc.
+function resolveSpintax(template: string): string {
+  let result = template;
+  let prev = "";
+  while (result !== prev) {
+    prev = result;
+    result = result.replace(/\{([^{}]*)\}/g, (_match, inner) => {
+      const options = inner.split("|");
+      return options[Math.floor(Math.random() * options.length)];
+    });
+  }
+  return result.trim();
+}
+
+function generatePassword(length = 14): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghjkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const special = "!@#$%&*";
+  const all = upper + lower + digits + special;
+  const rand = (set: string) => set[Math.floor(Math.random() * set.length)];
+  const chars = [rand(upper), rand(lower), rand(digits), rand(special)];
+  for (let i = chars.length; i < length; i++) chars.push(rand(all));
+  return chars.sort(() => Math.random() - 0.5).join("");
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -157,7 +183,7 @@ function StatusChip({ state }: { state: BrowserState }) {
     closed:    { icon: WifiOff, label: "Browser closed",  cls: "text-muted-foreground bg-muted/60 border-border" },
     opening:   { icon: Loader2, label: "Starting…",       cls: "text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800" },
     open:      { icon: Wifi,    label: "Browser running", cls: "text-green-700 bg-green-50 border-green-200 dark:bg-green-950/40 dark:border-green-800" },
-    resetting: { icon: Flame,   label: "Wiping session…", cls: "text-red-600 bg-red-50 border-red-200 dark:bg-red-950/40 dark:border-red-800" },
+    resetting: { icon: Bomb,    label: "Nuking session…", cls: "text-red-600 bg-red-50 border-red-200 dark:bg-red-950/40 dark:border-red-800" },
   }[state];
   const Icon = map.icon;
   return (
@@ -165,6 +191,32 @@ function StatusChip({ state }: { state: BrowserState }) {
       <Icon className={`w-3 h-3 ${state === "opening" || state === "resetting" ? "animate-spin" : ""}`} />
       {map.label}
     </span>
+  );
+}
+
+// ── Paste button ───────────────────────────────────────────────────────────────
+
+function PasteButton({ value, className }: { value: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title="Copy to clipboard"
+      className={cn(
+        "shrink-0 flex items-center gap-1 px-2 h-8 rounded-md border border-input bg-muted/50 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
+        copied && "text-green-600 border-green-400",
+        className
+      )}
+    >
+      <ClipboardCopy className="w-3 h-3" />
+      {copied ? "Copied" : "Paste"}
+    </button>
   );
 }
 
@@ -187,12 +239,18 @@ export function CreateGhostPage() {
   // Browser
   const [browserState, setBrowserState]   = useState<BrowserState>("closed");
   const [activeProxyLabel, setActiveProxyLabel] = useState<string>("");
-  // true when running inside the Electron desktop app (native detached window)
   const [isNative, setIsNative] = useState(false);
+
+  // Username spin
+  const [usernameSpin, setUsernameSpin] = useState("");
+  const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
+
+  // Password
+  const [password, setPassword] = useState(() => generatePassword());
+  const regeneratePassword = () => setPassword(generatePassword());
 
   const isOpen = browserState === "open";
 
-  // On mount, detect Electron mode and check if the ghost browser is already running.
   useEffect(() => {
     Promise.all([
       fetch("/api/is-electron").then(r => r.json()).catch(() => ({ electron: false })),
@@ -203,7 +261,6 @@ export function CreateGhostPage() {
     });
   }, []);
 
-  // Resolve proxy config for the open call
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
       const p = proxies.find(x => x.id === proxySelection.id);
@@ -255,10 +312,10 @@ export function CreateGhostPage() {
     await fetch("/api/signup/browser/close", { method: "POST" }).catch(() => {});
     await fetch("/api/signup/browser/reset", { method: "POST" }).catch(() => {});
     setSelectedUA(randomUA());
+    setPassword(generatePassword());
     setBrowserState("closed");
   };
 
-  const deviceLabel       = parseDeviceLabel(selectedUA.api);
   const activeDeviceLabel = parseDeviceLabel(activeUA.api);
 
   return (
@@ -358,22 +415,16 @@ export function CreateGhostPage() {
               </div>
             )}
 
-            {/* Proxy status hint */}
+            {/* No proxy warning */}
             {!hasProxy && proxySelection.kind === "none" && (
               <p className="text-[10px] text-amber-600 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3 shrink-0" />
                 No proxy — your real IP will be exposed.
               </p>
             )}
-            {hasProxy && resolvedProxy && (
-              <p className="text-[10px] text-muted-foreground font-mono truncate">
-                {resolvedProxy.host}:{resolvedProxy.port}
-                {resolvedProxy.username ? " · auth" : " · no auth"}
-              </p>
-            )}
           </div>
 
-          {/* Device / UA */}
+          {/* Device Identity */}
           <div className="desktop-card p-3 space-y-2">
             <div className="flex items-center gap-2 mb-1">
               <Monitor className="w-4 h-4 text-cyan-500 shrink-0" />
@@ -383,36 +434,11 @@ export function CreateGhostPage() {
               value={selectedUA.api}
               onSelect={ua => setSelectedUA(ua)}
             />
-            <div className="rounded bg-muted/50 px-2 py-1.5 space-y-1">
-              <p className="text-[10px] font-semibold text-muted-foreground">Selected</p>
-              <p className="text-[10px] text-foreground font-medium truncate">{deviceLabel}</p>
-              <p className="text-[10px] font-mono text-muted-foreground/70 break-all leading-tight">{selectedUA.embedded}</p>
-            </div>
           </div>
 
-          {/* Anti-detect */}
-          <div className="desktop-card p-3 space-y-1.5">
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck className="w-4 h-4 text-cyan-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Anti-Detect</p>
-            </div>
-            {[
-              "WebGL & Canvas fingerprint spoofed",
-              "navigator.webdriver hidden",
-              "Timezone matched to proxy exit IP",
-              "Language & locale hardened",
-              "Persistent user data directory",
-              "Device UA injected at Chrome launch",
-            ].map(item => (
-              <div key={item} className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                <p className="text-[10px] text-muted-foreground">{item}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Actions */}
+          {/* Actions + Account Fields */}
           <div className="desktop-card p-3 space-y-2">
+            {/* Open / Close button */}
             {!isOpen ? (
               <Button
                 className="w-full bg-cyan-500 hover:bg-cyan-600 text-white border-0 gap-2"
@@ -434,6 +460,7 @@ export function CreateGhostPage() {
               </Button>
             )}
 
+            {/* Nuke Environment */}
             <Button
               variant="outline"
               className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-400"
@@ -442,23 +469,56 @@ export function CreateGhostPage() {
               title="Wipes all cookies, cache, localStorage, and persistent data, and picks a new device identity"
             >
               {browserState === "resetting"
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Starting fresh…</>
-                : <><Flame className="w-4 h-4" />Start from Fresh</>}
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Nuking…</>
+                : <><Bomb className="w-4 h-4" />Nuke Environment</>}
             </Button>
-            <p className="text-[10px] text-muted-foreground text-center leading-tight">
-              Wipes all cookies, cache &amp; data, and picks a new device identity
-            </p>
-          </div>
 
-          {/* Email code timing tip */}
-          <div className="desktop-card p-3 space-y-1.5 border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Email Code Tip</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Instagram's signup codes expire in ~60 seconds. Have your email open and ready before submitting — paste the code as soon as it arrives. If it's rejected, request a new code and enter it immediately.
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              The ghost browser is fully isolated — it shares no cookies or session data with your other accounts.
-            </p>
+            {/* Username Spin */}
+            <div className="pt-1 space-y-1">
+              <p className="text-[10px] text-muted-foreground font-medium">Username Spin</p>
+              <div className="flex gap-1.5">
+                <Input
+                  value={usernameSpin}
+                  onChange={e => setUsernameSpin(e.target.value)}
+                  placeholder="{john|jane}.{smith|jones}{1|23|456}"
+                  className="h-8 text-xs font-mono flex-1 min-w-0"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <PasteButton value={generatedUsername || resolveSpintax(usernameSpin || "{user}")} />
+              </div>
+              {usernameSpin.trim() && generatedUsername && (
+                <p className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 truncate">
+                  → {generatedUsername}
+                </p>
+              )}
+            </div>
+
+            {/* Password */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-muted-foreground font-medium">Password</p>
+                <button
+                  type="button"
+                  onClick={regeneratePassword}
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  title="Generate new password"
+                >
+                  <RefreshCw className="w-2.5 h-2.5" />
+                  Regenerate
+                </button>
+              </div>
+              <div className="flex gap-1.5">
+                <Input
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="h-8 text-xs font-mono flex-1 min-w-0"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <PasteButton value={password} />
+              </div>
+            </div>
           </div>
 
           {/* Active session info */}
@@ -469,6 +529,28 @@ export function CreateGhostPage() {
               <p className="text-[10px] font-mono text-muted-foreground truncate">{activeProxyLabel}</p>
             </div>
           )}
+
+          {/* Anti-detect — always at the bottom */}
+          <div className="desktop-card p-3 space-y-1.5 mt-auto">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <ShieldCheck className="w-4 h-4 text-cyan-500 shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Anti-Detect</p>
+            </div>
+            {[
+              "WebGL & Canvas fingerprint spoofed",
+              "navigator.webdriver hidden",
+              "Timezone matched to proxy exit IP",
+              "Language & locale hardened",
+              "Persistent user data directory",
+              "Device UA injected at Chrome launch",
+            ].map(item => (
+              <div key={item} className="flex items-center justify-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                <p className="text-[10px] text-muted-foreground text-center">{item}</p>
+              </div>
+            ))}
+          </div>
+
         </div>
 
         {/* ── Right: Browser ── */}
@@ -519,20 +601,9 @@ export function CreateGhostPage() {
               <div className="space-y-1.5 max-w-xs">
                 <p className="text-base font-semibold text-foreground">Browser not started</p>
                 <p className="text-sm text-muted-foreground">
-                  Choose a proxy and device, then click{" "}
-                  <span className="font-medium text-foreground">Open Ghost Browser</span>{" "}
-                  to launch a clean, isolated environment.
+                  Configure your proxy and device identity, then click <span className="font-medium">Open Ghost Browser</span> to launch a clean, isolated session.
                 </p>
               </div>
-              <Button
-                className="bg-cyan-500 hover:bg-cyan-600 text-white border-0 gap-2"
-                onClick={handleOpen}
-                disabled={browserState === "opening" || !manualValid}
-              >
-                {browserState === "opening"
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Starting…</>
-                  : <><Ghost className="w-4 h-4" />Open Ghost Browser</>}
-              </Button>
             </div>
           )}
         </div>
