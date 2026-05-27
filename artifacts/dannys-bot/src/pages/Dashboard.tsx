@@ -57,6 +57,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.587",
+    date: "27 May 2026",
+    items: [
+      { category: "Feature", text: "New Leaks button in every embedded browser toolbar — click it to run a full in-app environment test that checks your proxy IP, WebRTC leaks, bot detection signals, canvas and audio fingerprints, timezone, WebGL GPU info, and screen hardware, all in one clean page." },
+    ],
+  },
+  {
     version: "1.0.586",
     date: "27 May 2026",
     items: [

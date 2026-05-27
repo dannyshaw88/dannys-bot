@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { crc32 as zlibCrc32 } from "node:zlib";
 import fs from "fs";
 import path from "path";
+import { LEAKS_PAGE_HTML } from "../instagram/leaksPage";
 import { storage, statusEvents } from "../storage";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
@@ -1858,6 +1859,12 @@ export async function registerInstagramRoutes(
       statusEvents.off("change", onChange);
       clearInterval(heartbeat);
     });
+  });
+
+  app.get("/api/browser/leaks", (_req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(LEAKS_PAGE_HTML);
   });
 
   app.get("/api/browser/debug", async (_req, res) => {

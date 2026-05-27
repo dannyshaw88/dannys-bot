@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ChevronLeft, ChevronRight, RefreshCw, Compass, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus,
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus, ShieldAlert,
 } from "lucide-react";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
@@ -912,6 +912,22 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               }}
             >
               <KeyRound className="w-3.5 h-3.5" /> Email Password
+            </Button>
+            <Button
+              variant="ghost" size="sm"
+              className="h-8 px-2 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 gap-1 shrink-0 font-semibold"
+              disabled={!connected}
+              title="Run an in-app leak test — checks IP, WebRTC, WebDriver, Canvas, Audio, WebGL and more"
+              onClick={() => {
+                const { protocol, hostname, port } = window.location;
+                const apiOrigin = port === "5000"
+                  ? `${protocol}//${hostname}:8080`
+                  : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+                const url = `${apiOrigin}/api/browser/leaks`;
+                send({ type: "navigate", url });
+              }}
+            >
+              <ShieldAlert className="w-3.5 h-3.5" /> Leaks
             </Button>
             <label
               className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}
