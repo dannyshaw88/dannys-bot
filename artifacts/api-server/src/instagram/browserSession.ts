@@ -6266,6 +6266,102 @@ export async function openSignupBrowser(opts?: {
     // evaluateOnNewDocument hooks are registered: WebGL spoofing, canvas noise,
     // WebRTC lockdown, battery, screen dims, platform, etc.
     await applyStealthScripts(page, opts?.userAgent ?? "", undefined, undefined).catch(() => {});
+
+    // ── Per-session Ghost Browser fingerprint uniqueness ─────────────────────
+    // applyStealthScripts seeds its canvas/audio noise from the UA string, so
+    // reusing the same UA across multiple account creation attempts would produce
+    // an identical fingerprint each time — a clear linking signal for Instagram.
+    // This layer injects an additional per-session random salt so every Ghost
+    // Browser launch gets a statistically unique fingerprint even with the same UA.
+    const _ghostSalt = (Date.now() ^ (Math.random() * 0xFFFFFFFF | 0)) >>> 0;
+    await page.evaluateOnNewDocument(`
+      (() => {
+        const _gS = ${_ghostSalt};
+        const _frac = (_gS & 0xFFFF) / 0x10000; // 0 – 0.9999…
+
+        // ── Performance timing jitter ──────────────────────────────────────
+        // Adds a fixed sub-millisecond offset to performance.now() so that
+        // timing-based fingerprinting produces a session-unique distribution.
+        const _origNow = performance.now.bind(performance);
+        const _jitter  = _frac * 0.05; // 0 – 0.05 ms per session
+        performance.now = () => _origNow() + _jitter;
+
+        // ── Audio fingerprint noise ────────────────────────────────────────
+        // The OscillatorNode → AnalyserNode fingerprinting technique reads
+        // tiny floating-point imprecision from the audio render graph.
+        // A session-unique gain offset shifts that value into a distinct bucket.
+        const _patchAC = (Ctor) => {
+          if (!Ctor) return;
+          const _origCreateOsc = Ctor.prototype.createOscillator;
+          Ctor.prototype.createOscillator = function(...args) {
+            const osc = _origCreateOsc.apply(this, args);
+            const _origConn = osc.connect.bind(osc);
+            osc.connect = function(dest, outIdx, inIdx) {
+              const g = this.context.createGain();
+              g.gain.value = 1 + (_gS % 997) * 1e-7;
+              _origConn(g);
+              return (inIdx !== undefined)
+                ? g.connect(dest, outIdx, inIdx)
+                : (outIdx !== undefined ? g.connect(dest, outIdx) : g.connect(dest));
+            };
+            return osc;
+          };
+        };
+        _patchAC(window.AudioContext);
+        _patchAC(window.webkitAudioContext);
+
+        // ── Canvas extra noise salt ────────────────────────────────────────
+        // applyStealthScripts already overrides toDataURL/getImageData to add
+        // UA-seeded noise.  Wrapping fillText here appends session-unique pixels
+        // so even accounts sharing the same UA diverge at the canvas level.
+        const _ctx2d = CanvasRenderingContext2D.prototype;
+        const _origFillText = _ctx2d.fillText;
+        const _applied = new WeakSet();
+        _ctx2d.fillText = function(text, x, y, maxWidth) {
+          const ret = maxWidth !== undefined
+            ? _origFillText.call(this, text, x, y, maxWidth)
+            : _origFillText.call(this, text, x, y);
+          if (!_applied.has(this.canvas)) {
+            _applied.add(this.canvas);
+            const px = (_gS & 0xFF);
+            const py = ((_gS >> 8) & 0xFF);
+            const prevAlpha = this.globalAlpha;
+            this.globalAlpha = 0.004 + (_frac * 0.002); // nearly invisible
+            this.fillStyle = \`rgb(\${px},\${py},\${(_gS >> 16) & 0xFF})\`;
+            this.fillRect(px % 3, py % 3, 1, 1);
+            this.globalAlpha = prevAlpha;
+          }
+          return ret;
+        };
+
+        // ── navigator.buildID ──────────────────────────────────────────────
+        // Some detection scripts probe for this Mozilla-only property; ensure
+        // it is absent (Chrome standard) rather than undefined which can itself
+        // be a signal when explicitly accessed.
+        try {
+          Object.defineProperty(navigator, 'buildID', { get: () => undefined, configurable: true });
+        } catch {}
+
+        // ── Randomise mimeTypes / plugins iteration order ──────────────────
+        // A consistent ordering is a low-entropy clustering signal.
+        try {
+          const _ptypes = Array.from(navigator.plugins);
+          if (_ptypes.length > 1) {
+            const _seed = _gS % _ptypes.length;
+            Object.defineProperty(navigator, 'plugins', {
+              get: () => {
+                const arr = [..._ptypes.slice(_seed), ..._ptypes.slice(0, _seed)];
+                Object.defineProperty(arr, 'item', { value: (i) => arr[i] });
+                Object.defineProperty(arr, 'namedItem', { value: (n) => arr.find(p => p.name === n) || null });
+                return arr;
+              },
+              configurable: true,
+            });
+          }
+        } catch {}
+      })();
+    `).catch(() => {});
+
     _signupPage = page;
 
     // Forward URL changes to the BrowserPanel address bar so the user can see

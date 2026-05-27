@@ -83,6 +83,20 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.582",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Binary file import now correctly extracts passwords — the parser now searches both before and after the username anchor and accepts a wider range of password formats." },
+      { category: "Fix", text: "Binary file import now correctly reads account labels in the Jarvee format (e.g. 'AlterEgo_Fitness_SWQ | MODERATE') — the pipe-and-status pattern is now detected first." },
+      { category: "Fix", text: "Binary file import now extracts email addresses that are stored near the POP/IMAP server settings section of the file." },
+      { category: "Improvement", text: "Actions menu reordered — Import EQX and Export EQX now sit directly below Import/Export Profiles, followed by Import Binary File, then the EB buttons below the separator." },
+      { category: "Fix", text: "Verify Accounts in the Actions menu no longer selects and verifies all accounts by default — it is now disabled until you select the accounts you want to verify." },
+      { category: "Improvement", text: "Ghost Browser now injects a per-session fingerprint salt on every launch — canvas, audio, timing, and plugin signals all differ across account creation sessions even when using the same device identity." },
+      { category: "Fix", text: "Fixed a crash in the automation engine where vtfResult was referenced before it was declared." },
+      { category: "Improvement", text: "Sidebar and page headings renamed: 'Create a Ghost' is now 'Ghost Browser', and the Accounts column header is now 'Account Name'." },
+    ],
+  },
+  {
     version: "1.0.578",
     date: "27 May 2026",
     items: [

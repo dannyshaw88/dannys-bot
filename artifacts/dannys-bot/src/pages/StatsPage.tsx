@@ -411,7 +411,7 @@ export function StatsPage() {
                       onClick={() => cycleSort("account")}
                       className="flex items-center hover:text-foreground transition-colors"
                     >
-                      Account{sortIcon("account")}
+                      Account Name{sortIcon("account")}
                     </button>
                   </th>
                   <th style={{ width: colWidths.open_eb }} className="px-4 py-3 font-bold uppercase tracking-wide">

@@ -2498,8 +2498,9 @@ class AutomationEngine {
         const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
         const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
         let viewed = 0;
+        let vtfResult: Awaited<ReturnType<typeof client.viewTimelineFeed>> | null = null;
         try {
-          const vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, reelWatchPctMax);
+          vtfResult = await client.viewTimelineFeed(feedCount, reelWatchPctMin, reelWatchPctMax);
           if (vtfResult.sessionExpired) {
             const expReason = vtfResult.reason ?? "session expired (login_required) — viewTimelineFeed";
             console.warn(`[engine] @${profile.username}: viewTimelineFeed — session expired, marking logged_out`);
@@ -2586,7 +2587,7 @@ class AutomationEngine {
         // feed → open individual posts from that feed.
         const clickPctMin = Number(s.clickPostPercentMin ?? 0);
         const clickPctMax = Number(s.clickPostPercentMax ?? 0);
-        if (viewed > 0 && clickPctMax > 0 && vtfResult.items.length > 0) {
+        if (viewed > 0 && clickPctMax > 0 && vtfResult?.items && vtfResult.items.length > 0) {
           const clickPct     = randInt(clickPctMin, clickPctMax);
           const exactClick   = vtfResult.items.length * clickPct / 100;
           const clickCount   = Math.floor(exactClick) + (Math.random() < (exactClick % 1) ? 1 : 0);

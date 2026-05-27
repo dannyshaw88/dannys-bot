@@ -1919,7 +1919,7 @@ export class InstagramWebClient {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string }> {
+  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string }> }> {
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
     const j = await this.mobileSessionPost(

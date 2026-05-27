@@ -939,7 +939,7 @@ export function ProfilesPage() {
       />
       <div className="mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Accounts</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Account Name</h1>
           <Button
             onClick={() => setAddProfilePanelOpen(o => !o)}
             size="sm"
@@ -1031,7 +1031,7 @@ export function ProfilesPage() {
                 onClick={() => cycleSort("account")}
                 className="flex items-center gap-1 text-left hover:text-foreground transition-colors"
               >
-                Account
+                Account Name
                 <span className="text-[9px]">
                   {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}
                 </span>
@@ -1623,14 +1623,6 @@ export function ProfilesPage() {
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles
               </button>
               <button
-                onClick={() => { setActionsOpen(false); jarveeImportRef.current?.click(); }}
-                disabled={jarveeImporting}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {jarveeImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                Import Binary File
-              </button>
-              <button
                 onClick={() => { setActionsOpen(false); eqxImportRef.current?.click(); }}
                 disabled={eqxImporting}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1703,34 +1695,16 @@ export function ProfilesPage() {
                 Export EQX{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <button
-                onClick={async () => {
-                  setActionsOpen(false);
-                  const tzOffset = new Date().getTimezoneOffset();
-                  const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
-                  const url = `/api/logs/export?tz=${tzOffset}${ids ? `&profileIds=${ids}` : ""}`;
-                  try {
-                    const res = await fetch(url, { credentials: "include" });
-                    const text = await res.text();
-                    const filename = `api_calls_${new Date().toISOString().slice(0, 10)}.csv`;
-                    const eApi = (window as any).electronAPI;
-                    if (eApi?.openCsvTemp) {
-                      await eApi.openCsvTemp({ content: text, filename });
-                    } else {
-                      const blob = new Blob([text], { type: "text/csv" });
-                      const objectUrl = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = objectUrl;
-                      a.download = filename;
-                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                      URL.revokeObjectURL(objectUrl);
-                    }
-                  } catch { /* ignore */ }
-                }}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setActionsOpen(false); jarveeImportRef.current?.click(); }}
+                disabled={jarveeImporting}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Download className="w-4 h-4 shrink-0 text-muted-foreground" />
-                Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+                {jarveeImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                Import Binary File
               </button>
+              {/* blank cell — keeps the 2-col grid aligned */}
+              <div />
+              <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>
               </button>
@@ -1738,9 +1712,9 @@ export function ProfilesPage() {
                 <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Login EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+L</span>
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
-              <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll || selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
-                <span className="flex-1">Verify {selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length} Account{(selectedProfileIds.length > 0 ? selectedProfileIds.length : filteredProfiles.length) !== 1 ? "s" : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+R</span>
+                <span className="flex-1">Verify {selectedProfileIds.length} Account{selectedProfileIds.length !== 1 ? "s" : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+R</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkFixCaptcha(); }} disabled={selectedProfileIds.length === 0 || fixingCaptcha} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {fixingCaptcha ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <ScanFace className="w-4 h-4 shrink-0 text-muted-foreground" />}

@@ -41,7 +41,7 @@ export function Sidebar() {
     { name: "Dashboard",         path: "/dashboard",          icon: LayoutDashboard, iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Accounts",          path: "/profiles",            icon: Users,           iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Bulk Import Accounts", path: "/bulk-import", icon: Upload,     iconColor: undefined, iconStyle: { color: BRAND } },
-    { name: "Create a Ghost",    path: "/create-ghost",       icon: Ghost,           iconColor: undefined,  iconStyle: { color: BRAND } },
+    { name: "Ghost Browser",    path: "/create-ghost",       icon: Ghost,           iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Statistics",        path: "/stats",              icon: Activity,        iconColor: undefined,  iconStyle: { color: BRAND } },
     { name: "Proxy Manager",     path: "/proxies",            icon: ShieldAlert,     iconColor: undefined,  iconStyle: { color: BRAND } },
   ];

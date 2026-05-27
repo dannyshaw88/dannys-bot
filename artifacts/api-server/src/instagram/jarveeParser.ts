@@ -13,6 +13,8 @@
  *      [status text] [2FA codes] [b64 username] [smtp host] [email pass]
  *      [IG password] [proxy host:port] [proxy username] [proxy password?]
  *      [full name] [note/label] [web UA (Chrome)] [device string …]
+ *  - Account label appears as "AccountName | STATUS" (e.g. "AlterEgo_Fitness_SWQ | MODERATE")
+ *  - Email is stored near the SMTP/POP/IMAP server settings section
  *  - Follow sources appear as "followers/X" strings (X = target account)
  *  - Followed users appear as a large consecutive run of IG usernames
  *  - DM recipients: IG username appears 2 records after each large sent-DM text
@@ -80,13 +82,16 @@ function extractAllStrings(decoded: Buffer): StringRecord[] {
 const PROXY_RE   = /^[\w.-]+:\d{2,5}$/;
 const B64_RE     = /^[A-Za-z0-9+/]+=*$/;
 const IG_UN_RE   = /^[a-zA-Z0-9_.]{3,30}$/;
-const SMTP_RE    = /^smtp\./i;
-const EMAIL_RE   = /^[^@]+@[^@]+\.[^@]+$/;
+const SMTP_RE    = /^(smtp|pop|imap)\./i;
+const EMAIL_RE   = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const URL_RE     = /^https?:\/\//i;
 const DEVICE_RE  = /^\d+\/\d+;\s+\d+dpi;/;
 const FOL_SRC_RE = /^followers\/([a-zA-Z0-9_.]{3,30})$/;
 const NUMERIC_RE = /^\d+$/;
 const SENT_DM_RE = /(?:Hey|Hiii|Hii|Hi|Heyy|Hows it going)/i;
+// Jarvee account label format: "AccountName | STATUS" or "Account Name | MODERATE"
+// The pipe + uppercase status word is distinctive.
+const JARVEE_LABEL_RE = /^.{2,80}\s*\|\s*[A-Z][A-Z0-9 _-]{1,20}$/;
 // TOTP 2FA secrets use base32 alphabet (A-Z, 2-7), typically 16-64 chars.
 // This discriminates them from base64 IG usernames (which contain lowercase/+//).
 // Jarvee sometimes exports them with spaces (grouped format, e.g. "RGG2 7WSL LXC3 K2HT").
@@ -114,13 +119,13 @@ function parseProxyStr(s: string): { host: string; port: number } | null {
 }
 
 function isLikelyPassword(s: string): boolean {
-  if (s.length < 4 || s.length > 60) return false;
+  if (s.length < 4 || s.length > 100) return false;
   if (EMAIL_RE.test(s)) return false;
   if (URL_RE.test(s)) return false;
   if (SMTP_RE.test(s)) return false;
   if (PROXY_RE.test(s)) return false;
   if (DEVICE_RE.test(s)) return false;
-  if (s.includes(" ") && s.split(" ").length > 3) return false;
+  if (JARVEE_LABEL_RE.test(s)) return false;
   return true;
 }
 
@@ -233,7 +238,8 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const username = decodeB64Username(s.value);
     if (!username || usedOffsets.has(s.offset)) continue;
 
-    const window = sortedByOffset.slice(i + 1, i + 50);
+    // Primary window: 80 records after the b64 username anchor
+    const window = sortedByOffset.slice(i + 1, i + 80);
 
     const proxyIdx = window.findIndex(w => parseProxyStr(w.value) !== null);
     if (proxyIdx < 0) continue;
@@ -242,15 +248,15 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
 
     // ── True Jarvee binary layout (confirmed from hex analysis) ─────────────
     // Before proxy (reading left→right by file offset):
-    //   [b64 username] … [IG password?] … [smtp host] [email pass] [proxy pass] [proxy host:port]
+    //   [b64 username] … [IG password?] … [smtp/pop/imap host] [email pass] [proxy pass] [proxy host:port]
     // After proxy:
-    //   [proxy username] …
+    //   [proxy username] … [full name] [label "Name | STATUS"] [web UA] [device]
     //
     // Key insight: the string IMMEDIATELY before proxy host:port is the PROXY password,
     // not the IG password.  The IG password lives before the smtp section and is often
     // absent (stored as a back-reference to null, invisible to the 0x06-only scanner).
 
-    // Step 1: locate smtp host in the pre-proxy window
+    // Step 1: locate smtp/pop/imap host in the pre-proxy window
     const smtpIdx = window.findIndex(w => SMTP_RE.test(w.value));
 
     // Step 2: proxy password = first password-like string working backwards from proxy,
@@ -273,12 +279,28 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       }
     }
 
-    // Step 4: IG password = password-like string before the smtp section.
-    //         Often absent for accounts whose passwords were not exported.
+    // Step 4: IG password = password-like string BETWEEN the b64 anchor and the smtp section.
+    //         Also checked in the records immediately BEFORE the anchor (some Jarvee versions
+    //         serialise the password object before the username string).
     let password = "";
     const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
-    for (let k = smtpBoundary - 1; k >= 0; k--) {
-      if (isLikelyPassword(window[k].value)) { password = window[k].value; break; }
+    // Search forward (between anchor and smtp)
+    for (let k = 0; k < smtpBoundary; k++) {
+      const v = window[k].value;
+      if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v)) continue;
+      if (isLikelyPassword(v)) { password = v; break; }
+    }
+    // If not found, also search backward in the 20 records before the anchor
+    if (!password) {
+      const priorWindow = sortedByOffset.slice(Math.max(0, i - 20), i).reverse();
+      for (const pw of priorWindow) {
+        const v = pw.value;
+        // Skip 2FA secrets and non-password strings
+        if (TOTP_RE.test(normaliseTOTP(v))) continue;
+        if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v) || URL_RE.test(v)) continue;
+        if (decodeB64Username(v)) continue;   // don't pick up another b64 username
+        if (isLikelyPassword(v)) { password = v; break; }
+      }
     }
 
     // Step 5: proxy username = first non-special string after proxy host:port.
@@ -292,24 +314,29 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
         EMAIL_RE.test(candidate) ||
         URL_RE.test(candidate) ||
         candidate.length > 60 ||
-        candidate.includes(" ")          // labels / names have spaces — skip them
+        JARVEE_LABEL_RE.test(candidate)   // labels have pipe — skip them
       ) break;
       if (!proxyUsername) { proxyUsername = candidate; continue; }
       if (!proxyPassword && isLikelyPassword(candidate)) { proxyPassword = candidate; }
       break;
     }
 
-    const emailItem = window.find(w => EMAIL_RE.test(w.value));
+    // ── Email: search a wider window (100 records) around the anchor ─────────
+    // Jarvee stores the email near the SMTP/POP/IMAP settings.  The primary 80-record
+    // window usually covers it, but fall back to a 200-record search if needed.
+    const wideWindow = sortedByOffset.slice(i + 1, i + 200);
+    const emailItem = window.find(w => EMAIL_RE.test(w.value))
+                   ?? wideWindow.find(w => EMAIL_RE.test(w.value));
     const email = emailItem?.value ?? "";
 
     // 2FA TOTP secret: appears before the b64 username anchor in the binary cluster.
     // Look at the 15 records immediately preceding the anchor (reversed = nearest first).
     // Jarvee may export them space-grouped ("RGG2 7WSL LXC3 …") — normalise before testing.
-    const priorWindow = sortedByOffset.slice(Math.max(0, i - 15), i).reverse();
-    const twoFAItem = priorWindow.find(w => TOTP_RE.test(normaliseTOTP(w.value)));
+    const priorWindow15 = sortedByOffset.slice(Math.max(0, i - 15), i).reverse();
+    const twoFAItem = priorWindow15.find(w => TOTP_RE.test(normaliseTOTP(w.value)));
     const twoFASecret = twoFAItem ? normaliseTOTP(twoFAItem.value) : "";
 
-    const searchWindow = [...window, ...sortedByOffset.slice(i + 50, i + 150)];
+    const searchWindow = [...window, ...sortedByOffset.slice(i + 80, i + 200)];
 
     const deviceItem = searchWindow.find(w => DEVICE_RE.test(w.value));
     const deviceString = deviceItem?.value ?? "";
@@ -317,11 +344,11 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     const uaItem = searchWindow.find(w => /Mozilla\/5\.0/.test(w.value));
     const userAgentWeb = uaItem?.value ?? "";
 
-    // Account label: Jarvee's "Name" field.
-    // Binary layout after proxy: [proxy user] [proxy pass?] [full name] [label] [web UA] [device]
-    // We skip proxy creds, UA, device string, emails, URLs, and proxy-like strings.
-    // Of the remaining candidates, prefer strings with spaces or mixed case (typical label style)
-    // over plain single-word values (which are more likely the IG full name).
+    // ── Account label: Jarvee's "Name" field ─────────────────────────────────
+    // Jarvee labels appear in the format "AccountName | STATUS"
+    // (e.g. "AlterEgo_Fitness_SWQ | MODERATE").  This pipe+STATUS pattern is
+    // distinctive and should be matched first.  If no pipe-format label is found,
+    // fall back to the first post-proxy string that has mixed case or spaces.
     const afterProxyCandidates = window.slice(proxyIdx + 1).filter(w =>
       w.value.length >= 2 && w.value.length <= 120 &&
       !EMAIL_RE.test(w.value) && !URL_RE.test(w.value) &&
@@ -329,11 +356,14 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       w.value !== proxyUsername && w.value !== proxyPassword &&
       !/Mozilla/.test(w.value) && !SMTP_RE.test(w.value)
     );
-    // Prefer a value that contains a space or is mixed-case (account labels often are),
-    // otherwise fall back to the first candidate (which could be the IG full name / label).
-    const accountLabelItem =
+
+    // Priority 1: string matching the "Name | STATUS" pipe format
+    const pipeLabelItem = afterProxyCandidates.find(w => JARVEE_LABEL_RE.test(w.value));
+    // Priority 2: any string with a space or mixed case (typical label style)
+    const fallbackLabelItem =
       afterProxyCandidates.find(w => w.value.includes(" ") || /[A-Z]/.test(w.value)) ??
       afterProxyCandidates[0];
+    const accountLabelItem = pipeLabelItem ?? fallbackLabelItem;
     const accountLabel = accountLabelItem?.value ?? "";
 
     accounts.push({

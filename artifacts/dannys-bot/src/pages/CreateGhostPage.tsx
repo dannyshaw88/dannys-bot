@@ -362,7 +362,7 @@ export function CreateGhostPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
             <Ghost className="w-8 h-8" style={{ color: "#1AD2F2" }} />
-            Create a Ghost
+            Ghost Browser
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Isolated embedded browser with a clean, detection-hardened environment for creating fresh Instagram accounts.
