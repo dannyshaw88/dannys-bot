@@ -98,6 +98,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.595",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Leak test: all 9 checks now fully run and display results — the script had remaining TypeScript syntax (type casts and non-null operators) that prevented the browser from executing any code at all." },
+    ],
+  },
+  {
     version: "1.0.594",
     date: "27 May 2026",
     items: [

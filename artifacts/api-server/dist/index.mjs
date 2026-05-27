@@ -123775,8 +123775,8 @@ function testHardware() {
 function testCanvas() {
   const body = document.getElementById('canvas-body');
   try {
-    const c = document.getElementById('canvas-preview') as HTMLCanvasElement;
-    const ctx = c.getContext('2d')!;
+    const c = document.getElementById('canvas-preview');
+    const ctx = c.getContext('2d');
     ctx.fillStyle = '#f60';
     ctx.fillRect(0, 0, 220, 50);
     ctx.fillStyle = '#069';
@@ -123807,7 +123807,8 @@ function testCanvas() {
 async function testAudio() {
   const body = document.getElementById('audio-body');
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const analyser = ctx.createAnalyser();
     const gain = ctx.createGain();
@@ -123868,10 +123869,12 @@ function testWebGL() {
 async function runAll() {
   // Reset
   Object.keys(RESULTS).forEach(k => delete RESULTS[k]);
-  document.getElementById('hdr-dot')!.className = 'dot running';
-  document.getElementById('score-pill')!.className = 'score-pill pending';
-  document.getElementById('score-pill')!.textContent = 'Running…';
-  document.getElementById('summary-bar')!.innerHTML = '';
+  const hdrDot = document.getElementById('hdr-dot');
+  const scorePill = document.getElementById('score-pill');
+  if (hdrDot) hdrDot.className = 'dot running';
+  if (scorePill) { scorePill.className = 'score-pill pending'; scorePill.textContent = 'Running\u2026'; }
+  const summaryBar = document.getElementById('summary-bar');
+  if (summaryBar) summaryBar.innerHTML = '';
 
   const resetBadge = (id) => setBadge(id, 'pending', '');
   ['badge-ip','badge-webrtc','badge-bot','badge-tz','badge-nav','badge-hw','badge-canvas','badge-audio','badge-webgl']
