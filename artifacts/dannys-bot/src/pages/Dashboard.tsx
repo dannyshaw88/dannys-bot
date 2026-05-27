@@ -56,6 +56,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.583",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser signup: added missing Accept-Language and sec-ch-ua Client Hint headers — headless Chrome was sending none by default, which Instagram's server flagged as a bot and rejected the email code even when it was correct." },
+      { category: "Fix", text: "Ghost Browser signup: canvas state is now fully restored after injecting the per-session fingerprint pixel — previously fillStyle was left changed, which could corrupt text rendering in the signup form." },
+      { category: "Fix", text: "Ghost Browser: audio fingerprint wrapper now falls back gracefully if the gain node cannot be inserted, preventing any risk of Instagram's JS receiving an unexpected error." },
+      { category: "Fix", text: "Import Jarvee Binary: account email field no longer imports a contact's email — search is now limited to the SMTP section only, before the proxy host, so contact messaging emails are excluded." },
+      { category: "Fix", text: "Import Jarvee Binary: password backward search window expanded from 20 to 40 records, catching more Jarvee versions that serialize the password earlier in the file." },
+    ],
+  },
+  {
     version: "1.0.581",
     date: "27 May 2026",
     items: [

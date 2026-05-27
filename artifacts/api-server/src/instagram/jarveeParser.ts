@@ -290,9 +290,11 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v)) continue;
       if (isLikelyPassword(v)) { password = v; break; }
     }
-    // If not found, also search backward in the 20 records before the anchor
+    // If not found, search backward in up to 40 records before the anchor.
+    // Some Jarvee versions serialise the password object well before the username
+    // string in the binary stream, so a tighter window misses it.
     if (!password) {
-      const priorWindow = sortedByOffset.slice(Math.max(0, i - 20), i).reverse();
+      const priorWindow = sortedByOffset.slice(Math.max(0, i - 40), i).reverse();
       for (const pw of priorWindow) {
         const v = pw.value;
         // Skip 2FA secrets and non-password strings
@@ -321,12 +323,14 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       break;
     }
 
-    // ── Email: search a wider window (100 records) around the anchor ─────────
-    // Jarvee stores the email near the SMTP/POP/IMAP settings.  The primary 80-record
-    // window usually covers it, but fall back to a 200-record search if needed.
-    const wideWindow = sortedByOffset.slice(i + 1, i + 200);
-    const emailItem = window.find(w => EMAIL_RE.test(w.value))
-                   ?? wideWindow.find(w => EMAIL_RE.test(w.value));
+    // ── Email: search ONLY within the pre-proxy section ──────────────────────
+    // The account email (used for Email Validation / SMTP login) is stored
+    // near the SMTP/POP/IMAP host, which always appears BEFORE the proxy host.
+    // Searching beyond the proxy picks up Contact Messaging emails (each contact
+    // can have an associated email address) and other accounts' emails — both
+    // of which are completely wrong for this account field.
+    // Limit to window[0..proxyIdx-1]: the SMTP section only.
+    const emailItem = window.slice(0, proxyIdx).find(w => EMAIL_RE.test(w.value));
     const email = emailItem?.value ?? "";
 
     // 2FA TOTP secret: appears before the b64 username anchor in the binary cluster.

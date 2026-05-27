@@ -6262,6 +6262,25 @@ export async function openSignupBrowser(opts?: {
     if (opts?.proxyUsername) {
       await page.authenticate({ username: opts.proxyUsername, password: opts.proxyPassword ?? "" });
     }
+    // ── HTTP-level headers — must be set BEFORE the first navigation ─────────
+    // Headless Chrome omits Accept-Language entirely — a glaring bot tell.
+    // Instagram also validates all three sec-ch-ua Client-Hint headers together;
+    // if any are absent the CDN scores the session as non-browser and the
+    // registration gets rejected server-side before any code is even evaluated.
+    await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
+    try {
+      const _cdp = await page.createCDPSession();
+      const _chrVer = (opts?.userAgent ?? "").match(/Chrome\/(\d+)/)?.[1] ?? "130";
+      await _cdp.send("Network.setExtraHTTPHeaders", {
+        headers: {
+          "Accept-Language":    "en-US,en;q=0.9",
+          "sec-ch-ua":          `"Chromium";v="${_chrVer}", "Google Chrome";v="${_chrVer}", "Not?A_Brand";v="99"`,
+          "sec-ch-ua-mobile":   "?1",
+          "sec-ch-ua-platform": '"Android"',
+        },
+      });
+    } catch { /* non-fatal — CDP may not be available on every Chromium build */ }
+
     // Apply full JS-layer stealth BEFORE the first navigation so all
     // evaluateOnNewDocument hooks are registered: WebGL spoofing, canvas noise,
     // WebRTC lockdown, battery, screen dims, platform, etc.
@@ -6290,6 +6309,8 @@ export async function openSignupBrowser(opts?: {
         // The OscillatorNode → AnalyserNode fingerprinting technique reads
         // tiny floating-point imprecision from the audio render graph.
         // A session-unique gain offset shifts that value into a distinct bucket.
+        // Wrapped safely: if gain-node insertion fails for any reason the
+        // original connect() is called unchanged so Instagram's JS never throws.
         const _patchAC = (Ctor) => {
           if (!Ctor) return;
           const _origCreateOsc = Ctor.prototype.createOscillator;
@@ -6297,12 +6318,16 @@ export async function openSignupBrowser(opts?: {
             const osc = _origCreateOsc.apply(this, args);
             const _origConn = osc.connect.bind(osc);
             osc.connect = function(dest, outIdx, inIdx) {
-              const g = this.context.createGain();
-              g.gain.value = 1 + (_gS % 997) * 1e-7;
-              _origConn(g);
-              return (inIdx !== undefined)
-                ? g.connect(dest, outIdx, inIdx)
-                : (outIdx !== undefined ? g.connect(dest, outIdx) : g.connect(dest));
+              try {
+                const g = this.context.createGain();
+                g.gain.value = 1 + (_gS % 997) * 1e-7;
+                _origConn(g);
+                return (inIdx !== undefined)
+                  ? g.connect(dest, outIdx, inIdx)
+                  : (outIdx !== undefined ? g.connect(dest, outIdx) : g.connect(dest));
+              } catch {
+                return _origConn.call(this, dest, outIdx, inIdx);
+              }
             };
             return osc;
           };
@@ -6314,6 +6339,9 @@ export async function openSignupBrowser(opts?: {
         // applyStealthScripts already overrides toDataURL/getImageData to add
         // UA-seeded noise.  Wrapping fillText here appends session-unique pixels
         // so even accounts sharing the same UA diverge at the canvas level.
+        // IMPORTANT: all canvas state (fillStyle AND globalAlpha) must be saved
+        // and restored — failing to restore fillStyle was corrupting subsequent
+        // draws on the same canvas element (e.g. Instagram's signup form text).
         const _ctx2d = CanvasRenderingContext2D.prototype;
         const _origFillText = _ctx2d.fillText;
         const _applied = new WeakSet();
@@ -6326,10 +6354,12 @@ export async function openSignupBrowser(opts?: {
             const px = (_gS & 0xFF);
             const py = ((_gS >> 8) & 0xFF);
             const prevAlpha = this.globalAlpha;
+            const prevFill  = this.fillStyle;
             this.globalAlpha = 0.004 + (_frac * 0.002); // nearly invisible
             this.fillStyle = \`rgb(\${px},\${py},\${(_gS >> 16) & 0xFF})\`;
             this.fillRect(px % 3, py % 3, 1, 1);
             this.globalAlpha = prevAlpha;
+            this.fillStyle   = prevFill;
           }
           return ret;
         };
