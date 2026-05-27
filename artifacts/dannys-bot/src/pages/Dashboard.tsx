@@ -57,6 +57,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.590",
+    date: "27 May 2026",
+    items: [
+      { category: "Feature", text: "Added Leak Check button to the Windows Electron EB toolbar — green, runs the full in-app IP/WebRTC/WebDriver leak test." },
+      { category: "Fix", text: "Leak Check button in the web EB panel changed from yellow to green and renamed from 'Leaks' to 'Leak Check'." },
+    ],
+  },
+  {
     version: "1.0.589",
     date: "27 May 2026",
     items: [

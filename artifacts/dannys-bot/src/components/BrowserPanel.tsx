@@ -915,7 +915,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             </Button>
             <Button
               variant="ghost" size="sm"
-              className="h-8 px-2 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 gap-1 shrink-0 font-semibold"
+              className="h-8 px-2 text-xs text-green-500 hover:text-green-400 hover:bg-green-500/10 gap-1 shrink-0 font-semibold"
               disabled={!connected}
               title="Run an in-app leak test — checks IP, WebRTC, WebDriver, Canvas, Audio, WebGL and more"
               onClick={() => {
@@ -927,7 +927,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                 send({ type: "navigate", url });
               }}
             >
-              <ShieldAlert className="w-3.5 h-3.5" /> Leaks
+              <ShieldAlert className="w-3.5 h-3.5" /> Leak Check
             </Button>
             <label
               className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}
