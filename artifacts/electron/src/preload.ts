@@ -27,4 +27,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("focus-browser-window", profileId),
   getAutostart: () => ipcRenderer.invoke("get-autostart"),
   setAutostart: (enable: boolean) => ipcRenderer.invoke("set-autostart", enable),
+  settingsGet: (key: string) => ipcRenderer.invoke("settings-get", key),
+  settingsSet: (key: string, value: unknown) => ipcRenderer.invoke("settings-set", key, value),
+  settingsGetAll: () => ipcRenderer.invoke("settings-get-all"),
 });

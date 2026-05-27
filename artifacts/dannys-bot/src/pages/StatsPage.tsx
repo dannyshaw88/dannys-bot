@@ -1,4 +1,5 @@
 import { useRef, useState, useMemo, useEffect } from "react";
+import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -136,30 +137,27 @@ export function StatsPage() {
   const [, setLocation] = useLocation();
   const { openWindow } = useBrowserWindows();
 
-  const [colWidths, setColWidths] = useState<Record<StatKey | "account" | "open_eb", number>>(() => {
-    try {
-      const s = localStorage.getItem("stats_col_widths_px");
-      return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS;
-    } catch { return DEFAULT_COL_WIDTHS; }
-  });
+  const [colWidths, setColWidths] = usePersistentSetting<Record<StatKey | "account" | "open_eb", number>>(
+    "stats_col_widths_px",
+    DEFAULT_COL_WIDTHS,
+    (s, d) => ({ ...d, ...s }),
+  );
 
-  const [visibleCols, setVisibleCols] = useState<Record<StatKey, boolean>>(() => {
-    try {
-      const s = localStorage.getItem("stats_visible_cols");
-      return s ? { ...DEFAULT_VISIBLE, ...JSON.parse(s) } : DEFAULT_VISIBLE;
-    } catch { return DEFAULT_VISIBLE; }
-  });
+  const [visibleCols, setVisibleCols] = usePersistentSetting<Record<StatKey, boolean>>(
+    "stats_visible_cols",
+    DEFAULT_VISIBLE,
+    (s, d) => ({ ...d, ...s }),
+  );
 
-  const [statColOrder, setStatColOrder] = useState<StatKey[]>(() => {
-    try {
-      const s = localStorage.getItem("stats_col_order");
-      if (!s) return DEFAULT_STAT_COL_ORDER;
-      const stored: StatKey[] = JSON.parse(s);
+  const [statColOrder, setStatColOrder] = usePersistentSetting<StatKey[]>(
+    "stats_col_order",
+    DEFAULT_STAT_COL_ORDER,
+    (stored, defaults) => {
       const storedSet = new Set(stored);
-      const newKeys = DEFAULT_STAT_COL_ORDER.filter(k => !storedSet.has(k));
+      const newKeys = defaults.filter(k => !storedSet.has(k));
       return [...stored, ...newKeys];
-    } catch { return DEFAULT_STAT_COL_ORDER; }
-  });
+    },
+  );
 
   const moveStatCol = (key: StatKey, dir: -1 | 1) => {
     const idx = statColOrder.indexOf(key);

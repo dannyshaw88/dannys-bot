@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -94,6 +95,17 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     date: "27 May 2026",
     items: [
       { category: "Feature", text: "New Leaks button in every embedded browser toolbar — click it to run a full in-app environment test that checks your proxy IP, WebRTC leaks, bot detection signals, canvas and audio fingerprints, timezone, WebGL GPU info, and screen hardware, all in one clean page." },
+    ],
+  },
+  {
+    version: "1.0.592",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Leak test: all checks now run and return results correctly — they were silently broken and every field was stuck spinning." },
+      { category: "Feature", text: "Leak test title now shows the account's Instagram username (e.g. @myaccount LEAK TEST) instead of the generic Equinox heading." },
+      { category: "Fix", text: "Ghost Browser leak check receives the same username-in-title fix." },
+      { category: "Feature", text: "System tray icon tooltip now shows the app version alongside the name (e.g. Equinox v1.0.592)." },
+      { category: "Fix", text: "Column arrangements on all pages — Accounts, Dashboard, Proxies, Stats, Bulk Import — are now fully remembered across app restarts and software updates." },
     ],
   },
   {
@@ -3054,18 +3066,15 @@ export function Dashboard() {
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [manageColsOpen, setManageColsOpen] = useState(false);
-  const [colWidths, setColWidths] = useState<typeof DEFAULT_COL_WIDTHS>(() => {
-    try {
-      const s = localStorage.getItem("dashboard_col_widths_px");
-      return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS;
-    } catch { return DEFAULT_COL_WIDTHS; }
-  });
-  const [colOrder, setColOrder] = useState<(keyof typeof DEFAULT_COL_WIDTHS)[]>(() => {
-    try {
-      const s = localStorage.getItem("dashboard_col_order");
-      return s ? JSON.parse(s) : DEFAULT_COL_ORDER;
-    } catch { return DEFAULT_COL_ORDER; }
-  });
+  const [colWidths, setColWidths] = usePersistentSetting(
+    "dashboard_col_widths_px",
+    DEFAULT_COL_WIDTHS,
+    (s, d) => ({ ...d, ...s }),
+  );
+  const [colOrder, setColOrder] = usePersistentSetting<(keyof typeof DEFAULT_COL_WIDTHS)[]>(
+    "dashboard_col_order",
+    DEFAULT_COL_ORDER,
+  );
   const moveCol = (key: keyof typeof DEFAULT_COL_WIDTHS, dir: -1 | 1) => {
     const idx = colOrder.indexOf(key);
     const next = [...colOrder];

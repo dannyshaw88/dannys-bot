@@ -344,7 +344,7 @@ function createTray(): void {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip("Equinox");
+  tray.setToolTip(`Equinox v${app.getVersion()}`);
 
   // Create the custom square popup window (hidden until right-click)
   trayPopup = new BrowserWindow({
@@ -705,6 +705,35 @@ async function initAutoBackup(port: number) {
   } catch {}
 }
 
+// ── UI Settings (column order/widths/visibility) ─────────────────────────────
+// Persists to a JSON file in userData so column arrangements survive even if
+// the server port changes between restarts (which would otherwise wipe the
+// localStorage origin that holds these settings).
+
+const uiSettingsPath = () => path.join(getUserDataPath(), "ui-settings.json");
+
+function readUiSettings(): Record<string, unknown> {
+  try {
+    const p = uiSettingsPath();
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch {}
+  return {};
+}
+
+function writeUiSettings(data: Record<string, unknown>): void {
+  try { fs.writeFileSync(uiSettingsPath(), JSON.stringify(data), "utf8"); } catch {}
+}
+
+function setupSettingsHandlers() {
+  ipcMain.handle("settings-get", (_e, key: string) => readUiSettings()[key] ?? null);
+  ipcMain.handle("settings-set", (_e, key: string, value: unknown) => {
+    const data = readUiSettings();
+    data[key] = value;
+    writeUiSettings(data);
+  });
+  ipcMain.handle("settings-get-all", () => readUiSettings());
+}
+
 function setupBackupHandlers() {
   ipcMain.handle("backup-create", async () => createBackupNow());
   ipcMain.handle("backup-list", () => listBackupsNow());
@@ -902,6 +931,7 @@ async function createWindow() {
   });
 
   createTray();
+  setupSettingsHandlers();
   setupBackupHandlers();
   initAutoBackup(serverPort).catch(() => {});
 

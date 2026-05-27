@@ -285,7 +285,7 @@ export const LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
 <div class="header">
   <div class="header-title">
     <span class="dot" id="hdr-dot"></span>
-    EQUINOX LEAK TEST
+    __LEAK_TEST_TITLE__
   </div>
   <div class="header-score">
     <span>Overall</span>
@@ -679,8 +679,8 @@ function testNavigator() {
   html += row('Plugins Count', n.plugins.length);
   html += row('MIME Types', n.mimeTypes.length);
   html += row('Online', n.onLine ? 'Yes' : 'No');
-  if ((n as any).connection) {
-    const c = (n as any).connection;
+  if (n.connection) {
+    const c = n.connection;
     html += row('Connection Type', c.effectiveType || c.type || '?');
   }
   if (body) body.innerHTML = html;
@@ -692,8 +692,8 @@ function testHardware() {
   const body = document.getElementById('hw-body');
   const s = screen;
   const dpr = window.devicePixelRatio;
-  const cpu = (navigator as any).hardwareConcurrency;
-  const mem = (navigator as any).deviceMemory;
+  const cpu = navigator.hardwareConcurrency;
+  const mem = navigator.deviceMemory;
   let html = '';
   html += row('Resolution', s.width+'×'+s.height);
   html += row('Available', s.availWidth+'×'+s.availHeight);
@@ -701,7 +701,7 @@ function testHardware() {
   html += row('Pixel Ratio', dpr+'x');
   html += row('CPU Cores', cpu !== undefined ? cpu : '?');
   html += row('Device Memory', mem !== undefined ? mem+' GB' : '?');
-  html += row('Touch Points', (navigator as any).maxTouchPoints ?? 0);
+  html += row('Touch Points', navigator.maxTouchPoints ?? 0);
   if (body) body.innerHTML = html;
   setResult('Hardware', 'info', s.width+'×'+s.height);
 }
@@ -777,7 +777,7 @@ function testWebGL() {
   const body = document.getElementById('webgl-body');
   try {
     const c = document.createElement('canvas');
-    const gl = c.getContext('webgl') || c.getContext('experimental-webgl') as WebGLRenderingContext | null;
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
     if (!gl) throw new Error('no webgl');
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const vendor   = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)   : gl.getParameter(gl.VENDOR);
@@ -808,7 +808,7 @@ async function runAll() {
   document.getElementById('score-pill')!.textContent = 'Running…';
   document.getElementById('summary-bar')!.innerHTML = '';
 
-  const resetBadge = (id: string) => setBadge(id, 'pending', '');
+  const resetBadge = (id) => setBadge(id, 'pending', '');
   ['badge-ip','badge-webrtc','badge-bot','badge-tz','badge-nav','badge-hw','badge-canvas','badge-audio','badge-webgl']
     .forEach(resetBadge);
 

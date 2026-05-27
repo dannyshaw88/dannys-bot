@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useQueryClient } from "@tanstack/react-query";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { Link } from "wouter";
@@ -169,24 +170,20 @@ export function ProfilesPage() {
     }
   }, [toast, queryClient]);
 
-  const [profColWidths, setProfColWidths] = useState<typeof DEFAULT_PROFILES_COL_WIDTHS>(() => {
-    try {
-      const s = localStorage.getItem("profiles_col_widths_px");
-      return s ? { ...DEFAULT_PROFILES_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_PROFILES_COL_WIDTHS;
-    } catch { return DEFAULT_PROFILES_COL_WIDTHS; }
-  });
-  const [profColVisible, setProfColVisible] = useState<typeof DEFAULT_PROFILES_COL_VISIBLE>(() => {
-    try {
-      const s = localStorage.getItem("profiles_col_visible_v2");
-      return s ? { ...DEFAULT_PROFILES_COL_VISIBLE, ...JSON.parse(s) } : DEFAULT_PROFILES_COL_VISIBLE;
-    } catch { return DEFAULT_PROFILES_COL_VISIBLE; }
-  });
-  const [profColOrder, setProfColOrder] = useState<(keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[]>(() => {
-    try {
-      const s = localStorage.getItem("profiles_col_order");
-      return s ? JSON.parse(s) : DEFAULT_PROFILES_COL_ORDER;
-    } catch { return DEFAULT_PROFILES_COL_ORDER; }
-  });
+  const [profColWidths, setProfColWidths] = usePersistentSetting(
+    "profiles_col_widths_px",
+    DEFAULT_PROFILES_COL_WIDTHS,
+    (s, d) => ({ ...d, ...s }),
+  );
+  const [profColVisible, setProfColVisible] = usePersistentSetting(
+    "profiles_col_visible_v2",
+    DEFAULT_PROFILES_COL_VISIBLE,
+    (s, d) => ({ ...d, ...s }),
+  );
+  const [profColOrder, setProfColOrder] = usePersistentSetting<(keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[]>(
+    "profiles_col_order",
+    DEFAULT_PROFILES_COL_ORDER,
+  );
 
   // ── Daily ABD (Automated Behaviour Detected) dismissal counts ─────────────
   const [abdDailyCount, setAbdDailyCount] = useState<Record<number, number>>({});

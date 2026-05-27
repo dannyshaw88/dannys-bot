@@ -1169,7 +1169,7 @@ function setupToolbarIpc(): void {
         break;
 
       case "leak-check":
-        if (_serverPort) wc.loadURL(`http://127.0.0.1:${_serverPort}/api/browser/leaks`).catch(() => {});
+        if (_serverPort) wc.loadURL(`http://127.0.0.1:${_serverPort}/api/browser/leaks?profileId=${foundPid}`).catch(() => {});
         break;
 
       case "login": {

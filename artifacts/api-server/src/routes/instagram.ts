@@ -1861,10 +1861,19 @@ export async function registerInstagramRoutes(
     });
   });
 
-  app.get("/api/browser/leaks", (_req, res) => {
+  app.get("/api/browser/leaks", async (req, res) => {
+    const profileId = Number(req.query.profileId) || 0;
+    let title = "EQUINOX LEAK TEST";
+    if (profileId) {
+      try {
+        const profile = await storage.getProfile(profileId);
+        if (profile?.username) title = `${profile.username.toUpperCase()} LEAK TEST`;
+      } catch {}
+    }
+    const html = LEAKS_PAGE_HTML.replace("__LEAK_TEST_TITLE__", title);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    res.send(LEAKS_PAGE_HTML);
+    res.send(html);
   });
 
   app.get("/api/browser/debug", async (_req, res) => {

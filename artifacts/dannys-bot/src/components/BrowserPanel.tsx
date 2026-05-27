@@ -923,7 +923,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                 const apiOrigin = port === "5000"
                   ? `${protocol}//${hostname}:8080`
                   : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
-                const url = `${apiOrigin}/api/browser/leaks`;
+                const url = `${apiOrigin}/api/browser/leaks?profileId=${profileId}`;
                 send({ type: "navigate", url });
               }}
             >

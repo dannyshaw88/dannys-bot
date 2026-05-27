@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useCreatorProfiles, useCreateProfile, useDeleteProfile, useUpdateAccountStatus, useVerifyProfile, useUpdateProfile, useMoveToAccounts } from "@/hooks/use-profiles";
@@ -108,12 +109,11 @@ export function CreateAccountPage() {
   const [eqxImporting, setEqxImporting] = useState(false);
   const eqxImportRef = useRef<HTMLInputElement>(null);
 
-  const [colWidths, setColWidths] = useState<typeof DEFAULT_COL_WIDTHS>(() => {
-    try {
-      const s = localStorage.getItem("creator_col_widths_px");
-      return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS;
-    } catch { return DEFAULT_COL_WIDTHS; }
-  });
+  const [colWidths, setColWidths] = usePersistentSetting(
+    "creator_col_widths_px",
+    DEFAULT_COL_WIDTHS,
+    (s, d) => ({ ...d, ...s }),
+  );
   const [manageColsOpen, setManageColsOpen] = useState(false);
   const manageColsRef = useRef<HTMLDivElement>(null);
 

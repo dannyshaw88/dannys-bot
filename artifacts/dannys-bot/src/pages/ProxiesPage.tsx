@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProxies, useCreateProxy, useUpdateProxy, useDeleteProxy } from "@/hooks/use-proxies";
@@ -280,23 +281,21 @@ export function ProxiesPage() {
     (localStorage.getItem("proxies:sortDir") as SortDir) === "desc" ? "desc" : "asc"
   );
 
-  const [proxyColOrder, setProxyColOrder] = useState<ProxyCol[]>(() => {
-    try {
-      const s = localStorage.getItem("proxies_col_order");
-      if (!s) return DEFAULT_PROXY_COL_ORDER;
-      const stored: ProxyCol[] = JSON.parse(s);
+  const [proxyColOrder, setProxyColOrder] = usePersistentSetting<ProxyCol[]>(
+    "proxies_col_order",
+    DEFAULT_PROXY_COL_ORDER,
+    (stored, defaults) => {
       const storedSet = new Set(stored);
-      const newKeys = DEFAULT_PROXY_COL_ORDER.filter(k => !storedSet.has(k));
+      const newKeys = defaults.filter(k => !storedSet.has(k));
       return [...stored, ...newKeys];
-    } catch { return DEFAULT_PROXY_COL_ORDER; }
-  });
+    },
+  );
 
-  const [proxyColWidths, setProxyColWidths] = useState<Record<ProxyCol, number>>(() => {
-    try {
-      const s = localStorage.getItem("proxies_col_widths_px");
-      return s ? { ...DEFAULT_PROXY_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_PROXY_COL_WIDTHS;
-    } catch { return DEFAULT_PROXY_COL_WIDTHS; }
-  });
+  const [proxyColWidths, setProxyColWidths] = usePersistentSetting<Record<ProxyCol, number>>(
+    "proxies_col_widths_px",
+    DEFAULT_PROXY_COL_WIDTHS,
+    (s, d) => ({ ...d, ...s }),
+  );
 
   const moveProxyCol = (key: ProxyCol, dir: -1 | 1) => {
     const idx = proxyColOrder.indexOf(key);
