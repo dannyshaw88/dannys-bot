@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, X, RefreshCw, Settings2, Upload, Download,
+  Users, UserCheck, ImageIcon, CheckCircle2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
@@ -3580,7 +3581,23 @@ export function Dashboard() {
                           if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=follow`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
                           if (col === "event") return <td key={col} className="px-3 py-3 truncate"><span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full">{(item.operationName ?? "").replace(/_/g, " ")}</span></td>;
                           if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate"> </td>;
-                          if (col === "detail") return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={item.message || undefined}>{item.message || " "}</td>;
+                          if (col === "detail") {
+                            const msg = item.message || "";
+                            const syncMatch = msg.match(/^followers=(\d+)\s+following=(\d+)\s+posts=(\d+)\s+Synced$/);
+                            if (syncMatch) {
+                              return (
+                                <td key={col} className="px-3 py-3 truncate">
+                                  <span className="flex items-center gap-3 text-xs">
+                                    <span className="flex items-center gap-1 text-muted-foreground"><Users className="w-3 h-3 text-primary/70" />{syncMatch[1]}</span>
+                                    <span className="flex items-center gap-1 text-muted-foreground"><UserCheck className="w-3 h-3 text-primary/70" />{syncMatch[2]}</span>
+                                    <span className="flex items-center gap-1 text-muted-foreground"><ImageIcon className="w-3 h-3 text-primary/70" />{syncMatch[3]}</span>
+                                    <span className="flex items-center gap-1 text-emerald-500 font-medium"><CheckCircle2 className="w-3 h-3" />Synced</span>
+                                  </span>
+                                </td>
+                              );
+                            }
+                            return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={msg || undefined}>{msg || " "}</td>;
+                          }
                           return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span></span></td>;
                         }
                         const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "text-muted-foreground", icon: "·" };

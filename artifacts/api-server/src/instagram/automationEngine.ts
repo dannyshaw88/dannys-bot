@@ -450,7 +450,7 @@ class AutomationEngine {
         date: new Date().toISOString(),
         source: "HikerAPI",
         message: stats
-          ? `followers=${stats.followersCount} following=${stats.followingCount} posts=${stats.postsCount}`
+          ? `followers=${stats.followersCount} following=${stats.followingCount} posts=${stats.postsCount} Synced`
           : "no data returned",
         durationMs: Date.now() - syncT0,
       }).catch(() => {});
@@ -477,7 +477,7 @@ class AutomationEngine {
           date: new Date().toISOString(),
           source: "account",
           message: stats
-            ? `followers=${stats.followersCount} following=${stats.followingCount} posts=${stats.postsCount}`
+            ? `followers=${stats.followersCount} following=${stats.followingCount} posts=${stats.postsCount} Synced`
             : "no data returned",
           durationMs: Date.now() - syncT0,
         }).catch(() => {});

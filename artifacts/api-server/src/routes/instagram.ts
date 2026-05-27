@@ -3118,7 +3118,7 @@ export async function registerInstagramRoutes(
         sourceValue: "",
         sourceType: "system",
         result: "ok",
-        detail: `Account @${created.username} imported from .eqx file (${fuData?.length ?? 0} followed users restored)`,
+        detail: `Account @${created.username} imported`,
         timestamp: new Date().toISOString(),
       }).catch(() => {});
 
