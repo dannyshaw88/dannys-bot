@@ -118836,6 +118836,8 @@ function isLikelyPassword(s) {
   if (PROXY_RE.test(s)) return false;
   if (DEVICE_RE.test(s)) return false;
   if (JARVEE_LABEL_RE.test(s)) return false;
+  if (JARVEE_STATUS_RE.test(s)) return false;
+  if (s.includes(" ") && s.length > 30) return false;
   return true;
 }
 function extractFollowedUsers(sortedById) {
@@ -118945,13 +118947,26 @@ function parseJarveeBinary(buffer) {
       }
     }
     let password = "";
-    const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
-    for (let k2 = 0; k2 < smtpBoundary; k2++) {
-      const v3 = window2[k2].value;
-      if (EMAIL_RE.test(v3) || SMTP_RE.test(v3) || PROXY_RE.test(v3)) continue;
-      if (isLikelyPassword(v3)) {
-        password = v3;
-        break;
+    if (smtpIdx >= 0) {
+      for (let k2 = smtpIdx + 1; k2 < proxyIdx; k2++) {
+        const v3 = window2[k2].value;
+        if (v3 === emailPassword) continue;
+        if (EMAIL_RE.test(v3) || SMTP_RE.test(v3)) continue;
+        if (isLikelyPassword(v3)) {
+          password = v3;
+          break;
+        }
+      }
+    }
+    if (!password) {
+      const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
+      for (let k2 = 0; k2 < smtpBoundary; k2++) {
+        const v3 = window2[k2].value;
+        if (EMAIL_RE.test(v3) || SMTP_RE.test(v3) || PROXY_RE.test(v3)) continue;
+        if (isLikelyPassword(v3)) {
+          password = v3;
+          break;
+        }
       }
     }
     if (!password) {
@@ -118967,6 +118982,7 @@ function parseJarveeBinary(buffer) {
         }
       }
     }
+    if (proxyPassword && proxyPassword === password) proxyPassword = "";
     let proxyUsername = "";
     for (let k2 = proxyIdx + 1; k2 < Math.min(proxyIdx + 3, window2.length); k2++) {
       const candidate = window2[k2].value;
@@ -119018,7 +119034,7 @@ function parseJarveeBinary(buffer) {
   }
   return accounts;
 }
-var PROXY_RE, B64_RE, IG_UN_RE, SMTP_RE, EMAIL_RE, URL_RE, DEVICE_RE, FOL_SRC_RE, NUMERIC_RE, SENT_DM_RE, JARVEE_LABEL_RE, TOTP_RE;
+var PROXY_RE, B64_RE, IG_UN_RE, SMTP_RE, EMAIL_RE, URL_RE, DEVICE_RE, FOL_SRC_RE, NUMERIC_RE, SENT_DM_RE, JARVEE_LABEL_RE, JARVEE_STATUS_RE, TOTP_RE;
 var init_jarveeParser = __esm({
   "src/instagram/jarveeParser.ts"() {
     "use strict";
@@ -119033,6 +119049,7 @@ var init_jarveeParser = __esm({
     NUMERIC_RE = /^\d+$/;
     SENT_DM_RE = /(?:Hey|Hiii|Hii|Hi|Heyy|Hows it going)/i;
     JARVEE_LABEL_RE = /^.{2,80}\s*\|\s*[A-Z][A-Z0-9 _-]{1,20}$/;
+    JARVEE_STATUS_RE = /^(The account is|Account is (waiting|running|paused|stopped|active)|This account)/i;
     TOTP_RE = /^[A-Z2-7]{16,64}=*$/;
   }
 });

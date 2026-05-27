@@ -92,6 +92,8 @@ const SENT_DM_RE = /(?:Hey|Hiii|Hii|Hi|Heyy|Hows it going)/i;
 // Jarvee account label format: "AccountName | STATUS" or "Account Name | MODERATE"
 // The pipe + uppercase status word is distinctive.
 const JARVEE_LABEL_RE = /^.{2,80}\s*\|\s*[A-Z][A-Z0-9 _-]{1,20}$/;
+// Jarvee account-status sentences — never a password.
+const JARVEE_STATUS_RE = /^(The account is|Account is (waiting|running|paused|stopped|active)|This account)/i;
 // TOTP 2FA secrets use base32 alphabet (A-Z, 2-7), typically 16-64 chars.
 // This discriminates them from base64 IG usernames (which contain lowercase/+//).
 // Jarvee sometimes exports them with spaces (grouped format, e.g. "RGG2 7WSL LXC3 K2HT").
@@ -126,6 +128,8 @@ function isLikelyPassword(s: string): boolean {
   if (PROXY_RE.test(s)) return false;
   if (DEVICE_RE.test(s)) return false;
   if (JARVEE_LABEL_RE.test(s)) return false;
+  if (JARVEE_STATUS_RE.test(s)) return false;
+  if (s.includes(" ") && s.length > 30) return false; // long sentences are never passwords
   return true;
 }
 
@@ -279,31 +283,54 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       }
     }
 
-    // Step 4: IG password = password-like string BETWEEN the b64 anchor and the smtp section.
-    //         Also checked in the records immediately BEFORE the anchor (some Jarvee versions
-    //         serialise the password object before the username string).
+    // Step 4: IG password.
+    //
+    // Confirmed binary layout (from hex analysis of real exports):
+    //   [b64 username] → [smtp host] → [email password] → [IG password] → [proxy host:port]
+    //
+    // The IG password is the SECOND password-like string in the smtp→proxy window,
+    // right after the email password.  If the smtp section is absent (no email configured),
+    // the IG password is the first password-like string before the proxy.
+    //
+    // Fallback: some Jarvee versions serialise the password object before the username
+    // anchor, so we also search the 40 records immediately preceding it.
     let password = "";
-    const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
-    // Search forward (between anchor and smtp)
-    for (let k = 0; k < smtpBoundary; k++) {
-      const v = window[k].value;
-      if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v)) continue;
-      if (isLikelyPassword(v)) { password = v; break; }
+
+    // Primary: look inside smtp→proxy window, skipping the email password we already found
+    if (smtpIdx >= 0) {
+      for (let k = smtpIdx + 1; k < proxyIdx; k++) {
+        const v = window[k].value;
+        if (v === emailPassword) continue;       // already claimed as email password
+        if (EMAIL_RE.test(v) || SMTP_RE.test(v)) continue;
+        if (isLikelyPassword(v)) { password = v; break; }
+      }
     }
-    // If not found, search backward in up to 40 records before the anchor.
-    // Some Jarvee versions serialise the password object well before the username
-    // string in the binary stream, so a tighter window misses it.
+
+    // Secondary: between anchor and smtp (no smtp section, or password lives here)
+    if (!password) {
+      const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
+      for (let k = 0; k < smtpBoundary; k++) {
+        const v = window[k].value;
+        if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v)) continue;
+        if (isLikelyPassword(v)) { password = v; break; }
+      }
+    }
+
+    // Tertiary: search backward in up to 40 records before the anchor.
     if (!password) {
       const priorWindow = sortedByOffset.slice(Math.max(0, i - 40), i).reverse();
       for (const pw of priorWindow) {
         const v = pw.value;
-        // Skip 2FA secrets and non-password strings
         if (TOTP_RE.test(normaliseTOTP(v))) continue;
         if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v) || URL_RE.test(v)) continue;
-        if (decodeB64Username(v)) continue;   // don't pick up another b64 username
+        if (decodeB64Username(v)) continue;
         if (isLikelyPassword(v)) { password = v; break; }
       }
     }
+
+    // If the backward proxy-password search landed on the IG password, discard it —
+    // the string between smtp and proxy is the IG password, not the proxy password.
+    if (proxyPassword && proxyPassword === password) proxyPassword = "";
 
     // Step 5: proxy username = first non-special string after proxy host:port.
     //         Limit to 2 records; only take a proxy password from after if we

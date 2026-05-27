@@ -98,6 +98,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.594",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Import Jarvee Binary: password field now correctly imports the Instagram account password — it was pulling a status message instead of the actual password." },
+    ],
+  },
+  {
     version: "1.0.593",
     date: "27 May 2026",
     items: [
