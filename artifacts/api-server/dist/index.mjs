@@ -118837,7 +118837,7 @@ function isLikelyPassword(s) {
   if (DEVICE_RE.test(s)) return false;
   if (JARVEE_LABEL_RE.test(s)) return false;
   if (JARVEE_STATUS_RE.test(s)) return false;
-  if (s.includes(" ") && s.length > 30) return false;
+  if (s.includes(" ")) return false;
   return true;
 }
 function extractFollowedUsers(sortedById) {

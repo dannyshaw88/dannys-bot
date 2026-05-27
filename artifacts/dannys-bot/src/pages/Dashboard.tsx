@@ -98,6 +98,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.596",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Import Jarvee Binary: fixed the password field returning the same value for every account — a Jarvee settings label (short phrase with spaces) was passing the password filter; passwords never contain spaces so the filter now rejects any string with a space." },
+    ],
+  },
+  {
     version: "1.0.595",
     date: "27 May 2026",
     items: [

@@ -129,7 +129,7 @@ function isLikelyPassword(s: string): boolean {
   if (DEVICE_RE.test(s)) return false;
   if (JARVEE_LABEL_RE.test(s)) return false;
   if (JARVEE_STATUS_RE.test(s)) return false;
-  if (s.includes(" ") && s.length > 30) return false; // long sentences are never passwords
+  if (s.includes(" ")) return false; // passwords never contain spaces; Jarvee config labels often do
   return true;
 }
 
