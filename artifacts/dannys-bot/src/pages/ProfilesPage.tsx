@@ -177,7 +177,7 @@ export function ProfilesPage() {
   });
   const [profColVisible, setProfColVisible] = useState<typeof DEFAULT_PROFILES_COL_VISIBLE>(() => {
     try {
-      const s = localStorage.getItem("profiles_col_visible");
+      const s = localStorage.getItem("profiles_col_visible_v2");
       return s ? { ...DEFAULT_PROFILES_COL_VISIBLE, ...JSON.parse(s) } : DEFAULT_PROFILES_COL_VISIBLE;
     } catch { return DEFAULT_PROFILES_COL_VISIBLE; }
   });
@@ -1442,7 +1442,7 @@ export function ProfilesPage() {
                             if (isAccount) return;
                             const next = { ...profColVisible, [key]: !!checked };
                             setProfColVisible(next);
-                            localStorage.setItem("profiles_col_visible", JSON.stringify(next));
+                            localStorage.setItem("profiles_col_visible_v2", JSON.stringify(next));
                           }}
                           className="mr-1"
                         />
@@ -1454,7 +1454,7 @@ export function ProfilesPage() {
                     );
                   })}
                   <button
-                    onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); setProfColVisible(DEFAULT_PROFILES_COL_VISIBLE); localStorage.removeItem("profiles_col_visible"); setProfColOrder(DEFAULT_PROFILES_COL_ORDER); localStorage.removeItem("profiles_col_order"); }}
+                    onClick={() => { setProfColWidths(DEFAULT_PROFILES_COL_WIDTHS); localStorage.removeItem("profiles_col_widths_px"); setProfColVisible(DEFAULT_PROFILES_COL_VISIBLE); localStorage.removeItem("profiles_col_visible_v2"); setProfColOrder(DEFAULT_PROFILES_COL_ORDER); localStorage.removeItem("profiles_col_order"); }}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
                   >
                     Reset to defaults

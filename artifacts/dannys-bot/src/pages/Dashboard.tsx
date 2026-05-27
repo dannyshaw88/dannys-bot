@@ -56,6 +56,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.581",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Last API Call column now shows immediately for all users — fixed a localStorage version conflict that was hiding the column even after it was enabled by default." },
+      { category: "Fix", text: "Create Ghost: the automated form browser now uses an Android Chrome mobile identity by default (UA, touch viewport, screen size) so the browser-originated cookies match what the mobile verification step expects." },
+      { category: "Fix", text: "Create Ghost: the automated browser now sends Accept-Language and sec-ch-ua Client Hints headers on all Instagram requests — headless Chrome was previously sending no locale header at all, a clear bot signal." },
+      { category: "Fix", text: "Create Ghost: the automated browser now scrolls the Instagram homepage briefly before navigating to the signup form, adding organic dwell time that bots skip entirely." },
+    ],
+  },
+  {
     version: "1.0.580",
     date: "27 May 2026",
     items: [

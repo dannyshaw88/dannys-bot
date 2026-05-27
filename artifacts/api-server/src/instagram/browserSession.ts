@@ -6477,10 +6477,35 @@ export async function createInstagramAccountViaEBForm(params: {
 
   try {
     const [page] = await browser.pages();
-    const effectiveUA = userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+    // Default to Android Chrome mobile UA so the browser-layer device identity
+    // (mid, ig_did, cookies) matches what the mobile API will use during verification.
+    // A Windows desktop UA paired with mobile API calls is a device-type mismatch —
+    // one of the clearest signals that the session did not originate on a real phone.
+    const GHOST_DEFAULT_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/AD1A.240530.047) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.102 Mobile Safari/537.36";
+    const effectiveUA = userAgent || GHOST_DEFAULT_UA;
     await page.setUserAgent(effectiveUA);
-    await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 1 });
+    // Viewport must match the UA — a 1280×760 desktop viewport against a mobile UA
+    // exposes window.innerWidth / screen.width mismatch and missing touch points.
+    await page.setViewport(viewportForUA(effectiveUA));
+    // Inject Accept-Language on all outgoing HTTP requests so Instagram sees en-US.
+    // Headless Chrome sends no Accept-Language by default — a bot tell.
+    await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
     if (proxyUsername) await page.authenticate({ username: proxyUsername, password: proxyPassword ?? "" });
+
+    // Inject sec-ch-ua client-hint headers via CDP on all Instagram requests.
+    // Chrome sends these automatically on real Android but headless Puppeteer needs
+    // explicit injection — without them Instagram sees UA-Hints mismatch and flags
+    // the session as inconsistent.
+    try {
+      const _cdp = await page.createCDPSession();
+      await _cdp.send("Network.setExtraHTTPHeaders", {
+        headers: {
+          "Accept-Language":    "en-US,en;q=0.9",
+          "sec-ch-ua-mobile":   "?1",
+          "sec-ch-ua-platform": '"Android"',
+        },
+      });
+    } catch { /* non-fatal — CDP might not be available */ }
 
     // Apply stealth patches BEFORE any navigation so Instagram never sees the
     // headless fingerprint (navigator.webdriver, canvas, WebGL, battery, etc.)
@@ -6497,6 +6522,15 @@ export async function createInstagramAccountViaEBForm(params: {
     try { await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 60000 }); }
     catch (e: any) { step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`); }
     await delay(1500);
+    // Brief organic scroll on the homepage before navigating to signup.
+    // Bots that jump straight to /accounts/emailsignup/ with zero scroll time
+    // are trivially distinguishable from a user browsing to the signup form.
+    try {
+      await page.evaluate(() => { window.scrollBy(0, 180 + Math.random() * 120); });
+      await delay(700 + Math.random() * 600);
+      await page.evaluate(() => { window.scrollBy(0, -(90 + Math.random() * 60)); });
+      await delay(400 + Math.random() * 300);
+    } catch { /* non-fatal */ }
     await dismissCookieBanner(page);
 
     const EMAIL_FORM_SELECTORS = 'input[aria-label="Email"], input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i], input[autocomplete="email"], input[name="email"], input[name="emailAddress"]';
