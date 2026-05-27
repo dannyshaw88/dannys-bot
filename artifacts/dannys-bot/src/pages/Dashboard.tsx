@@ -57,6 +57,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.588",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "GitHub Actions build workflow now correctly publishes releases so the auto-updater can find new versions." },
+      { category: "Improvement", text: "Windows installer build now uses the locally installed electron-builder for reliability and caches Electron dependencies between runs." },
+    ],
+  },
+  {
     version: "1.0.587",
     date: "27 May 2026",
     items: [
