@@ -1048,6 +1048,30 @@ if (process.platform === "win32") {
   app.setAppUserModelId("Equinox");
 }
 
+// ── WebRTC IP-leak prevention (Electron global) ───────────────────────────────
+// These Chrome command-line switches apply to every Chromium renderer in this
+// Electron process — including all EB BrowserWindows and BrowserViews.
+//
+// Without this, Chromium's WebRTC stack sends UDP STUN requests DIRECTLY to
+// Google's STUN servers, completely bypassing the HTTP/SOCKS proxy set via
+// session.setProxy(). The ICE candidate callback then returns the real host
+// machine IP (and all its IPv6 addresses), exposing it to any page that calls
+// new RTCPeerConnection() — exactly what the Leak Check reports.
+//
+// "disable_non_proxied_udp" instructs Chromium to only generate ICE candidates
+// that flow through a configured proxy. HTTP/SOCKS proxies don't forward UDP,
+// so in practice WebRTC gets zero usable candidates and leaks nothing.
+//
+// IMPORTANT: appendSwitch() must be called BEFORE app.whenReady() — Chrome
+// command-line args are consumed at process startup and cannot be changed later.
+app.commandLine.appendSwitch("force-webrtc-ip-handling-policy", "disable_non_proxied_udp");
+app.commandLine.appendSwitch("enforce-webrtc-ip-permission-check");
+// Prevent DNS prefetch from resolving hostnames outside the proxy tunnel.
+app.commandLine.appendSwitch("dns-prefetch-disable");
+// When a proxy fails, show ERR_PROXY_CONNECTION_FAILED instead of silently
+// falling back to a direct connection that would leak the real machine IP.
+app.commandLine.appendSwitch("no-proxy-fallback");
+
 app.whenReady().then(() => {
   createSplash("Starting…");
   createWindow();

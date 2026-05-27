@@ -7,6 +7,9 @@ import fs from "fs";
 import path from "path";
 import { LEAKS_PAGE_HTML } from "../instagram/leaksPage";
 import { storage, statusEvents } from "../storage";
+import { db } from "@workspace/db";
+import { proxies } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { api } from "../shared/routes";
 import { z } from "zod/v4";
 import { verifyInstagramCredentials } from "../instagram/instagramLogin";
@@ -1864,13 +1867,48 @@ export async function registerInstagramRoutes(
   app.get("/api/browser/leaks", async (req, res) => {
     const profileId = Number(req.query.profileId) || 0;
     let title = "EQUINOX LEAK TEST";
+
+    type AccountData = {
+      proxy: string | null;
+      proxyHost: string | null;
+      proxyPort: number | null;
+      ebUA: string | null;
+      apiUA: string | null;
+    };
+    const accountData: AccountData = { proxy: null, proxyHost: null, proxyPort: null, ebUA: null, apiUA: null };
+
     if (profileId) {
       try {
         const profile = await storage.getProfile(profileId);
-        if (profile?.username) title = `${profile.username.toUpperCase()} LEAK TEST`;
+        if (profile) {
+          if (profile.username) title = `${profile.username.toUpperCase()} LEAK TEST`;
+          accountData.ebUA  = profile.userAgentEmbedded || null;
+          accountData.apiUA = profile.userAgentApi || null;
+
+          // Resolve proxy: prefer the profile's own proxyHost, fall back to linked proxy table
+          let proxyHost: string | null = profile.proxyHost || null;
+          let proxyPort: number | null = profile.proxyPort || null;
+
+          if ((!proxyHost) && profile.proxyId) {
+            try {
+              const [proxy] = await db.select().from(proxies).where(eq(proxies.id, profile.proxyId));
+              if (proxy) { proxyHost = proxy.host; proxyPort = proxy.port; }
+            } catch {}
+          }
+
+          if (proxyHost) {
+            accountData.proxyHost = proxyHost;
+            accountData.proxyPort = proxyPort;
+            accountData.proxy = proxyPort ? `${proxyHost}:${proxyPort}` : proxyHost;
+          }
+        }
       } catch {}
     }
-    const html = LEAKS_PAGE_HTML.replace("__LEAK_TEST_TITLE__", title);
+
+    const html = LEAKS_PAGE_HTML
+      .replace("__LEAK_TEST_TITLE__", title)
+      .replace("__ACCOUNT_DATA__", JSON.stringify(accountData));
+
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
     res.send(html);

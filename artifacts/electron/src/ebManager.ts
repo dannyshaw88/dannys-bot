@@ -552,6 +552,7 @@ export async function openEbWindow(opts: {
         } else {
           await existingSes.setProxy({ proxyRules: "direct://" });
         }
+        try { existingSes.setWebRTCIPHandlingPolicy("disable_non_proxied_udp"); } catch {}
         // Update the stored proxy — the login handler reads from ebMap dynamically
         // so it will automatically pick up the new credentials on the next 407.
         ebMap.set(profileId, { ...existing, proxy });
@@ -591,6 +592,19 @@ export async function openEbWindow(opts: {
   } else {
     await ses.setProxy({ proxyRules: "direct://" });
   }
+
+  // ── WebRTC IP-leak prevention (session level) ────────────────────────────
+  // Belt-and-suspenders on top of the app.commandLine.appendSwitch() flags set
+  // in main.ts. The session-level API enforces the policy for THIS specific
+  // Electron session partition independently of the global Chrome switch,
+  // covering any edge case where the global flag is not yet active at session
+  // creation time (e.g. sessions created before app.whenReady fires).
+  // "disable_non_proxied_udp": WebRTC ICE only produces candidates that flow
+  // through the configured proxy.  HTTP/SOCKS proxies don't forward UDP, so
+  // in practice no ICE candidates are emitted and the real IP is never revealed.
+  try {
+    ses.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
+  } catch { /* non-fatal — older Electron builds may not expose this API */ }
 
   // Seed existing cookies into the Electron session
   await loadCookiesFromFile(profileId, ses);
@@ -1655,6 +1669,7 @@ export function startEbIpcServer(
         } else {
           await ses.setProxy({ proxyRules: "direct://" });
         }
+        try { ses.setWebRTCIPHandlingPolicy("disable_non_proxied_udp"); } catch {}
         await loadCookiesFromFile(pid, ses);
 
         // ── Skip auto-login if already logged in (same check as Puppeteer path) ──

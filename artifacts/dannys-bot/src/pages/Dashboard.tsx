@@ -58,6 +58,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.597",
+    date: "27 May 2026",
+    items: [
+      { category: "Security", text: "WebRTC IP leak fixed in all Electron browser windows — no UDP candidates generated, proxy IP stays hidden from every website." },
+      { category: "Security", text: "WebRTC protection covers the account EB, Ghost Browser, and silent-verify hidden window — all three now enforce the same policy." },
+      { category: "Feature", text: "Leak Check page expanded from 9 tests to 20 — now includes DNS Leak, Proxy IP Match, User Agent Match, Font Fingerprint, Battery, Media Devices, Permissions, Speech Synthesis, Client Hints, and Timing Precision." },
+      { category: "Feature", text: "Leak Check page now shows the account's assigned proxy, EB User Agent, and Mobile API User Agent at the top so you can confirm the correct identity is active." },
+      { category: "Feature", text: "IP info card now shows ISP/ASN, datacenter flag, IPv4/IPv6 version, and compares the detected IP against the assigned proxy." },
+      { category: "Feature", text: "Timezone card now compares the browser timezone against the proxy's geographic timezone and warns if they differ." },
+    ],
+  },
+  {
     version: "1.0.591",
     date: "27 May 2026",
     items: [
