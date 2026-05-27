@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.603",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed IPv6 / real-IP leak in Embedded Browser sessions: Chrome's QUIC (HTTP/3) protocol was opening direct UDP connections that bypass HTTP proxies — disabling QUIC forces all traffic through TCP where the proxy takes effect." },
+      { category: "Fix", text: "Proxy bypass list is now set explicitly to loopback-only on every session, preventing Chromium's default bypass rules from accidentally letting non-loopback traffic skip the proxy." },
+      { category: "Fix", text: "HTTP proxy rules changed to the all-schemes format so WebSocket and other connections are also routed through the proxy, not just HTTP and HTTPS." },
+      { category: "Fix", text: "Fingerprint check: Public IP test now uses the IPv4-only endpoint so the proxy-IP match correctly reflects what the proxy serves, rather than a dual-stack endpoint that could use a different route." },
+    ],
+  },
+  {
     version: "1.0.602",
     date: "27 May 2026",
     items: [

@@ -1093,6 +1093,22 @@ app.commandLine.appendSwitch("dns-prefetch-disable");
 // When a proxy fails, show ERR_PROXY_CONNECTION_FAILED instead of silently
 // falling back to a direct connection that would leak the real machine IP.
 app.commandLine.appendSwitch("no-proxy-fallback");
+// ── QUIC/HTTP3 bypass prevention ─────────────────────────────────────────────
+// HTTP proxies only handle TCP.  Chrome's QUIC (HTTP/3) implementation uses UDP
+// and has no proxy-aware path — when a site advertises alt-svc "h3" (e.g. any
+// Cloudflare-hosted endpoint such as api64.ipify.org) Chrome can open a direct
+// UDP connection to it, bypassing the HTTP proxy entirely.  This is the primary
+// cause of IPv6 leaks: the UDP socket is dual-stack so it picks up the real
+// IPv6 address even when --disable-ipv6 suppresses TCP IPv6.
+// Disabling QUIC forces all connections to TCP (HTTP/1.1 or HTTP/2 via CONNECT)
+// which the configured HTTP/SOCKS5 proxy handles correctly.
+app.commandLine.appendSwitch("disable-quic");
+// ── Global proxy bypass list ──────────────────────────────────────────────────
+// Set a strict global bypass list so only loopback addresses bypass the proxy.
+// Individual sessions also set proxyBypassList explicitly in setProxy() calls,
+// but this global switch acts as a backstop for any session created before the
+// per-session setProxy() takes effect.
+app.commandLine.appendSwitch("proxy-bypass-list", "127.0.0.1;[::1];localhost");
 
 app.whenReady().then(() => {
   createSplash("Starting…");

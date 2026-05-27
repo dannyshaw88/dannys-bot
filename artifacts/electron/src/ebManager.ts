@@ -191,8 +191,11 @@ function buildProxyRules(proxy: { host: string; port: number; user?: string; pas
     const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
     return `socks5://${creds}${proxy.host}:${proxy.port}`;
   }
-  // HTTP proxy (default)
-  return `http=${proxy.host}:${proxy.port};https=${proxy.host}:${proxy.port}`;
+  // HTTP proxy — use the bare "host:port" form (Chromium treats this as "PROXY
+  // host:port" which applies to ALL URL schemes: http, https, ws, wss, ftp).
+  // The scheme-specific form "http=host:port;https=host:port" only covers those
+  // two explicit schemes and can leave WebSocket and other traffic unproxied.
+  return `${proxy.host}:${proxy.port}`;
 }
 
 // JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
@@ -582,7 +585,7 @@ export async function openEbWindow(opts: {
         console.log(`[ebManager:${profileId}] Proxy changed (${oldProxyKey} → ${newProxyKey}), updating session proxy`);
         const existingSes = electronSession.fromPartition(existing.partition);
         if (proxy) {
-          await existingSes.setProxy({ proxyRules: buildProxyRules(proxy) });
+          await existingSes.setProxy({ proxyRules: buildProxyRules(proxy), proxyBypassRules: "127.0.0.1;[::1];localhost" });
         } else {
           await existingSes.setProxy({ proxyRules: "direct://" });
         }
@@ -626,7 +629,12 @@ export async function openEbWindow(opts: {
   //   using the HTTP format Chromium sends an HTTP CONNECT, gets rejected, then falls
   //   back to DIRECT — exposing the real IP.  buildProxyRules() picks the right format.
   if (proxy) {
-    await ses.setProxy({ proxyRules: buildProxyRules(proxy) });
+    // proxyBypassList is set explicitly to only loopback addresses.  Without
+    // this, Chromium's default bypass rules can include <local> (single-label
+    // hostnames) or platform-specific entries that allow some traffic to bypass
+    // the proxy.  Loopback must remain excluded so the EB can still reach the
+    // local API server at 127.0.0.1:PORT.
+    await ses.setProxy({ proxyRules: buildProxyRules(proxy), proxyBypassRules: "127.0.0.1;[::1];localhost" });
   } else {
     await ses.setProxy({ proxyRules: "direct://" });
   }

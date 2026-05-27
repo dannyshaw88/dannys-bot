@@ -673,7 +673,13 @@ async function testIP() {
     return fetch(url, { cache: 'no-store', signal: ctrl.signal }).finally(() => clearTimeout(t));
   }
   try {
-    const r = await makeFetch('https://api64.ipify.org?format=json', 8000);
+    // api.ipify.org is IPv4-only (no AAAA record).  api64.ipify.org is the
+    // Cloudflare-fronted dual-stack endpoint and supports QUIC/HTTP3, which
+    // Chrome can open as a direct UDP connection that bypasses an HTTP proxy
+    // — causing the real machine IPv6 to appear instead of the proxy IP.
+    // Using the IPv4-only endpoint ensures the result always reflects the
+    // proxied TCP path, giving an accurate proxy-IP-match result.
+    const r = await makeFetch('https://api.ipify.org?format=json', 8000);
     const d = await r.json();
     const ip = d.ip || '—';
     if (display) { display.className = 'ip-addr'; display.textContent = ip; }
@@ -919,7 +925,7 @@ async function testDNS() {
     }
   } else {
     html += row('Unique IPs seen', uniqueIPs.length.toString(), 'red');
-    html += desc('⚠ Multiple different IPs returned by DNS services. This indicates a DNS leak — some DNS queries are bypassing the proxy and using the real server DNS.', 'fail');
+    html += desc('⚠ Multiple different IPs returned by IP-check services. Different connections are routing through different paths — some traffic is bypassing the proxy (likely via IPv6 or QUIC/UDP direct connections).', 'fail');
     setBadge('badge-dns', 'fail', 'LEAK');
     setCardBorder('card-dns', 'fail');
     setResult('DNS', 'fail', 'Leak!');
