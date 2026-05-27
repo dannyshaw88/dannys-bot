@@ -98,6 +98,13 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.593",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Build pipeline: reverted installer publish mode to avoid a 401 error caused by a missing GitHub token secret — the installer is still available from the Actions tab as normal." },
+    ],
+  },
+  {
     version: "1.0.592",
     date: "27 May 2026",
     items: [
