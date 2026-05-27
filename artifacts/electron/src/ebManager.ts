@@ -528,20 +528,48 @@ export async function openEbWindow(opts: {
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
   if (existing && !existing.win.isDestroyed()) {
-    if (existing.win.isMinimized()) existing.win.restore();
-    if (!existing.win.isVisible()) existing.win.show();
-    existing.win.focus();
-    // Toolbar is a native BrowserView — it is always present; nothing to re-inject.
-    // If the current page is a chrome error or about:blank, navigate back to Instagram
-    const currentUrl: string = existing.win.webContents.getURL();
-    if (!currentUrl || currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank") {
-      const existingSes = electronSession.fromPartition(existing.partition);
-      const existingSessionCks = await existingSes.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-      existing.win.webContents.loadURL(
-        existingSessionCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
-      ).catch(() => {});
+    // Ghost browser (profileId=-1): always destroy and recreate with a fresh session.
+    // Ghost is a disposable identity — each open must start clean with the current proxy.
+    // win.destroy() bypasses the close→hide handler and actually destroys the window.
+    if (profileId === -1) {
+      try { existing.win.destroy(); } catch { /* already destroyed */ }
+      ebMap.delete(profileId);
+      tabsStateMap.delete(profileId);
+      toolbarViewMap.delete(profileId);
+      // Fall through to create a new window below.
+    } else {
+      // Regular account: update proxy on the existing session if it changed.
+      const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
+      const oldProxyKey = existing.proxy ? `${existing.proxy.host}:${existing.proxy.port}` : "direct";
+      if (newProxyKey !== oldProxyKey) {
+        console.log(`[ebManager:${profileId}] Proxy changed (${oldProxyKey} → ${newProxyKey}), updating session proxy`);
+        const existingSes = electronSession.fromPartition(existing.partition);
+        if (proxy) {
+          await existingSes.setProxy({ proxyRules: `http=${proxy.host}:${proxy.port};https=${proxy.host}:${proxy.port}` });
+        } else {
+          await existingSes.setProxy({ proxyRules: "direct://" });
+        }
+        // Update the stored proxy — the login handler reads from ebMap dynamically
+        // so it will automatically pick up the new credentials on the next 407.
+        ebMap.set(profileId, { ...existing, proxy });
+        // Reload so the new proxy takes effect for the current page
+        existing.win.webContents.reload();
+      }
+      if (existing.win.isMinimized()) existing.win.restore();
+      if (!existing.win.isVisible()) existing.win.show();
+      existing.win.focus();
+      // Toolbar is a native BrowserView — it is always present; nothing to re-inject.
+      // If the current page is a chrome error or about:blank, navigate back to Instagram
+      const currentUrl: string = existing.win.webContents.getURL();
+      if (!currentUrl || currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank") {
+        const existingSes = electronSession.fromPartition(existing.partition);
+        const existingSessionCks = await existingSes.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+        existing.win.webContents.loadURL(
+          existingSessionCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+        ).catch(() => {});
+      }
+      return;
     }
-    return;
   }
 
   // Ghost browser (profileId=-1) always gets a completely fresh in-memory session
@@ -553,9 +581,10 @@ export async function openEbWindow(opts: {
     : `persist:eb-${profileId}`;
   const ses = electronSession.fromPartition(partition);
 
-  // Configure proxy
+  // Configure proxy — use explicit per-scheme format so Chromium routes HTTPS
+  // traffic through the proxy via HTTP CONNECT (not just plain HTTP).
   if (proxy) {
-    await ses.setProxy({ proxyRules: `${proxy.host}:${proxy.port}` });
+    await ses.setProxy({ proxyRules: `http=${proxy.host}:${proxy.port};https=${proxy.host}:${proxy.port}` });
   } else {
     await ses.setProxy({ proxyRules: "direct://" });
   }
@@ -602,9 +631,16 @@ export async function openEbWindow(opts: {
     ebMap.delete(profileId);
   });
 
-  // Handle proxy authentication
-  win.webContents.on("login", (_event, _req, _authInfo, callback) => {
-    callback(proxy?.user ?? "", proxy?.pass ?? "");
+  // Handle proxy authentication.
+  // event.preventDefault() MUST be called — without it Electron ignores the
+  // callback and either shows a dialog or cancels the request, causing a silent
+  // fall-through to the home IP.  Reading from ebMap (instead of closing over
+  // the constructor `proxy` arg) ensures updated credentials are used if the
+  // proxy is changed while the window is open.
+  win.webContents.on("login", (event, _req, _authInfo, callback) => {
+    event.preventDefault();
+    const current = ebMap.get(profileId);
+    callback(current?.proxy?.user ?? "", current?.proxy?.pass ?? "");
   });
 
   // Apply user agent
@@ -1232,7 +1268,10 @@ function setupToolbarIpc(): void {
         if (!entry || entry.win.isDestroyed() || !state) break;
         const tabWin = entry.win;
         const newTabId = state.nextId++;
-        const partition = `persist:eb-${foundPid}`;
+        // Use ebPartition() — not the hardcoded format — so Ghost browser tabs
+        // (pid=-1) correctly inherit the Ghost session (and its proxy) instead of
+        // falling into a fresh 'persist:eb--1' session with no proxy configured.
+        const partition = ebPartition(foundPid);
         const tabView = new BrowserView({
           webPreferences: { partition, contextIsolation: true, nodeIntegration: false },
         });
@@ -1605,7 +1644,7 @@ export function startEbIpcServer(
         const partition = ebPartition(pid);
         const ses = electronSession.fromPartition(partition);
         if (body.proxy) {
-          await ses.setProxy({ proxyRules: `${body.proxy.host}:${body.proxy.port}` });
+          await ses.setProxy({ proxyRules: `http=${body.proxy.host}:${body.proxy.port};https=${body.proxy.host}:${body.proxy.port}` });
         } else {
           await ses.setProxy({ proxyRules: "direct://" });
         }
@@ -1642,7 +1681,8 @@ export function startEbIpcServer(
         });
 
         if (body.proxy) {
-          hiddenWin.webContents.on("login", (_ev: any, _rq: any, _auth: any, cb: any) => {
+          hiddenWin.webContents.on("login", (ev: any, _rq: any, _auth: any, cb: any) => {
+            ev.preventDefault();
             cb(body.proxy.user ?? "", body.proxy.pass ?? "");
           });
         }

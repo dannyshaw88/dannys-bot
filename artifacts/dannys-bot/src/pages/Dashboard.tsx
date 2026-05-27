@@ -94,6 +94,16 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.585",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser now always opens with a fully fresh session — closing and reopening it now properly destroys the old window so the selected proxy is applied correctly every time." },
+      { category: "Fix", text: "Account embedded browsers now correctly route all traffic through the assigned proxy — a missing event.preventDefault() call was causing Electron to silently fall back to the home IP on every proxy authentication challenge." },
+      { category: "Fix", text: "Proxy credentials are now read live from the account settings when the browser asks to authenticate — previously stale credentials from when the window was first opened were used even after the proxy was changed." },
+      { category: "Fix", text: "New tabs opened inside an account embedded browser now use the account's proxy session — they were previously opening on a separate unproxied session." },
+    ],
+  },
+  {
     version: "1.0.582",
     date: "27 May 2026",
     items: [

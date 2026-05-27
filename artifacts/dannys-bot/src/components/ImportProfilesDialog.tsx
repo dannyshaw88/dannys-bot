@@ -156,6 +156,189 @@ function parseDSVRows(text: string): string[][] {
   return rows;
 }
 
+/**
+ * Parse a Jarvee binary profile file (.jarvee or any extension).
+ *
+ * Jarvee stores these as .NET BinaryFormatter objects XOR-encoded with 0xFF.
+ * Detection: raw bytes[0..4] = FF FE FF FF FF (after XOR → 00 01 00 00 00 = BF header).
+ *
+ * Structure around each account block (after XOR-decode, scanning printable ASCII):
+ *   [backup codes]  [smtp server]  [PASSWORD]  MassPlanner.Domain.Platform
+ *   [proxy-pwd]  [proxy:port]  [display name]  [Jarvee ID]  [user agent]
+ *   [proxy-username]  [secondary proxy]  [email]  [backup email]
+ */
+function parseJarveeBinaryFile(buffer: ArrayBuffer): ParsedProfile[] {
+  const raw = new Uint8Array(buffer);
+
+  // XOR-decode
+  const dec = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) dec[i] = raw[i] ^ 0xFF;
+
+  // Extract all printable ASCII runs ≥ 4 chars, record (offset, value)
+  const strs: Array<{ off: number; val: string }> = [];
+  let run = "";
+  let runStart = 0;
+  for (let i = 0; i <= dec.length; i++) {
+    const b = dec[i];
+    if (b !== undefined && b >= 0x20 && b <= 0x7E) {
+      if (run.length === 0) runStart = i;
+      run += String.fromCharCode(b);
+    } else {
+      if (run.length >= 4) strs.push({ off: runStart, val: run });
+      run = "";
+    }
+  }
+
+  // Valid Instagram username pattern (stored as Base64)
+  const igRe = /^[a-zA-Z0-9_.]{5,30}$/;
+  const b64Re = /^[A-Za-z0-9+/]{8,44}={0,2}$/;
+  const proxyRe = /^[\d.a-zA-Z-]+:\d{4,5}$/;
+
+  const results: ParsedProfile[] = [];
+  const seen = new Set<string>();
+
+  for (let si = 0; si < strs.length; si++) {
+    const s = strs[si].val.trim();
+
+    // Must be valid Base64 with correct padding
+    if (!b64Re.test(s) || s.length % 4 !== 0) continue;
+
+    let username = "";
+    try {
+      username = atob(s);
+    } catch {
+      continue;
+    }
+    if (!igRe.test(username) || !username.includes("_")) continue;
+    if (seen.has(username)) continue;
+
+    // Require an "Instagram_" profile-ID string nearby (confirms it's a real account block)
+    const acctOff = strs[si].off;
+    const nearby = strs.filter(x => x.off > acctOff && x.off < acctOff + 600);
+    const hasProfileId = nearby.some(x => /^Instagram_\w+$/.test(x.val.trim()));
+    if (!hasProfileId) continue;
+
+    seen.add(username);
+
+    // Scan a window of strings around this account block
+    const window = strs.filter(x => x.off >= acctOff - 200 && x.off <= acctOff + 1600);
+
+    let password = "";
+    let proxyHost = "";
+    let proxyPort = "";
+    let proxyPassword = "";
+    let proxyUsername = "";
+    let userAgent = "";
+    let email = "";
+    let backupCodes = "";
+
+    for (let j = 0; j < window.length; j++) {
+      const v = window[j].val.trim();
+
+      // Password: the string just before "MassPlanner.Domain.Platform"
+      // Note: the Base64 exclusion must NOT be applied here — many passwords look
+      // like valid Base64 (all alphanumeric, length multiple of 4). We only exclude
+      // known system keywords and values that clearly aren't passwords.
+      if (v === "MassPlanner.Domain.Platform") {
+        for (let k = j - 1; k >= Math.max(0, j - 5); k--) {
+          const cand = window[k].val.trim();
+          if (
+            cand.length >= 4 && cand.length <= 30 &&
+            !/MassPlanner|System\.|value|smtp|http|@|PublicKey/.test(cand) &&
+            !cand.endsWith("=") // skip Base64 blobs that have padding (passwords never end with =)
+          ) {
+            password = cand;
+            break;
+          }
+        }
+      }
+
+      // User agent — .NET BinaryFormatter prepends a 1-byte string-length prefix
+      // which is often a printable character (e.g. 'v' = 0x76 = 118), so the
+      // extracted run looks like "vMozilla/5.0 ..." — match by contains, not startsWith.
+      if (!userAgent && v.includes("Mozilla/5.0") && v.includes("AppleWebKit")) {
+        // Strip the leading length-prefix byte if present
+        userAgent = v.startsWith("Mozilla/") ? v : v.slice(1);
+      }
+
+      // Email (not an Instagram URL, not a type name)
+      if (!email && v.includes("@") && v.includes(".") && v.length < 80 &&
+          !v.includes("instagram.com") && !v.includes("PublicKey") &&
+          !v.includes("mscorlib") && !v.includes("culture")) {
+        email = v;
+      }
+
+      // Primary proxy host:port
+      if (!proxyHost && proxyRe.test(v)) {
+        const colon = v.lastIndexOf(":");
+        proxyHost = v.slice(0, colon);
+        proxyPort = v.slice(colon + 1);
+
+        // Proxy password: the string just before the proxy host:port
+        for (let k = j - 1; k >= Math.max(0, j - 4); k--) {
+          const cand = window[k].val.trim();
+          if (
+            cand.length >= 4 && cand.length <= 30 &&
+            !/MassPlanner|System\.|value__|@|http/.test(cand) &&
+            !/^[A-Za-z0-9+/]{12,}={0,2}$/.test(cand)
+          ) {
+            proxyPassword = cand;
+            break;
+          }
+        }
+
+        // Proxy username: first all-lowercase-or-underscore string (≥8 chars) after the
+        // proxy host:port. Jarvee stores the proxy username AFTER the user agent block
+        // (i.e. further in the window), so we scan up to 20 entries ahead.
+        // We allow underscores since real proxy usernames often look like "gdgxae_gcfhioo".
+        for (let k = j + 1; k < Math.min(window.length, j + 20); k++) {
+          const cand = window[k].val.trim();
+          if (/^[a-z][a-z_]{7,}$/.test(cand)) {
+            proxyUsername = cand;
+            break;
+          }
+        }
+      }
+
+      // Backup codes: space-separated groups of uppercase + digits (OTP style)
+      if (!backupCodes && /^[A-Z0-9]{4}( [A-Z0-9]{4}){3,}/.test(v)) {
+        backupCodes = v.replace(/^'/, "");
+      }
+    }
+
+    results.push({
+      accountLabel: "",
+      username,
+      password,
+      email,
+      proxyHost,
+      proxyPort,
+      proxyUsername,
+      proxyPassword,
+      userAgentEmbedded: userAgent,
+      userAgentApi: userAgent,
+      tags: "",
+      dateOfBirth: "",
+      notes: "",
+      phoneNumber: "",
+      twoFASecretKey: "",
+      backupCodes,
+      emailValidationUsername: "",
+      emailValidationPassword: "",
+      emailValidationPop3Server: "",
+      emailValidationPort: "",
+      accStatus: "",
+      deviceId: "",
+      deviceUuid: "",
+      phoneId: "",
+      adid: "",
+      apiCookies: "",
+    });
+  }
+
+  return results;
+}
+
 function parseJarveeFile(text: string): ParsedProfile[] {
   const rows = parseDSVRows(text);
   if (rows.length < 2) return [];
@@ -239,10 +422,28 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
     reader.onload = (e) => {
       const buf = e.target?.result as ArrayBuffer;
       try {
-        // Auto-detect encoding from BOM bytes so passwords and user agents
-        // are read correctly regardless of which Jarvee version produced the file.
-        // UTF-16 LE BOM = FF FE, UTF-16 BE BOM = FE FF, UTF-8 BOM = EF BB BF
         const bytes = new Uint8Array(buf);
+
+        // Detect Jarvee binary profile format:
+        // Raw header = FF FE FF FF FF ... (XOR-decoded → 00 01 00 00 00 = .NET BinaryFormatter)
+        // Distinguished from a normal UTF-16 LE BOM (FF FE followed by text) by bytes[2] = 0xFF.
+        const isJarveeBinary =
+          bytes[0] === 0xFF && bytes[1] === 0xFE &&
+          bytes[2] === 0xFF && bytes[3] === 0xFF && bytes[4] === 0xFF;
+
+        if (isJarveeBinary) {
+          const profiles = parseJarveeBinaryFile(buf);
+          if (profiles.length === 0) {
+            toast({ title: "No profiles found", description: "The binary profile file contained no recognisable account blocks.", variant: "destructive" });
+            setParsed(null);
+          } else {
+            setParsed(profiles);
+          }
+          return;
+        }
+
+        // Text-based Jarvee / Equinox CSV export — auto-detect encoding.
+        // UTF-16 LE BOM = FF FE, UTF-16 BE BOM = FE FF, UTF-8 BOM = EF BB BF
         let encoding = "utf-8";
         if (bytes[0] === 0xFF && bytes[1] === 0xFE) encoding = "utf-16le";
         else if (bytes[0] === 0xFE && bytes[1] === 0xFF) encoding = "utf-16be";
@@ -324,7 +525,7 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
             <Upload className="w-5 h-5 text-primary" /> Import Profiles
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Import accounts from a Jarvee export file (.txt tab-separated, UTF-16 LE).
+            Import accounts from a Jarvee export — binary profile files or .txt/.csv tab-separated exports.
           </p>
         </DialogHeader>
 
@@ -346,12 +547,12 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
               </div>
               <div className="text-center">
                 <p className="font-semibold text-foreground">Drop your Jarvee export here</p>
-                <p className="text-sm text-muted-foreground mt-1">or click to browse .txt / .csv files</p>
+                <p className="text-sm text-muted-foreground mt-1">Binary profile files, .txt, or .csv — all supported</p>
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.csv"
+                accept="*"
                 className="hidden"
                 onChange={onFileChange}
                 data-testid="input-import-file"
