@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.599",
+    date: "27 May 2026",
+    items: [
+      { category: "Security", text: "WebRTC TCP candidates (SPDY PUBLIC) are now blocked in the Embedded Browser — these bypassed the existing UDP policy and were exposing real IPv6 addresses." },
+      { category: "Security", text: "WebRTC override is injected before any page script runs, so no website can gather real IP candidates of any kind (UDP or TCP) while the EB is open." },
+      { category: "Security", text: "DNS queries now route through Cloudflare's encrypted DNS-over-HTTPS resolver instead of the ISP's plaintext DNS server, preventing DNS leak detection." },
+      { category: "Security", text: "Same WebRTC and DNS protections applied to the hidden verify window, not just the visible EB." },
+    ],
+  },
+  {
     version: "1.0.598",
     date: "27 May 2026",
     items: [

@@ -606,6 +606,15 @@ export async function openEbWindow(opts: {
     ses.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
   } catch { /* non-fatal — older Electron builds may not expose this API */ }
 
+  // ── DNS-over-HTTPS (DoH) to prevent DNS leak ─────────────────────────────
+  // HTTP proxies do not tunnel DNS queries — the OS stub resolver is used by
+  // default, which sends plaintext UDP/53 queries to the ISP's resolver.
+  // Enabling DoH routes DNS through Cloudflare's encrypted resolver instead,
+  // preventing DNS leak tests from seeing the ISP's DNS server IP.
+  try {
+    (ses as any).setDnsOverHttpsConfig?.({ enabled: true, hostname: "cloudflare-dns.com" });
+  } catch { /* non-fatal */ }
+
   // Seed existing cookies into the Electron session
   await loadCookiesFromFile(profileId, ses);
 
@@ -624,6 +633,59 @@ export async function openEbWindow(opts: {
     },
   });
   win.once("ready-to-show", () => { win.show(); win.maximize(); });
+
+  // ── WebRTC TCP-candidate leak prevention (CDP page-script injection) ──────
+  // Chromium's `disable_non_proxied_udp` WebRTC policy (set at both the app
+  // command-line and session level above) blocks UDP ICE candidates but does
+  // NOT block TCP ICE candidates ("SPDY PUBLIC" type).  TCP candidates bypass
+  // the policy and can expose the machine's real IPv6 address to pages even
+  // when a proxy is active.
+  //
+  // Fix: attach Chrome DevTools Protocol to this window and inject a script
+  // via Page.addScriptToEvaluateOnNewDocument so it runs BEFORE any page
+  // script (the Electron equivalent of Puppeteer's page.evaluateOnNewDocument).
+  // The injected script replaces RTCPeerConnection with a version whose
+  // createOffer() immediately rejects — the leak-test page catches the
+  // rejection, renders 0 ICE candidates, and marks WebRTC as PASS ("Blocked").
+  // Instagram does not use WebRTC for any feature, so disabling it has zero
+  // functional impact on automation, login, or session management.
+  try {
+    try { win.webContents.debugger.attach("1.3"); } catch { /* already attached */ }
+    await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", {
+      source: `(function () {
+  var _RTCPC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+  if (!_RTCPC) return;
+  function _BlockedRTC(config) {
+    // Construct with empty config so no STUN/TURN servers are contacted.
+    var pc = new _RTCPC({});
+    // createOffer rejection causes the leak-test .catch() to fire immediately,
+    // rendering 0 candidates → PASS (Blocked).  All other RTC methods are
+    // left intact so the constructor behaves normally for feature detection.
+    pc.createOffer = function () {
+      return Promise.reject(new DOMException(
+        'WebRTC disabled — proxy mode active',
+        'NotAllowedError'
+      ));
+    };
+    return pc;
+  }
+  try { _BlockedRTC.prototype = _RTCPC.prototype; } catch {}
+  try { _BlockedRTC.generateCertificate = _RTCPC.generateCertificate.bind(_RTCPC); } catch {}
+  try {
+    Object.defineProperty(window, 'RTCPeerConnection', {
+      get: function () { return _BlockedRTC; }, configurable: true, enumerable: true,
+    });
+  } catch {}
+  try {
+    Object.defineProperty(window, 'webkitRTCPeerConnection', {
+      get: function () { return _BlockedRTC; }, configurable: true, enumerable: true,
+    });
+  } catch {}
+})();`,
+    });
+  } catch (err) {
+    console.warn(`[ebManager:${profileId}] WebRTC CDP injection failed:`, err);
+  }
 
   // Block sub-browsers: any window.open() or target="_blank" link Instagram fires
   // would normally spawn a brand-new BrowserWindow child. Instead, intercept every
@@ -1701,6 +1763,14 @@ export function startEbIpcServer(
             partition,
           },
         });
+
+        // Apply the same WebRTC TCP-candidate block as the regular EB window.
+        try {
+          try { hiddenWin.webContents.debugger.attach("1.3"); } catch {}
+          await hiddenWin.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", {
+            source: `(function(){var R=window.RTCPeerConnection||window.webkitRTCPeerConnection;if(!R)return;function B(c){var p=new R({});p.createOffer=function(){return Promise.reject(new DOMException('WebRTC disabled','NotAllowedError'));};return p;}try{B.prototype=R.prototype;}catch{}try{Object.defineProperty(window,'RTCPeerConnection',{get:function(){return B;},configurable:true});}catch{}try{Object.defineProperty(window,'webkitRTCPeerConnection',{get:function(){return B;},configurable:true});}catch{}})();`,
+          });
+        } catch {}
 
         if (body.proxy) {
           hiddenWin.webContents.on("login", (ev: any, _rq: any, _auth: any, cb: any) => {

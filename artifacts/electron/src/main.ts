@@ -1076,9 +1076,12 @@ if (process.platform === "win32") {
 //
 // Fix B — lock WebRTC to proxy-only UDP:
 //   "force-webrtc-ip-handling-policy=disable_non_proxied_udp" prevents WebRTC
-//   from generating any ICE candidate that doesn't flow through the proxy. With
-//   IPv6 already gone (Fix A) and HTTP/SOCKS unable to relay UDP, WebRTC ends
-//   up with zero usable candidates — nothing leaks.
+//   from generating UDP ICE candidates that bypass the proxy. Note: this flag
+//   does NOT block TCP ICE candidates ("SPDY PUBLIC" type), which can still
+//   expose real IPv6 addresses. TCP candidates are blocked by a CDP
+//   Page.addScriptToEvaluateOnNewDocument injection in ebManager.ts that
+//   overrides RTCPeerConnection.createOffer() to immediately reject, causing
+//   the ICE gatherer to produce zero candidates of any type.
 //
 // IMPORTANT: appendSwitch() must be called BEFORE app.whenReady() — Chrome
 // command-line args are consumed at process startup and cannot be changed later.
