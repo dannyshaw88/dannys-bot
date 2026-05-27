@@ -1217,8 +1217,11 @@ const LAUNCH_ARGS_BASE = [
   // "disable_non_proxied_udp" blocks all UDP unless it flows through a
   // configured proxy (which HTTP/SOCKS proxies don't forward UDP through, so in
   // practice WebRTC gets no ICE candidates and reveals nothing).
-  "--webrtc-ip-handling-policy=disable_non_proxied_udp",
-  "--force-webrtc-ip-handling-policy",
+  // NOTE: the VALUE must be on the SAME flag — "--force-webrtc-ip-handling-policy"
+  // alone (no value) is a boolean toggle that does nothing; the policy must be
+  // embedded: "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".
+  "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+  "--enforce-webrtc-ip-permission-check",
 
   // Prevent Chrome from auto-playing video before a user gesture.
   // Instagram's feed auto-plays Reel videos as soon as they load. With

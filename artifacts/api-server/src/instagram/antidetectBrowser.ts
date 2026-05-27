@@ -75,6 +75,19 @@ export async function launchAntidetect(opts: {
       `--window-size=${BROWSER_W},${BROWSER_H}`,
       "--disable-gpu",
       `--proxy-server=${opts.proxyHost}:${opts.proxyPort}`,
+      // ── WebRTC IP-leak prevention ──────────────────────────────────────────
+      // Without these flags Chrome's WebRTC stack sends UDP STUN requests
+      // directly (bypassing the HTTP proxy) and exposes the real host IP —
+      // including the full IPv6 address — in ICE candidates.
+      // "--force-webrtc-ip-handling-policy=VALUE" is the correct single-flag
+      // form; splitting it into a bare "--force-webrtc-ip-handling-policy"
+      // (boolean) + a separate "--webrtc-ip-handling-policy=VALUE" does NOT
+      // work and leaves WebRTC unrestricted.
+      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--enforce-webrtc-ip-permission-check",
+      // Prevent DNS prefetch from resolving hostnames outside the proxy tunnel.
+      "--dns-prefetch-disable",
+      "--disable-blink-features=AutomationControlled",
     ],
     defaultViewport: { width: BROWSER_W, height: BROWSER_H },
   }) as unknown as import("puppeteer").Browser;

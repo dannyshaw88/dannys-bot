@@ -1,83 +1,132 @@
-name: Build Windows Installer (Manual)
+name: Build Windows Installer
 
 on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override (e.g. 1.0.600)"
+        required: false
+        default: ""
 
 jobs:
-  build-web:
-    name: Build Web (Ubuntu)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install workspace dependencies
-        run: pnpm install --no-frozen-lockfile --ignore-scripts
-
-      - name: Build API server
-        run: pnpm --filter @workspace/api-server run build
-
-      - name: Build React frontend
-        run: pnpm --filter @workspace/dannys-bot run build
-        env:
-          REPL_ID: ci
-
-      - name: Archive build outputs
-        run: tar -czf web-builds.tar.gz artifacts/api-server/dist artifacts/dannys-bot/dist
-
-      - name: Upload web builds
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-builds-manual
-          path: web-builds.tar.gz
-          if-no-files-found: error
-
-  package-windows:
-    name: Package Windows Installer
+  build-windows:
     runs-on: windows-latest
-    needs: build-web
+    timeout-minutes: 60
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: "24"
 
-      - name: Download web builds
-        uses: actions/download-artifact@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          name: web-builds-manual
+          version: 9
 
-      - name: Extract build outputs
-        run: tar -xzf web-builds.tar.gz
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
-      - name: Install Electron dependencies
-        working-directory: artifacts/electron
-        run: npm install
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
-      - name: Bundle Electron main process
-        working-directory: artifacts/electron
-        run: node build.mjs
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared libs
+        run: pnpm run typecheck:libs
+
+      - name: Build API server bundle
+        working-directory: artifacts/api-server
+        run: node ./build.mjs
         env:
-          DANNY_BOT_UPDATER_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+          NODE_ENV: production
 
-      - name: Package Windows installer
-        working-directory: artifacts/electron
-        run: npx electron-builder --win --publish never
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            echo "VERSION=0.0.0-dev.${SHORT_SHA}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install electron-builder
+        run: pnpm add -g electron-builder
+
+      - name: Build Windows installer
+        working-directory: artifacts/api-server
+        run: |
+          electron-builder --win --x64 --config.appId=com.equinox.dannysbot \
+            --config.productName="Equinox" \
+            --config.win.target=nsis \
+            --config.nsis.oneClick=false \
+            --config.nsis.allowToChangeInstallationDirectory=true \
+            --config.files="dist/**/*,node_modules/**/*,package.json" \
+            --config.extraResources="../../database.db" \
+            --config.directories.output=installer-output \
+            --config.directories.buildResources=build-resources \
+            --config.win.icon=build-resources/icon.ico \
+            --config.extraMetadata.version=${{ steps.version.outputs.VERSION }}
         env:
-          GH_TOKEN: ${{ secrets.UPDATER_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
-      - name: Upload installer to Actions artifacts
+      - name: Build Windows installer (fallback — pkg)
+        if: failure()
+        working-directory: artifacts/api-server
+        shell: bash
+        run: |
+          pnpm add -g @vercel/pkg
+          pkg dist/index.mjs \
+            --target node24-win-x64 \
+            --output installer-output/equinox-win-x64.exe \
+            --compress GZip
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+
+      - name: List output
+        working-directory: artifacts/api-server
+        shell: bash
+        run: ls -lh installer-output/ 2>/dev/null || echo "No output directory found"
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Equinox-Windows-Installer
-          path: artifacts/electron/release/*.exe
-          if-no-files-found: error
+          name: equinox-windows-installer-${{ steps.version.outputs.VERSION }}
+          path: |
+            artifacts/api-server/installer-output/*.exe
+            artifacts/api-server/installer-output/*.msi
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Create GitHub Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/api-server/installer-output/*.exe
+            artifacts/api-server/installer-output/*.msi
+          name: Equinox v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
