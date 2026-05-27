@@ -7,21 +7,21 @@ export const LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --border: #2a2d3a;
-    --text: #e2e8f0;
-    --muted: #7c8299;
-    --pass: #22c55e;
-    --pass-bg: rgba(34,197,94,0.10);
-    --fail: #ef4444;
-    --fail-bg: rgba(239,68,68,0.10);
-    --warn: #f59e0b;
-    --warn-bg: rgba(245,158,11,0.10);
-    --info: #3b82f6;
-    --info-bg: rgba(59,130,246,0.10);
-    --neutral: #475569;
-    --neutral-bg: rgba(71,85,105,0.10);
+    --bg: #ffffff;
+    --surface: #f8fafc;
+    --border: #e2e8f0;
+    --text: #111827;
+    --muted: #6b7280;
+    --pass: #16a34a;
+    --pass-bg: rgba(22,163,74,0.10);
+    --fail: #dc2626;
+    --fail-bg: rgba(220,38,38,0.10);
+    --warn: #d97706;
+    --warn-bg: rgba(217,119,6,0.10);
+    --info: #2563eb;
+    --info-bg: rgba(37,99,235,0.10);
+    --neutral: #9ca3af;
+    --neutral-bg: rgba(156,163,175,0.10);
   }
   body {
     background: var(--bg);
@@ -173,7 +173,7 @@ export const LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
     justify-content: space-between;
     gap: 10px;
     padding: 5px 0;
-    border-bottom: 1px solid rgba(255,255,255,.04);
+    border-bottom: 1px solid rgba(0,0,0,.06);
     font-size: 12px;
   }
   .row:last-child { border-bottom: none; }
@@ -213,7 +213,7 @@ export const LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
     justify-content: space-between;
     gap: 8px;
     padding: 6px 10px;
-    background: rgba(255,255,255,.03);
+    background: rgba(0,0,0,.03);
     border-radius: 6px;
     margin-bottom: 4px;
     font-size: 12px;
@@ -240,12 +240,12 @@ export const LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
     margin-top: 8px;
     line-height: 1.5;
     padding: 7px 9px;
-    background: rgba(255,255,255,.03);
+    background: rgba(0,0,0,.03);
     border-radius: 6px;
   }
-  .desc.warn { color: var(--warn); background: var(--warn-bg); border: 1px solid rgba(245,158,11,.2); }
-  .desc.fail { color: #fca5a5; background: var(--fail-bg); border: 1px solid rgba(239,68,68,.2); }
-  .desc.pass { color: #86efac; background: var(--pass-bg); border: 1px solid rgba(34,197,94,.2); }
+  .desc.warn { color: var(--warn); background: var(--warn-bg); border: 1px solid rgba(217,119,6,.2); }
+  .desc.fail { color: var(--fail); background: var(--fail-bg); border: 1px solid rgba(220,38,38,.2); }
+  .desc.pass { color: var(--pass); background: var(--pass-bg); border: 1px solid rgba(22,163,74,.2); }
 
   /* ── Rerun button ───────────────────────────────────── */
   .rerun-btn {
@@ -468,15 +468,20 @@ function updateScore() {
 async function testIP() {
   const display = document.getElementById('ip-display');
   const rows    = document.getElementById('ip-rows');
+  function makeFetch(url, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { cache: 'no-store', signal: ctrl.signal }).finally(() => clearTimeout(t));
+  }
   try {
-    const r = await fetch('https://api64.ipify.org?format=json', { cache: 'no-store' });
+    const r = await makeFetch('https://api64.ipify.org?format=json', 8000);
     const d = await r.json();
     const ip = d.ip || '—';
     if (display) { display.className = 'ip-addr'; display.textContent = ip; }
     // geo lookup
     let geoHtml = '';
     try {
-      const g = await fetch('https://ipapi.co/'+ip+'/json/', { cache: 'no-store' });
+      const g = await makeFetch('https://ipapi.co/'+ip+'/json/', 8000);
       const gd = await g.json();
       geoHtml = row('Country', (gd.country_name||'?')+' '+((gd.country_code||'').toLowerCase()?'🏳️':''))
               + row('City', gd.city||'?')
@@ -489,8 +494,8 @@ async function testIP() {
     setResult('IP', 'info', ip);
     window._detectedPublicIP = ip;
   } catch (e) {
-    if (display) { display.className = 'ip-addr'; display.textContent = 'Failed'; }
-    if (rows) rows.innerHTML = desc('Could not reach ipify.org — browser may be offline or proxy is blocking external requests.', 'warn');
+    if (display) { display.className = 'ip-addr'; display.textContent = 'Timed out'; }
+    if (rows) rows.innerHTML = desc('Could not reach ipify.org — the proxy may be blocking external requests or the connection timed out after 8 s.', 'warn');
     setBadge('badge-ip', 'warn', 'WARN');
     setResult('IP', 'warn', 'Offline?');
   }

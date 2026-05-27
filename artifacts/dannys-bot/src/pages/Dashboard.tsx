@@ -57,6 +57,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.591",
+    date: "27 May 2026",
+    items: [
+      { category: "Fix", text: "EB content no longer hidden behind the toolbar — all Instagram content and the leak test page now start correctly below the 92px native toolbar." },
+      { category: "Improvement", text: "Leak Check page switched to a white background with dark text for better readability in the EB." },
+      { category: "Fix", text: "Leak Check IP test now times out cleanly after 8 seconds instead of hanging if the proxy blocks the lookup." },
+      { category: "Fix", text: "System Status label in the sidebar changed from 'Dev' to 'Developing'." },
+    ],
+  },
+  {
     version: "1.0.590",
     date: "27 May 2026",
     items: [

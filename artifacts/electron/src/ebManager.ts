@@ -66,6 +66,9 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
   return `(function(){
   if(window.__eq_utils_loaded)return;window.__eq_utils_loaded=true;
 
+  // ── Push body below the native 92-px Equinox toolbar ─────────────────────
+  if(!document.getElementById('__eq_tb')){var _eq_s=document.createElement('style');_eq_s.id='__eq_tb';_eq_s.textContent='body{padding-top:92px!important;box-sizing:border-box!important}';(document.head||document.documentElement).appendChild(_eq_s);}
+
   // ── Focus tracking (for toolbar paste buttons) ───────────────────────────
   window.__eq_lastInput=null;
   document.addEventListener('focusin',function(e){

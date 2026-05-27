@@ -175,7 +175,7 @@ export function Sidebar() {
         <div className="bg-background rounded-lg px-2.5 py-1.5 border border-border flex items-center gap-1.5 min-w-0">
           <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
           <span className="text-[11px] font-medium text-foreground whitespace-nowrap">System Status</span>
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap truncate">· Dev</span>
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap truncate">· Developing</span>
         </div>
       </div>
     </div>
