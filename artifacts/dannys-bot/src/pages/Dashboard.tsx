@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.622",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded Browser no longer opens blank after proxy fix — the proxy is now resolved entirely on the server using the same trusted path as the auto-login flow, eliminating a format mismatch that caused the window to load nothing." },
+    ],
+  },
+  {
     version: "1.0.621",
     date: "28 May 2026",
     items: [

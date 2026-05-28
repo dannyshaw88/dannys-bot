@@ -878,6 +878,24 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── EB Proxy Config (Electron native window mode) ────────────────────────
+  // Returns the fully-resolved proxy + userAgent for a profile so main.ts can
+  // configure the native BrowserWindow session without doing its own DB lookups.
+  // Uses the same resolveProxyConfig() path as eb-auto-login and the browser/start
+  // route — single source of truth, no format mismatches.
+  app.get("/api/profiles/:id/eb-proxy", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ proxy: null, userAgent: null });
+    const resolved = await resolveProxyConfig(profile);
+    return res.json({
+      proxy: resolved
+        ? { host: resolved.host, port: resolved.port, user: resolved.username ?? undefined, pass: resolved.password ?? undefined, type: resolved.type ?? "http" }
+        : null,
+      userAgent: profile.userAgentEmbedded ?? null,
+    });
+  });
+
   // ── EB State (Electron native window mode) ────────────────────────────────
   // Returns whether the native BrowserWindow is currently open and its URL.
   // Used by BrowserPanel to poll for address bar updates.

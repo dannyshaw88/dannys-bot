@@ -760,43 +760,18 @@ function setupBackupHandlers() {
       let proxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
       let userAgent: string | undefined;
       try {
-        const r = await fetch(`http://127.0.0.1:${serverPort}/api/profiles/${profileId}`);
+        // Single call to /eb-proxy — the API server resolves proxyId → proxy
+        // fields using resolveProxyConfig(), the same path used by eb-auto-login.
+        // This avoids a second /api/proxies fetch from main.ts and ensures
+        // format consistency regardless of whether the proxy is inline or via
+        // the Proxy Manager.
+        const r = await fetch(`http://127.0.0.1:${serverPort}/api/profiles/${profileId}/eb-proxy`);
         if (r.ok) {
-          const p = await r.json();
-          userAgent = p.userAgentEmbedded || undefined;
-          if (p.proxyHost && p.proxyPort) {
-            // Inline proxy (stored directly on the profile)
-            proxy = {
-              host: p.proxyHost,
-              port: Number(p.proxyPort),
-              user: p.proxyUsername || undefined,
-              pass: p.proxyPassword || undefined,
-              type: p.proxyType || undefined,
-            };
-          } else if (p.proxyId) {
-            // Proxy linked via Proxy Manager — fetch all proxies and look up by ID.
-            // Without this, accounts whose proxy is assigned through the Proxy Manager
-            // (proxyId set, proxyHost empty) were getting no proxy at all, causing
-            // the native EB window to use the real machine IP instead of the proxy.
-            try {
-              const pr = await fetch(`http://127.0.0.1:${serverPort}/api/proxies`);
-              if (pr.ok) {
-                const list = await pr.json();
-                const linked = Array.isArray(list) ? list.find((px: any) => px.id === p.proxyId) : null;
-                if (linked?.host && linked?.port) {
-                  proxy = {
-                    host: linked.host,
-                    port: Number(linked.port),
-                    user: linked.username || undefined,
-                    pass: linked.password || undefined,
-                    type: linked.proxyType === "socks5" ? "socks5" : "http",
-                  };
-                  console.log(`[EB] Profile ${profileId}: resolved proxy via Proxy Manager (id=${p.proxyId}) → ${linked.host}:${linked.port}`);
-                }
-              }
-            } catch (proxyErr: any) {
-              console.warn(`[EB] Profile ${profileId}: failed to fetch proxy list for proxyId=${p.proxyId}:`, proxyErr?.message);
-            }
+          const data = await r.json();
+          proxy     = data.proxy     || undefined;
+          userAgent = data.userAgent || undefined;
+          if (proxy) {
+            console.log(`[EB] Profile ${profileId}: proxy resolved → ${proxy.host}:${proxy.port}`);
           }
         }
       } catch {}

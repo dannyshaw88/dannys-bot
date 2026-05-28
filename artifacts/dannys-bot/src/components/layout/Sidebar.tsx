@@ -15,7 +15,7 @@ const PROFILE_TABS = (creatorMode: boolean) => [
     { value: "follow",        label: "Follow Tool",         icon: UserPlus      },
     { value: "unfollow",      label: "Unfollow Tool",       icon: UserMinus     },
     { value: "contact",       label: "Contact Tool",        icon: MessageSquare },
-    { value: "human-session", label: "Human Session Tools", icon: User          },
+    { value: "human-session", label: "Human Session",       icon: User          },
     { value: "session-log",   label: "Session Log",         icon: Activity      },
   ] : []),
   { value: "create-cookie", label: "Create a Cookie",     icon: Cookie        },
@@ -38,12 +38,12 @@ export function Sidebar() {
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",          shortLabel: "DASHBOARD",      path: "/dashboard",    icon: Gauge  },
-    { name: "Accounts",           shortLabel: "ACCOUNTS",       path: "/profiles",     icon: Users           },
-    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",  path: "/bulk-import",  icon: Upload          },
-    { name: "Ghost Browser",      shortLabel: "GHOST",          path: "/create-ghost", icon: Ghost           },
-    { name: "Statistics",         shortLabel: "STATISTICS",     path: "/stats",        icon: Activity        },
-    { name: "Proxy Manager",      shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: ShieldAlert     },
+    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",    icon: Gauge       },
+    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",     icon: Users       },
+    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: Ghost       },
+    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",  icon: Upload      },
+    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",        icon: Activity    },
+    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: ShieldAlert },
   ];
 
   function goBack() {
@@ -57,12 +57,12 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-[157px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
+    <div className="w-[133px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
 
       {/* ── Header: logo + wordmark row, then arrows row below centered ── */}
-      <div className="flex flex-col items-center border-b border-border/50 pt-3 pb-2 px-2">
-        <div className="flex items-center gap-2 mb-1.5">
-          <img src="/bot-logo.png" alt="Equinox" className="w-[32px] h-[32px] shrink-0 object-contain" />
+      <div className="flex flex-col items-center border-b border-border/50 pt-[10px] pb-[7px] px-2">
+        <div className="flex items-center gap-2 mb-1">
+          <img src="/bot-logo.png" alt="Equinox" className="w-[28px] h-[28px] shrink-0 object-contain" />
           <span className="font-bold text-base tracking-tight text-foreground">
             Equi<span style={{ color: BRAND }}>nox</span>
           </span>
@@ -108,7 +108,7 @@ export function Sidebar() {
               <button
                 onClick={() => setLocation(item.path)}
                 className={cn(
-                  "flex flex-col items-center justify-center w-full py-[15.5px] gap-1 transition-all duration-200 rounded-none",
+                  "flex flex-col items-center justify-center w-full py-[17.8px] gap-1 transition-all duration-200 rounded-none",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -119,7 +119,7 @@ export function Sidebar() {
                   style={isActive ? { color: BRAND } : { color: BRAND }}
                 />
                 <span className={cn(
-                  "text-[10px] font-bold tracking-widest leading-tight text-center",
+                  "text-[9px] font-bold tracking-wide leading-tight text-center",
                   isActive ? "text-primary" : "text-muted-foreground"
                 )}>
                   {item.shortLabel}
@@ -167,7 +167,7 @@ export function Sidebar() {
         <button
           onClick={() => setLocation("/settings")}
           className={cn(
-            "flex flex-col items-center justify-center w-full py-[15.5px] gap-1 transition-all duration-200 rounded-none",
+            "flex flex-col items-center justify-center w-full py-[17.8px] gap-1 transition-all duration-200 rounded-none",
             location === "/settings"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -178,7 +178,7 @@ export function Sidebar() {
             style={{ color: BRAND }}
           />
           <span className={cn(
-            "text-[10px] font-bold tracking-widest",
+            "text-[9px] font-bold tracking-wide",
             location === "/settings" ? "text-primary" : "text-muted-foreground"
           )}>
             SETTINGS
@@ -187,11 +187,10 @@ export function Sidebar() {
       </div>
 
       {/* ── Original status pill ── */}
-      <div className="px-4 pb-4 border-t border-border/50 pt-3">
-        <div className="bg-background rounded-lg px-2.5 py-1.5 border border-border flex items-center gap-1.5 min-w-0">
+      <div className="px-3 pb-4 border-t border-border/50 pt-3">
+        <div className="bg-background rounded-lg px-2 py-1.5 border border-border flex items-center gap-1.5 min-w-0">
           <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-          <span className="text-[11px] font-medium text-foreground whitespace-nowrap">System Status</span>
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap truncate">· in Development</span>
+          <span className="text-[10px] font-medium text-foreground whitespace-nowrap truncate">Amber Developing</span>
         </div>
       </div>
     </div>
