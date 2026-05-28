@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.627",
+    date: "28 May 2026",
+    items: [
+      { category: "Feature", text: "New Browser Fingerprint Preview panel in Account Settings (under Embedded Browser Agent) — shows every value the Leak Tool measures: touch points, platform, color depth, orientation, battery charging/discharging time, network RTT, and all stealth protections (WebRTC, Canvas, Audio, webdriver). Values are computed from the account's UA so they match the Leak Tool exactly." },
+    ],
+  },
+  {
     version: "1.0.626",
     date: "28 May 2026",
     items: [

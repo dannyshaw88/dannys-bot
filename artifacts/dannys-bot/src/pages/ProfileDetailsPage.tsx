@@ -19,7 +19,7 @@ import {
   Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
   UserPlus, MessageSquare, RefreshCw, Users, BarChart2,
   AlertTriangle, ShieldAlert, WifiOff, UserMinus, Camera, Eye, Smartphone, Cookie, PlusCircle, Trash2,
-  Battery, BatteryCharging, Wifi, Cpu, MapPin
+  Battery, BatteryCharging, Wifi, Cpu, MapPin, Fingerprint
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -88,6 +88,7 @@ function _fpDjb2(ua: string): number {
 interface FingerprintValues {
   device: string; sw: number; sh: number; dpr: number; mem: number; cores: number;
   batteryPct: number; charging: boolean; connType: string; downlink: number; timezone: string;
+  rtt: number; chargeOrDischargeTime: number;
 }
 function computeFingerprint(ua: string, apiUA?: string | null): FingerprintValues {
   let s = _fpDjb2(ua);
@@ -131,11 +132,11 @@ function computeFingerprint(ua: string, apiUA?: string | null): FingerprintValue
 
   const batteryPct = Math.round((0.60 + r() * 0.39) * 100);    // call 2
   const charging   = r() > 0.35;                                // call 3
-  if (charging) rI(0, 3600); else rI(1800, 28800);             // call 4 — advance seed
+  const chargeOrDischargeTime = charging ? rI(0, 3600) : rI(1800, 28800); // call 4
 
   const connType = rp(["Wi-Fi", "Wi-Fi", "Wi-Fi", "Cellular"] as const); // call 5
   const downlink = Math.round(2 + r() * 98);                    // call 6
-  rI(10, 150);                                                   // call 7 — RTT, advance seed
+  const rtt      = rI(10, 150);                                  // call 7
 
   const TZ_POOL = [
     "New York", "New York", "Los Angeles", "Los Angeles",
@@ -143,7 +144,7 @@ function computeFingerprint(ua: string, apiUA?: string | null): FingerprintValue
   ] as const;
   const timezone = rp(TZ_POOL);                                  // call 8
 
-  return { device, sw, sh, dpr, mem, cores, batteryPct, charging, connType, downlink, timezone };
+  return { device, sw, sh, dpr, mem, cores, batteryPct, charging, connType, downlink, timezone, rtt, chargeOrDischargeTime };
 }
 
 function parseActiveTimerSlots(start: string | null | undefined, end: string | null | undefined): { start: string; end: string }[] {
@@ -1207,6 +1208,87 @@ export function ProfileDetailsPage() {
                         placeholder="Browser-like User Agent..."
                       />
                     </div>
+
+                    {/* ── Browser Fingerprint Preview ── */}
+                    {formData.userAgentEmbedded && (() => {
+                      const fp = computeFingerprint(formData.userAgentEmbedded, formData.userAgentApi);
+                      const isMob = formData.userAgentEmbedded.includes("Mobile") && formData.userAgentEmbedded.includes("Android");
+
+                      const fmtTime = (secs: number, isCharging: boolean) => {
+                        if (isCharging && secs === 0) return "Full";
+                        if (!isCharging && secs >= 86400) return "∞";
+                        const h = Math.floor(secs / 3600);
+                        const m = Math.floor((secs % 3600) / 60);
+                        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                      };
+
+                      const Row = ({ label, value, muted }: { label: string; value: string; muted?: boolean }) => (
+                        <div className="flex items-center justify-between py-[3px]">
+                          <span className="text-[11px] text-slate-400">{label}</span>
+                          <span className={`text-[11px] font-semibold ${muted ? "text-slate-400" : "text-slate-700"}`}>{value}</span>
+                        </div>
+                      );
+
+                      const Pass = ({ label }: { label: string }) => (
+                        <div className="flex items-center gap-1.5 bg-green-50 border border-green-200 rounded px-2 py-1">
+                          <CheckCircle2 className="w-3 h-3 text-green-600 shrink-0" />
+                          <span className="text-[11px] font-semibold text-green-700">{label}</span>
+                        </div>
+                      );
+
+                      const battColor = fp.batteryPct > 25 ? "text-green-600" : fp.batteryPct > 5 ? "text-amber-600" : "text-red-600";
+
+                      return (
+                        <div className="border border-slate-200 rounded-lg overflow-hidden mt-2">
+                          <div className="bg-slate-50 px-3 py-2 flex items-center gap-2 border-b border-slate-200">
+                            <Fingerprint className="w-3.5 h-3.5 text-primary" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Browser Fingerprint Preview</span>
+                            <span className="text-[10px] text-slate-400 ml-1">— what the Leak Tool measures</span>
+                          </div>
+                          <div className="grid grid-cols-2 divide-x divide-slate-100">
+                            {/* Screen & Hardware */}
+                            <div className="px-3 py-2 space-y-0">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1"><Monitor className="w-3 h-3" /> Screen &amp; Hardware</p>
+                              <Row label="Touch Points" value={isMob ? "10" : "0"} />
+                              <Row label="Platform" value={isMob ? "Linux armv8l" : "Win32"} />
+                              <Row label="Color Depth" value="24 bit" />
+                              <Row label="Orientation" value={isMob ? "Portrait (0°)" : "Landscape (0°)"} />
+                              <Row label="Available" value={`${fp.sw}×${fp.sh - (isMob ? 30 : 40)}`} />
+                            </div>
+                            {/* Battery */}
+                            <div className="px-3 py-2 space-y-0">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1"><Battery className="w-3 h-3" /> Battery API</p>
+                              <Row label="Level" value={`${fp.batteryPct}%${fp.charging ? " ⚡" : ""}`} />
+                              <Row label="Charging" value={fp.charging ? "Yes" : "No"} />
+                              <Row
+                                label={fp.charging ? "Time to Full" : "Time Remaining"}
+                                value={fmtTime(fp.chargeOrDischargeTime, fp.charging)}
+                              />
+                              <Row label={fp.charging ? "Discharging Time" : "Charging Time"} value="∞" muted />
+                            </div>
+                            {/* Network */}
+                            <div className="px-3 py-2 space-y-0">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1"><Wifi className="w-3 h-3" /> Network Info</p>
+                              <Row label="Type" value={fp.connType} />
+                              <Row label="Effective Type" value="4G" />
+                              <Row label="Downlink" value={`${fp.downlink} Mbps`} />
+                              <Row label="RTT" value={`${fp.rtt} ms`} />
+                              <Row label="Save Data" value="No" />
+                            </div>
+                            {/* Protections */}
+                            <div className="px-3 py-2">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Stealth Protections</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                <Pass label="WebRTC Blocked" />
+                                <Pass label="Canvas Protected" />
+                                <Pass label="Audio Protected" />
+                                <Pass label="webdriver Hidden" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* ── UA device-change confirmation dialog ── */}
                     <AlertDialog open={uaChangeConfirmOpen} onOpenChange={setUaChangeConfirmOpen}>
