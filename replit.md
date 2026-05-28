@@ -152,6 +152,11 @@ This is a chronological record of every approach that was tried and its outcome.
 - **Change**: `testDNS()` in `leaksPage.ts` changed from `api.my-ip.io/v2/ip.json` to `api4.my-ip.io/v2/ip.json` (IPv4-only subdomain, no AAAA record). All three sources now route through the proxy.
 - **Result**: DNS leak should now show PASS. The earlier "my-ip.io is safe" note in this doc was wrong — it does have a AAAA record.
 
+### Attempt 5 — Reverted PAC script → fixed_servers with embedded credentials (v1.0.618)
+- **Theory**: The `pacScript` inline-string option in Electron's `session.setProxy()` is silently ignored in some Electron 33/34 builds on Windows. When ignored, no proxy is configured at all and all traffic goes DIRECT through the machine's real IP. The original "fixed_servers falls back to DIRECT" diagnosis (Attempt 1) was a false positive — the 2-IP result in the DNS test was actually the QUIC/IPv6 bypass in the test tool itself (subsequently fixed in Attempts 3-4), not a proxy routing failure.
+- **Change**: `buildProxyConfig()` now uses `mode:'fixed_servers'` + `proxyRules:'http://user:pass@host:port'` for HTTP proxies (same approach as SOCKS5). Credentials are embedded directly in the proxy URL, eliminating the 407-challenge cycle entirely — Chrome sends `Proxy-Authorization` preemptively on every CONNECT without needing the `login` event handler. The `login` handler is kept as belt-and-suspenders.
+- **Result**: Pending user confirmation.
+
 ### What has NOT been tried yet (open issues as of v1.0.613):
 - **Proxy IP Match FAIL for rotating residential proxies**: The test compares the detected exit IP against the proxy HOST IP (e.g., `37.97.112.154`). For rotating residential proxies the exit IP is a different residential address (e.g., `90.242.146.49`). This always shows FAIL because the test can't know the expected exit IP. This is a DISPLAY BUG in the test, not a real leak. The Proxy IP Match test needs logic to distinguish hostname-based proxies (show INFO instead of FAIL) from IP-based proxies.
 

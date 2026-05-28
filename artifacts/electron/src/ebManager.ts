@@ -181,59 +181,50 @@ function ebPartition(pid: number): string {
 
 // Build the Electron session.setProxy() options object for a given proxy config.
 //
-// HTTP proxies use an INLINE PAC SCRIPT (pacScript string, not pacURL):
+// ALL proxy types (HTTP and SOCKS5) now use mode:'fixed_servers' + proxyRules
+// with credentials embedded directly in the proxy URL.
 //
-//   WHY PAC and not fixed_servers + proxyRules:
-//     mode:'fixed_servers' + per-scheme proxyRules silently falls back to a
-//     DIRECT connection in Electron 33 / Chromium 130 when the proxy is slow
-//     to respond or the 407 auth cycle fails.  The --no-proxy-fallback switch
-//     is NOT honoured for session-level setProxy() calls in the Network Service
-//     process — only the renderer-level fetch sees it.  The result is that the
-//     real machine IP leaks through every time.
+// HISTORY — why we tried PAC script and why we reverted:
+//   v1.0.607 switched HTTP proxies from fixed_servers to an inline pacScript
+//   string.  The stated reason was that fixed_servers "silently falls back to
+//   DIRECT when the proxy is slow or the 407 auth cycle fails."  However, the
+//   evidence for that fallback was the DNS leak test showing 2 different IPs
+//   (Cloudflare vs ipify).  That 2-IP result was subsequently diagnosed as a
+//   false positive — ipify was returning the real IPv6 via a QUIC/UDP socket
+//   that bypasses the HTTP proxy entirely (fixed in v1.0.611 by switching to
+//   api.ipify.org).  The fixed_servers proxy was routing correctly the whole
+//   time.  Switching to pacScript broke proxy routing entirely because Electron
+//   33/34 silently ignores the pacScript inline-string option in some builds.
 //
-//   WHY pacScript (string) and not pacURL (URL to a local server):
-//     pacURL requires an async HTTP fetch of the PAC file.  In Electron 33,
-//     persistent sessions ('persist:eb-N') re-load their proxy config from the
-//     on-disk profile AFTER setProxy() resolves, potentially overwriting the
-//     newly set value.  pacScript is an INLINE STRING — Chromium evaluates it
-//     immediately with no network round-trip, so there is no async-fetch race
-//     and no dependence on the local API server being reachable at session init.
+// WHY fixed_servers with embedded credentials:
+//   Embedding user:pass in the proxy URL (http://user:pass@host:port) causes
+//   Chrome to send the Proxy-Authorization header preemptively on every CONNECT
+//   request, completely eliminating the 407-challenge cycle.  Without embedded
+//   credentials, Chrome waits for a 407, retries with credentials from the
+//   webContents 'login' event — a two-round-trip dance that can fail silently
+//   in some Electron builds.  Embedding credentials is the same approach used
+//   for SOCKS5 and is inherently more reliable.
 //
-//   WHY PAC eliminates the IPv6 leak:
-//     FindProxyForURL returns "PROXY host:port" — Chrome sends the hostname
-//     (not a resolved IP) to the proxy via a CONNECT tunnel.  The proxy's DNS
-//     resolver picks the address, so IPv6 is never exercised on the client side.
+//   The 'login' event handler on win.webContents is kept as a belt-and-suspenders
+//   fallback for proxies that still issue a 407 despite embedded credentials.
 //
-//   Credentials are supplied by the webContents 'login' event (HTTP 407 response).
-//
-// SOCKS5 proxies keep proxyRules because:
-//   1. SOCKS5 has no HTTP 407 challenge — the login event never fires.
-//   2. PAC strings cannot carry credentials ("SOCKS5 host:port" only).
-//   3. Chromium rejects SOCKS5 servers given an HTTP-CONNECT request, then
-//      falls back to DIRECT — leaking the real IP.
+// IPv6 note: --disable-ipv6 is set as an app-level Chromium flag in main.ts,
+//   so Chrome never resolves AAAA records or opens IPv6 sockets regardless of
+//   the proxy config here.
 function buildProxyConfig(proxy: { host: string; port: number; user?: string; pass?: string; type?: string }): Parameters<Electron.Session["setProxy"]>[0] {
+  const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
   if (proxy.type === "socks5") {
-    const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
     return {
       mode: "fixed_servers",
       proxyRules: `socks5://${creds}${proxy.host}:${proxy.port}`,
       proxyBypassRules: "127.0.0.1;[::1];localhost",
     };
   }
-
-  // Inline PAC script for HTTP proxies.
-  // Returns ONLY "PROXY host:port" — no DIRECT fallback for non-loopback hosts.
-  // If the proxy is unreachable, the request FAILS instead of leaking real IP.
+  // HTTP/HTTPS proxy — credentials embedded so no 407 dance needed.
   return {
-    pacScript: [
-      "function FindProxyForURL(url, host) {",
-      // Allow loopback directly so the EB can always reach the local API server.
-      '  if (host === "127.0.0.1" || host === "::1" || host === "[::1]" ||',
-      '      host === "localhost"  || host === "0.0.0.0") return "DIRECT";',
-      // All other traffic — including raw IP URLs — must go through the proxy.
-      `  return "PROXY ${proxy.host}:${proxy.port}";`,
-      "}",
-    ].join("\n"),
+    mode: "fixed_servers",
+    proxyRules: `http://${creds}${proxy.host}:${proxy.port}`,
+    proxyBypassRules: "127.0.0.1;[::1];localhost",
   };
 }
 

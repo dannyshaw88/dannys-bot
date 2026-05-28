@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.618",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Reverted EB proxy from PAC script back to fixed_servers mode — the PAC script approach (introduced v1.0.607) was silently ignored by Electron 33/34, causing all EB traffic to go direct through the machine's real IP. The fixed_servers approach that worked in earlier versions is restored, with credentials now embedded directly in the proxy URL to avoid the 407 auth cycle entirely." },
+    ],
+  },
+  {
     version: "1.0.617",
     date: "28 May 2026",
     items: [
