@@ -725,8 +725,9 @@ export function ProfileDetailsPage() {
                     <Link
                       href="/"
                       onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
                     >
+                      <BarChart2 className="w-3 h-3" />
                       Dash
                     </Link>
                     <span className="text-border mx-1 select-none">|</span>
@@ -740,8 +741,9 @@ export function ProfileDetailsPage() {
                     <span className="text-border mx-1 select-none">|</span>
                     <Link
                       href={`/profiles/${profileId}?tab=settings`}
-                      className="text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
                     >
+                      <Settings className="w-3 h-3" />
                       Account Settings
                     </Link>
                     {activeTab === "settings" && (

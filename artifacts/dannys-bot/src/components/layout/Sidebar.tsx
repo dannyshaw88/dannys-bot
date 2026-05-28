@@ -1,6 +1,6 @@
 import { useLocation, useSearch } from "wouter";
 import {
-  LayoutGrid, Users, ShieldAlert, Settings, Activity,
+  Gauge, Users, ShieldAlert, Settings, Activity,
   ChevronLeft, ChevronRight, Ghost, User, UserMinus, UserPlus, MessageSquare, Cookie, Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,7 @@ export function Sidebar() {
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",          shortLabel: "DASHBOARD",      path: "/dashboard",    icon: LayoutGrid  },
+    { name: "Dashboard",          shortLabel: "DASHBOARD",      path: "/dashboard",    icon: Gauge  },
     { name: "Accounts",           shortLabel: "ACCOUNTS",       path: "/profiles",     icon: Users           },
     { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",  path: "/bulk-import",  icon: Upload          },
     { name: "Ghost Browser",      shortLabel: "GHOST",          path: "/create-ghost", icon: Ghost           },
@@ -57,36 +57,40 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-[185px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
+    <div className="w-[157px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
 
-      {/* ── Original header: logo + wordmark + nav arrows ── */}
-      <div className="h-16 flex items-center px-4 border-b border-border/50 gap-2">
-        <img src="/bot-logo.png" alt="Equinox" className="w-[38px] h-[38px] shrink-0 object-contain" />
-        <span className="font-bold text-lg tracking-tight text-foreground mr-1">
-          Equi<span style={{ color: BRAND }}>nox</span>
-        </span>
-        <button
-          onClick={goBack}
-          className={cn(
-            "p-1.5 rounded transition-colors shrink-0",
-            canBack ? "hover:bg-accent cursor-pointer" : "cursor-default"
-          )}
-          style={{ color: canBack ? BRAND : BRAND + "60" }}
-          title="Go back"
-        >
-          <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
-        </button>
-        <button
-          onClick={goForward}
-          className={cn(
-            "p-1.5 rounded transition-colors shrink-0",
-            canForward ? "hover:bg-accent cursor-pointer" : "cursor-default"
-          )}
-          style={{ color: canForward ? BRAND : BRAND + "60" }}
-          title="Go forward"
-        >
-          <ChevronRight className="w-5 h-5" strokeWidth={2.5} />
-        </button>
+      {/* ── Header: logo + wordmark row, then arrows row below centered ── */}
+      <div className="flex flex-col items-center border-b border-border/50 pt-3 pb-2 px-2">
+        <div className="flex items-center gap-2 mb-1.5">
+          <img src="/bot-logo.png" alt="Equinox" className="w-[32px] h-[32px] shrink-0 object-contain" />
+          <span className="font-bold text-base tracking-tight text-foreground">
+            Equi<span style={{ color: BRAND }}>nox</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-center gap-1">
+          <button
+            onClick={goBack}
+            className={cn(
+              "p-1.5 rounded transition-colors",
+              canBack ? "hover:bg-accent cursor-pointer" : "cursor-default"
+            )}
+            style={{ color: canBack ? BRAND : BRAND + "60" }}
+            title="Go back"
+          >
+            <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
+          </button>
+          <button
+            onClick={goForward}
+            className={cn(
+              "p-1.5 rounded transition-colors",
+              canForward ? "hover:bg-accent cursor-pointer" : "cursor-default"
+            )}
+            style={{ color: canForward ? BRAND : BRAND + "60" }}
+            title="Go forward"
+          >
+            <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
 
       {/* ── Jarvee-style nav: icon centred above ALL-CAPS label ── */}
@@ -104,7 +108,7 @@ export function Sidebar() {
               <button
                 onClick={() => setLocation(item.path)}
                 className={cn(
-                  "flex flex-col items-center justify-center w-full py-[12.5px] gap-1 transition-all duration-200 rounded-none",
+                  "flex flex-col items-center justify-center w-full py-[15.5px] gap-1 transition-all duration-200 rounded-none",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -163,7 +167,7 @@ export function Sidebar() {
         <button
           onClick={() => setLocation("/settings")}
           className={cn(
-            "flex flex-col items-center justify-center w-full py-[12.5px] gap-1 transition-all duration-200 rounded-none",
+            "flex flex-col items-center justify-center w-full py-[15.5px] gap-1 transition-all duration-200 rounded-none",
             location === "/settings"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"

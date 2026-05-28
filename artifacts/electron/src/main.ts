@@ -763,7 +763,9 @@ function setupBackupHandlers() {
         const r = await fetch(`http://127.0.0.1:${serverPort}/api/profiles/${profileId}`);
         if (r.ok) {
           const p = await r.json();
+          userAgent = p.userAgentEmbedded || undefined;
           if (p.proxyHost && p.proxyPort) {
+            // Inline proxy (stored directly on the profile)
             proxy = {
               host: p.proxyHost,
               port: Number(p.proxyPort),
@@ -771,8 +773,31 @@ function setupBackupHandlers() {
               pass: p.proxyPassword || undefined,
               type: p.proxyType || undefined,
             };
+          } else if (p.proxyId) {
+            // Proxy linked via Proxy Manager — fetch all proxies and look up by ID.
+            // Without this, accounts whose proxy is assigned through the Proxy Manager
+            // (proxyId set, proxyHost empty) were getting no proxy at all, causing
+            // the native EB window to use the real machine IP instead of the proxy.
+            try {
+              const pr = await fetch(`http://127.0.0.1:${serverPort}/api/proxies`);
+              if (pr.ok) {
+                const list = await pr.json();
+                const linked = Array.isArray(list) ? list.find((px: any) => px.id === p.proxyId) : null;
+                if (linked?.host && linked?.port) {
+                  proxy = {
+                    host: linked.host,
+                    port: Number(linked.port),
+                    user: linked.username || undefined,
+                    pass: linked.password || undefined,
+                    type: linked.proxyType === "socks5" ? "socks5" : "http",
+                  };
+                  console.log(`[EB] Profile ${profileId}: resolved proxy via Proxy Manager (id=${p.proxyId}) → ${linked.host}:${linked.port}`);
+                }
+              }
+            } catch (proxyErr: any) {
+              console.warn(`[EB] Profile ${profileId}: failed to fetch proxy list for proxyId=${p.proxyId}:`, proxyErr?.message);
+            }
           }
-          userAgent = p.userAgentEmbedded || undefined;
         }
       } catch {}
 

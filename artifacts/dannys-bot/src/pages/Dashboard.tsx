@@ -58,6 +58,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.621",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy routing bug fixed — accounts with a proxy assigned via the Proxy Manager were getting no proxy applied to the Embedded Browser window, causing the home broadband IP to show instead of the proxy exit IP. The native EB window now correctly looks up and applies the Proxy Manager proxy for every account." },
+      { category: "UI", text: "Sidebar is 15% narrower and nav buttons are 25% taller." },
+      { category: "UI", text: "Navigation arrows (back/forward) moved below the logo, centered." },
+      { category: "UI", text: "Dashboard icon updated to a gauge icon." },
+      { category: "UI", text: "Account page top links now each show a matching icon (Dash, Browser, Account Settings)." },
+    ],
+  },
+  {
     version: "1.0.620",
     date: "28 May 2026",
     items: [
