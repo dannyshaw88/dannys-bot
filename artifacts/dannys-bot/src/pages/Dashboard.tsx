@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.611",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "DNS leak test fixed — the test was explicitly fetching api64.ipify.org (Cloudflare's dual-stack QUIC endpoint) which Chrome can open as a direct UDP/IPv6 connection that bypasses the HTTP proxy entirely. Switched to api.ipify.org (IPv4-only, no AAAA record, no QUIC) so all three DNS sources now route through the proxy, producing one consistent IP instead of two." },
+      { category: "UI", text: "Sidebar nav buttons are now full-width edge-to-edge — removed the horizontal padding from the nav container so the active/hover background bar spans the entire sidebar width, matching Jarvee's style." },
+      { category: "Fix", text: "Account list sort column and direction are now remembered across app restarts — switched from sessionStorage (cleared on close) to localStorage so your last sort choice persists." },
+      { category: "Fix", text: "Accounts page now defaults to A–Z by account name on first load (no stored sort preference) instead of unsorted insertion order." },
+    ],
+  },
+  {
     version: "1.0.610",
     date: "28 May 2026",
     items: [

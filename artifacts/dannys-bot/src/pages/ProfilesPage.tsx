@@ -280,18 +280,18 @@ export function ProfilesPage() {
   const [fixingAbdIds, setFixingAbdIds] = useState<Set<number>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
   const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | null>(() => {
-    const v = sessionStorage.getItem("profiles:sortField");
-    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following") ? v as any : null;
+    const v = localStorage.getItem("profiles:sortField");
+    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following") ? v as any : "account";
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
-    (sessionStorage.getItem("profiles:sortDir") as "asc" | "desc") ?? "asc"
+    (localStorage.getItem("profiles:sortDir") as "asc" | "desc") === "desc" ? "desc" : "asc"
   );
   // Stable order: IDs in the order frozen when user last clicked a column header,
   // or seeded from the first data load. Data refreshes update account data in-place
   // but never reorder the list.
   const [stableOrder, setStableOrder] = useState<number[]>(() => {
     try {
-      const s = sessionStorage.getItem("profiles:stableOrder");
+      const s = localStorage.getItem("profiles:stableOrder");
       return s ? (JSON.parse(s) as number[]) : [];
     } catch { return []; }
   });
@@ -307,7 +307,7 @@ export function ProfilesPage() {
       const newIds     = profiles.filter(p => !prevSet.has(p.id)).map(p => p.id);
       if (kept.length === prev.length && newIds.length === 0) return prev;
       const next = [...kept, ...newIds];
-      try { sessionStorage.setItem("profiles:stableOrder", JSON.stringify(next)); } catch {}
+      try { localStorage.setItem("profiles:stableOrder", JSON.stringify(next)); } catch {}
       return next;
     });
   }, [profiles]);
@@ -446,12 +446,12 @@ export function ProfilesPage() {
     if (sortField !== field) {
       setSortField(field); setSortDir("asc");
       newDir = "asc";
-      sessionStorage.setItem("profiles:sortField", field);
-      sessionStorage.setItem("profiles:sortDir", "asc");
+      localStorage.setItem("profiles:sortField", field);
+      localStorage.setItem("profiles:sortDir", "asc");
     } else {
       newDir = sortDir === "asc" ? "desc" : "asc";
       setSortDir(newDir);
-      sessionStorage.setItem("profiles:sortDir", newDir);
+      localStorage.setItem("profiles:sortDir", newDir);
     }
 
     // Snapshot the current sort order so data refreshes won't reorder accounts.
@@ -491,7 +491,7 @@ export function ProfilesPage() {
     });
     const newOrder = sorted.map(p => p.id);
     setStableOrder(newOrder);
-    try { sessionStorage.setItem("profiles:stableOrder", JSON.stringify(newOrder)); } catch {}
+    try { localStorage.setItem("profiles:stableOrder", JSON.stringify(newOrder)); } catch {}
   };
 
   const getNextAccountNum = () => {

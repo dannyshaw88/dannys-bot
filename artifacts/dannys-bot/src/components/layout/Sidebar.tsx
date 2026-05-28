@@ -87,7 +87,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 px-3 py-1 space-y-0 overflow-y-auto">
+      <nav className="flex-1 py-1 space-y-0 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = (() => {
             if (item.path === "/dashboard") return location === "/dashboard";
@@ -153,7 +153,7 @@ export function Sidebar() {
         </div>
       )}
 
-      <div className="px-3 pb-2">
+      <div className="pb-2">
         <button
           onClick={() => setLocation("/settings")}
           className={cn(

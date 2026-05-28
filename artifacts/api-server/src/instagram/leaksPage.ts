@@ -885,7 +885,11 @@ async function testDNS() {
   } catch {}
 
   try {
-    const r2 = await tf('https://api64.ipify.org?format=json', 5000);
+    // api.ipify.org (NOT api64) — IPv4-only endpoint with no AAAA record and no
+    // QUIC support.  api64.ipify.org is Cloudflare-fronted and dual-stack; Chrome
+    // can open it via direct UDP/QUIC or IPv6, bypassing the HTTP proxy entirely
+    // and exposing the real machine IPv6 — making the test report a false leak.
+    const r2 = await tf('https://api.ipify.org?format=json', 5000);
     const d2 = await r2.json();
     if (d2.ip) { ips.push(d2.ip); sources.push('ipify'); }
   } catch {}

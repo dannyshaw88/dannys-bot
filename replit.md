@@ -127,6 +127,50 @@ The user explicitly presses **Reset Device IDs** in the UI → calls `wipeEbSess
 
 53. Do not skip any file during imports — every file matters for git
 
+## EB IP Leak Prevention — Current State (v1.0.611, non-negotiable, do not regress)
+
+**What is in place and MUST NOT be removed or changed without understanding the full leak chain:**
+
+### Chromium launch flags (artifacts/electron/src/main.ts, before app.whenReady):
+- `--disable-ipv6` — removes IPv6 from every subsystem (DNS resolver, socket layer). Without this, Chrome opens a direct IPv6 socket to Cloudflare-fronted endpoints and exposes the real machine IPv6.
+- `--disable-quic` — disables QUIC/UDP (HTTP/3). Chrome can open QUIC directly (UDP, not TCP) to Cloudflare endpoints, bypassing the HTTP proxy entirely. This flag prevents that.
+- `--disable-features=HappyEyeballsV3,IPv6Reachability` — belt-and-suspenders: disables Chrome's IPv6 preference and reachability probing.
+- `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` + `--enforce-webrtc-ip-permission-check` — WebRTC leak prevention.
+- `--dns-prefetch-disable` — stops DNS prefetch from resolving domains outside the proxy.
+- `--no-proxy-fallback` — no direct fallback (belt-and-suspenders; PAC is the primary enforcement).
+- `--proxy-bypass-list=127.0.0.1;[::1];localhost` — only loopback bypasses the proxy.
+
+### Session-level proxy config (artifacts/electron/src/ebManager.ts, buildProxyConfig):
+- HTTP proxies: inline PAC script (`pacScript` string, NOT `pacURL`, NOT `mode:'fixed_servers'`). The PAC script returns `"PROXY host:port"` with NO `DIRECT` fallback for non-loopback hosts. If the proxy is unreachable the request FAILS, not leaks.
+- SOCKS5 proxies: `mode:'fixed_servers'` + `proxyRules` (PAC can't carry SOCKS5 credentials).
+- DoH (`setDnsOverHttpsConfig`) is DISABLED — it sent DNS directly to Cloudflare via the real IP, bypassing the proxy.
+- Proxy is set TWICE (150ms gap) on EB window open to defeat the persistent-session race where Chrome reloads its on-disk proxy config and overwrites the PAC after `setProxy()` resolves.
+- `clearHostResolverCache()` called before each proxy set.
+- `did-start-loading` event re-applies proxy (in addition to `did-finish-load`) — fires before any page requests.
+- `app.get('login', ...)` handler provides 407 credentials so Chrome doesn't fail auth and fall back to DIRECT.
+
+### Verify concurrency gate (artifacts/api-server/src/routes/instagram.ts):
+- `acquireSilentVerifySlot()` / `releaseSilentVerifySlot()` semaphore ensures only 1 hidden BrowserWindow runs at a time. Verifying 3+ accounts simultaneously previously crashed Electron's main process by spawning parallel Chromium instances.
+
+### DNS leak test (artifacts/api-server/src/instagram/leaksPage.ts):
+- Public IP test (`testIP`): uses `api.ipify.org` (IPv4-only, no AAAA, no QUIC). DO NOT change to `api64.ipify.org`.
+- DNS leak test (`testDNS`): also uses `api.ipify.org` (NOT `api64`). `api64.ipify.org` is Cloudflare-fronted, dual-stack, QUIC-enabled — Chrome can open it as a direct UDP connection bypassing the HTTP proxy, making the test report a false IPv6 leak. Using the IPv4-only endpoint ensures all three DNS sources route through the proxy.
+- `my-ip.io` endpoint is safe (not Cloudflare-fronted, not QUIC).
+- `1.1.1.1/cdn-cgi/trace` is safe with `--disable-quic` in place.
+
+### Proxy IP Match test logic:
+- The test compares `detectedIP` against the raw proxy HOST (e.g., `37.97.112.154`). For rotating residential proxies the exit IP is different from the proxy server IP — this is normal and NOT a leak. The test shows FAIL in this case because it cannot know the expected exit IP. This is a display limitation, not a real leak.
+
+### Sidebar — Jarvee-style edge-to-edge buttons (artifacts/dannys-bot/src/components/layout/Sidebar.tsx):
+- The `<nav>` element must have NO horizontal padding (`px-3` was causing button backgrounds to be inset from sidebar edges).
+- Bottom Settings `<div>` wrapper must also have no horizontal padding.
+- Buttons use `rounded-none` and `w-full` so backgrounds go edge-to-edge.
+- DO NOT add `px-3` back to the nav or the Settings div wrapper.
+
+### Account sort persistence (artifacts/dannys-bot/src/pages/ProfilesPage.tsx):
+- Sort field, direction, and stable order are stored in `localStorage` (NOT `sessionStorage`). Using sessionStorage caused sort to reset on every app restart.
+- Default sort is `"account"` A–Z when no localStorage preference is stored.
+
 ## Gotchas
 
 54. The DB path resolves from `process.cwd()` — when running via pnpm filter from `artifacts/api-server/`, the DB will be at `artifacts/api-server/database.db`; when run from workspace root it'll be at `database.db`
@@ -198,7 +242,7 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-75. Current version: **v1.0.519**
+75. Current version: **v1.0.611**
 76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.324` → `1.0.325`
 77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files
