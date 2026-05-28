@@ -58,6 +58,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.609",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "DNS leak eliminated — DNS-over-HTTPS to Cloudflare was connecting directly via the real IP (not through the proxy), so Cloudflare's leak-test endpoint was seeing and reporting the real machine IP. DoH is now disabled; the PAC-script proxy handles DNS correctly by sending hostnames through CONNECT so the proxy does all DNS resolution." },
+      { category: "Fix", text: "Proxy now re-applied at navigation start (before any page requests fire) as well as at page-load completion, and a 150 ms double-set on window open prevents the persistent session's disk-load from racing ahead and overwriting the proxy with a stale value." },
+      { category: "Fix", text: "Verifying 3 or more accounts simultaneously no longer crashes the app — verify requests are now queued so only one silent-verify browser window exists at a time." },
+      { category: "UI", text: "Sidebar navigation buttons are now explicitly square (no rounded corners) and the sidebar is 15% narrower for a more compact Jarvee-style layout." },
+      { category: "UI", text: "System Status label updated from 'Developing' to 'in Development'." },
+    ],
+  },
+  {
     version: "1.0.608",
     date: "28 May 2026",
     items: [

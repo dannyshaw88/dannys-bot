@@ -98,6 +98,22 @@ const DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKi
 // fingerprint look like a device leak to Instagram and cause blocks.
 const verifyInFlight = new Set<number>();
 
+// Global concurrency gate for electronSilentVerify — limits to 1 simultaneous
+// hidden BrowserWindow at a time.  Electron's main process cannot handle
+// multiple concurrent Chromium renderer processes during silent verify (GPU
+// memory contention + debugger conflicts crash the app when 3+ accounts are
+// verified at once).  Additional verify requests queue here and run in order.
+let _silentVerifySlotFree = true;
+const _silentVerifyWaiters: Array<() => void> = [];
+function acquireSilentVerifySlot(): Promise<void> {
+  if (_silentVerifySlotFree) { _silentVerifySlotFree = false; return Promise.resolve(); }
+  return new Promise(resolve => _silentVerifyWaiters.push(resolve));
+}
+function releaseSilentVerifySlot(): void {
+  const next = _silentVerifyWaiters.shift();
+  if (next) { next(); } else { _silentVerifySlotFree = true; }
+}
+
 // Persisted across restarts within the same calendar day so the dashboard
 // always shows when the bot was FIRST started today, not the latest restart.
 let SERVER_START = new Date().toISOString();
@@ -992,7 +1008,11 @@ export async function registerInstagramRoutes(
     let _silentCookies: Array<{ name: string; value: string }> | null = null;
 
     if (process.env.EB_IPC_PORT) {
-      // Electron silent path — no visible window ever opens during verify
+      // Electron silent path — no visible window ever opens during verify.
+      // Acquire the global slot first: only 1 silent-verify BrowserWindow at a
+      // time so the Electron main process is never overwhelmed by multiple
+      // concurrent Chromium renderer processes (crashes with 3+ accounts).
+      await acquireSilentVerifySlot();
       try {
         const silentRes = await electronSilentVerify({
           profileId,
@@ -1005,10 +1025,12 @@ export async function registerInstagramRoutes(
         loginResult    = { ok: silentRes.ok, message: silentRes.message };
         _silentCookies = silentRes.cookies;
       } catch (ebErr: any) {
+        releaseSilentVerifySlot();
         verifyInFlight.delete(profileId);
         await storage.updateProfile(profile.id, { accountStatus: "pending" });
         return fail(500, `Browser verify failed: ${ebErr?.message ?? "Unknown error"}`);
       }
+      releaseSilentVerifySlot();
     } else {
       // Puppeteer path — opens a visible EB session
       try {
@@ -2483,6 +2505,9 @@ export async function registerInstagramRoutes(
         let _bulkSilentCookies: Array<{ name: string; value: string }> | null = null;
 
         if (process.env.EB_IPC_PORT) {
+          // Acquire the global slot — queues if another silent verify is already
+          // in progress (from the single-account verify button or another bulk run).
+          await acquireSilentVerifySlot();
           try {
             const silentRes = await electronSilentVerify({
               profileId: profile.id,
@@ -2496,6 +2521,8 @@ export async function registerInstagramRoutes(
             _bulkSilentCookies = silentRes.cookies;
           } catch (ebErr: any) {
             bulkLoginResult = { ok: false, message: ebErr?.message ?? "Browser verify failed" };
+          } finally {
+            releaseSilentVerifySlot();
           }
         } else {
           await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);

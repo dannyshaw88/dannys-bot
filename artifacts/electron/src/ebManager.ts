@@ -698,14 +698,30 @@ export async function openEbWindow(opts: {
     ses.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
   } catch { /* non-fatal — older Electron builds may not expose this API */ }
 
-  // ── DNS-over-HTTPS (DoH) to prevent DNS leak ─────────────────────────────
-  // HTTP proxies do not tunnel DNS queries — the OS stub resolver is used by
-  // default, which sends plaintext UDP/53 queries to the ISP's resolver.
-  // Enabling DoH routes DNS through Cloudflare's encrypted resolver instead,
-  // preventing DNS leak tests from seeing the ISP's DNS server IP.
+  // ── DNS-over-HTTPS DISABLED intentionally ─────────────────────────────────
+  // DoH was previously enabled to route DNS through Cloudflare.  This was
+  // counter-productive: Chromium connects to cloudflare-dns.com:443 using the
+  // machine's REAL IP (not the proxy), so Cloudflare's DNS-leak-test endpoint
+  // sees the real IP and reports it as a leak.  The PAC-script proxy already
+  // handles DNS correctly — FindProxyForURL returns "PROXY host:port" so Chrome
+  // sends the target hostname via CONNECT and the proxy does the DNS resolution.
+  // The client's real IP is never used for DNS lookups in that code path.
+  // Disabling DoH removes the Cloudflare leak while keeping DNS leak-proof.
   try {
-    (ses as any).setDnsOverHttpsConfig?.({ enabled: true, hostname: "cloudflare-dns.com" });
+    (ses as any).setDnsOverHttpsConfig?.({ enabled: false });
   } catch { /* non-fatal */ }
+
+  // Flush any stale DNS cache that could route requests around the proxy
+  try { await ses.clearHostResolverCache(); } catch {}
+
+  // Double-set proxy: the first call overrides the in-memory setting.
+  // A short yield lets any disk-load race from the persistent session
+  // profile complete, then we override again so the final value is ours.
+  if (proxy) {
+    await ses.setProxy(buildProxyConfig(proxy));
+    await new Promise(r => setTimeout(r, 150));
+    await ses.setProxy(buildProxyConfig(proxy));
+  }
 
   // Seed existing cookies into the Electron session
   await loadCookiesFromFile(profileId, ses);
@@ -734,6 +750,12 @@ export async function openEbWindow(opts: {
   // correct proxy is active for all subsequent navigations in this session,
   // even if the disk-load race fired in between.
   if (proxy) {
+    // Re-apply on first navigation start (before any page requests fire)
+    // AND again on full load completion (belt-and-suspenders against disk-load race).
+    win.webContents.once("did-start-loading", () => {
+      ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
+      ses.clearHostResolverCache().catch(() => {});
+    });
     win.webContents.once("did-finish-load", () => {
       ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
     });
@@ -1826,6 +1848,10 @@ export function startEbIpcServer(
         const ses = electronSession.fromPartition(partition);
         if (body.proxy) {
           await ses.setProxy(buildProxyConfig(body.proxy));
+          try { await ses.clearHostResolverCache(); } catch {}
+          await new Promise(r => setTimeout(r, 150));
+          await ses.setProxy(buildProxyConfig(body.proxy));
+          try { (ses as any).setDnsOverHttpsConfig?.({ enabled: false }); } catch {}
         } else {
           await ses.setProxy({ proxyRules: "direct://" });
         }

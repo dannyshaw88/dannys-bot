@@ -57,7 +57,7 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-64 bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
+    <div className="w-[218px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
       <div className="h-16 flex items-center px-4 border-b border-border/50 gap-2">
         <img src="/bot-logo.png" alt="Equinox" className="w-[38px] h-[38px] shrink-0 object-contain" />
         <span className="font-bold text-lg tracking-tight text-foreground mr-1">
@@ -101,7 +101,7 @@ export function Sidebar() {
               <button
                 onClick={() => setLocation(item.path)}
                 className={cn(
-                  "flex items-center w-full px-4 py-2.5 gap-2.5 text-sm font-medium transition-all duration-200 group text-left",
+                  "flex items-center w-full px-4 py-2.5 gap-2.5 text-sm font-medium transition-all duration-200 group text-left rounded-none",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -157,7 +157,7 @@ export function Sidebar() {
         <button
           onClick={() => setLocation("/settings")}
           className={cn(
-            "flex items-center w-full px-4 py-2.5 gap-2.5 text-sm font-medium transition-all duration-200 group text-left",
+            "flex items-center w-full px-4 py-2.5 gap-2.5 text-sm font-medium transition-all duration-200 group text-left rounded-none",
             location === "/settings"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -175,7 +175,7 @@ export function Sidebar() {
         <div className="bg-background rounded-lg px-2.5 py-1.5 border border-border flex items-center gap-1.5 min-w-0">
           <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
           <span className="text-[11px] font-medium text-foreground whitespace-nowrap">System Status</span>
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap truncate">· Developing</span>
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap truncate">· in Development</span>
         </div>
       </div>
     </div>
