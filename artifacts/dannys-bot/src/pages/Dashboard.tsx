@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.629",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix",     text: "Font fingerprint, speech synthesis voices, and audio hash are now unique per account — each account shows different detected fonts, different voice names, and a different audio hash in the Leak Check tool." },
+      { category: "Fix",     text: "Account Settings device picker now shows the full API string (the technical identifier) as the selected value — brand and model only appear inside the dropdown when you open it to pick a new device." },
+      { category: "Feature", text: "Ghost Browser now has a Fingerprint panel — click it to expand and see the unique WebGL GPU, canvas seed, audio noise, font seed, speech profile, and media device IDs assigned to the current session." },
+      { category: "Feature", text: "Ghost Browser fingerprint regenerates automatically every time you press Nuke Environment, so each fresh session has completely different spoofed values." },
+    ],
+  },
+  {
     version: "1.0.628",
     date: "28 May 2026",
     items: [

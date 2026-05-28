@@ -73,12 +73,9 @@ export function UaPickerDropdown({ value, onSelect }: Props) {
     });
   };
 
-  const { brand: curBrand, model: curModel } = parseParts(value);
   const isKnown = !!value && userAgents.some(ua => ua.api === value);
-  const currentLabel = isKnown
-    ? `${curBrand} — ${curModel}`
-    : value
-    ? value.length > 42 ? value.slice(0, 42) + "…" : value
+  const currentLabel = value
+    ? value.length > 55 ? value.slice(0, 55) + "…" : value
     : "Pick a device…";
 
   return (

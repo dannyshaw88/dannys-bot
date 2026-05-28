@@ -8,6 +8,8 @@ export interface EbFingerprint {
   mediaVideoId:   string;
   mediaAudioId:   string;
   mediaSpeakerId: string;
+  fontSeed:       number;
+  speechProfile:  number;
 }
 
 const GPU_MAP: Array<{ vendor: string; renderer: string; keys: string[] }> = [
@@ -63,5 +65,7 @@ export function generateEbFingerprint(userAgentApi?: string | null): EbFingerpri
     mediaVideoId:   rndHex(16),
     mediaAudioId:   rndHex(16),
     mediaSpeakerId: rndHex(16),
+    fontSeed:       (randomBytes(1)[0] % 99) + 1,
+    speechProfile:  randomBytes(1)[0] % 8,
   };
 }

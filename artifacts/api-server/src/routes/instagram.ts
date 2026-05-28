@@ -2213,7 +2213,7 @@ export async function registerInstagramRoutes(
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
     if (ipcPort) {
       try {
-        const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent } = req.body as any;
+        const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint } = req.body as any;
         const body = {
           profileId: -1,
           username: "Ghost",
@@ -2221,6 +2221,7 @@ export async function registerInstagramRoutes(
             ? { host: proxyHost, port: Number(proxyPort), user: proxyUsername ?? undefined, pass: proxyPassword ?? undefined, type: (proxyType ?? "http") as "http" | "socks5" }
             : undefined,
           userAgent: userAgent ?? undefined,
+          ebFingerprint: fingerprint ?? undefined,
         };
         await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
           method:  "POST",

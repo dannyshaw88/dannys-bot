@@ -266,6 +266,8 @@ interface EbFingerprintLite {
   mediaVideoId:   string;
   mediaAudioId:   string;
   mediaSpeakerId: string;
+  fontSeed?:      number;
+  speechProfile?: number;
 }
 
 function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null): string {
@@ -279,13 +281,15 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
   if (fp) {
     fpVars = `var _WV=${JSON.stringify(fp.webglVendor)},_WR=${JSON.stringify(fp.webglRenderer)};`
            + `var _CN=${fp.canvasNoise},_AN=${fp.audioNoise};`
-           + `var _MVID=${JSON.stringify(fp.mediaVideoId)},_MAID=${JSON.stringify(fp.mediaAudioId)},_MSID=${JSON.stringify(fp.mediaSpeakerId)};`;
+           + `var _MVID=${JSON.stringify(fp.mediaVideoId)},_MAID=${JSON.stringify(fp.mediaAudioId)},_MSID=${JSON.stringify(fp.mediaSpeakerId)};`
+           + `var _FN=${fp.fontSeed ?? 50},_SP=${fp.speechProfile ?? 0};`;
   } else {
     fpVars = `var _WGPU=[["Qualcomm Technologies, Inc.","Adreno (TM) 750"],["Qualcomm Technologies, Inc.","Adreno (TM) 735"],["Qualcomm Technologies, Inc.","Adreno (TM) 720"],["ARM","Mali-G920 MC10"],["Google","Tensor G3"]];`
            + `var _gp=_WGPU[Math.floor(_r()*_WGPU.length)],_WV=_gp[0],_WR=_gp[1];`
            + `var _CN=(_rI(2,254)),_AN=(_r()*0.0000008+0.0000001);`
            + `var _hx=function(n){var s="";for(var i=0;i<n;i++){s+=("0"+Math.floor(_r()*256).toString(16)).slice(-2);}return s;};`
-           + `var _MVID=_hx(16),_MAID=_hx(16),_MSID=_hx(16);`;
+           + `var _MVID=_hx(16),_MAID=_hx(16),_MSID=_hx(16);`
+           + `var _FN=_rI(1,99),_SP=_rI(0,7);`;
   }
 
   return `(function(){try{
@@ -442,6 +446,39 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
         };
       },configurable:true
     });
+  }catch(e){}
+  try{
+    var _FVAR=['Garamond','Gill Sans MT','Bookman Old Style','Century Gothic','Franklin Gothic Medium','Webdings','Wingdings','Palatino Linotype','Lucida Sans Unicode','Trebuchet MS','Symbol','Comic Sans MS'];
+    var _FP={};
+    (function(){var _fh=function(f,s){var h=s>>>0;for(var i=0;i<f.length;i++){h=((h<<5)+h+f.charCodeAt(i))>>>0;}return h;};
+      for(var _fi=0;_fi<_FVAR.length;_fi++){var _ff=_FVAR[_fi];_FP[_ff]=(_fh(_ff,_FN)%100)<_FN;}})();
+    var _oMT=CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText=function(text){
+      var r=_oMT.call(this,text);
+      var fs=this.font||'';
+      for(var _fn in _FP){if(_FP[_fn]&&fs.indexOf(_fn)>=0){
+        return new Proxy(r,{get:function(t,k){return k==='width'?t.width+0.01:Reflect.get(t,k,t);}});
+      }}
+      return r;
+    };
+  }catch(e){}
+  try{
+    var _SVS=[
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google UK English Female',lang:'en-GB',localService:true,default:false,voiceURI:'Google UK English Female'}],
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google UK English Male',lang:'en-GB',localService:true,default:false,voiceURI:'Google UK English Male'},{name:'Google Deutsch',lang:'de-DE',localService:false,default:false,voiceURI:'Google Deutsch'}],
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google Espanol',lang:'es-ES',localService:false,default:false,voiceURI:'Google Espanol'},{name:'Google Francais',lang:'fr-FR',localService:false,default:false,voiceURI:'Google Francais'}],
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google Hindi',lang:'hi-IN',localService:false,default:false,voiceURI:'Google Hindi'},{name:'Google Italiano',lang:'it-IT',localService:false,default:false,voiceURI:'Google Italiano'}],
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google UK English Female',lang:'en-GB',localService:true,default:false,voiceURI:'Google UK English Female'},{name:'Google Portugues',lang:'pt-BR',localService:false,default:false,voiceURI:'Google Portugues'}],
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google Mandarin',lang:'zh-CN',localService:false,default:false,voiceURI:'Google Mandarin'}],
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google UK English Male',lang:'en-GB',localService:true,default:false,voiceURI:'Google UK English Male'},{name:'Google Espanol US',lang:'es-US',localService:false,default:false,voiceURI:'Google Espanol US'},{name:'Google Russian',lang:'ru-RU',localService:false,default:false,voiceURI:'Google Russian'}],
+      [{name:'Google US English',lang:'en-US',localService:true,default:true,voiceURI:'Google US English'},{name:'Google Bahasa Indonesia',lang:'id-ID',localService:false,default:false,voiceURI:'Google Bahasa Indonesia'},{name:'Google Bangla',lang:'bn-BD',localService:false,default:false,voiceURI:'Google Bangla'}]
+    ];
+    var _SV=_SVS[_SP%_SVS.length];
+    window.speechSynthesis.getVoices=function(){return _SV.slice();};
+    var _oPAE=EventTarget.prototype.addEventListener;
+    window.speechSynthesis.addEventListener=function(t,fn,opts){
+      _oPAE.call(this,t,fn,opts);if(t==='voiceschanged'){try{fn.call(window.speechSynthesis,new Event('voiceschanged'));}catch(e2){}}
+    };
   }catch(e){}
 }catch(e){}})();`;
 }

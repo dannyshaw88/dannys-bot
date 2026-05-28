@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useProxies } from "@/hooks/use-proxies";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
-  Ghost, ShieldCheck, Globe, Monitor,
+  Ghost, ShieldCheck, Globe, Monitor, Cpu,
   Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardPaste, Copy, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,65 @@ function NukeIcon({ className }: { className?: string }) {
       <path d="M10.25 15.03 A3.5 3.5 0 0 1 8.5 12 L3 12 A9 9 0 0 0 7.5 19.79 Z"/>
     </svg>
   );
+}
+
+// ── Ghost Fingerprint ──────────────────────────────────────────────────────────
+
+interface GhostFingerprint {
+  webglVendor:    string;
+  webglRenderer:  string;
+  canvasNoise:    number;
+  audioNoise:     number;
+  mediaVideoId:   string;
+  mediaAudioId:   string;
+  mediaSpeakerId: string;
+  fontSeed:       number;
+  speechProfile:  number;
+}
+
+const FP_GPUS = [
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 750" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 735" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 720" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 710" },
+  { vendor: "ARM",                         renderer: "Mali-G920 MC10" },
+  { vendor: "ARM",                         renderer: "Mali-G710 MC10" },
+  { vendor: "Google",                      renderer: "Tensor G3" },
+  { vendor: "Google",                      renderer: "Tensor G4" },
+];
+
+const FP_SPEECH_PROFILES = [
+  "US English only",
+  "US + UK English",
+  "English + German",
+  "English + Spanish",
+  "English + Hindi + Italian",
+  "English + Portuguese",
+  "English + Mandarin",
+  "English + Indonesian",
+];
+
+function randHex(bytes: number): string {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generateGhostFingerprint(): GhostFingerprint {
+  const gpu = FP_GPUS[Math.floor(Math.random() * FP_GPUS.length)];
+  const canvasNoise = Math.floor(Math.random() * 253) + 2;
+  const audioNoise  = parseFloat((Math.random() * 0.0000008 + 0.0000001).toFixed(10));
+  return {
+    webglVendor:    gpu.vendor,
+    webglRenderer:  gpu.renderer,
+    canvasNoise,
+    audioNoise,
+    mediaVideoId:   randHex(16),
+    mediaAudioId:   randHex(16),
+    mediaSpeakerId: randHex(16),
+    fontSeed:       Math.floor(Math.random() * 99) + 1,
+    speechProfile:  Math.floor(Math.random() * 8),
+  };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -284,6 +343,10 @@ export function CreateGhostPage() {
   const [usernameSpin, setUsernameSpin] = useState("");
   const [password, setPassword]         = useState(() => generatePassword());
 
+  // Ghost fingerprint — regenerated on every Nuke Environment
+  const [fingerprint, setFingerprint] = useState<GhostFingerprint>(() => generateGhostFingerprint());
+  const [fpOpen, setFpOpen]           = useState(false);
+
   const isOpen = browserState === "open";
 
   const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
@@ -335,6 +398,7 @@ export function CreateGhostPage() {
         proxyUsername: resolvedProxy?.username,
         proxyPassword: resolvedProxy?.password,
         proxyType: (resolvedProxy as any)?.proxyType,
+        fingerprint,
       }),
     }).catch(() => {});
     setBrowserState("open");
@@ -351,6 +415,7 @@ export function CreateGhostPage() {
     await fetch("/api/signup/browser/reset", { method: "POST" }).catch(() => {});
     setSelectedUA(randomUA());
     setPassword(generatePassword());
+    setFingerprint(generateGhostFingerprint());
     setBrowserState("closed");
   };
 
@@ -470,6 +535,41 @@ export function CreateGhostPage() {
               value={selectedUA.api}
               onSelect={ua => setSelectedUA(ua)}
             />
+          </div>
+
+          {/* Fingerprint Info */}
+          <div className="desktop-card p-2.5 space-y-1.5">
+            <button
+              type="button"
+              onClick={() => setFpOpen(o => !o)}
+              className="flex w-full items-center gap-2"
+            >
+              <Cpu className="w-4 h-4 text-cyan-500 shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Fingerprint</p>
+              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 ${fpOpen ? "rotate-180" : ""}`} />
+            </button>
+            {fpOpen && (
+              <div className="space-y-1 pt-0.5 border-t border-border/50">
+                {([
+                  ["WebGL GPU",     `${fingerprint.webglRenderer}`],
+                  ["Canvas Seed",   String(fingerprint.canvasNoise)],
+                  ["Audio Noise",   fingerprint.audioNoise.toFixed(10)],
+                  ["Font Seed",     `${fingerprint.fontSeed} / 99`],
+                  ["Speech",        FP_SPEECH_PROFILES[fingerprint.speechProfile] ?? `Profile ${fingerprint.speechProfile}`],
+                  ["Video Device",  fingerprint.mediaVideoId.slice(0, 14) + "…"],
+                  ["Audio Input",   fingerprint.mediaAudioId.slice(0, 14) + "…"],
+                  ["Speaker Out",   fingerprint.mediaSpeakerId.slice(0, 14) + "…"],
+                ] as [string, string][]).map(([label, val]) => (
+                  <div key={label} className="flex items-start justify-between gap-2 pt-0.5">
+                    <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
+                    <span className="text-[10px] font-mono text-foreground text-right break-all">{val}</span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground/60 pt-1">
+                  Regenerates automatically on Nuke Environment.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Actions + Account Fields */}
