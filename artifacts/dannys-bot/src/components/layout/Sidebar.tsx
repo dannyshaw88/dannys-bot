@@ -108,14 +108,14 @@ export function Sidebar() {
               <button
                 onClick={() => setLocation(item.path)}
                 className={cn(
-                  "flex flex-col items-center justify-center w-full py-[20.5px] gap-1 transition-all duration-200 rounded-none",
+                  "flex flex-col items-center justify-center w-full py-[23.5px] gap-1 transition-all duration-200 rounded-none",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
                 <Icon
-                  className={cn("w-6 h-6 shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
+                  className={cn("w-[29px] h-[29px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
                   style={isActive ? { color: BRAND } : { color: BRAND }}
                 />
                 <span className={cn(
@@ -136,7 +136,7 @@ export function Sidebar() {
                         <button
                           onClick={() => setLocation(`/profiles/${profileId}?tab=${value}`)}
                           className={cn(
-                            "flex items-center w-full px-4 py-1.5 text-xs font-bold transition-all duration-150 text-left rounded-md",
+                            "flex items-center w-full px-2 py-1.5 text-[9px] font-bold transition-all duration-150 text-left rounded-md whitespace-nowrap",
                             isSubActive
                               ? "text-primary"
                               : "text-muted-foreground hover:text-foreground"
@@ -167,14 +167,14 @@ export function Sidebar() {
         <button
           onClick={() => setLocation("/settings")}
           className={cn(
-            "flex flex-col items-center justify-center w-full py-[20.5px] gap-1 transition-all duration-200 rounded-none",
+            "flex flex-col items-center justify-center w-full py-[23.5px] gap-1 transition-all duration-200 rounded-none",
             location === "/settings"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
         >
           <Settings
-            className={cn("w-6 h-6 shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
+            className={cn("w-[29px] h-[29px] shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
             style={{ color: BRAND }}
           />
           <span className={cn(

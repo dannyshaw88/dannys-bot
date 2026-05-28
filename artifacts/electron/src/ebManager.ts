@@ -1363,7 +1363,13 @@ function setupToolbarIpc(): void {
           const _lkProxy = _lkEntry?.proxy
             ? `&proxyHost=${encodeURIComponent(_lkEntry.proxy.host)}&proxyPort=${encodeURIComponent(_lkEntry.proxy.port)}`
             : "";
-          wc.loadURL(`http://127.0.0.1:${_serverPort}/api/browser/leaks?profileId=${foundPid}${_lkProxy}`).catch(() => {});
+          // Pass the live browser UA so the Ghost (which has no DB record) can show it
+          // in the UA Match panel. For regular accounts the server reads it from the DB,
+          // but for Ghost (profileId=-1) there is no row so we must pass it explicitly.
+          const _lkUA = _lkEntry?.win
+            ? `&ebUA=${encodeURIComponent(_lkEntry.win.webContents.getUserAgent())}`
+            : "";
+          wc.loadURL(`http://127.0.0.1:${_serverPort}/api/browser/leaks?profileId=${foundPid}${_lkProxy}${_lkUA}`).catch(() => {});
         }
         break;
       }

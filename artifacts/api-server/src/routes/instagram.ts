@@ -1975,14 +1975,20 @@ export async function registerInstagramRoutes(
     }
 
     // For the Ghost Browser (profileId=-1) there is no DB record, so the proxy
-    // information is passed directly as query params by the ebManager leak-check
-    // toolbar command (which reads the proxy from the live ebMap entry).
+    // and UA are passed directly as query params by the ebManager leak-check
+    // toolbar command (which reads them from the live ebMap entry / webContents).
     const qProxyHost = ((req.query.proxyHost as string | undefined) ?? "").trim() || null;
     const qProxyPort = req.query.proxyPort ? Number(req.query.proxyPort) : null;
     if (qProxyHost && qProxyPort && !accountData.proxyHost) {
       accountData.proxyHost = qProxyHost;
       accountData.proxyPort = qProxyPort;
       accountData.proxy = `${qProxyHost}:${qProxyPort}`;
+    }
+    // Pick up the live browser UA passed from ebManager (used by Ghost and any
+    // profile whose DB row has no userAgentEmbedded yet).
+    const qEbUA = ((req.query.ebUA as string | undefined) ?? "").trim() || null;
+    if (qEbUA && !accountData.ebUA) {
+      accountData.ebUA = qEbUA;
     }
 
     // Fetch session resolve-proxy from the Electron IPC server.

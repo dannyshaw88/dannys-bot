@@ -58,6 +58,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.625",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser Leak Test now correctly shows the User Agent Match panel — the live browser UA is passed directly since the Ghost has no saved account record." },
+      { category: "UI", text: "Sidebar navigation buttons are 15% taller and icons are 20% larger." },
+      { category: "UI", text: "Account sub-menu labels (Follow Tool, Unfollow Tool, etc.) now always fit on a single line." },
+    ],
+  },
+  {
     version: "1.0.624",
     date: "28 May 2026",
     items: [
