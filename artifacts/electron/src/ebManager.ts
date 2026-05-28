@@ -631,6 +631,13 @@ export async function openEbWindow(opts: {
       const proxyChanged = newProxyKey !== oldProxyKey;
       const existingSes = electronSession.fromPartition(existing.partition);
       if (proxy) {
+        // Same double-set + DNS flush treatment as the fresh-window path.
+        // A single setProxy call can be overwritten by the persistent session's
+        // on-disk proxy config loading in the background.  Two calls with a 150ms
+        // gap ensure the final value is always ours.
+        try { await existingSes.clearHostResolverCache(); } catch {}
+        await existingSes.setProxy(buildProxyConfig(proxy));
+        await new Promise(r => setTimeout(r, 150));
         await existingSes.setProxy(buildProxyConfig(proxy));
       } else {
         await existingSes.setProxy({ mode: "direct" });
@@ -750,13 +757,20 @@ export async function openEbWindow(opts: {
   // correct proxy is active for all subsequent navigations in this session,
   // even if the disk-load race fired in between.
   if (proxy) {
-    // Re-apply on first navigation start (before any page requests fire)
-    // AND again on full load completion (belt-and-suspenders against disk-load race).
-    win.webContents.once("did-start-loading", () => {
+    // Re-apply on every navigation start (before any page requests fire),
+    // on full load completion, and on every committed navigation.
+    // Using `on` (not `once`) so the proxy is re-applied for EVERY page load,
+    // not just the first.  This defeats the persistent-session disk-load race
+    // regardless of which load it fires on.  setProxy is a near-no-op when the
+    // config has not changed, so recurring calls add negligible overhead.
+    win.webContents.on("did-start-loading", () => {
       ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
       ses.clearHostResolverCache().catch(() => {});
     });
-    win.webContents.once("did-finish-load", () => {
+    win.webContents.on("did-finish-load", () => {
+      ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
+    });
+    win.webContents.on("did-navigate", () => {
       ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
     });
   }

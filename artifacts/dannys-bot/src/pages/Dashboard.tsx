@@ -58,6 +58,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.617",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "IP Match leak test now shows FAIL (not WARN) when detected IP differs from proxy server IP, with a clear two-case explanation: real machine IP means the proxy is not routing at all; an unfamiliar residential IP is expected for residential proxies." },
+      { category: "Fix", text: "EB proxy now re-applies on every page navigation (not just the first load) to defeat the persistent-session disk-load race where Chromium restores a stale proxy config from disk after the PAC script has been set." },
+      { category: "Fix", text: "EB proxy re-open path now uses the same double-set + DNS flush treatment as fresh window creation, preventing a single-call race on re-show." },
+    ],
+  },
+  {
     version: "1.0.616",
     date: "28 May 2026",
     items: [

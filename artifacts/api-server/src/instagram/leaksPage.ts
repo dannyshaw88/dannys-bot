@@ -752,10 +752,15 @@ function testIPMatch() {
       setCardBorder('card-ipmatch', 'pass');
       setResult('IPMatch', 'pass', 'Match');
     } else {
-      html += desc('Exit IP differs from the proxy host IP. This is normal for residential proxies (static or rotating) — the proxy host is the provider\'s entry-point server, while the exit IP is the actual residential IP assigned to your account. These are always different by design. Only datacenter proxies with a dedicated static IP will have a matching host and exit IP.', 'warn');
-      setBadge('badge-ipmatch', 'warn', 'WARN');
-      setCardBorder('card-ipmatch', 'warn');
-      setResult('IPMatch', 'warn', 'Diff IP');
+      html += desc('<strong>Detected IP does not match the proxy server IP.</strong><br><br>'
+        + '<b>If the detected IP above is your machine\'s real IP</b> — the proxy is not routing traffic at all. '
+        + 'The EB session is going direct. Check that the proxy is reachable, credentials are correct, and the proxy is assigned to this account.<br><br>'
+        + '<b>If the detected IP is an unfamiliar residential address</b> — this is expected for residential proxies. '
+        + 'The proxy host (' + proxyHost + ') is the provider\'s entry-point server; the exit IP is the residential address assigned to your session. '
+        + 'These are always different by design.', 'fail');
+      setBadge('badge-ipmatch', 'fail', 'FAIL');
+      setCardBorder('card-ipmatch', 'fail');
+      setResult('IPMatch', 'fail', 'Diff IP');
     }
   } else {
     html += row('Match', 'Proxy is a hostname — cannot verify in browser', 'muted');
