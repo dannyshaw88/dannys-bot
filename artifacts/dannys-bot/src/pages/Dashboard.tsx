@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.612",
+    date: "28 May 2026",
+    items: [
+      { category: "Docs", text: "Added chronological EB leak fix attempt log to developer docs — lists every approach tried (proxyRules→PAC, DoH removal, test tool fix), what the test showed before and after each, and a definitive 'do not re-attempt' list. Prevents future agent sessions from circling on theories that were already eliminated." },
+    ],
+  },
+  {
     version: "1.0.611",
     date: "28 May 2026",
     items: [

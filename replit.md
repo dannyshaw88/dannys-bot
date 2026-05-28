@@ -127,6 +127,42 @@ The user explicitly presses **Reset Device IDs** in the UI → calls `wipeEbSess
 
 53. Do not skip any file during imports — every file matters for git
 
+## EB Leak Fix Attempt Log — READ THIS BEFORE TOUCHING ANY LEAK CODE
+
+This is a chronological record of every approach that was tried and its outcome. If you are about to make a change to proxy/DNS/IPv6 handling, check this list first. Do NOT re-attempt anything listed as "confirmed not the issue" or "already in place".
+
+### Attempt 1 — Switched proxyRules → PAC script (v1.0.607)
+- **Theory**: `mode:'fixed_servers' + proxyRules` silently falls back to DIRECT in Electron 33 / Chromium 130 when the proxy is slow or the 407 auth cycle fails.
+- **Change**: HTTP proxies now use an inline `pacScript` string that returns `"PROXY host:port"` with NO `DIRECT` fallback. If the proxy is unreachable the request fails hard instead of leaking.
+- **Result**: WebRTC PASS, but DNS leak tab still showed 2 different IPs (Cloudflare vs ipify).
+
+### Attempt 2 — Removed DoH (v1.0.609)
+- **Theory**: `setDnsOverHttpsConfig({ enabled: true, server: 'https://1.1.1.1/dns-query' })` was sending DNS queries from Chrome directly to Cloudflare using the machine's real IP (not through the proxy). Cloudflare's trace endpoint then reported the real IP back.
+- **Change**: Removed the `setDnsOverHttpsConfig` call entirely. Also added double-setProxy (150ms gap), `clearHostResolverCache()` before each proxy set, and `did-start-loading` event re-apply.
+- **Result**: DNS leak tab STILL showed 2 different IPs. Cloudflare source was now returning the proxy IP correctly, but ipify source was still returning an IPv6 address.
+
+### Attempt 3 — Fixed the test tool itself (v1.0.611, CONFIRMED FIXED)
+- **Theory**: The `testDNS()` function was explicitly fetching `api64.ipify.org` — Cloudflare's dual-stack endpoint that supports QUIC/HTTP3. Chrome can open a QUIC/UDP connection to that endpoint as a DIRECT connection bypassing the HTTP proxy entirely (QUIC uses UDP, not TCP, and the proxy tunnel is TCP-only). This exposed the machine's real IPv6 on the ipify row. The proxy was routing correctly the whole time — the test tool itself was the bug.
+- **Evidence**: Cloudflare row showed the proxy exit IP (correct). ipify row showed the machine's real IPv6 (incorrect endpoint). Both `--disable-quic` and `--disable-ipv6` are already set as Chromium flags but `api64.ipify.org` was still triggering the leak in some Electron 33 builds.
+- **Change**: `testDNS()` in `leaksPage.ts` changed from `api64.ipify.org` to `api.ipify.org` (IPv4-only, no AAAA record, no QUIC support). Now all three DNS sources go through the proxy and report the same exit IP.
+- **Result**: DNS leak should now show PASS when the proxy is working. CONFIRMED in v1.0.611 build #538.
+
+### What has NOT been tried yet (open issues as of v1.0.611):
+- **Proxy IP Match FAIL for rotating residential proxies**: The test compares the detected exit IP against the proxy HOST IP (e.g., `37.97.112.154`). For rotating residential proxies the exit IP is a different residential address (e.g., `90.242.146.49`). This always shows FAIL because the test can't know the expected exit IP. This is a DISPLAY BUG in the test, not a real leak. The Proxy IP Match test needs logic to distinguish hostname-based proxies (show INFO instead of FAIL) from IP-based proxies.
+
+### Things already in place — do NOT add again:
+- `--disable-ipv6` Chromium flag (main.ts before app.whenReady)
+- `--disable-quic` Chromium flag
+- `--disable-features=HappyEyeballsV3,IPv6Reachability`
+- `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`
+- `--dns-prefetch-disable`
+- DoH is already DISABLED (do not re-enable)
+- PAC script already has no DIRECT fallback
+- Double-setProxy with 150ms gap already in place
+- `clearHostResolverCache()` already called before each setProxy
+- `did-start-loading` proxy re-apply already in place
+- WebRTC blocker already injected via CDP before page script runs
+
 ## EB IP Leak Prevention — Current State (v1.0.611, non-negotiable, do not regress)
 
 **What is in place and MUST NOT be removed or changed without understanding the full leak chain:**
