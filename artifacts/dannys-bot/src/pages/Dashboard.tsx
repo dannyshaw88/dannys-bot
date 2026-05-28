@@ -58,6 +58,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.630",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix",     text: "Browser timezone now matches the proxy's exit country — Instagram no longer sees a mismatch between the IP location and the browser's reported timezone." },
+      { category: "Fix",     text: "Browser viewport dimensions now match the spoofed mobile screen size — previously window.innerWidth could be detected as much larger than screen.width, a clear bot signal." },
+      { category: "Fix",     text: "Canvas toBlob() is now noise-patched the same as toDataURL() — both canvas fingerprint extraction paths now return the same unique per-account hash." },
+      { category: "Fix",     text: "Browser locale (date/number formatting via Intl APIs) now consistently reports en-US to match navigator.languages." },
+      { category: "Fix",     text: "pdfViewerEnabled is now false — matches real Android Chrome behaviour." },
+      { category: "Feature", text: "All browser clicks now follow a natural curved path with realistic speed and slight hand-tremor jitter instead of jumping instantly to the target coordinate." },
+    ],
+  },
+  {
     version: "1.0.629",
     date: "28 May 2026",
     items: [

@@ -10,7 +10,7 @@
  * server at serverPort via HTTP.
  */
 
-import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain } from "electron";
+import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain, WebContents } from "electron";
 import http from "http";
 import fs from "fs";
 import path from "path";
@@ -270,6 +270,75 @@ interface EbFingerprintLite {
   speechProfile?: number;
 }
 
+// ── Human-like mouse click (Bézier curve path + realistic velocity) ───────────
+// Generates a curved Bézier path from a random start near (0,0) to (tx,ty),
+// firing mouseMoved events along the way before the final mouseDown/mouseUp.
+// Real phones never jump directly from nowhere to a button — they leave a
+// visible pointer trail.  The eased timing and per-step jitter make the path
+// indistinguishable from a real finger gesture in Instagram's event logs.
+async function humanMouseClick(
+  wc: WebContents,
+  tx: number,
+  ty: number,
+  sx = Math.round(tx * 0.1 + Math.random() * 20),
+  sy = Math.round(ty * 0.1 + Math.random() * 20),
+): Promise<void> {
+  if (wc.isDestroyed()) return;
+
+  const dx = tx - sx;
+  const dy = ty - sy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 2) {
+    // Already essentially at the target — just click
+    wc.sendInputEvent({ type: "mouseDown", x: tx, y: ty, button: "left", clickCount: 1 });
+    await new Promise(r => setTimeout(r, 40 + Math.random() * 60));
+    if (!wc.isDestroyed()) wc.sendInputEvent({ type: "mouseUp", x: tx, y: ty, button: "left", clickCount: 1 });
+    return;
+  }
+
+  const steps = Math.max(8, Math.min(40, Math.round(dist / 10)));
+  const totalMs = Math.max(80, Math.min(340, Math.round(dist * 0.7 + 50)));
+
+  // Random control points — perturb perpendicular to travel direction
+  const perpX = -dy / dist;
+  const perpY =  dx / dist;
+  const jiggle = (dist * 0.18 + 8) * (Math.random() > 0.5 ? 1 : -1);
+  const c1x = sx + dx * 0.25 + perpX * jiggle * (0.5 + Math.random() * 0.5);
+  const c1y = sy + dy * 0.25 + perpY * jiggle * (0.5 + Math.random() * 0.5);
+  const c2x = sx + dx * 0.75 + perpX * jiggle * 0.4 * Math.random();
+  const c2y = sy + dy * 0.75 + perpY * jiggle * 0.4 * Math.random();
+
+  for (let i = 1; i <= steps; i++) {
+    const raw = i / steps;
+    // Cubic ease-in-out: slow start, fast middle, slow end
+    const t = raw * raw * (3 - 2 * raw);
+    const u = 1 - t;
+    const mx = Math.round(u*u*u*sx + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*tx + (Math.random() - 0.5) * 1.2);
+    const my = Math.round(u*u*u*sy + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*ty + (Math.random() - 0.5) * 1.2);
+    if (!wc.isDestroyed()) wc.sendInputEvent({ type: "mouseMoved", x: mx, y: my } as any);
+    const stepMs = (totalMs / steps) * (0.7 + Math.random() * 0.6);
+    await new Promise(r => setTimeout(r, stepMs));
+  }
+
+  if (wc.isDestroyed()) return;
+  wc.sendInputEvent({ type: "mouseDown", x: tx, y: ty, button: "left", clickCount: 1 });
+  await new Promise(r => setTimeout(r, 35 + Math.random() * 55));
+  if (!wc.isDestroyed()) wc.sendInputEvent({ type: "mouseUp", x: tx, y: ty, button: "left", clickCount: 1 });
+}
+
+// Extract logical CSS screen dimensions from an API UA string.
+// Mirrors the same calculation used inside buildFingerprintScript so the CDP
+// Emulation.setDeviceMetricsOverride values are always consistent with the JS
+// screen.width/height overrides.
+function screenDimsFromApiUA(apiUA: string | null | undefined): { w: number; h: number; dpr: number } | null {
+  if (!apiUA) return null;
+  const m = apiUA.match(/;\s*(\d+)dpi;\s*(\d+)x(\d+)/);
+  if (!m) return null;
+  const dpi = +m[1], pW = +m[2], pH = +m[3];
+  const dpr = Math.round(dpi / 160 * 10000) / 10000;
+  return { w: Math.round(pW / dpr), h: Math.round(pH / dpr), dpr };
+}
+
 function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null): string {
   const mf = isMobile ? 'true' : 'false';
   const af = apiUA ? JSON.stringify(apiUA) : 'null';
@@ -400,6 +469,21 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       }catch(e2){return _oDTU.apply(this,arguments);}
     };
   }catch(e){}
+  try{
+    var _oDTB=HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob=function(cb,type,quality){
+      if(!this.width||!this.height){_oDTB.call(this,cb,type,quality);return;}
+      try{
+        var c=document.createElement('canvas');c.width=this.width;c.height=this.height;
+        var cx=c.getContext('2d');cx.drawImage(this,0,0);
+        var d=cx.getImageData(0,0,c.width,c.height);
+        var idx=(_CN*4)%d.data.length;d.data[idx]=d.data[idx]^1;
+        cx.putImageData(d,0,0);
+        _oDTB.call(c,cb,type,quality);
+      }catch(e2){_oDTB.call(this,cb,type,quality);}
+    };
+  }catch(e){}
+  try{Object.defineProperty(navigator,"pdfViewerEnabled",{get:function(){return false;}});}catch(e){}
   try{
     var _oGFF=AnalyserNode.prototype.getFloatFrequencyData;
     AnalyserNode.prototype.getFloatFrequencyData=function(a){
@@ -951,6 +1035,17 @@ export async function openEbWindow(opts: {
   // Flush any stale DNS cache that could route requests around the proxy
   try { await ses.clearHostResolverCache(); } catch {}
 
+  // ── Accept-Language header alignment ───────────────────────────────────────
+  // navigator.languages is overridden in JS to ["en-US","en"], but the actual
+  // HTTP Accept-Language header Chrome sends is determined by the process locale,
+  // not the JS override.  This webRequest hook keeps them consistent so
+  // Instagram never sees a mismatch between the HTTP header and navigator.languages.
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
+    const headers = details.requestHeaders;
+    headers["Accept-Language"] = "en-US,en;q=0.9";
+    callback({ requestHeaders: headers });
+  });
+
   // Double-set proxy: the first call overrides the in-memory setting.
   // A short yield lets any disk-load race from the persistent session
   // profile complete, then we override again so the final value is ours.
@@ -1025,6 +1120,50 @@ export async function openEbWindow(opts: {
       await win.webContents.debugger.sendCommand("Page.enable");
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _fpScript });
+
+      // ── Timezone override — match proxy's exit country ──────────────────────
+      // Without this, Intl.DateTimeFormat().resolvedOptions().timeZone returns
+      // the machine's real timezone regardless of what IP the proxy exits from.
+      // A US proxy paired with a Europe/London timezone is an instant bot flag.
+      let proxyTimezone = "UTC";
+      if (proxy) {
+        try {
+          const tzRes = await fetch(
+            `http://ip-api.com/json/${encodeURIComponent(proxy.host)}?fields=timezone`,
+          );
+          const tzJson = await tzRes.json() as { timezone?: string };
+          if (tzJson.timezone) proxyTimezone = tzJson.timezone;
+        } catch { /* fall back to UTC */ }
+      }
+      try {
+        await win.webContents.debugger.sendCommand("Emulation.setTimezoneOverride",
+          { timezoneId: proxyTimezone });
+      } catch {}
+
+      // ── Locale override — match navigator.languages ─────────────────────────
+      // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
+      // locale unless overridden at the CDP level.
+      try {
+        await win.webContents.debugger.sendCommand("Emulation.setLocaleOverride",
+          { locale: "en-US" });
+      } catch {}
+
+      // ── Device metrics — fix window.innerWidth ≠ screen.width mismatch ──────
+      // The JS fingerprint already spoofs screen.width to e.g. 360px, but the
+      // actual Electron window is ~1280px wide.  Any script that reads
+      // window.innerWidth sees 1280 while screen.width says 360 — impossible on
+      // a real phone.  setDeviceMetricsOverride makes the actual rendered
+      // viewport match the spoofed screen dimensions.
+      if (_fpIsMobile) {
+        const dims = screenDimsFromApiUA(apiUA ?? null);
+        const sw = dims?.w ?? 390, sh = dims?.h ?? 844, dpr = dims?.dpr ?? 3.0;
+        try {
+          await win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
+            width: sw, height: sh, deviceScaleFactor: dpr, mobile: true,
+            screenWidth: sw, screenHeight: sh,
+          });
+        } catch {}
+      }
     } catch (err) {
       console.warn(`[ebManager:${profileId}] WebRTC/fingerprint CDP injection failed:`, err);
     }
@@ -1314,11 +1453,9 @@ export async function openEbWindow(opts: {
         }
         _cookieAttempts++;
         _cookieLastClickAt = Date.now();
-        _ebLog(`Cookie banner attempt ${_cookieAttempts}/${COOKIE_MAX_ATTEMPTS}: sendInputEvent click at (${pos.x},${pos.y}) label="${pos.label}"`);
+        _ebLog(`Cookie banner attempt ${_cookieAttempts}/${COOKIE_MAX_ATTEMPTS}: human-click at (${pos.x},${pos.y}) label="${pos.label}"`);
         win.webContents.focus();
-        win.webContents.sendInputEvent({ type: "mouseDown", x: pos.x, y: pos.y, button: "left", clickCount: 1 });
-        await new Promise(r => setTimeout(r, 80));
-        win.webContents.sendInputEvent({ type: "mouseUp",   x: pos.x, y: pos.y, button: "left", clickCount: 1 });
+        await humanMouseClick(win.webContents, pos.x, pos.y);
       } else if (_cookieAttempts > 0) {
         // We clicked at least once and the button is now gone — success
         clearInterval(_cookieDismissTimer);
@@ -1450,11 +1587,9 @@ export async function openEbWindow(opts: {
             { x: number; y: number } | null;
 
           if (ckPos) {
-            console.log(`[ebManager] @${username} — auto-fill: cookie banner at (${ckPos.x},${ckPos.y}), clicking via sendInputEvent`);
+            console.log(`[ebManager] @${username} — auto-fill: cookie banner at (${ckPos.x},${ckPos.y}), human-click`);
             win.webContents.focus();
-            win.webContents.sendInputEvent({ type: "mouseDown", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1 });
-            await new Promise(r => setTimeout(r, 80));
-            win.webContents.sendInputEvent({ type: "mouseUp",   x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1 });
+            await humanMouseClick(win.webContents, ckPos.x, ckPos.y);
             // Wait for the banner to dismiss and any resulting navigation to settle
             await new Promise(r => setTimeout(r, 3000));
             if (win.isDestroyed()) { _autoFillBusy = false; return; }
