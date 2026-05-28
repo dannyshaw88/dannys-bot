@@ -1523,6 +1523,13 @@ export async function applyStealthScripts(
       // Device pixel ratio — seeded from UA, matches the chosen device profile
       Object.defineProperty(window, "devicePixelRatio",       { get: () => _DPR });
 
+      // window.innerWidth/Height must match screen.width/Height on a real phone.
+      // Without these overrides the EB window's actual render size (e.g. 1280px)
+      // leaks through, making window.innerWidth >> screen.width — physically
+      // impossible on any real mobile device and an immediate bot-detection tell.
+      Object.defineProperty(window, "innerWidth",  { get: () => _SW });
+      Object.defineProperty(window, "innerHeight", { get: () => _SH });
+
       // ── Screen / window orientation ───────────────────────────────────────
       // Mobile browsers always expose window.orientation (0 = portrait) and a
       // screen.orientation object.  Headless Chrome has neither — their absence

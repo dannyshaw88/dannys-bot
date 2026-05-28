@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.632",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "window.innerWidth and window.innerHeight now return the same spoofed mobile dimensions as screen.width/screen.height — previously the EB's actual render width (1280px) was leaking through, which is physically impossible on a real phone and a clear bot-detection signal." },
+    ],
+  },
+  {
     version: "1.0.631",
     date: "28 May 2026",
     items: [
