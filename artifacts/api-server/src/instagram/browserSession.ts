@@ -12,6 +12,7 @@ import tls from "tls";
 import { db } from "@workspace/db";
 import { instagramApiCalls } from "../shared/schema";
 import { storage } from "../storage";
+import { generateEbFingerprint } from "./browserFingerprint";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
@@ -1942,14 +1943,22 @@ export async function getOrCreateSession(
     // closed/cleared because the stale electronSessions entry was never evicted.
     electronSessions.set(profileId, { ws: null, proxyKey: newProxyKey });
     const profile = await storage.getProfile(profileId).catch(() => null);
+    // Auto-generate and persist a browser fingerprint if the account doesn't have one yet.
+    // This ensures every account has unique WebGL/canvas/audio/media-device seeds from first open.
+    let ebFp = profile?.ebFingerprint ?? null;
+    if (!ebFp && profile) {
+      ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? undefined));
+      await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {});
+    }
     await ebIpc("POST", "/eb/open", {
       profileId,
-      username:  profile?.username  ?? String(profileId),
-      password:  profile?.password  ?? "",
-      twoFAKey:  profile?.twoFASecretKey ?? "",
-      proxy:     proxy ? { host: proxy.host, port: proxy.port, user: proxy.username, pass: proxy.password } : undefined,
-      userAgent: userAgent || undefined,
-      apiUA:     profile?.userAgentApi ?? "",
+      username:      profile?.username  ?? String(profileId),
+      password:      profile?.password  ?? "",
+      twoFAKey:      profile?.twoFASecretKey ?? "",
+      proxy:         proxy ? { host: proxy.host, port: proxy.port, user: proxy.username, pass: proxy.password } : undefined,
+      userAgent:     userAgent || undefined,
+      apiUA:         profile?.userAgentApi ?? "",
+      ebFingerprint: ebFp ?? undefined,
     }).catch(err => log(`[getOrCreate:${profileId}] EB open failed: ${err?.message}`, "browser"));
     return {} as unknown as Session;
   }

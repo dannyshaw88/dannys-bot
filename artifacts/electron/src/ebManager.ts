@@ -258,9 +258,36 @@ const WEBRTC_BLOCKER_JS = `(function () {
 // isMobile and apiUA are baked in as literals so the script is self-contained.
 // The PRNG is seeded from navigator.userAgent (= the spoofed EB UA set via
 // win.webContents.setUserAgent) — identical seed → identical values to the server.
-function buildFingerprintScript(isMobile: boolean, apiUA: string | null): string {
+interface EbFingerprintLite {
+  webglVendor:    string;
+  webglRenderer:  string;
+  canvasNoise:    number;
+  audioNoise:     number;
+  mediaVideoId:   string;
+  mediaAudioId:   string;
+  mediaSpeakerId: string;
+}
+
+function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null): string {
   const mf = isMobile ? 'true' : 'false';
   const af = apiUA ? JSON.stringify(apiUA) : 'null';
+
+  // Per-account fingerprint values — baked in as literals when available so every
+  // account has unique WebGL/canvas/audio/media-device data in the leak test.
+  // Falls back to PRNG-derived values (seeded from UA hash) when not provided.
+  let fpVars: string;
+  if (fp) {
+    fpVars = `var _WV=${JSON.stringify(fp.webglVendor)},_WR=${JSON.stringify(fp.webglRenderer)};`
+           + `var _CN=${fp.canvasNoise},_AN=${fp.audioNoise};`
+           + `var _MVID=${JSON.stringify(fp.mediaVideoId)},_MAID=${JSON.stringify(fp.mediaAudioId)},_MSID=${JSON.stringify(fp.mediaSpeakerId)};`;
+  } else {
+    fpVars = `var _WGPU=[["Qualcomm Technologies, Inc.","Adreno (TM) 750"],["Qualcomm Technologies, Inc.","Adreno (TM) 735"],["Qualcomm Technologies, Inc.","Adreno (TM) 720"],["ARM","Mali-G920 MC10"],["Google","Tensor G3"]];`
+           + `var _gp=_WGPU[Math.floor(_r()*_WGPU.length)],_WV=_gp[0],_WR=_gp[1];`
+           + `var _CN=(_rI(2,254)),_AN=(_r()*0.0000008+0.0000001);`
+           + `var _hx=function(n){var s="";for(var i=0;i<n;i++){s+=("0"+Math.floor(_r()*256).toString(16)).slice(-2);}return s;};`
+           + `var _MVID=_hx(16),_MAID=_hx(16),_MSID=_hx(16);`;
+  }
+
   return `(function(){try{
   var _M=${mf},_A=${af};
   var _ua=navigator.userAgent,_s=5381;
@@ -280,6 +307,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null): string
   var _BL=Math.round((0.60+_r()*0.39)*100)/100,_BC=_r()>0.35;
   var _BCT=_BC?_rI(0,3600):0,_BDT=_BC?Infinity:_rI(1800,28800);
   var _CT=_rp(["wifi","wifi","wifi","cellular"]),_CDL=Math.round(2+_r()*98),_CRT=_rI(10,150);
+  ${fpVars}
   try{Object.defineProperty(navigator,"webdriver",{get:function(){return undefined;}});}catch(e){}
   if(_M){
     try{Object.defineProperty(screen,"width",{get:function(){return _SW;}});}catch(e){}
@@ -334,6 +362,87 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null): string
   try{var _oq=navigator.permissions&&navigator.permissions.query.bind(navigator.permissions);
     if(_oq){navigator.permissions.query=function(p){
       return p.name==="notifications"?Promise.resolve({state:"prompt",onchange:null}):_oq(p);};}}catch(e){}
+  try{
+    if(window.WebGLRenderingContext){
+      var _oE1=WebGLRenderingContext.prototype.getExtension;
+      WebGLRenderingContext.prototype.getExtension=function(n){
+        if(n==="WEBGL_debug_renderer_info")return{UNMASKED_VENDOR_WEBGL:0x9245,UNMASKED_RENDERER_WEBGL:0x9246};
+        return _oE1.call(this,n);};
+      var _oP1=WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter=function(p){
+        if(p===0x9245)return _WV;if(p===0x9246)return _WR;return _oP1.call(this,p);};
+    }
+    if(window.WebGL2RenderingContext){
+      var _oE2=WebGL2RenderingContext.prototype.getExtension;
+      WebGL2RenderingContext.prototype.getExtension=function(n){
+        if(n==="WEBGL_debug_renderer_info")return{UNMASKED_VENDOR_WEBGL:0x9245,UNMASKED_RENDERER_WEBGL:0x9246};
+        return _oE2.call(this,n);};
+      var _oP2=WebGL2RenderingContext.prototype.getParameter;
+      WebGL2RenderingContext.prototype.getParameter=function(p){
+        if(p===0x9245)return _WV;if(p===0x9246)return _WR;return _oP2.call(this,p);};
+    }
+  }catch(e){}
+  try{
+    var _oDTU=HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL=function(){
+      if(!this.width||!this.height)return _oDTU.apply(this,arguments);
+      try{
+        var c=document.createElement('canvas');c.width=this.width;c.height=this.height;
+        var cx=c.getContext('2d');cx.drawImage(this,0,0);
+        var d=cx.getImageData(0,0,c.width,c.height);
+        var idx=(_CN*4)%d.data.length;d.data[idx]=d.data[idx]^1;
+        cx.putImageData(d,0,0);
+        return _oDTU.apply(c,arguments);
+      }catch(e2){return _oDTU.apply(this,arguments);}
+    };
+  }catch(e){}
+  try{
+    var _oGFF=AnalyserNode.prototype.getFloatFrequencyData;
+    AnalyserNode.prototype.getFloatFrequencyData=function(a){
+      _oGFF.call(this,a);
+      if(a&&a.length>0){a[0]+=_AN;if(a.length>2)a[2]+=_AN*0.6;}
+    };
+  }catch(e){}
+  try{
+    if(navigator.mediaDevices&&navigator.mediaDevices.enumerateDevices){
+      var _oED=navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
+      navigator.mediaDevices.enumerateDevices=function(){
+        return _oED().then(function(devs){
+          return devs.concat([
+            {deviceId:_MVID,groupId:_MVID.slice(0,8),kind:'videoinput',label:'',toJSON:function(){return {};}},
+            {deviceId:_MAID,groupId:_MAID.slice(0,8),kind:'audioinput',label:'',toJSON:function(){return {};}},
+            {deviceId:_MSID,groupId:_MSID.slice(0,8),kind:'audiooutput',label:'',toJSON:function(){return {};}}
+          ]);
+        });
+      };
+    }
+  }catch(e){}
+  try{
+    var _chm=_ua.match(/Chrome\\/([0-9]+)/);
+    var _chv=_chm?_chm[1]:"131";
+    var _chp=_ua.indexOf("Android")>=0?"Android":"Windows";
+    var _chmo=_ua.indexOf("Android")>=0&&_ua.indexOf("Mobile")>=0;
+    var _chb=[{brand:"Chromium",version:_chv},{brand:"Google Chrome",version:_chv},{brand:"Not_A Brand",version:"99"}];
+    var _chmdl=(function(){var mm=_ua.match(/Android [0-9]+;\\s*([^)]+)\\)/);return mm?mm[1].trim():"";})();
+    Object.defineProperty(navigator,"userAgentData",{
+      get:function(){
+        return{
+          brands:_chb,mobile:_chmo,platform:_chp,
+          getHighEntropyValues:function(h){
+            var rv={brands:_chb,mobile:_chmo,platform:_chp};
+            if(h.indexOf("platformVersion")>=0)rv.platformVersion="15.0.0";
+            if(h.indexOf("architecture")>=0)rv.architecture="arm";
+            if(h.indexOf("bitness")>=0)rv.bitness="64";
+            if(h.indexOf("model")>=0)rv.model=_chmdl;
+            if(h.indexOf("uaFullVersion")>=0)rv.uaFullVersion=_chv+".0.0.0";
+            if(h.indexOf("fullVersionList")>=0)rv.fullVersionList=_chb.map(function(b){return{brand:b.brand,version:_chv+".0.0.0"};});
+            return Promise.resolve(rv);
+          },
+          toJSON:function(){return{brands:_chb,mobile:_chmo,platform:_chp};}
+        };
+      },configurable:true
+    });
+  }catch(e){}
 }catch(e){}})();`;
 }
 
@@ -685,8 +794,9 @@ export async function openEbWindow(opts: {
   apiUA?:     string;
   password?: string;
   twoFAKey?: string;
+  ebFingerprint?: EbFingerprintLite | null;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey } = opts;
+  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint } = opts;
 
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
@@ -871,7 +981,7 @@ export async function openEbWindow(opts: {
   // app and prevent ebMap.set() from being reached.  A dom-ready fallback below
   // covers the rare case where CDP completes after the first navigation starts.
   const _fpIsMobile = !!userAgent && userAgent.includes("Mobile") && userAgent.includes("Android");
-  const _fpScript   = buildFingerprintScript(_fpIsMobile, apiUA ?? null);
+  const _fpScript   = buildFingerprintScript(_fpIsMobile, apiUA ?? null, ebFingerprint ?? null);
   void (async () => {
     try {
       try { win.webContents.debugger.attach("1.3"); } catch { /* already attached or unavailable */ }
@@ -1879,6 +1989,9 @@ export function startEbIpcServer(
 
       // ── POST /eb/open ──────────────────────────────────────────────────────────
       if (req.method === "POST" && u.pathname === "/eb/open") {
+        const parsedFp: EbFingerprintLite | null = body.ebFingerprint
+          ? (typeof body.ebFingerprint === "string" ? JSON.parse(body.ebFingerprint) : body.ebFingerprint)
+          : null;
         await openEbWindow({
           profileId: pid,
           username:  body.username  ?? String(pid),
@@ -1887,6 +2000,7 @@ export function startEbIpcServer(
           proxy:     body.proxy,
           userAgent: body.userAgent,
           apiUA:     body.apiUA,
+          ebFingerprint: parsedFp,
         });
         return send(res, 200, { ok: true });
       }

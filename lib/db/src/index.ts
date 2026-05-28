@@ -246,6 +246,9 @@ if (!colNames.has("cookie_baker_settings")) {
 if (!colNames.has("status_message")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN status_message TEXT;`);
 }
+if (!colNames.has("eb_fingerprint")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN eb_fingerprint TEXT;`);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

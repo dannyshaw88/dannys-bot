@@ -100,6 +100,7 @@ export const profiles = sqliteTable("profiles", {
   creatorMode: integer("creator_mode", { mode: "boolean" }).default(false),
   locked: integer("locked", { mode: "boolean" }).default(false),
   cookieBakerSettings: text("cookie_baker_settings", { mode: "json" }).default(null),
+  ebFingerprint: text("eb_fingerprint"),
 });
 
 export const tools = sqliteTable("tools", {

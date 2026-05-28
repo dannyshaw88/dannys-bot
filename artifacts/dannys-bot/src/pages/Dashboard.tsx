@@ -58,6 +58,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.628",
+    date: "28 May 2026",
+    items: [
+      { category: "Feature", text: "Each account now has a unique browser fingerprint stored permanently — WebGL GPU (vendor and renderer matched to the account device), canvas pixel noise, audio noise, and media device IDs are all unique per account and show different values in the Leak Check tool." },
+      { category: "Feature", text: "Browser fingerprint is automatically generated the first time an account opens its embedded browser, and regenerated every time Reset Device IDs is pressed." },
+      { category: "Feature", text: "Client Hints (navigator.userAgentData) now matches the account User Agent — brands, mobile flag, platform, model, and high-entropy values are all consistent with the assigned UA." },
+    ],
+  },
+  {
     version: "1.0.627",
     date: "28 May 2026",
     items: [

@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { LEAKS_PAGE_HTML } from "../instagram/leaksPage";
 import { storage, statusEvents } from "../storage";
+import { generateEbFingerprint } from "../instagram/browserFingerprint";
 import { db } from "@workspace/db";
 import { proxies } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -480,6 +481,7 @@ export async function registerInstagramRoutes(
       igApiCookies: null,
       accountStatus: "pending",
       credentialsDirty: true,
+      ebFingerprint: JSON.stringify(generateEbFingerprint(ua.api)),
     });
     res.json({ ok: true });
   });
