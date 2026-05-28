@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.624",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Fixed proxy not working in the Embedded Browser for HTTP proxies — Chromium rejects credentials embedded in the proxy URL (ERR_NO_SUPPORTED_PROXIES). Credentials are now supplied via the standard 407 auth challenge instead, which Chromium fully supports." },
+    ],
+  },
+  {
     version: "1.0.623",
     date: "28 May 2026",
     items: [

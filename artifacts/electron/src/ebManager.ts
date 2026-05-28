@@ -196,17 +196,19 @@ function ebPartition(pid: number): string {
 //   time.  Switching to pacScript broke proxy routing entirely because Electron
 //   33/34 silently ignores the pacScript inline-string option in some builds.
 //
-// WHY fixed_servers with embedded credentials:
-//   Embedding user:pass in the proxy URL (http://user:pass@host:port) causes
-//   Chrome to send the Proxy-Authorization header preemptively on every CONNECT
-//   request, completely eliminating the 407-challenge cycle.  Without embedded
-//   credentials, Chrome waits for a 407, retries with credentials from the
-//   webContents 'login' event — a two-round-trip dance that can fail silently
-//   in some Electron builds.  Embedding credentials is the same approach used
-//   for SOCKS5 and is inherently more reliable.
+// WHY credentials are NOT embedded in the HTTP proxyRules URL:
+//   Chromium's fixed_servers mode ONLY accepts bare host:port or scheme://host:port
+//   in the proxyRules field for HTTP proxies.  Embedding credentials as
+//   http://user:pass@host:port causes Chromium to emit ERR_NO_SUPPORTED_PROXIES
+//   (code -336) and refuse to use the proxy at all — confirmed in Electron 33 /
+//   Chromium 130 (v1.0.624).  Credentials for HTTP proxies must be supplied via
+//   the webContents 'login' event when the proxy issues a 407 challenge.
 //
-//   The 'login' event handler on win.webContents is kept as a belt-and-suspenders
-//   fallback for proxies that still issue a 407 despite embedded credentials.
+//   SOCKS5 is different: socks5://user:pass@host:port IS supported by Chromium's
+//   SOCKS5 resolver and credentials embedded there work correctly.
+//
+//   The 'login' event handler on win.webContents (and on tab BrowserViews and
+//   hidden verify windows) handles the 407 challenge for HTTP proxies.
 //
 // IPv6 note: --disable-ipv6 is set as an app-level Chromium flag in main.ts,
 //   so Chrome never resolves AAAA records or opens IPv6 sockets regardless of
@@ -220,10 +222,12 @@ function buildProxyConfig(proxy: { host: string; port: number; user?: string; pa
       proxyBypassRules: "127.0.0.1;[::1];localhost",
     };
   }
-  // HTTP/HTTPS proxy — credentials embedded so no 407 dance needed.
+  // HTTP/HTTPS proxy — credentials must NOT be embedded in the URL.
+  // Chromium rejects http://user:pass@host:port in proxyRules with ERR_NO_SUPPORTED_PROXIES.
+  // Credentials are supplied via the webContents 'login' event on 407 challenge.
   return {
     mode: "fixed_servers",
-    proxyRules: `http://${creds}${proxy.host}:${proxy.port}`,
+    proxyRules: `http://${proxy.host}:${proxy.port}`,
     proxyBypassRules: "127.0.0.1;[::1];localhost",
   };
 }
