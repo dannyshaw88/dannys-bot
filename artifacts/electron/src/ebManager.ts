@@ -199,6 +199,21 @@ function ebPartition(pid: number): string {
 //   3. Chromium rejects SOCKS5 servers given an HTTP-CONNECT request, then
 //      falls back to DIRECT — leaking the real IP.
 function buildProxyConfig(proxy: { host: string; port: number; user?: string; pass?: string; type?: string }): Parameters<Electron.Session["setProxy"]>[0] {
+  // WHY mode:'fixed_servers' + proxyRules (not PAC):
+  //   PAC script approaches (both the deprecated `pacScript` field and the newer
+  //   `pacURL` + mode:'pac_script') have a race condition with persistent sessions
+  //   in Electron 33 — the PAC file is fetched asynchronously after setProxy()
+  //   resolves, and if the session networking stack is not yet fully initialised
+  //   the PAC fetch silently falls back to DIRECT, exposing the machine's real IP.
+  //   mode:'fixed_servers' is applied synchronously at the network stack level and
+  //   is the only approach Electron 33 reliably honours for session-level setProxy().
+  //
+  // Credentials are NOT embedded in the proxyRules URL for HTTP proxies (Chromium
+  // ignores them there).  The win.webContents 'login' event handler (see below)
+  // supplies them when the proxy responds with a 407.
+  //
+  // proxyBypassRules keeps loopback connections DIRECT so the EB can always reach
+  // the local API server on 127.0.0.1 without going through the proxy.
   if (proxy.type === "socks5") {
     const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
     return {
@@ -207,32 +222,11 @@ function buildProxyConfig(proxy: { host: string; port: number; user?: string; pa
       proxyBypassRules: "127.0.0.1;[::1];localhost;<local>",
     };
   }
-  // HTTP proxy via PAC script using pacURL + mode:'pac_script'.
-  //
-  // WHY pacURL instead of the older pacScript field:
-  //   pacScript was deprecated in Electron 30 and is silently ignored in
-  //   Electron 33 unless mode:'pac_script' is also set.  The correct modern
-  //   form is mode:'pac_script' + pacURL with a data: URI — this is guaranteed
-  //   to work in Electron 30–33+ and does not depend on the deprecated shim.
-  //
-  // WHY PAC instead of proxyRules:
-  //   The PAC function returns only "PROXY host:port" with no DIRECT option.
-  //   If the proxy is unreachable the request fails hard — there is no silent
-  //   fallback to the machine's real IP (the well-known --no-proxy-fallback
-  //   flag is only respected for proxyRules on the main process; session-level
-  //   setProxy() ignores it).  Additionally, Chrome sends the raw hostname to
-  //   the proxy via CONNECT so DNS is resolved on the proxy side — IPv6
-  //   bypass via dual-stack AAAA records is impossible.
-  //
-  // Loopback is returned as DIRECT so the EB can always reach the local API.
-  const pac = [
-    "function FindProxyForURL(url, host) {",
-    "  if (host === '127.0.0.1' || host === 'localhost' || isInNet(host, '127.0.0.0', '255.0.0.0')) return 'DIRECT';",
-    `  return "PROXY ${proxy.host}:${proxy.port}";`,
-    "}",
-  ].join("\n");
-  const pacURL = `data:application/x-ns-proxy-autoconfig,${encodeURIComponent(pac)}`;
-  return { mode: "pac_script", pacURL };
+  return {
+    mode: "fixed_servers",
+    proxyRules: `${proxy.host}:${proxy.port}`,
+    proxyBypassRules: "127.0.0.1;[::1];localhost;<local>",
+  };
 }
 
 // JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
@@ -615,22 +609,32 @@ export async function openEbWindow(opts: {
       toolbarViewMap.delete(profileId);
       // Fall through to create a new window below.
     } else {
-      // Regular account: update proxy on the existing session if it changed.
-      const newProxyKey = proxy ? `${proxy.host}:${proxy.port}` : "direct";
-      const oldProxyKey = existing.proxy ? `${existing.proxy.host}:${existing.proxy.port}` : "direct";
-      if (newProxyKey !== oldProxyKey) {
+      // Regular account: always re-apply proxy on every re-show.
+      // Checking only for proxy changes is insufficient — sessions can lose their
+      // proxy config between app restarts, and the fix for Electron 33's PAC timing
+      // bug (switching to mode:'fixed_servers') must be applied even when the proxy
+      // host/port is unchanged but the config format changed in a new app version.
+      const newProxyKey = proxy
+        ? `${proxy.type || "http"}:${proxy.host}:${proxy.port}`
+        : "direct";
+      const oldProxyKey = existing.proxy
+        ? `${existing.proxy.type || "http"}:${existing.proxy.host}:${existing.proxy.port}`
+        : "direct";
+      const proxyChanged = newProxyKey !== oldProxyKey;
+      const existingSes = electronSession.fromPartition(existing.partition);
+      if (proxy) {
+        await existingSes.setProxy(buildProxyConfig(proxy));
+      } else {
+        await existingSes.setProxy({ mode: "direct" });
+      }
+      try { existingSes.setWebRTCIPHandlingPolicy("disable_non_proxied_udp"); } catch {}
+      // Clear stale DNS cache so new proxy resolves fresh
+      try { await existingSes.clearHostResolverCache(); } catch {}
+      if (proxyChanged) {
         console.log(`[ebManager:${profileId}] Proxy changed (${oldProxyKey} → ${newProxyKey}), updating session proxy`);
-        const existingSes = electronSession.fromPartition(existing.partition);
-        if (proxy) {
-          await existingSes.setProxy(buildProxyConfig(proxy));
-        } else {
-          await existingSes.setProxy({ proxyRules: "direct://" });
-        }
-        try { existingSes.setWebRTCIPHandlingPolicy("disable_non_proxied_udp"); } catch {}
-        // Update the stored proxy — the login handler reads from ebMap dynamically
-        // so it will automatically pick up the new credentials on the next 407.
+        // Update the stored proxy — the login handler reads from ebMap dynamically.
         ebMap.set(profileId, { ...existing, proxy });
-        // Reload so the new proxy takes effect for the current page
+        // Reload so the new proxy takes effect for the current page.
         existing.win.webContents.reload();
       }
       if (existing.win.isMinimized()) existing.win.restore();

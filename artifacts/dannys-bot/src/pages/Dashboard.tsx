@@ -58,6 +58,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.606",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy now correctly routes all Embedded Browser traffic — switched from PAC script (which has a timing bug with persistent sessions in Electron 33 and silently falls back to direct) to mode:'fixed_servers' which Electron 33 applies synchronously and reliably." },
+      { category: "Fix", text: "Proxy is now re-applied every time an account browser window is opened, not only when the proxy host changes — prevents stale sessions from bypassing the proxy after an app update or restart." },
+      { category: "Fix", text: "DNS cache cleared on every browser window re-open to prevent stale entries from routing traffic around the proxy." },
+    ],
+  },
+  {
     version: "1.0.605",
     date: "28 May 2026",
     items: [
