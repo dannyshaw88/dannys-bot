@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.608",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Embedded Browser proxy routing completely overhauled — switched from Chromium's fixed-server proxy rules (which silently fall back to a direct connection in Electron 33) to an inline PAC script that has no fallback path, so if the proxy is unreachable the request fails instead of leaking the real IP." },
+      { category: "Fix", text: "IPv6 leak through proxy eliminated — the PAC script sends hostnames (not resolved IPs) to the proxy via CONNECT, so all DNS resolution happens on the proxy side and your machine's IPv6 address is never exposed." },
+      { category: "Fix", text: "Belt-and-suspenders: proxy config is now re-applied after the first page load to handle a Chromium 130 edge case where persistent session disk-load can overwrite the proxy setting set at startup." },
+      { category: "Fix", text: "Proxy authentication (407 challenge) now works correctly in multi-tab Embedded Browser sessions — each new tab window now has its own proxy credential handler." },
+    ],
+  },
+  {
     version: "1.0.607",
     date: "28 May 2026",
     items: [

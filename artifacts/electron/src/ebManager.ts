@@ -181,39 +181,37 @@ function ebPartition(pid: number): string {
 
 // Build the Electron session.setProxy() options object for a given proxy config.
 //
-// HTTP proxies use a PAC script instead of proxyRules.  The critical difference:
-//   proxyRules — Chromium may silently fall back to DIRECT if the proxy is
-//     unreachable, exposing the machine's real IP even with --no-proxy-fallback
-//     (that flag is not always honoured for session-level setProxy() calls).
-//   pacScript  — FindProxyForURL returns only "PROXY host:port" with no DIRECT
-//     option.  If the proxy is down the request fails hard; there is no fallback
-//     path.  Additionally, Chrome sends the hostname (not a resolved IP) to the
-//     proxy via CONNECT, so the proxy's DNS resolver picks the address — IPv6
-//     connections to dual-stack hosts are resolved on the proxy side, eliminating
-//     IPv6 bypass leaks entirely regardless of the --disable-ipv6 flag's
-//     effectiveness in the current Chromium build.
+// HTTP proxies use an INLINE PAC SCRIPT (pacScript string, not pacURL):
 //
-// SOCKS5 proxies keep proxyRules with embedded credentials because:
-//   1. SOCKS5 has no HTTP 407 challenge so the login event never fires.
+//   WHY PAC and not fixed_servers + proxyRules:
+//     mode:'fixed_servers' + per-scheme proxyRules silently falls back to a
+//     DIRECT connection in Electron 33 / Chromium 130 when the proxy is slow
+//     to respond or the 407 auth cycle fails.  The --no-proxy-fallback switch
+//     is NOT honoured for session-level setProxy() calls in the Network Service
+//     process — only the renderer-level fetch sees it.  The result is that the
+//     real machine IP leaks through every time.
+//
+//   WHY pacScript (string) and not pacURL (URL to a local server):
+//     pacURL requires an async HTTP fetch of the PAC file.  In Electron 33,
+//     persistent sessions ('persist:eb-N') re-load their proxy config from the
+//     on-disk profile AFTER setProxy() resolves, potentially overwriting the
+//     newly set value.  pacScript is an INLINE STRING — Chromium evaluates it
+//     immediately with no network round-trip, so there is no async-fetch race
+//     and no dependence on the local API server being reachable at session init.
+//
+//   WHY PAC eliminates the IPv6 leak:
+//     FindProxyForURL returns "PROXY host:port" — Chrome sends the hostname
+//     (not a resolved IP) to the proxy via a CONNECT tunnel.  The proxy's DNS
+//     resolver picks the address, so IPv6 is never exercised on the client side.
+//
+//   Credentials are supplied by the webContents 'login' event (HTTP 407 response).
+//
+// SOCKS5 proxies keep proxyRules because:
+//   1. SOCKS5 has no HTTP 407 challenge — the login event never fires.
 //   2. PAC strings cannot carry credentials ("SOCKS5 host:port" only).
 //   3. Chromium rejects SOCKS5 servers given an HTTP-CONNECT request, then
 //      falls back to DIRECT — leaking the real IP.
 function buildProxyConfig(proxy: { host: string; port: number; user?: string; pass?: string; type?: string }): Parameters<Electron.Session["setProxy"]>[0] {
-  // WHY mode:'fixed_servers' + proxyRules (not PAC):
-  //   PAC script approaches (both the deprecated `pacScript` field and the newer
-  //   `pacURL` + mode:'pac_script') have a race condition with persistent sessions
-  //   in Electron 33 — the PAC file is fetched asynchronously after setProxy()
-  //   resolves, and if the session networking stack is not yet fully initialised
-  //   the PAC fetch silently falls back to DIRECT, exposing the machine's real IP.
-  //   mode:'fixed_servers' is applied synchronously at the network stack level and
-  //   is the only approach Electron 33 reliably honours for session-level setProxy().
-  //
-  // Credentials are NOT embedded in the proxyRules URL for HTTP proxies (Chromium
-  // ignores them there).  The win.webContents 'login' event handler (see below)
-  // supplies them when the proxy responds with a 407.
-  //
-  // proxyBypassRules keeps loopback connections DIRECT so the EB can always reach
-  // the local API server on 127.0.0.1 without going through the proxy.
   if (proxy.type === "socks5") {
     const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
     return {
@@ -222,17 +220,20 @@ function buildProxyConfig(proxy: { host: string; port: number; user?: string; pa
       proxyBypassRules: "127.0.0.1;[::1];localhost",
     };
   }
-  // Use per-scheme rules with explicit http:// prefix so Chromium unambiguously
-  // routes both HTTP (direct forward) and HTTPS (CONNECT tunnel) through the proxy.
-  // Bare "host:port" is technically equivalent but some Chromium 130 builds ignore
-  // it for HTTPS; the explicit per-scheme form is always honoured.
-  // <local> is intentionally omitted — 127.0.0.1, [::1], and localhost are listed
-  // explicitly; <local> on Windows can inadvertently bypass the proxy for intranet
-  // zones, causing leaks on machines with custom Windows networking policies.
+
+  // Inline PAC script for HTTP proxies.
+  // Returns ONLY "PROXY host:port" — no DIRECT fallback for non-loopback hosts.
+  // If the proxy is unreachable, the request FAILS instead of leaking real IP.
   return {
-    mode: "fixed_servers",
-    proxyRules: `http=http://${proxy.host}:${proxy.port};https=http://${proxy.host}:${proxy.port}`,
-    proxyBypassRules: "127.0.0.1;[::1];localhost",
+    pacScript: [
+      "function FindProxyForURL(url, host) {",
+      // Allow loopback directly so the EB can always reach the local API server.
+      '  if (host === "127.0.0.1" || host === "::1" || host === "[::1]" ||',
+      '      host === "localhost"  || host === "0.0.0.0") return "DIRECT";',
+      // All other traffic — including raw IP URLs — must go through the proxy.
+      `  return "PROXY ${proxy.host}:${proxy.port}";`,
+      "}",
+    ].join("\n"),
   };
 }
 
@@ -724,6 +725,19 @@ export async function openEbWindow(opts: {
     },
   });
   win.once("ready-to-show", () => { win.show(); win.maximize(); });
+
+  // Belt-and-suspenders proxy re-apply after first page load.
+  // In Electron 33, a persistent session ('persist:eb-N') may re-load its
+  // on-disk proxy config AFTER setProxy() resolves above, overwriting the newly
+  // set PAC script with stale settings from the profile directory.  Re-calling
+  // setProxy() once the first page has finished loading guarantees that the
+  // correct proxy is active for all subsequent navigations in this session,
+  // even if the disk-load race fired in between.
+  if (proxy) {
+    win.webContents.once("did-finish-load", () => {
+      ses.setProxy(buildProxyConfig(proxy)).catch(() => {});
+    });
+  }
 
   // ── WebRTC TCP-candidate leak prevention (CDP page-script injection) ──────
   // Chromium's `disable_non_proxied_udp` WebRTC policy blocks UDP ICE candidates
@@ -1469,6 +1483,14 @@ function setupToolbarIpc(): void {
         });
         tabView.webContents.on("dom-ready",       () => tabView.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
         tabView.webContents.on("did-finish-load", () => tabView.webContents.executeJavaScript(buildPageUtilsJs()).catch(() => {}));
+        // Supply proxy credentials for authenticated proxies in tab BrowserViews.
+        // The main EB window has a login handler on win.webContents, but tab views
+        // are separate webContents and need their own handler for the 407 response.
+        tabView.webContents.on("login", (event: any, _req: any, _authInfo: any, callback: any) => {
+          event.preventDefault();
+          const _tabEntry = ebMap.get(foundPid);
+          callback(_tabEntry?.proxy?.user ?? "", _tabEntry?.proxy?.pass ?? "");
+        });
         tabView.webContents.loadURL("https://www.google.com/").catch(() => {});
         switchToTab(foundPid, newTabId);
         break;
