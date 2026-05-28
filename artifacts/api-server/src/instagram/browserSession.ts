@@ -1949,6 +1949,7 @@ export async function getOrCreateSession(
       twoFAKey:  profile?.twoFASecretKey ?? "",
       proxy:     proxy ? { host: proxy.host, port: proxy.port, user: proxy.username, pass: proxy.password } : undefined,
       userAgent: userAgent || undefined,
+      apiUA:     profile?.userAgentApi ?? "",
     }).catch(err => log(`[getOrCreate:${profileId}] EB open failed: ${err?.message}`, "browser"));
     return {} as unknown as Session;
   }

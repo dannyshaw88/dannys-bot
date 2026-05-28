@@ -115,7 +115,7 @@ export function Sidebar() {
                 )}
               >
                 <Icon
-                  className={cn("w-[29px] h-[29px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
+                  className={cn("w-[32px] h-[32px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
                   style={isActive ? { color: BRAND } : { color: BRAND }}
                 />
                 <span className={cn(
@@ -174,7 +174,7 @@ export function Sidebar() {
           )}
         >
           <Settings
-            className={cn("w-[29px] h-[29px] shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
+            className={cn("w-[32px] h-[32px] shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
             style={{ color: BRAND }}
           />
           <span className={cn(

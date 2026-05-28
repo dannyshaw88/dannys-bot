@@ -249,6 +249,94 @@ const WEBRTC_BLOCKER_JS = `(function () {
   try { Object.defineProperty(window, 'RTCPeerConnection',        { get: function () { return B; }, configurable: true }); } catch {}
   try { Object.defineProperty(window, 'webkitRTCPeerConnection',  { get: function () { return B; }, configurable: true }); } catch {}
 })();`;
+
+// Hardware fingerprint spoofing script injected into every EB page via CDP.
+// Mirrors applyStealthScripts() in browserSession.ts exactly so the leak tool
+// reports the same values that Account Settings shows (battery %, CPU cores,
+// touch points, device memory, screen dimensions, connection).
+//
+// isMobile and apiUA are baked in as literals so the script is self-contained.
+// The PRNG is seeded from navigator.userAgent (= the spoofed EB UA set via
+// win.webContents.setUserAgent) — identical seed → identical values to the server.
+function buildFingerprintScript(isMobile: boolean, apiUA: string | null): string {
+  const mf = isMobile ? 'true' : 'false';
+  const af = apiUA ? JSON.stringify(apiUA) : 'null';
+  return `(function(){try{
+  var _M=${mf},_A=${af};
+  var _ua=navigator.userAgent,_s=5381;
+  for(var i=0;i<_ua.length;i++){_s=(((_s<<5)+_s)^_ua.charCodeAt(i))>>>0;}
+  _s=_s||1;
+  var _r=function(){_s=(Math.imul(1664525,_s)+1013904223)>>>0;return _s/0x100000000;};
+  var _rI=function(lo,hi){return lo+Math.round(_r()*(hi-lo));};
+  var _rp=function(a){return a[Math.floor(_r()*a.length)];};
+  var _PROF=[[360,808,3.0,8,8],[411,914,2.625,8,9],[411,914,2.625,8,9],[360,780,3.0,8,10],
+    [360,780,3.0,8,8],[393,851,2.75,8,8],[412,915,2.625,8,8],[412,900,2.70,8,8],
+    [393,873,2.75,8,8],[393,873,2.75,8,8],[393,868,2.75,8,8],[360,780,3.0,8,8]];
+  var _p=_rp(_PROF),_SW=_p[0],_SH=_p[1],_DPR=_p[2],_MEM=_p[3],_CORES=_p[4];
+  if(_A){var _m=_A.match(/;\\s*(\\d+)dpi;\\s*(\\d+)x(\\d+)/);if(_m){
+    var _dpi=+_m[1],_pW=+_m[2],_pH=+_m[3];
+    _DPR=Math.round(_dpi/160*10000)/10000;_SW=Math.round(_pW/_DPR);_SH=Math.round(_pH/_DPR);_MEM=8;
+    _CORES=/;\\s*Pixel 8[^9]/i.test(_A)?9:/exynos2400/i.test(_A)?10:8;}}
+  var _BL=Math.round((0.60+_r()*0.39)*100)/100,_BC=_r()>0.35;
+  var _BCT=_BC?_rI(0,3600):0,_BDT=_BC?Infinity:_rI(1800,28800);
+  var _CT=_rp(["wifi","wifi","wifi","cellular"]),_CDL=Math.round(2+_r()*98),_CRT=_rI(10,150);
+  try{Object.defineProperty(navigator,"webdriver",{get:function(){return undefined;}});}catch(e){}
+  if(_M){
+    try{Object.defineProperty(screen,"width",{get:function(){return _SW;}});}catch(e){}
+    try{Object.defineProperty(screen,"height",{get:function(){return _SH;}});}catch(e){}
+    try{Object.defineProperty(screen,"availWidth",{get:function(){return _SW;}});}catch(e){}
+    try{Object.defineProperty(screen,"availHeight",{get:function(){return _SH-30;}});}catch(e){}
+    try{Object.defineProperty(screen,"colorDepth",{get:function(){return 24;}});}catch(e){}
+    try{Object.defineProperty(screen,"pixelDepth",{get:function(){return 24;}});}catch(e){}
+    try{Object.defineProperty(navigator,"maxTouchPoints",{get:function(){return 10;}});}catch(e){}
+    try{Object.defineProperty(navigator,"platform",{get:function(){return "Linux armv8l";}});}catch(e){}
+    try{Object.defineProperty(navigator,"hardwareConcurrency",{get:function(){return _CORES;}});}catch(e){}
+    try{Object.defineProperty(navigator,"deviceMemory",{get:function(){return _MEM;}});}catch(e){}
+    try{Object.defineProperty(window,"devicePixelRatio",{get:function(){return _DPR;}});}catch(e){}
+    try{Object.defineProperty(window,"orientation",{get:function(){return 0;},configurable:true});}catch(e){}
+    try{var _ori={type:"portrait-primary",angle:0,onchange:null,
+      lock:function(){return Promise.reject(new DOMException("Not supported","NotSupportedError"));},
+      unlock:function(){},addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
+      Object.defineProperty(screen,"orientation",{get:function(){return _ori;},configurable:true});}catch(e){}
+    if(!(navigator).connection){
+      var _cn={effectiveType:"4g",downlink:_CDL,rtt:_CRT,saveData:false,type:_CT,onchange:null,
+        addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
+      setInterval(function(){
+        _cn.downlink=Math.max(1,Math.round(_CDL*(0.75+Math.random()*0.5)));
+        _cn.rtt=Math.max(5,Math.round(_CRT*(0.75+Math.random()*0.5)));
+      },25000+Math.random()*10000);
+      try{Object.defineProperty(navigator,"connection",{get:function(){return _cn;},configurable:true});}catch(e){}
+    }
+  }else{
+    try{Object.defineProperty(screen,"width",{get:function(){return 1920;}});}catch(e){}
+    try{Object.defineProperty(screen,"height",{get:function(){return 1080;}});}catch(e){}
+    try{Object.defineProperty(screen,"availWidth",{get:function(){return 1920;}});}catch(e){}
+    try{Object.defineProperty(screen,"availHeight",{get:function(){return 1040;}});}catch(e){}
+    try{Object.defineProperty(screen,"colorDepth",{get:function(){return 24;}});}catch(e){}
+    try{Object.defineProperty(screen,"pixelDepth",{get:function(){return 24;}});}catch(e){}
+    try{Object.defineProperty(navigator,"maxTouchPoints",{get:function(){return 0;}});}catch(e){}
+    try{Object.defineProperty(navigator,"hardwareConcurrency",{get:function(){return _rp([4,6,8,8,8,12,16]);}});}catch(e){}
+    try{Object.defineProperty(navigator,"deviceMemory",{get:function(){return _rp([8,8,16,32]);}});}catch(e){}
+  }
+  try{
+    var _bt={charging:_BC,chargingTime:_BCT,dischargingTime:_BDT,level:_BL,
+      onchargingchange:null,onchargingtimechange:null,ondischargingtimechange:null,onlevelchange:null,
+      addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
+    var _dp=0.0008+Math.random()*0.0004;
+    setInterval(function(){
+      if(_bt.charging){_bt.level=Math.min(1.0,Math.round((_bt.level+_dp)*10000)/10000);if(_bt.level>=1.0)_bt.chargingTime=0;}
+      else{_bt.level=Math.max(0.05,Math.round((_bt.level-_dp)*10000)/10000);}
+    },60000);
+    navigator.getBattery=function(){return Promise.resolve(_bt);};
+  }catch(e){}
+  try{Object.defineProperty(navigator,"languages",{get:function(){return ["en-US","en"];}});}catch(e){}
+  try{window.chrome={app:{isInstalled:false},runtime:{},loadTimes:function(){return{};},csi:function(){return{};}};} catch(e){}
+  try{var _oq=navigator.permissions&&navigator.permissions.query.bind(navigator.permissions);
+    if(_oq){navigator.permissions.query=function(p){
+      return p.name==="notifications"?Promise.resolve({state:"prompt",onchange:null}):_oq(p);};}}catch(e){}
+}catch(e){}})();`;
+}
+
 // Native toolbar BrowserView per profile — floats above all page content.
 const toolbarViewMap = new Map<number, BrowserView>();
 
@@ -594,10 +682,11 @@ export async function openEbWindow(opts: {
   username:  string;
   proxy?:    { host: string; port: number; user?: string; pass?: string; type?: string };
   userAgent?: string;
+  apiUA?:     string;
   password?: string;
   twoFAKey?: string;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent, password, twoFAKey } = opts;
+  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey } = opts;
 
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
@@ -781,13 +870,16 @@ export async function openEbWindow(opts: {
   // IMPORTANT: fire-and-forget (no await) — awaiting can hang in the packaged
   // app and prevent ebMap.set() from being reached.  A dom-ready fallback below
   // covers the rare case where CDP completes after the first navigation starts.
+  const _fpIsMobile = !!userAgent && userAgent.includes("Mobile") && userAgent.includes("Android");
+  const _fpScript   = buildFingerprintScript(_fpIsMobile, apiUA ?? null);
   void (async () => {
     try {
       try { win.webContents.debugger.attach("1.3"); } catch { /* already attached or unavailable */ }
       await win.webContents.debugger.sendCommand("Page.enable");
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
+      await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _fpScript });
     } catch (err) {
-      console.warn(`[ebManager:${profileId}] WebRTC CDP injection failed:`, err);
+      console.warn(`[ebManager:${profileId}] WebRTC/fingerprint CDP injection failed:`, err);
     }
   })();
 
@@ -841,6 +933,7 @@ export async function openEbWindow(opts: {
   // callbacks — earlier than any real-world leak-test gather loop.
   win.webContents.on("dom-ready", () => {
     win.webContents.executeJavaScript(WEBRTC_BLOCKER_JS).catch(() => {});
+    win.webContents.executeJavaScript(_fpScript).catch(() => {});
   });
 
   // Chrome-error recovery: auto-navigate back to Instagram when the page hits
@@ -1793,6 +1886,7 @@ export function startEbIpcServer(
           twoFAKey:  body.twoFAKey,
           proxy:     body.proxy,
           userAgent: body.userAgent,
+          apiUA:     body.apiUA,
         });
         return send(res, 200, { ok: true });
       }

@@ -58,6 +58,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.626",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Battery percentage, CPU cores, touch points, device memory, screen size, and connection speed in the Leak Tool now match exactly what Account Settings shows — the full hardware fingerprint script is now injected into the Embedded Browser on every navigation." },
+      { category: "UI", text: "Sidebar icons increased by a further 10% (now 32px)." },
+    ],
+  },
+  {
     version: "1.0.625",
     date: "28 May 2026",
     items: [
