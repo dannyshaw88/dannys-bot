@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.634",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "matchMedia pointer/hover queries now return mobile-correct values — Instagram's signup script checks these to detect touchscreens, and an Electron desktop window was returning desktop values that contradicted the mobile UA." },
+      { category: "Fix", text: "visualViewport.width and outerWidth are now spoofed to match the mobile screen profile — previously they reported the real 1280px Electron window width." },
+      { category: "Fix", text: "document.hasFocus() always returns true and document.visibilityState always returns 'visible' — background EB windows previously leaked false/hidden which Instagram treats as a bot signal during signup." },
+      { category: "Fix", text: "window.ontouchstart is now defined (as null) to confirm touch support — its absence contradicted the maxTouchPoints=10 spoof." },
+    ],
+  },
+  {
     version: "1.0.633",
     date: "28 May 2026",
     items: [

@@ -398,6 +398,21 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
       },25000+Math.random()*10000);
       try{Object.defineProperty(navigator,"connection",{get:function(){return _cn;},configurable:true});}catch(e){}
     }
+    try{var _oMM=window.matchMedia.bind(window);window.matchMedia=function(q){
+      var _mql={matches:false,media:q,onchange:null,addListener:function(){},removeListener:function(){},addEventListener:function(){},removeEventListener:function(){},dispatchEvent:function(){return true;}};
+      if(/(pointer:\s*coarse|any-pointer:\s*coarse)/.test(q))return Object.assign({},_mql,{matches:true});
+      if(/(hover:\s*none|any-hover:\s*none)/.test(q))return Object.assign({},_mql,{matches:true});
+      if(/(pointer:\s*fine|any-pointer:\s*fine|hover:\s*hover|any-hover:\s*hover)/.test(q))return _mql;
+      try{return _oMM(q);}catch(e2){return _mql;}
+    };}catch(e){}
+    try{if(window.visualViewport){
+      Object.defineProperty(window.visualViewport,'width',{get:function(){return _SW;},configurable:true});
+      Object.defineProperty(window.visualViewport,'height',{get:function(){return _SH;},configurable:true});
+      Object.defineProperty(window.visualViewport,'scale',{get:function(){return 1;},configurable:true});
+    }}catch(e){}
+    try{Object.defineProperty(window,'outerWidth',{get:function(){return _SW;},configurable:true});}catch(e){}
+    try{Object.defineProperty(window,'outerHeight',{get:function(){return _SH;},configurable:true});}catch(e){}
+    try{if(window.ontouchstart===undefined)window.ontouchstart=null;}catch(e){}
   }else{
     try{Object.defineProperty(screen,"width",{get:function(){return 1920;}});}catch(e){}
     try{Object.defineProperty(screen,"height",{get:function(){return 1080;}});}catch(e){}
@@ -420,6 +435,9 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     },60000);
     navigator.getBattery=function(){return Promise.resolve(_bt);};
   }catch(e){}
+  try{document.hasFocus=function(){return true;};}catch(e){}
+  try{Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';},configurable:true});}catch(e){}
+  try{Object.defineProperty(document,'hidden',{get:function(){return false;},configurable:true});}catch(e){}
   try{Object.defineProperty(navigator,"languages",{get:function(){return ["en-US","en"];}});}catch(e){}
   try{window.chrome={app:{isInstalled:false},runtime:{},loadTimes:function(){return{};},csi:function(){return{};}};} catch(e){}
   try{var _oq=navigator.permissions&&navigator.permissions.query.bind(navigator.permissions);

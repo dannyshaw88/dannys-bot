@@ -1530,6 +1530,44 @@ export async function applyStealthScripts(
       Object.defineProperty(window, "innerWidth",  { get: () => _SW });
       Object.defineProperty(window, "innerHeight", { get: () => _SH });
 
+      // outerWidth/outerHeight — on mobile these match innerWidth/Height (no
+      // desktop chrome decorations).  Unset, they expose the real Electron/OS
+      // window frame size (~1280px), contradicting the spoofed screen.width.
+      try { Object.defineProperty(window, "outerWidth",  { get: () => _SW, configurable: true }); } catch { /* non-fatal */ }
+      try { Object.defineProperty(window, "outerHeight", { get: () => _SH, configurable: true }); } catch { /* non-fatal */ }
+
+      // visualViewport.width/height — queried directly by Instagram's signup JS.
+      // Even with innerWidth spoofed, visualViewport still reports the real render
+      // width (1280px on the Electron window) until overridden here.
+      try {
+        if ((window as any).visualViewport) {
+          Object.defineProperty((window as any).visualViewport, "width",  { get: () => _SW, configurable: true });
+          Object.defineProperty((window as any).visualViewport, "height", { get: () => _SH, configurable: true });
+          Object.defineProperty((window as any).visualViewport, "scale",  { get: () => 1,   configurable: true });
+        }
+      } catch { /* non-fatal */ }
+
+      // matchMedia pointer/hover queries — real phones return coarse/none.
+      // Electron on a desktop returns fine/hover — contradicts the mobile UA.
+      // Instagram's signup script uses these to distinguish touchscreens.
+      try {
+        const _origMM = window.matchMedia.bind(window);
+        (window as any).matchMedia = function(q: string) {
+          const _mql: any = { matches: false, media: q, onchange: null,
+            addListener() {}, removeListener() {},
+            addEventListener() {}, removeEventListener() {},
+            dispatchEvent() { return true; } };
+          if (/(pointer:\s*coarse|any-pointer:\s*coarse)/.test(q)) return { ..._mql, matches: true };
+          if (/(hover:\s*none|any-hover:\s*none)/.test(q))         return { ..._mql, matches: true };
+          if (/(pointer:\s*fine|any-pointer:\s*fine|hover:\s*hover|any-hover:\s*hover)/.test(q)) return _mql;
+          try { return _origMM(q); } catch { return _mql; }
+        };
+      } catch { /* non-fatal */ }
+
+      // ontouchstart — must be defined (even as null) on touch devices.
+      // undefined means "no touch support" — contradicts maxTouchPoints=10.
+      try { if ((window as any).ontouchstart === undefined) (window as any).ontouchstart = null; } catch { /* non-fatal */ }
+
       // ── Screen / window orientation ───────────────────────────────────────
       // Mobile browsers always expose window.orientation (0 = portrait) and a
       // screen.orientation object.  Headless Chrome has neither — their absence
@@ -1616,6 +1654,16 @@ export async function applyStealthScripts(
       Object.defineProperty(navigator, "hardwareConcurrency", { get: () => _rp([4, 6, 8, 8, 8, 12, 16] as const) });
       Object.defineProperty(navigator, "deviceMemory",        { get: () => _rp([8, 8, 16, 32] as const) });
     }
+
+    // ── document focus / visibility ──────────────────────────────────────────
+    // document.hasFocus() returns false when the Electron/headless window is not
+    // the active foreground window.  On a real phone the browser is almost always
+    // focused during a signup flow — a false here is a reliable bot signal.
+    // document.visibilityState / document.hidden have the same problem when the
+    // EB runs in the background while the user is on a different window.
+    try { document.hasFocus = () => true; } catch { /* non-fatal */ }
+    try { Object.defineProperty(document, "visibilityState", { get: () => "visible", configurable: true }); } catch { /* non-fatal */ }
+    try { Object.defineProperty(document, "hidden",          { get: () => false,     configurable: true }); } catch { /* non-fatal */ }
 
     // ── Battery API — live draining / charging ───────────────────────────────
     // Real phones have navigator.getBattery().  A headless server has no battery
