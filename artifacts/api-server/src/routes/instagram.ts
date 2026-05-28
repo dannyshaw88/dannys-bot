@@ -1920,10 +1920,20 @@ export async function registerInstagramRoutes(
       proxy: string | null;
       proxyHost: string | null;
       proxyPort: number | null;
+      proxyType: string | null;
+      proxyHasCredentials: boolean;
       ebUA: string | null;
       apiUA: string | null;
+      sessionResolvedProxy: string | null;
+      sessionProxyRules: string | null;
+      sessionStoredProxy: { host: string; port: number; type: string; hasCredentials: boolean; user: string | null } | null;
     };
-    const accountData: AccountData = { proxy: null, proxyHost: null, proxyPort: null, ebUA: null, apiUA: null };
+    const accountData: AccountData = {
+      proxy: null, proxyHost: null, proxyPort: null,
+      proxyType: null, proxyHasCredentials: false,
+      ebUA: null, apiUA: null,
+      sessionResolvedProxy: null, sessionProxyRules: null, sessionStoredProxy: null,
+    };
 
     if (profileId) {
       try {
@@ -1936,18 +1946,29 @@ export async function registerInstagramRoutes(
           // Resolve proxy: prefer the profile's own proxyHost, fall back to linked proxy table
           let proxyHost: string | null = profile.proxyHost || null;
           let proxyPort: number | null = profile.proxyPort || null;
+          let proxyType: string | null = profile.proxyType || null;
+          let proxyUsername: string | null = profile.proxyUsername || null;
+          let proxyPassword: string | null = profile.proxyPassword || null;
 
           if ((!proxyHost) && profile.proxyId) {
             try {
               const [proxy] = await db.select().from(proxies).where(eq(proxies.id, profile.proxyId));
-              if (proxy) { proxyHost = proxy.host; proxyPort = proxy.port; }
+              if (proxy) {
+                proxyHost     = proxy.host;
+                proxyPort     = proxy.port;
+                proxyType     = (proxy as any).proxyType || null;
+                proxyUsername = (proxy as any).username  || null;
+                proxyPassword = (proxy as any).password  || null;
+              }
             } catch {}
           }
 
           if (proxyHost) {
-            accountData.proxyHost = proxyHost;
-            accountData.proxyPort = proxyPort;
-            accountData.proxy = proxyPort ? `${proxyHost}:${proxyPort}` : proxyHost;
+            accountData.proxyHost           = proxyHost;
+            accountData.proxyPort           = proxyPort;
+            accountData.proxyType           = proxyType || "http";
+            accountData.proxyHasCredentials = !!(proxyUsername && proxyPassword);
+            accountData.proxy               = proxyPort ? `${proxyHost}:${proxyPort}` : proxyHost;
           }
         }
       } catch {}
@@ -1962,6 +1983,26 @@ export async function registerInstagramRoutes(
       accountData.proxyHost = qProxyHost;
       accountData.proxyPort = qProxyPort;
       accountData.proxy = `${qProxyHost}:${qProxyPort}`;
+    }
+
+    // Fetch session resolve-proxy from the Electron IPC server.
+    // This tells us what Electron's routing engine ACTUALLY routes through —
+    // confirming whether the proxy session config was applied correctly.
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort && (profileId || qProxyHost)) {
+      try {
+        const pid = profileId || -1;
+        const r = await fetch(
+          `http://127.0.0.1:${ipcPort}/eb/resolve-proxy?profileId=${pid}&url=https://api.ipify.org/`,
+          { signal: AbortSignal.timeout(3000) },
+        );
+        if (r.ok) {
+          const d = await r.json();
+          accountData.sessionResolvedProxy = d.resolved   ?? null;
+          accountData.sessionProxyRules    = d.proxyRules ?? null;
+          accountData.sessionStoredProxy   = d.storedProxy ?? null;
+        }
+      } catch {}
     }
 
     const html = LEAKS_PAGE_HTML

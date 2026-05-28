@@ -354,6 +354,18 @@ export const LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
           <div class="ib-value" id="id-proxy">—</div>
         </div>
         <div class="identity-block">
+          <div class="ib-label">Proxy Type / Credentials</div>
+          <div class="ib-value" id="id-proxy-meta">—</div>
+        </div>
+        <div class="identity-block">
+          <div class="ib-label">Electron Routes Via</div>
+          <div class="ib-value" id="id-session-proxy">—</div>
+        </div>
+        <div class="identity-block">
+          <div class="ib-label">Session Proxy Rules</div>
+          <div class="ib-value" id="id-proxy-rules">—</div>
+        </div>
+        <div class="identity-block">
           <div class="ib-label">EB User Agent</div>
           <div class="ib-value" id="id-eb-ua">—</div>
         </div>
@@ -643,14 +655,63 @@ function updateScore() {
 
 // ── Test 0: Account Identity ──────────────────────────────────────────────────
 function testIdentity() {
-  const proxyEl  = document.getElementById('id-proxy');
-  const ebUaEl   = document.getElementById('id-eb-ua');
-  const apiUaEl  = document.getElementById('id-api-ua');
+  const proxyEl       = document.getElementById('id-proxy');
+  const proxyMetaEl   = document.getElementById('id-proxy-meta');
+  const sessionProxyEl= document.getElementById('id-session-proxy');
+  const proxyRulesEl  = document.getElementById('id-proxy-rules');
+  const ebUaEl        = document.getElementById('id-eb-ua');
+  const apiUaEl       = document.getElementById('id-api-ua');
+
   if (ACCOUNT.proxy) {
     if (proxyEl) { proxyEl.textContent = ACCOUNT.proxy; proxyEl.className = 'ib-value'; }
   } else {
     if (proxyEl) { proxyEl.textContent = 'No proxy assigned'; proxyEl.className = 'ib-value none'; }
   }
+
+  // Proxy type + credentials
+  if (proxyMetaEl) {
+    if (ACCOUNT.proxy) {
+      const type  = (ACCOUNT.proxyType || 'http').toUpperCase();
+      const creds = ACCOUNT.proxyHasCredentials ? '🔑 Credentials set' : '⚠️ No credentials';
+      proxyMetaEl.textContent = type + ' — ' + creds;
+      proxyMetaEl.className   = 'ib-value' + (ACCOUNT.proxyHasCredentials ? '' : ' warn');
+    } else {
+      proxyMetaEl.textContent = 'N/A';
+      proxyMetaEl.className   = 'ib-value none';
+    }
+  }
+
+  // What Electron's routing engine resolved
+  if (sessionProxyEl) {
+    const sp = ACCOUNT.sessionResolvedProxy;
+    if (sp) {
+      const isDirect = sp === 'DIRECT';
+      sessionProxyEl.textContent = sp;
+      sessionProxyEl.className   = 'ib-value' + (isDirect && ACCOUNT.proxy ? ' red' : '');
+      if (isDirect && ACCOUNT.proxy) {
+        sessionProxyEl.title = 'WARNING: Electron resolved DIRECT even though a proxy is assigned. The proxy session config may not have been applied yet — try reopening the EB window.';
+      }
+    } else if (ACCOUNT.sessionStoredProxy && ACCOUNT.sessionStoredProxy.error) {
+      sessionProxyEl.textContent = 'EB window not open';
+      sessionProxyEl.className   = 'ib-value none';
+    } else {
+      sessionProxyEl.textContent = 'Not available';
+      sessionProxyEl.className   = 'ib-value none';
+    }
+  }
+
+  // Raw proxy rules string applied to the session
+  if (proxyRulesEl) {
+    const rules = ACCOUNT.sessionProxyRules;
+    if (rules) {
+      proxyRulesEl.textContent = rules;
+      proxyRulesEl.className   = 'ib-value';
+    } else {
+      proxyRulesEl.textContent = 'Not available';
+      proxyRulesEl.className   = 'ib-value none';
+    }
+  }
+
   if (ACCOUNT.ebUA) {
     if (ebUaEl) { ebUaEl.textContent = ACCOUNT.ebUA; ebUaEl.className = 'ib-value'; }
   } else {
@@ -704,9 +765,23 @@ async function testIP() {
     window._detectedPublicIP = ip;
   } catch (e) {
     if (display) { display.className = 'ip-addr'; display.textContent = 'Timed out'; }
-    if (rows) rows.innerHTML = desc('Could not reach ipify.org — proxy may be blocking external requests or connection timed out after 8s.', 'warn');
-    setBadge('badge-ip', 'warn', 'WARN');
-    setResult('IP', 'warn', 'Offline?');
+    const proxyStr = ACCOUNT.proxy || '';
+    const timeoutMsg = proxyStr
+      ? '<b>✅ The proxy IS blocking direct traffic (this is correct).</b><br><br>'
+        + 'The EB session is routing through <code>' + proxyStr + '</code> — ipify.org timed out because the proxy is intercepting the request. '
+        + 'The issue is that the <b>proxy server itself is not forwarding the request</b>.<br><br>'
+        + '<b>Possible causes:</b><ul style="margin:4px 0 0 16px;padding:0">'
+        + '<li>Proxy server is down or unreachable</li>'
+        + '<li>Wrong username/password — proxy rejected the CONNECT request</li>'
+        + '<li>Port ' + (ACCOUNT.proxyPort||'?') + ' is blocked by a firewall</li>'
+        + '<li>Proxy server is blocking ipify.org specifically</li>'
+        + '</ul><br>'
+        + 'Check the <b>Proxy Type / Credentials</b> row above and the <b>Electron Routes Via</b> row. '
+        + 'If Electron shows the proxy address correctly, the proxy config is applied — the issue is with the proxy server, not with Equinox.'
+      : 'Could not reach ipify.org — connection timed out after 8s. No proxy is assigned, so this may be a network connectivity issue.';
+    if (rows) rows.innerHTML = desc(timeoutMsg, proxyStr ? 'info' : 'warn');
+    setBadge('badge-ip', proxyStr ? 'info' : 'warn', proxyStr ? 'INFO' : 'WARN');
+    setResult('IP', proxyStr ? 'info' : 'warn', 'Timed out');
     window._detectedPublicIP = null;
   }
 }

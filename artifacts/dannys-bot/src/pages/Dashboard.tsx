@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.623",
+    date: "28 May 2026",
+    items: [
+      { category: "UI", text: "Sidebar navigation buttons are 15% taller." },
+      { category: "Diagnostics", text: "Leak Test page now shows Proxy Type, Credentials status (set or not set), Electron's resolved routing path, and the raw proxy rules applied to the EB session — making it easy to confirm the proxy is actually being used." },
+      { category: "Diagnostics", text: "When the Public IP test times out and a proxy is assigned, the page now clearly explains that the timeout means the proxy IS blocking direct traffic — and the real issue is the proxy server itself not forwarding the request (down, wrong credentials, or port blocked)." },
+      { category: "Debug", text: "Electron now logs the full proxy configuration (type, host, port, has credentials, proxy rules) each time an Embedded Browser window is opened." },
+    ],
+  },
+  {
     version: "1.0.622",
     date: "28 May 2026",
     items: [

@@ -671,15 +671,14 @@ export async function openEbWindow(opts: {
   const ses = electronSession.fromPartition(partition);
 
   // Configure proxy.
-  // HTTP proxies use a PAC script (see buildProxyConfig) so that:
-  //   (a) there is no DIRECT fallback if the proxy is unreachable, and
-  //   (b) Chrome sends the hostname to the proxy via CONNECT — the proxy does
-  //       the DNS resolution, so IPv6 bypass leaks are impossible even if
-  //       Chromium's --disable-ipv6 flag is not fully effective in this build.
-  // SOCKS5 proxies keep proxyRules with embedded credentials (see buildProxyConfig).
+  // HTTP proxies use fixed_servers + proxyRules with embedded credentials.
+  // SOCKS5 proxies also use fixed_servers with socks5:// proxyRules.
   if (proxy) {
-    await ses.setProxy(buildProxyConfig(proxy));
+    const cfg = buildProxyConfig(proxy);
+    console.log(`[EB:open:${profileId}] Setting proxy — type=${proxy.type||"http"} host=${proxy.host}:${proxy.port} hasCredentials=${!!(proxy.user)} proxyRules=${(cfg as any).proxyRules}`);
+    await ses.setProxy(cfg);
   } else {
+    console.log(`[EB:open:${profileId}] No proxy configured — using direct:// (real machine IP will be exposed)`);
     await ses.setProxy({ proxyRules: "direct://" });
   }
 
@@ -1723,6 +1722,37 @@ export function startEbIpcServer(
         const e   = ebMap.get(pid);
         if (!e || e.win.isDestroyed()) return send(res, 200, { open: false, url: "" });
         return send(res, 200, { open: true, url: e.win.webContents.getURL() });
+      }
+
+      // ── GET /eb/resolve-proxy ─────────────────────────────────────────────────
+      // Calls Electron session.resolveProxy() to show what the browser ACTUALLY
+      // routes through for a given URL.  Used by the leak-test page for diagnostics.
+      if (req.method === "GET" && u.pathname === "/eb/resolve-proxy") {
+        const pid        = Number(u.searchParams.get("profileId") ?? "-1");
+        const testUrl    = u.searchParams.get("url") || "https://api.ipify.org/";
+        const entry      = ebMap.get(pid);
+        if (!entry || entry.win.isDestroyed()) {
+          return send(res, 200, { resolved: null, partition: null, storedProxy: null, error: "EB window not open" });
+        }
+        const ses      = electronSession.fromPartition(entry.partition);
+        const resolved = await ses.resolveProxy(testUrl).catch((e: any) => `ERROR: ${e?.message}`);
+        const stored   = entry.proxy;
+        const proxyRules = stored
+          ? (buildProxyConfig(stored) as any).proxyRules ?? "(no proxyRules)"
+          : "direct://";
+        console.log(`[EB:resolve-proxy] pid=${pid} url=${testUrl} electron-resolved="${resolved}" applied-rules="${proxyRules}"`);
+        return send(res, 200, {
+          resolved,
+          partition:  entry.partition,
+          proxyRules,
+          storedProxy: stored ? {
+            host:           stored.host,
+            port:           stored.port,
+            type:           stored.type || "http",
+            hasCredentials: !!(stored.user),
+            user:           stored.user ? `${stored.user.slice(0,2)}***` : null,
+          } : null,
+        });
       }
 
       // ── GET /eb/cookies ────────────────────────────────────────────────────────
