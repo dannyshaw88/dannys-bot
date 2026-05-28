@@ -757,7 +757,7 @@ function setupBackupHandlers() {
     try {
       // Fetch the profile's proxy + UA from the API server so the native window
       // can be configured correctly (same proxy the mobile API uses).
-      let proxy: { host: string; port: number; user?: string; pass?: string } | undefined;
+      let proxy: { host: string; port: number; user?: string; pass?: string; type?: string } | undefined;
       let userAgent: string | undefined;
       try {
         const r = await fetch(`http://127.0.0.1:${serverPort}/api/profiles/${profileId}`);
@@ -769,6 +769,7 @@ function setupBackupHandlers() {
               port: Number(p.proxyPort),
               user: p.proxyUsername || undefined,
               pass: p.proxyPassword || undefined,
+              type: p.proxyType || undefined,
             };
           }
           userAgent = p.userAgentEmbedded || undefined;
@@ -814,13 +815,14 @@ function setupBackupHandlers() {
 
   // open-signup-browser-window: open a native EB window for account creation.
   // Proxy and UA are passed directly — no profile lookup needed.
-  ipcMain.handle("open-signup-browser-window", async (_event, { username, userAgent, proxyHost, proxyPort, proxyUsername, proxyPassword }: any) => {
+  ipcMain.handle("open-signup-browser-window", async (_event, { username, userAgent, proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType }: any) => {
     try {
       const proxy = proxyHost && proxyPort ? {
         host: proxyHost,
         port: Number(proxyPort),
         user: proxyUsername || undefined,
         pass: proxyPassword || undefined,
+        type: proxyType || undefined,
       } : undefined;
       await openEbWindow({
         profileId: -1,

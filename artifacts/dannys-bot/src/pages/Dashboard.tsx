@@ -58,6 +58,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.605",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy now actually routes traffic in the Embedded Browser — the previous build used a deprecated Electron API (pacScript) that was silently ignored in Electron 33; switched to the correct pacURL + mode:'pac_script' form which Electron 33 honours." },
+      { category: "Fix", text: "SOCKS5 proxy type is now correctly passed when opening an account's browser window — previously the proxy type was stripped, causing SOCKS5 accounts to be treated as HTTP proxies and fail." },
+      { category: "Fix", text: "Ghost / signup browser window now also passes proxy type through correctly." },
+    ],
+  },
+  {
     version: "1.0.604",
     date: "28 May 2026",
     items: [

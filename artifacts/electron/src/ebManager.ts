@@ -202,19 +202,37 @@ function buildProxyConfig(proxy: { host: string; port: number; user?: string; pa
   if (proxy.type === "socks5") {
     const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
     return {
+      mode: "fixed_servers",
       proxyRules: `socks5://${creds}${proxy.host}:${proxy.port}`,
-      proxyBypassRules: "127.0.0.1;[::1];localhost",
+      proxyBypassRules: "127.0.0.1;[::1];localhost;<local>",
     };
   }
-  // HTTP proxy via PAC script — no DIRECT fallback, hostname forwarded to proxy,
-  // loopback bypass inlined so the EB can always reach 127.0.0.1 (local API server).
+  // HTTP proxy via PAC script using pacURL + mode:'pac_script'.
+  //
+  // WHY pacURL instead of the older pacScript field:
+  //   pacScript was deprecated in Electron 30 and is silently ignored in
+  //   Electron 33 unless mode:'pac_script' is also set.  The correct modern
+  //   form is mode:'pac_script' + pacURL with a data: URI — this is guaranteed
+  //   to work in Electron 30–33+ and does not depend on the deprecated shim.
+  //
+  // WHY PAC instead of proxyRules:
+  //   The PAC function returns only "PROXY host:port" with no DIRECT option.
+  //   If the proxy is unreachable the request fails hard — there is no silent
+  //   fallback to the machine's real IP (the well-known --no-proxy-fallback
+  //   flag is only respected for proxyRules on the main process; session-level
+  //   setProxy() ignores it).  Additionally, Chrome sends the raw hostname to
+  //   the proxy via CONNECT so DNS is resolved on the proxy side — IPv6
+  //   bypass via dual-stack AAAA records is impossible.
+  //
+  // Loopback is returned as DIRECT so the EB can always reach the local API.
   const pac = [
     "function FindProxyForURL(url, host) {",
     "  if (host === '127.0.0.1' || host === 'localhost' || isInNet(host, '127.0.0.0', '255.0.0.0')) return 'DIRECT';",
     `  return "PROXY ${proxy.host}:${proxy.port}";`,
     "}",
   ].join("\n");
-  return { pacScript: pac };
+  const pacURL = `data:application/x-ns-proxy-autoconfig,${encodeURIComponent(pac)}`;
+  return { mode: "pac_script", pacURL };
 }
 
 // JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
