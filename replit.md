@@ -147,7 +147,12 @@ This is a chronological record of every approach that was tried and its outcome.
 - **Change**: `testDNS()` in `leaksPage.ts` changed from `api64.ipify.org` to `api.ipify.org` (IPv4-only, no AAAA record, no QUIC support). Now all three DNS sources go through the proxy and report the same exit IP.
 - **Result**: DNS leak should now show PASS when the proxy is working. CONFIRMED in v1.0.611 build #538.
 
-### What has NOT been tried yet (open issues as of v1.0.611):
+### Attempt 4 — Fixed my-ip.io endpoint (v1.0.613)
+- **Theory**: `api.my-ip.io` has a AAAA record. Chrome opens it via a direct IPv6 socket that bypasses the HTTP proxy entirely — exact same failure mode as `api64.ipify.org` (Attempt 3). The test was reporting the real machine IPv6 (`2a0a:ef40:...`) from my-ip.io while Cloudflare and ipify both returned the proxy IP correctly.
+- **Change**: `testDNS()` in `leaksPage.ts` changed from `api.my-ip.io/v2/ip.json` to `api4.my-ip.io/v2/ip.json` (IPv4-only subdomain, no AAAA record). All three sources now route through the proxy.
+- **Result**: DNS leak should now show PASS. The earlier "my-ip.io is safe" note in this doc was wrong — it does have a AAAA record.
+
+### What has NOT been tried yet (open issues as of v1.0.613):
 - **Proxy IP Match FAIL for rotating residential proxies**: The test compares the detected exit IP against the proxy HOST IP (e.g., `37.97.112.154`). For rotating residential proxies the exit IP is a different residential address (e.g., `90.242.146.49`). This always shows FAIL because the test can't know the expected exit IP. This is a DISPLAY BUG in the test, not a real leak. The Proxy IP Match test needs logic to distinguish hostname-based proxies (show INFO instead of FAIL) from IP-based proxies.
 
 ### Things already in place — do NOT add again:
@@ -191,7 +196,7 @@ This is a chronological record of every approach that was tried and its outcome.
 ### DNS leak test (artifacts/api-server/src/instagram/leaksPage.ts):
 - Public IP test (`testIP`): uses `api.ipify.org` (IPv4-only, no AAAA, no QUIC). DO NOT change to `api64.ipify.org`.
 - DNS leak test (`testDNS`): also uses `api.ipify.org` (NOT `api64`). `api64.ipify.org` is Cloudflare-fronted, dual-stack, QUIC-enabled — Chrome can open it as a direct UDP connection bypassing the HTTP proxy, making the test report a false IPv6 leak. Using the IPv4-only endpoint ensures all three DNS sources route through the proxy.
-- `my-ip.io` endpoint is safe (not Cloudflare-fronted, not QUIC).
+- `api4.my-ip.io` endpoint is used (NOT `api.my-ip.io` — that has a AAAA record and leaks real IPv6 via direct socket). `api4.my-ip.io` is the IPv4-only subdomain, no AAAA record.
 - `1.1.1.1/cdn-cgi/trace` is safe with `--disable-quic` in place.
 
 ### Proxy IP Match test logic:

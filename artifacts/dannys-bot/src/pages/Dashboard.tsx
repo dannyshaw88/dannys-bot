@@ -58,6 +58,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.614",
+    date: "28 May 2026",
+    items: [
+      { category: "UI", text: "Left sidebar redesigned to match Jarvee's square icon-button style — each nav item is now a compact square with a large centered icon and short ALL-CAPS label below, with an accent left-border on the active item. Profile sub-tabs shown as icon-only squares with hover tooltips when viewing an account. Sidebar is narrower (74px) giving more space to the main content area." },
+    ],
+  },
+  {
+    version: "1.0.613",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "DNS leak test fixed again — my-ip.io was returning the real machine IPv6 address because api.my-ip.io has a AAAA record and Chrome was opening it via a direct IPv6 socket that bypasses the HTTP proxy entirely (same failure mode as api64.ipify.org fixed in v1.0.611). Switched to api4.my-ip.io which is the IPv4-only subdomain — no AAAA record, all requests go through the proxy, and all three DNS sources now report the same proxy exit IP." },
+    ],
+  },
+  {
     version: "1.0.612",
     date: "28 May 2026",
     items: [

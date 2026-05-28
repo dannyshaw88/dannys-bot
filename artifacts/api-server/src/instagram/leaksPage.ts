@@ -895,7 +895,12 @@ async function testDNS() {
   } catch {}
 
   try {
-    const r3 = await tf('https://api.my-ip.io/v2/ip.json', 5000);
+    // api4.my-ip.io (NOT api) — IPv4-only subdomain.  api.my-ip.io has an
+    // AAAA record and Chrome opens it via a direct IPv6 socket that bypasses
+    // the HTTP proxy entirely, exposing the real machine IPv6 — same failure
+    // mode as api64.ipify.org (fixed in v1.0.611).  api4.my-ip.io has no
+    // AAAA record so all requests must go through the proxy over TCP.
+    const r3 = await tf('https://api4.my-ip.io/v2/ip.json', 5000);
     const d3 = await r3.json();
     if (d3.ip) { ips.push(d3.ip); sources.push('my-ip.io'); }
   } catch {}

@@ -6,7 +6,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="h-screen bg-background flex overflow-hidden">
       <Sidebar />
-      <main className="flex-1 ml-[218px] h-screen relative flex flex-col overflow-x-hidden w-0">
+      <main className="flex-1 ml-[74px] h-screen relative flex flex-col overflow-x-hidden w-0">
         <LiveActivityTicker />
         <div id="app-scroll" className="px-4 pt-4 w-full flex-1 min-h-0 overflow-y-auto">
           {children}
