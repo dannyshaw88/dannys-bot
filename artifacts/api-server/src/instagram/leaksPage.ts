@@ -752,7 +752,7 @@ function testIPMatch() {
       setCardBorder('card-ipmatch', 'pass');
       setResult('IPMatch', 'pass', 'Match');
     } else {
-      html += desc('Exit IP differs from the proxy host IP. This is normal for rotating residential proxies — the proxy provider routes traffic through a pool of residential IPs, so the exit IP is never the same as the proxy server IP. If you are using a static datacenter proxy and see this, the proxy may not be routing correctly.', 'warn');
+      html += desc('Exit IP differs from the proxy host IP. This is normal for residential proxies (static or rotating) — the proxy host is the provider\'s entry-point server, while the exit IP is the actual residential IP assigned to your account. These are always different by design. Only datacenter proxies with a dedicated static IP will have a matching host and exit IP.', 'warn');
       setBadge('badge-ipmatch', 'warn', 'WARN');
       setCardBorder('card-ipmatch', 'warn');
       setResult('IPMatch', 'warn', 'Diff IP');

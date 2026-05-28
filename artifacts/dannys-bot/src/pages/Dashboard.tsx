@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.616",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy IP Match explanation corrected — clarified that both static and rotating residential proxies will always show a different exit IP from the proxy host IP, because the host is the provider's entry-point server and the exit IP is the residential IP assigned to your account. This is expected behaviour, not a leak." },
+    ],
+  },
+  {
     version: "1.0.615",
     date: "28 May 2026",
     items: [
