@@ -58,6 +58,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.631",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Web Workers and OffscreenCanvas are now fingerprint-protected — any fingerprinting script running inside a Worker sees the same spoofed hardwareConcurrency, deviceMemory, platform, and WebGL GPU as the main page." },
+      { category: "Fix", text: "screen.isExtended is now false — matches real mobile devices which never have an extended/multi-monitor setup." },
+    ],
+  },
+  {
     version: "1.0.630",
     date: "28 May 2026",
     items: [

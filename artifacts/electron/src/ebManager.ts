@@ -394,6 +394,7 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     try{Object.defineProperty(navigator,"hardwareConcurrency",{get:function(){return _CORES;}});}catch(e){}
     try{Object.defineProperty(navigator,"deviceMemory",{get:function(){return _MEM;}});}catch(e){}
     try{Object.defineProperty(window,"devicePixelRatio",{get:function(){return _DPR;}});}catch(e){}
+    try{Object.defineProperty(screen,"isExtended",{get:function(){return false;}});}catch(e){}
     try{Object.defineProperty(window,"orientation",{get:function(){return 0;},configurable:true});}catch(e){}
     try{var _ori={type:"portrait-primary",angle:0,onchange:null,
       lock:function(){return Promise.reject(new DOMException("Not supported","NotSupportedError"));},
@@ -563,6 +564,40 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     window.speechSynthesis.addEventListener=function(t,fn,opts){
       _oPAE.call(this,t,fn,opts);if(t==='voiceschanged'){try{fn.call(window.speechSynthesis,new Event('voiceschanged'));}catch(e2){}}
     };
+  }catch(e){}
+  try{
+    var _WPS=(
+      '(function(){'
+      +'try{Object.defineProperty(self.navigator,"hardwareConcurrency",{get:function(){return '+_CORES+';}});}catch(e){}'
+      +'try{Object.defineProperty(self.navigator,"deviceMemory",{get:function(){return '+_MEM+';}});}catch(e){}'
+      +'try{Object.defineProperty(self.navigator,"platform",{get:function(){return"Linux armv8l";}});}catch(e){}'
+      +'if(typeof OffscreenCanvas!=="undefined"){try{'
+      +'var _pG=function(gl){if(!gl)return;'
+      +'var _eO=gl.getExtension.bind(gl),_pO=gl.getParameter.bind(gl);'
+      +'gl.getExtension=function(n){if(n==="WEBGL_debug_renderer_info")return{UNMASKED_VENDOR_WEBGL:37445,UNMASKED_RENDERER_WEBGL:37446};return _eO(n);};'
+      +'gl.getParameter=function(p){if(p===37445)return '+JSON.stringify(_WV)+';if(p===37446)return '+JSON.stringify(_WR)+';return _pO(p);};};'
+      +'var _oGC=OffscreenCanvas.prototype.getContext;'
+      +'OffscreenCanvas.prototype.getContext=function(t,a){var g=_oGC.call(this,t,a);if(g&&(t==="webgl"||t==="webgl2"||t==="experimental-webgl"))_pG(g);return g;};'
+      +'}catch(e){}}'
+      +'})();'
+    );
+    var _WBlob=new Blob([_WPS],{type:'text/javascript'});
+    var _WUrl=URL.createObjectURL(_WBlob);
+    var _WOrig=window.Worker;
+    if(_WOrig){
+      window.Worker=function(url,opts){
+        if(!opts||opts.type!=='module'){
+          try{
+            var _wu=typeof url==='string'?url:url.toString();
+            var _wb=new Blob(['importScripts('+JSON.stringify(_WUrl)+');\\nimportScripts('+JSON.stringify(_wu)+');'],{type:'text/javascript'});
+            return new _WOrig(URL.createObjectURL(_wb),opts);
+          }catch(e2){}
+        }
+        return new _WOrig(url,opts);
+      };
+      try{window.Worker.prototype=_WOrig.prototype;}catch(e){}
+      try{Object.defineProperty(window.Worker,'name',{value:'Worker'});}catch(e){}
+    }
   }catch(e){}
 }catch(e){}})();`;
 }
