@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.633",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "The embedded browser no longer physically resizes to mobile dimensions — it stays at its normal usable size. window.innerWidth and window.innerHeight are now spoofed at the JavaScript level to match the mobile screen profile, so the consistency check passes without squashing the window." },
+    ],
+  },
+  {
     version: "1.0.632",
     date: "28 May 2026",
     items: [

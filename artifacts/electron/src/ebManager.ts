@@ -326,19 +326,6 @@ async function humanMouseClick(
   if (!wc.isDestroyed()) wc.sendInputEvent({ type: "mouseUp", x: tx, y: ty, button: "left", clickCount: 1 });
 }
 
-// Extract logical CSS screen dimensions from an API UA string.
-// Mirrors the same calculation used inside buildFingerprintScript so the CDP
-// Emulation.setDeviceMetricsOverride values are always consistent with the JS
-// screen.width/height overrides.
-function screenDimsFromApiUA(apiUA: string | null | undefined): { w: number; h: number; dpr: number } | null {
-  if (!apiUA) return null;
-  const m = apiUA.match(/;\s*(\d+)dpi;\s*(\d+)x(\d+)/);
-  if (!m) return null;
-  const dpi = +m[1], pW = +m[2], pH = +m[3];
-  const dpr = Math.round(dpi / 160 * 10000) / 10000;
-  return { w: Math.round(pW / dpr), h: Math.round(pH / dpr), dpr };
-}
-
 function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: EbFingerprintLite | null): string {
   const mf = isMobile ? 'true' : 'false';
   const af = apiUA ? JSON.stringify(apiUA) : 'null';
@@ -394,6 +381,8 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     try{Object.defineProperty(navigator,"hardwareConcurrency",{get:function(){return _CORES;}});}catch(e){}
     try{Object.defineProperty(navigator,"deviceMemory",{get:function(){return _MEM;}});}catch(e){}
     try{Object.defineProperty(window,"devicePixelRatio",{get:function(){return _DPR;}});}catch(e){}
+    try{Object.defineProperty(window,"innerWidth",{get:function(){return _SW;}});}catch(e){}
+    try{Object.defineProperty(window,"innerHeight",{get:function(){return _SH;}});}catch(e){}
     try{Object.defineProperty(screen,"isExtended",{get:function(){return false;}});}catch(e){}
     try{Object.defineProperty(window,"orientation",{get:function(){return 0;},configurable:true});}catch(e){}
     try{var _ori={type:"portrait-primary",angle:0,onchange:null,
@@ -1183,22 +1172,6 @@ export async function openEbWindow(opts: {
           { locale: "en-US" });
       } catch {}
 
-      // ── Device metrics — fix window.innerWidth ≠ screen.width mismatch ──────
-      // The JS fingerprint already spoofs screen.width to e.g. 360px, but the
-      // actual Electron window is ~1280px wide.  Any script that reads
-      // window.innerWidth sees 1280 while screen.width says 360 — impossible on
-      // a real phone.  setDeviceMetricsOverride makes the actual rendered
-      // viewport match the spoofed screen dimensions.
-      if (_fpIsMobile) {
-        const dims = screenDimsFromApiUA(apiUA ?? null);
-        const sw = dims?.w ?? 390, sh = dims?.h ?? 844, dpr = dims?.dpr ?? 3.0;
-        try {
-          await win.webContents.debugger.sendCommand("Emulation.setDeviceMetricsOverride", {
-            width: sw, height: sh, deviceScaleFactor: dpr, mobile: true,
-            screenWidth: sw, screenHeight: sh,
-          });
-        } catch {}
-      }
     } catch (err) {
       console.warn(`[ebManager:${profileId}] WebRTC/fingerprint CDP injection failed:`, err);
     }
