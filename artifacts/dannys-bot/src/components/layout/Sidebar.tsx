@@ -1,6 +1,6 @@
 import { useLocation, useSearch } from "wouter";
 import {
-  LayoutDashboard, Users, ShieldAlert, Settings, Activity,
+  LayoutGrid, Users, ShieldAlert, Settings, Activity,
   ChevronLeft, ChevronRight, Ghost, User, UserMinus, UserPlus, MessageSquare, Cookie, Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,12 +38,12 @@ export function Sidebar() {
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",          shortLabel: "DASHBOARD",   path: "/dashboard",    icon: LayoutDashboard },
-    { name: "Accounts",           shortLabel: "ACCOUNTS",    path: "/profiles",     icon: Users           },
-    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT", path: "/bulk-import", icon: Upload          },
-    { name: "Ghost Browser",      shortLabel: "GHOST",       path: "/create-ghost", icon: Ghost           },
-    { name: "Statistics",         shortLabel: "STATISTICS",  path: "/stats",        icon: Activity        },
-    { name: "Proxy Manager",      shortLabel: "PROXY MGR",   path: "/proxies",      icon: ShieldAlert     },
+    { name: "Dashboard",          shortLabel: "DASHBOARD",      path: "/dashboard",    icon: LayoutGrid  },
+    { name: "Accounts",           shortLabel: "ACCOUNTS",       path: "/profiles",     icon: Users           },
+    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",  path: "/bulk-import",  icon: Upload          },
+    { name: "Ghost Browser",      shortLabel: "GHOST",          path: "/create-ghost", icon: Ghost           },
+    { name: "Statistics",         shortLabel: "STATISTICS",     path: "/stats",        icon: Activity        },
+    { name: "Proxy Manager",      shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: ShieldAlert     },
   ];
 
   function goBack() {
@@ -57,7 +57,7 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-[218px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
+    <div className="w-[185px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
 
       {/* ── Original header: logo + wordmark + nav arrows ── */}
       <div className="h-16 flex items-center px-4 border-b border-border/50 gap-2">
@@ -104,7 +104,7 @@ export function Sidebar() {
               <button
                 onClick={() => setLocation(item.path)}
                 className={cn(
-                  "flex flex-col items-center justify-center w-full py-2.5 gap-1 transition-all duration-200 rounded-none",
+                  "flex flex-col items-center justify-center w-full py-[12.5px] gap-1 transition-all duration-200 rounded-none",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -163,7 +163,7 @@ export function Sidebar() {
         <button
           onClick={() => setLocation("/settings")}
           className={cn(
-            "flex flex-col items-center justify-center w-full py-2.5 gap-1 transition-all duration-200 rounded-none",
+            "flex flex-col items-center justify-center w-full py-[12.5px] gap-1 transition-all duration-200 rounded-none",
             location === "/settings"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"

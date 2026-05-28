@@ -152,6 +152,12 @@ This is a chronological record of every approach that was tried and its outcome.
 - **Change**: `testDNS()` in `leaksPage.ts` changed from `api.my-ip.io/v2/ip.json` to `api4.my-ip.io/v2/ip.json` (IPv4-only subdomain, no AAAA record). All three sources now route through the proxy.
 - **Result**: DNS leak should now show PASS. The earlier "my-ip.io is safe" note in this doc was wrong — it does have a AAAA record.
 
+### Attempt 6 — Residential auto-detection in Proxy IP Match (v1.0.619, REVERTED — WRONG)
+- **Theory (WRONG)**: Assumed exit IP `90.242.146.49` (Vodafone UK) was a residential proxy exit address.
+- **Reality**: `90.242.146.49` is the user's real home broadband. A residential-looking IP can always be the machine's actual ISP — there is NO reliable way to distinguish "residential proxy exit" from "real home broadband" from geo data alone.
+- **Change**: Added `is_datacenter` check — if exit IP is non-datacenter, showed INFO instead of FAIL. This was wrong and masked a real leak.
+- **Result**: REVERTED in v1.0.620. Proxy IP Match must always FAIL on mismatch. The user decides if it's a residential proxy or a real leak.
+
 ### Attempt 5 — Reverted PAC script → fixed_servers with embedded credentials (v1.0.618)
 - **Theory**: The `pacScript` inline-string option in Electron's `session.setProxy()` is silently ignored in some Electron 33/34 builds on Windows. When ignored, no proxy is configured at all and all traffic goes DIRECT through the machine's real IP. The original "fixed_servers falls back to DIRECT" diagnosis (Attempt 1) was a false positive — the 2-IP result in the DNS test was actually the QUIC/IPv6 bypass in the test tool itself (subsequently fixed in Attempts 3-4), not a proxy routing failure.
 - **Change**: `buildProxyConfig()` now uses `mode:'fixed_servers'` + `proxyRules:'http://user:pass@host:port'` for HTTP proxies (same approach as SOCKS5). Credentials are embedded directly in the proxy URL, eliminating the 407-challenge cycle entirely — Chrome sends `Proxy-Authorization` preemptively on every CONNECT without needing the `login` event handler. The `login` handler is kept as belt-and-suspenders.
@@ -204,8 +210,8 @@ This is a chronological record of every approach that was tried and its outcome.
 - `api4.my-ip.io` endpoint is used (NOT `api.my-ip.io` — that has a AAAA record and leaks real IPv6 via direct socket). `api4.my-ip.io` is the IPv4-only subdomain, no AAAA record.
 - `1.1.1.1/cdn-cgi/trace` is safe with `--disable-quic` in place.
 
-### Proxy IP Match test logic:
-- The test compares `detectedIP` against the raw proxy HOST (e.g., `37.97.112.154`). For rotating residential proxies the exit IP is different from the proxy server IP — this is normal and NOT a leak. The test shows FAIL in this case because it cannot know the expected exit IP. This is a display limitation, not a real leak.
+### Proxy IP Match test logic (v1.0.620+):
+- Always shows **FAIL** when exit IP ≠ proxy host IP. There is no reliable way to distinguish "residential proxy exit IP" from "real home broadband IP" from geo data alone — both are non-datacenter. The user must manually decide if the mismatch is a real leak or an expected residential proxy routing difference.
 
 ### Sidebar — Jarvee-style edge-to-edge buttons (artifacts/dannys-bot/src/components/layout/Sidebar.tsx):
 - The `<nav>` element must have NO horizontal padding (`px-3` was causing button backgrounds to be inset from sidebar edges).
@@ -288,7 +294,7 @@ Every push to `main` triggers `.github/workflows/build.yml` which runs two jobs:
 
 Every push to GitHub **must** include a version bump in `artifacts/electron/package.json`.
 
-75. Current version: **v1.0.611**
+75. Current version: **v1.0.620**
 76. Increment the **patch** number (third digit) by 1 for each push: e.g. `1.0.324` → `1.0.325`
 77. The version string in `package.json` (`"version": "1.0.XXX"`) is what `electron-builder` bakes into the installer and what the auto-updater compares against
 78. Include `artifacts/electron/package.json` in every batch push alongside the other changed files

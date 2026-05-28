@@ -58,6 +58,24 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.620",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy IP Match test reverted to always show FAIL when exit IP differs from the assigned proxy — a residential-looking exit IP can still be the machine's real home broadband, so the test must always flag the mismatch and let the user decide." },
+      { category: "UI", text: "Sidebar nav buttons are 25% taller for easier clicking." },
+      { category: "UI", text: "Sidebar column is 15% narrower to give more room to the main content area." },
+      { category: "UI", text: "Dashboard icon updated." },
+      { category: "UI", text: "Proxy Manager label now shows full name instead of abbreviation." },
+    ],
+  },
+  {
+    version: "1.0.619",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy IP Match test — reverted: the residential-proxy auto-detection was incorrect and was masking real leaks. Removed." },
+    ],
+  },
+  {
     version: "1.0.618",
     date: "28 May 2026",
     items: [
