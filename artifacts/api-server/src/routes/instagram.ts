@@ -812,12 +812,19 @@ export async function registerInstagramRoutes(
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
 
+    // Resolve proxy via proxyId (Proxy Manager) OR inline proxyHost — whichever is set.
+    // Previously only proxyHost was used, so accounts whose proxy was linked via the
+    // Proxy Manager (proxyId) had no proxy applied to the EB session, causing the
+    // real machine IP to appear in the leak test instead of the proxy exit IP.
+    const resolvedEbProxy = await resolveProxyConfig(profile);
     const body = {
       profileId,
       username:  profile.username,
       password:  profile.password,
       twoFAKey:  profile.twoFASecretKey ?? "",
-      proxy:     profile.proxyHost ? { host: profile.proxyHost, port: profile.proxyPort, user: profile.proxyUsername, pass: profile.proxyPassword, type: (profile as any).proxyType ?? "http" } : undefined,
+      proxy:     resolvedEbProxy
+        ? { host: resolvedEbProxy.host, port: resolvedEbProxy.port, user: resolvedEbProxy.username, pass: resolvedEbProxy.password, type: resolvedEbProxy.type }
+        : undefined,
       userAgent: profile.userAgentEmbedded ?? "",
     };
     try {
@@ -1906,6 +1913,17 @@ export async function registerInstagramRoutes(
       } catch {}
     }
 
+    // For the Ghost Browser (profileId=-1) there is no DB record, so the proxy
+    // information is passed directly as query params by the ebManager leak-check
+    // toolbar command (which reads the proxy from the live ebMap entry).
+    const qProxyHost = ((req.query.proxyHost as string | undefined) ?? "").trim() || null;
+    const qProxyPort = req.query.proxyPort ? Number(req.query.proxyPort) : null;
+    if (qProxyHost && qProxyPort && !accountData.proxyHost) {
+      accountData.proxyHost = qProxyHost;
+      accountData.proxyPort = qProxyPort;
+      accountData.proxy = `${qProxyHost}:${qProxyPort}`;
+    }
+
     const html = LEAKS_PAGE_HTML
       .replace("__LEAK_TEST_TITLE__", title)
       .replace("__ACCOUNT_DATA__", JSON.stringify(accountData));
@@ -2106,12 +2124,12 @@ export async function registerInstagramRoutes(
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
     if (ipcPort) {
       try {
-        const { proxyHost, proxyPort, proxyUsername, proxyPassword, userAgent } = req.body as any;
+        const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent } = req.body as any;
         const body = {
           profileId: -1,
           username: "Ghost",
           proxy: proxyHost && proxyPort
-            ? { host: proxyHost, port: Number(proxyPort), user: proxyUsername ?? undefined, pass: proxyPassword ?? undefined }
+            ? { host: proxyHost, port: Number(proxyPort), user: proxyUsername ?? undefined, pass: proxyPassword ?? undefined, type: (proxyType ?? "http") as "http" | "socks5" }
             : undefined,
           userAgent: userAgent ?? undefined,
         };

@@ -58,6 +58,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.607",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "Proxy now correctly applies in the Embedded Browser for accounts whose proxy is set via the Proxy Manager — previously only inline proxy fields were used, so Proxy Manager-linked proxies were silently ignored and the real IP leaked." },
+      { category: "Fix", text: "Ghost Browser now forwards the correct proxy type (HTTP vs SOCKS5) to the browser session so SOCKS5 proxies are no longer misidentified as HTTP, which caused silent connection failures." },
+      { category: "Fix", text: "Leak test now correctly shows the assigned proxy in the Ghost Browser's Account Identity section instead of always showing 'No proxy assigned'." },
+      { category: "Fix", text: "HTTP proxy rules now use explicit per-scheme format (http=... and https=...) so both HTTP and HTTPS traffic reliably route through the proxy in Chromium 130." },
+      { category: "UI", text: "Main sidebar navigation buttons (Dashboard, Accounts, Ghost Browser, etc.) are now square — rounded corners removed as requested." },
+    ],
+  },
+  {
     version: "1.0.606",
     date: "28 May 2026",
     items: [

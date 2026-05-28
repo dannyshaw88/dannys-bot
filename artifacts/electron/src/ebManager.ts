@@ -219,13 +219,20 @@ function buildProxyConfig(proxy: { host: string; port: number; user?: string; pa
     return {
       mode: "fixed_servers",
       proxyRules: `socks5://${creds}${proxy.host}:${proxy.port}`,
-      proxyBypassRules: "127.0.0.1;[::1];localhost;<local>",
+      proxyBypassRules: "127.0.0.1;[::1];localhost",
     };
   }
+  // Use per-scheme rules with explicit http:// prefix so Chromium unambiguously
+  // routes both HTTP (direct forward) and HTTPS (CONNECT tunnel) through the proxy.
+  // Bare "host:port" is technically equivalent but some Chromium 130 builds ignore
+  // it for HTTPS; the explicit per-scheme form is always honoured.
+  // <local> is intentionally omitted — 127.0.0.1, [::1], and localhost are listed
+  // explicitly; <local> on Windows can inadvertently bypass the proxy for intranet
+  // zones, causing leaks on machines with custom Windows networking policies.
   return {
     mode: "fixed_servers",
-    proxyRules: `${proxy.host}:${proxy.port}`,
-    proxyBypassRules: "127.0.0.1;[::1];localhost;<local>",
+    proxyRules: `http=http://${proxy.host}:${proxy.port};https=http://${proxy.host}:${proxy.port}`,
+    proxyBypassRules: "127.0.0.1;[::1];localhost",
   };
 }
 
@@ -1306,9 +1313,16 @@ function setupToolbarIpc(): void {
         if (payload?.url) wc.loadURL(payload.url).catch(() => {});
         break;
 
-      case "leak-check":
-        if (_serverPort) wc.loadURL(`http://127.0.0.1:${_serverPort}/api/browser/leaks?profileId=${foundPid}`).catch(() => {});
+      case "leak-check": {
+        if (_serverPort) {
+          const _lkEntry = ebMap.get(foundPid);
+          const _lkProxy = _lkEntry?.proxy
+            ? `&proxyHost=${encodeURIComponent(_lkEntry.proxy.host)}&proxyPort=${encodeURIComponent(_lkEntry.proxy.port)}`
+            : "";
+          wc.loadURL(`http://127.0.0.1:${_serverPort}/api/browser/leaks?profileId=${foundPid}${_lkProxy}`).catch(() => {});
+        }
         break;
+      }
 
       case "login": {
         // Fill username + password into the visible Instagram login form.

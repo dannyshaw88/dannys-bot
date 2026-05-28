@@ -301,7 +301,7 @@ export function CreateGhostPage() {
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
       const p = proxies.find(x => x.id === proxySelection.id);
-      if (p) return { host: p.host, port: p.port, username: p.username ?? undefined, password: p.password ?? undefined };
+      if (p) return { host: p.host, port: p.port, username: p.username ?? undefined, password: p.password ?? undefined, proxyType: (p as any).proxyType ?? "http" };
     }
     if (proxySelection.kind === "manual") {
       const host = manualHost.trim();
@@ -334,6 +334,7 @@ export function CreateGhostPage() {
         proxyPort: resolvedProxy?.port,
         proxyUsername: resolvedProxy?.username,
         proxyPassword: resolvedProxy?.password,
+        proxyType: (resolvedProxy as any)?.proxyType,
       }),
     }).catch(() => {});
     setBrowserState("open");

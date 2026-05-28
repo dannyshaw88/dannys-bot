@@ -101,7 +101,7 @@ export function Sidebar() {
               <button
                 onClick={() => setLocation(item.path)}
                 className={cn(
-                  "flex items-center w-full px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group text-left",
+                  "flex items-center w-full px-4 py-2.5 gap-2.5 text-sm font-medium transition-all duration-200 group text-left",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -157,7 +157,7 @@ export function Sidebar() {
         <button
           onClick={() => setLocation("/settings")}
           className={cn(
-            "flex items-center w-full px-4 py-2.5 gap-2.5 rounded-md text-sm font-medium transition-all duration-200 group text-left",
+            "flex items-center w-full px-4 py-2.5 gap-2.5 text-sm font-medium transition-all duration-200 group text-left",
             location === "/settings"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
