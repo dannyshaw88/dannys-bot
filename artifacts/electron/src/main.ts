@@ -1103,6 +1103,20 @@ app.commandLine.appendSwitch("no-proxy-fallback");
 // Disabling QUIC forces all connections to TCP (HTTP/1.1 or HTTP/2 via CONNECT)
 // which the configured HTTP/SOCKS5 proxy handles correctly.
 app.commandLine.appendSwitch("disable-quic");
+// ── Disable IPv6 preference in Chrome's connection algorithms ─────────────────
+// Belt-and-suspenders on top of --disable-ipv6.  In Electron 33 / Chromium 130
+// the --disable-ipv6 flag may not fully suppress TCP IPv6 connections due to
+// changes in the Network Service process.  These feature flags target the
+// upper-layer algorithms that PREFER IPv6:
+//   HappyEyeballsV3  — the Happy Eyeballs v3 algorithm aggressively races IPv6
+//     vs IPv4 and picks whichever connects first (usually IPv6 on a dual-stack
+//     host).  Disabling it reverts to the older IPv4-first behaviour.
+//   IPv6Reachability — Chrome's IPv6 reachability probe.  Without a confirmed
+//     reachable IPv6 path Chrome avoids IPv6 for new connections.
+// Note: the PAC-script proxy approach in ebManager.ts is the primary IPv6 leak
+// fix (Chrome sends hostname to proxy via CONNECT; proxy resolves DNS, so IPv6
+// never appears on the client side).  These flags are an additional layer.
+app.commandLine.appendSwitch("disable-features", "HappyEyeballsV3,IPv6Reachability");
 // ── Global proxy bypass list ──────────────────────────────────────────────────
 // Set a strict global bypass list so only loopback addresses bypass the proxy.
 // Individual sessions also set proxyBypassList explicitly in setProxy() calls,

@@ -1699,8 +1699,28 @@ export function ProfilesPage() {
                 {jarveeImporting ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Upload className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 Import Binary File
               </button>
-              {/* blank cell — keeps the 2-col grid aligned */}
-              <div />
+              <button
+                onClick={async () => {
+                  setActionsOpen(false);
+                  try {
+                    const tz = new Date().getTimezoneOffset();
+                    const ids = selectedProfileIds.length > 0 ? selectedProfileIds.join(",") : "";
+                    const url = `/api/logs/export?${ids ? `profileIds=${ids}&` : ""}tz=${tz}`;
+                    const res = await fetch(url, { credentials: "include" });
+                    if (!res.ok) { toast({ title: "Export failed", description: "Could not fetch API call history.", variant: "destructive" }); return; }
+                    const blob = await res.blob();
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                  } catch { toast({ title: "Export failed", variant: "destructive" }); }
+                }}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"
+              >
+                <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" />
+                Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>

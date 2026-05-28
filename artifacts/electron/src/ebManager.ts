@@ -179,23 +179,42 @@ function ebPartition(pid: number): string {
   return ebMap.get(pid)?.partition ?? `persist:eb-${pid}`;
 }
 
-// Build the Electron session.setProxy() proxyRules string for a given proxy config.
-// HTTP proxies: "http=host:port;https=host:port" — credentials delivered via the
-//   session "login" event (HTTP 407 Proxy-Authorization challenge).
-// SOCKS5 proxies: "socks5://user:pass@host:port" — credentials MUST be embedded in
-//   the URL because SOCKS5 has no 407 challenge.  Feeding a SOCKS5 server the HTTP
-//   format causes Chromium to issue an HTTP CONNECT that SOCKS5 rejects, then fall
-//   back to a DIRECT connection — leaking the real IP.
-function buildProxyRules(proxy: { host: string; port: number; user?: string; pass?: string; type?: string }): string {
+// Build the Electron session.setProxy() options object for a given proxy config.
+//
+// HTTP proxies use a PAC script instead of proxyRules.  The critical difference:
+//   proxyRules — Chromium may silently fall back to DIRECT if the proxy is
+//     unreachable, exposing the machine's real IP even with --no-proxy-fallback
+//     (that flag is not always honoured for session-level setProxy() calls).
+//   pacScript  — FindProxyForURL returns only "PROXY host:port" with no DIRECT
+//     option.  If the proxy is down the request fails hard; there is no fallback
+//     path.  Additionally, Chrome sends the hostname (not a resolved IP) to the
+//     proxy via CONNECT, so the proxy's DNS resolver picks the address — IPv6
+//     connections to dual-stack hosts are resolved on the proxy side, eliminating
+//     IPv6 bypass leaks entirely regardless of the --disable-ipv6 flag's
+//     effectiveness in the current Chromium build.
+//
+// SOCKS5 proxies keep proxyRules with embedded credentials because:
+//   1. SOCKS5 has no HTTP 407 challenge so the login event never fires.
+//   2. PAC strings cannot carry credentials ("SOCKS5 host:port" only).
+//   3. Chromium rejects SOCKS5 servers given an HTTP-CONNECT request, then
+//      falls back to DIRECT — leaking the real IP.
+function buildProxyConfig(proxy: { host: string; port: number; user?: string; pass?: string; type?: string }): Parameters<Electron.Session["setProxy"]>[0] {
   if (proxy.type === "socks5") {
     const creds = proxy.user ? `${encodeURIComponent(proxy.user)}:${encodeURIComponent(proxy.pass ?? "")}@` : "";
-    return `socks5://${creds}${proxy.host}:${proxy.port}`;
+    return {
+      proxyRules: `socks5://${creds}${proxy.host}:${proxy.port}`,
+      proxyBypassRules: "127.0.0.1;[::1];localhost",
+    };
   }
-  // HTTP proxy — use the bare "host:port" form (Chromium treats this as "PROXY
-  // host:port" which applies to ALL URL schemes: http, https, ws, wss, ftp).
-  // The scheme-specific form "http=host:port;https=host:port" only covers those
-  // two explicit schemes and can leave WebSocket and other traffic unproxied.
-  return `${proxy.host}:${proxy.port}`;
+  // HTTP proxy via PAC script — no DIRECT fallback, hostname forwarded to proxy,
+  // loopback bypass inlined so the EB can always reach 127.0.0.1 (local API server).
+  const pac = [
+    "function FindProxyForURL(url, host) {",
+    "  if (host === '127.0.0.1' || host === 'localhost' || isInNet(host, '127.0.0.0', '255.0.0.0')) return 'DIRECT';",
+    `  return "PROXY ${proxy.host}:${proxy.port}";`,
+    "}",
+  ].join("\n");
+  return { pacScript: pac };
 }
 
 // JavaScript injected into every EB page to block WebRTC TCP and UDP ICE candidates.
@@ -585,7 +604,7 @@ export async function openEbWindow(opts: {
         console.log(`[ebManager:${profileId}] Proxy changed (${oldProxyKey} → ${newProxyKey}), updating session proxy`);
         const existingSes = electronSession.fromPartition(existing.partition);
         if (proxy) {
-          await existingSes.setProxy({ proxyRules: buildProxyRules(proxy), proxyBypassRules: "127.0.0.1;[::1];localhost" });
+          await existingSes.setProxy(buildProxyConfig(proxy));
         } else {
           await existingSes.setProxy({ proxyRules: "direct://" });
         }
@@ -597,6 +616,7 @@ export async function openEbWindow(opts: {
         existing.win.webContents.reload();
       }
       if (existing.win.isMinimized()) existing.win.restore();
+      if (!existing.win.isMaximized()) existing.win.maximize();
       if (!existing.win.isVisible()) existing.win.show();
       existing.win.focus();
       // Toolbar is a native BrowserView — it is always present; nothing to re-inject.
@@ -623,18 +643,14 @@ export async function openEbWindow(opts: {
   const ses = electronSession.fromPartition(partition);
 
   // Configure proxy.
-  // HTTP proxies: Chromium uses HTTP CONNECT for HTTPS (credentials via login event).
-  // SOCKS5 proxies: credentials are embedded in the URL — SOCKS5 has no HTTP 407
-  //   challenge, so the login event never fires for them.  If we set a SOCKS5 server
-  //   using the HTTP format Chromium sends an HTTP CONNECT, gets rejected, then falls
-  //   back to DIRECT — exposing the real IP.  buildProxyRules() picks the right format.
+  // HTTP proxies use a PAC script (see buildProxyConfig) so that:
+  //   (a) there is no DIRECT fallback if the proxy is unreachable, and
+  //   (b) Chrome sends the hostname to the proxy via CONNECT — the proxy does
+  //       the DNS resolution, so IPv6 bypass leaks are impossible even if
+  //       Chromium's --disable-ipv6 flag is not fully effective in this build.
+  // SOCKS5 proxies keep proxyRules with embedded credentials (see buildProxyConfig).
   if (proxy) {
-    // proxyBypassList is set explicitly to only loopback addresses.  Without
-    // this, Chromium's default bypass rules can include <local> (single-label
-    // hostnames) or platform-specific entries that allow some traffic to bypass
-    // the proxy.  Loopback must remain excluded so the EB can still reach the
-    // local API server at 127.0.0.1:PORT.
-    await ses.setProxy({ proxyRules: buildProxyRules(proxy), proxyBypassRules: "127.0.0.1;[::1];localhost" });
+    await ses.setProxy(buildProxyConfig(proxy));
   } else {
     await ses.setProxy({ proxyRules: "direct://" });
   }
@@ -1751,7 +1767,7 @@ export function startEbIpcServer(
         const partition = ebPartition(pid);
         const ses = electronSession.fromPartition(partition);
         if (body.proxy) {
-          await ses.setProxy({ proxyRules: buildProxyRules(body.proxy) });
+          await ses.setProxy(buildProxyConfig(body.proxy));
         } else {
           await ses.setProxy({ proxyRules: "direct://" });
         }

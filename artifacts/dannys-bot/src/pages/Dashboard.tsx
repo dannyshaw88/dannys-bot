@@ -58,6 +58,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.604",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "All Embedded Browser windows now open maximised — re-opening an account browser that was previously un-maximised now correctly maximises it every time." },
+      { category: "Fix", text: "Proxy IP and DNS leaks fixed: HTTP proxy sessions now use a PAC script instead of raw proxy rules, routing all traffic through the proxy server and eliminating the silent direct fallback that was exposing the real machine IP." },
+      { category: "Fix", text: "IPv6 bypass leaks fully closed — Chrome now sends the hostname to the proxy via CONNECT so the proxy resolves DNS, meaning IPv6 connections to dual-stack sites never reach the machine directly." },
+      { category: "Fix", text: "Happy Eyeballs V3 and IPv6 Reachability features disabled in Chrome to reduce IPv6 preference as an additional layer of protection." },
+      { category: "Feature", text: "Export API Calls button restored to Accounts Actions menu — downloads a CSV of the full API call history, filtered to selected accounts if any are chosen." },
+    ],
+  },
+  {
     version: "1.0.603",
     date: "27 May 2026",
     items: [
