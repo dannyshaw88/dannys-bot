@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.610",
+    date: "28 May 2026",
+    items: [
+      { category: "Fix", text: "CI build fixed — the Windows installer now builds cleanly again (removed the GitHub Releases publish step that required a secret token that wasn't configured)." },
+    ],
+  },
+  {
     version: "1.0.609",
     date: "28 May 2026",
     items: [
