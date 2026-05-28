@@ -10,15 +10,15 @@ import { useEffect } from "react";
 import { useProfile } from "@/hooks/use-profiles";
 
 const PROFILE_TABS = (creatorMode: boolean) => [
-  { value: "settings",      label: "Account Settings",    shortLabel: "SETTINGS",  icon: Settings,      spacerAfter: true },
+  { value: "settings",      label: "Account Settings",    icon: Settings,      spacerAfter: true },
   ...(!creatorMode ? [
-    { value: "follow",        label: "Follow Tool",         shortLabel: "FOLLOW",    icon: UserPlus      },
-    { value: "unfollow",      label: "Unfollow Tool",       shortLabel: "UNFOLLOW",  icon: UserMinus     },
-    { value: "contact",       label: "Contact Tool",        shortLabel: "CONTACT",   icon: MessageSquare },
-    { value: "human-session", label: "Human Session Tools", shortLabel: "HUMAN",     icon: User          },
-    { value: "session-log",   label: "Session Log",         shortLabel: "LOG",       icon: Activity      },
+    { value: "follow",        label: "Follow Tool",         icon: UserPlus      },
+    { value: "unfollow",      label: "Unfollow Tool",       icon: UserMinus     },
+    { value: "contact",       label: "Contact Tool",        icon: MessageSquare },
+    { value: "human-session", label: "Human Session Tools", icon: User          },
+    { value: "session-log",   label: "Session Log",         icon: Activity      },
   ] : []),
-  { value: "create-cookie", label: "Create a Cookie",     shortLabel: "COOKIE",    icon: Cookie        },
+  { value: "create-cookie", label: "Create a Cookie",     icon: Cookie        },
 ];
 
 export function Sidebar() {
@@ -37,14 +37,13 @@ export function Sidebar() {
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
 
   const BRAND = "#1AD2F2";
-
   const navItems = [
-    { name: "Dashboard",    shortName: "DASHBOARD", path: "/dashboard",   icon: LayoutDashboard },
-    { name: "Accounts",     shortName: "ACCOUNTS",  path: "/profiles",    icon: Users           },
-    { name: "Bulk Import",  shortName: "BULK\nIMPORT", path: "/bulk-import", icon: Upload       },
-    { name: "Ghost Browser",shortName: "GHOST",     path: "/create-ghost",icon: Ghost           },
-    { name: "Statistics",   shortName: "STATS",     path: "/stats",       icon: Activity        },
-    { name: "Proxy Manager",shortName: "PROXIES",   path: "/proxies",     icon: ShieldAlert     },
+    { name: "Dashboard",          shortLabel: "DASHBOARD",   path: "/dashboard",    icon: LayoutDashboard },
+    { name: "Accounts",           shortLabel: "ACCOUNTS",    path: "/profiles",     icon: Users           },
+    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT", path: "/bulk-import", icon: Upload          },
+    { name: "Ghost Browser",      shortLabel: "GHOST",       path: "/create-ghost", icon: Ghost           },
+    { name: "Statistics",         shortLabel: "STATISTICS",  path: "/stats",        icon: Activity        },
+    { name: "Proxy Manager",      shortLabel: "PROXY MGR",   path: "/proxies",      icon: ShieldAlert     },
   ];
 
   function goBack() {
@@ -58,39 +57,40 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-[74px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
+    <div className="w-[218px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
 
-      {/* Logo + nav arrows */}
-      <div className="h-16 flex flex-col items-center justify-center border-b border-border/50 gap-0.5 shrink-0">
-        <img src="/bot-logo.png" alt="Equinox" className="w-8 h-8 object-contain" />
-        <div className="flex items-center gap-0">
-          <button
-            onClick={goBack}
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              canBack ? "hover:bg-accent cursor-pointer" : "cursor-default"
-            )}
-            style={{ color: canBack ? BRAND : BRAND + "40" }}
-            title="Go back"
-          >
-            <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
-          </button>
-          <button
-            onClick={goForward}
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              canForward ? "hover:bg-accent cursor-pointer" : "cursor-default"
-            )}
-            style={{ color: canForward ? BRAND : BRAND + "40" }}
-            title="Go forward"
-          >
-            <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
-          </button>
-        </div>
+      {/* ── Original header: logo + wordmark + nav arrows ── */}
+      <div className="h-16 flex items-center px-4 border-b border-border/50 gap-2">
+        <img src="/bot-logo.png" alt="Equinox" className="w-[38px] h-[38px] shrink-0 object-contain" />
+        <span className="font-bold text-lg tracking-tight text-foreground mr-1">
+          Equi<span style={{ color: BRAND }}>nox</span>
+        </span>
+        <button
+          onClick={goBack}
+          className={cn(
+            "p-1.5 rounded transition-colors shrink-0",
+            canBack ? "hover:bg-accent cursor-pointer" : "cursor-default"
+          )}
+          style={{ color: canBack ? BRAND : BRAND + "60" }}
+          title="Go back"
+        >
+          <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
+        </button>
+        <button
+          onClick={goForward}
+          className={cn(
+            "p-1.5 rounded transition-colors shrink-0",
+            canForward ? "hover:bg-accent cursor-pointer" : "cursor-default"
+          )}
+          style={{ color: canForward ? BRAND : BRAND + "60" }}
+          title="Go forward"
+        >
+          <ChevronRight className="w-5 h-5" strokeWidth={2.5} />
+        </button>
       </div>
 
-      {/* Main nav */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden">
+      {/* ── Jarvee-style nav: icon centred above ALL-CAPS label ── */}
+      <nav className="flex-1 py-1 space-y-0 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = (() => {
             if (item.path === "/dashboard") return location === "/dashboard";
@@ -103,51 +103,45 @@ export function Sidebar() {
             <div key={item.path}>
               <button
                 onClick={() => setLocation(item.path)}
-                title={item.name}
                 className={cn(
-                  "flex flex-col items-center justify-center w-full py-2.5 gap-1 transition-all duration-150 rounded-none",
+                  "flex flex-col items-center justify-center w-full py-2.5 gap-1 transition-all duration-200 rounded-none",
                   isActive
-                    ? "bg-primary/15 text-primary"
+                    ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
-                style={isActive ? { borderLeft: `3px solid ${BRAND}` } : { borderLeft: "3px solid transparent" }}
               >
                 <Icon
-                  className="w-[22px] h-[22px] shrink-0"
-                  style={{ color: isActive ? BRAND : undefined }}
+                  className={cn("w-6 h-6 shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
+                  style={isActive ? { color: BRAND } : { color: BRAND }}
                 />
-                <span
-                  className="text-[9px] font-bold tracking-wider leading-tight text-center whitespace-pre-line"
-                  style={{ color: isActive ? BRAND : undefined }}
-                >
-                  {item.shortName}
+                <span className={cn(
+                  "text-[10px] font-bold tracking-widest leading-tight text-center",
+                  isActive ? "text-primary" : "text-muted-foreground"
+                )}>
+                  {item.shortLabel}
                 </span>
               </button>
 
-              {/* Profile sub-tabs — icon-only squares when on a profile detail page */}
+              {/* Sub-tabs: original single-row text buttons */}
               {item.path === "/profiles" && profileId > 0 && (
-                <div className="border-t border-border/30">
-                  {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label, icon: TabIcon, spacerAfter }) => {
+                <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">
+                  {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label, spacerAfter }) => {
                     const isSubActive = activeTab === value;
                     return (
                       <div key={value}>
                         <button
                           onClick={() => setLocation(`/profiles/${profileId}?tab=${value}`)}
-                          title={label}
                           className={cn(
-                            "flex items-center justify-center w-full py-2 transition-all duration-150 rounded-none",
+                            "flex items-center w-full px-4 py-1.5 text-xs font-bold transition-all duration-150 text-left rounded-md",
                             isSubActive
-                              ? "bg-primary/20 text-primary"
-                              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                              ? "text-primary"
+                              : "text-muted-foreground hover:text-foreground"
                           )}
-                          style={isSubActive ? { borderLeft: `3px solid ${BRAND}` } : { borderLeft: "3px solid transparent" }}
                         >
-                          <TabIcon
-                            className="w-[16px] h-[16px] shrink-0"
-                            style={{ color: isSubActive ? BRAND : undefined }}
-                          />
+                          <ChevronRight className="w-3 h-3 text-black dark:text-white mr-1 shrink-0" />
+                          {label}
                         </button>
-                        {spacerAfter && <div className="h-px bg-border/30 mx-2" />}
+                        {spacerAfter && <div className="h-2" />}
                       </div>
                     );
                   })}
@@ -159,42 +153,41 @@ export function Sidebar() {
       </nav>
 
       {slot && (
-        <div className="px-1 pb-2 flex justify-center">
+        <div className="px-4 pb-3">
           {slot}
         </div>
       )}
 
-      {/* Settings button */}
-      <div className="shrink-0">
+      {/* ── Settings — same Jarvee style ── */}
+      <div className="pb-2">
         <button
           onClick={() => setLocation("/settings")}
-          title="Settings"
           className={cn(
-            "flex flex-col items-center justify-center w-full py-2.5 gap-1 transition-all duration-150 rounded-none",
+            "flex flex-col items-center justify-center w-full py-2.5 gap-1 transition-all duration-200 rounded-none",
             location === "/settings"
-              ? "bg-primary/15 text-primary"
+              ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
-          style={location === "/settings" ? { borderLeft: `3px solid ${BRAND}` } : { borderLeft: "3px solid transparent" }}
         >
           <Settings
-            className="w-[22px] h-[22px] shrink-0"
-            style={{ color: location === "/settings" ? BRAND : undefined }}
+            className={cn("w-6 h-6 shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
+            style={{ color: BRAND }}
           />
-          <span
-            className="text-[9px] font-bold tracking-wider"
-            style={{ color: location === "/settings" ? BRAND : undefined }}
-          >
+          <span className={cn(
+            "text-[10px] font-bold tracking-widest",
+            location === "/settings" ? "text-primary" : "text-muted-foreground"
+          )}>
             SETTINGS
           </span>
         </button>
       </div>
 
-      {/* Status pill */}
-      <div className="px-1 pb-3 pt-1 border-t border-border/50 shrink-0">
-        <div className="bg-background rounded px-1 py-1 border border-border flex items-center justify-center gap-1 min-w-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
-          <span className="text-[9px] font-medium text-muted-foreground whitespace-nowrap truncate">Dev</span>
+      {/* ── Original status pill ── */}
+      <div className="px-4 pb-4 border-t border-border/50 pt-3">
+        <div className="bg-background rounded-lg px-2.5 py-1.5 border border-border flex items-center gap-1.5 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+          <span className="text-[11px] font-medium text-foreground whitespace-nowrap">System Status</span>
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap truncate">· in Development</span>
         </div>
       </div>
     </div>

@@ -752,10 +752,10 @@ function testIPMatch() {
       setCardBorder('card-ipmatch', 'pass');
       setResult('IPMatch', 'pass', 'Match');
     } else {
-      html += desc('⚠ Detected IP does NOT match the proxy host. Traffic may be bypassing the proxy, or the proxy is not routing correctly.', 'fail');
-      setBadge('badge-ipmatch', 'fail', 'FAIL');
-      setCardBorder('card-ipmatch', 'fail');
-      setResult('IPMatch', 'fail', 'Mismatch!');
+      html += desc('Exit IP differs from the proxy host IP. This is normal for rotating residential proxies — the proxy provider routes traffic through a pool of residential IPs, so the exit IP is never the same as the proxy server IP. If you are using a static datacenter proxy and see this, the proxy may not be routing correctly.', 'warn');
+      setBadge('badge-ipmatch', 'warn', 'WARN');
+      setCardBorder('card-ipmatch', 'warn');
+      setResult('IPMatch', 'warn', 'Diff IP');
     }
   } else {
     html += row('Match', 'Proxy is a hostname — cannot verify in browser', 'muted');

@@ -58,6 +58,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.615",
+    date: "28 May 2026",
+    items: [
+      { category: "UI", text: "Sidebar nav buttons refined — now Jarvee-style with icon centred above short ALL-CAPS label, original header and back/forward arrows restored, original colour scheme kept, account sub-tabs restored as full text buttons. Proxy IP Match test changed from FAIL to WARN when exit IP differs from proxy host IP, with a clear explanation that rotating residential proxies always route through a different exit IP — not a leak." },
+    ],
+  },
+  {
     version: "1.0.614",
     date: "28 May 2026",
     items: [
