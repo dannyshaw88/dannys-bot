@@ -84,7 +84,7 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 250, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 120, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
 const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, actions: true, battery: false, connection: false, abd: true, ip: true };
 const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
@@ -184,6 +184,10 @@ export function ProfilesPage() {
   const [profColOrder, setProfColOrder] = usePersistentSetting<(keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[]>(
     "profiles_col_order",
     DEFAULT_PROFILES_COL_ORDER,
+    (s, d) => {
+      const missing = d.filter(k => !s.includes(k));
+      return missing.length ? [...s, ...missing] : s;
+    },
   );
 
   // ── Daily ABD (Automated Behaviour Detected) dismissal counts ─────────────

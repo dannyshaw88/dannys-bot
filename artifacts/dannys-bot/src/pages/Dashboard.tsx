@@ -51,13 +51,24 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }
   save_media:              { label: "Save Media",      cls: "text-emerald-600",   icon: "⊙" },
 };
 
-const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 250 };
+const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
 const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "trustscore", "event", "target", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
   account: "Account", event: "Action", target: "Target", detail: "Detail", timestamp: "Timestamp", trustscore: "TrustScore",
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.637",
+    date: "29 May 2026",
+    items: [
+      { category: "Fix", text: "TrustScore badge now shows empty by default instead of NOOB — only displays a level once you click and set one." },
+      { category: "Fix", text: "TrustScore column now correctly appears on the Accounts page and Statistics page for users who had an older column layout saved." },
+      { category: "Improvement", text: "TrustScore badge is now a compact pill matching the style of the Status badge — click to open a dropdown with a Clear option." },
+      { category: "Improvement", text: "Sidebar 'Developing' label is now black instead of amber." },
+      { category: "Improvement", text: "README & FAQ card in Settings no longer shows an arrow on the right." },
+    ],
+  },
   {
     version: "1.0.636",
     date: "29 May 2026",
@@ -3461,6 +3472,10 @@ export function Dashboard() {
   const [colOrder, setColOrder] = usePersistentSetting<(keyof typeof DEFAULT_COL_WIDTHS)[]>(
     "dashboard_col_order",
     DEFAULT_COL_ORDER,
+    (s, d) => {
+      const missing = d.filter(k => !s.includes(k));
+      return missing.length ? [...s, ...missing] : s;
+    },
   );
   const moveCol = (key: keyof typeof DEFAULT_COL_WIDTHS, dir: -1 | 1) => {
     const idx = colOrder.indexOf(key);

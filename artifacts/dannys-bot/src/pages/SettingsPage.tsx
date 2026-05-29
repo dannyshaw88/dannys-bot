@@ -321,7 +321,6 @@ export function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Getting started guide, tool docs, and common questions</p>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
           </div>
         </Link>
 

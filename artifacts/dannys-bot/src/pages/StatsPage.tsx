@@ -31,7 +31,7 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
 ];
 
 const DEFAULT_COL_WIDTHS: Record<StatKey | "account" | "open_eb" | "trustscore", number> = {
-  account: 160, open_eb: 80, trustscore: 250, follow: 110, unfollow: 110, dm: 110,
+  account: 160, open_eb: 80, trustscore: 120, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, human_session: 140,
 };
 

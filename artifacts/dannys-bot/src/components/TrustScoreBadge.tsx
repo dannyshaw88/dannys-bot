@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Smile, Flame, Timer, Minus, Clock, Moon, Shield, ShieldCheck,
   Eye, Activity, TrendingUp, Skull, Star, Rocket, Crown, Zap,
-  Diamond, Swords, Sparkles
+  Diamond, Swords, Sparkles, X
 } from "lucide-react";
 
 export const TRUST_LEVELS = [
@@ -29,10 +29,12 @@ export const TRUST_LEVELS = [
 
 export type TrustLevelId = typeof TRUST_LEVELS[number]["id"];
 
-const lsKey = (profileId: number) => `trustscore_${profileId}`;
+const lsKey = (profileId: number) => `trustscore_v2_${profileId}`;
 
 export function getTrustScore(profileId: number): TrustLevelId | null {
-  return (localStorage.getItem(lsKey(profileId)) as TrustLevelId | null) ?? null;
+  const val = localStorage.getItem(lsKey(profileId));
+  if (!val) return null;
+  return TRUST_LEVELS.some(l => l.id === val) ? (val as TrustLevelId) : null;
 }
 
 export function setTrustScore(profileId: number, id: TrustLevelId | null) {
@@ -70,36 +72,36 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
     setOpen(false);
   };
 
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTrustScore(profileId, null);
+    setScore(null);
+    setOpen(false);
+  };
+
   return (
     <div ref={ref} className="relative inline-block shrink-0" onMouseDown={e => e.stopPropagation()}>
       <button
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        className="flex h-5 items-center gap-1 rounded-full px-2 transition-opacity hover:opacity-75"
         style={{
-          width: 250,
-          height: 25,
-          background: current?.bg ?? "#f9fafb",
-          border: `1px solid ${current?.border ?? "#e5e7eb"}`,
-          color: current?.text ?? "#9ca3af",
-          borderRadius: 4,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          paddingLeft: 8,
-          paddingRight: 8,
+          background: current?.bg ?? "transparent",
+          border: `1px ${current ? "solid" : "dashed"} ${current?.border ?? "#d1d5db"}`,
           cursor: "pointer",
           flexShrink: 0,
+          minWidth: 60,
         }}
         title="Click to set Trust Score"
       >
         {current ? (
           <>
-            <current.icon size={12} color={current.text} strokeWidth={2} />
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: current.text }}>
+            <current.icon size={10} color={current.text} strokeWidth={2} />
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap" }}>
               {current.label}
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", flex: 1, textAlign: "center", letterSpacing: "0.05em" }}>— SET TRUST SCORE —</span>
+          <span style={{ fontSize: 9, fontWeight: 500, color: "#9ca3af", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>Score</span>
         )}
       </button>
 
@@ -112,9 +114,9 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
             border: "1px solid var(--border, #e5e7eb)",
             borderRadius: 8,
             boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
-            width: 260,
+            width: 200,
             padding: "4px 0",
-            maxHeight: 360,
+            maxHeight: 380,
             overflowY: "auto",
           }}
           ref={el => {
@@ -126,6 +128,29 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
             el.style.left = `${rect.left}px`;
           }}
         >
+          {score && (
+            <button
+              onClick={handleClear}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "5px 12px",
+                background: "transparent",
+                border: "none",
+                borderLeft: "3px solid transparent",
+                borderBottom: "1px solid #e5e7eb",
+                cursor: "pointer",
+                textAlign: "left",
+                outline: "none",
+                marginBottom: 2,
+              }}
+            >
+              <X size={11} color="#9ca3af" strokeWidth={2} />
+              <span style={{ fontSize: 11, fontWeight: 500, color: "#9ca3af" }}>Clear score</span>
+            </button>
+          )}
           {TRUST_LEVELS.map(lvl => {
             const Icon = lvl.icon;
             const isActive = score === lvl.id;
@@ -147,7 +172,7 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
                   outline: "none",
                 }}
               >
-                <Icon size={13} color={lvl.text} strokeWidth={2} />
+                <Icon size={12} color={lvl.text} strokeWidth={2} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: lvl.text, letterSpacing: "0.05em" }}>{lvl.label}</span>
               </button>
             );
