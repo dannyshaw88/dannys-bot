@@ -5,9 +5,9 @@ import {
   Diamond, Swords, Sparkles, X
 } from "lucide-react";
 
-const GREEN_BG     = "#000000";
-const GREEN_TEXT   = "#F59E0B";
-const GREEN_BORDER = "#D97706";
+const GREEN_BG     = "#1AD2F2";
+const GREEN_TEXT   = "#ffffff";
+const GREEN_BORDER = "#0eb8d4";
 
 export const TRUST_LEVELS = [
   { id: "noob",        label: "NOOB",        icon: Baby,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
@@ -90,7 +90,7 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
         className="flex h-5 items-center gap-1 rounded-full px-2 transition-opacity hover:opacity-75"
         style={{
           background: current ? GREEN_BG : "transparent",
-          border: `1px ${current ? "solid" : "dashed"} ${current ? GREEN_BORDER : "#bbf7d0"}`,
+          border: `1px ${current ? "solid" : "dashed"} ${current ? GREEN_BORDER : "#94a3b8"}`,
           cursor: "pointer",
           flexShrink: 0,
           minWidth: 60,
@@ -105,7 +105,7 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 9, fontWeight: 500, color: "#15803d", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>Score</span>
+          <span style={{ fontSize: 9, fontWeight: 500, color: "#94a3b8", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>Score</span>
         )}
       </button>
 
@@ -114,7 +114,7 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
           style={{
             position: "fixed",
             zIndex: 99999,
-            background: "var(--background, white)",
+            background: "#ffffff",
             border: "1px solid var(--border, #e5e7eb)",
             borderRadius: 8,
             boxShadow: "0 8px 32px rgba(0,0,0,0.14)",

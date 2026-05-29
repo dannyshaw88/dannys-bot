@@ -127,7 +127,8 @@ function _pageFingerprint(ua: string, _apiUA?: string | null): { batteryPct: num
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function ProfilesPage() {
-  const { data: profiles, isLoading } = useProfiles();
+  const { data: allProfilesRaw, isLoading } = useProfiles();
+  const profiles = allProfilesRaw?.filter(p => !p.isTemplate);
   const createProfileMutation = useCreateProfile();
   const deleteProfileMutation = useDeleteProfile();
   const updateAccountStatus   = useUpdateAccountStatus();

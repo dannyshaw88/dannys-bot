@@ -249,6 +249,12 @@ if (!colNames.has("status_message")) {
 if (!colNames.has("eb_fingerprint")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN eb_fingerprint TEXT;`);
 }
+if (!colNames.has("is_template")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN is_template INTEGER DEFAULT 0;`);
+}
+if (!colNames.has("template_id")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN template_id TEXT;`);
+}
 
 // Add new columns to sources and followed_users if they don't exist
 const sourcesCols = sqlite.prepare("pragma table_info(sources)").all() as { name: string }[];

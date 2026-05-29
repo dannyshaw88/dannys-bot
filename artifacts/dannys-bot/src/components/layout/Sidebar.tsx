@@ -1,13 +1,21 @@
 import { useLocation, useSearch } from "wouter";
 import {
   Gauge, Users, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, Ghost, User, UserMinus, UserPlus, MessageSquare, Cookie, Upload,
+  ChevronLeft, ChevronRight, Ghost, User, UserMinus, UserPlus, MessageSquare, Cookie, Upload, Award,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useProfile } from "@/hooks/use-profiles";
+
+const TRUST_SCORE_TABS = [
+  { value: "settings",      label: "Settings"      },
+  { value: "follow",        label: "Follow Tool"   },
+  { value: "unfollow",      label: "Unfollow Tool" },
+  { value: "contact",       label: "Contact Tool"  },
+  { value: "human-session", label: "Human Session" },
+];
 
 const PROFILE_TABS = (creatorMode: boolean) => [
   { value: "settings",      label: "Account Settings",    icon: Settings,      spacerAfter: true },
@@ -34,16 +42,19 @@ export function Sidebar() {
   const profileMatch = location.match(/^\/profiles\/(\d+)$/);
   const profileId = profileMatch ? Number(profileMatch[1]) : 0;
   const { data: profile } = useProfile(profileId);
+  const trustScoreMatch = location.match(/^\/trust-scores\/([^?/]+)/);
+  const activeTrustScoreId = trustScoreMatch ? trustScoreMatch[1] : null;
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",    icon: Gauge       },
-    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",     icon: Users       },
-    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",        icon: Activity    },
-    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: Ghost       },
-    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",  icon: Upload      },
-    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: ShieldAlert },
+    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: Gauge       },
+    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: Users       },
+    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: Award       },
+    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: Activity    },
+    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: Ghost       },
+    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: Upload      },
+    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: ShieldAlert },
   ];
 
   function goBack() {
@@ -126,7 +137,7 @@ export function Sidebar() {
                 </span>
               </button>
 
-              {/* Sub-tabs: original single-row text buttons */}
+              {/* Profile sub-tabs */}
               {item.path === "/profiles" && profileId > 0 && (
                 <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">
                   {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label, spacerAfter }) => {
@@ -147,6 +158,28 @@ export function Sidebar() {
                         </button>
                         {spacerAfter && <div className="h-2" />}
                       </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* TrustScore sub-tabs */}
+              {item.path === "/trust-scores" && activeTrustScoreId && (
+                <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">
+                  {TRUST_SCORE_TABS.map(({ value, label }) => {
+                    const isSubActive = activeTab === value;
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => setLocation(`/trust-scores/${activeTrustScoreId}?tab=${value}`)}
+                        className={cn(
+                          "flex items-center w-full px-2 py-1.5 text-[9px] font-bold transition-all duration-150 text-left rounded-md whitespace-nowrap",
+                          isSubActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <ChevronRight className="w-3 h-3 text-black dark:text-white mr-1 shrink-0" />
+                        {label}
+                      </button>
                     );
                   })}
                 </div>

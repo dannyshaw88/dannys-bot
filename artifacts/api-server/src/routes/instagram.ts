@@ -4006,4 +4006,46 @@ export async function registerInstagramRoutes(
       console.warn("[startup] Cookie file backfill failed (non-fatal):", e);
     }
   })();
+
+  // ── Trust Score Templates ────────────────────────────────────────────────────
+  const TRUST_SCORE_IDS = [
+    "noob", "warmup", "snail", "slug", "slow", "sloth", "tortoise", "turtle",
+    "reptile", "moderate", "high", "monster", "class", "super", "outstanding",
+    "ridiculous", "impossible", "overpowered", "god_level",
+  ] as const;
+
+  app.get("/api/trust-score-templates", async (_req, res) => {
+    try {
+      const allProfiles = await storage.getProfiles();
+      const templateMap = new Map<string, number>();
+      for (const p of allProfiles) {
+        if (p.isTemplate && p.templateId) {
+          templateMap.set(p.templateId, p.id);
+        }
+      }
+
+      for (const tsId of TRUST_SCORE_IDS) {
+        if (!templateMap.has(tsId)) {
+          const created = await storage.createProfile({
+            username: `__tpl_${tsId}__`,
+            password: "template",
+            isTemplate: true as any,
+            templateId: tsId,
+            accountStatus: "pending",
+          } as any);
+          templateMap.set(tsId, created.id);
+        }
+      }
+
+      const result = TRUST_SCORE_IDS.map(id => ({
+        trustScoreId: id,
+        profileId: templateMap.get(id) ?? null,
+      }));
+
+      res.json(result);
+    } catch (err) {
+      console.error("[trust-score-templates] error:", err);
+      res.status(500).json({ error: String(err) });
+    }
+  });
 }

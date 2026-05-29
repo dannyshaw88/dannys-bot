@@ -59,6 +59,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.639",
+    date: "29 May 2026",
+    items: [
+      { category: "New", text: "Added TrustScores section to the sidebar — click any of the 19 trust tiers to configure API limits and tool settings for that level." },
+      { category: "New", text: "Each TrustScore tier now has its own settings page with API Limits & Control, Sync Options, Follow Tool, Unfollow Tool, Contact Tool, and Human Session tabs." },
+      { category: "Improvement", text: "TrustScore pill colour changed to cyan with white text and icon across all 19 tiers." },
+      { category: "Fix", text: "TrustScore dropdown now shows a solid white background instead of a transparent one." },
+    ],
+  },
+  {
     version: "1.0.638",
     date: "29 May 2026",
     items: [
