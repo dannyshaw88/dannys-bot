@@ -59,6 +59,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.649",
+    date: "29 May 2026",
+    items: [
+      { category: "Improved", text: "Tool navigation (Follow, Unfollow, Contact, etc.) moved from the sidebar sub-buttons into a static horizontal tab bar directly below the account name — always visible regardless of which tool is active." },
+      { category: "Improved", text: "Copy Settings now opens with all options de-selected by default — choose only what you want to copy." },
+      { category: "Improved", text: "Copy Settings account list now has a dedicated TrustScore column, keeping the account name clean and the score easy to scan." },
+      { category: "Fixed", text: "Account picker dropdown no longer shows a tick icon next to the currently selected account, removing the layout disruption." },
+      { category: "Renamed", text: "'Human Session' is now called 'Human Session Emulation' throughout the app." },
+    ],
+  },
+  {
     version: "1.0.648",
     date: "29 May 2026",
     items: [

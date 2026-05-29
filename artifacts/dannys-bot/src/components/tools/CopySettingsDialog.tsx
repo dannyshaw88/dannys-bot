@@ -51,18 +51,8 @@ function statusBadgeClass(status: string) {
   return "bg-muted/60 text-muted-foreground border-border";
 }
 
-function buildInitialSelected(groups: CopyOptionGroup[]): Set<string> {
-  const all = new Set<string>();
-  groups.forEach(g =>
-    g.options.forEach(o => {
-      if (o.subOptions?.length) {
-        o.subOptions.forEach(s => all.add(s.key));
-      } else {
-        all.add(o.key);
-      }
-    })
-  );
-  return all;
+function buildInitialSelected(_groups: CopyOptionGroup[]): Set<string> {
+  return new Set<string>();
 }
 
 function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): string[] {
@@ -352,6 +342,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   </button>
                 );
               })}
+              <div className="w-[88px] shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                TrustScore
+              </div>
             </div>
 
             {/* Account rows */}
@@ -371,21 +364,10 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                     className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-muted/30 transition-colors"
                   >
                     <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} className="shrink-0 w-4 h-4" />
-                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                      <span className="text-xs font-semibold truncate leading-tight">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-semibold truncate block leading-tight">
                         {p.accountLabel || p.username}
                       </span>
-                      {tsLevel && (
-                        <span
-                          className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 shrink-0"
-                          style={{ background: "#1AD2F2" }}
-                        >
-                          <tsLevel.icon size={8} color="#fff" fill="#fff" strokeWidth={2} />
-                          <span style={{ fontSize: 8, fontWeight: 700, color: "#fff", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                            {tsLevel.label}
-                          </span>
-                        </span>
-                      )}
                     </div>
                     <div className="w-[72px] shrink-0">
                       {displayStatus && (
@@ -396,6 +378,21 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                     </div>
                     <div className="w-[88px] shrink-0 truncate text-[10px] text-muted-foreground">
                       {groupLabel}
+                    </div>
+                    <div className="w-[88px] shrink-0">
+                      {tsLevel ? (
+                        <span
+                          className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 w-fit"
+                          style={{ background: "#1AD2F2" }}
+                        >
+                          <tsLevel.icon size={8} color="#fff" fill="#fff" strokeWidth={2} />
+                          <span style={{ fontSize: 8, fontWeight: 700, color: "#fff", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                            {tsLevel.label}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/40">—</span>
+                      )}
                     </div>
                   </label>
                 );

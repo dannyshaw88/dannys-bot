@@ -1,33 +1,21 @@
 import { useLocation, useSearch } from "wouter";
 import {
   Gauge, Users, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, Ghost, User, UserMinus, UserPlus, MessageSquare, Cookie, Upload, Award,
+  ChevronLeft, ChevronRight, Ghost, Upload, Award,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
-import { useProfile } from "@/hooks/use-profiles";
 
 const TRUST_SCORE_TABS = [
   { value: "settings",      label: "Settings"      },
   { value: "follow",        label: "Follow Tool"   },
   { value: "unfollow",      label: "Unfollow Tool" },
   { value: "contact",       label: "Contact Tool"  },
-  { value: "human-session", label: "Human Session" },
+  { value: "human-session", label: "Human Session Emulation" },
 ];
 
-const PROFILE_TABS = (creatorMode: boolean) => [
-  { value: "settings",      label: "Account Settings",    icon: Settings,      spacerAfter: true },
-  ...(!creatorMode ? [
-    { value: "follow",        label: "Follow Tool",         icon: UserPlus      },
-    { value: "unfollow",      label: "Unfollow Tool",       icon: UserMinus     },
-    { value: "contact",       label: "Contact Tool",        icon: MessageSquare },
-    { value: "human-session", label: "Human Session",       icon: User          },
-    { value: "session-log",   label: "Session Log",         icon: Activity      },
-  ] : []),
-  { value: "create-cookie", label: "Create a Cookie",     icon: Cookie        },
-];
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
@@ -39,9 +27,6 @@ export function Sidebar() {
     pushLocation(location);
   }, [location]);
 
-  const profileMatch = location.match(/^\/profiles\/(\d+)$/);
-  const profileId = profileMatch ? Number(profileMatch[1]) : 0;
-  const { data: profile } = useProfile(profileId);
   const trustScoreMatch = location.match(/^\/trust-scores\/([^?/]+)/);
   const activeTrustScoreId = trustScoreMatch ? trustScoreMatch[1] : null;
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
@@ -137,32 +122,7 @@ export function Sidebar() {
                 </span>
               </button>
 
-              {/* Profile sub-tabs */}
-              {item.path === "/profiles" && profileId > 0 && (
-                <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">
-                  {PROFILE_TABS(!!profile?.creatorMode).map(({ value, label, spacerAfter }) => {
-                    const isSubActive = activeTab === value;
-                    return (
-                      <div key={value}>
-                        <button
-                          onClick={() => setLocation(`/profiles/${profileId}?tab=${value}`)}
-                          className={cn(
-                            "flex items-center w-full px-2 py-1.5 text-[9px] font-bold transition-all duration-150 text-left rounded-md whitespace-nowrap",
-                            isSubActive
-                              ? "text-primary"
-                              : "text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          <ChevronRight className="w-3 h-3 text-black dark:text-white mr-1 shrink-0" />
-                          {label}
-                        </button>
-                        {spacerAfter && <div className="h-2" />}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
+  
               {/* TrustScore sub-tabs */}
               {item.path === "/trust-scores" && activeTrustScoreId && (
                 <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">

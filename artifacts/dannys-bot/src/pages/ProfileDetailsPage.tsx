@@ -915,7 +915,6 @@ export function ProfileDetailsPage() {
                                 </span>
                               </span>
                             )}
-                            {p.id === profileId && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
                           </DropdownMenuItem>
                         );
                       })}
@@ -934,6 +933,57 @@ export function ProfileDetailsPage() {
               </div>
             </div>
           </div>
+
+          {/* ── Horizontal tool tab bar — always visible ── */}
+          {!profile?.creatorMode && (
+            <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
+              {([
+                { value: "settings",      label: "Account Settings",         icon: Settings      },
+                { value: "follow",        label: "Follow Tool",               icon: UserPlus      },
+                { value: "unfollow",      label: "Unfollow Tool",             icon: UserMinus     },
+                { value: "contact",       label: "Contact Tool",              icon: MessageSquare },
+                { value: "human-session", label: "Human Session Emulation",   icon: Fingerprint   },
+                { value: "session-log",   label: "Session Log",               icon: Activity      },
+                { value: "create-cookie", label: "Create a Cookie",           icon: Cookie        },
+              ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => navigate(`/profiles/${profileId}?tab=${value}`)}
+                  className={[
+                    "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
+                    activeTab === value
+                      ? "text-primary border-primary"
+                      : "text-muted-foreground border-transparent hover:text-foreground hover:border-border",
+                  ].join(" ")}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {profile?.creatorMode && (
+            <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
+              {([
+                { value: "settings",      label: "Account Settings", icon: Settings },
+                { value: "create-cookie", label: "Create a Cookie",  icon: Cookie   },
+              ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => navigate(`/profiles/${profileId}?tab=${value}`)}
+                  className={[
+                    "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
+                    activeTab === value
+                      ? "text-primary border-primary"
+                      : "text-muted-foreground border-transparent hover:text-foreground hover:border-border",
+                  ].join(" ")}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
         <Tabs.Content value="settings" className="outline-none animate-in fade-in duration-300">
           <CopySettingsDialog
