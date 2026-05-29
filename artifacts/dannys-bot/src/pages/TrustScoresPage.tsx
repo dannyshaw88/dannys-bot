@@ -2,6 +2,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { TRUST_LEVELS } from "@/components/TrustScoreBadge";
 import { Loader2, ChevronRight } from "lucide-react";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 interface TrustScoreTemplate {
   trustScoreId: string;
@@ -21,6 +22,7 @@ export function TrustScoresPage() {
   });
 
   return (
+    <AppLayout>
     <div className="p-6 space-y-4 max-w-2xl">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">TrustScores</h1>
@@ -48,14 +50,16 @@ export function TrustScoresPage() {
                 <span className="w-7 text-[11px] font-bold text-muted-foreground shrink-0 text-right">
                   {idx + 1}
                 </span>
-                <div
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1 shrink-0"
-                  style={{ background: "#1AD2F2", border: "1px solid #0eb8d4" }}
-                >
-                  <Icon size={12} color="#ffffff" strokeWidth={2} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>
-                    {level.label}
-                  </span>
+                <div className="w-36 flex justify-center shrink-0">
+                  <div
+                    className="flex items-center gap-1.5 rounded-full px-3 py-1"
+                    style={{ background: "#1AD2F2" }}
+                  >
+                    <Icon size={12} color="#ffffff" fill="#ffffff" strokeWidth={2} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>
+                      {level.label}
+                    </span>
+                  </div>
                 </div>
                 <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors flex-1">
                   API limits, tool settings
@@ -67,5 +71,6 @@ export function TrustScoresPage() {
         </div>
       )}
     </div>
+    </AppLayout>
   );
 }

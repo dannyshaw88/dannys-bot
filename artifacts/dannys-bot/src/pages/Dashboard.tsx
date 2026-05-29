@@ -59,6 +59,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.640",
+    date: "29 May 2026",
+    items: [
+      { category: "Fix", text: "TrustScore pills no longer have a border — cleaner flat look." },
+      { category: "Improvement", text: "TrustScore pill icons now use a solid white fill instead of outline-only." },
+      { category: "Improvement", text: "TrustScore pills are now centre-aligned in their column on the list page instead of left-aligned." },
+      { category: "Improvement", text: "Sidebar status pill is now centred within the sidebar column." },
+      { category: "Fix", text: "TrustScores and TrustScore detail pages now correctly show the full sidebar and navigation — clicking TrustScores from the sidebar no longer strips the UI." },
+    ],
+  },
+  {
     version: "1.0.639",
     date: "29 May 2026",
     items: [

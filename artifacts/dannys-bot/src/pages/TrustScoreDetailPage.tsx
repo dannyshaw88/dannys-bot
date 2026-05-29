@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 interface TrustScoreTemplate {
   trustScoreId: string;
@@ -98,21 +99,26 @@ export function TrustScoreDetailPage() {
 
   if (templatesLoading) {
     return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
+      <AppLayout>
+        <div className="flex items-center justify-center h-48">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
     );
   }
 
   if (!level || !profileId) {
     return (
-      <div className="p-6 text-muted-foreground">Trust score tier not found.</div>
+      <AppLayout>
+        <div className="p-6 text-muted-foreground">Trust score tier not found.</div>
+      </AppLayout>
     );
   }
 
   const Icon = level.icon;
 
   return (
+    <AppLayout>
     <Tabs.Root
       value={activeTab}
       onValueChange={tab => navigate(`/trust-scores/${trustScoreId}?tab=${tab}`)}
@@ -128,9 +134,9 @@ export function TrustScoreDetailPage() {
           </button>
           <div
             className="flex items-center gap-1.5 rounded-full px-3 py-1"
-            style={{ background: CYAN, border: `1px solid ${CYAN_BORDER}` }}
+            style={{ background: CYAN }}
           >
-            <Icon size={12} color="#ffffff" strokeWidth={2} />
+            <Icon size={12} color="#ffffff" fill="#ffffff" strokeWidth={2} />
             <span style={{ fontSize: 11, fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>
               {level.label}
             </span>
@@ -304,5 +310,6 @@ export function TrustScoreDetailPage() {
         }
       </Tabs.Content>
     </Tabs.Root>
+    </AppLayout>
   );
 }

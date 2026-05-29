@@ -240,9 +240,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const pctInputs = (minKey: string, maxKey: string) => (
     <>
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs text-muted-foreground">Min</Label>
+        <Label className="text-xs text-muted-foreground uppercase">Min</Label>
         <div className="relative">
-          <Input type="number" min="0" max="100" className="w-14 h-7 text-xs pr-5"
+          <Input type="number" min="0" max="100" className="w-16 h-7 text-xs pr-5"
             value={settings[minKey] ?? 0}
             onChange={(e) => setSettings({ ...settings, [minKey]: Math.min(100, Math.max(0, Number(e.target.value))) })}
           />
@@ -250,9 +250,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         </div>
       </div>
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs text-muted-foreground">Max</Label>
+        <Label className="text-xs text-muted-foreground uppercase">Max</Label>
         <div className="relative">
-          <Input type="number" min="0" max="100" className="w-14 h-7 text-xs pr-5"
+          <Input type="number" min="0" max="100" className="w-16 h-7 text-xs pr-5"
             value={settings[maxKey] ?? 0}
             onChange={(e) => setSettings({ ...settings, [maxKey]: Math.min(100, Math.max(0, Number(e.target.value))) })}
           />
@@ -427,59 +427,42 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             {/* Click on Post % */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Click on Post%</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CLICK ON POST%</span>
               {pctInputs("clickPostPercentMin", "clickPostPercentMax")}
-              <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance to open a post from the feed</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CHANCE TO OPEN A POST FROM THE FEED</span>
             </div>
 
             {/* Visit Profile % — shown when click% is set */}
             {(settings.clickPostPercentMax ?? 0) > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">View Profile%</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE%</span>
                 {pctInputs("viewPostProfilePercentMin", "viewPostProfilePercentMax")}
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance to visit the post author's profile</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">CHANCE TO VISIT THE POST AUTHOR'S PROFILE</span>
               </div>
             )}
 
-            {/* View Profile's Feed % + Count — shown when view profile% is set */}
+            {/* View Profile's Feed % + View Timeline Posts — on same row */}
             {(settings.clickPostPercentMax ?? 0) > 0 && (settings.viewPostProfilePercentMax ?? 0) > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">View Profile's Feed%</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">VIEW PROFILE'S FEED%</span>
                 {pctInputs("viewProfileFeedPercentMin", "viewProfileFeedPercentMax")}
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance to scroll their posts</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
-                  <Label className="text-xs text-muted-foreground">Min</Label>
-                  <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
-                    value={settings.viewProfileFeedCountMin ?? 3}
-                    onChange={(e) => setSettings({ ...settings, viewProfileFeedCountMin: Math.max(1, Number(e.target.value)) })}
-                  />
-                  <Label className="text-xs text-muted-foreground">Max</Label>
-                  <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
-                    value={settings.viewProfileFeedCountMax ?? 8}
-                    onChange={(e) => setSettings({ ...settings, viewProfileFeedCountMax: Math.max(1, Number(e.target.value)) })}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* View Timeline Posts count + % — shown when view feed% is set */}
-            {(settings.clickPostPercentMax ?? 0) > 0 && (settings.viewPostProfilePercentMax ?? 0) > 0 && (settings.viewProfileFeedPercentMax ?? 0) > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">View Timeline Posts</span>
-                <Label className="text-xs text-muted-foreground">Min</Label>
-                <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
-                  value={settings.viewProfilePostsCountMin ?? 1}
-                  onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMin: Math.max(1, Number(e.target.value)) })}
-                />
-                <Label className="text-xs text-muted-foreground">Max</Label>
-                <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
-                  value={settings.viewProfilePostsCountMax ?? 3}
-                  onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMax: Math.max(1, Number(e.target.value)) })}
-                />
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">at%</span>
-                {pctInputs("viewProfilePostsPercentMin", "viewProfilePostsPercentMax")}
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">chance to open each one</span>
+                {(settings.viewProfileFeedPercentMax ?? 0) > 0 && (
+                  <>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AMOUNT OF POSTS TO SCROLL</span>
+                    <Label className="text-xs text-muted-foreground uppercase">Min</Label>
+                    <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
+                      value={settings.viewProfilePostsCountMin ?? 1}
+                      onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMin: Math.max(1, Number(e.target.value)) })}
+                    />
+                    <Label className="text-xs text-muted-foreground uppercase">Max</Label>
+                    <Input type="number" min="1" max="20" className="w-14 h-7 text-xs"
+                      value={settings.viewProfilePostsCountMax ?? 3}
+                      onChange={(e) => setSettings({ ...settings, viewProfilePostsCountMax: Math.max(1, Number(e.target.value)) })}
+                    />
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AT%</span>
+                    {pctInputs("viewProfilePostsPercentMin", "viewProfilePostsPercentMax")}
+                  </>
+                )}
               </div>
             )}
           </div>
