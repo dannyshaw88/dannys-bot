@@ -175,12 +175,10 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
       {/* Master toggle */}
-      <div className="border border-border rounded-xl p-4 space-y-2">
-        <div className="flex items-center gap-2">
-          <UserMinus className="w-4 h-4 text-muted-foreground" />
-          <h4 className="font-semibold text-sm">Unfollow Tool</h4>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="border border-border rounded-xl p-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <UserMinus className="w-4 h-4 text-muted-foreground shrink-0" />
+          <h4 className="font-semibold text-sm shrink-0">Unfollow Tool</h4>
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) =>

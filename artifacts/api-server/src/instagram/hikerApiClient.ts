@@ -170,22 +170,47 @@ export class HikerApiClient {
   }
 
   async getFollowings(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
-    try {
-      const amount = Math.min(Math.max(max, 1), 200);
-      const j = await hikerGet(`/v1/user/following?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
-      const users: any[] = Array.isArray(j) ? j
+    const extractUsers = (j: any): { pk: string; username: string; fullName: string }[] => {
+      const arr: any[] = Array.isArray(j) ? j
         : Array.isArray(j?.users) ? j.users
         : Array.isArray(j?.items) ? j.items
         : Array.isArray(j?.data) ? j.data
         : [];
-      return users
+      return arr
         .filter((u: any) => u?.pk && u?.username)
-        .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }))
-        .slice(0, max);
-    } catch (e: any) {
-      console.error(`[hikerApi] getFollowings ${userId} error: ${e?.message}`);
-      return [];
+        .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }));
+    };
+
+    // HikerAPI returns at most ~200 per call — page until we have enough.
+    const PAGE_SIZE = 200;
+    const accumulated: { pk: string; username: string; fullName: string }[] = [];
+    let nextMaxId: string | null = null;
+    const maxPages = Math.ceil(max / PAGE_SIZE) + 1; // safety ceiling
+
+    for (let page = 0; page < maxPages && accumulated.length < max; page++) {
+      try {
+        const qs = new URLSearchParams({ user_id: userId, amount: String(PAGE_SIZE) });
+        if (nextMaxId) qs.set("next_max_id", nextMaxId);
+        const j = await hikerGet(`/v1/user/following?${qs}`, this.token);
+        if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
+          console.warn(`[hikerApi] getFollowings ${userId} page ${page}: ${j.detail ?? j.exc_type}`);
+          break;
+        }
+        const users = extractUsers(j);
+        accumulated.push(...users);
+        console.log(`[hikerApi] getFollowings ${userId} page ${page}: +${users.length} (total ${accumulated.length}/${max})`);
+        // Try to get a pagination cursor; if none or no new results, stop.
+        const response = j?.response ?? j;
+        const more = response?.more_available ?? (users.length >= PAGE_SIZE);
+        nextMaxId = (response?.next_max_id ? String(response.next_max_id) : null);
+        if (!more || !nextMaxId || users.length === 0) break;
+      } catch (e: any) {
+        console.error(`[hikerApi] getFollowings ${userId} page ${page} error: ${e?.message}`);
+        break;
+      }
     }
+
+    return accumulated.slice(0, max);
   }
 
   // Converts a numeric media ID (e.g. "3123456789012345678_123") to the

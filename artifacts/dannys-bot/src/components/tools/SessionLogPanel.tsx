@@ -58,7 +58,7 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
             <Activity className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-base font-semibold">Session Action Log</h2>
+            <h2 className="text-sm font-semibold">Session Action Log</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               All automation actions performed · sorted by most recent · {sessionActionsList?.length ?? 0} entries · refreshes every 5s
             </p>

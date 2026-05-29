@@ -59,6 +59,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.651",
+    date: "29 May 2026",
+    items: [
+      { category: "Fixed", text: "HikerAPI import now pages through results to collect up to 2000 followings instead of stopping at 200." },
+      { category: "Improved", text: "Unfollow Tool: title, toggle, and next-execution time are now on a single row." },
+      { category: "Improved", text: "Human Session Emulation: title, toggle, and next-execution time are now on a single row." },
+      { category: "Improved", text: "Session Action Log and Follow Tool titles are now the same size as all other tool titles." },
+    ],
+  },
+  {
     version: "1.0.650",
     date: "29 May 2026",
     items: [

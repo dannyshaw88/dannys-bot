@@ -720,7 +720,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
           <div className={`desktop-card ${tool.type === 'follow' ? 'px-6 pb-6 pt-3' : 'p-6'} space-y-4`}>
             {tool.type === 'follow' && (
               <div className="flex items-center gap-2 flex-wrap mb-4 pb-3 border-b border-border">
-                <h2 className="text-xl font-bold">Follow Tool</h2>
+                <h2 className="text-sm font-semibold">Follow Tool</h2>
                 <Switch
                   checked={tool.enabled}
                   onCheckedChange={handleToggleEnable}

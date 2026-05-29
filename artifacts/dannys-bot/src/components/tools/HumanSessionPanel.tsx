@@ -283,9 +283,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
       {/* ── Master enable/disable ─────────────────────────────── */}
-      <div className="border border-border rounded-xl p-4 space-y-2">
-        <h4 className="font-semibold text-sm">Human Session Emulation Tool</h4>
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="border border-border rounded-xl p-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h4 className="font-semibold text-sm shrink-0">Human Session Emulation Tool</h4>
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })}
