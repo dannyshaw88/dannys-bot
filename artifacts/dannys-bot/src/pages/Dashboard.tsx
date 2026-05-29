@@ -59,6 +59,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.642",
+    date: "29 May 2026",
+    items: [
+      { category: "Fix", text: "TrustScore dropdown now shows tier names and icons correctly — text was white on white background and invisible." },
+      { category: "Fix", text: "TrustScore badge icons in the pill are now filled solid, matching the style on all other pages." },
+      { category: "Improvement", text: "All automation tools now run strictly through the mobile API regardless of what the embedded browser is showing — cookie banners, ads, or other prompts in the EB no longer block tool execution." },
+    ],
+  },
+  {
     version: "1.0.641",
     date: "29 May 2026",
     items: [

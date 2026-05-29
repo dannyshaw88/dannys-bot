@@ -99,7 +99,7 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
       >
         {current ? (
           <>
-            <current.icon size={10} color={GREEN_TEXT} strokeWidth={2} />
+            <current.icon size={10} color={GREEN_TEXT} fill={GREEN_TEXT} strokeWidth={2} />
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: GREEN_TEXT, whiteSpace: "nowrap" }}>
               {current.label}
             </span>
@@ -158,6 +158,8 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
           {TRUST_LEVELS.map(lvl => {
             const Icon = lvl.icon;
             const isActive = score === lvl.id;
+            const itemIconColor = isActive ? GREEN_TEXT : "#111827";
+            const itemTextColor = isActive ? GREEN_TEXT : "#111827";
             return (
               <button
                 key={lvl.id}
@@ -176,8 +178,8 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
                   outline: "none",
                 }}
               >
-                <Icon size={12} color={GREEN_TEXT} strokeWidth={2} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: GREEN_TEXT, letterSpacing: "0.05em" }}>{lvl.label}</span>
+                <Icon size={12} color={itemIconColor} fill={isActive ? GREEN_TEXT : "none"} strokeWidth={2} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: itemTextColor, letterSpacing: "0.05em" }}>{lvl.label}</span>
               </button>
             );
           })}

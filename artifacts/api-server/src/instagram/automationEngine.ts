@@ -1674,52 +1674,39 @@ class AutomationEngine {
 
     const client = state.client;
 
-    // Always sync EB browser cookies first — this makes the engine share the
-    // same Instagram session as the embedded browser (which can follow freely).
+    // API-FIRST: if a verified mobile session exists (igApiCookies from Verify
+    // Credentials), use it directly.  All automation tools run via the mobile API —
+    // they do NOT require the EB to be showing any particular page.  The EB is only
+    // used for general browsing, challenge-fixing, and cookie harvesting.
+    // loadBrowserCookies() is still called for freshness, but its return value does
+    // NOT gate whether we proceed — only the mobile session matters here.
+    if (client.isMobileLoggedIn()) {
+      console.log(`[engine] @${profile.username}: resuming mobile API session from stored cookies`);
+      // Sync EB cookies non-destructively so the web cookieJar stays fresh, but
+      // never let EB state (cookie banner, ads prompt, etc.) block tool execution.
+      client.loadBrowserCookies();
+      return client;
+    }
+
+    // No verified mobile session yet.  Try to seed one from the EB cookie file.
+    // This path is taken for accounts that have an EB session but have not yet
+    // been through Verify Credentials (no igApiCookies in DB).
     const browserOk = client.loadBrowserCookies();
     if (browserOk) {
-      console.log(`[engine] @${profile.username}: using EB browser session (cookies synced)`);
-      // EB-FIRST RULE: seed the mobile session from fresh EB web cookies only if
-      // there is no existing verified mobile session (igApiCookies from a Verify
-      // Credentials run).  Verified sessions have gone through the cold-start
-      // device registration sequence and are accepted by i.instagram.com.
-      // EB-bootstrapped cookies lack that registration so they are rejected by the
-      // mobile API.  Preserving the verified session here prevents the EB bootstrap
-      // from clobbering valid igApiCookies on every engine cycle.
-      const alreadyVerified = client.isMobileLoggedIn();
-      if (alreadyVerified) {
-        console.log(`[engine] @${profile.username}: verified igApiCookies mobile session preserved (EB bootstrap skipped)`);
+      console.log(`[engine] @${profile.username}: no verified session — attempting EB cookie bootstrap`);
+      const mobileBootOk = client.mobileBootstrapFromWebCookies();
+      if (mobileBootOk) {
+        console.log(`[engine] @${profile.username}: mobile session seeded from EB cookies (Watch Stories/Reels may be skipped until Verify Credentials is run)`);
       } else {
-        const mobileBootOk = client.mobileBootstrapFromWebCookies();
-        if (mobileBootOk) {
-          console.log(`[engine] @${profile.username}: mobile session seeded from EB cookies (account not yet verified — Watch Stories/Reels may be skipped until Verify Credentials is run)`);
-        } else {
-          // EB cookie file exists but has no sessionid — EB is not properly logged in.
-          // Do NOT fall back to a cold mobile API login. Mobile-API tools (Watch Reels,
-          // Watch Stories) will be skipped this session. The account needs to be
-          // re-verified via the Verify button so the EB logs in and saves a sessionid.
-          console.warn(`[engine] @${profile.username}: EB cookie file has no sessionid — mobile-API tools skipped this session. Re-verify the account via the Verify button.`);
-        }
+        console.warn(`[engine] @${profile.username}: EB cookie file has no sessionid — mobile-API tools skipped this session. Re-verify the account via the Verify button.`);
       }
       return client;
     }
 
-    // Mobile session already live from stored igApiCookies (set by Verify Credentials).
-    // setDeviceInfo eagerly calls _restoreMobileFromApiCookies so this will be true
-    // for any account that has been verified — no web login needed.
-    if (client.isMobileLoggedIn()) {
-      console.log(`[engine] @${profile.username}: resuming mobile API session from stored cookies`);
-      return client;
-    }
-
-    // EB-first enforcement: reaching here means the EB browser is NOT providing
-    // a fresh session (browserOk = false) AND no stored API session is available
-    // (isMobileLoggedIn = false).  Do NOT attempt a cold mobile login — calling
-    // the Instagram API before any EB session has been established is a trust-
-    // signal Instagram uses to flag accounts.  Instead, skip this run and let
-    // the runner retry on the next cycle.  The account should be verified via
-    // the embedded browser first (Verify Credentials button).
-    console.warn(`[engine] @${profile.username}: no EB session and no stored mobile session — skipping run (verify the account in the browser first)`);
+    // No verified mobile session AND no EB cookie file with a sessionid.
+    // Do NOT attempt a cold mobile login — the account must be verified via the
+    // embedded browser first (Verify Credentials button).
+    console.warn(`[engine] @${profile.username}: no mobile session and no EB session — skipping run (verify the account in the browser first)`);
     return null;
   }
 
