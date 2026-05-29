@@ -11,7 +11,7 @@ import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
 import { CreateCookiePanel } from "@/components/tools/CreateCookiePanel";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
-import { TrustScoreBadge } from "@/components/TrustScoreBadge";
+import { TrustScoreBadge, getTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
   ArrowLeft, Settings, Shield, User, Lock, Globe, Zap, Instagram, Activity, Monitor,
@@ -416,8 +416,8 @@ export function ProfileDetailsPage() {
     }
   };
 
-  const otherProfiles = allProfiles?.filter(p => p.id !== profileId && !p.locked) ?? [];
-  const hasOtherProfiles = (allProfiles?.filter(p => p.id !== profileId) ?? []).length > 0;
+  const otherProfiles = allProfiles?.filter(p => p.id !== profileId && !p.locked && !p.isTemplate) ?? [];
+  const hasOtherProfiles = (allProfiles?.filter(p => p.id !== profileId && !p.isTemplate) ?? []).length > 0;
 
   const handleAccountCopy = async (targetIds: number[], expandedKeys: string[]) => {
     if (!formData) return;
@@ -695,8 +695,8 @@ export function ProfileDetailsPage() {
 
   const getTool = (type: string) => tools?.find(t => t.type === type);
 
-  // Profile switcher helpers
-  const sortedProfiles = [...(allProfiles ?? [])].sort((a, b) =>
+  // Profile switcher helpers — exclude TrustScore base (template) profiles
+  const sortedProfiles = [...(allProfiles ?? [])].filter(p => !p.isTemplate).sort((a, b) =>
     (a.accountLabel || a.username).toLowerCase().localeCompare((b.accountLabel || b.username).toLowerCase())
   );
   const switcherProfiles = profileSearch.trim()
@@ -891,19 +891,34 @@ export function ProfileDetailsPage() {
                     <div className="max-h-72 overflow-y-auto py-1">
                       {switcherProfiles.length === 0 ? (
                         <div className="px-3 py-4 text-center text-sm text-muted-foreground">No profiles found</div>
-                      ) : switcherProfiles.map(p => (
-                        <DropdownMenuItem
-                          key={p.id}
-                          onClick={() => navigate(`/profiles/${p.id}?tab=${activeTab}`)}
-                          className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 ${p.id === profileId ? "bg-accent" : ""}`}
-                        >
-                          <Instagram className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <span className={`flex-1 truncate text-sm ${p.id === profileId ? "font-semibold" : ""}`}>
-                            {p.accountLabel || p.username}{(p.tags ?? "").trim() ? ` - ${(p.tags ?? "").trim()}` : ""}
-                          </span>
-                          {p.id === profileId && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
-                        </DropdownMenuItem>
-                      ))}
+                      ) : switcherProfiles.map(p => {
+                        const tsId = getTrustScore(p.id);
+                        const tsLevel = tsId ? TRUST_LEVELS.find(l => l.id === tsId) : null;
+                        return (
+                          <DropdownMenuItem
+                            key={p.id}
+                            onClick={() => navigate(`/profiles/${p.id}?tab=${activeTab}`)}
+                            className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 ${p.id === profileId ? "bg-accent" : ""}`}
+                          >
+                            <Instagram className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className={`flex-1 truncate text-sm ${p.id === profileId ? "font-semibold" : ""}`}>
+                              {p.accountLabel || p.username}{(p.tags ?? "").trim() ? ` - ${(p.tags ?? "").trim()}` : ""}
+                            </span>
+                            {tsLevel && (
+                              <span
+                                className="flex items-center gap-1 rounded-full px-1.5 py-0.5 shrink-0"
+                                style={{ background: "#1AD2F2" }}
+                              >
+                                <tsLevel.icon size={9} color="#fff" fill="#fff" strokeWidth={2} />
+                                <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                                  {tsLevel.label}
+                                </span>
+                              </span>
+                            )}
+                            {p.id === profileId && <CheckCircle2 className="w-3.5 h-3.5 text-primary ml-auto shrink-0" />}
+                          </DropdownMenuItem>
+                        );
+                      })}
                     </div>
                   </DropdownMenuContent>
                 </DropdownMenu>

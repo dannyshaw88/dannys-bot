@@ -68,6 +68,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_view_profile",     label: "Visit profile % (min / max)",             settingKeys: ["viewPostProfilePercentMin","viewPostProfilePercentMax"] },
         { key: "vtf_profile_feed",     label: "View profile feed % + count (min / max)", settingKeys: ["viewProfileFeedPercentMin","viewProfileFeedPercentMax","viewProfileFeedCountMin","viewProfileFeedCountMax"] },
         { key: "vtf_profile_posts",    label: "Open profile posts count + % (min / max)",settingKeys: ["viewProfilePostsCountMin","viewProfilePostsCountMax","viewProfilePostsPercentMin","viewProfilePostsPercentMax"] },
+        { key: "vtf_follow_suggested", label: "If 0 Posts → Follow Suggested (enabled + min / max)", settingKeys: ["followSuggestedUsersIfEmptyEnabled","followSuggestedUsersIfEmptyMin","followSuggestedUsersIfEmptyMax"] },
       ]},
       { key: "humanSession", label: "Human Session (Visit Profile)", description: "Core session order and cool-down", subOptions: [
         { key: "hs_enabled", label: "Enabled",                            settingKeys: ["humanSessionEnabled"] },

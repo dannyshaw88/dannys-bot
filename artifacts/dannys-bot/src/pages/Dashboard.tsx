@@ -59,6 +59,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.648",
+    date: "29 May 2026",
+    items: [
+      { category: "Fixed", text: "Account picker dropdown on Account Settings now only shows real accounts — TrustScore base profiles are excluded." },
+      { category: "Fixed", text: "Copy Settings target list now also excludes TrustScore base profiles, showing only real accounts." },
+      { category: "Improved", text: "Account picker dropdown and Copy Settings list now display each account's TrustScore badge next to the account name." },
+      { category: "Fixed", text: "Human Sessions Copy Settings now includes the 'If 0 Posts → Follow Suggested' setting so it can be copied across accounts." },
+    ],
+  },
+  {
     version: "1.0.647",
     date: "29 May 2026",
     items: [

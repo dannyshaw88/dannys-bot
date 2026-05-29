@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { Profile } from "@shared/schema";
+import { getTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
 
 export interface CopySubOption {
   key: string;
@@ -362,16 +363,29 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 const acctStatus = ((p as any).accountStatus as string | undefined) ?? "";
                 const displayStatus = acctStatus.replace(/_/g, " ").trim();
                 const groupLabel = (p.tags ?? "").trim() || "No Group Assigned";
+                const tsId = getTrustScore(p.id);
+                const tsLevel = tsId ? TRUST_LEVELS.find(l => l.id === tsId) : null;
                 return (
                   <label
                     key={p.id}
                     className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-muted/30 transition-colors"
                   >
                     <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} className="shrink-0 w-4 h-4" />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-semibold truncate block leading-tight">
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                      <span className="text-xs font-semibold truncate leading-tight">
                         {p.accountLabel || p.username}
                       </span>
+                      {tsLevel && (
+                        <span
+                          className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 shrink-0"
+                          style={{ background: "#1AD2F2" }}
+                        >
+                          <tsLevel.icon size={8} color="#fff" fill="#fff" strokeWidth={2} />
+                          <span style={{ fontSize: 8, fontWeight: 700, color: "#fff", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+                            {tsLevel.label}
+                          </span>
+                        </span>
+                      )}
                     </div>
                     <div className="w-[72px] shrink-0">
                       {displayStatus && (
