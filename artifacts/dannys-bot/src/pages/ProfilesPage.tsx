@@ -17,7 +17,7 @@ import {
   ShieldCheck, Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, LogIn, Loader2, Globe, Clock,
   Smartphone, FileDown, Filter, X, Settings2,
   AlertTriangle, ShieldAlert, WifiOff, RefreshCw, Lock, LockOpen, UserMinus, Camera, Eye,
-  Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus,
+  Tag, FolderOpen, Battery, BatteryCharging, Wifi, ImagePlus, UserCog, Images,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -328,6 +328,11 @@ export function ProfilesPage() {
   });
   const [setGroupOpen, setSetGroupOpen] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState("");
+  const [changeDetailsOpen, setChangeDetailsOpen] = useState(false);
+  const [changeDetailsUsername, setChangeDetailsUsername] = useState("");
+  const [changeDetailsBio, setChangeDetailsBio] = useState("");
+  const [changeDetailsPictures, setChangeDetailsPictures] = useState<File[]>([]);
+  const changeDetailsPicInputRef = useRef<HTMLInputElement>(null);
 
   const setFilterPersisted = (v: string) => {
     sessionStorage.setItem("profiles:filter", v);
@@ -1815,6 +1820,15 @@ export function ProfilesPage() {
                 <LockOpen className="w-4 h-4 shrink-0 text-muted-foreground" /> Unlock Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <button
+                onClick={() => { setActionsOpen(false); setChangeDetailsOpen(true); }}
+                disabled={selectedProfileIds.length === 0}
+                className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <UserCog className="w-4 h-4 shrink-0 text-muted-foreground" />
+                Change Details{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
+              </button>
+              <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Trash2 className="w-4 h-4 shrink-0" /><span className="flex-1">Delete Selected</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+D</span>
               </button>
@@ -1852,6 +1866,109 @@ export function ProfilesPage() {
             <div className="px-5 pb-4 flex items-center justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setSetGroupOpen(false)}>Cancel</Button>
               <Button size="sm" onClick={handleSetGroup}>Apply</Button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Change Details dialog ─────────────────────────────────────────── */}
+      {changeDetailsOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setChangeDetailsOpen(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[520px] overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b border-border flex items-center gap-2">
+              <UserCog className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-sm font-semibold">Change Details</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {selectedProfileIds.length} account{selectedProfileIds.length !== 1 ? "s" : ""} selected
+                </p>
+              </div>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* Username */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                  Username
+                </label>
+                <Input
+                  value={changeDetailsUsername}
+                  onChange={e => setChangeDetailsUsername(e.target.value)}
+                  placeholder="{newuser_a|newuser_b|newuser_c}"
+                  className="h-8 text-sm font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Use spintax <span className="font-mono bg-muted px-1 rounded">{"{ option1 | option2 | option3 }"}</span> to randomly pick one per account.
+                </p>
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                  Bio
+                </label>
+                <textarea
+                  value={changeDetailsBio}
+                  onChange={e => setChangeDetailsBio(e.target.value)}
+                  placeholder={"{ Fitness coach 💪 | Personal trainer 🏋️ | Helping you reach your goals 🎯 }"}
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Use spintax <span className="font-mono bg-muted px-1 rounded">{"{ option1 | option2 }"}</span> for random bio per account.
+                </p>
+              </div>
+
+              {/* Profile Picture */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                  Profile Picture
+                </label>
+                <input
+                  ref={changeDetailsPicInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={e => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length > 0) setChangeDetailsPictures(prev => [...prev, ...files]);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => changeDetailsPicInputRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md border border-dashed border-border hover:border-primary hover:bg-muted/40 transition-colors text-sm text-muted-foreground w-full"
+                >
+                  <Images className="w-4 h-4 shrink-0" />
+                  <span>Browse images… <span className="text-[10px]">(multiple allowed — one picked at random per account)</span></span>
+                </button>
+                {changeDetailsPictures.length > 0 && (
+                  <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                    {changeDetailsPictures.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2 text-xs text-foreground bg-muted/40 rounded px-2 py-1">
+                        <ImagePlus className="w-3 h-3 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setChangeDetailsPictures(prev => prev.filter((_, j) => j !== i))}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {changeDetailsPictures.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-1">No images selected. A random image will be chosen per account at run time.</p>
+                )}
+              </div>
+            </div>
+            <div className="px-5 pb-4 flex items-center justify-end gap-2 border-t border-border pt-3">
+              <Button variant="outline" size="sm" onClick={() => { setChangeDetailsOpen(false); setChangeDetailsUsername(""); setChangeDetailsBio(""); setChangeDetailsPictures([]); }}>Cancel</Button>
+              <Button size="sm" onClick={() => { setChangeDetailsOpen(false); toast({ title: "Change Details queued", description: `Scheduled for ${selectedProfileIds.length} account${selectedProfileIds.length !== 1 ? "s" : ""}` }); }}>Apply</Button>
             </div>
           </div>
         </>

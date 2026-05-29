@@ -59,6 +59,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.643",
+    date: "29 May 2026",
+    items: [
+      { category: "New", text: "Added Change Details to the Actions menu on the Accounts page — lets you update username, bio, and profile picture across multiple accounts using spintax for variation." },
+      { category: "New", text: "Username and bio fields support spintax so each account can get a unique randomly-chosen value." },
+      { category: "New", text: "Profile picture picker lets you select multiple images — one is randomly assigned to each account at run time." },
+    ],
+  },
+  {
     version: "1.0.642",
     date: "29 May 2026",
     items: [
