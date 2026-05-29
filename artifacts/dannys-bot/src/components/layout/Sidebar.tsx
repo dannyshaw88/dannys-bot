@@ -188,8 +188,9 @@ export function Sidebar() {
 
       {/* ── Status pill ── */}
       <div className="px-3 pb-4 border-t border-border/50 pt-3">
-        <div className="bg-background rounded-lg px-2 py-1.5 border border-border flex items-center gap-1.5 min-w-0">
+        <div className="bg-background rounded-lg px-2 py-1.5 border border-border flex items-center justify-center gap-1.5 min-w-0">
           <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+          <span className="text-[10px] font-bold text-amber-400 tracking-wide">Developing</span>
         </div>
       </div>
     </div>

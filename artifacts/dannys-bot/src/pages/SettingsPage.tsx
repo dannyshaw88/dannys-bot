@@ -190,6 +190,7 @@ export function SettingsPage() {
   const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
   const [captchaTestState, setCaptchaTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
   const [captchaTestResult, setCaptchaTestResult] = useState<string>("");
+  const [settingsTab, setSettingsTab] = useState("general");
 
   // ─── Jarvee import state ───────────────────────────────────────────────────
   const jarveeFileRef = useRef<HTMLInputElement>(null);
@@ -295,10 +296,21 @@ export function SettingsPage() {
         <p className="text-muted-foreground mt-1">Configure application-wide preferences.</p>
       </div>
 
+      <div className="flex items-center gap-0 mb-6 border-b border-border/60 max-w-2xl">
+        {(["General", "Scraping", "Automation", "Security", "Data"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setSettingsTab(tab.toLowerCase())}
+            className={`px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === tab.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
       <div className="space-y-4 max-w-2xl">
 
         {/* README & FAQ shortcut */}
-        <Link href="/readme" className="block">
+        <Link href="/readme" className="block" style={{ display: settingsTab !== "general" ? "none" : undefined }}>
           <div className="desktop-card p-4 flex items-center justify-between cursor-pointer hover:bg-accent/30 transition-colors">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -314,10 +326,10 @@ export function SettingsPage() {
         </Link>
 
         {/* Autostart — Electron only */}
-        {isElectron && <AutostartCard />}
+        {isElectron && settingsTab === "general" && <AutostartCard />}
 
         {/* HikerAPI Scraper Protection */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "scraping" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
               <Shield className="w-4 h-4" />
@@ -388,10 +400,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* Follow Skip Settings */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
           <h3 className="text-base font-semibold mb-1">Follow Skip Settings</h3>
           <p className="text-sm text-muted-foreground mb-5">
             Control whether accounts can follow the same users as each other.
@@ -448,10 +460,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* Scraped User Skip Settings */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
               <Database className="w-4 h-4" />
@@ -529,10 +541,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* 2Captcha Integration */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "security" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
               <KeyRound className="w-4 h-4" />
@@ -596,10 +608,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* Dashboard Log Limit */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-indigo-100 text-indigo-600">
               <ScrollText className="w-4 h-4" />
@@ -631,10 +643,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* Verify All Delay */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-green-100 text-green-600">
               <Timer className="w-4 h-4" />
@@ -680,10 +692,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* Pre-filled Phone Number */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
               <Phone className="w-4 h-4" />
@@ -713,10 +725,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* CSV Export Timezone */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "data" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-cyan-100 text-cyan-600">
               <RefreshCw className="w-4 h-4" />
@@ -746,10 +758,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* Theme */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "general" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-primary/10 text-primary">
               <Palette className="w-4 h-4" />
@@ -762,10 +774,10 @@ export function SettingsPage() {
           <ThemePicker />
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* App Updates */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "general" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-green-100 text-green-600">
               <RefreshCw className="w-4 h-4" />
@@ -807,10 +819,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-t border-border/60" />
+
 
         {/* Jarvee Import */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "data" ? "none" : undefined }}>
           <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
             <Upload className="w-4 h-4" />
             Jarvee Import Followed Users
@@ -964,12 +976,8 @@ export function SettingsPage() {
           )}
         </div>
 
-        {isElectron && (
-          <div className="border-t border-border/60" />
-        )}
-
         {/* Backup & Restore */}
-        {isElectron && (
+        {isElectron && settingsTab === "data" && (
           <div className="desktop-card p-6">
             <div className="flex items-center gap-3 mb-1">
               <div className="p-2 rounded-lg bg-emerald-100 text-emerald-600">
@@ -1159,15 +1167,13 @@ export function SettingsPage() {
           </div>
         )}
 
-        <div className="border-t border-border/60" />
+
 
         {/* Server Debug Log */}
-        <ServerLogCard />
-
-        <div className="border-t border-border/60" />
+        {settingsTab === "data" && <ServerLogCard />}
 
         {/* Data Management */}
-        <div className="desktop-card p-6">
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "data" ? "none" : undefined }}>
           <h3 className="text-base font-semibold mb-2">Data Management</h3>
           <p className="text-sm text-muted-foreground mb-4">
             Clear local cache if you are experiencing synchronisation issues with the backend database.

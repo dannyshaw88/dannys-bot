@@ -3,6 +3,7 @@ import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -29,8 +30,8 @@ const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; colo
   { key: "human_session", label: "Human Sessions",icon: <Bot className="w-3.5 h-3.5" />,           color: "text-cyan-500",    isTool: false },
 ];
 
-const DEFAULT_COL_WIDTHS: Record<StatKey | "account" | "open_eb", number> = {
-  account: 160, open_eb: 80, follow: 110, unfollow: 110, dm: 110,
+const DEFAULT_COL_WIDTHS: Record<StatKey | "account" | "open_eb" | "trustscore", number> = {
+  account: 160, open_eb: 80, trustscore: 250, follow: 110, unfollow: 110, dm: 110,
   like: 100, comment: 110, story: 120, human_session: 140,
 };
 
@@ -54,7 +55,7 @@ function ProfileStatsRow({
   profile: Profile;
   visibleCols: Record<StatKey, boolean>;
   statColOrder: StatKey[];
-  colWidths: Record<StatKey | "account" | "open_eb", number>;
+  colWidths: Record<StatKey | "account" | "open_eb" | "trustscore", number>;
   statsData: any[];
   onOpenBrowser: () => void;
   onNavigateToProfile: () => void;
@@ -102,6 +103,11 @@ function ProfileStatsRow({
         </button>
       </td>
 
+      {/* TrustScore column */}
+      <td style={{ width: colWidths.trustscore }} className="px-4 py-3">
+        <TrustScoreBadge profileId={profile.id} />
+      </td>
+
       {/* Stat columns — in user-defined order */}
       {statColOrder.filter(key => visibleCols[key]).map(key => {
         const statType = ALL_STAT_TYPES.find(s => s.key === key)!;
@@ -137,7 +143,7 @@ export function StatsPage() {
   const [, setLocation] = useLocation();
   const { openWindow } = useBrowserWindows();
 
-  const [colWidths, setColWidths] = usePersistentSetting<Record<StatKey | "account" | "open_eb", number>>(
+  const [colWidths, setColWidths] = usePersistentSetting<Record<StatKey | "account" | "open_eb" | "trustscore", number>>(
     "stats_col_widths_px",
     DEFAULT_COL_WIDTHS,
     (s, d) => ({ ...d, ...s }),
@@ -281,7 +287,7 @@ export function StatsPage() {
 
   const visibleTypes = ALL_STAT_TYPES.filter(({ key }) => visibleCols[key]);
   // Account + Browser Embedded + stat columns
-  const colCount = 2 + visibleTypes.length;
+  const colCount = 3 + visibleTypes.length;
 
   const colGroups: [string, string][] = [
     ["account", "Account"],
@@ -400,6 +406,7 @@ export function StatsPage() {
               <colgroup>
                 <col style={{ width: colWidths.account }} />
                 <col style={{ width: colWidths.open_eb }} />
+                <col style={{ width: colWidths.trustscore }} />
                 {statColOrder.filter(key => visibleCols[key]).map(key => <col key={key} style={{ width: colWidths[key] }} />)}
               </colgroup>
               <thead className="text-xs bg-muted/30 text-muted-foreground border-b border-border/50">
@@ -418,6 +425,7 @@ export function StatsPage() {
                       <span className="text-[10px]">Open EB</span>
                     </span>
                   </th>
+                  <th style={{ width: colWidths.trustscore }} className="px-4 py-3 font-bold uppercase tracking-wide text-[10px] text-muted-foreground/60">TrustScore</th>
                   {statColOrder.filter(key => visibleCols[key]).map(key => {
                     const st = ALL_STAT_TYPES.find(s => s.key === key)!;
                     const isDragTarget = statDragOverCol === key;

@@ -9,6 +9,7 @@ import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
   Users, UserCheck, ImageIcon, CheckCircle2,
 } from "lucide-react";
+import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
@@ -50,13 +51,24 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }
   save_media:              { label: "Save Media",      cls: "text-emerald-600",   icon: "⊙" },
 };
 
-const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220 };
-const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "event", "target", "detail", "timestamp"];
+const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 250 };
+const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "trustscore", "event", "target", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
-  account: "Account", event: "Action", target: "Target", detail: "Detail", timestamp: "Timestamp",
+  account: "Account", event: "Action", target: "Target", detail: "Detail", timestamp: "Timestamp", trustscore: "TrustScore",
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.636",
+    date: "29 May 2026",
+    items: [
+      { category: "New", text: "TrustScore badge added to Accounts page, Dashboard activity log, and Statistics page — click any badge to set or change the trust level for that account." },
+      { category: "New", text: "TrustScore badge added inside each account's settings header, next to the account name picker navigation." },
+      { category: "New", text: "Settings page now has five horizontal sub-category tabs (General, Scraping, Automation, Security, Data) so you can jump straight to what you need without scrolling the full list." },
+      { category: "Improvement", text: "Activity Log and What's New tab icons are now solid filled cyan instead of outlines." },
+      { category: "Improvement", text: "Sidebar status pill now shows 'Developing' label next to the amber dot." },
+    ],
+  },
   {
     version: "1.0.635",
     date: "29 May 2026",
@@ -3740,10 +3752,10 @@ export function Dashboard() {
       <Card className="desktop-card border-none shadow-sm">
         <div className="flex items-center border-b border-border/50 px-4">
           <button className={tabClass("api-log")} onClick={() => setActiveTab("api-log")}>
-            <Zap className="w-4 h-4 text-cyan-500" /> Activity Log
+            <Zap className="w-4 h-4 text-cyan-500" fill="currentColor" /> Activity Log
           </button>
           <button className={tabClass("whats-new")} onClick={() => setActiveTab("whats-new")}>
-            <Bell className="w-4 h-4 text-cyan-500" /> What's New
+            <Bell className="w-4 h-4 text-cyan-500" fill="currentColor" /> What's New
           </button>
           <div className="ml-auto flex items-center gap-1">
             {activeTab === "api-log" && (
@@ -4012,6 +4024,7 @@ export function Dashboard() {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
+                        if (col === "trustscore") return <td key={col} className="px-3 py-1.5 truncate">{item.profileId ? <TrustScoreBadge profileId={item.profileId} /> : <span className="text-muted-foreground text-xs">—</span>}</td>;
                         if (item.kind === "import") {
                           const imp = item.importData!;
                           if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><span className="flex items-center gap-1.5 text-foreground min-w-0"><Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" /><span className="truncate text-xs font-semibold">Import</span></span></td>;

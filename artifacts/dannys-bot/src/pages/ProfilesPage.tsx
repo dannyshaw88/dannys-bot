@@ -25,6 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ImportProfilesDialog } from "@/components/ImportProfilesDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
+import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
 
 // ── Status metadata ──────────────────────────────────────────────────────────
@@ -83,11 +84,11 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
   );
 }
 
-const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
-const DEFAULT_PROFILES_COL_VISIBLE = { status: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, actions: true, battery: false, connection: false, abd: true, ip: true };
-const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "ip"];
+const DEFAULT_PROFILES_COL_WIDTHS = { account: 200, status: 96, trustscore: 250, active: 56, followers: 72, following: 72, sync: 88, lastApiCall: 100, actions: 176, battery: 90, connection: 80, abd: 56, ip: 128 };
+const DEFAULT_PROFILES_COL_VISIBLE = { status: true, trustscore: true, active: true, followers: true, following: true, sync: true, lastApiCall: true, actions: true, battery: false, connection: false, abd: true, ip: true };
+const DEFAULT_PROFILES_COL_ORDER: (keyof typeof DEFAULT_PROFILES_COL_WIDTHS)[] = ["account", "status", "trustscore", "active", "followers", "following", "sync", "lastApiCall", "actions", "battery", "connection", "abd", "ip"];
 const PROFILES_COL_LABELS: Record<keyof typeof DEFAULT_PROFILES_COL_WIDTHS, string> = {
-  account: "Account", status: "Status", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", lastApiCall: "Last API Call", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
+  account: "Account", status: "Status", trustscore: "TrustScore", active: "Active", followers: "FOLLOWERS", following: "FOLLOWING", sync: "SYNC", lastApiCall: "Last API Call", actions: "Actions", battery: "Battery", connection: "Mbps", abd: "Automatic Behaviour Detected", ip: "IP:Port",
 };
 
 // ── Fingerprint PRNG — same djb2+LCG as applyStealthScripts ─────────────────
@@ -1087,6 +1088,7 @@ export function ProfilesPage() {
               if (key === "actions") return <div key={key} {...dragProps} style={{ width: profColWidths.actions }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Actions</div>;
               if (key === "battery") return <div key={key} {...dragProps} style={{ width: profColWidths.battery }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Battery</div>;
               if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
+              if (key === "trustscore") return <div key={key} {...dragProps} style={{ width: profColWidths.trustscore }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>TrustScore</div>;
               if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>ABD</div>;
               return null;
             })}
@@ -1201,6 +1203,11 @@ export function ProfilesPage() {
                             {verifyingIds.has(profile.id) ? "…" : "Verify"}
                           </button>
                         )}
+                      </div>
+                    );
+                    if (key === "trustscore") return (
+                      <div key={key} style={{ width: profColWidths.trustscore }} className="flex items-center shrink-0" onMouseDown={e => e.stopPropagation()}>
+                        <TrustScoreBadge profileId={profile.id} />
                       </div>
                     );
                     if (key === "active") return (

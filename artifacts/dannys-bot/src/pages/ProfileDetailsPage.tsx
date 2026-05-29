@@ -11,6 +11,7 @@ import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
 import { CreateCookiePanel } from "@/components/tools/CreateCookiePanel";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
+import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
   ArrowLeft, Settings, Shield, User, Lock, Globe, Zap, Instagram, Activity, Monitor,
@@ -914,6 +915,7 @@ export function ProfileDetailsPage() {
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
+                <TrustScoreBadge profileId={profileId} />
               </div>
             </div>
           </div>
