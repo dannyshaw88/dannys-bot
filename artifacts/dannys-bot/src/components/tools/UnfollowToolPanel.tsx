@@ -278,8 +278,8 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         </p>
         <div className={`space-y-3 transition-opacity ${!(settings as any).unfollowTargetListEnabled ? "opacity-40 pointer-events-none" : ""}`}>
           <textarea
-            rows={6}
-            className="w-full text-xs border border-border rounded-lg p-3 bg-background resize-y focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+            rows={20}
+            className="w-full text-xs border border-border rounded-lg p-3 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary"
             placeholder={"@user1\n@user2\nuser3"}
             value={(settings as any).unfollowTargetList ?? ""}
             onChange={(e) => setSettings(s => ({ ...s, unfollowTargetList: e.target.value }))}

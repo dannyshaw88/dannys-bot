@@ -170,44 +170,75 @@ export class HikerApiClient {
   }
 
   async getFollowings(userId: string, max = 50): Promise<{ pk: string; username: string; fullName: string }[]> {
-    const extractUsers = (j: any): { pk: string; username: string; fullName: string }[] => {
-      const arr: any[] = Array.isArray(j) ? j
-        : Array.isArray(j?.users) ? j.users
-        : Array.isArray(j?.items) ? j.items
-        : Array.isArray(j?.data) ? j.data
+    // Normalise any HikerAPI response shape into { users[], cursor, more }.
+    const extractPage = (j: any): { users: { pk: string; username: string; fullName: string }[]; nextMaxId: string | null; more: boolean } => {
+      // Unwrap a possible top-level `response` envelope.
+      const envelope: any = (j && !Array.isArray(j) && j?.response && typeof j.response === "object") ? j.response : j;
+      const arr: any[] = Array.isArray(envelope)       ? envelope
+        : Array.isArray(envelope?.users)               ? envelope.users
+        : Array.isArray(envelope?.items)               ? envelope.items
+        : Array.isArray(envelope?.data)                ? envelope.data
+        : Array.isArray(j?.users)                      ? j.users
+        : Array.isArray(j?.items)                      ? j.items
+        : Array.isArray(j?.data)                       ? j.data
         : [];
-      return arr
+      const users = arr
         .filter((u: any) => u?.pk && u?.username)
         .map((u: any) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }));
+      const nextMaxId = envelope?.next_max_id ? String(envelope.next_max_id) : null;
+      const more: boolean = !!(envelope?.more_available ?? (users.length > 0 && !!nextMaxId));
+      return { users, nextMaxId, more };
     };
 
-    // HikerAPI returns at most ~200 per call — page until we have enough.
     const PAGE_SIZE = 200;
     const accumulated: { pk: string; username: string; fullName: string }[] = [];
     let nextMaxId: string | null = null;
-    const maxPages = Math.ceil(max / PAGE_SIZE) + 1; // safety ceiling
+    const maxPages = Math.ceil(max / PAGE_SIZE) + 5; // safety ceiling
 
     for (let page = 0; page < maxPages && accumulated.length < max; page++) {
+      let pageResult: { users: { pk: string; username: string; fullName: string }[]; nextMaxId: string | null; more: boolean } | null = null;
+
+      // Try v2 first — it returns a proper paginated envelope with next_max_id.
       try {
         const qs = new URLSearchParams({ user_id: userId, amount: String(PAGE_SIZE) });
         if (nextMaxId) qs.set("next_max_id", nextMaxId);
-        const j = await hikerGet(`/v1/user/following?${qs}`, this.token);
+        const j = await hikerGet(`/v2/user/following?${qs}`, this.token);
         if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
-          console.warn(`[hikerApi] getFollowings ${userId} page ${page}: ${j.detail ?? j.exc_type}`);
+          const detail: string = j.detail ?? j.exc_type ?? JSON.stringify(j);
+          if (/entries not found|not found/i.test(detail)) {
+            console.log(`[hikerApi] getFollowings ${userId} page ${page}: /v2/ cache miss, trying /v1/…`);
+          } else {
+            console.warn(`[hikerApi] getFollowings ${userId} page ${page} v2 error: ${detail}`);
+          }
+        } else {
+          pageResult = extractPage(j);
+        }
+      } catch (e: any) {
+        console.warn(`[hikerApi] getFollowings v2 ${userId} page ${page}: ${e?.message} — trying v1`);
+      }
+
+      // Fall back to v1 if v2 failed or returned an error.
+      if (!pageResult) {
+        try {
+          const qs = new URLSearchParams({ user_id: userId, amount: String(PAGE_SIZE) });
+          if (nextMaxId) qs.set("next_max_id", nextMaxId);
+          const j = await hikerGet(`/v1/user/following?${qs}`, this.token);
+          if (j && !Array.isArray(j) && !j?.response && (j.detail || j.exc_type)) {
+            console.warn(`[hikerApi] getFollowings ${userId} page ${page} v1 error: ${j.detail ?? j.exc_type}`);
+            break;
+          }
+          pageResult = extractPage(j);
+        } catch (e: any) {
+          console.error(`[hikerApi] getFollowings ${userId} page ${page} v1 error: ${e?.message}`);
           break;
         }
-        const users = extractUsers(j);
-        accumulated.push(...users);
-        console.log(`[hikerApi] getFollowings ${userId} page ${page}: +${users.length} (total ${accumulated.length}/${max})`);
-        // Try to get a pagination cursor; if none or no new results, stop.
-        const response = j?.response ?? j;
-        const more = response?.more_available ?? (users.length >= PAGE_SIZE);
-        nextMaxId = (response?.next_max_id ? String(response.next_max_id) : null);
-        if (!more || !nextMaxId || users.length === 0) break;
-      } catch (e: any) {
-        console.error(`[hikerApi] getFollowings ${userId} page ${page} error: ${e?.message}`);
-        break;
       }
+
+      accumulated.push(...pageResult.users);
+      console.log(`[hikerApi] getFollowings ${userId} page ${page}: +${pageResult.users.length} (total ${accumulated.length}/${max}, nextMaxId=${pageResult.nextMaxId ?? "none"}, more=${pageResult.more})`);
+
+      nextMaxId = pageResult.nextMaxId;
+      if (!pageResult.more || !nextMaxId || pageResult.users.length === 0) break;
     }
 
     return accumulated.slice(0, max);

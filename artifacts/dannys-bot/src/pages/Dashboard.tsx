@@ -59,6 +59,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.654",
+    date: "29 May 2026",
+    items: [
+      { category: "Fixed", text: "Unfollow Tool: list field can no longer be resized by dragging — it stays the fixed height." },
+      { category: "Fixed", text: "Unfollow Tool: HikerAPI import now tries the v2 following endpoint first (which returns proper pagination cursors) before falling back to v1, allowing imports well beyond 25 users." },
+    ],
+  },
+  {
     version: "1.0.653",
     date: "29 May 2026",
     items: [
