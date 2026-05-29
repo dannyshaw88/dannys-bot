@@ -60,7 +60,7 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const [hikerFetchMin, setHikerFetchMin] = useState(50);
   const [hikerFetchMax, setHikerFetchMax] = useState(200);
   const engineStatus = useProfileEngineStatus(tool.profileId);
-  const otherProfiles = allProfiles.filter(p => p.id !== profile.id && !p.locked);
+  const otherProfiles = allProfiles.filter(p => p.id !== profile.id && !p.locked && !p.isTemplate);
   const hasOtherProfiles = allProfiles.some(p => p.id !== profile.id);
 
   const [settings, setSettings] = useState(() => {

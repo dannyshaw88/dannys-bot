@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, useEffect } from "react";
+import { useRef, useState, useMemo, useEffect, Fragment } from "react";
 import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { useQuery, useQueries } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
-  Settings2, ChevronDown, ChevronUp, Bot, Monitor,
+  Settings2, ChevronDown, ChevronUp, ChevronRight, Bot, Monitor,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
@@ -141,7 +141,8 @@ function ProfileStatsRow({
 
 export function StatsPage() {
   useScrollRestore("stats");
-  const { data: profiles, isLoading } = useProfiles();
+  const { data: rawProfiles, isLoading } = useProfiles();
+  const profiles = useMemo(() => rawProfiles?.filter(p => !p.isTemplate), [rawProfiles]);
   const [, setLocation] = useLocation();
   const { openWindow } = useBrowserWindows();
 
@@ -185,6 +186,19 @@ export function StatsPage() {
   const manageColsRef = useRef<HTMLDivElement>(null);
 
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("stats:groupMode") === "true");
+
+  const [collapsedGroups, setCollapsedGroups] = usePersistentSetting<string[]>(
+    "stats:collapsedGroups",
+    [],
+    (s) => s,
+  );
+  const collapsedGroupsSet = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
+  const toggleGroupCollapse = (key: string) => {
+    const next = collapsedGroupsSet.has(key)
+      ? collapsedGroups.filter(g => g !== key)
+      : [...collapsedGroups, key];
+    setCollapsedGroups(next);
+  };
 
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<StatKey | "account" | null>(() => {
@@ -477,31 +491,41 @@ export function StatsPage() {
                     </td>
                   </tr>
                 ) : groupMode && groupedStats ? (
-                  Array.from(groupedStats.entries()).map(([groupKey, groupProfiles]) => (
-                    <>
-                      <tr key={`group-${groupKey}`} className="bg-background border-b border-border">
-                        <td colSpan={colCount} className="px-4 py-1.5 select-none">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
-                              {groupKey === "__ungrouped__" ? "Ungrouped" : groupKey}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground">({groupProfiles.length})</span>
-                          </div>
-                        </td>
-                      </tr>
-                      {groupProfiles.map(profile => (
-                        <ProfileStatsRow
-                          key={profile.id}
-                          profile={profile}
-                          visibleCols={visibleCols}
-                          statColOrder={statColOrder}
-                          colWidths={colWidths}
-                          statsData={statsMap.get(profile.id) ?? []}
-                          {...makeRowProps(profile)}
-                        />
-                      ))}
-                    </>
-                  ))
+                  Array.from(groupedStats.entries()).map(([groupKey, groupProfiles]) => {
+                    const isCollapsed = collapsedGroupsSet.has(groupKey);
+                    return (
+                      <Fragment key={`group-${groupKey}`}>
+                        <tr className="bg-muted/20 border-b border-border sticky top-0 z-10">
+                          <td colSpan={colCount} className="px-4 py-1.5 select-none">
+                            <button
+                              onClick={() => toggleGroupCollapse(groupKey)}
+                              className="flex items-center gap-1.5 hover:text-primary transition-colors"
+                            >
+                              {isCollapsed
+                                ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              }
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+                                {groupKey === "__ungrouped__" ? "No Group Assigned" : groupKey}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">({groupProfiles.length})</span>
+                            </button>
+                          </td>
+                        </tr>
+                        {!isCollapsed && groupProfiles.map(profile => (
+                          <ProfileStatsRow
+                            key={profile.id}
+                            profile={profile}
+                            visibleCols={visibleCols}
+                            statColOrder={statColOrder}
+                            colWidths={colWidths}
+                            statsData={statsMap.get(profile.id) ?? []}
+                            {...makeRowProps(profile)}
+                          />
+                        ))}
+                      </Fragment>
+                    );
+                  })
                 ) : (
                   sortedProfiles.map(profile => (
                     <ProfileStatsRow

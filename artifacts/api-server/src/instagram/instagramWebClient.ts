@@ -1994,45 +1994,51 @@ export class InstagramWebClient {
   // Fetches the media info endpoint — the same call the app makes when a user
   // taps a post to open the detail view.
   async viewFeedPost(mediaId: string): Promise<boolean> {
-    try {
-      await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
-      return true;
-    } catch { return false; }
+    return this.timed("ViewFeedPost", async () => {
+      try {
+        await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
+        return true;
+      } catch { return false; }
+    }, "Viewed feed post");
   }
 
   // ── Visit a user's profile page ──────────────────────────────────────────
   // Fetches user info — equivalent to tapping a username to open their profile.
   async visitUserProfile(userId: string): Promise<boolean> {
-    try {
-      await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
-      return true;
-    } catch { return false; }
+    return this.timed("VisitUserProfile", async () => {
+      try {
+        await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
+        return true;
+      } catch { return false; }
+    }, "Visited user profile");
   }
 
   // ── Scroll through a user's post feed (profile grid) ────────────────────
   // Fetches up to `count` posts from the user's feed and marks them as seen,
   // simulating a user scrolling through someone's profile grid.
   async viewUserFeed(userId: string, count: number): Promise<Array<{ mediaId: string; shortcode: string; username: string }>> {
-    const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=12`);
-    if (!j?.items) return [];
-    const items: any[] = (j.items as any[]).slice(0, Math.max(1, count));
-    const result: Array<{ mediaId: string; shortcode: string; username: string }> = [];
-    for (const media of items) {
-      const mediaId = String(media?.id ?? media?.pk ?? "");
-      if (!mediaId) continue;
-      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
-      await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-        reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
-        live_vods_skipped: "",
-        nuxes_skipped: "",
-      }).toString()).catch(() => {});
-      result.push({
-        mediaId,
-        shortcode: this.mediaIdToShortcode(mediaId),
-        username: String(media?.user?.username ?? ""),
-      });
-    }
-    return result;
+    return this.timed("ViewUserFeed", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=12`);
+      if (!j?.items) return [];
+      const items: any[] = (j.items as any[]).slice(0, Math.max(1, count));
+      const result: Array<{ mediaId: string; shortcode: string; username: string }> = [];
+      for (const media of items) {
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1000);
+        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
+          live_vods_skipped: "",
+          nuxes_skipped: "",
+        }).toString()).catch(() => {});
+        result.push({
+          mediaId,
+          shortcode: this.mediaIdToShortcode(mediaId),
+          username: String(media?.user?.username ?? ""),
+        });
+      }
+      return result;
+    }, (r) => `Viewed user feed: ${r.length} posts`);
   }
 
   // ── Watch reels from the home feed Reels tab ─────────────────────────────

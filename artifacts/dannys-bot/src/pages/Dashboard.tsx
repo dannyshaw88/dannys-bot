@@ -59,6 +59,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.644",
+    date: "29 May 2026",
+    items: [
+      { category: "Improvement", text: "Account names and status labels on the Accounts page are now displayed in uppercase." },
+      { category: "New", text: "Statistics page groups now have a collapse/expand chevron button — click any group header to hide or show its accounts." },
+      { category: "Fix", text: "Template profiles (used internally by TrustScores) no longer appear in the Statistics page or in the Copy Settings dialog." },
+      { category: "Fix", text: "View Timeline actions — View Feed Post, Visit User Profile, and View User Feed — are now logged as API calls in the activity export." },
+      { category: "Fix", text: "Removed the Clear Score option from the TrustScore dropdown — scores can only be changed, not cleared." },
+    ],
+  },
+  {
     version: "1.0.643",
     date: "29 May 2026",
     items: [

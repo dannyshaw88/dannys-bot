@@ -91,6 +91,7 @@ export type Profile = {
   lastSyncedAt: string | null;
   creatorMode: boolean | null;
   locked: boolean | null;
+  isTemplate: boolean | null;
   cookieBakerSettings: Record<string, unknown> | null;
 };
 

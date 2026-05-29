@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Baby, Flame, Snail, Worm, Hourglass, Moon, Shield, Turtle,
   Eye, Activity, TrendingUp, Skull, Star, Rocket, Crown, Zap,
-  Diamond, Swords, Sparkles, X
+  Diamond, Swords, Sparkles
 } from "lucide-react";
 
 const GREEN_BG     = "#1AD2F2";
@@ -132,29 +132,6 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
             el.style.left = `${rect.left}px`;
           }}
         >
-          {score && (
-            <button
-              onClick={handleClear}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "5px 12px",
-                background: "transparent",
-                border: "none",
-                borderLeft: "3px solid transparent",
-                borderBottom: "1px solid #e5e7eb",
-                cursor: "pointer",
-                textAlign: "left",
-                outline: "none",
-                marginBottom: 2,
-              }}
-            >
-              <X size={11} color="#9ca3af" strokeWidth={2} />
-              <span style={{ fontSize: 11, fontWeight: 500, color: "#9ca3af" }}>Clear score</span>
-            </button>
-          )}
           {TRUST_LEVELS.map(lvl => {
             const Icon = lvl.icon;
             const isActive = score === lvl.id;

@@ -64,7 +64,7 @@ export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopy
   const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
+  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
   const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   const START_STOP_KEYS = ["contactNewFollowersEnabled", "contactUsersEnabled", "autoReplyEnabled"];

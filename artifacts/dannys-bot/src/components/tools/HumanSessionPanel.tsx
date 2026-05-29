@@ -41,7 +41,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const [repostingNow, setRepostingNow] = useState(false);
   const { data: allProfiles = [] } = useProfiles();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
+  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
   const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   const HUMAN_COPY_GROUPS: CopyOptionGroup[] = [

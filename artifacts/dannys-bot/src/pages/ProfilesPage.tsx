@@ -79,7 +79,7 @@ function AccountStatusBadge({ status, statusMessage }: { status: string; statusM
       className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap ${meta.pill}${statusMessage ? " cursor-help" : ""}`}
     >
       <Icon className="w-2.5 h-2.5" />
-      {meta.label}
+      <span className="uppercase">{meta.label}</span>
     </span>
   );
 }
@@ -1193,7 +1193,7 @@ export function ProfilesPage() {
                   <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
                     <Link href={`/profiles/${profile.id}`} onClick={(e: React.MouseEvent) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); }}>
                       <span
-                        className={`text-xs font-semibold truncate hover:text-primary cursor-pointer flex items-center gap-1 ${isStopped ? "text-muted-foreground" : acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
+                        className={`text-xs font-semibold truncate uppercase hover:text-primary cursor-pointer flex items-center gap-1 ${isStopped ? "text-muted-foreground" : acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
                         data-testid={`text-username-${profile.id}`}
                         title={isDupUsername ? `Duplicate username: @${profile.username}` : undefined}
                       >

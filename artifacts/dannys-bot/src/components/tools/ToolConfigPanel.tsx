@@ -234,7 +234,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const _copyOpen = copyOpenProp ?? showCopyModal;
   const _setCopyOpen = onCopyOpenChange ?? _setShowCopyModal;
   const { data: allProfiles = [] } = useProfiles();
-  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked);
+  const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
   const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   // ── Follow Tool copy option groups ──────────────────────────────
