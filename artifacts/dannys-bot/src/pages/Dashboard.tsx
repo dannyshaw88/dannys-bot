@@ -59,6 +59,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.647",
+    date: "29 May 2026",
+    items: [
+      { category: "Fixed", text: "Account picker no longer shows internal Trust Score template profiles — only real accounts appear in the list." },
+      { category: "Fixed", text: "Follow tool Inject Profile Browsing sub-settings (Feed Posts, Open Post%, Browse Before Follow) are now truly locked to one row and will not wrap." },
+      { category: "Improved", text: "Trust Score icons updated: NOOB is now a sprout, SLUG a droplet, SLOTH a coffee cup, TORTOISE an anchor, REPTILE a scan, and MONSTER a ghost — all more recognisable at small sizes." },
+    ],
+  },
+  {
     version: "1.0.646",
     date: "29 May 2026",
     items: [
@@ -3754,8 +3763,10 @@ export function Dashboard() {
     }), [feedItems, clearedAt, errorsCleared, showOnlyErrors, selectedProfileId, apiLogSearch, profileLookup]);
 
   const filteredProfileOptions = (profiles ?? []).filter(p =>
-    !profileSearch.trim() ||
-    p.username.toLowerCase().includes(profileSearch.toLowerCase())
+    !p.username.startsWith("__tpl_") && (
+      !profileSearch.trim() ||
+      p.username.toLowerCase().includes(profileSearch.toLowerCase())
+    )
   );
 
   // Merge the CSV-import notification (stored in localStorage) into the sorted feed
@@ -4027,31 +4038,17 @@ export function Dashboard() {
                     >
                       <Activity className="w-3 h-3 shrink-0" /> All accounts
                     </button>
-                    {filteredProfileOptions.map(p => {
-                      const tsId = getTrustScore(p.id);
-                      const tsLevel = tsId ? TRUST_LEVELS.find(l => l.id === tsId) : null;
-                      const TsIcon = tsLevel?.icon;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
-                        >
-                          <User className="w-3.5 h-3.5 shrink-0 text-primary" />
-                          <span className="truncate flex-1">{p.username}</span>
-                          {tsLevel && TsIcon && (
-                            <span
-                              className="shrink-0 flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-bold"
-                              style={{ background: tsLevel.bg, color: tsLevel.text }}
-                            >
-                              <TsIcon className="w-2.5 h-2.5" />
-                              {tsLevel.label}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                    {filteredProfileOptions.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors truncate ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
+                      >
+                        <User className="w-3.5 h-3.5 shrink-0 text-primary" />
+                        <span className="truncate">{p.username}</span>
+                      </button>
+                    ))}
                     {filteredProfileOptions.length === 0 && (
                       <p className="px-3 py-2 text-xs text-muted-foreground">No accounts match</p>
                     )}

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Baby, Flame, Snail, Worm, Hourglass, Moon, Shield, Turtle,
-  Eye, Activity, TrendingUp, Skull, Star, Rocket, Crown, Zap,
+  Sprout, Flame, Snail, Droplet, Hourglass, Coffee, Anchor, Turtle,
+  Scan, Activity, TrendingUp, Ghost, Star, Rocket, Crown, Zap,
   Diamond, Swords, Sparkles
 } from "lucide-react";
 
@@ -10,18 +10,18 @@ const GREEN_TEXT   = "#ffffff";
 const GREEN_BORDER = "#0eb8d4";
 
 export const TRUST_LEVELS = [
-  { id: "noob",        label: "NOOB",        icon: Baby,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "noob",        label: "NOOB",        icon: Sprout,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "warmup",      label: "WARMUP",       icon: Flame,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "snail",       label: "SNAIL",        icon: Snail,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "slug",        label: "SLUG",         icon: Worm,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "slug",        label: "SLUG",         icon: Droplet,    bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "slow",        label: "SLOW",         icon: Hourglass,  bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "sloth",       label: "SLOTH",        icon: Moon,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "tortoise",    label: "TORTOISE",     icon: Shield,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "sloth",       label: "SLOTH",        icon: Coffee,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "tortoise",    label: "TORTOISE",     icon: Anchor,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "turtle",      label: "TURTLE",       icon: Turtle,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "reptile",     label: "REPTILE",      icon: Eye,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "reptile",     label: "REPTILE",      icon: Scan,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "moderate",    label: "MODERATE",     icon: Activity,   bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "high",        label: "HIGH",         icon: TrendingUp, bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "monster",     label: "MONSTER",      icon: Skull,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "monster",     label: "MONSTER",      icon: Ghost,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "class",       label: "CLASS",        icon: Star,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "super",       label: "SUPER",        icon: Rocket,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
   { id: "outstanding", label: "OUTSTANDING",  icon: Crown,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
