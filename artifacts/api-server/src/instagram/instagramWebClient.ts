@@ -3743,6 +3743,31 @@ export class InstagramWebClient {
       await this.mobileSessionGet(`/api/v1/discover/ayml/`);
     }, "Get suggested users");
   }
+
+  // ── Follow X users from the Suggested Users page ──────────────────────────
+  // Used by the Human Session engine when the timeline returns 0 posts.
+  // Fetches the discover/ayml endpoint, picks the first `count` suggestions,
+  // and follows them using the mobile API — seeding the feed for future runs.
+  async followSuggestedUsers(count: number): Promise<{ followed: number; usernames: string[] }> {
+    return this.timed("FollowSuggestedUsers", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/discover/ayml/`);
+      const suggestions: any[] = j?.suggested_users ?? j?.users ?? [];
+      const toFollow = suggestions.slice(0, count);
+      const followed: string[] = [];
+      for (const item of toFollow) {
+        const user = item.user ?? item;
+        const userId = String(user.pk ?? user.id ?? "");
+        const username = String(user.username ?? userId);
+        if (!userId) continue;
+        try {
+          const res = await this.followUser(userId, username, "suggested_users");
+          if (res.ok) followed.push(username);
+          await new Promise(r => setTimeout(r, 2000 + Math.floor(Math.random() * 3000)));
+        } catch {}
+      }
+      return { followed: followed.length, usernames: followed };
+    }, `Follow ${count} suggested user(s)`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

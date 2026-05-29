@@ -105,7 +105,7 @@ export function Sidebar() {
       </div>
 
       {/* ── Jarvee-style nav: icon centred above ALL-CAPS label ── */}
-      <nav className="flex-1 py-1 space-y-0 overflow-y-auto">
+      <nav className="flex-1 py-1 space-y-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [scrollbar-width:none] [-ms-overflow-style:none]">
         {navItems.map((item) => {
           const isActive = (() => {
             if (item.path === "/dashboard") return location === "/dashboard";

@@ -2512,6 +2512,26 @@ class AutomationEngine {
           viewed = vtfResult.viewed;
           console.log(`[engine] @${profile.username}: 📰 viewed ${viewed} timeline post(s)`);
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
+
+          // ── Follow from Suggested Users if timeline was empty ───────────────
+          if (viewed === 0 && s.followSuggestedUsersIfEmptyEnabled === true) {
+            const followCount = randInt(
+              Number(s.followSuggestedUsersIfEmptyMin ?? 1),
+              Number(s.followSuggestedUsersIfEmptyMax ?? 3)
+            );
+            try {
+              const result = await client.followSuggestedUsers(followCount);
+              if (result.followed > 0) {
+                for (const username of result.usernames) {
+                  await storage.incrementStat(profile.id, "follow");
+                  this.logAction(profile.id, tool.id, "follow", username, "", "", "ok", "Followed suggested user (empty timeline)");
+                }
+                console.log(`[engine] @${profile.username}: 👥 followed ${result.followed} suggested user(s) — timeline was empty`);
+              }
+            } catch (se: any) {
+              console.warn(`[engine] @${profile.username}: follow suggested users error: ${se?.message}`);
+            }
+          }
         } catch (e: any) {
           if (await checkSessionErr(e, "view_timeline_feed")) return;
           console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);

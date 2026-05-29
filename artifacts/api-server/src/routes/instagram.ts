@@ -1598,18 +1598,20 @@ export async function registerInstagramRoutes(
 
   app.get("/api/instagram-api-calls", async (req, res) => {
     const sinceParam = req.query.since;
+    const limitParam = req.query.limit;
     const [settings, allProfiles] = await Promise.all([
       storage.getGlobalSettings(),
       storage.getProfiles(),
     ]);
     const profileMap = new Map(allProfiles.map(p => [p.id, p]));
     const logMaxRows = parseInt(settings.logMaxRows ?? "100000", 10);
+    const effectiveLimit = limitParam !== undefined ? Math.min(parseInt(limitParam as string, 10) || logMaxRows, logMaxRows) : logMaxRows;
     let data: any[];
     if (sinceParam !== undefined) {
       const sinceId = parseInt(sinceParam as string, 10);
       data = isNaN(sinceId) ? [] : await storage.getInstagramApiCallsSince(sinceId, 5000);
     } else {
-      data = await storage.getInstagramApiCalls(logMaxRows);
+      data = await storage.getInstagramApiCalls(effectiveLimit);
     }
     const enriched = data.map(call => {
       const storedUsername = call.username && call.username !== "" ? call.username : null;

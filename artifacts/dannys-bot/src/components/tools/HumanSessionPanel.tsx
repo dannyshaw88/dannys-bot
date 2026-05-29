@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy, FolderOpen,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -177,6 +177,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       viewProfilePostsPercentMax: 0,
       viewProfilePostsCountMin: 1,
       viewProfilePostsCountMax: 3,
+      followSuggestedUsersIfEmptyEnabled: false,
+      followSuggestedUsersIfEmptyMin: 1,
+      followSuggestedUsersIfEmptyMax: 3,
       repostEnabled: false,
       repostUseHikerApi: false,
       repostSourceUsername: "",
@@ -378,6 +381,31 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
           </div>
         </div>
+        {/* Follow Suggested Users if timeline returns 0 posts */}
+        {!!settings.viewTimelineFeedEnabled && (
+          <div className={`flex items-center gap-2 flex-wrap transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <UserPlus className="w-3.5 h-3.5 text-green-500 shrink-0" />
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">If 0 Posts → Follow Suggested</span>
+            <input type="checkbox" id="followSuggestedUsersIfEmptyEnabled"
+              checked={!!settings.followSuggestedUsersIfEmptyEnabled}
+              onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyEnabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+            />
+            <div className={`flex items-center gap-1.5 transition-opacity ${!settings.followSuggestedUsersIfEmptyEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <Label className="text-xs text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
+                value={settings.followSuggestedUsersIfEmptyMin ?? 1}
+                onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMin: Math.max(1, Number(e.target.value)) })}
+              />
+              <Label className="text-xs text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="10" className="w-12 h-7 text-xs"
+                value={settings.followSuggestedUsersIfEmptyMax ?? 3}
+                onChange={(e) => setSettings({ ...settings, followSuggestedUsersIfEmptyMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground">users from the Suggested Users page</span>
+          </div>
+        )}
         {/* Like delay + save media — only shown when like % is configured */}
         {!!(settings.viewTimelineFeedEnabled && (settings.likeTimelinePostsPercentMax ?? 0) > 0) && (
           <div className="flex items-center gap-4 flex-wrap">

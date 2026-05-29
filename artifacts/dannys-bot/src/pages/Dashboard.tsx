@@ -9,7 +9,7 @@ import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
   Users, UserCheck, ImageIcon, CheckCircle2,
 } from "lucide-react";
-import { TrustScoreBadge } from "@/components/TrustScoreBadge";
+import { TrustScoreBadge, getTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
@@ -58,6 +58,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.646",
+    date: "29 May 2026",
+    items: [
+      { category: "Improved", text: "Dashboard now loads only the most recent 2000 API log entries on startup — much faster on accounts with large log histories." },
+      { category: "Improved", text: "Account picker dropdown now shows each account's Trust Score badge so you can identify accounts at a glance." },
+      { category: "Improved", text: "Sidebar no longer shifts in width when profile sub-tabs appear — scrollbar is now hidden so the column stays exactly the same size." },
+      { category: "Improved", text: "Follow tool Inject Profile Browsing settings (Feed Posts, Open Post%, Browse Before Follow + percentage) are now all on a single row." },
+      { category: "Improved", text: "Follow tool Browse Before Follow now has its own X–Y percentage range input so you can control how often the profile browse happens before each follow." },
+      { category: "Improved", text: "Follow tool Auto Follow/Unfollow section now shows Stop At and Start After side-by-side on one row, matching the unfollow tool layout." },
+      { category: "New", text: "Human Sessions View Timeline Feed now has a 'If 0 Posts → Follow Suggested' option — when the timeline returns no posts, the bot follows X–Y users from the Suggested Users page to seed the feed." },
+    ],
+  },
   {
     version: "1.0.645",
     date: "29 May 2026",
@@ -3606,7 +3619,7 @@ export function Dashboard() {
       const [apiRes, sessionRes] = await Promise.all([
         fetch(lastApiIdRef.current > 0
           ? `/api/instagram-api-calls?since=${lastApiIdRef.current}`
-          : "/api/instagram-api-calls"),
+          : "/api/instagram-api-calls?limit=2000"),
         fetch("/api/all-session-actions?limit=500"),
       ]);
       const [apiRows, sessionRows]: [any[], any[]] = await Promise.all([
@@ -4014,17 +4027,31 @@ export function Dashboard() {
                     >
                       <Activity className="w-3 h-3 shrink-0" /> All accounts
                     </button>
-                    {filteredProfileOptions.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors truncate ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
-                      >
-                        <User className="w-3.5 h-3.5 shrink-0 text-primary" />
-                        <span className="truncate">{p.username}</span>
-                      </button>
-                    ))}
+                    {filteredProfileOptions.map(p => {
+                      const tsId = getTrustScore(p.id);
+                      const tsLevel = tsId ? TRUST_LEVELS.find(l => l.id === tsId) : null;
+                      const TsIcon = tsLevel?.icon;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setSelectedProfileId(p.id); setProfilePickerOpen(false); setProfileSearch(""); }}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-accent/50 transition-colors ${selectedProfileId === p.id ? "text-primary font-semibold" : "text-foreground"}`}
+                        >
+                          <User className="w-3.5 h-3.5 shrink-0 text-primary" />
+                          <span className="truncate flex-1">{p.username}</span>
+                          {tsLevel && TsIcon && (
+                            <span
+                              className="shrink-0 flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-bold"
+                              style={{ background: tsLevel.bg, color: tsLevel.text }}
+                            >
+                              <TsIcon className="w-2.5 h-2.5" />
+                              {tsLevel.label}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                     {filteredProfileOptions.length === 0 && (
                       <p className="px-3 py-2 text-xs text-muted-foreground">No accounts match</p>
                     )}
