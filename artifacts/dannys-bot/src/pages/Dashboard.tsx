@@ -54,10 +54,20 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }
 const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
 const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "trustscore", "event", "target", "detail", "timestamp"];
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
-  account: "Account", event: "Action", target: "Target", detail: "Detail", timestamp: "Timestamp", trustscore: "TrustScore",
+  account: "ACCOUNT", event: "ACTION", target: "TARGET", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.645",
+    date: "29 May 2026",
+    items: [
+      { category: "New", text: "Follow tool now has an Inject Profile Browsing option — between follows it visits the target user's profile, scrolls their feed, and optionally opens posts, at a configurable X–Y% chance." },
+      { category: "New", text: "Follow tool injection settings now include Feed Posts (min/max) and Open Post % to control how deeply the profile is browsed during each injection." },
+      { category: "New", text: "New Browse Before Follow toggle on the Follow tool — when enabled, the target's profile is always browsed immediately before each follow action." },
+      { category: "New", text: "All profile browsing API calls (visit profile, view feed, open post) are individually logged in the activity log." },
+    ],
+  },
   {
     version: "1.0.644",
     date: "29 May 2026",

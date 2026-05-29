@@ -3171,6 +3171,15 @@ class AutomationEngine {
     const injectSearchMin     = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
     const injectSearchMax     = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
 
+    const injectProfileBrowsingEnabled      = !!(s.injectProfileBrowsingEnabled);
+    const injectProfileBrowsingMin          = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 30));
+    const injectProfileBrowsingMax          = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 50));
+    const injectProfileBrowsingFeedMin      = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
+    const injectProfileBrowsingFeedMax      = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
+    const injectProfileBrowsingPostPctMin   = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
+    const injectProfileBrowsingPostPctMax   = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
+    const injectProfileBrowsingBeforeFollow = !!(s.injectProfileBrowsingBeforeFollow);
+
     // Inject /api/v1/users/search/ before the very first follow of every session —
     // but ONLY when the searchByUsername inject is enabled by the user.
     // Simulates the user searching in the search bar before following — adds natural API signal.
@@ -3188,6 +3197,37 @@ class AutomationEngine {
 
     let followed = 0, dedupSkipped = 0, filterSkipped = 0, blocked = 0, skipped = 0;
     let hitHardLimit = false; // true when a real cap/block/stop occurred (not just ran out of candidates)
+
+    // Helper: browse the target user's profile — visit, scroll feed, open posts.
+    // Used for both the between-follows injection and the before-follow browse.
+    const browseTargetProfile = async (label: string, targetUser: { pk: string; username: string }) => {
+      try {
+        await client.visitUserProfile(targetUser.pk);
+        engineLog("INFO", `@${profile.username}: [${label}] visited profile of @${targetUser.username}`);
+        this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `[Profile Browse] Visited @${targetUser.username}'s profile`);
+      } catch { /* non-critical */ }
+
+      const feedCount = randInt(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
+      let profilePosts: Array<{ mediaId: string; shortcode: string; username: string }> = [];
+      try {
+        profilePosts = await client.viewUserFeed(targetUser.pk, feedCount);
+        engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
+        this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `[Profile Browse] Scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
+      } catch { /* non-critical */ }
+
+      if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
+        const postPct = randInt(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
+        for (const post of profilePosts) {
+          if (Math.random() * 100 < postPct) {
+            try {
+              await client.viewFeedPost(post.mediaId);
+              engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
+              this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `[Profile Browse] Opened post from @${targetUser.username}'s profile`);
+            } catch { /* non-critical */ }
+          }
+        }
+      }
+    };
 
     for (const user of candidates) {
       if (followed >= processCount) break;
@@ -3285,6 +3325,20 @@ class AutomationEngine {
             } catch { /* non-critical */ }
           }
         }
+
+        // Inject Profile Browsing (between follows) — visit, scroll, open posts on the TARGET user's profile
+        if (injectProfileBrowsingEnabled) {
+          const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+          if (Math.random() * 100 < threshold) {
+            engineLog("INFO", `@${profile.username}: injected profile browsing for @${user.username} before follow #${followed + 1}`);
+            await browseTargetProfile("between-follows inject", user);
+          }
+        }
+      }
+
+      // Browse before follow — fires for EVERY follow (including the first) when enabled
+      if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow) {
+        await browseTargetProfile("pre-follow browse", user);
       }
 
       // Follow
