@@ -598,17 +598,17 @@ export function SettingsPage() {
 
         <div className="border-t border-border/60" />
 
-        {/* API Log Limit */}
+        {/* Dashboard Log Limit */}
         <div className="desktop-card p-6">
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-indigo-100 text-indigo-600">
               <ScrollText className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-semibold">API Log Limit</h3>
+            <h3 className="text-base font-semibold">Dashboard Log Limit</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Maximum number of rows loaded in the Dashboard API call log. Older entries beyond this limit are not displayed.
-            Larger limits use more memory but preserve more history.
+            Maximum number of rows kept in memory for the Dashboard activity log. Older entries beyond this limit are dropped.
+            Larger limits preserve more history but use more memory.
           </p>
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Max log rows</Label>

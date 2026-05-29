@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   Activity, Clock, ExternalLink, Hash, Users, Image,
   Heart, PlaySquare, BookOpen, Star, UserCheck, Ban, SkipForward,
   AlertCircle, MessageSquare, Bell, User, RefreshCw, Settings,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { type Tool, type Profile, type SessionAction } from "@shared/schema";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
@@ -33,14 +35,20 @@ interface SessionLogPanelProps {
   profile: Profile;
 }
 
+const SESSION_LOG_PAGE_SIZE = 50;
+
 export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
   const { navigateTo } = useBrowserWindows();
+  const [page, setPage] = useState(0);
 
   const { data: sessionActionsList, isLoading: sessionActionsLoading } = useQuery<SessionAction[]>({
     queryKey: [`/api/profiles/${tool.profileId}/session-actions`],
     refetchInterval: 3000,
     staleTime: 0,
   });
+
+  const totalPages = Math.max(1, Math.ceil((sessionActionsList?.length ?? 0) / SESSION_LOG_PAGE_SIZE));
+  const pageItems = sessionActionsList?.slice(page * SESSION_LOG_PAGE_SIZE, (page + 1) * SESSION_LOG_PAGE_SIZE);
 
   return (
     <div className="animate-in fade-in duration-300 space-y-5">
@@ -67,6 +75,7 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                 <th className="px-5 py-3 font-bold bg-muted/30 w-full">Reason / Detail</th>
               </tr>
             </thead>
+            <caption className="sr-only">Session actions — page {page + 1} of {totalPages}</caption>
             <tbody className="divide-y divide-border/50">
               {sessionActionsLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
@@ -83,7 +92,7 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                   </td>
                 </tr>
               ) : (
-                sessionActionsList.map(sa => {
+                (pageItems ?? []).map(sa => {
                   const meta = ACTION_META[sa.action] ?? { label: sa.action, icon: AlertCircle, color: "text-muted-foreground" };
                   const Icon = meta.icon;
                   const isError = sa.result === "error";
@@ -148,6 +157,34 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
             </tbody>
           </table>
         </div>
+        {(sessionActionsList?.length ?? 0) > SESSION_LOG_PAGE_SIZE && (
+          <div className="flex items-center justify-between px-5 py-2 border-t border-border/40 bg-muted/20">
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {`${(page * SESSION_LOG_PAGE_SIZE + 1).toLocaleString()}–${Math.min((page + 1) * SESSION_LOG_PAGE_SIZE, sessionActionsList!.length).toLocaleString()} of ${sessionActionsList!.length.toLocaleString()} entries`}
+            </span>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Previous page"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-xs text-muted-foreground tabular-nums px-1">
+                {`${page + 1} / ${totalPages}`}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Next page"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

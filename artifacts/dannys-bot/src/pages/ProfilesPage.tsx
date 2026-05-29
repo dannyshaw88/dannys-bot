@@ -669,15 +669,21 @@ export function ProfilesPage() {
       p.emailValidationPort ?? "",
     ]);
     const csv = "\uFEFF" + [headers, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `profiles_export_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `profiles_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    const eApi = (window as any).electronAPI;
+    if (eApi?.openCsvTemp) {
+      eApi.openCsvTemp({ content: csv, filename }).catch(() => {});
+    } else {
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
     toast({ title: "Exported", description: `${toExport.length} profile(s) exported as CSV.` });
   }, [profiles, selectedProfileIds, toast]);
 
@@ -1708,12 +1714,19 @@ export function ProfilesPage() {
                     const url = `/api/logs/export?${ids ? `profileIds=${ids}&` : ""}tz=${tz}`;
                     const res = await fetch(url, { credentials: "include" });
                     if (!res.ok) { toast({ title: "Export failed", description: "Could not fetch API call history.", variant: "destructive" }); return; }
-                    const blob = await res.blob();
-                    const a = document.createElement("a");
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                    const text = await res.text();
+                    const filename = `api-calls_${new Date().toISOString().slice(0, 10)}.csv`;
+                    const eApi2 = (window as any).electronAPI;
+                    if (eApi2?.openCsvTemp) {
+                      await eApi2.openCsvTemp({ content: text, filename });
+                    } else {
+                      const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = filename;
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                    }
                   } catch { toast({ title: "Export failed", variant: "destructive" }); }
                 }}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left"

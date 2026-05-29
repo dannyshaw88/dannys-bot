@@ -6,7 +6,7 @@ import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, X, RefreshCw, Settings2, Upload, Download,
+  Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
   Users, UserCheck, ImageIcon, CheckCircle2,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -57,6 +57,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.635",
+    date: "29 May 2026",
+    items: [
+      { category: "Fix", text: "Audio fingerprint now applies seeded per-sample noise to every frequency bin — previously only 2 out of 1024 samples were modified, which was too small to produce unique fingerprint hashes across accounts." },
+      { category: "Fix", text: "Status bar in the sidebar no longer shows the 'Amber' text label — only the coloured dot remains." },
+      { category: "Fix", text: "Export Profiles and Export API Calls now open instantly in your default CSV editor instead of prompting you to save the file to disk first." },
+      { category: "Fix", text: "Dashboard activity log now honours the Dashboard Log Limit setting — previously it was capped at 2,000 rows regardless of what you set." },
+      { category: "Improvement", text: "Dashboard activity log and Session Log inside each profile now show 50 rows per page with previous/next page arrows — eliminates the lag caused by rendering thousands of DOM rows at once." },
+      { category: "Improvement", text: "Settings: renamed 'API Log Limit' to 'Dashboard Log Limit' to better reflect what it controls." },
+    ],
+  },
   {
     version: "1.0.634",
     date: "28 May 2026",
@@ -3475,6 +3487,13 @@ export function Dashboard() {
   const lastApiIdRef = useRef<number>(0);
   const lastSessionIdRef = useRef<number>(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logMaxRowsRef = useRef<number>(2000);
+  const { data: globalSettings } = useQuery<{ logMaxRows?: number }>({ queryKey: ["/api/settings"] });
+  useEffect(() => {
+    if (globalSettings?.logMaxRows != null) logMaxRowsRef.current = globalSettings.logMaxRows;
+  }, [globalSettings]);
+  const [feedPage, setFeedPage] = useState(0);
+  useEffect(() => { setFeedPage(0); }, [apiLogSearch, selectedProfileId, showOnlyErrors, clearedAt]);
 
   const fetchFeed = useCallback(async (isInitial = false) => {
     try {
@@ -3536,12 +3555,12 @@ export function Dashboard() {
       }));
 
       if (isInitial) {
-        const all = [...newApiRows, ...newSessionItems].sort((a, b) => b.ts - a.ts).slice(0, 2000);
+        const all = [...newApiRows, ...newSessionItems].sort((a, b) => b.ts - a.ts).slice(0, logMaxRowsRef.current);
         setFeedItems(all);
       } else {
         const incoming = [...newApiRows, ...newSessionItems];
         if (incoming.length > 0) {
-          setFeedItems(prev => [...incoming, ...prev].sort((a, b) => b.ts - a.ts).slice(0, 2000));
+          setFeedItems(prev => [...incoming, ...prev].sort((a, b) => b.ts - a.ts).slice(0, logMaxRowsRef.current));
         }
       }
     } catch { /* ignore */ } finally {
@@ -3989,7 +4008,7 @@ export function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    displayFeed.slice(0, 500).map((item) => {
+                    displayFeed.slice(feedPage * 50, (feedPage + 1) * 50).map((item) => {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
@@ -4083,11 +4102,34 @@ export function Dashboard() {
 
         {activeTab === "api-log" && (
           <div className="flex items-center justify-between px-4 py-2 border-t border-border/40 bg-muted/20 rounded-b-xl">
-            <span className="text-xs text-muted-foreground">
-              {displayFeed.length > 500
-                ? `showing 500 of ${displayFeed.length.toLocaleString()} rows${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`
-                : `${displayFeed.length.toLocaleString()} ${displayFeed.length === 1 ? "row" : "rows"}${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {displayFeed.length === 0
+                  ? "No rows"
+                  : `${(feedPage * 50 + 1).toLocaleString()}–${Math.min((feedPage + 1) * 50, displayFeed.length).toLocaleString()} of ${displayFeed.length.toLocaleString()}${(apiLogSearch.trim() || selectedProfileId != null) ? " (filtered)" : ""}`}
+              </span>
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => setFeedPage(p => Math.max(0, p - 1))}
+                  disabled={feedPage === 0 || displayFeed.length === 0}
+                  className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs text-muted-foreground tabular-nums px-1">
+                  {displayFeed.length === 0 ? "—" : `${feedPage + 1} / ${Math.max(1, Math.ceil(displayFeed.length / 50))}`}
+                </span>
+                <button
+                  onClick={() => setFeedPage(p => Math.min(Math.max(0, Math.ceil(displayFeed.length / 50) - 1), p + 1))}
+                  disabled={feedPage >= Math.ceil(displayFeed.length / 50) - 1 || displayFeed.length === 0}
+                  className="p-1 rounded hover:bg-accent/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
             <button
               onClick={exportCsv}
               disabled={displayFeed.length === 0}

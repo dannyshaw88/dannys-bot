@@ -496,7 +496,17 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
     var _oGFF=AnalyserNode.prototype.getFloatFrequencyData;
     AnalyserNode.prototype.getFloatFrequencyData=function(a){
       _oGFF.call(this,a);
-      if(a&&a.length>0){a[0]+=_AN;if(a.length>2)a[2]+=_AN*0.6;}
+      if(a&&a.length>0){var _as=Math.round(_AN*1e7)|1;for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;a[i]+=(_as/0x100000000)*0.0001-0.00005;}}
+    };
+    var _oGBF=AnalyserNode.prototype.getByteFrequencyData;
+    AnalyserNode.prototype.getByteFrequencyData=function(a){
+      _oGBF.call(this,a);
+      if(a&&a.length>0){var _as=Math.round(_AN*1e7)|1;for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;var v=a[i]+(_as/0x100000000>0.5?1:0);a[i]=Math.max(0,Math.min(255,v));}}
+    };
+    var _oGFT=AnalyserNode.prototype.getFloatTimeDomainData;
+    AnalyserNode.prototype.getFloatTimeDomainData=function(a){
+      _oGFT.call(this,a);
+      if(a&&a.length>0){var _as=Math.round(_AN*1e7)|1;for(var i=0;i<a.length;i++){_as=Math.imul(1664525,_as)+1013904223>>>0;a[i]=Math.max(-1,Math.min(1,a[i]+(_as/0x100000000)*0.0001-0.00005));}}
     };
   }catch(e){}
   try{
