@@ -59,14 +59,22 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.641",
+    date: "29 May 2026",
+    items: [
+      { category: "Fix", text: "TrustScore pills no longer have a border — cleaner flat look across all pages." },
+      { category: "Improvement", text: "TrustScore pill icons now use a solid white fill instead of outline-only." },
+      { category: "Improvement", text: "TrustScores list is now displayed in two columns of 10 — all 19 tiers visible without scrolling." },
+      { category: "Improvement", text: "TrustScore badges in the Accounts, Statistics, and Dashboard pages are now centre-aligned in their column." },
+      { category: "Fix", text: "Fixed automatic follow↔unfollow switching — the opposite tool was being silently skipped when the engine's background reconciler interrupted the stagger delay. Now always enables the opposite tool regardless of timing." },
+    ],
+  },
+  {
     version: "1.0.640",
     date: "29 May 2026",
     items: [
-      { category: "Fix", text: "TrustScore pills no longer have a border — cleaner flat look." },
-      { category: "Improvement", text: "TrustScore pill icons now use a solid white fill instead of outline-only." },
-      { category: "Improvement", text: "TrustScore pills are now centre-aligned in their column on the list page instead of left-aligned." },
+      { category: "Fix", text: "TrustScores and TrustScore detail pages now correctly show the full sidebar and navigation." },
       { category: "Improvement", text: "Sidebar status pill is now centred within the sidebar column." },
-      { category: "Fix", text: "TrustScores and TrustScore detail pages now correctly show the full sidebar and navigation — clicking TrustScores from the sidebar no longer strips the UI." },
     ],
   },
   {
@@ -4071,7 +4079,7 @@ export function Dashboard() {
                       const label = getUsername(item.profileId, item.profileLabel);
 
                       const getCell = (col: keyof typeof DEFAULT_COL_WIDTHS) => {
-                        if (col === "trustscore") return <td key={col} className="px-3 py-1.5 truncate">{item.profileId ? <TrustScoreBadge profileId={item.profileId} /> : <span className="text-muted-foreground text-xs">—</span>}</td>;
+                        if (col === "trustscore") return <td key={col} className="px-3 py-1.5"><div className="flex justify-center">{item.profileId ? <TrustScoreBadge profileId={item.profileId} /> : <span className="text-muted-foreground text-xs">—</span>}</div></td>;
                         if (item.kind === "import") {
                           const imp = item.importData!;
                           if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><span className="flex items-center gap-1.5 text-foreground min-w-0"><Upload className="w-3.5 h-3.5 text-blue-500 shrink-0" /><span className="truncate text-xs font-semibold">Import</span></span></td>;

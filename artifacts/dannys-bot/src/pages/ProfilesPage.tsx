@@ -1215,7 +1215,7 @@ export function ProfilesPage() {
                       </div>
                     );
                     if (key === "trustscore") return (
-                      <div key={key} style={{ width: profColWidths.trustscore }} className="flex items-center shrink-0" onMouseDown={e => e.stopPropagation()}>
+                      <div key={key} style={{ width: profColWidths.trustscore }} className="flex items-center justify-center shrink-0" onMouseDown={e => e.stopPropagation()}>
                         <TrustScoreBadge profileId={profile.id} />
                       </div>
                     );

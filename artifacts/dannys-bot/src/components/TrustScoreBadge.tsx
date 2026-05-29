@@ -90,7 +90,7 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
         className="flex h-5 items-center gap-1 rounded-full px-2 transition-opacity hover:opacity-75"
         style={{
           background: current ? GREEN_BG : "transparent",
-          border: `1px ${current ? "solid" : "dashed"} ${current ? GREEN_BORDER : "#94a3b8"}`,
+          border: current ? "none" : "1px dashed #94a3b8",
           cursor: "pointer",
           flexShrink: 0,
           minWidth: 60,

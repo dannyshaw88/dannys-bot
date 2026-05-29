@@ -105,7 +105,9 @@ function ProfileStatsRow({
 
       {/* TrustScore column */}
       <td style={{ width: colWidths.trustscore }} className="px-4 py-3">
-        <TrustScoreBadge profileId={profile.id} />
+        <div className="flex justify-center">
+          <TrustScoreBadge profileId={profile.id} />
+        </div>
       </td>
 
       {/* Stat columns — in user-defined order */}

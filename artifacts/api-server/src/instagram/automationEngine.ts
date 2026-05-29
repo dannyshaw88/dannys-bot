@@ -686,14 +686,19 @@ class AutomationEngine {
                   (sa.autoStartUnfollowAfterMax ?? 135) * 60_000,
                 );
                 console.log(`[engine] @${freshProfile.username}: auto: enabling unfollow tool in ${Math.round(delayMs / 60000)}min`);
-                await sleepInterruptible(delayMs, state.stop);
+                await sleep(delayMs);
               }
-              if (!state.stop.stopped) {
-                const tools2 = await storage.getToolsByProfile(freshProfile.id);
-                const unfollowTool2 = tools2.find(t => t.type === "unfollow");
-                if (unfollowTool2) await storage.updateTool(unfollowTool2.id, { enabled: true });
-                console.log(`[engine] @${freshProfile.username}: auto: unfollow tool enabled`);
+              // Always enable the opposite tool — do NOT gate on state.stop.stopped.
+              // reconcile() fires during the stagger sleep, sees follow disabled, sets
+              // state.stop.stopped = true, which would otherwise prevent this code from
+              // running. We've already committed to the switch so always proceed.
+              const tools2 = await storage.getToolsByProfile(freshProfile.id);
+              const unfollowTool2 = tools2.find(t => t.type === "unfollow");
+              if (unfollowTool2) {
+                await storage.updateTool(unfollowTool2.id, { enabled: true });
+                this.triggerUnfollow(freshProfile.id);
               }
+              console.log(`[engine] @${freshProfile.username}: auto: unfollow tool enabled`);
               break;
             }
           }
@@ -901,14 +906,19 @@ class AutomationEngine {
                   (sa.autoStartFollowAfterMax ?? 120) * 60_000,
                 );
                 console.log(`[engine] @${freshProfile.username}: auto: enabling follow tool in ${Math.round(delayMs / 60000)}min`);
-                await sleepInterruptible(delayMs, state.stop);
+                await sleep(delayMs);
               }
-              if (!state.stop.stopped) {
-                const tools2 = await storage.getToolsByProfile(freshProfile.id);
-                const followTool2 = tools2.find(t => t.type === "follow");
-                if (followTool2) await storage.updateTool(followTool2.id, { enabled: true });
-                console.log(`[engine] @${freshProfile.username}: auto: follow tool enabled`);
+              // Always enable the opposite tool — do NOT gate on state.stop.stopped.
+              // reconcile() fires during the stagger sleep, sees unfollow disabled, sets
+              // state.stop.stopped = true, which would otherwise prevent this code from
+              // running. We've already committed to the switch so always proceed.
+              const tools2 = await storage.getToolsByProfile(freshProfile.id);
+              const followTool2 = tools2.find(t => t.type === "follow");
+              if (followTool2) {
+                await storage.updateTool(followTool2.id, { enabled: true });
+                this.triggerFollow(freshProfile.id);
               }
+              console.log(`[engine] @${freshProfile.username}: auto: follow tool enabled`);
               break;
             }
           }
