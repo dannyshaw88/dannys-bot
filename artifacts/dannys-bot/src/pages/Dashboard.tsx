@@ -9,7 +9,7 @@ import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
   Users, UserCheck, ImageIcon, CheckCircle2,
 } from "lucide-react";
-import { TrustScoreBadge, getTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
+import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 import { format } from "date-fns";
 import { type Profile } from "@shared/schema";
 
@@ -58,6 +58,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.653",
+    date: "29 May 2026",
+    items: [
+      { category: "Feature", text: "TrustScores page: scores now show 5 per row with numbered positions." },
+      { category: "Feature", text: "TrustScores: drag any score to reorder — sort order reflects everywhere accounts are sorted by trust score." },
+      { category: "Feature", text: "TrustScores: click the red × on any score to delete it — confirms with a warning and stops all accounts assigned to that score." },
+      { category: "Feature", text: "TrustScores: click the + button to add a custom trust score tier." },
+    ],
+  },
   {
     version: "1.0.652",
     date: "29 May 2026",

@@ -25,7 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ImportProfilesDialog } from "@/components/ImportProfilesDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
-import { TrustScoreBadge, getTrustScore, setTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
+import { TrustScoreBadge, getTrustScore, getTrustLevels, setTrustScore } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
 
 // ── Status metadata ──────────────────────────────────────────────────────────
@@ -407,8 +407,9 @@ export function ProfilesPage() {
       }
       if (sortField === "trustscore") {
         const tsA = getTrustScore(a.id); const tsB = getTrustScore(b.id);
-        const ra = tsA !== null ? TRUST_LEVELS.findIndex(l => l.id === tsA) : Infinity;
-        const rb = tsB !== null ? TRUST_LEVELS.findIndex(l => l.id === tsB) : Infinity;
+        const lvls = getTrustLevels();
+        const ra = tsA !== null ? lvls.findIndex(l => l.id === tsA) : Infinity;
+        const rb = tsB !== null ? lvls.findIndex(l => l.id === tsB) : Infinity;
         return sortDir === "asc" ? (ra === rb ? 0 : ra < rb ? -1 : 1) : (ra === rb ? 0 : ra > rb ? -1 : 1);
       }
       if (sortField === "sync") {
@@ -508,8 +509,9 @@ export function ProfilesPage() {
       }
       if (field === "trustscore") {
         const tsA = getTrustScore(a.id); const tsB = getTrustScore(b.id);
-        const ra = tsA !== null ? TRUST_LEVELS.findIndex(l => l.id === tsA) : Infinity;
-        const rb = tsB !== null ? TRUST_LEVELS.findIndex(l => l.id === tsB) : Infinity;
+        const lvls = getTrustLevels();
+        const ra = tsA !== null ? lvls.findIndex(l => l.id === tsA) : Infinity;
+        const rb = tsB !== null ? lvls.findIndex(l => l.id === tsB) : Infinity;
         return newDir === "asc" ? (ra === rb ? 0 : ra < rb ? -1 : 1) : (ra === rb ? 0 : ra > rb ? -1 : 1);
       }
       let va = "", vb = "";

@@ -11,7 +11,7 @@ import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
 import { CreateCookiePanel } from "@/components/tools/CreateCookiePanel";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
-import { TrustScoreBadge, getTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
+import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
   ArrowLeft, Settings, Shield, User, Lock, Globe, Zap, Instagram, Activity, Monitor,
@@ -791,7 +791,7 @@ export function ProfileDetailsPage() {
                         <div className="px-3 py-4 text-center text-sm text-muted-foreground">No profiles found</div>
                       ) : switcherProfiles.map(p => {
                         const tsId = getTrustScore(p.id);
-                        const tsLevel = tsId ? TRUST_LEVELS.find(l => l.id === tsId) : null;
+                        const tsLevel = tsId ? getTrustLevels().find(l => l.id === tsId) : null;
                         return (
                           <DropdownMenuItem
                             key={p.id}

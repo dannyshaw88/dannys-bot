@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import type { Profile } from "@shared/schema";
-import { getTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
+import { getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 
 export interface CopySubOption {
   key: string;
@@ -176,8 +176,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       }
       if (sortBy === "trustscore") {
         const tsA = getTrustScore(a.id); const tsB = getTrustScore(b.id);
-        const ra = tsA !== null ? TRUST_LEVELS.findIndex(l => l.id === tsA) : Infinity;
-        const rb = tsB !== null ? TRUST_LEVELS.findIndex(l => l.id === tsB) : Infinity;
+        const _lvls = getTrustLevels();
+        const ra = tsA !== null ? _lvls.findIndex(l => l.id === tsA) : Infinity;
+        const rb = tsB !== null ? _lvls.findIndex(l => l.id === tsB) : Infinity;
         const diff = ra === rb ? 0 : ra < rb ? -1 : 1;
         if (diff !== 0) return diff * dir;
       }
@@ -373,7 +374,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 const displayStatus = acctStatus.replace(/_/g, " ").trim();
                 const groupLabel = (p.tags ?? "").trim() || "No Group Assigned";
                 const tsId = getTrustScore(p.id);
-                const tsLevel = tsId ? TRUST_LEVELS.find(l => l.id === tsId) : null;
+                const tsLevel = tsId ? getTrustLevels().find(l => l.id === tsId) : null;
                 return (
                   <label
                     key={p.id}

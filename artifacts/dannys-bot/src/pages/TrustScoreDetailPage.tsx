@@ -8,7 +8,7 @@ import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
 import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
 import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import * as Tabs from "@radix-ui/react-tabs";
-import { TRUST_LEVELS } from "@/components/TrustScoreBadge";
+import { getTrustLevels } from "@/components/TrustScoreBadge";
 import { Zap, RefreshCw, Loader2, ChevronLeft, Save } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -42,7 +42,7 @@ export function TrustScoreDetailPage() {
   const { toast } = useToast();
   const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
 
-  const level = TRUST_LEVELS.find(l => l.id === trustScoreId);
+  const level = getTrustLevels().find(l => l.id === trustScoreId);
 
   const { data: templates, isLoading: templatesLoading } = useQuery<TrustScoreTemplate[]>({
     queryKey: ["/api/trust-score-templates"],
