@@ -715,109 +715,7 @@ export function ProfileDetailsPage() {
         <div className="w-full">
           <div className="flex items-center gap-4 mb-3">
             <div className="flex-1 space-y-1">
-              {/* Row 1 — navigation links */}
-              <div className="flex items-center gap-1 flex-wrap">
-                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium transition-colors">
-                  <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
-                  <span className="text-blue-500 hover:text-blue-600 uppercase">{profile?.creatorMode ? "Back to Account Creator" : "Back to Accounts"}</span>
-                </Link>
-                {!profile?.creatorMode && (
-                  <>
-                    <span className="text-border mx-1 select-none">|</span>
-                    <Link
-                      href="/"
-                      onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
-                    >
-                      <BarChart2 className="w-3 h-3" />
-                      Dash
-                    </Link>
-                    <span className="text-border mx-1 select-none">|</span>
-                    <button
-                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
-                    >
-                      <Monitor className="w-3 h-3" />
-                      Browser
-                    </button>
-                    <span className="text-border mx-1 select-none">|</span>
-                    <Link
-                      href={`/profiles/${profileId}?tab=settings`}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors"
-                    >
-                      <Settings className="w-3 h-3" />
-                      Account Settings
-                    </Link>
-                    {activeTab === "settings" && (
-                      <>
-                        <span className="text-border mx-1 select-none">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
-                          onClick={() => setCopyDialogOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "follow" && getTool('follow') && (
-                      <>
-                        <span className="text-border mx-1 select-none">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
-                          onClick={() => setFollowCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "unfollow" && getTool('unfollow') && (
-                      <>
-                        <span className="text-border mx-1 select-none">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
-                          onClick={() => setUnfollowCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "contact" && getTool('contact') && (
-                      <>
-                        <span className="text-border mx-1 select-none">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
-                          onClick={() => setContactCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "human-session" && getTool('human_sessions') && (
-                      <>
-                        <span className="text-border mx-1 select-none">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
-                          onClick={() => setHumanCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "create-cookie" && (
-                      <>
-                        <span className="text-border mx-1 select-none">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase"
-                          onClick={() => setCookieCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-              {/* Row 2 — account status pill + profile picker */}
+              {/* Row 2 — status pill + account picker + trustscore + nav links */}
               <div className="flex items-center gap-1 flex-wrap">
                 {(() => {
                   const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
@@ -930,6 +828,99 @@ export function ProfileDetailsPage() {
                   <ChevronRight className="w-4 h-4" />
                 </button>
                 <TrustScoreBadge profileId={profileId} />
+                {/* Navigation links — right of TrustScore pill */}
+                <span className="text-border mx-1 select-none shrink-0">|</span>
+                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium transition-colors shrink-0">
+                  <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
+                  <span className="text-blue-500 hover:text-blue-600 uppercase">{profile?.creatorMode ? "Back to Creator" : "Accounts"}</span>
+                </Link>
+                {!profile?.creatorMode && (
+                  <>
+                    <span className="text-border mx-1 select-none shrink-0">|</span>
+                    <Link
+                      href="/"
+                      onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors shrink-0"
+                    >
+                      <BarChart2 className="w-3 h-3" />
+                      Dash
+                    </Link>
+                    <span className="text-border mx-1 select-none shrink-0">|</span>
+                    <button
+                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors shrink-0"
+                    >
+                      <Monitor className="w-3 h-3" />
+                      Browser
+                    </button>
+                    {activeTab === "settings" && (
+                      <>
+                        <span className="text-border mx-1 select-none shrink-0">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
+                          onClick={() => setCopyDialogOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "follow" && getTool('follow') && (
+                      <>
+                        <span className="text-border mx-1 select-none shrink-0">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
+                          onClick={() => setFollowCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "unfollow" && getTool('unfollow') && (
+                      <>
+                        <span className="text-border mx-1 select-none shrink-0">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
+                          onClick={() => setUnfollowCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "contact" && getTool('contact') && (
+                      <>
+                        <span className="text-border mx-1 select-none shrink-0">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
+                          onClick={() => setContactCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "human-session" && getTool('human_sessions') && (
+                      <>
+                        <span className="text-border mx-1 select-none shrink-0">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
+                          onClick={() => setHumanCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                    {activeTab === "create-cookie" && (
+                      <>
+                        <span className="text-border mx-1 select-none shrink-0">|</span>
+                        <button
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
+                          onClick={() => setCookieCopyOpen(true)}
+                        >
+                          <Copy className="w-3 h-3" /> Copy Settings
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>

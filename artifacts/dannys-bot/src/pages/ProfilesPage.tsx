@@ -25,7 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ImportProfilesDialog } from "@/components/ImportProfilesDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
-import { TrustScoreBadge, getTrustScore, setTrustScore } from "@/components/TrustScoreBadge";
+import { TrustScoreBadge, getTrustScore, setTrustScore, TRUST_LEVELS } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
 
 // ── Status metadata ──────────────────────────────────────────────────────────
@@ -285,9 +285,9 @@ export function ProfilesPage() {
   const [fixingAbd, setFixingAbd] = useState(false);
   const [fixingAbdIds, setFixingAbdIds] = useState<Set<number>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
-  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | null>(() => {
+  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | null>(() => {
     const v = localStorage.getItem("profiles:sortField");
-    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following") ? v as any : "account";
+    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore") ? v as any : "account";
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (localStorage.getItem("profiles:sortDir") as "asc" | "desc") === "desc" ? "desc" : "asc"
@@ -405,6 +405,12 @@ export function ProfilesPage() {
         const nb = sortField === "followers" ? (b.followersCount ?? -1) : (b.followingCount ?? -1);
         return sortDir === "asc" ? na - nb : nb - na;
       }
+      if (sortField === "trustscore") {
+        const tsA = getTrustScore(a.id); const tsB = getTrustScore(b.id);
+        const ra = tsA !== null ? TRUST_LEVELS.findIndex(l => l.id === tsA) : Infinity;
+        const rb = tsB !== null ? TRUST_LEVELS.findIndex(l => l.id === tsB) : Infinity;
+        return sortDir === "asc" ? (ra === rb ? 0 : ra < rb ? -1 : 1) : (ra === rb ? 0 : ra > rb ? -1 : 1);
+      }
       let va = "", vb = "";
       if (sortField === "account") {
         va = (a.accountLabel || a.username || "").toLowerCase();
@@ -452,7 +458,7 @@ export function ProfilesPage() {
     });
   };
 
-  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following") => {
+  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore") => {
     let newDir: "asc" | "desc";
     if (sortField !== field) {
       setSortField(field); setSortDir("asc");
@@ -489,6 +495,12 @@ export function ProfilesPage() {
         const pa = a.proxyPort ?? 0;
         const pb = b.proxyPort ?? 0;
         return newDir === "asc" ? pa - pb : pb - pa;
+      }
+      if (field === "trustscore") {
+        const tsA = getTrustScore(a.id); const tsB = getTrustScore(b.id);
+        const ra = tsA !== null ? TRUST_LEVELS.findIndex(l => l.id === tsA) : Infinity;
+        const rb = tsB !== null ? TRUST_LEVELS.findIndex(l => l.id === tsB) : Infinity;
+        return newDir === "asc" ? (ra === rb ? 0 : ra < rb ? -1 : 1) : (ra === rb ? 0 : ra > rb ? -1 : 1);
       }
       let va = "", vb = "";
       if (field === "account") {
@@ -1049,7 +1061,7 @@ export function ProfilesPage() {
                 onClick={() => cycleSort("account")}
                 className="flex items-center gap-1 text-left hover:text-foreground transition-colors"
               >
-                Account Name
+                ACCOUNT NAME
                 <span className="text-[9px]">
                   {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}
                 </span>
@@ -1083,7 +1095,7 @@ export function ProfilesPage() {
               };
               if (key === "status") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  Status<span className="text-[9px]">{sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  STATUS<span className="text-[9px]">{sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
               if (key === "active") return <div key={key} {...dragProps} style={{ width: profColWidths.active }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Active</div>;
@@ -1102,7 +1114,11 @@ export function ProfilesPage() {
               if (key === "actions") return <div key={key} {...dragProps} style={{ width: profColWidths.actions }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Actions</div>;
               if (key === "battery") return <div key={key} {...dragProps} style={{ width: profColWidths.battery }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Battery</div>;
               if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
-              if (key === "trustscore") return <div key={key} {...dragProps} style={{ width: profColWidths.trustscore }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>TrustScore</div>;
+              if (key === "trustscore") return (
+                <button key={key} {...dragProps} onClick={() => cycleSort("trustscore")} style={{ width: profColWidths.trustscore }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                  TRUSTSCORE<span className="text-[9px]">{sortField === "trustscore" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                </button>
+              );
               if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>ABD</div>;
               return null;
             })}

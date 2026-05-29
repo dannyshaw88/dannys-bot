@@ -59,6 +59,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.650",
+    date: "29 May 2026",
+    items: [
+      { category: "Improved", text: "Copy Settings opens with no accounts ticked by default — clean slate every time." },
+      { category: "Improved", text: "TrustScore column in Copy Settings is now sortable by rank (NOOB first, GOD LEVEL last)." },
+      { category: "Improved", text: "TrustScore column on the Accounts page is now sortable by rank." },
+      { category: "Improved", text: "Account Name and Status column headers on the Accounts page are now all-caps for consistency." },
+      { category: "Improved", text: "Navigation links (Accounts, Dash, Browser, Copy Settings) moved to the same row as the status pill and account name — no separate row above." },
+    ],
+  },
+  {
     version: "1.0.649",
     date: "29 May 2026",
     items: [

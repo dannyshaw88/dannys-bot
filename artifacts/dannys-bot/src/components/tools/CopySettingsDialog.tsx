@@ -37,7 +37,7 @@ interface Props {
   onCopy: (targetIds: number[], expandedKeys: string[]) => Promise<void>;
 }
 
-type SortBy  = "name" | "status" | "group";
+type SortBy  = "name" | "status" | "group" | "trustscore";
 type SortDir = "asc" | "desc";
 
 function statusBadgeClass(status: string) {
@@ -53,6 +53,17 @@ function statusBadgeClass(status: string) {
 
 function buildInitialSelected(_groups: CopyOptionGroup[]): Set<string> {
   return new Set<string>();
+}
+
+function buildAllSelected(groups: CopyOptionGroup[]): Set<string> {
+  const all = new Set<string>();
+  groups.forEach(g =>
+    g.options.forEach(o => {
+      if (o.subOptions?.length) o.subOptions.forEach(s => all.add(s.key));
+      else all.add(o.key);
+    })
+  );
+  return all;
 }
 
 function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): string[] {
@@ -74,15 +85,7 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
 const SHARED_TARGETS_KEY = "copyDialog:targets:lastUsed";
 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
-  const [targets, setTargets]    = useState<Set<number>>(() => {
-    try {
-      const stored = localStorage.getItem(SHARED_TARGETS_KEY);
-      if (!stored) return new Set();
-      const ids = JSON.parse(stored) as number[];
-      const validIds = new Set(profiles.map(p => p.id));
-      return new Set(ids.filter(id => validIds.has(id)));
-    } catch { return new Set(); }
-  });
+  const [targets, setTargets]    = useState<Set<number>>(new Set());
   const [search, setSearch]      = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy]      = useState<SortBy>("name");
@@ -110,7 +113,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   useEffect(() => {
     if (open) {
-      // Preserve targets across re-opens — only NONE clears them
+      setTargets(new Set());
       setSearch("");
       setStatusFilter("");
       setSortBy("name");
@@ -171,6 +174,13 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         const gc = ga.localeCompare(gb);
         if (gc !== 0) return gc * dir;
       }
+      if (sortBy === "trustscore") {
+        const tsA = getTrustScore(a.id); const tsB = getTrustScore(b.id);
+        const ra = tsA !== null ? TRUST_LEVELS.findIndex(l => l.id === tsA) : Infinity;
+        const rb = tsB !== null ? TRUST_LEVELS.findIndex(l => l.id === tsB) : Infinity;
+        const diff = ra === rb ? 0 : ra < rb ? -1 : 1;
+        if (diff !== 0) return diff * dir;
+      }
       return (a.accountLabel || a.username).localeCompare(b.accountLabel || b.username) * dir;
     });
   }, [profiles, search, sortBy, sortDir]);
@@ -222,7 +232,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
 
   const handleSelectAll = () => {
     if (allSelected) setSelected(new Set());
-    else             setSelected(buildInitialSelected(optionGroups));
+    else             setSelected(buildAllSelected(optionGroups));
   };
 
   const handleSelectAllFiltered = () => {
@@ -342,9 +352,15 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   </button>
                 );
               })}
-              <div className="w-[88px] shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              <button
+                onClick={() => cycleSort("trustscore")}
+                className={`w-[88px] shrink-0 flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                  sortBy === "trustscore" ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
                 TrustScore
-              </div>
+                {(() => { const Icon = sortBy === "trustscore" ? (sortDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown; return <Icon className={`w-2.5 h-2.5 shrink-0 ${sortBy === "trustscore" ? "opacity-100" : "opacity-40"}`} />; })()}
+              </button>
             </div>
 
             {/* Account rows */}
