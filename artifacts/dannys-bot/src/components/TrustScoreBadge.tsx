@@ -1,30 +1,34 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Smile, Flame, Timer, Minus, Clock, Moon, Shield, ShieldCheck,
+  Baby, Flame, Snail, Worm, Hourglass, Moon, Shield, Turtle,
   Eye, Activity, TrendingUp, Skull, Star, Rocket, Crown, Zap,
   Diamond, Swords, Sparkles, X
 } from "lucide-react";
 
+const GREEN_BG     = "#000000";
+const GREEN_TEXT   = "#F59E0B";
+const GREEN_BORDER = "#D97706";
+
 export const TRUST_LEVELS = [
-  { id: "noob",        label: "NOOB",        icon: Smile,       bg: "#f3f4f6", text: "#6b7280", border: "#d1d5db" },
-  { id: "warmup",      label: "WARMUP",       icon: Flame,       bg: "#fefce8", text: "#ca8a04", border: "#fde68a" },
-  { id: "snail",       label: "SNAIL",        icon: Timer,       bg: "#f0fdf4", text: "#16a34a", border: "#bbf7d0" },
-  { id: "slug",        label: "SLUG",         icon: Minus,       bg: "#f8fafc", text: "#64748b", border: "#e2e8f0" },
-  { id: "slow",        label: "SLOW",         icon: Clock,       bg: "#fafaf9", text: "#78716c", border: "#e7e5e4" },
-  { id: "sloth",       label: "SLOTH",        icon: Moon,        bg: "#fffbeb", text: "#d97706", border: "#fde68a" },
-  { id: "tortoise",    label: "TORTOISE",     icon: Shield,      bg: "#f7fee7", text: "#65a30d", border: "#d9f99d" },
-  { id: "turtle",      label: "TURTLE",       icon: ShieldCheck, bg: "#f0fdfa", text: "#0d9488", border: "#99f6e4" },
-  { id: "reptile",     label: "REPTILE",      icon: Eye,         bg: "#ecfdf5", text: "#059669", border: "#a7f3d0" },
-  { id: "moderate",    label: "MODERATE",     icon: Activity,    bg: "#eff6ff", text: "#3b82f6", border: "#bfdbfe" },
-  { id: "high",        label: "HIGH",         icon: TrendingUp,  bg: "#f0f9ff", text: "#0ea5e9", border: "#bae6fd" },
-  { id: "monster",     label: "MONSTER",      icon: Skull,       bg: "#fff7ed", text: "#ea580c", border: "#fed7aa" },
-  { id: "class",       label: "CLASS",        icon: Star,        bg: "#fefce8", text: "#ca8a04", border: "#fde047" },
-  { id: "super",       label: "SUPER",        icon: Rocket,      bg: "#faf5ff", text: "#9333ea", border: "#e9d5ff" },
-  { id: "outstanding", label: "OUTSTANDING",  icon: Crown,       bg: "#fffbeb", text: "#f59e0b", border: "#fcd34d" },
-  { id: "ridiculous",  label: "RIDICULOUS",   icon: Zap,         bg: "#fef2f2", text: "#dc2626", border: "#fecaca" },
-  { id: "impossible",  label: "IMPOSSIBLE",   icon: Diamond,     bg: "#ecfeff", text: "#0891b2", border: "#a5f3fc" },
-  { id: "overpowered", label: "OVERPOWERED",  icon: Swords,      bg: "#f5f3ff", text: "#7c3aed", border: "#ddd6fe" },
-  { id: "god_level",   label: "GOD LEVEL",    icon: Sparkles,    bg: "#fffbeb", text: "#f59e0b", border: "#fbbf24" },
+  { id: "noob",        label: "NOOB",        icon: Baby,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "warmup",      label: "WARMUP",       icon: Flame,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "snail",       label: "SNAIL",        icon: Snail,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "slug",        label: "SLUG",         icon: Worm,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "slow",        label: "SLOW",         icon: Hourglass,  bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "sloth",       label: "SLOTH",        icon: Moon,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "tortoise",    label: "TORTOISE",     icon: Shield,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "turtle",      label: "TURTLE",       icon: Turtle,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "reptile",     label: "REPTILE",      icon: Eye,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "moderate",    label: "MODERATE",     icon: Activity,   bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "high",        label: "HIGH",         icon: TrendingUp, bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "monster",     label: "MONSTER",      icon: Skull,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "class",       label: "CLASS",        icon: Star,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "super",       label: "SUPER",        icon: Rocket,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "outstanding", label: "OUTSTANDING",  icon: Crown,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "ridiculous",  label: "RIDICULOUS",   icon: Zap,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "impossible",  label: "IMPOSSIBLE",   icon: Diamond,    bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "overpowered", label: "OVERPOWERED",  icon: Swords,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "god_level",   label: "GOD LEVEL",    icon: Sparkles,   bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
 ] as const;
 
 export type TrustLevelId = typeof TRUST_LEVELS[number]["id"];
@@ -85,8 +89,8 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         className="flex h-5 items-center gap-1 rounded-full px-2 transition-opacity hover:opacity-75"
         style={{
-          background: current?.bg ?? "transparent",
-          border: `1px ${current ? "solid" : "dashed"} ${current?.border ?? "#d1d5db"}`,
+          background: current ? GREEN_BG : "transparent",
+          border: `1px ${current ? "solid" : "dashed"} ${current ? GREEN_BORDER : "#bbf7d0"}`,
           cursor: "pointer",
           flexShrink: 0,
           minWidth: 60,
@@ -95,13 +99,13 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
       >
         {current ? (
           <>
-            <current.icon size={10} color={current.text} strokeWidth={2} />
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap" }}>
+            <current.icon size={10} color={GREEN_TEXT} strokeWidth={2} />
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: GREEN_TEXT, whiteSpace: "nowrap" }}>
               {current.label}
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 9, fontWeight: 500, color: "#9ca3af", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>Score</span>
+          <span style={{ fontSize: 9, fontWeight: 500, color: "#15803d", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>Score</span>
         )}
       </button>
 
@@ -164,16 +168,16 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
                   alignItems: "center",
                   gap: 8,
                   padding: "5px 12px",
-                  background: isActive ? lvl.bg : "transparent",
+                  background: isActive ? GREEN_BG : "transparent",
                   border: "none",
-                  borderLeft: isActive ? `3px solid ${lvl.border}` : "3px solid transparent",
+                  borderLeft: isActive ? `3px solid ${GREEN_BORDER}` : "3px solid transparent",
                   cursor: "pointer",
                   textAlign: "left",
                   outline: "none",
                 }}
               >
-                <Icon size={12} color={lvl.text} strokeWidth={2} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: lvl.text, letterSpacing: "0.05em" }}>{lvl.label}</span>
+                <Icon size={12} color={GREEN_TEXT} strokeWidth={2} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: GREEN_TEXT, letterSpacing: "0.05em" }}>{lvl.label}</span>
               </button>
             );
           })}

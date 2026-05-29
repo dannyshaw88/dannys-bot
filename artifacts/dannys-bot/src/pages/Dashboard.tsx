@@ -59,6 +59,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.638",
+    date: "29 May 2026",
+    items: [
+      { category: "Improvement", text: "TrustScore pill is now black with gold text and icon — applies to all trust levels." },
+      { category: "Improvement", text: "Statistics moved directly under Accounts in the sidebar navigation." },
+      { category: "Improvement", text: "Accounts page title changed from Account Name to Account Manager." },
+      { category: "Improvement", text: "Human Session View Timeline — removed confusing percentage inputs for scrolling, replaced with Amount of Posts to Scroll count inputs. View Profile Feed row merged onto same line. All labels uppercased." },
+      { category: "Fix", text: "Percentage input fields (%) no longer clip the value 100 — inputs widened to fit cleanly." },
+    ],
+  },
+  {
     version: "1.0.637",
     date: "29 May 2026",
     items: [

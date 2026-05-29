@@ -40,9 +40,9 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",    icon: Gauge       },
     { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",     icon: Users       },
+    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",        icon: Activity    },
     { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: Ghost       },
     { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",  icon: Upload      },
-    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",        icon: Activity    },
     { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: ShieldAlert },
   ];
 

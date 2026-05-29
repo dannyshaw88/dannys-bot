@@ -25,7 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ImportProfilesDialog } from "@/components/ImportProfilesDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
-import { TrustScoreBadge } from "@/components/TrustScoreBadge";
+import { TrustScoreBadge, getTrustScore, setTrustScore } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
 
 // ── Status metadata ──────────────────────────────────────────────────────────
@@ -521,6 +521,7 @@ export function ProfilesPage() {
       userAgentEmbedded: ua.embedded,
     }, {
       onSuccess: (profile) => {
+        if (!getTrustScore(profile.id)) setTrustScore(profile.id, "noob");
         window.location.href = `/profiles/${profile.id}`;
       }
     });
@@ -533,7 +534,7 @@ export function ProfilesPage() {
     try {
       for (let i = 0; i < count; i++) {
         const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
-        await createProfileMutation.mutateAsync({
+        const newProfile = await createProfileMutation.mutateAsync({
           username: "",
           password: "",
           accountLabel: `Account${startNum + i}`,
@@ -544,6 +545,7 @@ export function ProfilesPage() {
           userAgentApi: ua.api,
           userAgentEmbedded: ua.embedded,
         });
+        if (!getTrustScore(newProfile.id)) setTrustScore(newProfile.id, "noob");
       }
       setAddProfilePanelOpen(false);
       setAddProfileCount("1");
@@ -652,6 +654,7 @@ export function ProfilesPage() {
       "Notes", "Phone number", "2FA Secret Key",
       "Backup Codes", "Email Validation Username", "Email Validation Pass",
       "Email Validation Pop3Server", "Email Validation Port",
+      "TrustScore",
     ];
     const rows = toExport.map(p => [
       p.tags ?? "",
@@ -672,6 +675,7 @@ export function ProfilesPage() {
       p.emailValidationPassword ?? "",
       p.emailValidationPop3Server ?? "",
       p.emailValidationPort ?? "",
+      getTrustScore(p.id) ?? "",
     ]);
     const csv = "\uFEFF" + [headers, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
     const filename = `profiles_export_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -947,7 +951,7 @@ export function ProfilesPage() {
       />
       <div className="mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Account Name</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground shrink-0">Account Manager</h1>
           <Button
             onClick={() => setAddProfilePanelOpen(o => !o)}
             size="sm"
