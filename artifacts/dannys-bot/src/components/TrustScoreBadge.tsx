@@ -1,34 +1,49 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Sprout, Flame, Snail, Droplet, Hourglass, Coffee, Anchor, Turtle,
-  Scan, Activity, TrendingUp, Ghost, Star, Rocket, Crown, Zap,
-  Diamond, Swords, Sparkles
+  HelpCircle, PersonStanding, Snail, Hourglass, Coffee, Anchor, Turtle,
+  Scan, Activity, TrendingUp, Ghost, Diamond, Rocket, Crown, Zap,
+  Gem, Swords, Sparkles
 } from "lucide-react";
+
+function SlugIcon({ size = 12, color = "currentColor", ..._ }: { size?: number; color?: string; [k: string]: any }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Eye stalks */}
+      <line x1="8" y1="4" x2="8" y2="8" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <line x1="13" y1="3" x2="13" y2="8" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      {/* Eyes */}
+      <circle cx="8" cy="3.5" r="1.5" fill={color} />
+      <circle cx="13" cy="2.5" r="1.5" fill={color} />
+      {/* Body */}
+      <path d="M4 14 Q4 9 9 9 L16 9 Q22 9 22 14 Q22 19 16 19 L6 19 Q4 19 4 17 Q4 15 6 15 L18 15" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
 
 const GREEN_BG     = "#1AD2F2";
 const GREEN_TEXT   = "#ffffff";
 const GREEN_BORDER = "#0eb8d4";
 
 export const TRUST_LEVELS = [
-  { id: "noob",        label: "NOOB",        icon: Sprout,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "warmup",      label: "WARMUP",       icon: Flame,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "snail",       label: "SNAIL",        icon: Snail,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "slug",        label: "SLUG",         icon: Droplet,    bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "slow",        label: "SLOW",         icon: Hourglass,  bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "sloth",       label: "SLOTH",        icon: Coffee,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "tortoise",    label: "TORTOISE",     icon: Anchor,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "turtle",      label: "TURTLE",       icon: Turtle,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "reptile",     label: "REPTILE",      icon: Scan,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "moderate",    label: "MODERATE",     icon: Activity,   bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "high",        label: "HIGH",         icon: TrendingUp, bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "monster",     label: "MONSTER",      icon: Ghost,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "class",       label: "CLASS",        icon: Star,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "super",       label: "SUPER",        icon: Rocket,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "outstanding", label: "OUTSTANDING",  icon: Crown,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "ridiculous",  label: "RIDICULOUS",   icon: Zap,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "impossible",  label: "IMPOSSIBLE",   icon: Diamond,    bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "overpowered", label: "OVERPOWERED",  icon: Swords,     bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "god_level",   label: "GOD LEVEL",    icon: Sparkles,   bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "noob",        label: "NOOB",        icon: HelpCircle,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "warmup",      label: "WARMUP",       icon: PersonStanding,  bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "snail",       label: "SNAIL",        icon: Snail,           bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "slug",        label: "SLUG",         icon: SlugIcon,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "slow",        label: "SLOW",         icon: Hourglass,       bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "sloth",       label: "SLOTH",        icon: Coffee,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "tortoise",    label: "TORTOISE",     icon: Anchor,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "turtle",      label: "TURTLE",       icon: Turtle,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "reptile",     label: "REPTILE",      icon: Scan,            bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "moderate",    label: "MODERATE",     icon: Activity,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "high",        label: "HIGH",         icon: TrendingUp,      bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "monster",     label: "MONSTER",      icon: Ghost,           bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "class",       label: "CLASS",        icon: Diamond,         bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "super",       label: "SUPER",        icon: Rocket,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "outstanding", label: "OUTSTANDING",  icon: Crown,           bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "ridiculous",  label: "RIDICULOUS",   icon: Zap,             bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "impossible",  label: "IMPOSSIBLE",   icon: Gem,             bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "overpowered", label: "OVERPOWERED",  icon: Swords,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "god_level",   label: "GOD LEVEL",    icon: Sparkles,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
 ] as const;
 
 export type TrustLevelId = typeof TRUST_LEVELS[number]["id"];

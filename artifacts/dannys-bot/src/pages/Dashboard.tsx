@@ -59,6 +59,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.652",
+    date: "29 May 2026",
+    items: [
+      { category: "Feature", text: "Accounts: SYNC and LAST API CALL columns are now sortable — click the header to sort newest to oldest, click again for oldest to newest." },
+      { category: "Improved", text: "TrustScore: Noob badge now shows a confused face icon, Warmup shows a stretching person, Class shows a diamond, Slug shows a custom slug with two eyes." },
+    ],
+  },
+  {
     version: "1.0.651",
     date: "29 May 2026",
     items: [

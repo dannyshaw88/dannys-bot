@@ -285,9 +285,9 @@ export function ProfilesPage() {
   const [fixingAbd, setFixingAbd] = useState(false);
   const [fixingAbdIds, setFixingAbdIds] = useState<Set<number>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>(() => sessionStorage.getItem("profiles:filter") ?? "");
-  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | null>(() => {
+  const [sortField, setSortField] = useState<"account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall" | null>(() => {
     const v = localStorage.getItem("profiles:sortField");
-    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore") ? v as any : "account";
+    return (v === "account" || v === "status" || v === "ip" || v === "followers" || v === "following" || v === "trustscore" || v === "sync" || v === "lastApiCall") ? v as any : "account";
   });
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() =>
     (localStorage.getItem("profiles:sortDir") as "asc" | "desc") === "desc" ? "desc" : "asc"
@@ -411,6 +411,16 @@ export function ProfilesPage() {
         const rb = tsB !== null ? TRUST_LEVELS.findIndex(l => l.id === tsB) : Infinity;
         return sortDir === "asc" ? (ra === rb ? 0 : ra < rb ? -1 : 1) : (ra === rb ? 0 : ra > rb ? -1 : 1);
       }
+      if (sortField === "sync") {
+        const ta = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0;
+        const tb = b.lastSyncedAt ? new Date(b.lastSyncedAt).getTime() : 0;
+        return sortDir === "asc" ? ta - tb : tb - ta;
+      }
+      if (sortField === "lastApiCall") {
+        const ta = lastApiCallMap[a.id] ? new Date(lastApiCallMap[a.id]).getTime() : 0;
+        const tb = lastApiCallMap[b.id] ? new Date(lastApiCallMap[b.id]).getTime() : 0;
+        return sortDir === "asc" ? ta - tb : tb - ta;
+      }
       let va = "", vb = "";
       if (sortField === "account") {
         va = (a.accountLabel || a.username || "").toLowerCase();
@@ -421,7 +431,7 @@ export function ProfilesPage() {
       }
       return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
-  }, [profiles, filterTokens, sortField, sortDir, stableOrder]);
+  }, [profiles, filterTokens, sortField, sortDir, stableOrder, lastApiCallMap]);
 
   // ── Duplicate Instagram username detection ────────────────────────────────
   // Scans ALL profiles (not just the filtered view) so a duplicate is flagged
@@ -458,7 +468,7 @@ export function ProfilesPage() {
     });
   };
 
-  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore") => {
+  const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall") => {
     let newDir: "asc" | "desc";
     if (sortField !== field) {
       setSortField(field); setSortDir("asc");
@@ -1109,8 +1119,16 @@ export function ProfilesPage() {
                   FOLLOWING<span className="text-[9px]">{sortField === "following" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
                 </button>
               );
-              if (key === "sync") return <div key={key} {...dragProps} style={{ width: profColWidths.sync }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>SYNC</div>;
-              if (key === "lastApiCall") return <div key={key} {...dragProps} style={{ width: profColWidths.lastApiCall }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Last API Call</div>;
+              if (key === "sync") return (
+                <button key={key} {...dragProps} onClick={() => cycleSort("sync")} style={{ width: profColWidths.sync }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                  SYNC<span className="text-[9px]">{sortField === "sync" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                </button>
+              );
+              if (key === "lastApiCall") return (
+                <button key={key} {...dragProps} onClick={() => cycleSort("lastApiCall")} style={{ width: profColWidths.lastApiCall }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
+                  LAST API CALL<span className="text-[9px]">{sortField === "lastApiCall" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                </button>
+              );
               if (key === "actions") return <div key={key} {...dragProps} style={{ width: profColWidths.actions }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Actions</div>;
               if (key === "battery") return <div key={key} {...dragProps} style={{ width: profColWidths.battery }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Battery</div>;
               if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
