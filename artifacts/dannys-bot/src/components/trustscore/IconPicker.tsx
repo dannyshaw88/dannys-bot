@@ -39,7 +39,7 @@ export function IconPicker({ value, onChange, onClose }: IconPickerProps) {
       onMouseDown={e => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div className="bg-background rounded-xl border border-border shadow-2xl flex flex-col"
-        style={{ width: 741, height: 520 }}>
+        style={{ width: 852, height: 520 }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border shrink-0">
@@ -114,7 +114,7 @@ export function IconPicker({ value, onChange, onClose }: IconPickerProps) {
                     >
                       <entry.Icon
                         size={16}
-                        color={isSelected ? "var(--primary-foreground)" : "var(--foreground)"}
+                        className={isSelected ? "text-primary-foreground" : "text-foreground"}
                       />
                       <span
                         className="text-[8px] leading-tight text-center truncate w-full"

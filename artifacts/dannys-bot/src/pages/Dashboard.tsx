@@ -59,6 +59,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.659",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "TrustScores page: icon picker now correctly displays all icons — switching from a direct stroke attribute to a CSS class colour fixes invisible icons in Electron's renderer." },
+      { category: "Improvement", text: "TrustScores page: all badges and the page title are now centred instead of left-aligned." },
+      { category: "Improvement", text: "Icon picker dialog is now 15% wider (852px) for more comfortable browsing." },
+    ],
+  },
+  {
     version: "1.0.658",
     date: "30 May 2026",
     items: [

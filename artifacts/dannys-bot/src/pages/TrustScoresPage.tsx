@@ -161,17 +161,17 @@ export function TrustScoresPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-4">
-        <div>
+      <div className="p-6 flex flex-col items-center gap-4">
+        <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight">TrustScores</h1>
           <p className="text-sm text-muted-foreground mt-1">
             A section to assign and configure trustscores to accounts
           </p>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1 w-full overflow-x-auto">
           {rows.map((row, rowIdx) => (
-            <div key={rowIdx} className="flex gap-2 items-center">
+            <div key={rowIdx} className="flex gap-2 items-center justify-center">
               {row.map((level, colIdx) => {
                 const globalIdx = rowIdx * 5 + colIdx;
                 const Icon = level.icon;
@@ -236,7 +236,7 @@ export function TrustScoresPage() {
           ))}
 
           {levels.length === 0 && (
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center justify-center">
               <button
                 onClick={() => setShowAdd(true)}
                 className="flex items-center justify-center rounded-lg border border-dashed border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors"
