@@ -59,6 +59,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.663",
+    date: "30 May 2026",
+    items: [
+      { category: "Improvement", text: "Ghost Browser: removed the redundant 'Run Warm-up' button — warm-up starts automatically when you click Start." },
+      { category: "Improvement", text: "Ghost Browser: each warm-up activity (reels, posts, profiles) now has its own configurable viewing time in seconds so the session looks natural." },
+      { category: "Improvement", text: "Ghost Browser: warm-up settings are remembered between sessions — no need to re-enter them every time." },
+      { category: "Improvement", text: "Ghost Browser: the 'Never miss a post from Instagram' popup is now automatically dismissed on every page during warm-up." },
+    ],
+  },
+  {
     version: "1.0.662",
     date: "30 May 2026",
     items: [

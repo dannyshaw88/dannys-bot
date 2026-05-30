@@ -55,6 +55,15 @@ const FP_GPUS = [
   { vendor: "Google",                      renderer: "Tensor G4" },
 ];
 
+const _warmupDefaults = {
+  reelsMin: 1, reelsMax: 3,
+  postsMin: 0, postsMax: 2,
+  profilesMin: 1, profilesMax: 2,
+  reelsIdleMin: 5, reelsIdleMax: 12,
+  postsIdleMin: 5, postsIdleMax: 12,
+  profilesIdleMin: 5, profilesIdleMax: 12,
+};
+
 const FP_SPEECH_PROFILES = [
   "US English only",
   "US + UK English",
@@ -91,29 +100,42 @@ function generateGhostFingerprint(): GhostFingerprint {
 
 // ── Warmup Row ─────────────────────────────────────────────────────────────────
 
-function WarmupRow({ label, min, max, onMin, onMax }: {
+function WarmupRow({ label, min, max, onMin, onMax, idleMin, idleMax, onIdleMin, onIdleMax }: {
   label: string;
-  min: number;
-  max: number;
-  onMin: (v: number) => void;
-  onMax: (v: number) => void;
+  min: number; max: number;
+  onMin: (v: number) => void; onMax: (v: number) => void;
+  idleMin: number; idleMax: number;
+  onIdleMin: (v: number) => void; onIdleMax: (v: number) => void;
 }) {
-  const clamp = (v: number) => Math.max(0, Math.min(10, isNaN(v) ? 0 : v));
+  const clampCount = (v: number) => Math.max(0, Math.min(10, isNaN(v) ? 0 : v));
+  const clampIdle  = (v: number) => Math.max(1, Math.min(300, isNaN(v) ? 1 : v));
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <span className="text-[10px] text-muted-foreground flex-1 min-w-0 truncate">{label}</span>
-      <div className="flex items-center gap-1 shrink-0">
-        <input
-          type="number" min="0" max="10" value={min}
-          onChange={e => onMin(clamp(parseInt(e.target.value, 10)))}
-          className="w-9 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+      {/* Count */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <input type="number" min="0" max="10" value={min}
+          onChange={e => onMin(clampCount(parseInt(e.target.value, 10)))}
+          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <span className="text-[10px] text-muted-foreground">–</span>
-        <input
-          type="number" min="0" max="10" value={max}
-          onChange={e => onMax(clamp(parseInt(e.target.value, 10)))}
-          className="w-9 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+        <input type="number" min="0" max="10" value={max}
+          onChange={e => onMax(clampCount(parseInt(e.target.value, 10)))}
+          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
         />
+      </div>
+      {/* Idle wait */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <input type="number" min="1" max="300" value={idleMin}
+          onChange={e => onIdleMin(clampIdle(parseInt(e.target.value, 10)))}
+          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <span className="text-[10px] text-muted-foreground">–</span>
+        <input type="number" min="1" max="300" value={idleMax}
+          onChange={e => onIdleMax(clampIdle(parseInt(e.target.value, 10)))}
+          className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <span className="text-[9px] text-muted-foreground/70 ml-0.5">s</span>
       </div>
     </div>
   );
@@ -378,12 +400,14 @@ export function CreateGhostPage() {
   const [fingerprint, setFingerprint] = useState<GhostFingerprint>(() => generateGhostFingerprint());
   const [fpOpen, setFpOpen]           = useState(false);
 
-  // Pre-Signup Warm-up
+  // Pre-Signup Warm-up — persisted to localStorage so values survive page reloads
   const [warmupOpen, setWarmupOpen] = useState(true);
-  const [warmupConfig, setWarmupConfig] = useState({
-    reelsMin: 1, reelsMax: 3,
-    postsMin: 0, postsMax: 2,
-    profilesMin: 1, profilesMax: 2,
+  const [warmupConfig, setWarmupConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ghost-warmup-config");
+      if (saved) return JSON.parse(saved) as typeof _warmupDefaults;
+    } catch { /* ignore */ }
+    return _warmupDefaults;
   });
   const [warmupStatus, setWarmupStatus] = useState<"idle" | "running" | "done">("idle");
   const [warmupLastStep, setWarmupLastStep] = useState("");
@@ -401,6 +425,11 @@ export function CreateGhostPage() {
       if ((statusData as any).running) setBrowserState("open");
     });
   }, []);
+
+  // Persist warmup config to localStorage whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("ghost-warmup-config", JSON.stringify(warmupConfig)); } catch { /* ignore */ }
+  }, [warmupConfig]);
 
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
@@ -672,64 +701,40 @@ export function CreateGhostPage() {
 
             {warmupOpen && (
               <div className="space-y-2 pt-0.5 border-t border-border/50">
-                <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Browses Instagram content before touching the signup form. Each count is picked randomly within the min–max range.
-                </p>
-
                 {/* Column headers */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className="flex-1" />
-                  <span className="w-9 text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Min</span>
-                  <span className="w-2" />
-                  <span className="w-9 text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Max</span>
+                  <span className="w-[72px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Count</span>
+                  <span className="w-[76px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Wait (s)</span>
                 </div>
 
                 <WarmupRow
                   label="▶ View reels"
-                  min={warmupConfig.reelsMin}
-                  max={warmupConfig.reelsMax}
+                  min={warmupConfig.reelsMin} max={warmupConfig.reelsMax}
                   onMin={v => setWarmupConfig(c => ({ ...c, reelsMin: Math.min(v, c.reelsMax) }))}
                   onMax={v => setWarmupConfig(c => ({ ...c, reelsMax: Math.max(v, c.reelsMin) }))}
+                  idleMin={warmupConfig.reelsIdleMin} idleMax={warmupConfig.reelsIdleMax}
+                  onIdleMin={v => setWarmupConfig(c => ({ ...c, reelsIdleMin: Math.min(v, c.reelsIdleMax) }))}
+                  onIdleMax={v => setWarmupConfig(c => ({ ...c, reelsIdleMax: Math.max(v, c.reelsIdleMin) }))}
                 />
                 <WarmupRow
                   label="⊞ Click &amp; view posts"
-                  min={warmupConfig.postsMin}
-                  max={warmupConfig.postsMax}
+                  min={warmupConfig.postsMin} max={warmupConfig.postsMax}
                   onMin={v => setWarmupConfig(c => ({ ...c, postsMin: Math.min(v, c.postsMax) }))}
                   onMax={v => setWarmupConfig(c => ({ ...c, postsMax: Math.max(v, c.postsMin) }))}
+                  idleMin={warmupConfig.postsIdleMin} idleMax={warmupConfig.postsIdleMax}
+                  onIdleMin={v => setWarmupConfig(c => ({ ...c, postsIdleMin: Math.min(v, c.postsIdleMax) }))}
+                  onIdleMax={v => setWarmupConfig(c => ({ ...c, postsIdleMax: Math.max(v, c.postsIdleMin) }))}
                 />
                 <WarmupRow
                   label="👤 Visit profiles"
-                  min={warmupConfig.profilesMin}
-                  max={warmupConfig.profilesMax}
+                  min={warmupConfig.profilesMin} max={warmupConfig.profilesMax}
                   onMin={v => setWarmupConfig(c => ({ ...c, profilesMin: Math.min(v, c.profilesMax) }))}
                   onMax={v => setWarmupConfig(c => ({ ...c, profilesMax: Math.max(v, c.profilesMin) }))}
+                  idleMin={warmupConfig.profilesIdleMin} idleMax={warmupConfig.profilesIdleMax}
+                  onIdleMin={v => setWarmupConfig(c => ({ ...c, profilesIdleMin: Math.min(v, c.profilesIdleMax) }))}
+                  onIdleMax={v => setWarmupConfig(c => ({ ...c, profilesIdleMax: Math.max(v, c.profilesIdleMin) }))}
                 />
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className={cn(
-                    "w-full h-8 text-xs gap-1.5 mt-1",
-                    warmupStatus === "done" && "border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
-                  )}
-                  disabled={!isOpen || warmupStatus === "running"}
-                  onClick={handleRunWarmup}
-                >
-                  {warmupStatus === "running" ? (
-                    <><Loader2 className="w-3 h-3 animate-spin" />Running warm-up…</>
-                  ) : warmupStatus === "done" ? (
-                    <><CheckCircle2 className="w-3 h-3" />Warm-up done — run again</>
-                  ) : (
-                    <><PlayCircle className="w-3 h-3" />{isOpen ? "Run Warm-up" : "Open browser first"}</>
-                  )}
-                </Button>
-
-                {warmupLastStep && (
-                  <p className="text-[10px] text-muted-foreground/70 italic truncate" title={warmupLastStep}>
-                    {warmupLastStep}
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -744,7 +749,7 @@ export function CreateGhostPage() {
               >
                 {browserState === "opening"
                   ? <><Loader2 className="w-4 h-4 animate-spin" />Starting…</>
-                  : <><Ghost className="w-4 h-4" />Open Ghost Browser</>}
+                  : <><Ghost className="w-4 h-4" />Start</>}
               </Button>
             ) : (
               <Button variant="outline" className="w-full gap-2" onClick={handleClose}>
@@ -808,34 +813,26 @@ export function CreateGhostPage() {
             </div>
           </div>
 
-          {/* Active session info */}
-          {isOpen && (
-            <div className="desktop-card p-2.5 space-y-1 border-cyan-200 dark:border-cyan-800">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600">Active Session</p>
-              <p className="text-[10px] text-muted-foreground font-medium truncate">{activeDeviceLabel}</p>
-              <p className="text-[10px] font-mono text-muted-foreground truncate">{activeProxyLabel}</p>
-            </div>
-          )}
-
-          {/* Anti-detect — always at the bottom */}
-          <div className="desktop-card p-2.5 space-y-1 mt-auto">
-            <div className="flex items-center justify-center gap-2 mb-0.5">
-              <ShieldCheck className="w-4 h-4 text-cyan-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Anti-Detect</p>
-            </div>
-            {[
-              "WebGL & Canvas fingerprint spoofed",
-              "navigator.webdriver hidden",
-              "Timezone matched to proxy exit IP",
-              "Language & locale hardened",
-              "Persistent user data directory",
-              "Device UA injected at Chrome launch",
-            ].map(item => (
-              <div key={item} className="flex items-center justify-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                <p className="text-[10px] text-muted-foreground text-center">{item}</p>
+          {/* Warm-up step progress — bottom of left column */}
+          <div className="desktop-card p-2.5 space-y-1.5 mt-auto">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600">Warm-up</p>
+            {!isOpen ? (
+              <p className="text-[10px] text-muted-foreground">Open browser to begin</p>
+            ) : warmupStatus === "running" ? (
+              <div className="flex items-start gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin text-cyan-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-muted-foreground leading-snug break-words">
+                  {warmupLastStep || "Starting…"}
+                </p>
               </div>
-            ))}
+            ) : warmupStatus === "done" ? (
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                <p className="text-[10px] text-green-600 font-medium">Complete ✓</p>
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">Ready</p>
+            )}
           </div>
 
         </div>

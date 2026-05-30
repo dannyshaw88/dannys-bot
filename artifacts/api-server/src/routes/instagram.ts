@@ -2309,19 +2309,37 @@ export async function registerInstagramRoutes(
 
   // ── Ghost Browser warm-up: runs warmupSignupSession on the open _signupPage ──
   app.post("/api/signup/browser/warmup", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      // Desktop (Electron) mode — the Ghost Browser is a native window managed by
+      // the Electron main process; Puppeteer _signupPage is never set so warmup
+      // can't run. Acknowledge immediately and broadcast done so the frontend
+      // status resets correctly instead of hanging on "Running warm-up…".
+      res.json({ ok: true, skipped: true });
+      sendSignupWsMsg({ type: "signupStep", msg: "Warm-up not available in desktop mode — session is ready." });
+      sendSignupWsMsg({ type: "warmupDone" });
+      return;
+    }
     if (!isSignupBrowserOpen()) {
       return res.status(400).json({ ok: false, error: "Ghost Browser is not open" });
     }
-    const { reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax } = req.body as {
+    const {
+      reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax,
+      reelsIdleMin, reelsIdleMax, postsIdleMin, postsIdleMax, profilesIdleMin, profilesIdleMax,
+    } = req.body as {
       reelsMin?: number; reelsMax?: number;
       postsMin?: number; postsMax?: number;
       profilesMin?: number; profilesMax?: number;
+      reelsIdleMin?: number; reelsIdleMax?: number;
+      postsIdleMin?: number; postsIdleMax?: number;
+      profilesIdleMin?: number; profilesIdleMax?: number;
     };
     res.json({ ok: true });
     (async () => {
       try {
         await runWarmupOnOpenBrowser({
           reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax,
+          reelsIdleMin, reelsIdleMax, postsIdleMin, postsIdleMax, profilesIdleMin, profilesIdleMax,
           onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg }),
         });
         sendSignupWsMsg({ type: "warmupDone" });

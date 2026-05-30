@@ -4760,15 +4760,16 @@ async function dismissCookieBanner(page: Page): Promise<void> {
         '[data-cookiebanner], [class*="CookieBanner"], [class*="cookie-banner"], [id*="cookie"]'
       );
       if (container) {
-        const btn = Array.from(container.querySelectorAll<HTMLElement>('button, [role="button"]'))
+        const btn = Array.from(container.querySelectorAll<HTMLElement>('button, [role="button"], a'))
           .find(isCookieAcceptBtn);
         if (btn) {
           const r = btn.getBoundingClientRect();
           return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
         }
       }
-      // 3. Walk all buttons looking for known accept text
-      const allBtns = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
+      // 3. Walk all buttons/links looking for known accept text
+      // Instagram renders "Allow all cookies" as an <a> link, not a <button>
+      const allBtns = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"], a'));
       for (const btn of allBtns) {
         if (isCookieAcceptBtn(btn)) {
           const r = btn.getBoundingClientRect();
@@ -6755,6 +6756,12 @@ async function warmupSignupSession(page: Page, opts: {
   postsMax?: number;
   profilesMin?: number;
   profilesMax?: number;
+  reelsIdleMin?: number;
+  reelsIdleMax?: number;
+  postsIdleMin?: number;
+  postsIdleMax?: number;
+  profilesIdleMin?: number;
+  profilesIdleMax?: number;
   onStep?: (msg: string) => void;
 }): Promise<void> {
   const step = opts.onStep ?? (() => {});
@@ -6765,6 +6772,11 @@ async function warmupSignupSession(page: Page, opts: {
   const reelsCount    = randBetween(opts.reelsMin    ?? 1, opts.reelsMax    ?? 3);
   const postsCount    = randBetween(opts.postsMin    ?? 0, opts.postsMax    ?? 2);
   const profilesCount = randBetween(opts.profilesMin ?? 1, opts.profilesMax ?? 2);
+
+  // Idle time per item (user-configured seconds, converted to ms with jitter)
+  const reelsIdleMs    = () => randBetween(opts.reelsIdleMin    ?? 5, opts.reelsIdleMax    ?? 12) * 1000;
+  const postsIdleMs    = () => randBetween(opts.postsIdleMin    ?? 5, opts.postsIdleMax    ?? 12) * 1000;
+  const profilesIdleMs = () => randBetween(opts.profilesIdleMin ?? 5, opts.profilesIdleMax ?? 12) * 1000;
 
   if (reelsCount === 0 && postsCount === 0 && profilesCount === 0) {
     step("EB warmup: all counts are 0 — skipping warm-up");
@@ -6780,6 +6792,7 @@ async function warmupSignupSession(page: Page, opts: {
   }
   await delay(jitter(1500, 1000));
   await dismissCookieBanner(page);
+  await dismissInstagramPopups(page).catch(() => {});
   await delay(jitter(1000, 800));
 
   // Organic scrolling on homepage
@@ -6827,12 +6840,14 @@ async function warmupSignupSession(page: Page, opts: {
       step(`EB warmup: viewing reel ${label}...`);
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-        await delay(jitter(2500, 2000));
+        await delay(jitter(1500, 1000));
+        await dismissCookieBanner(page);
+        await dismissInstagramPopups(page).catch(() => {});
+        // Spread the user-configured idle time across 2 scroll steps
+        const reelIdle = reelsIdleMs();
         for (let i = 0; i < 2; i++) {
-          try {
-            await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250));
-            await delay(jitter(2000, 1500));
-          } catch { /* non-fatal */ }
+          await delay(Math.round(reelIdle / 2));
+          try { await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250)); } catch { /* non-fatal */ }
         }
       } catch (e: any) {
         step(`EB warmup: reel nav warning: ${e?.message?.slice(0, 60)}`);
@@ -6847,7 +6862,10 @@ async function warmupSignupSession(page: Page, opts: {
     step(`EB warmup: visiting @${pickedProfile} to click posts (${postsCount})...`);
     try {
       await page.goto(`https://www.instagram.com/${pickedProfile}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
-      await delay(jitter(2000, 1500));
+      await delay(jitter(1500, 1000));
+      await dismissCookieBanner(page);
+      await dismissInstagramPopups(page).catch(() => {});
+      await delay(jitter(800, 600));
 
       for (let i = 0; i < postsCount; i++) {
         try {
@@ -6864,11 +6882,15 @@ async function warmupSignupSession(page: Page, opts: {
           if (postHref) {
             step(`EB warmup: clicking post ${i + 1}/${postsCount}...`);
             await page.goto(postHref, { waitUntil: "domcontentloaded", timeout: 15000 });
-            await delay(jitter(3000, 2500));
+            await delay(jitter(1200, 800));
+            await dismissInstagramPopups(page).catch(() => {});
+            // User-configured idle time split: 60% reading, 40% after scroll
+            const postIdle = postsIdleMs();
+            await delay(Math.round(postIdle * 0.6));
             try {
               await page.evaluate(() => window.scrollBy(0, 200 + Math.random() * 300));
-              await delay(jitter(1500, 1000));
-            } catch { /* non-fatal */ }
+              await delay(Math.round(postIdle * 0.4));
+            } catch { await delay(Math.round(postIdle * 0.4)); }
             await page.goBack({ timeout: 10000 }).catch(() => {});
             await delay(jitter(1000, 800));
           }
@@ -6890,12 +6912,14 @@ async function warmupSignupSession(page: Page, opts: {
       step(`EB warmup: visiting @${handle} profile...`);
       try {
         await page.goto(`https://www.instagram.com/${handle}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
-        await delay(jitter(2000, 1500));
+        await delay(jitter(1500, 1000));
+        await dismissCookieBanner(page);
+        await dismissInstagramPopups(page).catch(() => {});
+        // Spread user-configured idle time across 2 scroll steps
+        const profIdle = profilesIdleMs();
         for (let j = 0; j < 2; j++) {
-          try {
-            await page.evaluate(() => window.scrollBy(0, 300 + Math.random() * 400));
-            await delay(jitter(2000, 1500));
-          } catch { /* non-fatal */ }
+          await delay(Math.round(profIdle / 2));
+          try { await page.evaluate(() => window.scrollBy(0, 300 + Math.random() * 400)); } catch { /* non-fatal */ }
         }
       } catch (e: any) {
         step(`EB warmup: profile nav warning: ${e?.message?.slice(0, 60)}`);
@@ -6921,6 +6945,9 @@ export async function runWarmupOnOpenBrowser(opts: {
   reelsMin?: number; reelsMax?: number;
   postsMin?: number; postsMax?: number;
   profilesMin?: number; profilesMax?: number;
+  reelsIdleMin?: number; reelsIdleMax?: number;
+  postsIdleMin?: number; postsIdleMax?: number;
+  profilesIdleMin?: number; profilesIdleMax?: number;
   onStep?: (msg: string) => void;
 }): Promise<void> {
   if (!_signupPage) throw new Error("Ghost Browser is not open");
