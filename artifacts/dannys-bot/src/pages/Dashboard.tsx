@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.674",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser no longer redirects to the homepage when the sign-up wall popup is dismissed — if a redirect happens the browser immediately returns to the reel." },
+      { category: "Fix", text: "Reel watch time is now pure viewing — scrolling during the wait period has been removed so the reel plays uninterrupted for the configured number of seconds." },
+      { category: "UI", text: "Statistics moved directly under Accounts in the left sidebar." },
+      { category: "UI", text: "Accounts icon updated to a single filled person. Statistics icon updated to 3 ascending filled bars." },
+    ],
+  },
+  {
     version: "1.0.673",
     date: "30 May 2026",
     items: [

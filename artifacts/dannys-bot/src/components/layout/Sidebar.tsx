@@ -1,12 +1,31 @@
 import { useLocation, useSearch } from "wouter";
 import {
-  Gauge, Users, Activity,
+  Gauge,
   ChevronLeft, ChevronRight, Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
+
+function FilledPersonIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <circle fill="currentColor" cx="12" cy="7" r="4.5"/>
+      <path fill="currentColor" d="M20.5 21c0-4.694-3.806-8.5-8.5-8.5S3.5 16.306 3.5 21h17z"/>
+    </svg>
+  );
+}
+
+function FilledBarChartIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <rect fill="currentColor" x="2" y="14" width="6" height="8" rx="1.2"/>
+      <rect fill="currentColor" x="9" y="8"  width="6" height="14" rx="1.2"/>
+      <rect fill="currentColor" x="16" y="2" width="6" height="20" rx="1.2"/>
+    </svg>
+  );
+}
 
 function FilledStarIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -70,13 +89,13 @@ export function Sidebar() {
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: Gauge               },
-    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: Users               },
-    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: FilledStarIcon      },
-    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: Activity            },
-    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon     },
-    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: Upload              },
-    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon },
+    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: Gauge                  },
+    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: FilledPersonIcon       },
+    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: FilledBarChartIcon     },
+    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: FilledStarIcon         },
+    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon        },
+    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: Upload                 },
+    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon  },
   ];
 
   function goBack() {

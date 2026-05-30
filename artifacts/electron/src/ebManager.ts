@@ -2742,16 +2742,36 @@ export function startEbIpcServer(
               await sleep(800);
               // Dismiss sign-up wall / "See photos, videos and more" modal
               await dismissOverlay();
+              // If dismissing the overlay triggered a redirect (Instagram sometimes
+              // navigates to the homepage when the modal is closed), go back to the reel.
+              await sleep(600);
+              {
+                const afterDismiss = wc.getURL();
+                if (afterDismiss && !afterDismiss.includes('/reel/') && !afterDismiss.startsWith('about:')) {
+                  console.log(`[warmup] redirect after dismiss (${afterDismiss}), returning to reel`);
+                  await nav(url);
+                  await sleep(800);
+                  await dismissOverlay();
+                }
+              }
 
-              // Poll every 3 s during idle so sign-up wall is dismissed within 1-10 s
+              // Watch the reel for the configured idle time — no scrolling, just viewing.
               const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
               const pollMs = 3000;
               const polls  = Math.max(1, Math.floor(idleMs / pollMs));
-              console.log(`[warmup] reel ${i + 1}: idle ${idleMs}ms (${polls} polls)`);
+              console.log(`[warmup] reel ${i + 1}: watching ${idleMs}ms (${polls} polls)`);
               for (let p = 0; p < polls; p++) {
                 await sleep(pollMs);
+                // Dismiss sign-up wall if it appeared during watch time
                 await dismissOverlay();
-                await scrollFeed();
+                // Check for redirect again and return to reel if needed
+                const midUrl = wc.getURL();
+                if (midUrl && !midUrl.includes('/reel/') && !midUrl.startsWith('about:')) {
+                  console.log(`[warmup] mid-watch redirect (${midUrl}), returning to reel`);
+                  await nav(url);
+                  await sleep(800);
+                  await dismissOverlay();
+                }
               }
               const remainder = idleMs - polls * pollMs;
               if (remainder > 100) await sleep(remainder);
