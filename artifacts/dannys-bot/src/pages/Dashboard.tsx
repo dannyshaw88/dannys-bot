@@ -59,6 +59,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.655",
+    date: "30 May 2026",
+    items: [
+      { category: "Feature", text: "TrustScores: subtitle updated to describe the section purpose clearly." },
+      { category: "Feature", text: "TrustScore badges: each badge now has a pencil edit button — click it to customise pill colour, text colour, border colour, and icon." },
+      { category: "Feature", text: "TrustScore icon picker: choose from 300+ icons organised into 14 categories (Speed, Rank, Animals, People, Tech, Security, Finance, Communication, Media, Sports, Symbols, World, Food, Design) with a live search bar." },
+      { category: "Feature", text: "TrustScore badges now respect their individually saved colours everywhere they appear, including the score picker dropdown." },
+      { category: "Fixed", text: "Accounts hitting consent_required during timeline activity now automatically accept Instagram's T&C via the mobile API and retry — no manual intervention needed." },
+      { category: "Fixed", text: "Embedded browser now auto-dismisses Instagram TOS and age-verification popups every 10 seconds as a belt-and-suspenders fallback." },
+    ],
+  },
+  {
     version: "1.0.654",
     date: "29 May 2026",
     items: [

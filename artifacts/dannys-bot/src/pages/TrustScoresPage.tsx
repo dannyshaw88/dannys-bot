@@ -3,12 +3,35 @@ import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getTrustLevels, TrustLevelEntry, reorderTrustLevels,
-  deleteTrustLevel, addCustomTrustLevel, getAllProfilesWithTrustScore, setTrustScore,
+  deleteTrustLevel, addCustomTrustLevel, getAllProfilesWithTrustScore,
+  setTrustScore, updateTrustLevelStyle, CUSTOM_ICONS,
 } from "@/components/TrustScoreBadge";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { X, Plus, GripVertical } from "lucide-react";
+import { X, Plus, GripVertical, Pencil, RotateCcw } from "lucide-react";
+import { IconPicker } from "@/components/trustscore/IconPicker";
+import { getIconByKey } from "@/components/trustscore/iconRegistry";
+
+function resolveIcon(
+  base: TrustLevelEntry["icon"],
+  iconKey: string
+): TrustLevelEntry["icon"] {
+  if (!iconKey) return base;
+  if (CUSTOM_ICONS[iconKey]) return CUSTOM_ICONS[iconKey];
+  const lucide = getIconByKey(iconKey);
+  if (lucide) return lucide as TrustLevelEntry["icon"];
+  return base;
+}
 
 const PROFILES_QUERY_KEY = "/api/profiles";
+
+interface EditState {
+  level: TrustLevelEntry;
+  bg: string;
+  text: string;
+  border: string;
+  iconKey: string;
+  showIconPicker: boolean;
+}
 
 export function TrustScoresPage() {
   const [, setLocation] = useLocation();
@@ -19,9 +42,12 @@ export function TrustScoresPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [editState, setEditState] = useState<EditState | null>(null);
 
   const dragIdxRef = useRef<number | null>(null);
   const dragOverIdxRef = useRef<number | null>(null);
+
+  const refreshLevels = () => setLevels(getTrustLevels());
 
   const handleDeleteClick = (e: React.MouseEvent, level: TrustLevelEntry) => {
     e.stopPropagation();
@@ -51,7 +77,7 @@ export function TrustScoresPage() {
     }
 
     deleteTrustLevel(id);
-    setLevels(getTrustLevels());
+    refreshLevels();
     setDeleteTarget(null);
     setDeleting(false);
   };
@@ -60,7 +86,7 @@ export function TrustScoresPage() {
     const trimmed = newLabel.trim();
     if (!trimmed) return;
     addCustomTrustLevel(trimmed);
-    setLevels(getTrustLevels());
+    refreshLevels();
     setNewLabel("");
     setShowAdd(false);
   };
@@ -90,6 +116,44 @@ export function TrustScoresPage() {
     dragOverIdxRef.current = null;
   };
 
+  // ── Edit handlers ────────────────────────────────────────────────────────────
+
+  const openEdit = (e: React.MouseEvent, level: TrustLevelEntry) => {
+    e.stopPropagation();
+    setEditState({
+      level,
+      bg: level.bg,
+      text: level.text,
+      border: level.border,
+      iconKey: level.iconKey ?? "",
+      showIconPicker: false,
+    });
+  };
+
+  const saveEdit = () => {
+    if (!editState) return;
+    updateTrustLevelStyle(editState.level.id, {
+      bg: editState.bg,
+      text: editState.text,
+      border: editState.border,
+      iconKey: editState.iconKey || undefined,
+    });
+    refreshLevels();
+    setEditState(null);
+  };
+
+  const resetEdit = () => {
+    if (!editState) return;
+    updateTrustLevelStyle(editState.level.id, {
+      bg: undefined,
+      text: undefined,
+      border: undefined,
+      iconKey: undefined,
+    });
+    refreshLevels();
+    setEditState(null);
+  };
+
   const rows: TrustLevelEntry[][] = [];
   for (let i = 0; i < levels.length; i += 5) {
     rows.push(levels.slice(i, i + 5));
@@ -101,7 +165,7 @@ export function TrustScoresPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">TrustScores</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure API limits and tool defaults for each trust score tier. Drag to reorder.
+            A section to assign and configure trustscores to accounts
           </p>
         </div>
 
@@ -128,22 +192,33 @@ export function TrustScoresPage() {
                     <button
                       onClick={() => setLocation(`/trust-scores/${level.id}`)}
                       className="flex items-center gap-1.5 rounded-full px-3 py-1 shrink-0 hover:opacity-80 transition-opacity"
-                      style={{ background: "#1AD2F2" }}
+                      style={{ background: level.bg, border: `1px solid ${level.border}` }}
                       onMouseDown={e => e.stopPropagation()}
                     >
-                      <Icon size={12} color="#ffffff" fill="#ffffff" strokeWidth={2} />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#ffffff", letterSpacing: "0.05em" }}>
+                      <Icon size={12} color={level.text} fill={level.text} strokeWidth={2} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: level.text, letterSpacing: "0.05em" }}>
                         {level.label}
                       </span>
                     </button>
-                    <button
-                      onClick={e => handleDeleteClick(e, level)}
-                      onMouseDown={e => e.stopPropagation()}
-                      className="ml-auto p-0.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors opacity-0 group-hover:opacity-100"
-                      title="Delete this trust score"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+
+                    <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={e => openEdit(e, level)}
+                        onMouseDown={e => e.stopPropagation()}
+                        className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                        title="Edit badge style"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={e => handleDeleteClick(e, level)}
+                        onMouseDown={e => e.stopPropagation()}
+                        className="p-0.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                        title="Delete this trust score"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -174,6 +249,144 @@ export function TrustScoresPage() {
           )}
         </div>
 
+        {/* ── Edit style dialog ─────────────────────────────────────── */}
+        {editState && !editState.showIconPicker && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-background rounded-xl border border-border shadow-2xl p-6 w-96 mx-4">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-base font-bold">Edit Badge Style</h2>
+                <button
+                  onClick={() => setEditState(null)}
+                  className="p-1 rounded hover:bg-accent transition-colors"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+
+              {/* Live preview */}
+              <div className="flex items-center justify-center mb-5 py-3 rounded-lg bg-accent/40">
+                {(() => {
+                  const PreviewIcon = resolveIcon(editState.level.icon, editState.iconKey);
+                  return (
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1"
+                      style={{ background: editState.bg, border: `1px solid ${editState.border}` }}
+                    >
+                      <PreviewIcon size={13} color={editState.text} fill={editState.text} strokeWidth={2} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: editState.text, letterSpacing: "0.05em" }}>
+                        {editState.level.label}
+                      </span>
+                    </span>
+                  );
+                })()}
+              </div>
+
+              {/* Color pickers */}
+              <div className="space-y-3 mb-5">
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium w-28 shrink-0">Pill Colour</label>
+                  <input
+                    type="color"
+                    value={editState.bg}
+                    onChange={e => setEditState(s => s ? { ...s, bg: e.target.value } : s)}
+                    className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background"
+                  />
+                  <input
+                    type="text"
+                    value={editState.bg}
+                    onChange={e => setEditState(s => s ? { ...s, bg: e.target.value } : s)}
+                    className="flex-1 px-2 py-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                    maxLength={7}
+                    placeholder="#1AD2F2"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium w-28 shrink-0">Text Colour</label>
+                  <input
+                    type="color"
+                    value={editState.text}
+                    onChange={e => setEditState(s => s ? { ...s, text: e.target.value } : s)}
+                    className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background"
+                  />
+                  <input
+                    type="text"
+                    value={editState.text}
+                    onChange={e => setEditState(s => s ? { ...s, text: e.target.value } : s)}
+                    className="flex-1 px-2 py-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                    maxLength={7}
+                    placeholder="#ffffff"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium w-28 shrink-0">Border Colour</label>
+                  <input
+                    type="color"
+                    value={editState.border}
+                    onChange={e => setEditState(s => s ? { ...s, border: e.target.value } : s)}
+                    className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background"
+                  />
+                  <input
+                    type="text"
+                    value={editState.border}
+                    onChange={e => setEditState(s => s ? { ...s, border: e.target.value } : s)}
+                    className="flex-1 px-2 py-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                    maxLength={7}
+                    placeholder="#0eb8d4"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium w-28 shrink-0">Icon</label>
+                  <button
+                    onClick={() => setEditState(s => s ? { ...s, showIconPicker: true } : s)}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors"
+                  >
+                    <editState.level.icon size={14} />
+                    <span className="text-sm">{editState.iconKey || "Default"}</span>
+                    <span className="text-xs text-muted-foreground ml-1">Change…</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-between">
+                <button
+                  onClick={resetEdit}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors text-muted-foreground"
+                  title="Reset to default colours and icon"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditState(null)}
+                    className="px-4 py-1.5 text-sm rounded-lg border border-border hover:bg-accent transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdit}
+                    className="px-4 py-1.5 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-semibold"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Icon picker (shown on top of edit dialog) ──────────────── */}
+        {editState?.showIconPicker && (
+          <IconPicker
+            value={editState.iconKey || null}
+            onChange={key => setEditState(s => s ? { ...s, iconKey: key, showIconPicker: false } : s)}
+            onClose={() => setEditState(s => s ? { ...s, showIconPicker: false } : s)}
+          />
+        )}
+
         {/* ── Delete warning dialog ─────────────────────────────────── */}
         {deleteTarget && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -183,9 +396,9 @@ export function TrustScoresPage() {
                 This will stop all accounts assigned to{" "}
                 <span
                   className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
-                  style={{ background: "#1AD2F2", color: "#fff" }}
+                  style={{ background: deleteTarget.bg, color: deleteTarget.text, border: `1px solid ${deleteTarget.border}` }}
                 >
-                  {(() => { const Icon = deleteTarget.icon; return <Icon size={10} color="#fff" fill="#fff" strokeWidth={2} />; })()}
+                  {(() => { const Icon = deleteTarget.icon; return <Icon size={10} color={deleteTarget.text} fill={deleteTarget.text} strokeWidth={2} />; })()}
                   {deleteTarget.label}
                 </span>
                 .

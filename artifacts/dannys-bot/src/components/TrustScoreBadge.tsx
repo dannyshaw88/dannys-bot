@@ -4,6 +4,7 @@ import {
   Scan, Activity, TrendingUp, Ghost, Diamond, Rocket, Crown, Zap,
   Gem, Swords, Sparkles
 } from "lucide-react";
+import { getIconByKey } from "./trustscore/iconRegistry";
 
 function ConfusedFaceIcon({ size = 12, color = "currentColor", ..._ }: { size?: number; color?: string; [k: string]: any }) {
   return (
@@ -44,39 +45,46 @@ function SlugIcon({ size = 12, color = "currentColor", ..._ }: { size?: number; 
   );
 }
 
-const GREEN_BG     = "#1AD2F2";
-const GREEN_TEXT   = "#ffffff";
-const GREEN_BORDER = "#0eb8d4";
+export const CUSTOM_ICONS: Record<string, React.ComponentType<{ size?: number; color?: string; fill?: string; strokeWidth?: number; [k: string]: any }>> = {
+  ConfusedFace: ConfusedFaceIcon,
+  StretchingMan: StretchingManIcon,
+  Slug: SlugIcon,
+};
+
+const DEFAULT_BG     = "#1AD2F2";
+const DEFAULT_TEXT   = "#ffffff";
+const DEFAULT_BORDER = "#0eb8d4";
 
 export interface TrustLevelEntry {
   id: string;
   label: string;
   icon: React.ComponentType<{ size?: number; color?: string; fill?: string; strokeWidth?: number; [k: string]: any }>;
+  iconKey?: string;
   bg: string;
   text: string;
   border: string;
 }
 
 const BASE_TRUST_LEVELS: TrustLevelEntry[] = [
-  { id: "noob",        label: "NOOB",        icon: ConfusedFaceIcon,  bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "warmup",      label: "WARMUP",       icon: StretchingManIcon, bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "snail",       label: "SNAIL",        icon: Snail,             bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "slug",        label: "SLUG",         icon: SlugIcon,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "slow",        label: "SLOW",         icon: Hourglass,         bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "sloth",       label: "SLOTH",        icon: Coffee,            bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "tortoise",    label: "TORTOISE",     icon: Anchor,            bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "turtle",      label: "TURTLE",       icon: Turtle,            bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "reptile",     label: "REPTILE",      icon: Scan,              bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "moderate",    label: "MODERATE",     icon: Activity,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "high",        label: "HIGH",         icon: TrendingUp,        bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "monster",     label: "MONSTER",      icon: Ghost,             bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "class",       label: "CLASS",        icon: Diamond,           bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "super",       label: "SUPER",        icon: Rocket,            bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "outstanding", label: "OUTSTANDING",  icon: Crown,             bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "ridiculous",  label: "RIDICULOUS",   icon: Zap,               bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "impossible",  label: "IMPOSSIBLE",   icon: Gem,               bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "overpowered", label: "OVERPOWERED",  icon: Swords,            bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
-  { id: "god_level",   label: "GOD LEVEL",    icon: Sparkles,          bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER },
+  { id: "noob",        label: "NOOB",        icon: ConfusedFaceIcon,  iconKey: "ConfusedFace",  bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "warmup",      label: "WARMUP",       icon: StretchingManIcon, iconKey: "StretchingMan", bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "snail",       label: "SNAIL",        icon: Snail,             iconKey: "Snail",         bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "slug",        label: "SLUG",         icon: SlugIcon,          iconKey: "Slug",          bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "slow",        label: "SLOW",         icon: Hourglass,         iconKey: "Hourglass",     bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "sloth",       label: "SLOTH",        icon: Coffee,            iconKey: "Coffee",        bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "tortoise",    label: "TORTOISE",     icon: Anchor,            iconKey: "Anchor",        bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "turtle",      label: "TURTLE",       icon: Turtle,            iconKey: "Turtle",        bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "reptile",     label: "REPTILE",      icon: Scan,              iconKey: "Scan",          bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "moderate",    label: "MODERATE",     icon: Activity,          iconKey: "Activity",      bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "high",        label: "HIGH",         icon: TrendingUp,        iconKey: "TrendingUp",    bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "monster",     label: "MONSTER",      icon: Ghost,             iconKey: "Ghost",         bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "class",       label: "CLASS",        icon: Diamond,           iconKey: "Diamond",       bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "super",       label: "SUPER",        icon: Rocket,            iconKey: "Rocket",        bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "outstanding", label: "OUTSTANDING",  icon: Crown,             iconKey: "Crown",         bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "ridiculous",  label: "RIDICULOUS",   icon: Zap,               iconKey: "Zap",           bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "impossible",  label: "IMPOSSIBLE",   icon: Gem,               iconKey: "Gem",           bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "overpowered", label: "OVERPOWERED",  icon: Swords,            iconKey: "Swords",        bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
+  { id: "god_level",   label: "GOD LEVEL",    icon: Sparkles,          iconKey: "Sparkles",      bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER },
 ];
 
 export const TRUST_LEVELS: readonly TrustLevelEntry[] = BASE_TRUST_LEVELS;
@@ -87,22 +95,47 @@ export type TrustLevelId = string;
 
 const TRUSTLEVELS_LS_KEY = "trustlevels_v1";
 
+interface StyleOverride {
+  bg?: string;
+  text?: string;
+  border?: string;
+  iconKey?: string;
+}
+
 interface TrustLevelsStorage {
   order: string[];
   deleted: string[];
   custom: Array<{ id: string; label: string }>;
+  overrides: Record<string, StyleOverride>;
 }
 
 function getTrustLevelsStorage(): TrustLevelsStorage {
   try {
     const raw = localStorage.getItem(TRUSTLEVELS_LS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (!parsed.overrides) parsed.overrides = {};
+      return parsed;
+    }
   } catch {}
-  return { order: BASE_TRUST_LEVELS.map(l => l.id), deleted: [], custom: [] };
+  return { order: BASE_TRUST_LEVELS.map(l => l.id), deleted: [], custom: [], overrides: {} };
 }
 
 function saveTrustLevelsStorage(s: TrustLevelsStorage) {
   localStorage.setItem(TRUSTLEVELS_LS_KEY, JSON.stringify(s));
+}
+
+function resolveIcon(
+  base: TrustLevelEntry,
+  iconKey: string | undefined
+): TrustLevelEntry["icon"] {
+  if (!iconKey) return base.icon;
+  // Custom SVG icons
+  if (CUSTOM_ICONS[iconKey]) return CUSTOM_ICONS[iconKey];
+  // Lucide icons from registry
+  const lucide = getIconByKey(iconKey);
+  if (lucide) return lucide as TrustLevelEntry["icon"];
+  return base.icon;
 }
 
 export function getTrustLevels(): TrustLevelEntry[] {
@@ -111,10 +144,26 @@ export function getTrustLevels(): TrustLevelEntry[] {
   for (const l of BASE_TRUST_LEVELS) byId.set(l.id, l);
   for (const c of s.custom) {
     if (!byId.has(c.id)) {
-      byId.set(c.id, { id: c.id, label: c.label, icon: Sparkles, bg: GREEN_BG, text: GREEN_TEXT, border: GREEN_BORDER });
+      byId.set(c.id, { id: c.id, label: c.label, icon: Sparkles, bg: DEFAULT_BG, text: DEFAULT_TEXT, border: DEFAULT_BORDER });
     }
   }
-  return s.order.filter(id => !s.deleted.includes(id) && byId.has(id)).map(id => byId.get(id)!);
+  const overrides = s.overrides ?? {};
+  return s.order
+    .filter(id => !s.deleted.includes(id) && byId.has(id))
+    .map(id => {
+      const base = byId.get(id)!;
+      const ov = overrides[id] ?? {};
+      const resolvedIconKey = ov.iconKey ?? base.iconKey;
+      const icon = resolveIcon(base, resolvedIconKey);
+      return {
+        ...base,
+        bg:      ov.bg     ?? base.bg,
+        text:    ov.text   ?? base.text,
+        border:  ov.border ?? base.border,
+        iconKey: resolvedIconKey,
+        icon,
+      };
+    });
 }
 
 export function reorderTrustLevels(newOrder: string[]) {
@@ -138,6 +187,13 @@ export function addCustomTrustLevel(label: string): string {
   s.order.push(id);
   saveTrustLevelsStorage(s);
   return id;
+}
+
+export function updateTrustLevelStyle(id: string, updates: StyleOverride) {
+  const s = getTrustLevelsStorage();
+  if (!s.overrides) s.overrides = {};
+  s.overrides[id] = { ...(s.overrides[id] ?? {}), ...updates };
+  saveTrustLevelsStorage(s);
 }
 
 export function getAllProfilesWithTrustScore(tsId: string): number[] {
@@ -215,8 +271,8 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
         className="flex h-5 items-center gap-1 rounded-full px-2 transition-opacity hover:opacity-75"
         style={{
-          background: current ? GREEN_BG : "transparent",
-          border: current ? "none" : "1px dashed #94a3b8",
+          background: current ? current.bg : "transparent",
+          border: current ? `1px solid ${current.border}` : "1px dashed #94a3b8",
           cursor: "pointer",
           flexShrink: 0,
           minWidth: 60,
@@ -225,8 +281,8 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
       >
         {current ? (
           <>
-            <current.icon size={10} color={GREEN_TEXT} fill={GREEN_TEXT} strokeWidth={2} />
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: GREEN_TEXT, whiteSpace: "nowrap" }}>
+            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} />
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap" }}>
               {current.label}
             </span>
           </>
@@ -261,8 +317,6 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
           {levels.map(lvl => {
             const Icon = lvl.icon;
             const isActive = score === lvl.id;
-            const itemIconColor = isActive ? GREEN_TEXT : "#111827";
-            const itemTextColor = isActive ? GREEN_TEXT : "#111827";
             return (
               <button
                 key={lvl.id}
@@ -273,16 +327,16 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
                   alignItems: "center",
                   gap: 8,
                   padding: "5px 12px",
-                  background: isActive ? GREEN_BG : "transparent",
+                  background: isActive ? lvl.bg : "transparent",
                   border: "none",
-                  borderLeft: isActive ? `3px solid ${GREEN_BORDER}` : "3px solid transparent",
+                  borderLeft: isActive ? `3px solid ${lvl.border}` : "3px solid transparent",
                   cursor: "pointer",
                   textAlign: "left",
                   outline: "none",
                 }}
               >
-                <Icon size={12} color={itemIconColor} fill={isActive ? GREEN_TEXT : "none"} strokeWidth={2} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: itemTextColor, letterSpacing: "0.05em" }}>{lvl.label}</span>
+                <Icon size={12} color={isActive ? lvl.text : "#111827"} fill={isActive ? lvl.text : "none"} strokeWidth={2} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? lvl.text : "#111827", letterSpacing: "0.05em" }}>{lvl.label}</span>
               </button>
             );
           })}

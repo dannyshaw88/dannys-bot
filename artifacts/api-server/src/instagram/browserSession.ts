@@ -4779,6 +4779,34 @@ async function dismissInstagramPopups(page: Page): Promise<void> {
           if (btn) { btn.click(); return; }
         }
 
+        // Instagram TOS / Privacy Policy consent flow (web equivalent of consent_required).
+        // Step 1: Instagram shows a dialog with "Review Now" — click it.
+        // Step 2: On the next tick (10 s later) the review page is visible — click "I Agree".
+        // Both steps run inside the same polling loop so the full flow completes automatically.
+        if (body.includes("terms") || body.includes("privacy policy") || body.includes("privacy and cookies")) {
+          // Confirmation step — "I Agree" / "I Accept" (shown after clicking Review Now)
+          const confirmBtn = btns.find(b => {
+            const t = (b.innerText || b.textContent || "").trim().toLowerCase();
+            return t === "i agree" || t === "i accept" || t === "agree and continue" || t === "accept and continue";
+          });
+          if (confirmBtn) { confirmBtn.click(); return; }
+          // Initial prompt step — "Review Now" CTA
+          const reviewBtn = btns.find(b => {
+            const t = (b.innerText || b.textContent || "").trim().toLowerCase();
+            return t === "review now" || t === "review" || t === "review and accept";
+          });
+          if (reviewBtn) { reviewBtn.click(); return; }
+        }
+
+        // Age / date-of-birth verification prompt → click the primary CTA
+        if (body.includes("date of birth") || body.includes("birthday") || body.includes("how old are you") || body.includes("age verification")) {
+          const ageBtn = btns.find(b => {
+            const t = (b.innerText || b.textContent || "").trim().toLowerCase();
+            return t === "continue" || t === "confirm" || t === "submit" || t === "next" || t === "done";
+          });
+          if (ageBtn) { ageBtn.click(); return; }
+        }
+
         // "The messaging tab has a new look" → click "OK"
         if (body.includes("messaging tab") || body.includes("new look")) {
           const btn = btns.find(b => (b.innerText || b.textContent || "").trim().toLowerCase() === "ok");

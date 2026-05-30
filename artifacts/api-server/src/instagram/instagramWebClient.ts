@@ -1412,6 +1412,53 @@ export class InstagramWebClient {
     }
   }
 
+  // ── Programmatic consent acceptance ──────────────────────────────────────
+  // When Instagram's mobile API returns consent_required, it means the account
+  // must accept the updated Terms of Service / Privacy Policy before any API
+  // call will succeed. This is a server-side block — completely independent of
+  // what is visible in the EB. instagram-private-api's ConsentRepository exposes
+  // POST /api/v1/consent/existing_user_flow/ which accepts TOS + age consent
+  // programmatically so no EB click is required.
+  private async _tryAcceptConsent(): Promise<boolean> {
+    if (!this.igApiCookies) return false;
+    try {
+      const ig = newIgClient();
+      const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+      if (this.igDeviceState) {
+        try {
+          const saved = JSON.parse(this.igDeviceState) as { deviceId?: string; uuid?: string; phoneId?: string; adid?: string; deviceString?: string; authorization?: string; igWWWClaim?: string };
+          ig.state.generateDevice(deviceSeed);
+          if (saved.deviceId)      ig.state.deviceId      = saved.deviceId;
+          if (saved.uuid)          ig.state.uuid          = saved.uuid;
+          if (saved.phoneId)       ig.state.phoneId       = saved.phoneId;
+          if (saved.adid)          ig.state.adid          = saved.adid;
+          if (saved.deviceString)  ig.state.deviceString  = saved.deviceString;
+          if (saved.authorization) ig.state.authorization = saved.authorization;
+          if (saved.igWWWClaim)    ig.state.igWWWClaim    = saved.igWWWClaim;
+        } catch { ig.state.generateDevice(deviceSeed); }
+      } else {
+        ig.state.generateDevice(deviceSeed);
+      }
+      await this._deserializeIgCookies(ig, this.igApiCookies);
+      ig.state.constants.APP_VERSION      = MOBILE_VERSION;
+      ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+      patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+      if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+      patchIgClientTls(ig, this.proxyUrl);
+
+      // Accept TOS + age consent — sets tos_data_policy_consent_state=2 and
+      // age_consent_state=2 on the account server-side, clearing consent_required.
+      await ig.consent.existingUserFlowTosAndTwoAgeButton();
+      console.log(`[webClient] @${this.username}: ✅ consent accepted via mobile API (TOS+age)`);
+      return true;
+    } catch (e: any) {
+      const raw: string = e?.message ?? String(e);
+      const msg = raw.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || raw;
+      console.warn(`[webClient] @${this.username}: consent auto-accept failed: ${msg}`);
+      return false;
+    }
+  }
+
   // ── Shared IgApiClient helpers ────────────────────────────────────────────
 
   // Deserialize a cookie string into an IgApiClient's tough-cookie jar.
@@ -1919,7 +1966,7 @@ export class InstagramWebClient {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string }> }> {
+  async viewTimelineFeed(count: number = 5, reelWatchPercentMin: number = 0, reelWatchPercentMax: number = 0, _consentRetry = false): Promise<{ viewed: number; sessionExpired?: boolean; reason?: string; items?: Array<{ mediaId: string; userId: string; username: string; shortcode: string }> }> {
     // Fetch timeline using the igApiCookies mobile session — the EB web cookies
     // do not have a valid i.instagram.com mobile session so the endpoint returns 0 items.
     const j = await this.mobileSessionPost(
@@ -1945,6 +1992,17 @@ export class InstagramWebClient {
       console.warn(`[webClient] viewTimelineFeed: timeline fetch failed — status="${j?.status}" message="${failMsg}"`);
       if (/challenge_required|checkpoint_required|checkpoint required|login_required|not authorized|session expired|logged.?out|suspended|disabled/i.test(failMsg)) {
         throw new Error(failMsg);
+      }
+      // consent_required: Instagram is blocking all API calls until the account
+      // accepts the updated T&C / Privacy Policy. Accept it programmatically via
+      // the mobile API and retry this call once — no EB interaction needed.
+      if (failMsg === "consent_required" && !_consentRetry) {
+        console.log(`[webClient] viewTimelineFeed: consent_required — attempting programmatic consent acceptance`);
+        const accepted = await this._tryAcceptConsent();
+        if (accepted) {
+          console.log(`[webClient] viewTimelineFeed: retrying after consent acceptance`);
+          return this.viewTimelineFeed(count, reelWatchPercentMin, reelWatchPercentMax, true);
+        }
       }
       return { viewed: 0 };
     }
