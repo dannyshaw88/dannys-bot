@@ -62,6 +62,8 @@ const _warmupDefaults = {
   reelsIdleMin: 5, reelsIdleMax: 12,
   postsIdleMin: 5, postsIdleMax: 12,
   profilesIdleMin: 5, profilesIdleMax: 12,
+  postClicksPerProfileMin: 0, postClicksPerProfileMax: 2,
+  postBrowseTimeMin: 8, postBrowseTimeMax: 20,
 };
 
 const FP_SPEECH_PROFILES = [
@@ -760,6 +762,16 @@ export function CreateGhostPage() {
                   idleMin={warmupConfig.profilesIdleMin} idleMax={warmupConfig.profilesIdleMax}
                   onIdleMin={v => setWarmupConfig(c => ({ ...c, profilesIdleMin: Math.min(v, c.profilesIdleMax) }))}
                   onIdleMax={v => setWarmupConfig(c => ({ ...c, profilesIdleMax: Math.max(v, c.profilesIdleMin) }))}
+                />
+                {/* Sub-setting: posts to click per profile, with per-post browse time */}
+                <WarmupRow
+                  label="   ↳ Posts per profile"
+                  min={warmupConfig.postClicksPerProfileMin} max={warmupConfig.postClicksPerProfileMax}
+                  onMin={v => setWarmupConfig(c => ({ ...c, postClicksPerProfileMin: Math.min(v, c.postClicksPerProfileMax) }))}
+                  onMax={v => setWarmupConfig(c => ({ ...c, postClicksPerProfileMax: Math.max(v, c.postClicksPerProfileMin) }))}
+                  idleMin={warmupConfig.postBrowseTimeMin} idleMax={warmupConfig.postBrowseTimeMax}
+                  onIdleMin={v => setWarmupConfig(c => ({ ...c, postBrowseTimeMin: Math.min(v, c.postBrowseTimeMax) }))}
+                  onIdleMax={v => setWarmupConfig(c => ({ ...c, postBrowseTimeMax: Math.max(v, c.postBrowseTimeMin) }))}
                 />
               </div>
             )}

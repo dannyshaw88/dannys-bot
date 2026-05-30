@@ -2363,6 +2363,7 @@ export async function registerInstagramRoutes(
     const {
       reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax,
       reelsIdleMin, reelsIdleMax, postsIdleMin, postsIdleMax, profilesIdleMin, profilesIdleMax,
+      postClicksPerProfileMin, postClicksPerProfileMax, postBrowseTimeMin, postBrowseTimeMax,
     } = req.body as {
       reelsMin?: number; reelsMax?: number;
       postsMin?: number; postsMax?: number;
@@ -2370,6 +2371,8 @@ export async function registerInstagramRoutes(
       reelsIdleMin?: number; reelsIdleMax?: number;
       postsIdleMin?: number; postsIdleMax?: number;
       profilesIdleMin?: number; profilesIdleMax?: number;
+      postClicksPerProfileMin?: number; postClicksPerProfileMax?: number;
+      postBrowseTimeMin?: number; postBrowseTimeMax?: number;
     };
     res.json({ ok: true });
     (async () => {
@@ -2377,6 +2380,7 @@ export async function registerInstagramRoutes(
         await runWarmupOnOpenBrowser({
           reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax,
           reelsIdleMin, reelsIdleMax, postsIdleMin, postsIdleMax, profilesIdleMin, profilesIdleMax,
+          postClicksPerProfileMin, postClicksPerProfileMax, postBrowseTimeMin, postBrowseTimeMax,
           onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg }),
         });
         sendSignupWsMsg({ type: "warmupDone" });

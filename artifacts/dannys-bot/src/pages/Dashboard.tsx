@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.670",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Warm-up overlay prompts (the 'Sign up to see more' dialog) are now actually clicked closed — previously the button was found but the click was not registered because Instagram uses React events. The close button is now clicked via the same trusted CDP mechanism used for cookie banners, so it always dismisses." },
+      { category: "Fix", text: "Reels warm-up no longer shows 'this link may be broken' — /reels/ and /reels/trending/ require login. The warm-up now browses the reels tab of public accounts (NatGeo, NASA, CNN etc.) which load correctly without an account." },
+      { category: "Fix", text: "Profile visits no longer repeat the same profile repeatedly — profiles are now shuffled before the warm-up starts so every profile in the list gets visited in a random order." },
+      { category: "Feature", text: "Visit Profiles warm-up now has a sub-setting: Posts per profile (count range) and Browse time per post (seconds range). For each profile visited, the warm-up clicks into individual posts, spends the configured time reading them, then returns to the profile page." },
+    ],
+  },
+  {
     version: "1.0.669",
     date: "30 May 2026",
     items: [

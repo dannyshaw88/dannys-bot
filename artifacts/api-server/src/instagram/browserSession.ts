@@ -6948,6 +6948,8 @@ export async function runWarmupOnOpenBrowser(opts: {
   reelsIdleMin?: number; reelsIdleMax?: number;
   postsIdleMin?: number; postsIdleMax?: number;
   profilesIdleMin?: number; profilesIdleMax?: number;
+  postClicksPerProfileMin?: number; postClicksPerProfileMax?: number;
+  postBrowseTimeMin?: number; postBrowseTimeMax?: number;
   onStep?: (msg: string) => void;
 }): Promise<void> {
   if (!_signupPage) throw new Error("Ghost Browser is not open");
