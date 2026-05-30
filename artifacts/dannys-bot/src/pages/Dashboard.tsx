@@ -59,6 +59,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.666",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Pre-Signup Warm-up progress now shows in real time on Windows — the Ghost Browser was running the warm-up in the background but the step messages were never reaching the screen because the browser runs as its own window." },
+    ],
+  },
+  {
     version: "1.0.665",
     date: "30 May 2026",
     items: [

@@ -431,6 +431,32 @@ export function CreateGhostPage() {
     try { localStorage.setItem("ghost-warmup-config", JSON.stringify(warmupConfig)); } catch { /* ignore */ }
   }, [warmupConfig]);
 
+  // In native Electron mode the BrowserPanel is not rendered (Ghost Browser
+  // runs as its own OS window), so its WebSocket to /api/signup/browser/stream
+  // never opens and warmup signupStep / warmupDone messages are silently
+  // dropped.  Open our own WS here purely to receive those messages.
+  useEffect(() => {
+    if (!isNative) return;
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${proto}//${window.location.host}/api/signup/browser/stream`;
+    let ws: WebSocket | null = null;
+    let dead = false;
+
+    const connect = () => {
+      if (dead) return;
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (e) => {
+        try { handleBrowserMessage(JSON.parse(e.data)); } catch {}
+      };
+      ws.onclose = () => {
+        if (!dead) setTimeout(connect, 3000);
+      };
+      ws.onerror = () => { ws?.close(); };
+    };
+    connect();
+    return () => { dead = true; ws?.close(); };
+  }, [isNative, handleBrowserMessage]);
+
   const resolvedProxy = (() => {
     if (proxySelection.kind === "saved") {
       const p = proxies.find(x => x.id === proxySelection.id);
