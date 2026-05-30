@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.671",
+    date: "30 May 2026",
+    items: [
+      { category: "Feature", text: "Ghost Browser warm-up now uses HikerAPI to fetch trending reels before the browser opens — the embedded browser lands directly on a real trending reel instead of the Instagram homepage." },
+      { category: "Change", text: "Removed Visit Profiles and Click & View Posts settings from the Ghost Browser warm-up. View Trending Reels is now the only warm-up action." },
+      { category: "Fix", text: "The 'See photos, videos and more' sign-up wall popup that appears on Instagram reels is now automatically dismissed within 1–10 seconds by clicking its X close button." },
+    ],
+  },
+  {
     version: "1.0.670",
     date: "30 May 2026",
     items: [

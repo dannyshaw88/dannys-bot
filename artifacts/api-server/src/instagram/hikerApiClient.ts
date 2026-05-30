@@ -244,6 +244,46 @@ export class HikerApiClient {
     return accumulated.slice(0, max);
   }
 
+  // Fetches shortcodes for trending Instagram Reels (media_type=2 / clips) from
+  // popular high-volume accounts.  Falls back to getPublicShortcodes if no reel-
+  // specific media is found.  Returns up to `n` shortcodes.
+  async getTrendingReelShortcodes(n = 3): Promise<string[]> {
+    const REEL_ACCOUNTS = ["instagram", "natgeo", "creators", "reels", "nasa", "discovery"];
+    const shortcodes: string[] = [];
+
+    for (const username of REEL_ACCOUNTS) {
+      if (shortcodes.length >= n) break;
+      try {
+        const user = await this.getUserByUsername(username);
+        if (!user) continue;
+        const j = await hikerGet(
+          `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=12`,
+          this.token,
+        );
+        const items: any[] = Array.isArray(j) ? j
+          : Array.isArray(j?.response) ? j.response
+          : Array.isArray(j?.items)    ? j.items
+          : [];
+        for (const item of items) {
+          if (shortcodes.length >= n) break;
+          const mediaType: number = item?.media_type ?? 0;
+          const productType: string = item?.product_type ?? "";
+          const isReel = mediaType === 2 || productType === "clips";
+          if (!isReel) continue;
+          const mediaId = String(item.id ?? item.pk ?? "");
+          if (!mediaId) continue;
+          const sc = item.code || this.mediaIdToShortcode(mediaId);
+          if (sc && sc !== "0") shortcodes.push(sc);
+        }
+      } catch { /* non-fatal — best-effort */ }
+    }
+
+    if (shortcodes.length === 0) {
+      return this.getPublicShortcodes(n);
+    }
+    return shortcodes.slice(0, n);
+  }
+
   // Fetches shortcodes from well-known public Instagram accounts for use as
   // warmup browsing URLs before a signup attempt.  Returns up to `n` shortcodes.
   // Falls back gracefully: skips accounts that don't respond, returns whatever

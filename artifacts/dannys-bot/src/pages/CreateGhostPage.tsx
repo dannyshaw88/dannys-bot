@@ -57,13 +57,7 @@ const FP_GPUS = [
 
 const _warmupDefaults = {
   reelsMin: 1, reelsMax: 3,
-  postsMin: 0, postsMax: 2,
-  profilesMin: 1, profilesMax: 2,
   reelsIdleMin: 5, reelsIdleMax: 12,
-  postsIdleMin: 5, postsIdleMax: 12,
-  profilesIdleMin: 5, profilesIdleMax: 12,
-  postClicksPerProfileMin: 0, postClicksPerProfileMax: 2,
-  postBrowseTimeMin: 8, postBrowseTimeMax: 20,
 };
 
 const FP_SPEECH_PROFILES = [
@@ -737,41 +731,13 @@ export function CreateGhostPage() {
                 </div>
 
                 <WarmupRow
-                  label="▶ View reels"
+                  label="▶ View trending reels"
                   min={warmupConfig.reelsMin} max={warmupConfig.reelsMax}
                   onMin={v => setWarmupConfig(c => ({ ...c, reelsMin: Math.min(v, c.reelsMax) }))}
                   onMax={v => setWarmupConfig(c => ({ ...c, reelsMax: Math.max(v, c.reelsMin) }))}
                   idleMin={warmupConfig.reelsIdleMin} idleMax={warmupConfig.reelsIdleMax}
                   onIdleMin={v => setWarmupConfig(c => ({ ...c, reelsIdleMin: Math.min(v, c.reelsIdleMax) }))}
                   onIdleMax={v => setWarmupConfig(c => ({ ...c, reelsIdleMax: Math.max(v, c.reelsIdleMin) }))}
-                />
-                <WarmupRow
-                  label="⊞ Click &amp; view posts"
-                  min={warmupConfig.postsMin} max={warmupConfig.postsMax}
-                  onMin={v => setWarmupConfig(c => ({ ...c, postsMin: Math.min(v, c.postsMax) }))}
-                  onMax={v => setWarmupConfig(c => ({ ...c, postsMax: Math.max(v, c.postsMin) }))}
-                  idleMin={warmupConfig.postsIdleMin} idleMax={warmupConfig.postsIdleMax}
-                  onIdleMin={v => setWarmupConfig(c => ({ ...c, postsIdleMin: Math.min(v, c.postsIdleMax) }))}
-                  onIdleMax={v => setWarmupConfig(c => ({ ...c, postsIdleMax: Math.max(v, c.postsIdleMin) }))}
-                />
-                <WarmupRow
-                  label="👤 Visit profiles"
-                  min={warmupConfig.profilesMin} max={warmupConfig.profilesMax}
-                  onMin={v => setWarmupConfig(c => ({ ...c, profilesMin: Math.min(v, c.profilesMax) }))}
-                  onMax={v => setWarmupConfig(c => ({ ...c, profilesMax: Math.max(v, c.profilesMin) }))}
-                  idleMin={warmupConfig.profilesIdleMin} idleMax={warmupConfig.profilesIdleMax}
-                  onIdleMin={v => setWarmupConfig(c => ({ ...c, profilesIdleMin: Math.min(v, c.profilesIdleMax) }))}
-                  onIdleMax={v => setWarmupConfig(c => ({ ...c, profilesIdleMax: Math.max(v, c.profilesIdleMin) }))}
-                />
-                {/* Sub-setting: posts to click per profile, with per-post browse time */}
-                <WarmupRow
-                  label="   ↳ Posts per profile"
-                  min={warmupConfig.postClicksPerProfileMin} max={warmupConfig.postClicksPerProfileMax}
-                  onMin={v => setWarmupConfig(c => ({ ...c, postClicksPerProfileMin: Math.min(v, c.postClicksPerProfileMax) }))}
-                  onMax={v => setWarmupConfig(c => ({ ...c, postClicksPerProfileMax: Math.max(v, c.postClicksPerProfileMin) }))}
-                  idleMin={warmupConfig.postBrowseTimeMin} idleMax={warmupConfig.postBrowseTimeMax}
-                  onIdleMin={v => setWarmupConfig(c => ({ ...c, postBrowseTimeMin: Math.min(v, c.postBrowseTimeMax) }))}
-                  onIdleMax={v => setWarmupConfig(c => ({ ...c, postBrowseTimeMax: Math.max(v, c.postBrowseTimeMin) }))}
                 />
               </div>
             )}

@@ -4879,6 +4879,22 @@ async function dismissInstagramPopups(page: Page): Promise<void> {
           if (btn) { btn.click(); return; }
         }
 
+        // "See photos, videos and more from X" / login wall (shown on public profiles) →
+        // find and click the X close button in the top-right corner.
+        // Detects: "sign up and never miss" / "see photos" / "see videos and more".
+        if (
+          body.includes("sign up") &&
+          (body.includes("see photos") || body.includes("see videos") || body.includes("never miss") || body.includes("log in"))
+        ) {
+          const closeBtn = dialog.querySelector<HTMLElement>('[aria-label="Close"], [aria-label="close"]');
+          if (closeBtn) { (closeBtn as HTMLElement).click(); return; }
+          const svgOnlyBtn = btns.find(b => {
+            const txt = (b.innerText || b.textContent || "").trim();
+            return txt === "" && b.querySelector("svg");
+          });
+          if (svgOnlyBtn) { svgOnlyBtn.click(); return; }
+        }
+
         // Generic: any dialog with ONLY a "Not Now" / dismiss button → click it
         if (btns.length <= 3) {
           const dismissBtn = btns.find(b => DISMISS_TEXTS.has((b.innerText || b.textContent || "").trim().toLowerCase()));
@@ -4891,6 +4907,11 @@ async function dismissInstagramPopups(page: Page): Promise<void> {
         const txt = (btn.innerText || btn.textContent || "").trim().toLowerCase();
         if (txt === "not now") { btn.click(); return; }
       }
+
+      // Global close pass: catch login-wall / sign-up modal by aria-label when
+      // Instagram renders it outside [role="dialog"] (some builds do this).
+      const globalClose = document.querySelector<HTMLElement>('[aria-label="Close"], [aria-label="close"]');
+      if (globalClose) { (globalClose as HTMLElement).click(); return; }
     });
   } catch {
     // Page navigating or closed — ignore
@@ -6752,16 +6773,15 @@ export function isEBSignupSession(sessionId: string): boolean {
 async function warmupSignupSession(page: Page, opts: {
   reelsMin?: number;
   reelsMax?: number;
-  postsMin?: number;
-  postsMax?: number;
-  profilesMin?: number;
-  profilesMax?: number;
+  // Legacy params kept for backward-compat but no longer used:
+  postsMin?: number; postsMax?: number;
+  profilesMin?: number; profilesMax?: number;
   reelsIdleMin?: number;
   reelsIdleMax?: number;
-  postsIdleMin?: number;
-  postsIdleMax?: number;
-  profilesIdleMin?: number;
-  profilesIdleMax?: number;
+  postsIdleMin?: number; postsIdleMax?: number;
+  profilesIdleMin?: number; profilesIdleMax?: number;
+  postClicksPerProfileMin?: number; postClicksPerProfileMax?: number;
+  postBrowseTimeMin?: number; postBrowseTimeMax?: number;
   onStep?: (msg: string) => void;
 }): Promise<void> {
   const step = opts.onStep ?? (() => {});
@@ -6769,174 +6789,72 @@ async function warmupSignupSession(page: Page, opts: {
   const jitter = (base: number, range: number) => base + Math.floor(Math.random() * range);
   const randBetween = (lo: number, hi: number) => lo + Math.floor(Math.random() * Math.max(1, hi - lo + 1));
 
-  const reelsCount    = randBetween(opts.reelsMin    ?? 1, opts.reelsMax    ?? 3);
-  const postsCount    = randBetween(opts.postsMin    ?? 0, opts.postsMax    ?? 2);
-  const profilesCount = randBetween(opts.profilesMin ?? 1, opts.profilesMax ?? 2);
+  const reelsCount  = randBetween(opts.reelsMin ?? 1, opts.reelsMax ?? 3);
+  const reelsIdleMs = () => randBetween(opts.reelsIdleMin ?? 5, opts.reelsIdleMax ?? 12) * 1000;
 
-  // Idle time per item (user-configured seconds, converted to ms with jitter)
-  const reelsIdleMs    = () => randBetween(opts.reelsIdleMin    ?? 5, opts.reelsIdleMax    ?? 12) * 1000;
-  const postsIdleMs    = () => randBetween(opts.postsIdleMin    ?? 5, opts.postsIdleMax    ?? 12) * 1000;
-  const profilesIdleMs = () => randBetween(opts.profilesIdleMin ?? 5, opts.profilesIdleMax ?? 12) * 1000;
-
-  if (reelsCount === 0 && postsCount === 0 && profilesCount === 0) {
-    step("EB warmup: all counts are 0 — skipping warm-up");
+  if (reelsCount === 0) {
+    step("EB warmup: reels count is 0 — skipping warm-up");
     return;
   }
 
-  // ── 1. Homepage — cookie acceptance + initial session establishment ────────
-  step("EB warmup: visiting instagram.com homepage...");
+  // ── 1. Fetch trending reel URLs via HikerAPI before navigating anywhere ───────
+  //       The EB will land directly on the first reel — no homepage stop.
+  const reelUrls: string[] = [];
+
+  let hikerApiToken: string | undefined;
   try {
-    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
-  } catch (e: any) {
-    step(`EB warmup: homepage nav warning: ${e?.message?.slice(0, 60)}`);
-  }
-  await delay(jitter(1500, 1000));
-  await dismissCookieBanner(page);
-  await dismissInstagramPopups(page).catch(() => {});
-  await delay(jitter(1000, 800));
+    const s = await storage.getGlobalSettings();
+    if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
+  } catch { /* non-fatal */ }
 
-  // Organic scrolling on homepage
-  for (let i = 0; i < 3; i++) {
+  if (hikerApiToken) {
     try {
-      const down = 200 + Math.random() * 300;
-      await page.evaluate((d: number) => window.scrollBy(0, d), down);
-      await delay(jitter(1800, 1200));
-      if (Math.random() > 0.5) {
-        await page.evaluate((d: number) => window.scrollBy(0, -d), down * 0.4);
-        await delay(jitter(700, 500));
+      const { HikerApiClient } = await import("./hikerApiClient");
+      const hiker = new HikerApiClient(hikerApiToken);
+      step("EB warmup: fetching trending reels via HikerAPI...");
+      const shortcodes = await hiker.getTrendingReelShortcodes(reelsCount + 2);
+      for (const sc of shortcodes.slice(0, reelsCount)) {
+        reelUrls.push(`https://www.instagram.com/reel/${sc}/`);
       }
-    } catch { /* non-fatal */ }
-  }
-
-  // ── 2. Reels — fetch real shortcodes via HikerAPI, fall back to /reels/ ─────
-  if (reelsCount > 0) {
-    const reelUrls: string[] = [];
-
-    let hikerApiToken: string | undefined;
-    try {
-      const s = await storage.getGlobalSettings();
-      if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
-    } catch { /* non-fatal */ }
-
-    if (hikerApiToken) {
-      try {
-        const { HikerApiClient } = await import("./hikerApiClient");
-        const hiker = new HikerApiClient(hikerApiToken);
-        step("EB warmup: fetching public reel URLs via HikerAPI...");
-        const shortcodes = await hiker.getPublicShortcodes(reelsCount + 2);
-        for (const sc of shortcodes.slice(0, reelsCount)) {
-          reelUrls.push(`https://www.instagram.com/reel/${sc}/`);
-        }
-        if (reelUrls.length > 0) step(`EB warmup: got ${reelUrls.length} reel URL(s) via HikerAPI ✓`);
-      } catch { /* non-fatal */ }
-    }
-
-    if (reelUrls.length === 0) {
-      reelUrls.push("https://www.instagram.com/reels/", "https://www.instagram.com/explore/");
-    }
-
-    for (const url of reelUrls.slice(0, reelsCount)) {
-      const label = url.replace("https://www.instagram.com", "ig.com");
-      step(`EB warmup: viewing reel ${label}...`);
-      try {
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-        await delay(jitter(1500, 1000));
-        await dismissCookieBanner(page);
-        await dismissInstagramPopups(page).catch(() => {});
-        // Spread the user-configured idle time across 2 scroll steps
-        const reelIdle = reelsIdleMs();
-        for (let i = 0; i < 2; i++) {
-          await delay(Math.round(reelIdle / 2));
-          try { await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250)); } catch { /* non-fatal */ }
-        }
-      } catch (e: any) {
-        step(`EB warmup: reel nav warning: ${e?.message?.slice(0, 60)}`);
-      }
+      if (reelUrls.length > 0) step(`EB warmup: got ${reelUrls.length} trending reel(s) via HikerAPI ✓`);
+    } catch (e: any) {
+      step(`EB warmup: HikerAPI fetch warning: ${e?.message?.slice(0, 60)}`);
     }
   }
 
-  // ── 3. Posts — navigate to a public profile, click individual post thumbnails ─
-  if (postsCount > 0) {
-    const postProfiles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth"];
-    const pickedProfile = postProfiles[Math.floor(Math.random() * postProfiles.length)];
-    step(`EB warmup: visiting @${pickedProfile} to click posts (${postsCount})...`);
+  if (reelUrls.length === 0) {
+    if (!hikerApiToken) step("EB warmup: no HikerAPI token — using Reels feed fallback");
+    reelUrls.push("https://www.instagram.com/reels/");
+  }
+
+  // ── 2. Navigate directly to each trending reel — no homepage stop ─────────────
+  for (let i = 0; i < reelsCount; i++) {
+    const url = reelUrls[i] ?? reelUrls[reelUrls.length - 1];
+    const label = url.replace("https://www.instagram.com", "ig.com");
+    step(`EB warmup: viewing trending reel ${i + 1}/${reelsCount} — ${label}...`);
     try {
-      await page.goto(`https://www.instagram.com/${pickedProfile}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
       await delay(jitter(1500, 1000));
       await dismissCookieBanner(page);
       await dismissInstagramPopups(page).catch(() => {});
-      await delay(jitter(800, 600));
 
-      for (let i = 0; i < postsCount; i++) {
-        try {
-          const postHref: string | null = await page.evaluate(() => {
-            const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/p/"]'));
-            const visible = links.filter(el => {
-              const r = el.getBoundingClientRect();
-              return r.width > 50 && r.height > 50 && r.top > 0 && r.top < window.innerHeight * 2;
-            });
-            if (visible.length === 0) return null;
-            return visible[Math.floor(Math.random() * Math.min(visible.length, 9))].href;
-          });
-
-          if (postHref) {
-            step(`EB warmup: clicking post ${i + 1}/${postsCount}...`);
-            await page.goto(postHref, { waitUntil: "domcontentloaded", timeout: 15000 });
-            await delay(jitter(1200, 800));
-            await dismissInstagramPopups(page).catch(() => {});
-            // User-configured idle time split: 60% reading, 40% after scroll
-            const postIdle = postsIdleMs();
-            await delay(Math.round(postIdle * 0.6));
-            try {
-              await page.evaluate(() => window.scrollBy(0, 200 + Math.random() * 300));
-              await delay(Math.round(postIdle * 0.4));
-            } catch { await delay(Math.round(postIdle * 0.4)); }
-            await page.goBack({ timeout: 10000 }).catch(() => {});
-            await delay(jitter(1000, 800));
-          }
-        } catch (e: any) {
-          step(`EB warmup: post click warning: ${e?.message?.slice(0, 60)}`);
-        }
-      }
-    } catch (e: any) {
-      step(`EB warmup: posts profile nav warning: ${e?.message?.slice(0, 60)}`);
-    }
-  }
-
-  // ── 4. Profiles — browse public profile pages ─────────────────────────────
-  if (profilesCount > 0) {
-    const allHandles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth", "ngc", "cnn"];
-    const shuffled = allHandles.sort(() => Math.random() - 0.5);
-    for (let i = 0; i < Math.min(profilesCount, shuffled.length); i++) {
-      const handle = shuffled[i];
-      step(`EB warmup: visiting @${handle} profile...`);
-      try {
-        await page.goto(`https://www.instagram.com/${handle}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
-        await delay(jitter(1500, 1000));
-        await dismissCookieBanner(page);
+      // Poll every 3 s during idle so the sign-up wall is dismissed within 1-10 s
+      const reelIdle = reelsIdleMs();
+      const pollMs   = 3000;
+      const polls    = Math.max(1, Math.floor(reelIdle / pollMs));
+      for (let p = 0; p < polls; p++) {
+        await delay(pollMs);
         await dismissInstagramPopups(page).catch(() => {});
-        // Spread user-configured idle time across 2 scroll steps
-        const profIdle = profilesIdleMs();
-        for (let j = 0; j < 2; j++) {
-          await delay(Math.round(profIdle / 2));
-          try { await page.evaluate(() => window.scrollBy(0, 300 + Math.random() * 400)); } catch { /* non-fatal */ }
-        }
-      } catch (e: any) {
-        step(`EB warmup: profile nav warning: ${e?.message?.slice(0, 60)}`);
+        try { await page.evaluate(() => window.scrollBy(0, 80 + Math.random() * 120)); } catch { /* non-fatal */ }
       }
+      const remainder = reelIdle - polls * pollMs;
+      if (remainder > 100) await delay(remainder);
+    } catch (e: any) {
+      step(`EB warmup: reel nav warning: ${e?.message?.slice(0, 60)}`);
     }
   }
 
   step("EB warmup: session warm-up complete ✓");
-
-  // Land on the Reels feed so every account doesn't sit on an identical
-  // Instagram homepage — varied landing pages are a weaker clustering signal.
-  try {
-    step("EB warmup: landing on Reels feed…");
-    await page.goto("https://www.instagram.com/reels/", { waitUntil: "domcontentloaded", timeout: 20000 });
-    await delay(jitter(1000, 600));
-    await dismissCookieBanner(page);
-  } catch { /* non-fatal */ }
 }
 
 /** Run the warm-up session on the already-open Ghost Browser (_signupPage).
