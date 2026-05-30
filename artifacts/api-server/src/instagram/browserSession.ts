@@ -1498,10 +1498,13 @@ export async function applyStealthScripts(
     (window as any).chrome = { app: { isInstalled: false }, runtime: {}, loadTimes: () => ({}), csi: () => ({}) };
     const originalQuery = window.navigator.permissions?.query;
     if (originalQuery) {
-      (window.navigator.permissions as any).query = (params: any) =>
-        params.name === "notifications"
-          ? Promise.resolve({ state: "prompt", onchange: null } as PermissionStatus)
-          : originalQuery.call(window.navigator.permissions, params);
+      (window.navigator.permissions as any).query = (params: any) => {
+        if (params.name === "notifications")
+          return Promise.resolve({ state: "prompt", onchange: null } as PermissionStatus);
+        if (params.name === "gyroscope" || params.name === "accelerometer" || params.name === "magnetometer")
+          return Promise.resolve({ state: "granted", onchange: null } as PermissionStatus);
+        return originalQuery.call(window.navigator.permissions, params);
+      };
     }
 
     if (mobile) {
@@ -1702,6 +1705,68 @@ export async function applyStealthScripts(
       }, 60_000); // tick every minute
 
       (navigator as any).getBattery = () => Promise.resolve(_batt);
+    } catch { /* non-fatal */ }
+
+    // ── Gyroscope / Accelerometer (DeviceMotion + DeviceOrientation) ──────────
+    // Real Android phones fire these events continuously — even sitting still
+    // on a desk.  Their complete absence is an immediate bot signal: no phone
+    // → no motion hardware → not a real device.
+    //
+    // We fire at ~50 ms intervals (20 Hz), matching the default Android Chrome
+    // sensor polling rate for a real device at rest.  Values stay in the
+    // realistic "phone lying flat on a desk" range:
+    //   alpha (compass/yaw):           0–360°, slow drift
+    //   beta  (front-back tilt):       0–8°
+    //   gamma (left-right tilt):       -3–3°
+    //   acceleration x/y:              ±0.05–0.06 m/s² micro-tremor
+    //   accelerationIncludingGravity.z: 9.81 ± 0.04 m/s²
+    //   rotationRate:                  ±0.1–0.25 °/s
+    //
+    // Base orientation is seeded per-account (via UA) so two accounts that
+    // run simultaneously always have different compass headings — just like
+    // two phones sitting on the same desk facing slightly different directions.
+    try {
+      const _ua2 = navigator.userAgent;
+      let _gs = 0xdeadbeef;
+      for (let i = 0; i < _ua2.length; i++) {
+        _gs = (Math.imul(_gs ^ _ua2.charCodeAt(i), 0x9e3779b9) >>> 0);
+      }
+      const _gr = () => { _gs = (Math.imul(1664525, _gs) + 1013904223) >>> 0; return _gs / 0x100000000; };
+
+      let _alpha = _gr() * 360;
+      let _beta  = _gr() * 8;        // 0–8°
+      let _gamma = _gr() * 6 - 3;   // -3–3°
+
+      const _fireSensors = () => {
+        _alpha = (_alpha + (_gr() - 0.5) * 0.3 + 360) % 360;
+        _beta  = Math.max(-5, Math.min(10, _beta  + (_gr() - 0.5) * 0.08));
+        _gamma = Math.max(-5, Math.min( 5, _gamma + (_gr() - 0.5) * 0.05));
+
+        const ax = (_gr() - 0.5) * 0.12;
+        const ay = (_gr() - 0.5) * 0.10;
+        const az = (_gr() - 0.5) * 0.08;
+
+        try {
+          window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", {
+            alpha: _alpha, beta: _beta, gamma: _gamma, absolute: false,
+          }));
+        } catch { /* non-fatal */ }
+
+        try {
+          window.dispatchEvent(new DeviceMotionEvent("devicemotion", {
+            acceleration:                 { x: ax, y: ay, z: az },
+            accelerationIncludingGravity: { x: ax, y: ay, z: az + 9.81 },
+            rotationRate: {
+              alpha: (_gr() - 0.5) * 0.4,
+              beta:  (_gr() - 0.5) * 0.3,
+              gamma: (_gr() - 0.5) * 0.2,
+            },
+            interval: 50,
+          }));
+        } catch { /* non-fatal */ }
+      };
+
+      setInterval(_fireSensors, 50);
     } catch { /* non-fatal */ }
 
     // ── AudioContext fingerprint protection ───────────────────────────────────

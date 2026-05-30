@@ -59,6 +59,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.658",
+    date: "30 May 2026",
+    items: [
+      { category: "Improvement", text: "Ghost Browser now fires realistic gyroscope and accelerometer sensor events continuously, matching what a real Android phone produces when sitting on a desk — eliminates a known bot-detection signal Instagram checks during signup." },
+      { category: "Improvement", text: "Gyroscope and accelerometer permissions now correctly report as 'granted' inside the embedded browser, matching a real phone's permission state." },
+    ],
+  },
+  {
     version: "1.0.657",
     date: "30 May 2026",
     items: [
