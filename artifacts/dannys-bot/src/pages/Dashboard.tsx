@@ -49,6 +49,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }
   refresh_own_profile:     { label: "Refresh Profile", cls: "text-indigo-600",    icon: "↺" },
   visit_settings_activity: { label: "Settings",        cls: "text-slate-600",     icon: "⚙" },
   save_media:              { label: "Save Media",      cls: "text-emerald-600",   icon: "⊙" },
+  server_started:          { label: "Started",         cls: "text-cyan-600",      icon: "⚡" },
 };
 
 const DEFAULT_COL_WIDTHS = { account: 160, event: 150, target: 100, detail: 200, timestamp: 220, trustscore: 120 };
@@ -58,6 +59,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.668",
+    date: "30 May 2026",
+    items: [
+      { category: "Dashboard", text: "Activity log now shows an 'Equinox Started' entry every time the software starts or restarts — account is labelled 'Equinox' with a cyan Started badge and the exact date and time." },
+      { category: "Fix", text: "Ghost Browser pre-signup warm-up now actually navigates and scrolls on Windows — a navigation race between the browser opening and warm-up starting caused all actions to run on a blank page; the warm-up now waits for the browser to finish its initial load before navigating." },
+    ],
+  },
   {
     version: "1.0.667",
     date: "30 May 2026",

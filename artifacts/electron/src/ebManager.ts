@@ -2530,7 +2530,25 @@ export function startEbIpcServer(
         // Run warmup asynchronously — don't block the IPC response
         (async () => {
           const wc = e.win.webContents;
-          const nav = (url: string) => wc.loadURL(url).catch(() => {});
+
+          // nav() waits for the page to actually finish loading using
+          // did-finish-load / did-fail-load events.
+          //
+          // The old approach (wc.loadURL(url).catch(() => {})) resolved
+          // immediately when the loadURL Promise was rejected via ERR_ABORTED
+          // because openEbWindow fires its own loadURL("accounts/login/")
+          // fire-and-forget just before returning.  Both navigations race and
+          // one of the two Promises is aborted, so the warmup's .catch(() => {})
+          // resolved before the page was actually loaded — all scroll/JS then
+          // ran on an empty or mid-load page.
+          const nav = (url: string) => new Promise<void>(resolve => {
+            const timer = setTimeout(resolve, 30000);
+            const done  = () => { clearTimeout(timer); resolve(); };
+            wc.once("did-finish-load", done);
+            wc.once("did-fail-load",   done);
+            wc.loadURL(url).catch(done);
+          });
+
           const js  = (script: string) => wc.executeJavaScript(script).catch(() => null);
 
           const scrollFeed = () => js(`(function(){
@@ -2545,6 +2563,21 @@ export function startEbIpcServer(
           })()`);
 
           try {
+            // Wait for openEbWindow's initial loadURL("accounts/login/") to
+            // settle before starting warmup navigations.  If we skip this,
+            // our first nav() call races with that in-flight load; Chromium
+            // aborts one of the two navigations and the nav() Promise resolves
+            // before the page is usable.
+            if (wc.isLoading()) {
+              relayStep("Waiting for browser to initialize…");
+              await new Promise<void>(res => {
+                const timer = setTimeout(res, 8000);
+                wc.once("did-finish-load", () => { clearTimeout(timer); res(); });
+                wc.once("did-fail-load",   () => { clearTimeout(timer); res(); });
+              });
+            }
+            await sleep(500);
+
             // 1. Dismiss cookie banner + browse homepage
             relayStep("Navigating to Instagram homepage…");
             await nav("https://www.instagram.com/");

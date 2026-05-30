@@ -170,6 +170,21 @@ export async function registerInstagramRoutes(
     // If DB read fails, keep the in-memory start time
   }
 
+  // Write a system-level activity log entry so the Dashboard shows when Equinox
+  // was started or restarted.  profileId/toolId 0 are sentinels for system events
+  // (no FK constraint in SQLite so 0 is safe to use).
+  storage.createSessionAction({
+    profileId: 0,
+    toolId: 0,
+    action: "server_started",
+    targetUsername: "",
+    sourceValue: "",
+    sourceType: "",
+    result: "ok",
+    detail: `Equinox started — ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
+    timestamp: SERVER_START,
+  }).catch(() => {});
+
   // Reset any accounts stuck in "verifying" from a previous crashed/restarted server.
   // A "verifying" status only makes sense while the server is actively running the
   // verify call — on startup there can be no such call in flight.
@@ -1591,6 +1606,7 @@ export async function registerInstagramRoutes(
       actions = await storage.getRecentSessionActions(limit);
     }
     const enriched = actions.map(a => {
+      if (Number(a.profileId) === 0) return { ...a, profileLabel: "Equinox" };
       const p = profileMap.get(Number(a.profileId));
       return { ...a, profileLabel: p?.accountLabel || p?.username || `#${a.profileId}` };
     });
