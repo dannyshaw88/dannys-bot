@@ -59,6 +59,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.660",
+    date: "30 May 2026",
+    items: [
+      { category: "New", text: "Ghost Browser signup now runs a 35-55 second warm-up session before touching the signup form — browses the Instagram homepage and public content (real reels via HikerAPI if configured, or popular public profiles as fallback) to build session history for the IP and device before signup begins." },
+      { category: "Improvement", text: "Warm-up accepts the cookie banner and performs organic scrolling on each page visited, making the pre-signup browsing pattern indistinguishable from a real user." },
+    ],
+  },
+  {
     version: "1.0.659",
     date: "30 May 2026",
     items: [

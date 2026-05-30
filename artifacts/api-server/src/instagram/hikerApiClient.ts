@@ -244,6 +244,39 @@ export class HikerApiClient {
     return accumulated.slice(0, max);
   }
 
+  // Fetches shortcodes from well-known public Instagram accounts for use as
+  // warmup browsing URLs before a signup attempt.  Returns up to `n` shortcodes.
+  // Falls back gracefully: skips accounts that don't respond, returns whatever
+  // was collected (may be fewer than `n`).
+  async getPublicShortcodes(n = 3): Promise<string[]> {
+    const WARMUP_ACCOUNTS = ["instagram", "natgeo", "nasa"];
+    const shortcodes: string[] = [];
+
+    for (const username of WARMUP_ACCOUNTS) {
+      if (shortcodes.length >= n) break;
+      try {
+        const user = await this.getUserByUsername(username);
+        if (!user) continue;
+        const j = await hikerGet(
+          `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=6`,
+          this.token,
+        );
+        const items: any[] = Array.isArray(j) ? j
+          : Array.isArray(j?.response) ? j.response
+          : Array.isArray(j?.items)    ? j.items
+          : [];
+        for (const item of items) {
+          if (shortcodes.length >= n) break;
+          const mediaId = String(item.id ?? item.pk ?? "");
+          if (!mediaId) continue;
+          const sc = item.code || this.mediaIdToShortcode(mediaId);
+          if (sc && sc !== "0") shortcodes.push(sc);
+        }
+      } catch { /* non-fatal — warmup is best-effort */ }
+    }
+    return shortcodes;
+  }
+
   // Converts a numeric media ID (e.g. "3123456789012345678_123") to the
   // base64url shortcode Instagram uses in post URLs.
   private mediaIdToShortcode(id: string): string {

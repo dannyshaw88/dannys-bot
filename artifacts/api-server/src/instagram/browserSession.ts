@@ -6726,6 +6726,106 @@ export function isEBSignupSession(sessionId: string): boolean {
   return _pendingEBSignups.has(sessionId);
 }
 
+// ── Pre-signup session warm-up ────────────────────────────────────────────────
+// Browses instagram.com as a guest for 30-50 s before touching the signup form.
+// A fresh IP with no prior Instagram session history is heavily penalised on
+// signup — Instagram's web anti-bot scores it far below threshold before the
+// form is even filled.  Spending time on the homepage + public content pages
+// lets Instagram's tracking cookies (mid, ig_did, csrftoken, rur, etc.) build
+// up natural session history for that IP/device combination.
+//
+// If a HikerAPI token is configured, real post/reel shortcodes from popular
+// public accounts are used as browsing targets, which triggers actual video/
+// image CDN requests and makes the session look indistinguishable from a human
+// browsing their feed before deciding to sign up.
+//
+// All steps are best-effort: a nav timeout or HikerAPI error silently falls
+// back to the next URL in the list.  The warm-up never blocks the signup.
+async function warmupSignupSession(page: Page, opts: {
+  onStep?: (msg: string) => void;
+}): Promise<void> {
+  const step = opts.onStep ?? (() => {});
+  const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  const jitter = (base: number, range: number) => base + Math.floor(Math.random() * range);
+
+  // ── 1. Homepage — cookie acceptance + initial session establishment ────────
+  step("EB warmup: visiting instagram.com homepage...");
+  try {
+    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+  } catch (e: any) {
+    step(`EB warmup: homepage nav warning: ${e?.message?.slice(0, 60)}`);
+  }
+  await delay(jitter(1500, 1000));
+  await dismissCookieBanner(page);
+  await delay(jitter(1000, 800));
+
+  // Organic scrolling on homepage — simulates a user reading before clicking sign up
+  for (let i = 0; i < 3; i++) {
+    try {
+      const down = 200 + Math.random() * 300;
+      await page.evaluate((d: number) => window.scrollBy(0, d), down);
+      await delay(jitter(1800, 1200));
+      if (Math.random() > 0.5) {
+        await page.evaluate((d: number) => window.scrollBy(0, -d), down * 0.4);
+        await delay(jitter(700, 500));
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  // ── 2. Browse public content to build deeper session history ─────────────
+  // Priority: real shortcodes from HikerAPI → popular public profile pages.
+  const urlsToVisit: string[] = [];
+
+  // Try HikerAPI for real post shortcodes
+  let hikerApiToken: string | undefined;
+  try {
+    const s = await storage.getGlobalSettings();
+    if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
+  } catch { /* non-fatal */ }
+
+  if (hikerApiToken) {
+    try {
+      const { HikerApiClient } = await import("./hikerApiClient");
+      const hiker = new HikerApiClient(hikerApiToken);
+      step("EB warmup: fetching public reel URLs via HikerAPI...");
+      const shortcodes = await hiker.getPublicShortcodes(3);
+      for (const sc of shortcodes) {
+        urlsToVisit.push(`https://www.instagram.com/reel/${sc}/`);
+      }
+      if (shortcodes.length > 0) {
+        step(`EB warmup: got ${shortcodes.length} public reel URL(s) ✓`);
+      }
+    } catch { /* non-fatal — fall through to profile page fallback */ }
+  }
+
+  // Fallback: well-known always-public profile pages
+  if (urlsToVisit.length === 0) {
+    urlsToVisit.push(
+      "https://www.instagram.com/instagram/",
+      "https://www.instagram.com/natgeo/",
+    );
+  }
+
+  for (const url of urlsToVisit.slice(0, 3)) {
+    const label = url.replace("https://www.instagram.com", "ig.com");
+    step(`EB warmup: browsing ${label}...`);
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+      await delay(jitter(2000, 1500));
+      for (let i = 0; i < 2; i++) {
+        try {
+          await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250));
+          await delay(jitter(2500, 2000));
+        } catch { /* non-fatal */ }
+      }
+    } catch (e: any) {
+      step(`EB warmup: nav warning ${label}: ${e?.message?.slice(0, 60)}`);
+    }
+  }
+
+  step("EB warmup: session warm-up complete ✓");
+}
+
 export async function createInstagramAccountViaEBForm(params: {
   username: string;
   password: string;
@@ -6826,24 +6926,14 @@ export async function createInstagramAccountViaEBForm(params: {
     );
     step("EB: stealth scripts applied ✓");
 
-    // ── Navigate directly to the email signup URL (skipping homepage) ─────────
-    // Using ?next= forces Instagram to show the email form instead of the phone gate.
-    // We visit the homepage first only briefly to seed mid/ig_did device cookies,
-    // then immediately go to the email signup URL.
-    step("EB: visiting instagram.com homepage (seeding device cookies)...");
-    try { await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 60000 }); }
-    catch (e: any) { step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`); }
-    await delay(1500);
-    // Brief organic scroll on the homepage before navigating to signup.
-    // Bots that jump straight to /accounts/emailsignup/ with zero scroll time
-    // are trivially distinguishable from a user browsing to the signup form.
-    try {
-      await page.evaluate(() => { window.scrollBy(0, 180 + Math.random() * 120); });
-      await delay(700 + Math.random() * 600);
-      await page.evaluate(() => { window.scrollBy(0, -(90 + Math.random() * 60)); });
-      await delay(400 + Math.random() * 300);
-    } catch { /* non-fatal */ }
-    await dismissCookieBanner(page);
+    // ── Session warm-up: browse instagram.com as a guest before the signup form ─
+    // A fresh IP/device with zero Instagram session history is heavily penalised
+    // on signup — Instagram's web anti-bot scores it well below threshold before
+    // the form is even filled.  warmupSignupSession() spends ~35-55 s visiting the
+    // homepage + public content (real reels via HikerAPI if available, otherwise
+    // popular public profiles) so that mid/ig_did/csrftoken/rur cookies accumulate
+    // natural session history before the signup URL is touched.
+    await warmupSignupSession(page, { onStep: step });
 
     const EMAIL_FORM_SELECTORS = 'input[aria-label="Email"], input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i], input[autocomplete="email"], input[name="email"], input[name="emailAddress"]';
     const PHONE_GATE_LABELS = ["sign up with email address", "sign up with email", "use email address", "use email", "use your email address"];
