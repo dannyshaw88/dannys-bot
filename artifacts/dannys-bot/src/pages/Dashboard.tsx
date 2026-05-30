@@ -59,6 +59,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.656",
+    date: "30 May 2026",
+    items: [
+      { category: "Improvement", text: "Accounts page: removed sort direction arrows from all column headers — columns are still sortable by clicking, just cleaner." },
+      { category: "Improvement", text: "Statistics page: removed sort direction arrows from column headers." },
+      { category: "Improvement", text: "Copy Settings dialog: Status and TrustScore columns are now centred under their headers." },
+      { category: "Fixed", text: "Icon picker: fixed missing icons caused by renamed lucide-react exports — all icons now display correctly." },
+      { category: "Improvement", text: "Icon picker: categories moved to a left sidebar panel for easier browsing, dialog widened by 15%." },
+      { category: "Improvement", text: "Accounts page: account names no longer forced to uppercase — they show exactly as entered." },
+      { category: "Improvement", text: "Sidebar: TrustScores icon changed to a star, nav label text is always full contrast, Developing pill is no longer bold." },
+    ],
+  },
+  {
     version: "1.0.655",
     date: "30 May 2026",
     items: [

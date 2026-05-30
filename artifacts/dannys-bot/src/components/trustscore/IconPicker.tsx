@@ -39,7 +39,7 @@ export function IconPicker({ value, onChange, onClose }: IconPickerProps) {
       onMouseDown={e => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div className="bg-background rounded-xl border border-border shadow-2xl flex flex-col"
-        style={{ width: 560, height: 520 }}>
+        style={{ width: 644, height: 520 }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border shrink-0">
@@ -72,60 +72,62 @@ export function IconPicker({ value, onChange, onClose }: IconPickerProps) {
           </div>
         </div>
 
-        {/* Category tabs */}
-        <div className="flex gap-1 px-4 py-2 border-b border-border overflow-x-auto shrink-0 scrollbar-none">
-          {ICON_CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors whitespace-nowrap"
-              style={{
-                background: category === cat ? "var(--primary)" : "transparent",
-                color: category === cat ? "var(--primary-foreground)" : "var(--muted-foreground)",
-                border: `1px solid ${category === cat ? "var(--primary)" : "var(--border)"}`,
-              }}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
+        {/* Body: left category sidebar + right icon grid */}
+        <div className="flex flex-1 min-h-0">
+          {/* Category sidebar */}
+          <div className="w-44 shrink-0 border-r border-border overflow-y-auto flex flex-col gap-0.5 p-2 [&::-webkit-scrollbar]:w-0 [scrollbar-width:none]">
+            {ICON_CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className="text-left w-full px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap truncate"
+                style={{
+                  background: category === cat ? "var(--primary)" : "transparent",
+                  color: category === cat ? "var(--primary-foreground)" : "var(--muted-foreground)",
+                }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
 
-        {/* Icon grid */}
-        <div className="flex-1 overflow-y-auto p-3">
-          {filtered.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-              No icons match "{search}"
-            </div>
-          ) : (
-            <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(9, 1fr)" }}>
-              {filtered.map(entry => {
-                const isSelected = value === entry.key;
-                return (
-                  <button
-                    key={entry.key}
-                    title={entry.label}
-                    onClick={() => { onChange(entry.key); onClose(); }}
-                    className="flex flex-col items-center justify-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-accent group"
-                    style={{
-                      background: isSelected ? "var(--primary)" : undefined,
-                      outline: isSelected ? "2px solid var(--primary)" : undefined,
-                    }}
-                  >
-                    <entry.Icon
-                      size={16}
-                      color={isSelected ? "var(--primary-foreground)" : "var(--foreground)"}
-                    />
-                    <span
-                      className="text-[8px] leading-tight text-center truncate w-full"
-                      style={{ color: isSelected ? "var(--primary-foreground)" : "var(--muted-foreground)" }}
+          {/* Icon grid */}
+          <div className="flex-1 overflow-y-auto p-3">
+            {filtered.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                No icons match "{search}"
+              </div>
+            ) : (
+              <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(9, 1fr)" }}>
+                {filtered.map(entry => {
+                  const isSelected = value === entry.key;
+                  return (
+                    <button
+                      key={entry.key}
+                      title={entry.label}
+                      onClick={() => { onChange(entry.key); onClose(); }}
+                      className="flex flex-col items-center justify-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-accent group"
+                      style={{
+                        background: isSelected ? "var(--primary)" : undefined,
+                        outline: isSelected ? "2px solid var(--primary)" : undefined,
+                      }}
                     >
-                      {entry.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                      <entry.Icon
+                        size={16}
+                        color={isSelected ? "var(--primary-foreground)" : "var(--foreground)"}
+                      />
+                      <span
+                        className="text-[8px] leading-tight text-center truncate w-full"
+                        style={{ color: isSelected ? "var(--primary-foreground)" : "var(--muted-foreground)" }}
+                      >
+                        {entry.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer count */}

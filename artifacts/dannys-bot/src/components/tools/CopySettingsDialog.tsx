@@ -340,11 +340,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               {([ ["name", "Name", "flex-1"], ["status", "Status", "w-[72px]"], ["group", "Group", "w-[88px]"] ] as [SortBy, string, string][]).map(([key, label, cls]) => {
                 const active = sortBy === key;
                 const Icon = active ? (sortDir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+                const isCentered = key === "status";
                 return (
                   <button
                     key={key}
                     onClick={() => cycleSort(key)}
-                    className={`${cls} flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    className={`${cls} flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${isCentered ? "justify-center" : ""} ${
                       active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -355,7 +356,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               })}
               <button
                 onClick={() => cycleSort("trustscore")}
-                className={`w-[88px] shrink-0 flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                className={`w-[88px] shrink-0 flex items-center justify-center gap-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
                   sortBy === "trustscore" ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -386,7 +387,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                         {p.accountLabel || p.username}
                       </span>
                     </div>
-                    <div className="w-[72px] shrink-0">
+                    <div className="w-[72px] shrink-0 flex items-center justify-center">
                       {displayStatus && (
                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border capitalize ${statusBadgeClass(displayStatus)}`}>
                           {displayStatus}
@@ -396,7 +397,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                     <div className="w-[88px] shrink-0 truncate text-[10px] text-muted-foreground">
                       {groupLabel}
                     </div>
-                    <div className="w-[88px] shrink-0">
+                    <div className="w-[88px] shrink-0 flex items-center justify-center">
                       {tsLevel ? (
                         <span
                           className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 w-fit"

@@ -432,7 +432,7 @@ export function StatsPage() {
                       onClick={() => cycleSort("account")}
                       className="flex items-center hover:text-foreground transition-colors"
                     >
-                      Account Name{sortIcon("account")}
+                      Account Name
                     </button>
                   </th>
                   <th style={{ width: colWidths.open_eb }} className="px-4 py-3 font-bold uppercase tracking-wide">
@@ -470,7 +470,7 @@ export function StatsPage() {
                         className={`px-4 py-3 font-bold cursor-default select-none ${isDragTarget ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}
                       >
                         <button onClick={() => cycleSort(key)} className={`flex items-center gap-1 hover:opacity-90 transition-opacity ${st.color} ${sortKey === key ? "opacity-100" : "opacity-60"}`}>
-                          {st.icon}<span className="uppercase tracking-wide text-[10px]">{st.label}</span>{sortIcon(key)}
+                          {st.icon}<span className="uppercase tracking-wide text-[10px]">{st.label}</span>
                         </button>
                       </th>
                     );

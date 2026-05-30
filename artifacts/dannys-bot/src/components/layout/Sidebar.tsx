@@ -1,7 +1,7 @@
 import { useLocation, useSearch } from "wouter";
 import {
   Gauge, Users, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, Ghost, Upload, Award,
+  ChevronLeft, ChevronRight, Ghost, Upload, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
@@ -35,7 +35,7 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: Gauge       },
     { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: Users       },
-    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: Award       },
+    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: Star        },
     { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: Activity    },
     { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: Ghost       },
     { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: Upload      },
@@ -114,10 +114,7 @@ export function Sidebar() {
                   className={cn("w-[32px] h-[32px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")}
                   style={isActive ? { color: BRAND } : { color: BRAND }}
                 />
-                <span className={cn(
-                  "text-[9px] font-bold tracking-wide leading-tight text-center",
-                  isActive ? "text-primary" : "text-muted-foreground"
-                )}>
+                <span className="text-[9px] font-bold tracking-wide leading-tight text-center text-foreground">
                   {item.shortLabel}
                 </span>
               </button>
@@ -170,10 +167,7 @@ export function Sidebar() {
             className={cn("w-[32px] h-[32px] shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
             style={{ color: BRAND }}
           />
-          <span className={cn(
-            "text-[9px] font-bold tracking-wide",
-            location === "/settings" ? "text-primary" : "text-muted-foreground"
-          )}>
+          <span className="text-[9px] font-bold tracking-wide text-foreground">
             SETTINGS
           </span>
         </button>
@@ -183,7 +177,7 @@ export function Sidebar() {
       <div className="pb-4 border-t border-border/50 pt-3 flex justify-center">
         <div className="bg-background rounded-lg px-2 py-1.5 border border-border flex items-center justify-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-          <span className="text-[10px] font-bold text-foreground tracking-wide">Developing</span>
+          <span className="text-[10px] text-foreground tracking-wide">Developing</span>
         </div>
       </div>
     </div>

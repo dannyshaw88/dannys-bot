@@ -1074,9 +1074,6 @@ export function ProfilesPage() {
                 className="flex items-center gap-1 text-left hover:text-foreground transition-colors"
               >
                 ACCOUNT NAME
-                <span className="text-[9px]">
-                  {sortField === "account" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}
-                </span>
               </button>
             </div>
             {profColOrder.filter(k => k !== "account" && k !== "ip" && profColVisible[k as keyof typeof DEFAULT_PROFILES_COL_VISIBLE]).map(key => {
@@ -1107,28 +1104,28 @@ export function ProfilesPage() {
               };
               if (key === "status") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("status")} style={{ width: profColWidths.status }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  STATUS<span className="text-[9px]">{sortField === "status" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  STATUS
                 </button>
               );
               if (key === "active") return <div key={key} {...dragProps} style={{ width: profColWidths.active }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Active</div>;
               if (key === "followers") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("followers")} style={{ width: profColWidths.followers }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  FOLLOWERS<span className="text-[9px]">{sortField === "followers" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  FOLLOWERS
                 </button>
               );
               if (key === "following") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("following")} style={{ width: profColWidths.following }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  FOLLOWING<span className="text-[9px]">{sortField === "following" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  FOLLOWING
                 </button>
               );
               if (key === "sync") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("sync")} style={{ width: profColWidths.sync }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  SYNC<span className="text-[9px]">{sortField === "sync" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  SYNC
                 </button>
               );
               if (key === "lastApiCall") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("lastApiCall")} style={{ width: profColWidths.lastApiCall }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  LAST API CALL<span className="text-[9px]">{sortField === "lastApiCall" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  LAST API CALL
                 </button>
               );
               if (key === "actions") return <div key={key} {...dragProps} style={{ width: profColWidths.actions }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Actions</div>;
@@ -1136,7 +1133,7 @@ export function ProfilesPage() {
               if (key === "connection") return <div key={key} {...dragProps} style={{ width: profColWidths.connection }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>Mbps</div>;
               if (key === "trustscore") return (
                 <button key={key} {...dragProps} onClick={() => cycleSort("trustscore")} style={{ width: profColWidths.trustscore }} className={`shrink-0 flex items-center justify-start gap-1 hover:text-foreground transition-colors cursor-default select-none ${dragBorder}`}>
-                  TRUSTSCORE<span className="text-[9px]">{sortField === "trustscore" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}</span>
+                  TRUSTSCORE
                 </button>
               );
               if (key === "abd") return <div key={key} {...dragProps} style={{ width: profColWidths.abd }} className={`shrink-0 text-left cursor-default select-none ${dragBorder}`}>ABD</div>;
@@ -1150,9 +1147,6 @@ export function ProfilesPage() {
                 className="shrink-0 flex items-center justify-start gap-1 pl-2 hover:text-foreground transition-colors"
               >
                 IP:PORT
-                <span className="text-[9px]">
-                  {sortField === "ip" ? (sortDir === "asc" ? "▲" : "▼") : "↑↓"}
-                </span>
               </button>
             )}
           </div>
@@ -1229,7 +1223,7 @@ export function ProfilesPage() {
                   <div style={{ width: profColWidths.account }} className="shrink-0 min-w-0">
                     <Link href={`/profiles/${profile.id}`} onClick={(e: React.MouseEvent) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); }}>
                       <span
-                        className={`text-xs font-semibold truncate uppercase hover:text-primary cursor-pointer flex items-center gap-1 ${isStopped ? "text-muted-foreground" : acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
+                        className={`text-xs font-semibold truncate hover:text-primary cursor-pointer flex items-center gap-1 ${isStopped ? "text-muted-foreground" : acctStatus === "valid" ? "text-foreground" : "text-red-600"}`}
                         data-testid={`text-username-${profile.id}`}
                         title={isDupUsername ? `Duplicate username: @${profile.username}` : undefined}
                       >
