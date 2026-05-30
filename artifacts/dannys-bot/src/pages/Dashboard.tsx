@@ -59,6 +59,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.665",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: cookie consent banner is now accepted on every page load using the same click mechanism Puppeteer uses (CDP mouse dispatch) — the previous approach used a weaker click method that Instagram's React app sometimes ignored on Windows." },
+      { category: "Fix", text: "Ghost Browser: cookie banner check now fires on every page navigation, not just once at window open — previously the check stopped after 60 seconds so banners on later pages were never dismissed." },
+    ],
+  },
+  {
     version: "1.0.664",
     date: "30 May 2026",
     items: [

@@ -1374,65 +1374,6 @@ export async function openEbWindow(opts: {
   win.webContents.on("dom-ready",       () => injectPageUtils());
   win.webContents.on("did-finish-load", () => injectPageUtils());
 
-  // ── Main-process cookie banner auto-dismiss ───────────────────────────────
-  // Fires both sendInputEvent (real OS-level click, needs webContents.focus())
-  // and a JS PointerEvent sequence simultaneously — belt-and-suspenders.
-  // Clears itself immediately after the first match so it never loops.
-  // IMPORTANT: selectors must be SPECIFIC to the cookie banner.  Never use
-  // "last button in any dialog" — Instagram shows Save-Login, 2FA, and other
-  // persistent dialogs that would cause infinite click loops.
-  // Exact whitelist of accept-all button labels (lower-cased).
-  // Using t.includes('cookie') is WRONG — Instagram's full cookie preference page
-  // has category toggles ("Functional cookies", "Analytics cookies", etc.) that
-  // all contain the word "cookie" and would be spam-clicked on every timer tick.
-  // This list must match only the primary "accept all" action button.
-  const _COOKIE_ACCEPT_LABELS = [
-    'allow all cookies', 'accept all cookies',
-    'allow all', 'accept all',
-    'allow essential and optional cookies',
-    'accept cookies', 'allow cookies',
-    'alle cookies akzeptieren',  // German
-    'accepter tout',             // French
-    'aceptar todo',              // Spanish
-    'accetta tutto',             // Italian
-    'tillåt alla',               // Swedish
-    'alle accepteren',           // Dutch
-  ];
-
-  // DETECT-ONLY — no events fired from JS (isTrusted=false events are ignored by
-  // Instagram's React app). This script only locates the button and returns its
-  // centre coordinates. The actual click is done via sendInputEvent (trusted).
-  const _COOKIE_DETECT_JS = `(() => {
-    const ACCEPT = ${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
-    function isCookieAcceptBtn(b) {
-      if (!b || !b.getBoundingClientRect) return null;
-      const r = b.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) return null;
-      const t = (b.innerText||b.textContent||'').trim().toLowerCase();
-      if (ACCEPT.indexOf(t) === -1) return null;
-      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), label: t };
-    }
-    let pos = null;
-    const attr = document.querySelector('[data-cookiebanner="accept_button"]')
-              || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
-    if (attr) pos = isCookieAcceptBtn(attr);
-    if (!pos) {
-      const container = document.querySelector('[data-cookiebanner]')
-                     || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
-      if (container) {
-        for (const b of container.querySelectorAll('button,[role="button"],a')) {
-          pos = isCookieAcceptBtn(b); if (pos) break;
-        }
-      }
-    }
-    if (!pos) {
-      for (const b of document.querySelectorAll('button,[role="button"],a')) {
-        pos = isCookieAcceptBtn(b); if (pos) break;
-      }
-    }
-    return pos;
-  })()`;
-
   // ── Diagnostic relay helper ───────────────────────────────────────────────
   // ebManager runs in the Electron main process — its console.log does NOT
   // appear in the API server debug log file the user reads. This helper fires
@@ -1449,60 +1390,126 @@ export async function openEbWindow(opts: {
     }
   };
 
-  // Cookie dismiss using sendInputEvent (produces isTrusted=true events that
-  // React accepts). Key rules to prevent EB freeze:
-  //   • DETECT first (JS only, no click in the script)
-  //   • CLICK once via sendInputEvent, then wait COOLDOWN_MS before re-checking
-  //   • Max MAX_ATTEMPTS clicks total — give up gracefully rather than loop forever
-  //   • focus() only called immediately before a click, never on idle ticks
-  // Diagnostic: first 20 ticks always relay url + detect result via _ebLog so
-  // that the messages appear in the server debug log the user can read.
-  const COOKIE_MAX_ATTEMPTS = 5;
-  const COOKIE_COOLDOWN_MS  = 4000; // wait 4s after each click before checking again
-  const COOKIE_DIAG_TICKS   = 20;   // log every tick for the first 20 seconds
-  let _cookieAttempts    = 0;
-  let _cookieLastClickAt = 0;
-  let _cookieTick        = 0;
-  _ebLog("Cookie dismiss timer started");
-  const _cookieDismissTimer = setInterval(async () => {
-    if (win.isDestroyed()) { clearInterval(_cookieDismissTimer); return; }
-    // Enforce cooldown — don't hammer the renderer right after a click
-    if (_cookieLastClickAt > 0 && Date.now() - _cookieLastClickAt < COOKIE_COOLDOWN_MS) return;
-    _cookieTick++;
+  // ── Main-process cookie banner auto-dismiss (CDP approach) ────────────────
+  //
+  // WHY CDP and not sendInputEvent:
+  //   sendInputEvent/humanMouseClick sends an InputEvent to the renderer but
+  //   Instagram's React app sometimes ignores it for <a> links because the
+  //   event routing in some Electron builds doesn't produce a trusted "click"
+  //   synthetic event that React's SyntheticEventSystem picks up.
+  //   CDP Input.dispatchMouseEvent is exactly what Puppeteer uses internally —
+  //   it is the lowest-level mechanism short of a real OS cursor move and is
+  //   guaranteed to produce isTrusted=true events that React handles.
+  //
+  // WHY on every did-finish-load and NOT just once on open:
+  //   The old approach started a single 60-second timer at window-open time.
+  //   If the page loaded after 60 s, or the user navigated to another page,
+  //   the timer was already dead and the banner was never dismissed.
+  //   The new approach fires on every did-finish-load and did-navigate, so
+  //   every page that shows the banner gets it dismissed.
+  //
+  // SAFETY: the detect script matches only an exact whitelist of labels so
+  //   it cannot accidentally click login forms, 2FA dialogs, or Save-Info
+  //   prompts. Instagram's cookie banner is always one of these strings.
+
+  const _COOKIE_ACCEPT_LABELS = [
+    'allow all cookies', 'accept all cookies',
+    'allow all', 'accept all',
+    'allow essential and optional cookies',
+    'accept cookies', 'allow cookies',
+    'alle cookies akzeptieren',
+    'accepter tout',
+    'aceptar todo',
+    'accetta tutto',
+    'tillåt alla',
+    'alle accepteren',
+  ];
+
+  // Returns { x, y, label } of the accept button, or null if not present.
+  const _COOKIE_DETECT_JS = `(() => {
+    const ACCEPT = ${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
+    function match(b) {
+      if (!b || !b.getBoundingClientRect) return null;
+      const r = b.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return null;
+      const t = (b.innerText||b.textContent||'').trim().toLowerCase();
+      if (ACCEPT.indexOf(t) === -1) return null;
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), label: t };
+    }
+    // 1. Instagram's own data attribute (most specific)
+    let pos = match(document.querySelector('[data-cookiebanner="accept_button"]')
+                 || document.querySelector('[data-testid="cookie-policy-banner-accept"]'));
+    // 2. Inside a known cookie container
+    if (!pos) {
+      const c = document.querySelector('[data-cookiebanner]')
+             || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
+      if (c) { for (const b of c.querySelectorAll('button,[role="button"],a')) { pos = match(b); if (pos) break; } }
+    }
+    // 3. Anywhere on the page (exact whitelist only — safe)
+    if (!pos) { for (const b of document.querySelectorAll('button,[role="button"],a')) { pos = match(b); if (pos) break; } }
+    return pos;
+  })()`;
+
+  // cdpClickCookieBanner: detects the banner and clicks via CDP.
+  // Called after every page load. Retries up to 8 times with 1.5 s gaps.
+  let _cookieDismissRunning = false;
+  const cdpClickCookieBanner = async () => {
+    if (win.isDestroyed() || _cookieDismissRunning) return;
+    _cookieDismissRunning = true;
     try {
-      const pos = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null) as
-        { x: number; y: number; label: string } | null;
+      // Attach debugger if not already attached (idempotent)
+      try { win.webContents.debugger.attach("1.3"); } catch {}
 
-      // Always relay for the first COOKIE_DIAG_TICKS ticks so we can confirm
-      // the timer is running and see what the detect script returns on each tick.
-      if (_cookieTick <= COOKIE_DIAG_TICKS) {
-        const url = win.isDestroyed() ? "(destroyed)" : win.webContents.getURL().slice(0, 80);
-        const det = pos ? `FOUND label="${pos.label}" at (${pos.x},${pos.y})` : "no-banner";
-        _ebLog(`CookieTick#${_cookieTick} url="${url}" detect=${det}`);
-      }
+      for (let attempt = 0; attempt < 8; attempt++) {
+        if (win.isDestroyed()) break;
+        await new Promise(r => setTimeout(r, attempt === 0 ? 2500 : 1500));
+        if (win.isDestroyed()) break;
 
-      if (pos) {
-        if (_cookieAttempts >= COOKIE_MAX_ATTEMPTS) {
-          _ebLog(`Cookie banner: giving up after ${_cookieAttempts} attempts — button still at (${pos.x},${pos.y}) label="${pos.label}"`);
-          clearInterval(_cookieDismissTimer);
-          return;
+        const pos = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null) as
+          { x: number; y: number; label: string } | null;
+
+        _ebLog(`CookieCheck#${attempt + 1} url="${win.webContents.getURL().slice(0, 80)}" detect=${pos ? `FOUND label="${pos.label}" at (${pos.x},${pos.y})` : "no-banner"}`);
+
+        if (!pos) break; // banner gone (or never appeared) — stop
+
+        // Use CDP Input.dispatchMouseEvent — same mechanism Puppeteer uses,
+        // produces isTrusted=true events that React's synthetic event system
+        // handles correctly for both <button> and <a> elements.
+        try {
+          await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
+            type: "mousePressed", x: pos.x, y: pos.y,
+            button: "left", clickCount: 1, modifiers: 0,
+          });
+          await new Promise(r => setTimeout(r, 60));
+          await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
+            type: "mouseReleased", x: pos.x, y: pos.y,
+            button: "left", clickCount: 1, modifiers: 0,
+          });
+          _ebLog(`CookieBanner: CDP click dispatched at (${pos.x},${pos.y}) label="${pos.label}"`);
+        } catch (cdpErr) {
+          // CDP failed — fall back to sendInputEvent
+          _ebLog(`CookieBanner: CDP failed (${cdpErr}), falling back to sendInputEvent`);
+          win.webContents.focus();
+          await humanMouseClick(win.webContents, pos.x, pos.y);
         }
-        _cookieAttempts++;
-        _cookieLastClickAt = Date.now();
-        _ebLog(`Cookie banner attempt ${_cookieAttempts}/${COOKIE_MAX_ATTEMPTS}: human-click at (${pos.x},${pos.y}) label="${pos.label}"`);
-        win.webContents.focus();
-        await humanMouseClick(win.webContents, pos.x, pos.y);
-      } else if (_cookieAttempts > 0) {
-        // We clicked at least once and the button is now gone — success
-        clearInterval(_cookieDismissTimer);
-        _ebLog(`Cookie banner dismissed after ${_cookieAttempts} click(s)`);
+        // Wait then check if it actually dismissed
+        await new Promise(r => setTimeout(r, 1500));
+        if (win.isDestroyed()) break;
+        const stillThere = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null);
+        if (!stillThere) {
+          _ebLog(`CookieBanner dismissed after ${attempt + 1} attempt(s)`);
+          break;
+        }
       }
     } catch (err) {
-      _ebLog(`Cookie banner check error: ${err}`);
+      _ebLog(`CookieBanner error: ${err}`);
+    } finally {
+      _cookieDismissRunning = false;
     }
-  }, 1000); // poll every 1s, but cooldown gates how often we actually click
-  win.once("closed", () => clearInterval(_cookieDismissTimer));
-  setTimeout(() => { clearInterval(_cookieDismissTimer); }, 60000);
+  };
+
+  // Trigger on every page load — covers initial open AND all subsequent navigations.
+  win.webContents.on("did-finish-load", () => { cdpClickCookieBanner().catch(() => {}); });
 
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
