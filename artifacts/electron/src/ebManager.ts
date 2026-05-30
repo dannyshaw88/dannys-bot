@@ -2531,29 +2531,73 @@ export function startEbIpcServer(
         (async () => {
           const wc = e.win.webContents;
 
-          // nav() waits for the page to actually finish loading using
-          // did-finish-load / did-fail-load events.
+          // Cookie accept labels defined LOCALLY so this handler is self-contained.
+          // Do NOT reference _COOKIE_ACCEPT_LABELS from openEbWindow — that variable
+          // is in a different function scope and causes a ReferenceError here which
+          // silently kills the warmup by jumping to the catch block.
+          const WARMUP_COOKIE_LABELS = [
+            'allow all cookies', 'accept all cookies',
+            'allow all', 'accept all',
+            'allow essential and optional cookies',
+            'accept cookies', 'allow cookies',
+            'alle cookies akzeptieren',
+            'accepter tout', 'aceptar todo', 'accetta tutto',
+            'tillåt alla', 'alle accepteren',
+          ];
+
+          // nav() waits for the page to actually finish loading.
           //
-          // The old approach (wc.loadURL(url).catch(() => {})) resolved
-          // immediately when the loadURL Promise was rejected via ERR_ABORTED
-          // because openEbWindow fires its own loadURL("accounts/login/")
-          // fire-and-forget just before returning.  Both navigations race and
-          // one of the two Promises is aborted, so the warmup's .catch(() => {})
-          // resolved before the page was actually loaded — all scroll/JS then
-          // ran on an empty or mid-load page.
+          // KEY FIXES vs the old approach:
+          // 1. ERR_ABORTED (-3) is IGNORED — this fires when our loadURL() aborts
+          //    an earlier in-flight navigation (e.g. openEbWindow's fire-and-forget
+          //    loadURL("accounts/login/") is still pending when warmup calls
+          //    loadURL("instagram.com")).  Resolving on ERR_ABORTED means nav()
+          //    returns before the page is usable, causing all subsequent
+          //    executeJavaScript calls to throw "Execution context destroyed".
+          // 2. Named listeners — explicitly removed from BOTH paths so there are
+          //    no orphaned once() handlers polluting future nav() calls.
+          // 3. 1-second post-load settling gap before returning — lets the page JS
+          //    context fully initialise so executeJavaScript never sees a stale ctx.
           const nav = (url: string) => new Promise<void>(resolve => {
-            const timer = setTimeout(resolve, 30000);
-            const done  = () => { clearTimeout(timer); resolve(); };
-            wc.once("did-finish-load", done);
-            wc.once("did-fail-load",   done);
-            wc.loadURL(url).catch(done);
+            console.log(`[warmup] nav() START: ${url}`);
+            let settled = false;
+            const settle = (reason: string) => {
+              if (settled) return;
+              settled = true;
+              wc.removeListener("did-finish-load", onFinish);
+              wc.removeListener("did-fail-load",   onFail);
+              clearTimeout(timer);
+              console.log(`[warmup] nav() SETTLE (${reason}): ${url}`);
+              // 1-second breathing room so the page JS context is ready
+              setTimeout(resolve, 1000);
+            };
+            const onFinish = () => settle("did-finish-load");
+            const onFail   = (_e: unknown, code: number, desc: string) => {
+              if (code === -3) {
+                // ERR_ABORTED — our loadURL cancelled an older in-flight nav,
+                // or vice versa.  The page is still loading; keep waiting.
+                console.log(`[warmup] nav() ERR_ABORTED (ignored, still waiting): ${url}`);
+                return;
+              }
+              settle(`did-fail-load code=${code} desc=${desc}`);
+            };
+            const timer = setTimeout(() => settle("30s timeout"), 30000);
+            wc.on("did-finish-load", onFinish);
+            wc.on("did-fail-load",   onFail);
+            wc.loadURL(url).catch((err: any) => {
+              // loadURL() promise rejects when the navigation is superseded (the
+              // same as ERR_ABORTED for us).  Keep waiting for did-finish-load.
+              console.log(`[warmup] nav() loadURL rejected (${err?.message}), still waiting: ${url}`);
+            });
           });
 
-          const js  = (script: string) => wc.executeJavaScript(script).catch(() => null);
+          const js  = (script: string) => wc.executeJavaScript(script).catch((err: any) => {
+            console.log(`[warmup] executeJavaScript error (ignored): ${err?.message}`);
+            return null;
+          });
 
           const scrollFeed = () => js(`(function(){
             var dist = ${randInt(800, 2400)};
-            var start = window.scrollY;
             var step  = Math.ceil(dist / 20);
             var i = 0;
             var t = setInterval(function(){
@@ -2563,40 +2607,60 @@ export function startEbIpcServer(
           })()`);
 
           try {
-            // Wait for openEbWindow's initial loadURL("accounts/login/") to
-            // settle before starting warmup navigations.  If we skip this,
-            // our first nav() call races with that in-flight load; Chromium
-            // aborts one of the two navigations and the nav() Promise resolves
-            // before the page is usable.
+            console.log(`[warmup] START — reels:${reelsMin}-${reelsMax} posts:${postsMin}-${postsMax} profiles:${profilesMin}-${profilesMax}`);
+
+            // Wait for openEbWindow's initial loadURL to settle before starting
+            // warmup navigations.  If we skip this, our first nav() call races
+            // with that in-flight load; Chromium aborts one of the navigations
+            // and the page context is not ready.
             if (wc.isLoading()) {
               relayStep("Waiting for browser to initialize…");
+              console.log(`[warmup] initial wait: browser still loading`);
               await new Promise<void>(res => {
-                const timer = setTimeout(res, 8000);
-                wc.once("did-finish-load", () => { clearTimeout(timer); res(); });
-                wc.once("did-fail-load",   () => { clearTimeout(timer); res(); });
+                let done = false;
+                const finish = () => { if (!done) { done = true; clearTimeout(t); wc.removeListener("did-finish-load", finish); wc.removeListener("did-fail-load", failCb); res(); } };
+                const failCb = (_e: unknown, code: number) => {
+                  if (code === -3) { console.log(`[warmup] initial wait: ERR_ABORTED (ignored)`); return; }
+                  finish();
+                };
+                const t = setTimeout(() => { console.log(`[warmup] initial wait: 8s timeout`); finish(); }, 8000);
+                wc.on("did-finish-load", finish);
+                wc.on("did-fail-load",   failCb);
               });
+              console.log(`[warmup] initial wait: done`);
+            } else {
+              console.log(`[warmup] initial wait: browser already idle`);
             }
-            await sleep(500);
+            await sleep(800);
 
-            // 1. Dismiss cookie banner + browse homepage
+            // 1. Navigate to homepage + dismiss cookie banner + scroll feed
             relayStep("Navigating to Instagram homepage…");
+            console.log(`[warmup] step 1: navigating to homepage`);
             await nav("https://www.instagram.com/");
-            await sleep(3000 + Math.random() * 2000);
+            await sleep(2500 + Math.random() * 1500);
+
+            // Dismiss cookie banner (inline labels — do NOT use _COOKIE_ACCEPT_LABELS
+            // from openEbWindow scope).
+            console.log(`[warmup] step 1: dismissing cookie banner`);
             await js(`(function(){
-              const ACCEPT = ${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
-              function ok(b){if(!b)return false;const r=b.getBoundingClientRect();if(r.width<=0)return false;return ACCEPT.indexOf((b.innerText||b.textContent||'').trim().toLowerCase())!==-1;}
-              const btn=document.querySelector('[data-cookiebanner="accept_button"]')||Array.from(document.querySelectorAll('button,[role="button"],a')).find(ok);
+              var ACCEPT = ${JSON.stringify(WARMUP_COOKIE_LABELS)};
+              function ok(b){if(!b)return false;var r=b.getBoundingClientRect();if(r.width<=0)return false;return ACCEPT.indexOf((b.innerText||b.textContent||'').trim().toLowerCase())!==-1;}
+              var btn=document.querySelector('[data-cookiebanner="accept_button"]')||Array.from(document.querySelectorAll('button,[role="button"],a')).find(ok);
               if(btn){btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}
             })()`);
-            await sleep(1500);
+            await sleep(1200);
+
             relayStep("Scrolling Instagram feed…");
+            console.log(`[warmup] step 1: scrolling feed`);
             await scrollFeed();
             await sleep(randInt(3000, 6000));
             await scrollFeed();
             await sleep(randInt(2000, 4000));
+            console.log(`[warmup] step 1: feed scroll done`);
 
             // 2. View reels
             const reelCount = randInt(reelsMin, reelsMax);
+            console.log(`[warmup] step 2: reelCount=${reelCount}`);
             if (reelCount > 0) {
               const PUBLIC_REELS = [
                 "https://www.instagram.com/reels/trending/",
@@ -2608,13 +2672,15 @@ export function startEbIpcServer(
               for (let i = 0; i < reelCount; i++) {
                 await scrollFeed();
                 const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
+                console.log(`[warmup] reel ${i+1}/${reelCount}: idle ${idleMs}ms`);
                 await sleep(idleMs);
                 relayStep(`Reel ${i + 1}/${reelCount} watched`);
               }
             }
 
-            // 3. Click & view posts (visit popular public profiles)
+            // 3. View posts on public profiles
             const postCount = randInt(postsMin, postsMax);
+            console.log(`[warmup] step 3: postCount=${postCount}`);
             if (postCount > 0) {
               const PUBLIC_PROFILES = ["natgeo", "nasa", "time", "bbcnews", "cnn"];
               const profileHandle = PUBLIC_PROFILES[Math.floor(Math.random() * PUBLIC_PROFILES.length)];
@@ -2624,6 +2690,7 @@ export function startEbIpcServer(
               for (let i = 0; i < postCount; i++) {
                 await scrollFeed();
                 const idleMs = randInt(postsIdleMin, postsIdleMax) * 1000;
+                console.log(`[warmup] post ${i+1}/${postCount}: idle ${idleMs}ms`);
                 await sleep(idleMs);
                 relayStep(`Post ${i + 1}/${postCount} viewed`);
               }
@@ -2631,6 +2698,7 @@ export function startEbIpcServer(
 
             // 4. Visit profiles
             const profileCount = randInt(profilesMin, profilesMax);
+            console.log(`[warmup] step 4: profileCount=${profileCount}`);
             if (profileCount > 0) {
               const PUBLIC_BROWSE = ["natgeo", "nasa", "instagram", "time", "wwf", "discovery"];
               for (let i = 0; i < profileCount; i++) {
@@ -2640,18 +2708,24 @@ export function startEbIpcServer(
                 await sleep(2000 + Math.random() * 1000);
                 await scrollFeed();
                 const idleMs = randInt(profilesIdleMin, profilesIdleMax) * 1000;
+                console.log(`[warmup] profile ${i+1}/${profileCount} @${h}: idle ${idleMs}ms`);
                 await sleep(idleMs);
                 relayStep(`Profile ${i + 1}/${profileCount} visited`);
               }
             }
 
+            console.log(`[warmup] COMPLETE`);
             relayStep("Warm-up complete ✓");
           } catch (err: any) {
+            console.log(`[warmup] CAUGHT ERROR: ${err?.message ?? String(err)}\n${err?.stack ?? ""}`);
             relayStep(`Warm-up error: ${err?.message ?? "unknown"}`);
           } finally {
             relayDone();
           }
-        })().catch(() => { relayDone(); });
+        })().catch((err: any) => {
+          console.log(`[warmup] OUTER CATCH: ${err?.message ?? String(err)}`);
+          relayDone();
+        });
 
         return;
       }

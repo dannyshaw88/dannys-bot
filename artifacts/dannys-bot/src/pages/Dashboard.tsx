@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.669",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser pre-signup warm-up now correctly runs all scroll, reel, and profile steps — two bugs were killing it early: the cookie label list was defined in a different part of the code and caused an invisible error that skipped straight to 'complete', and a failed navigation (ERR_ABORTED) was being treated as a success, leaving the page unloaded before scrolling began." },
+      { category: "Fix", text: "Warm-up navigation is now robust against Chromium cancelling in-flight page loads — ERR_ABORTED is silently ignored and the warm-up keeps waiting for the page to fully load before scrolling or moving on." },
+      { category: "Diagnostics", text: "Dense warm-up logging now appears in equinox-debug.log — every nav() start, settle, and ERR_ABORTED event is recorded so future issues can be diagnosed from the Windows log file." },
+    ],
+  },
+  {
     version: "1.0.668",
     date: "30 May 2026",
     items: [
