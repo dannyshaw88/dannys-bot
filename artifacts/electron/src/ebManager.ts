@@ -968,8 +968,10 @@ export async function openEbWindow(opts: {
   password?: string;
   twoFAKey?: string;
   ebFingerprint?: EbFingerprintLite | null;
+  /** Ghost Browser only — URL to load directly instead of the login page. */
+  initialUrl?: string;
 }): Promise<void> {
-  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint } = opts;
+  const { profileId, username, proxy, userAgent, apiUA, password, twoFAKey, ebFingerprint, initialUrl } = opts;
 
   // Focus existing window if already open (or hidden via close→hide handler)
   const existing = ebMap.get(profileId);
@@ -1566,18 +1568,20 @@ export async function openEbWindow(opts: {
     tabsStateMap.delete(profileId);
   });
 
-  // Navigate to Instagram.
-  // Only go to the homepage if there is already an active sessionid in the
-  // Electron session (loaded from the cookie file above). When only device
-  // tokens (mid, ig_did) exist but no sessionid, navigate directly to the
-  // login page so the auto-fill handler fires immediately without the user
-  // having to do anything.
-  const sessionCksForNav = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-  win.webContents.loadURL(
-    sessionCksForNav.length > 0
-      ? "https://www.instagram.com/"
-      : "https://www.instagram.com/accounts/login/",
-  ).catch(() => {});
+  // Navigate to the initial URL.
+  // Ghost Browser (profileId=-1): load the provided initialUrl (a trending reel) directly —
+  // never load the login page or homepage, the warmup handles all navigation.
+  // Regular account EBs: go to homepage if sessionid exists, otherwise login page.
+  if (profileId === -1) {
+    win.webContents.loadURL(initialUrl || "about:blank").catch(() => {});
+  } else {
+    const sessionCksForNav = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+    win.webContents.loadURL(
+      sessionCksForNav.length > 0
+        ? "https://www.instagram.com/"
+        : "https://www.instagram.com/accounts/login/",
+    ).catch(() => {});
+  }
 
   // ── Page-detection auto-fill ──────────────────────────────────────────────
   // Detects every navigation to the Instagram login page or 2FA page and
@@ -2216,6 +2220,7 @@ export function startEbIpcServer(
           userAgent: body.userAgent,
           apiUA:     body.apiUA,
           ebFingerprint: parsedFp,
+          initialUrl: body.initialUrl ?? undefined,
         });
         return send(res, 200, { ok: true });
       }
@@ -2624,6 +2629,27 @@ export function startEbIpcServer(
                 'div[role="button"][aria-label="Close"]',
               ];
               for(var i=0;i<sels.length;i++){var p=rect(document.querySelector(sels[i]));if(p)return p;}
+              // Fallback: detect "Never miss a post" / "See photos" sign-up wall by modal text,
+              // then find an X/close button inside that modal (SVG-only or "Not now" label).
+              var containers=Array.from(document.querySelectorAll('[role="dialog"],[role="presentation"]'));
+              for(var c=0;c<containers.length;c++){
+                var txt=(containers[c].innerText||containers[c].textContent||'').toLowerCase();
+                if(txt.includes('sign up')||txt.includes('never miss')||txt.includes('see photos')||txt.includes('see videos')||txt.includes('log in to')){
+                  var btns=Array.from(containers[c].querySelectorAll('button,div[role="button"]'));
+                  for(var b=0;b<btns.length;b++){
+                    var btxt=(btns[b].innerText||btns[b].textContent||'').trim().toLowerCase();
+                    if(btxt===''||btxt==='×'||btxt==='✕'||btxt==='not now'||btxt==='dismiss'||btxt==='close'||(btxt.length<4&&btns[b].querySelector('svg'))){
+                      var p2=rect(btns[b]);if(p2)return p2;
+                    }
+                  }
+                  // Last resort: first button that contains only an SVG (the X icon)
+                  for(var b2=0;b2<btns.length;b2++){
+                    if(btns[b2].querySelector('svg')&&!(btns[b2].innerText||btns[b2].textContent||'').trim().match(/[a-z]/i)){
+                      var p3=rect(btns[b2]);if(p3)return p3;
+                    }
+                  }
+                }
+              }
               return null;
             })()`);
             if (pos && typeof pos === "object" && "x" in (pos as any)) {

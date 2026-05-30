@@ -2233,6 +2233,20 @@ export async function registerInstagramRoutes(
     if (ipcPort) {
       try {
         const { proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint } = req.body as any;
+
+        // Fetch a trending reel URL via HikerAPI BEFORE the browser opens so it
+        // lands directly on the reel — never on the Instagram homepage or login page.
+        let initialUrl: string | undefined;
+        try {
+          const settings = await storage.getGlobalSettings();
+          if (settings.hikerApiEnabled === "true" && settings.hikerApiToken) {
+            const { HikerApiClient } = await import("../instagram/hikerApiClient");
+            const hiker = new HikerApiClient(settings.hikerApiToken);
+            const shortcodes = await hiker.getTrendingReelShortcodes(3);
+            if (shortcodes.length > 0) initialUrl = `https://www.instagram.com/reel/${shortcodes[0]}/`;
+          }
+        } catch { /* non-fatal — browser still opens, warmup navigates */ }
+
         const body = {
           profileId: -1,
           username: "Ghost",
@@ -2241,6 +2255,7 @@ export async function registerInstagramRoutes(
             : undefined,
           userAgent: userAgent ?? undefined,
           ebFingerprint: fingerprint ?? undefined,
+          initialUrl,
         };
         await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
           method:  "POST",

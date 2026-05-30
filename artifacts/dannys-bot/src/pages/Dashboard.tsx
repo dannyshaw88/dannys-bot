@@ -60,6 +60,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.673",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser now opens directly on a trending reel — HikerAPI fetches a reel URL before the browser launches, so the login page and homepage are never shown." },
+      { category: "Fix", text: "Sign-up wall popup ('Never miss a post' / 'See photos and videos') is now detected by its body text and dismissed even when the close button has no aria-label — works on all Instagram reel modal variants." },
+    ],
+  },
+  {
     version: "1.0.672",
     date: "30 May 2026",
     items: [
