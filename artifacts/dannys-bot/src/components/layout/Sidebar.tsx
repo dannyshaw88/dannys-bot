@@ -1,12 +1,49 @@
 import { useLocation, useSearch } from "wouter";
 import {
-  Gauge, Users, ShieldAlert, Settings, Activity,
-  ChevronLeft, ChevronRight, Ghost, Upload, Star,
+  Gauge, Users, Activity,
+  ChevronLeft, ChevronRight, Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
+
+function FilledStarIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="currentColor" stroke="none" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+    </svg>
+  );
+}
+
+function FilledGhostIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="currentColor" stroke="none" d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"/>
+      <circle fill="white" cx="9" cy="10" r="1.5"/>
+      <circle fill="white" cx="15" cy="10" r="1.5"/>
+    </svg>
+  );
+}
+
+function FilledSettingsIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="currentColor" stroke="none" d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+      <circle fill="white" cx="12" cy="12" r="3"/>
+    </svg>
+  );
+}
+
+function FilledShieldAlertIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path fill="currentColor" stroke="none" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <rect x="11" y="8" width="2" height="5" rx="0.5" fill="white"/>
+      <circle cx="12" cy="16" r="1" fill="white"/>
+    </svg>
+  );
+}
 
 const TRUST_SCORE_TABS = [
   { value: "settings",      label: "Settings"      },
@@ -33,13 +70,13 @@ export function Sidebar() {
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: Gauge       },
-    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: Users       },
-    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: Star        },
-    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: Activity    },
-    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: Ghost       },
-    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: Upload      },
-    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: ShieldAlert },
+    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: Gauge               },
+    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: Users               },
+    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: FilledStarIcon      },
+    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: Activity            },
+    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon     },
+    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: Upload              },
+    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon },
   ];
 
   function goBack() {
@@ -163,7 +200,7 @@ export function Sidebar() {
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
         >
-          <Settings
+          <FilledSettingsIcon
             className={cn("w-[32px] h-[32px] shrink-0 transition-colors", location === "/settings" ? "text-primary" : "text-muted-foreground")}
             style={{ color: BRAND }}
           />

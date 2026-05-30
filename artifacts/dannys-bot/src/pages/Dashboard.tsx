@@ -59,6 +59,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.667",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser page no longer shows a white screen when clicked — a hook ordering bug caused a crash before any UI could render." },
+      { category: "UI", text: "Sidebar icons updated: TrustScores star, Ghost Browser ghost, Settings cog, and Proxy Manager shield are now solid filled with the brand cyan colour; ghost eyes, cog centre, and shield exclamation mark are white for contrast." },
+    ],
+  },
+  {
     version: "1.0.666",
     date: "30 May 2026",
     items: [

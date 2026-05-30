@@ -431,6 +431,19 @@ export function CreateGhostPage() {
     try { localStorage.setItem("ghost-warmup-config", JSON.stringify(warmupConfig)); } catch { /* ignore */ }
   }, [warmupConfig]);
 
+  const handleBrowserMessage = useCallback((msg: any) => {
+    try {
+      const parsed = typeof msg === "string" ? JSON.parse(msg) : msg;
+      if (parsed.type === "signupStep" && parsed.msg) {
+        setWarmupLastStep(parsed.msg);
+      }
+      if (parsed.type === "warmupDone") {
+        setWarmupStatus("done");
+        setWarmupLastStep("Warm-up complete ✓");
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
   // In native Electron mode the BrowserPanel is not rendered (Ghost Browser
   // runs as its own OS window), so its WebSocket to /api/signup/browser/stream
   // never opens and warmup signupStep / warmupDone messages are silently
@@ -478,19 +491,6 @@ export function CreateGhostPage() {
     (manualHost.trim() !== "" && /^\d+$/.test(manualPort) && parseInt(manualPort, 10) > 0 && parseInt(manualPort, 10) <= 65535);
 
   const hasProxy = proxySelection.kind !== "none" && resolvedProxy !== undefined;
-
-  const handleBrowserMessage = useCallback((msg: any) => {
-    try {
-      const parsed = typeof msg === "string" ? JSON.parse(msg) : msg;
-      if (parsed.type === "signupStep" && parsed.msg) {
-        setWarmupLastStep(parsed.msg);
-      }
-      if (parsed.type === "warmupDone") {
-        setWarmupStatus("done");
-        setWarmupLastStep("Warm-up complete ✓");
-      }
-    } catch { /* non-fatal */ }
-  }, []);
 
   const handleRunWarmup = useCallback(async () => {
     if (!isOpen) return;
