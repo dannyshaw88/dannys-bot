@@ -987,17 +987,71 @@ export function ProfileDetailsPage() {
             onCopy={handleAccountCopy}
           />
 
-          {/* Group — shown first */}
-          <div className="space-y-1 pb-2">
-            <div className="flex items-center gap-3">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
+          {/* Group + Sync — top row */}
+          <div className="flex gap-6 items-start pb-2">
+            {/* Left: Group */}
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-3">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
+              </div>
+              <GroupCombobox
+                value={formData.tags || ""}
+                groups={Array.from(new Set((allProfiles ?? []).map(p => (p.tags ?? "").trim()).filter(Boolean))).sort()}
+                onChange={val => updateField({ tags: val })}
+              />
+              <p className="text-[11px] text-muted-foreground">Pick an existing group or type a new name. Leave blank to remove from any group.</p>
             </div>
-            <GroupCombobox
-              value={formData.tags || ""}
-              groups={Array.from(new Set((allProfiles ?? []).map(p => (p.tags ?? "").trim()).filter(Boolean))).sort()}
-              onChange={val => updateField({ tags: val })}
-            />
-            <p className="text-[11px] text-muted-foreground">Pick an existing group or type a new name. Leave blank to remove from any group.</p>
+
+            {/* Right: Sync controls */}
+            <div className="shrink-0 flex flex-col gap-1.5 pt-0.5 border-l border-border pl-5 min-w-[185px]">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sync</Label>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={!!formData?.syncEnabled}
+                  onCheckedChange={v => updateField({ syncEnabled: v })}
+                />
+                <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
+                <div className="flex items-center gap-1 ml-1">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={formData?.syncIntervalMin ?? 60}
+                    onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
+                    className="h-6 text-xs w-11 px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={formData?.syncIntervalMax ?? 120}
+                    onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
+                    className="h-6 text-xs w-11 px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="syncUseHikerTop"
+                  checked={!!formData?.syncUseHiker}
+                  onCheckedChange={v => updateField({ syncUseHiker: !!v })}
+                />
+                <Label htmlFor="syncUseHikerTop" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-xs px-2 gap-1 ml-auto"
+                  disabled={syncNowStatus === "syncing"}
+                  onClick={handleSyncNow}
+                >
+                  {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                  {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
+                  {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
+                  {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Account Label */}
@@ -1790,55 +1844,6 @@ export function ProfileDetailsPage() {
                     )}
                   </div>
 
-                  {/* Right controls (single row) */}
-                  <div className="flex items-center gap-3 flex-1 border-l border-border pl-4 flex-nowrap">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={!!formData?.syncEnabled}
-                        onCheckedChange={v => updateField({ syncEnabled: v })}
-                      />
-                      <Label className="text-sm font-semibold whitespace-nowrap">Auto Sync</Label>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        type="number"
-                        min={1}
-                        value={formData?.syncIntervalMin ?? 60}
-                        onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
-                        className="h-7 text-sm w-16"
-                      />
-                      <span className="text-xs text-muted-foreground">–</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={formData?.syncIntervalMax ?? 120}
-                        onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
-                        className="h-7 text-sm w-16"
-                      />
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">min</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="syncUseHiker"
-                        checked={!!formData?.syncUseHiker}
-                        onCheckedChange={v => updateField({ syncUseHiker: !!v })}
-                      />
-                      <Label htmlFor="syncUseHiker" className="text-sm cursor-pointer whitespace-nowrap">HikerAPI</Label>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5"
-                      disabled={syncNowStatus === "syncing"}
-                      onClick={handleSyncNow}
-                    >
-                      {syncNowStatus === "syncing" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                      {syncNowStatus === "done" && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
-                      {syncNowStatus === "fail" && <XCircle className="w-3.5 h-3.5 text-destructive" />}
-                      {syncNowStatus === "idle" && <RefreshCw className="w-3.5 h-3.5" />}
-                      {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Sync Failed" : "Sync Now"}
-                    </Button>
-                  </div>
                 </div>
               </CardContent>
             </Card>

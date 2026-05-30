@@ -183,7 +183,7 @@ export function TrustScoresPage() {
                     onDragOver={e => onDragOver(e, globalIdx)}
                     onDragEnd={onDragEnd}
                     className="group relative flex items-center gap-2 px-2 py-2 rounded-lg border border-transparent hover:border-border hover:bg-accent transition-colors cursor-grab active:cursor-grabbing select-none"
-                    style={{ width: 220 }}
+                    style={{ width: 275 }}
                   >
                     <GripVertical className="w-3 h-3 text-muted-foreground/40 shrink-0 group-hover:text-muted-foreground transition-colors" />
                     <span className="w-5 text-[11px] font-bold text-muted-foreground shrink-0 text-right">
@@ -191,12 +191,12 @@ export function TrustScoresPage() {
                     </span>
                     <button
                       onClick={() => setLocation(`/trust-scores/${level.id}`)}
-                      className="flex items-center gap-1.5 rounded-full px-3 py-1 shrink-0 hover:opacity-80 transition-opacity"
+                      className="flex items-center gap-1.5 rounded-full px-4 py-1.5 shrink-0 hover:opacity-80 transition-opacity"
                       style={{ background: level.bg, border: `1px solid ${level.border}` }}
                       onMouseDown={e => e.stopPropagation()}
                     >
-                      <Icon size={12} color={level.text} fill={level.text} strokeWidth={2} />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: level.text, letterSpacing: "0.05em" }}>
+                      <Icon size={15} color={level.text} fill={level.text} strokeWidth={2} />
+                      <span style={{ fontSize: 14, fontWeight: 700, color: level.text, letterSpacing: "0.05em" }}>
                         {level.label}
                       </span>
                     </button>
@@ -285,20 +285,34 @@ export function TrustScoresPage() {
               <div className="space-y-3 mb-5">
                 <div className="flex items-center gap-3">
                   <label className="text-sm font-medium w-28 shrink-0">Pill Colour</label>
-                  <input
-                    type="color"
-                    value={editState.bg}
-                    onChange={e => setEditState(s => s ? { ...s, bg: e.target.value } : s)}
-                    className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background"
-                  />
+                  {editState.bg === "transparent" ? (
+                    <div
+                      className="w-10 h-8 rounded border border-border cursor-pointer shrink-0 flex items-center justify-center text-[9px] text-muted-foreground font-bold"
+                      style={{ background: "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 8px 8px" }}
+                      onClick={() => setEditState(s => s ? { ...s, bg: "#1AD2F2" } : s)}
+                      title="Click to pick a colour"
+                    />
+                  ) : (
+                    <input
+                      type="color"
+                      value={editState.bg}
+                      onChange={e => setEditState(s => s ? { ...s, bg: e.target.value } : s)}
+                      className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background shrink-0"
+                    />
+                  )}
                   <input
                     type="text"
                     value={editState.bg}
                     onChange={e => setEditState(s => s ? { ...s, bg: e.target.value } : s)}
                     className="flex-1 px-2 py-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                    maxLength={7}
                     placeholder="#1AD2F2"
                   />
+                  <button
+                    onClick={() => setEditState(s => s ? { ...s, bg: s.bg === "transparent" ? "#1AD2F2" : "transparent" } : s)}
+                    className={`text-[10px] px-2 py-1 rounded border transition-colors whitespace-nowrap shrink-0 ${editState.bg === "transparent" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary hover:text-primary"}`}
+                  >
+                    None
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -307,7 +321,7 @@ export function TrustScoresPage() {
                     type="color"
                     value={editState.text}
                     onChange={e => setEditState(s => s ? { ...s, text: e.target.value } : s)}
-                    className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background"
+                    className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background shrink-0"
                   />
                   <input
                     type="text"
@@ -321,20 +335,34 @@ export function TrustScoresPage() {
 
                 <div className="flex items-center gap-3">
                   <label className="text-sm font-medium w-28 shrink-0">Border Colour</label>
-                  <input
-                    type="color"
-                    value={editState.border}
-                    onChange={e => setEditState(s => s ? { ...s, border: e.target.value } : s)}
-                    className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background"
-                  />
+                  {editState.border === "transparent" ? (
+                    <div
+                      className="w-10 h-8 rounded border border-border cursor-pointer shrink-0"
+                      style={{ background: "repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 8px 8px" }}
+                      onClick={() => setEditState(s => s ? { ...s, border: "#0eb8d4" } : s)}
+                      title="Click to pick a colour"
+                    />
+                  ) : (
+                    <input
+                      type="color"
+                      value={editState.border}
+                      onChange={e => setEditState(s => s ? { ...s, border: e.target.value } : s)}
+                      className="w-10 h-8 rounded border border-border cursor-pointer p-0.5 bg-background shrink-0"
+                    />
+                  )}
                   <input
                     type="text"
                     value={editState.border}
                     onChange={e => setEditState(s => s ? { ...s, border: e.target.value } : s)}
                     className="flex-1 px-2 py-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                    maxLength={7}
                     placeholder="#0eb8d4"
                   />
+                  <button
+                    onClick={() => setEditState(s => s ? { ...s, border: s.border === "transparent" ? "#0eb8d4" : "transparent" } : s)}
+                    className={`text-[10px] px-2 py-1 rounded border transition-colors whitespace-nowrap shrink-0 ${editState.border === "transparent" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary hover:text-primary"}`}
+                  >
+                    None
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-3">

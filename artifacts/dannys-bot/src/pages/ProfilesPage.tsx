@@ -987,8 +987,7 @@ export function ProfilesPage() {
             size="sm"
             className="bg-sky-400 hover:bg-sky-500 text-white border-0 shrink-0"
           >
-            <Plus className="w-4 h-4 mr-1" />
-            Add Profile
+            Add Account
           </Button>
           {addProfilePanelOpen && (
             <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-2 duration-150">
@@ -999,12 +998,14 @@ export function ProfilesPage() {
                 value={addProfileCount}
                 onChange={e => {
                   const v = e.target.value.replace(/[^0-9]/g, "");
+                  if (Number(v) > 999) return;
                   setAddProfileCount(v);
                 }}
                 onKeyDown={e => { if (e.key === "Enter") handleCreateMultiple(); if (e.key === "Escape") setAddProfilePanelOpen(false); }}
                 autoFocus
-                placeholder="Count"
-                className="w-20 h-8 text-sm border border-border rounded px-2 bg-background text-foreground text-center"
+                placeholder="1"
+                maxLength={3}
+                className="w-12 h-8 text-sm border-2 border-cyan-400 rounded px-1 bg-cyan-950/30 text-cyan-100 text-center font-bold focus:outline-none focus:border-cyan-300"
               />
               <Button
                 size="sm"

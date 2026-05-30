@@ -158,7 +158,6 @@ export const ICON_REGISTRY: IconEntry[] = [
   { key: "BadgeMinus",     Icon: BadgeMinus,     label: "Badge Minus",  category: "👑 Rank & Awards" },
   { key: "BadgePlus",      Icon: BadgePlus,      label: "Badge Plus",   category: "👑 Rank & Awards" },
   { key: "BadgeX",         Icon: BadgeX,         label: "Badge X",      category: "👑 Rank & Awards" },
-  { key: "BadgeCheck2",    Icon: BadgeCheck,     label: "Verified",     category: "👑 Rank & Awards" },
   { key: "Dice1",          Icon: Dice1,          label: "Dice 1",       category: "👑 Rank & Awards" },
   { key: "Dice2",          Icon: Dice2,          label: "Dice 2",       category: "👑 Rank & Awards" },
   { key: "Dice3",          Icon: Dice3,          label: "Dice 3",       category: "👑 Rank & Awards" },
@@ -197,7 +196,6 @@ export const ICON_REGISTRY: IconEntry[] = [
   { key: "Waves",          Icon: Waves,          label: "Waves",        category: "🐾 Animals & Nature" },
   { key: "Mountain",       Icon: Mountain,       label: "Mountain",     category: "🐾 Animals & Nature" },
   { key: "MountainSnow",   Icon: MountainSnow,   label: "Snowy Mountain",category: "🐾 Animals & Nature" },
-  { key: "Flame_nature",   Icon: Flame,          label: "Fire",         category: "🐾 Animals & Nature" },
 
   // ─── People & Emotions ─────────────────────────────────────────────────────
   { key: "User",           Icon: User,           label: "User",         category: "👤 People & Emotions" },
@@ -222,7 +220,6 @@ export const ICON_REGISTRY: IconEntry[] = [
   { key: "Skull",          Icon: Skull,          label: "Skull",        category: "👤 People & Emotions" },
   { key: "PersonStanding", Icon: PersonStanding, label: "Person",       category: "👤 People & Emotions" },
   { key: "HandCoins",      Icon: HandCoins,      label: "Hand Coins",   category: "👤 People & Emotions" },
-  { key: "HandHeart",      Icon: HeartHandshake, label: "Hand Heart",   category: "👤 People & Emotions" },
 
   // ─── Tech & Devices ────────────────────────────────────────────────────────
   { key: "Code",           Icon: Code,           label: "Code",         category: "⚙️ Tech & Devices" },

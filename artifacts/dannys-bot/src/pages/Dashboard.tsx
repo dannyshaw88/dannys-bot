@@ -59,6 +59,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.657",
+    date: "30 May 2026",
+    items: [
+      { category: "Fixed", text: "TrustScore icon picker: removed duplicate icons that were showing the same image under different names." },
+      { category: "Improvement", text: "TrustScore icon picker: dialog is now 15% wider for easier browsing." },
+      { category: "Improvement", text: "TrustScore badge editor: Pill Colour and Border Colour now have a 'None' button to set them to transparent." },
+      { category: "Improvement", text: "TrustScore badges on the TrustScores page are now 25% larger — 5 badges fill each row more comfortably." },
+      { category: "Improvement", text: "Accounts page: 'Add Profile' button renamed to 'Add Account' with no plus sign." },
+      { category: "Improvement", text: "Add Account input is now cyan-styled, 3 digits wide, and capped at a maximum of 999." },
+      { category: "Improvement", text: "Account Settings: Sync controls (Auto Sync, interval, HikerAPI, Sync Now) moved from the bottom to the top-right, beside the Group field." },
+    ],
+  },
+  {
     version: "1.0.656",
     date: "30 May 2026",
     items: [

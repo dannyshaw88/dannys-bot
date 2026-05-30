@@ -39,7 +39,7 @@ export function IconPicker({ value, onChange, onClose }: IconPickerProps) {
       onMouseDown={e => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div className="bg-background rounded-xl border border-border shadow-2xl flex flex-col"
-        style={{ width: 644, height: 520 }}>
+        style={{ width: 741, height: 520 }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border shrink-0">
