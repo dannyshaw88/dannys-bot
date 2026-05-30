@@ -59,6 +59,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.662",
+    date: "30 May 2026",
+    items: [
+      { category: "Improvement", text: "Ghost Browser now auto-detects and accepts Instagram's cookie policy banner on every page — no more manual clicking required." },
+      { category: "Improvement", text: "Warm-up starts automatically the moment you click Open Ghost Browser — no separate button click needed." },
+      { category: "Improvement", text: "Warm-up now ends on the Reels feed instead of the homepage, so accounts don't all land on the same page after setup." },
+    ],
+  },
+  {
     version: "1.0.661",
     date: "30 May 2026",
     items: [

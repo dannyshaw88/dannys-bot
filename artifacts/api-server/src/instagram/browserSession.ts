@@ -6596,6 +6596,13 @@ export async function openSignupBrowser(opts?: {
       // The delay prevents createCDPSession() from racing against an in-progress
       // renderer swap and keeps frame delivery continuous across navigations.
       setTimeout(() => { _startSignupScreencast().catch(() => {}); }, 500);
+      // Auto-dismiss cookie banner after every navigation: wait 2.5 s for React
+      // to render the dialog before probing for it.  The 2.5 s gap also ensures
+      // we never fire mid-redirect (the old "constantly refreshing" bug was caused
+      // by clicking a random element while Instagram was still navigating).
+      if (url && url.includes("instagram.com")) {
+        setTimeout(() => { dismissCookieBanner(page as any).catch(() => {}); }, 2500);
+      }
     });
 
     // Notify the frontend when Chrome disconnects unexpectedly (OOM crash, force
@@ -6617,10 +6624,10 @@ export async function openSignupBrowser(opts?: {
     // to constantly refresh or showed a frozen/blank canvas.
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    // Cookie banner is intentionally NOT auto-dismissed here.
-    // Auto-clicking "Accept" triggered an Instagram redirect; a second scheduled
-    // attempt fired mid-redirect and clicked a random element, causing the
-    // "constantly refreshing" loop. The user can dismiss the banner manually.
+    // Auto-dismiss cookie banner on initial load.  Wait 2.5 s so React has time
+    // to paint the dialog before we probe for it — the framenavigated handler
+    // will take care of subsequent navigations with the same 2.5 s guard.
+    setTimeout(() => { dismissCookieBanner(page as any).catch(() => {}); }, 2500);
 
     // Start screencast AFTER goto() — page is now in a stable state and
     // createCDPSession() will not conflict with an in-progress navigation.
@@ -6897,6 +6904,15 @@ async function warmupSignupSession(page: Page, opts: {
   }
 
   step("EB warmup: session warm-up complete ✓");
+
+  // Land on the Reels feed so every account doesn't sit on an identical
+  // Instagram homepage — varied landing pages are a weaker clustering signal.
+  try {
+    step("EB warmup: landing on Reels feed…");
+    await page.goto("https://www.instagram.com/reels/", { waitUntil: "domcontentloaded", timeout: 20000 });
+    await delay(jitter(1000, 600));
+    await dismissCookieBanner(page);
+  } catch { /* non-fatal */ }
 }
 
 /** Run the warm-up session on the already-open Ghost Browser (_signupPage).

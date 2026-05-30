@@ -474,6 +474,14 @@ export function CreateGhostPage() {
       }),
     }).catch(() => {});
     setBrowserState("open");
+    // Auto-start warm-up immediately — no need to click "Run Warm-up" manually.
+    setWarmupStatus("running");
+    setWarmupLastStep("Starting warm-up…");
+    fetch("/api/signup/browser/warmup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(warmupConfig),
+    }).catch(() => { setWarmupStatus("idle"); setWarmupLastStep(""); });
   };
 
   const handleClose = async () => {
