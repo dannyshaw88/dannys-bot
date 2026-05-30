@@ -30726,7 +30726,7 @@ var require_websocket = __commonJS({
     var http3 = __require("http");
     var net4 = __require("net");
     var tls3 = __require("tls");
-    var { randomBytes: randomBytes5, createHash } = __require("crypto");
+    var { randomBytes: randomBytes6, createHash } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL3 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -31256,7 +31256,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes5(16).toString("base64");
+      const key = randomBytes6(16).toString("base64");
       const request3 = isSecure ? https4.request : http3.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -118392,10 +118392,10 @@ __export(hikerApiClient_exports, {
   HikerApiClient: () => HikerApiClient,
   HikerCacheMissError: () => HikerCacheMissError
 });
-import * as https3 from "https";
+import * as https2 from "https";
 function hikerGet(path6, token) {
   return new Promise((resolve, reject) => {
-    const req = https3.request(
+    const req = https2.request(
       {
         hostname: HIKER_HOST,
         path: path6,
@@ -118550,15 +118550,87 @@ var init_hikerApiClient = __esm({
         }
       }
       async getFollowings(userId, max = 50) {
-        try {
-          const amount = Math.min(Math.max(max, 1), 200);
-          const j = await hikerGet(`/v1/user/following?user_id=${encodeURIComponent(userId)}&amount=${amount}`, this.token);
-          const users = Array.isArray(j) ? j : Array.isArray(j?.users) ? j.users : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : [];
-          return users.filter((u) => u?.pk && u?.username).map((u) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") })).slice(0, max);
-        } catch (e) {
-          console.error(`[hikerApi] getFollowings ${userId} error: ${e?.message}`);
-          return [];
+        const extractPage = (j) => {
+          const envelope = j && !Array.isArray(j) && j?.response && typeof j.response === "object" ? j.response : j;
+          const arr = Array.isArray(envelope) ? envelope : Array.isArray(envelope?.users) ? envelope.users : Array.isArray(envelope?.items) ? envelope.items : Array.isArray(envelope?.data) ? envelope.data : Array.isArray(j?.users) ? j.users : Array.isArray(j?.items) ? j.items : Array.isArray(j?.data) ? j.data : [];
+          const users = arr.filter((u) => u?.pk && u?.username).map((u) => ({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") }));
+          const nextMaxId2 = envelope?.next_max_id ? String(envelope.next_max_id) : null;
+          const more = !!(envelope?.more_available ?? (users.length > 0 && !!nextMaxId2));
+          return { users, nextMaxId: nextMaxId2, more };
+        };
+        const PAGE_SIZE = 200;
+        const accumulated = [];
+        let nextMaxId = null;
+        const maxPages = Math.ceil(max / PAGE_SIZE) + 5;
+        for (let page = 0; page < maxPages && accumulated.length < max; page++) {
+          let pageResult = null;
+          try {
+            const qs = new URLSearchParams({ user_id: userId, amount: String(PAGE_SIZE) });
+            if (nextMaxId) qs.set("next_max_id", nextMaxId);
+            const j = await hikerGet(`/v2/user/following?${qs}`, this.token);
+            if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
+              const detail = j.detail ?? j.exc_type ?? JSON.stringify(j);
+              if (/entries not found|not found/i.test(detail)) {
+                console.log(`[hikerApi] getFollowings ${userId} page ${page}: /v2/ cache miss, trying /v1/\u2026`);
+              } else {
+                console.warn(`[hikerApi] getFollowings ${userId} page ${page} v2 error: ${detail}`);
+              }
+            } else {
+              pageResult = extractPage(j);
+            }
+          } catch (e) {
+            console.warn(`[hikerApi] getFollowings v2 ${userId} page ${page}: ${e?.message} \u2014 trying v1`);
+          }
+          if (!pageResult) {
+            try {
+              const qs = new URLSearchParams({ user_id: userId, amount: String(PAGE_SIZE) });
+              if (nextMaxId) qs.set("next_max_id", nextMaxId);
+              const j = await hikerGet(`/v1/user/following?${qs}`, this.token);
+              if (j && !Array.isArray(j) && !j?.response && (j.detail || j.exc_type)) {
+                console.warn(`[hikerApi] getFollowings ${userId} page ${page} v1 error: ${j.detail ?? j.exc_type}`);
+                break;
+              }
+              pageResult = extractPage(j);
+            } catch (e) {
+              console.error(`[hikerApi] getFollowings ${userId} page ${page} v1 error: ${e?.message}`);
+              break;
+            }
+          }
+          accumulated.push(...pageResult.users);
+          console.log(`[hikerApi] getFollowings ${userId} page ${page}: +${pageResult.users.length} (total ${accumulated.length}/${max}, nextMaxId=${pageResult.nextMaxId ?? "none"}, more=${pageResult.more})`);
+          nextMaxId = pageResult.nextMaxId;
+          if (!pageResult.more || !nextMaxId || pageResult.users.length === 0) break;
         }
+        return accumulated.slice(0, max);
+      }
+      // Fetches shortcodes from well-known public Instagram accounts for use as
+      // warmup browsing URLs before a signup attempt.  Returns up to `n` shortcodes.
+      // Falls back gracefully: skips accounts that don't respond, returns whatever
+      // was collected (may be fewer than `n`).
+      async getPublicShortcodes(n = 3) {
+        const WARMUP_ACCOUNTS = ["instagram", "natgeo", "nasa"];
+        const shortcodes = [];
+        for (const username of WARMUP_ACCOUNTS) {
+          if (shortcodes.length >= n) break;
+          try {
+            const user = await this.getUserByUsername(username);
+            if (!user) continue;
+            const j = await hikerGet(
+              `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=6`,
+              this.token
+            );
+            const items = Array.isArray(j) ? j : Array.isArray(j?.response) ? j.response : Array.isArray(j?.items) ? j.items : [];
+            for (const item of items) {
+              if (shortcodes.length >= n) break;
+              const mediaId = String(item.id ?? item.pk ?? "");
+              if (!mediaId) continue;
+              const sc = item.code || this.mediaIdToShortcode(mediaId);
+              if (sc && sc !== "0") shortcodes.push(sc);
+            }
+          } catch {
+          }
+        }
+        return shortcodes;
       }
       // Converts a numeric media ID (e.g. "3123456789012345678_123") to the
       // base64url shortcode Instagram uses in post URLs.
@@ -118658,13 +118730,13 @@ var imageAlteration_exports = {};
 __export(imageAlteration_exports, {
   alterJpegBuffer: () => alterJpegBuffer
 });
-import { randomBytes as randomBytes4 } from "crypto";
+import { randomBytes as randomBytes5 } from "crypto";
 function randInRange(min, max) {
   return min + Math.random() * (max - min);
 }
 function injectComSegment(buf, commentLen) {
   if (buf.length < 4 || buf[0] !== 255 || buf[1] !== 216) return buf;
-  const comment = randomBytes4(commentLen);
+  const comment = randomBytes5(commentLen);
   const segLen = 2 + commentLen;
   const com = Buffer.allocUnsafe(4 + commentLen);
   com[0] = 255;
@@ -123194,6 +123266,7 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
   .card.pass { border-color: rgba(34,197,94,.30); }
   .card.fail { border-color: rgba(239,68,68,.40); }
   .card.warn { border-color: rgba(245,158,11,.30); }
+  .card.wide { grid-column: 1 / -1; }
 
   .card-header {
     display: flex;
@@ -123248,7 +123321,7 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
     color: var(--text);
     text-align: right;
     word-break: break-all;
-    max-width: 240px;
+    max-width: 260px;
   }
   .row-value.red   { color: var(--fail); font-weight: 700; }
   .row-value.green { color: var(--pass); font-weight: 700; }
@@ -123312,6 +123385,52 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
   .desc.fail { color: var(--fail); background: var(--fail-bg); border: 1px solid rgba(220,38,38,.2); }
   .desc.pass { color: var(--pass); background: var(--pass-bg); border: 1px solid rgba(22,163,74,.2); }
 
+  /* ── Font list ──────────────────────────────────────── */
+  .font-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .font-tag {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(0,0,0,.05);
+    font-family: 'Menlo', 'Consolas', monospace;
+    color: var(--text);
+  }
+  .font-tag.present { background: var(--pass-bg); color: var(--pass); border: 1px solid rgba(34,197,94,.2); }
+
+  /* ── Identity grid ──────────────────────────────────── */
+  .identity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .identity-block {
+    background: rgba(0,0,0,.03);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .identity-block .ib-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .identity-block .ib-value {
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--text);
+    word-break: break-all;
+    line-height: 1.6;
+  }
+  .identity-block .ib-value.none { color: var(--muted); font-style: italic; }
+
   /* ── Rerun button ───────────────────────────────────── */
   .rerun-btn {
     display: block;
@@ -123328,9 +123447,6 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
     transition: border-color .15s, color .15s;
   }
   .rerun-btn:hover { border-color: var(--info); color: var(--info); }
-
-  /* ── Wide card ──────────────────────────────────────── */
-  .card.wide { grid-column: 1 / -1; }
 
   /* ── Loading spinner ─────────────────────────────────── */
   .spinner {
@@ -123362,7 +123478,43 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
 
 <div class="grid">
 
-  <!-- IP Detection -->
+  <!-- Account Identity (server-injected) -->
+  <div class="card wide" id="card-identity">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🪪</span> Account Identity</div>
+      <span class="badge info" id="badge-identity">INFO</span>
+    </div>
+    <div class="card-body" id="identity-body">
+      <div class="identity-grid">
+        <div class="identity-block">
+          <div class="ib-label">Assigned Proxy</div>
+          <div class="ib-value" id="id-proxy">—</div>
+        </div>
+        <div class="identity-block">
+          <div class="ib-label">Proxy Type / Credentials</div>
+          <div class="ib-value" id="id-proxy-meta">—</div>
+        </div>
+        <div class="identity-block">
+          <div class="ib-label">Electron Routes Via</div>
+          <div class="ib-value" id="id-session-proxy">—</div>
+        </div>
+        <div class="identity-block">
+          <div class="ib-label">Session Proxy Rules</div>
+          <div class="ib-value" id="id-proxy-rules">—</div>
+        </div>
+        <div class="identity-block">
+          <div class="ib-label">EB User Agent</div>
+          <div class="ib-value" id="id-eb-ua">—</div>
+        </div>
+        <div class="identity-block">
+          <div class="ib-label">Mobile API User Agent</div>
+          <div class="ib-value" id="id-api-ua">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Public IP -->
   <div class="card" id="card-ip">
     <div class="card-header">
       <div class="card-title"><span class="icon">🌐</span> Public IP</div>
@@ -123374,6 +123526,17 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
         <div class="ip-addr loading" id="ip-display">Fetching…</div>
       </div>
       <div id="ip-rows"></div>
+    </div>
+  </div>
+
+  <!-- IP Match -->
+  <div class="card" id="card-ipmatch">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🎯</span> Proxy IP Match</div>
+      <span class="badge pending" id="badge-ipmatch"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="ipmatch-body">
+      <div class="row"><span class="row-label">Status</span><span class="row-value muted">Waiting for IP…</span></div>
     </div>
   </div>
 
@@ -123391,6 +123554,26 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- DNS Leak -->
+  <div class="card" id="card-dns">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🔍</span> DNS Leak</div>
+      <span class="badge pending" id="badge-dns"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="dns-body">
+      <div class="row"><span class="row-label">Status</span><span class="row-value muted">Running…</span></div>
+    </div>
+  </div>
+
+  <!-- User Agent Match -->
+  <div class="card" id="card-uamatch">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🔐</span> User Agent Match</div>
+      <span class="badge pending" id="badge-uamatch"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="uamatch-body"></div>
   </div>
 
   <!-- Bot / WebDriver detection -->
@@ -123456,6 +123639,78 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
     <div class="card-body" id="webgl-body"></div>
   </div>
 
+  <!-- Font Fingerprint -->
+  <div class="card" id="card-fonts">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🔠</span> Font Fingerprint</div>
+      <span class="badge pending" id="badge-fonts"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="fonts-body"></div>
+  </div>
+
+  <!-- Network -->
+  <div class="card" id="card-net">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">📶</span> Network Info</div>
+      <span class="badge info" id="badge-net">INFO</span>
+    </div>
+    <div class="card-body" id="net-body"></div>
+  </div>
+
+  <!-- Battery -->
+  <div class="card" id="card-battery">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🔋</span> Battery API</div>
+      <span class="badge pending" id="badge-battery"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="battery-body"></div>
+  </div>
+
+  <!-- Media Devices -->
+  <div class="card" id="card-media">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">📷</span> Media Devices</div>
+      <span class="badge pending" id="badge-media"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="media-body"></div>
+  </div>
+
+  <!-- Permissions -->
+  <div class="card" id="card-perms">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🔑</span> Permissions</div>
+      <span class="badge pending" id="badge-perms"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="perms-body"></div>
+  </div>
+
+  <!-- Speech Synthesis -->
+  <div class="card" id="card-speech">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🗣️</span> Speech Synthesis</div>
+      <span class="badge info" id="badge-speech">INFO</span>
+    </div>
+    <div class="card-body" id="speech-body"></div>
+  </div>
+
+  <!-- Client Hints -->
+  <div class="card" id="card-hints">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">💡</span> Client Hints</div>
+      <span class="badge pending" id="badge-hints"><span class="spinner"></span></span>
+    </div>
+    <div class="card-body" id="hints-body"></div>
+  </div>
+
+  <!-- Performance / Timing -->
+  <div class="card" id="card-perf">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">⏱️</span> Timing Precision</div>
+      <span class="badge info" id="badge-perf">INFO</span>
+    </div>
+    <div class="card-body" id="perf-body"></div>
+  </div>
+
 </div>
 
 <button class="rerun-btn" onclick="runAll()">↺ Re-run All Tests</button>
@@ -123463,6 +123718,9 @@ var LEAKS_PAGE_HTML = String.raw`<!DOCTYPE html>
 <canvas id="canvas-preview" width="220" height="50"></canvas>
 
 <script>
+// ── Account data injected by server ───────────────────────────────────────────
+const ACCOUNT = __ACCOUNT_DATA__;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function row(label, value, cls) {
   return '<div class="row"><span class="row-label">'+label+'</span><span class="row-value'+(cls?' '+cls:'')+'">'+value+'</span></div>';
@@ -123476,9 +123734,9 @@ function setBadge(id, status, label) {
   el.className = 'badge '+status;
   el.textContent = label || status.toUpperCase();
 }
-function setCardBorder(id, cls) {
+function setCardBorder(id, cls, extra) {
   const el = document.getElementById(id);
-  if (el) el.className = 'card '+(id==='card-nav'?'wide ':'')+cls;
+  if (el) el.className = 'card '+(extra||'')+cls;
 }
 
 // Simple DJB2 hash → hex
@@ -123490,6 +123748,7 @@ function hashStr(str) {
 
 // Collect results for summary
 const RESULTS = {};
+const TOTAL_SCORED = 7; // IP, WebRTC, DNS, UAMatch, Bot, IPMatch, Fonts
 function setResult(key, status, label) {
   RESULTS[key] = { status, label };
   updateSummary();
@@ -123499,7 +123758,7 @@ function setResult(key, status, label) {
 function updateSummary() {
   const bar = document.getElementById('summary-bar');
   if (!bar) return;
-  const order = ['IP', 'WebRTC', 'WebDriver', 'Timezone', 'Navigator', 'Hardware', 'Canvas', 'Audio', 'WebGL'];
+  const order = ['IP','IPMatch','WebRTC','DNS','UAMatch','Bot','Fonts','Timezone','Navigator','Hardware','Canvas','Audio','WebGL','Network','Battery','Media','Perms','Speech','Hints','Timing'];
   bar.innerHTML = order.filter(k => RESULTS[k]).map(k => {
     const r = RESULTS[k];
     return '<div class="summary-item '+r.status+'"><span>'+k+'</span></div>';
@@ -123509,23 +123768,96 @@ function updateSummary() {
 function updateScore() {
   const dot  = document.getElementById('hdr-dot');
   const pill = document.getElementById('score-pill');
-  const vals = Object.values(RESULTS);
-  const total = 9;
-  if (vals.length < total) {
+  const scored = ['IP','IPMatch','WebRTC','DNS','UAMatch','Bot','Fonts'];
+  const ready = scored.filter(k => RESULTS[k]);
+  if (ready.length < TOTAL_SCORED) {
     if (dot)  dot.className = 'dot running';
     if (pill) { pill.className = 'score-pill pending'; pill.textContent = 'Running…'; }
     return;
   }
-  const fails = vals.filter(r => r.status === 'fail' || r.status === 'warn').length;
-  if (dot) dot.className = fails > 0 ? 'dot done-warn' : 'dot done-ok';
+  const vals = scored.map(k => RESULTS[k]);
+  const fails = vals.filter(r => r.status === 'fail').length;
+  const warns = vals.filter(r => r.status === 'warn').length;
+  if (dot) dot.className = (fails > 0 || warns > 0) ? 'dot done-warn' : 'dot done-ok';
   if (pill) {
-    if (fails === 0) {
+    if (fails === 0 && warns === 0) {
       pill.className = 'score-pill good';
       pill.textContent = 'All Clear';
     } else {
       pill.className = 'score-pill bad';
-      pill.textContent = fails + ' Issue' + (fails > 1 ? 's' : '');
+      pill.textContent = (fails+warns) + ' Issue' + ((fails+warns) > 1 ? 's' : '');
     }
+  }
+}
+
+// ── Test 0: Account Identity ──────────────────────────────────────────────────
+function testIdentity() {
+  const proxyEl       = document.getElementById('id-proxy');
+  const proxyMetaEl   = document.getElementById('id-proxy-meta');
+  const sessionProxyEl= document.getElementById('id-session-proxy');
+  const proxyRulesEl  = document.getElementById('id-proxy-rules');
+  const ebUaEl        = document.getElementById('id-eb-ua');
+  const apiUaEl       = document.getElementById('id-api-ua');
+
+  if (ACCOUNT.proxy) {
+    if (proxyEl) { proxyEl.textContent = ACCOUNT.proxy; proxyEl.className = 'ib-value'; }
+  } else {
+    if (proxyEl) { proxyEl.textContent = 'No proxy assigned'; proxyEl.className = 'ib-value none'; }
+  }
+
+  // Proxy type + credentials
+  if (proxyMetaEl) {
+    if (ACCOUNT.proxy) {
+      const type  = (ACCOUNT.proxyType || 'http').toUpperCase();
+      const creds = ACCOUNT.proxyHasCredentials ? '🔑 Credentials set' : '⚠️ No credentials';
+      proxyMetaEl.textContent = type + ' — ' + creds;
+      proxyMetaEl.className   = 'ib-value' + (ACCOUNT.proxyHasCredentials ? '' : ' warn');
+    } else {
+      proxyMetaEl.textContent = 'N/A';
+      proxyMetaEl.className   = 'ib-value none';
+    }
+  }
+
+  // What Electron's routing engine resolved
+  if (sessionProxyEl) {
+    const sp = ACCOUNT.sessionResolvedProxy;
+    if (sp) {
+      const isDirect = sp === 'DIRECT';
+      sessionProxyEl.textContent = sp;
+      sessionProxyEl.className   = 'ib-value' + (isDirect && ACCOUNT.proxy ? ' red' : '');
+      if (isDirect && ACCOUNT.proxy) {
+        sessionProxyEl.title = 'WARNING: Electron resolved DIRECT even though a proxy is assigned. The proxy session config may not have been applied yet — try reopening the EB window.';
+      }
+    } else if (ACCOUNT.sessionStoredProxy && ACCOUNT.sessionStoredProxy.error) {
+      sessionProxyEl.textContent = 'EB window not open';
+      sessionProxyEl.className   = 'ib-value none';
+    } else {
+      sessionProxyEl.textContent = 'Not available';
+      sessionProxyEl.className   = 'ib-value none';
+    }
+  }
+
+  // Raw proxy rules string applied to the session
+  if (proxyRulesEl) {
+    const rules = ACCOUNT.sessionProxyRules;
+    if (rules) {
+      proxyRulesEl.textContent = rules;
+      proxyRulesEl.className   = 'ib-value';
+    } else {
+      proxyRulesEl.textContent = 'Not available';
+      proxyRulesEl.className   = 'ib-value none';
+    }
+  }
+
+  if (ACCOUNT.ebUA) {
+    if (ebUaEl) { ebUaEl.textContent = ACCOUNT.ebUA; ebUaEl.className = 'ib-value'; }
+  } else {
+    if (ebUaEl) { ebUaEl.textContent = 'Not set'; ebUaEl.className = 'ib-value none'; }
+  }
+  if (ACCOUNT.apiUA) {
+    if (apiUaEl) { apiUaEl.textContent = ACCOUNT.apiUA; apiUaEl.className = 'ib-value'; }
+  } else {
+    if (apiUaEl) { apiUaEl.textContent = 'Not set'; apiUaEl.className = 'ib-value none'; }
   }
 }
 
@@ -123539,19 +123871,29 @@ async function testIP() {
     return fetch(url, { cache: 'no-store', signal: ctrl.signal }).finally(() => clearTimeout(t));
   }
   try {
-    const r = await makeFetch('https://api64.ipify.org?format=json', 8000);
+    // api.ipify.org is IPv4-only (no AAAA record).  api64.ipify.org is the
+    // Cloudflare-fronted dual-stack endpoint and supports QUIC/HTTP3, which
+    // Chrome can open as a direct UDP connection that bypasses an HTTP proxy
+    // — causing the real machine IPv6 to appear instead of the proxy IP.
+    // Using the IPv4-only endpoint ensures the result always reflects the
+    // proxied TCP path, giving an accurate proxy-IP-match result.
+    const r = await makeFetch('https://api.ipify.org?format=json', 8000);
     const d = await r.json();
     const ip = d.ip || '—';
     if (display) { display.className = 'ip-addr'; display.textContent = ip; }
-    // geo lookup
     let geoHtml = '';
     try {
       const g = await makeFetch('https://ipapi.co/'+ip+'/json/', 8000);
       const gd = await g.json();
-      geoHtml = row('Country', (gd.country_name||'?')+' '+((gd.country_code||'').toLowerCase()?'🏳️':''))
+      const isIPv6 = ip.includes(':');
+      geoHtml = row('IP Version', isIPv6 ? 'IPv6' : 'IPv4', isIPv6 ? 'warn' : '')
+              + row('Country', (gd.country_name||'?'))
               + row('City', gd.city||'?')
               + row('ISP / Org', gd.org||'?')
-              + row('Timezone', gd.timezone||'?');
+              + row('ASN', gd.asn||'?')
+              + row('Timezone', gd.timezone||'?')
+              + row('Hosting / DC', gd.is_datacenter ? 'YES — datacenter IP' : 'No', gd.is_datacenter ? 'warn' : 'green');
+      window._detectedGeo = gd;
     } catch {}
     if (rows) rows.innerHTML = geoHtml;
     setBadge('badge-ip', 'info', 'INFO');
@@ -123560,13 +123902,89 @@ async function testIP() {
     window._detectedPublicIP = ip;
   } catch (e) {
     if (display) { display.className = 'ip-addr'; display.textContent = 'Timed out'; }
-    if (rows) rows.innerHTML = desc('Could not reach ipify.org — the proxy may be blocking external requests or the connection timed out after 8 s.', 'warn');
-    setBadge('badge-ip', 'warn', 'WARN');
-    setResult('IP', 'warn', 'Offline?');
+    const proxyStr = ACCOUNT.proxy || '';
+    const timeoutMsg = proxyStr
+      ? '<b>✅ The proxy IS blocking direct traffic (this is correct).</b><br><br>'
+        + 'The EB session is routing through <code>' + proxyStr + '</code> — ipify.org timed out because the proxy is intercepting the request. '
+        + 'The issue is that the <b>proxy server itself is not forwarding the request</b>.<br><br>'
+        + '<b>Possible causes:</b><ul style="margin:4px 0 0 16px;padding:0">'
+        + '<li>Proxy server is down or unreachable</li>'
+        + '<li>Wrong username/password — proxy rejected the CONNECT request</li>'
+        + '<li>Port ' + (ACCOUNT.proxyPort||'?') + ' is blocked by a firewall</li>'
+        + '<li>Proxy server is blocking ipify.org specifically</li>'
+        + '</ul><br>'
+        + 'Check the <b>Proxy Type / Credentials</b> row above and the <b>Electron Routes Via</b> row. '
+        + 'If Electron shows the proxy address correctly, the proxy config is applied — the issue is with the proxy server, not with Equinox.'
+      : 'Could not reach ipify.org — connection timed out after 8s. No proxy is assigned, so this may be a network connectivity issue.';
+    if (rows) rows.innerHTML = desc(timeoutMsg, proxyStr ? 'info' : 'warn');
+    setBadge('badge-ip', proxyStr ? 'info' : 'warn', proxyStr ? 'INFO' : 'WARN');
+    setResult('IP', proxyStr ? 'info' : 'warn', 'Timed out');
+    window._detectedPublicIP = null;
   }
 }
 
-// ── Test 2: WebRTC Leak ───────────────────────────────────────────────────────
+// ── Test 2: IP Match (proxy host vs detected IP) ───────────────────────────────
+function testIPMatch() {
+  const body = document.getElementById('ipmatch-body');
+  const detectedIP = window._detectedPublicIP;
+  const proxyStr = ACCOUNT.proxy || '';
+
+  if (!proxyStr) {
+    if (body) body.innerHTML = row('Assigned Proxy', 'None', 'muted')
+      + desc('No proxy is assigned to this account. The connection is using the host machine\'s real IP.', 'warn');
+    setBadge('badge-ipmatch', 'warn', 'WARN');
+    setCardBorder('card-ipmatch', 'warn');
+    setResult('IPMatch', 'warn', 'No proxy');
+    return;
+  }
+
+  const proxyHost = ACCOUNT.proxyHost || '';
+  const proxyPort = ACCOUNT.proxyPort || '';
+
+  if (!detectedIP) {
+    if (body) body.innerHTML = row('Assigned Proxy', proxyStr, '')
+      + desc('Could not detect public IP — unable to compare against proxy.', 'warn');
+    setBadge('badge-ipmatch', 'warn', 'WARN');
+    setResult('IPMatch', 'warn', 'No IP');
+    return;
+  }
+
+  // Check if proxyHost looks like an IP (IPv4 or IPv6)
+  const isIP = /^[\d.:a-fA-F]+$/.test(proxyHost) && !proxyHost.includes('.com') && !proxyHost.includes('.net') && !proxyHost.includes('.org');
+
+  let html = row('Assigned Proxy', proxyStr)
+           + row('Detected IP', detectedIP);
+
+  if (isIP) {
+    const match = detectedIP === proxyHost || detectedIP.includes(proxyHost);
+    html += row('Match', match ? '✓ MATCH' : '✗ MISMATCH', match ? 'green' : 'red');
+    if (match) {
+      html += desc('Detected IP matches the assigned proxy. Traffic is routing through the correct proxy server.', 'pass');
+      setBadge('badge-ipmatch', 'pass', 'PASS');
+      setCardBorder('card-ipmatch', 'pass');
+      setResult('IPMatch', 'pass', 'Match');
+    } else {
+      html += desc('<strong>Detected IP does not match the proxy server IP.</strong><br><br>'
+        + '<b>If the detected IP above is your machine\'s real IP</b> — the proxy is not routing traffic at all. '
+        + 'The EB session is going direct. Check that the proxy is reachable, credentials are correct, and the proxy is assigned to this account.<br><br>'
+        + '<b>If the detected IP is an unfamiliar residential address</b> — this is expected for residential proxies. '
+        + 'The proxy host (' + proxyHost + ') is the provider\'s entry-point server; the exit IP is the residential address assigned to your session. '
+        + 'These are always different by design.', 'fail');
+      setBadge('badge-ipmatch', 'fail', 'FAIL');
+      setCardBorder('card-ipmatch', 'fail');
+      setResult('IPMatch', 'fail', 'Diff IP');
+    }
+  } else {
+    html += row('Match', 'Proxy is a hostname — cannot verify in browser', 'muted');
+    html += desc('The proxy uses a hostname (not a raw IP). Browser cannot resolve DNS to compare. Check that the IP shown above matches the expected proxy location.', '');
+    setBadge('badge-ipmatch', 'info', 'INFO');
+    setResult('IPMatch', 'info', 'Hostname');
+  }
+
+  if (body) body.innerHTML = html;
+}
+
+// ── Test 3: WebRTC Leak ───────────────────────────────────────────────────────
 function testWebRTC() {
   return new Promise(resolve => {
     const body = document.getElementById('webrtc-body');
@@ -123575,11 +123993,11 @@ function testWebRTC() {
     function classify(ip) {
       if (!ip) return null;
       if (ip.endsWith('.local')) return 'mdns';
-      if (ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.')) return 'private';
+      if (ip.startsWith('10.') || ip.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 'private';
       if (ip === '127.0.0.1' || ip === '::1') return 'private';
-      if (ip.startsWith('fc') || ip.startsWith('fd')) return 'private'; // IPv6 ULA
-      if (ip.startsWith('fe80')) return 'private'; // link-local
-      if (ip.includes(':') && ip.startsWith('::ffff:')) return null; // IPv4-mapped
+      if (/^f[cd]/i.test(ip)) return 'private'; // IPv6 ULA
+      if (/^fe80/i.test(ip)) return 'private'; // link-local
+      if (ip.startsWith('::ffff:')) return null; // IPv4-mapped
       return 'public';
     }
 
@@ -123587,43 +124005,28 @@ function testWebRTC() {
       const pc = new RTCPeerConnection({ iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
       ]});
-      pc.createDataChannel('x');
+      pc.createDataChannel('eq');
 
-      const timeout = setTimeout(() => {
-        pc.close();
-        render();
-        resolve();
-      }, 6000);
-
+      const timeout = setTimeout(() => { pc.close(); render(); resolve(); }, 7000);
       pc.onicecandidate = (e) => {
-        if (!e.candidate || !e.candidate.candidate) return;
-        const cand = e.candidate.candidate;
-        // Extract IP from candidate string
-        const parts = cand.split(' ');
+        if (!e.candidate?.candidate) return;
+        const parts = e.candidate.candidate.split(' ');
         if (parts.length < 5) return;
         const ip = parts[4];
         const type = classify(ip);
         if (type) ips[type].add(ip);
       };
-
       pc.onicegatheringstatechange = () => {
         if (pc.iceGatheringState === 'complete') {
-          clearTimeout(timeout);
-          pc.close();
-          render();
-          resolve();
+          clearTimeout(timeout); pc.close(); render(); resolve();
         }
       };
-
-      pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => {
-        clearTimeout(timeout);
-        render();
-        resolve();
-      });
+      pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => { clearTimeout(timeout); render(); resolve(); });
     } catch {
-      if (body) body.innerHTML = desc('WebRTC API not available in this browser context.', '');
-      setBadge('badge-webrtc', 'info', 'N/A');
+      if (body) body.innerHTML = desc('WebRTC API not available in this context.', '');
+      setBadge('badge-webrtc', 'pass', 'N/A');
       setResult('WebRTC', 'pass', 'N/A');
       resolve();
     }
@@ -123632,47 +124035,42 @@ function testWebRTC() {
       const pubIPs = [...ips.public];
       const privIPs = [...ips.private];
       const mdnsIPs = [...ips.mdns];
-
       const publicIp = window._detectedPublicIP;
-      const hasRealPublicLeak = pubIPs.some(ip => ip !== publicIp);
+      const hasRealLeak = pubIPs.some(ip => ip !== publicIp);
+      const hasIPv6Leak = pubIPs.some(ip => ip.includes(':'));
 
       let html = '';
-
       html += row('Gathering State', 'complete', 'green');
-      html += row('Public IPs found', pubIPs.length > 0 ? pubIPs.length : 'None', pubIPs.length > 0 ? 'warn' : 'green');
+      html += row('Public IPs', pubIPs.length > 0 ? pubIPs.length : 'None', pubIPs.length > 0 ? 'warn' : 'green');
+      html += row('IPv6 Exposed', hasIPv6Leak ? pubIPs.filter(i=>i.includes(':')).join(', ') : 'None', hasIPv6Leak ? 'red' : 'green');
       html += row('Private IPs', privIPs.length > 0 ? privIPs.length : 'None', '');
-      html += row('mDNS tokens', mdnsIPs.length > 0 ? mdnsIPs.length : 'None', 'muted');
+      html += row('mDNS Tokens', mdnsIPs.length > 0 ? mdnsIPs.length : 'None', 'muted');
 
       if (pubIPs.length > 0 || privIPs.length > 0 || mdnsIPs.length > 0) {
         html += '<div class="ip-list">';
-        pubIPs.forEach(ip => { html += '<div class="ip-item public"><span>'+ip+'</span><span class="ip-type">PUBLIC</span></div>'; });
+        pubIPs.forEach(ip => { html += '<div class="ip-item public"><span>'+ip+'</span><span class="ip-type">'+(ip.includes(':') ? 'IPv6 PUBLIC' : 'PUBLIC')+'</span></div>'; });
         privIPs.forEach(ip => { html += '<div class="ip-item private"><span>'+ip+'</span><span class="ip-type">PRIVATE</span></div>'; });
         mdnsIPs.forEach(ip => { html += '<div class="ip-item mdns"><span>'+ip+'</span><span class="ip-type">mDNS</span></div>'; });
         html += '</div>';
       }
 
-      if (hasRealPublicLeak) {
-        html += desc('⚠ WebRTC is leaking a public IP that differs from your detected proxy IP. Your real IP may be exposed to websites.', 'fail');
+      if (hasRealLeak || hasIPv6Leak) {
+        html += desc('⚠ WebRTC is exposing an IP that differs from your proxy. Your real IP or IPv6 address is visible to sites.', 'fail');
         setBadge('badge-webrtc', 'fail', 'LEAK');
         setCardBorder('card-webrtc', 'fail');
         setResult('WebRTC', 'fail', 'Leak!');
       } else if (pubIPs.length > 0) {
-        html += desc('A public IP was found but it matches your detected proxy IP. This is normal — WebRTC is going through the proxy correctly.', 'pass');
-        setBadge('badge-webrtc', 'pass', 'PASS');
-        setCardBorder('card-webrtc', 'pass');
-        setResult('WebRTC', 'pass', 'OK');
-      } else if (privIPs.length > 0) {
-        html += desc('Only private/LAN IPs found — no public IP leak. Your proxy IP is not exposed via WebRTC.', 'pass');
+        html += desc('A public IP was found but matches your proxy IP — WebRTC is routing through the proxy correctly.', 'pass');
         setBadge('badge-webrtc', 'pass', 'PASS');
         setCardBorder('card-webrtc', 'pass');
         setResult('WebRTC', 'pass', 'OK');
       } else if (mdnsIPs.length > 0) {
-        html += desc('Only mDNS tokens found (Chrome\'s privacy mode). No real IPs are exposed via WebRTC.', 'pass');
+        html += desc('Only mDNS tokens found (Chrome privacy mode). No real IPs exposed via WebRTC.', 'pass');
         setBadge('badge-webrtc', 'pass', 'PASS');
         setCardBorder('card-webrtc', 'pass');
-        setResult('WebRTC', 'pass', 'OK');
+        setResult('WebRTC', 'pass', 'mDNS');
       } else {
-        html += desc('No ICE candidates found. WebRTC may be fully blocked or the proxy is intercepting UDP. This is the most private configuration.', 'pass');
+        html += desc('No ICE candidates generated. WebRTC is fully blocked or UDP is disabled. Most private configuration possible.', 'pass');
         setBadge('badge-webrtc', 'pass', 'PASS');
         setCardBorder('card-webrtc', 'pass');
         setResult('WebRTC', 'pass', 'Blocked');
@@ -123683,36 +124081,172 @@ function testWebRTC() {
   });
 }
 
-// ── Test 3: Bot / WebDriver ───────────────────────────────────────────────────
+// ── Test 4: DNS Leak ──────────────────────────────────────────────────────────
+async function testDNS() {
+  const body = document.getElementById('dns-body');
+  function tf(url, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { cache: 'no-store', signal: ctrl.signal }).finally(() => clearTimeout(t));
+  }
+
+  const ips = [];
+  const sources = [];
+
+  try {
+    // Cloudflare trace — reveals IP as seen from Cloudflare's edge
+    const r1 = await tf('https://1.1.1.1/cdn-cgi/trace', 5000);
+    const t1 = await r1.text();
+    const ipLine = t1.split('\n').find(l => l.startsWith('ip='));
+    if (ipLine) { ips.push(ipLine.split('=')[1].trim()); sources.push('Cloudflare'); }
+  } catch {}
+
+  try {
+    // api.ipify.org (NOT api64) — IPv4-only endpoint with no AAAA record and no
+    // QUIC support.  api64.ipify.org is Cloudflare-fronted and dual-stack; Chrome
+    // can open it via direct UDP/QUIC or IPv6, bypassing the HTTP proxy entirely
+    // and exposing the real machine IPv6 — making the test report a false leak.
+    const r2 = await tf('https://api.ipify.org?format=json', 5000);
+    const d2 = await r2.json();
+    if (d2.ip) { ips.push(d2.ip); sources.push('ipify'); }
+  } catch {}
+
+  try {
+    // api4.my-ip.io (NOT api) — IPv4-only subdomain.  api.my-ip.io has an
+    // AAAA record and Chrome opens it via a direct IPv6 socket that bypasses
+    // the HTTP proxy entirely, exposing the real machine IPv6 — same failure
+    // mode as api64.ipify.org (fixed in v1.0.611).  api4.my-ip.io has no
+    // AAAA record so all requests must go through the proxy over TCP.
+    const r3 = await tf('https://api4.my-ip.io/v2/ip.json', 5000);
+    const d3 = await r3.json();
+    if (d3.ip) { ips.push(d3.ip); sources.push('my-ip.io'); }
+  } catch {}
+
+  const detectedIP = window._detectedPublicIP;
+  let html = '';
+  const uniqueIPs = [...new Set(ips)];
+
+  for (let i = 0; i < ips.length; i++) {
+    const match = detectedIP && ips[i] === detectedIP;
+    html += row(sources[i], ips[i], match ? 'green' : (detectedIP ? 'red' : ''));
+  }
+
+  if (uniqueIPs.length === 0) {
+    html += desc('All DNS endpoint checks timed out — unable to verify DNS routing.', 'warn');
+    setBadge('badge-dns', 'warn', 'WARN');
+    setResult('DNS', 'warn', 'Timeout');
+  } else if (uniqueIPs.length === 1) {
+    const consistent = !detectedIP || uniqueIPs[0] === detectedIP;
+    html += row('Unique IPs seen', uniqueIPs.length.toString(), 'green');
+    if (consistent) {
+      html += desc('All DNS resolvers returned the same IP as your proxy. DNS is routing consistently — no leak detected.', 'pass');
+      setBadge('badge-dns', 'pass', 'PASS');
+      setCardBorder('card-dns', 'pass');
+      setResult('DNS', 'pass', 'OK');
+    } else {
+      html += desc('DNS resolvers returned an IP that differs from your detected public IP. DNS may be leaking outside the proxy.', 'warn');
+      setBadge('badge-dns', 'warn', 'WARN');
+      setCardBorder('card-dns', 'warn');
+      setResult('DNS', 'warn', 'Different IP');
+    }
+  } else {
+    html += row('Unique IPs seen', uniqueIPs.length.toString(), 'red');
+    html += desc('⚠ Multiple different IPs returned by IP-check services. Different connections are routing through different paths — some traffic is bypassing the proxy (likely via IPv6 or QUIC/UDP direct connections).', 'fail');
+    setBadge('badge-dns', 'fail', 'LEAK');
+    setCardBorder('card-dns', 'fail');
+    setResult('DNS', 'fail', 'Leak!');
+  }
+
+  if (body) body.innerHTML = html;
+}
+
+// ── Test 5: User Agent Match ──────────────────────────────────────────────────
+function testUAMatch() {
+  const body = document.getElementById('uamatch-body');
+  const browserUA = navigator.userAgent;
+  const assignedEbUA = ACCOUNT.ebUA || '';
+  const assignedApiUA = ACCOUNT.apiUA || '';
+
+  let html = '';
+  html += row('Browser UA (actual)', browserUA);
+
+  if (!assignedEbUA) {
+    html += row('Assigned EB UA', 'Not set', 'muted');
+    html += desc('No EB User Agent assigned to this account. Assign one in Account Settings to prevent UA fingerprinting.', 'warn');
+    setBadge('badge-uamatch', 'warn', 'WARN');
+    setCardBorder('card-uamatch', 'warn');
+    setResult('UAMatch', 'warn', 'No UA set');
+  } else {
+    const exactMatch = browserUA === assignedEbUA;
+    const partialMatch = !exactMatch && (browserUA.includes(assignedEbUA.slice(0, 40)) || assignedEbUA.includes(browserUA.slice(0, 40)));
+    html += row('Assigned EB UA', assignedEbUA);
+    html += row('Match', exactMatch ? '✓ EXACT MATCH' : (partialMatch ? '~ PARTIAL MATCH' : '✗ MISMATCH'), exactMatch ? 'green' : (partialMatch ? 'warn' : 'red'));
+    if (assignedApiUA) {
+      html += row('Mobile API UA', assignedApiUA);
+    }
+    if (exactMatch) {
+      html += desc('The browser is using exactly the assigned EB User Agent. Instagram will see a consistent UA fingerprint.', 'pass');
+      setBadge('badge-uamatch', 'pass', 'PASS');
+      setCardBorder('card-uamatch', 'pass');
+      setResult('UAMatch', 'pass', 'Match');
+    } else if (partialMatch) {
+      html += desc('Partial UA match. The browser UA shares content with the assigned UA but is not identical. This may indicate a version difference.', 'warn');
+      setBadge('badge-uamatch', 'warn', 'WARN');
+      setCardBorder('card-uamatch', 'warn');
+      setResult('UAMatch', 'warn', 'Partial');
+    } else {
+      html += desc('⚠ The active browser UA does not match the assigned EB UA. Instagram may detect a UA fingerprint inconsistency between sessions.', 'fail');
+      setBadge('badge-uamatch', 'fail', 'FAIL');
+      setCardBorder('card-uamatch', 'fail');
+      setResult('UAMatch', 'fail', 'Mismatch!');
+    }
+  }
+
+  if (body) body.innerHTML = html;
+}
+
+// ── Test 6: Bot / WebDriver detection ────────────────────────────────────────
 function testBot() {
   const body = document.getElementById('bot-body');
   const wd = navigator.webdriver;
-  const hasCDP = !!(window.cdc_adoQpoasnfa76pfcZLmcfl_Array || window.cdc_adoQpoasnfa76pfcZLmcfl_Promise);
-  const hasPhantom = !!(window.callPhantom || window._phantom);
-  const hasSelenium = !!(window.__selenium_evaluate || window.__webdriver_evaluate || window.__driver_evaluate);
+  const hasCDP = !!(window.cdc_adoQpoasnfa76pfcZLmcfl_Array || window.cdc_adoQpoasnfa76pfcZLmcfl_Promise || window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol);
+  const hasPhantom = !!(window.callPhantom || window._phantom || window.__phantomas);
+  const hasSelenium = !!(window.__selenium_evaluate || window.__webdriver_evaluate || window.__driver_evaluate || window.$cdc_asdjflasutopfhvcZLmcfl_);
+  const hasNightmare = !!window.__nightmare;
+  const hasCypress = !!window.Cypress;
+  const pluginsOk = navigator.plugins.length > 0;
+  const mimeOk = navigator.mimeTypes.length > 0;
+  const langOk = navigator.languages && navigator.languages.length > 0;
+  const hardwareOk = navigator.hardwareConcurrency > 1;
 
   let html = '';
   html += row('navigator.webdriver', wd ? 'TRUE' : 'false', wd ? 'red' : 'green');
   html += row('CDP artifacts', hasCDP ? 'FOUND' : 'None', hasCDP ? 'red' : 'green');
   html += row('PhantomJS artifacts', hasPhantom ? 'FOUND' : 'None', hasPhantom ? 'red' : 'green');
   html += row('Selenium artifacts', hasSelenium ? 'FOUND' : 'None', hasSelenium ? 'red' : 'green');
+  html += row('Nightmare.js', hasNightmare ? 'FOUND' : 'None', hasNightmare ? 'red' : 'green');
+  html += row('Cypress', hasCypress ? 'FOUND' : 'None', hasCypress ? 'warn' : 'green');
+  html += row('Plugins', pluginsOk ? navigator.plugins.length+' found' : 'Empty — suspicious', pluginsOk ? 'green' : 'warn');
+  html += row('MIME Types', mimeOk ? navigator.mimeTypes.length+' found' : 'Empty — suspicious', mimeOk ? 'green' : 'warn');
+  html += row('Languages', langOk ? navigator.languages.join(', ') : 'None', langOk ? 'green' : 'warn');
+  html += row('CPU Cores', hardwareOk ? navigator.hardwareConcurrency : '1 — suspicious', hardwareOk ? 'green' : 'warn');
 
-  const isBot = wd || hasCDP || hasPhantom || hasSelenium;
+  const isBot = wd || hasCDP || hasPhantom || hasSelenium || hasNightmare;
   if (isBot) {
-    html += desc('⚠ Bot detection signals present. Instagram\'s JavaScript may flag this session. Review your EB user agent and ensure stealth scripts are active.', 'fail');
+    html += desc('⚠ Automation signals detected. Instagram\'s JS will flag this session. Ensure stealth patches are applied.', 'fail');
     setBadge('badge-bot', 'fail', 'FLAGGED');
     setCardBorder('card-bot', 'fail');
-    setResult('WebDriver', 'fail', 'Flagged');
+    setResult('Bot', 'fail', 'Flagged');
   } else {
-    html += desc('No automation signals detected. The browser appears to be a normal user session to JavaScript-based bot detectors.', 'pass');
+    html += desc('No automation signals found. Browser appears as a normal user session to JavaScript-based bot detectors.', 'pass');
     setBadge('badge-bot', 'pass', 'CLEAN');
     setCardBorder('card-bot', 'pass');
-    setResult('WebDriver', 'pass', 'Clean');
+    setResult('Bot', 'pass', 'Clean');
   }
   if (body) body.innerHTML = html;
 }
 
-// ── Test 4: Timezone ──────────────────────────────────────────────────────────
+// ── Test 7: Timezone ──────────────────────────────────────────────────────────
 function testTimezone() {
   const body = document.getElementById('tz-body');
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -123721,38 +124255,53 @@ function testTimezone() {
   const h = Math.floor(Math.abs(offset)/60).toString().padStart(2,'0');
   const m = (Math.abs(offset)%60).toString().padStart(2,'0');
   const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+  const geoTZ = window._detectedGeo?.timezone;
   let html = '';
-  html += row('Timezone', tz);
+  html += row('Browser Timezone', tz);
   html += row('UTC Offset', 'UTC'+sign+h+':'+m);
   html += row('Locale', locale);
   html += row('Date', new Date().toLocaleDateString('en-US',{timeZone:tz,weekday:'long',year:'numeric',month:'long',day:'numeric'}));
+  if (geoTZ) {
+    const tzMatch = tz === geoTZ;
+    html += row('Proxy Geo Timezone', geoTZ, tzMatch ? 'green' : 'warn');
+    html += row('TZ Consistent', tzMatch ? '✓ Yes' : '✗ Mismatch — browser TZ differs from proxy location', tzMatch ? 'green' : 'warn');
+    if (!tzMatch) {
+      html += desc('Browser timezone differs from the proxy\'s geographic timezone. Instagram may detect a location inconsistency. Consider adjusting the system timezone to match the proxy.', 'warn');
+    }
+  }
   if (body) body.innerHTML = html;
   setResult('Timezone', 'info', tz);
 }
 
-// ── Test 5: Navigator ─────────────────────────────────────────────────────────
+// ── Test 8: Navigator ─────────────────────────────────────────────────────────
 function testNavigator() {
   const body = document.getElementById('nav-body');
   const n = navigator;
   let html = '';
   html += row('User Agent', n.userAgent);
   html += row('Platform', n.platform);
-  html += row('App Version', n.appVersion.slice(0,60)+'…');
+  html += row('App Version', n.appVersion.slice(0,80)+'…');
   html += row('Languages', n.languages.join(', '));
   html += row('Cookie Enabled', n.cookieEnabled ? 'Yes' : 'No');
   html += row('Do Not Track', n.doNotTrack ?? 'Not set', n.doNotTrack === '1' ? 'warn' : '');
   html += row('Plugins Count', n.plugins.length);
   html += row('MIME Types', n.mimeTypes.length);
   html += row('Online', n.onLine ? 'Yes' : 'No');
+  html += row('Java Enabled', typeof n.javaEnabled === 'function' ? (n.javaEnabled() ? 'Yes' : 'No') : 'n/a');
+  html += row('Vendor', n.vendor || 'n/a');
+  html += row('App Name', n.appName);
+  html += row('Product', n.product || 'n/a');
   if (n.connection) {
     const c = n.connection;
     html += row('Connection Type', c.effectiveType || c.type || '?');
+    html += row('Downlink', c.downlink !== undefined ? c.downlink+'Mbps' : '?');
+    html += row('RTT', c.rtt !== undefined ? c.rtt+'ms' : '?');
   }
   if (body) body.innerHTML = html;
   setResult('Navigator', 'info', n.platform);
 }
 
-// ── Test 6: Screen & Hardware ─────────────────────────────────────────────────
+// ── Test 9: Screen & Hardware ─────────────────────────────────────────────────
 function testHardware() {
   const body = document.getElementById('hw-body');
   const s = screen;
@@ -123767,11 +124316,15 @@ function testHardware() {
   html += row('CPU Cores', cpu !== undefined ? cpu : '?');
   html += row('Device Memory', mem !== undefined ? mem+' GB' : '?');
   html += row('Touch Points', navigator.maxTouchPoints ?? 0);
+  html += row('Orientation Type', screen.orientation?.type ?? 'n/a');
+  html += row('Inner Window', window.innerWidth+'×'+window.innerHeight);
+  html += row('Outer Window', window.outerWidth+'×'+window.outerHeight);
+  html += row('Screen Orient', window.screen.orientation?.angle !== undefined ? window.screen.orientation.angle+'°' : 'n/a');
   if (body) body.innerHTML = html;
   setResult('Hardware', 'info', s.width+'×'+s.height);
 }
 
-// ── Test 7: Canvas Fingerprint ────────────────────────────────────────────────
+// ── Test 10: Canvas Fingerprint ───────────────────────────────────────────────
 function testCanvas() {
   const body = document.getElementById('canvas-body');
   try {
@@ -123789,21 +124342,20 @@ function testCanvas() {
     ctx.beginPath();
     ctx.arc(180, 25, 18, 0, Math.PI * 2);
     ctx.stroke();
-    const data = c.toDataURL().slice(22, 100);
     const hash = hashStr(c.toDataURL());
     let html = '';
     html += row('Canvas Hash', hash, 'muted');
-    html += row('Noise Detected', 'No');
-    html += desc('The canvas hash is used by websites to fingerprint your browser. Consistent across sessions = normal browser. Changes each reload = canvas noise protection active (good for privacy).');
+    html += row('Canvas Protection', 'No noise detected');
+    html += desc('Canvas hash is used to fingerprint browsers across sites. A consistent hash = normal browser. Randomized each reload = canvas noise is active.');
     if (body) body.innerHTML = html;
   } catch (e) {
-    if (body) body.innerHTML = row('Status', 'Blocked / Error', 'green') + desc('Canvas API is blocked or restricted. This improves canvas fingerprint resistance.', 'pass');
+    if (body) body.innerHTML = row('Status', 'Blocked / Error', 'green') + desc('Canvas API is blocked. This improves canvas fingerprint resistance.', 'pass');
   }
   setBadge('badge-canvas', 'info', 'INFO');
   setResult('Canvas', 'info', 'Done');
 }
 
-// ── Test 8: Audio Fingerprint ─────────────────────────────────────────────────
+// ── Test 11: Audio Fingerprint ────────────────────────────────────────────────
 async function testAudio() {
   const body = document.getElementById('audio-body');
   try {
@@ -123829,7 +124381,8 @@ async function testAudio() {
     html += row('Audio Hash', hash, 'muted');
     html += row('Context State', ctx.state);
     html += row('Sample Rate', ctx.sampleRate + ' Hz');
-    html += desc('The audio context fingerprint reflects subtle differences in hardware/OS audio processing. Like canvas, it varies between real devices but stays consistent for the same device.');
+    html += row('Channel Count', ctx.destination.channelCount || 'n/a');
+    html += desc('Audio fingerprint reflects hardware/OS audio processing differences. Consistent for the same device; varies between real devices.');
     if (body) body.innerHTML = html;
   } catch (e) {
     if (body) body.innerHTML = row('Status', 'Blocked', 'green') + desc('Audio API is unavailable or blocked.', '');
@@ -123838,7 +124391,7 @@ async function testAudio() {
   setResult('Audio', 'info', 'Done');
 }
 
-// ── Test 9: WebGL ─────────────────────────────────────────────────────────────
+// ── Test 12: WebGL ────────────────────────────────────────────────────────────
 function testWebGL() {
   const body = document.getElementById('webgl-body');
   try {
@@ -123857,12 +124410,230 @@ function testWebGL() {
     html += row('WebGL Version', version.split(' ').slice(0,3).join(' '));
     html += row('GLSL Version', glslVer.split(' ').slice(0,3).join(' '));
     html += row('Extensions', extsCount+' supported');
+    // WebGL2
+    const gl2 = c.getContext('webgl2');
+    html += row('WebGL 2', gl2 ? 'Supported' : 'Not supported', '');
     if (body) body.innerHTML = html;
   } catch {
     if (body) body.innerHTML = row('Status', 'Not available', 'muted');
   }
   setBadge('badge-webgl', 'info', 'INFO');
   setResult('WebGL', 'info', 'Done');
+}
+
+// ── Test 13: Font Fingerprint ─────────────────────────────────────────────────
+function testFonts() {
+  const body = document.getElementById('fonts-body');
+  const TEST_FONTS = [
+    'Arial','Arial Black','Arial Narrow','Calibri','Cambria','Comic Sans MS',
+    'Courier','Courier New','Georgia','Helvetica','Impact','Lucida Console',
+    'Lucida Sans Unicode','Microsoft Sans Serif','Palatino Linotype',
+    'Segoe UI','Tahoma','Times New Roman','Trebuchet MS','Verdana',
+    'Wingdings','Symbol','Webdings','Franklin Gothic Medium',
+    'Century Gothic','Bookman Old Style','Garamond','Gill Sans MT',
+  ];
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const BASELINE_FONT = 'monospace';
+  const TEST_TEXT = 'mmmmmmmmmmlli';
+  ctx.font = '72px ' + BASELINE_FONT;
+  const baseW = ctx.measureText(TEST_TEXT).width;
+
+  const present = [];
+  for (const font of TEST_FONTS) {
+    ctx.font = '72px '+font+', '+BASELINE_FONT;
+    const w = ctx.measureText(TEST_TEXT).width;
+    if (w !== baseW) present.push(font);
+  }
+
+  let html = '';
+  html += row('Fonts Detected', present.length + ' / ' + TEST_FONTS.length, present.length > 5 ? 'green' : 'warn');
+  html += row('Sample', present.slice(0,5).join(', ')+(present.length>5?'…':''), 'muted');
+  html += '<div class="font-grid">';
+  for (const f of TEST_FONTS) {
+    const found = present.includes(f);
+    html += '<span class="font-tag'+(found?' present':'')+'">'+f+'</span>';
+  }
+  html += '</div>';
+
+  if (present.length < 3) {
+    html += desc('Very few fonts detected. This is unusual and may indicate a sandboxed or headless environment — could be flagged by fingerprinting services.', 'warn');
+    setBadge('badge-fonts', 'warn', 'WARN');
+    setCardBorder('card-fonts', 'warn');
+    setResult('Fonts', 'warn', present.length+' fonts');
+  } else {
+    html += desc('Font list is within normal range for a real user browser.');
+    setBadge('badge-fonts', 'pass', 'PASS');
+    setCardBorder('card-fonts', 'pass');
+    setResult('Fonts', 'pass', present.length+' fonts');
+  }
+
+  if (body) body.innerHTML = html;
+}
+
+// ── Test 14: Network Info ─────────────────────────────────────────────────────
+function testNetwork() {
+  const body = document.getElementById('net-body');
+  let html = '';
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn) {
+    html += row('Effective Type', conn.effectiveType || '?');
+    html += row('Type', conn.type || '?');
+    html += row('Downlink', conn.downlink !== undefined ? conn.downlink+'Mbps' : '?');
+    html += row('Downlink Max', conn.downlinkMax !== undefined ? conn.downlinkMax+'Mbps' : '?');
+    html += row('RTT', conn.rtt !== undefined ? conn.rtt+'ms' : '?');
+    html += row('Save Data', conn.saveData ? 'Yes' : 'No');
+  } else {
+    html += row('Network Info API', 'Not available', 'muted');
+  }
+  html += row('Online', navigator.onLine ? 'Yes' : 'No');
+  if (body) body.innerHTML = html;
+  setResult('Network', 'info', conn?.effectiveType || 'n/a');
+}
+
+// ── Test 15: Battery API ──────────────────────────────────────────────────────
+async function testBattery() {
+  const body = document.getElementById('battery-body');
+  try {
+    const bat = await navigator.getBattery();
+    let html = '';
+    html += row('Charging', bat.charging ? 'Yes' : 'No');
+    html += row('Level', Math.round(bat.level * 100)+'%');
+    html += row('Charging Time', bat.chargingTime === Infinity ? 'Not charging' : bat.chargingTime+'s');
+    html += row('Discharging Time', bat.dischargingTime === Infinity ? '∞' : bat.dischargingTime+'s');
+    html += desc('Battery API exposes device state. Real device = realistic values. Headless browser = often 100% charging with constant values.');
+    if (body) body.innerHTML = html;
+    setBadge('badge-battery', 'info', 'INFO');
+  } catch {
+    if (body) body.innerHTML = row('Status', 'API not available', 'muted');
+    setBadge('badge-battery', 'info', 'N/A');
+  }
+  setResult('Battery', 'info', 'Done');
+}
+
+// ── Test 16: Media Devices ────────────────────────────────────────────────────
+async function testMediaDevices() {
+  const body = document.getElementById('media-body');
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === 'videoinput');
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    const speakers = devices.filter(d => d.kind === 'audiooutput');
+    let html = '';
+    html += row('Video Inputs (Cameras)', cams.length || 'None', cams.length ? '' : 'muted');
+    html += row('Audio Inputs (Mics)', mics.length || 'None', mics.length ? '' : 'muted');
+    html += row('Audio Outputs', speakers.length || 'None', speakers.length ? '' : 'muted');
+    cams.forEach((d,i) => { html += row('Camera '+(i+1), d.label || '(label hidden — needs permission)'); });
+    mics.forEach((d,i) => { html += row('Mic '+(i+1), d.label || '(label hidden — needs permission)'); });
+    html += desc('Real user browsers show camera/mic entries even without permission. Headless browsers often show 0 devices — a fingerprinting signal.');
+    if (body) body.innerHTML = html;
+    setBadge('badge-media', 'info', 'INFO');
+  } catch (e) {
+    if (body) body.innerHTML = row('Status', 'API error: '+e.message, 'muted');
+    setBadge('badge-media', 'info', 'N/A');
+  }
+  setResult('Media', 'info', 'Done');
+}
+
+// ── Test 17: Permissions ──────────────────────────────────────────────────────
+async function testPermissions() {
+  const body = document.getElementById('perms-body');
+  const permsToCheck = [
+    'geolocation','notifications','camera','microphone',
+    'clipboard-read','clipboard-write','push','midi','accelerometer',
+    'gyroscope','magnetometer','payment-handler',
+  ];
+  let html = '';
+  const results = await Promise.allSettled(
+    permsToCheck.map(name => navigator.permissions.query({ name }))
+  );
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      const state = r.value.state;
+      const cls = state === 'granted' ? 'green' : state === 'denied' ? 'muted' : '';
+      html += row(permsToCheck[i], state, cls);
+    } else {
+      html += row(permsToCheck[i], 'n/a', 'muted');
+    }
+  });
+  if (body) body.innerHTML = html;
+  setBadge('badge-perms', 'info', 'INFO');
+  setResult('Perms', 'info', 'Done');
+}
+
+// ── Test 18: Speech Synthesis ─────────────────────────────────────────────────
+function testSpeech() {
+  const body = document.getElementById('speech-body');
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth) throw new Error('not available');
+    const voices = synth.getVoices();
+    let html = '';
+    html += row('Voices Available', voices.length || '(loading…)');
+    if (voices.length > 0) {
+      const local = voices.filter(v => v.localService);
+      const remote = voices.filter(v => !v.localService);
+      html += row('Local Voices', local.length);
+      html += row('Remote Voices', remote.length);
+      const sample = voices.slice(0,4).map(v => v.name).join(', ');
+      html += row('Sample', sample, 'muted');
+    }
+    html += desc('Speech synthesis voices vary by OS. This is a secondary fingerprinting signal used alongside canvas and audio hashes.');
+    if (body) body.innerHTML = html;
+  } catch {
+    if (body) body.innerHTML = row('Status', 'Not available', 'muted');
+  }
+  setBadge('badge-speech', 'info', 'INFO');
+  setResult('Speech', 'info', 'Done');
+}
+
+// ── Test 19: Client Hints ─────────────────────────────────────────────────────
+async function testClientHints() {
+  const body = document.getElementById('hints-body');
+  let html = '';
+  try {
+    const ua = navigator.userAgentData;
+    if (!ua) throw new Error('not available');
+    html += row('Brand', ua.brands.map(b => b.brand+' '+b.version).join(', ') || 'n/a');
+    html += row('Mobile', ua.mobile ? 'Yes' : 'No');
+    html += row('Platform', ua.platform || 'n/a');
+    try {
+      const high = await ua.getHighEntropyValues(['architecture','bitness','model','platformVersion','uaFullVersion','fullVersionList']);
+      html += row('Architecture', high.architecture || 'n/a');
+      html += row('Bitness', high.bitness || 'n/a');
+      html += row('Platform Version', high.platformVersion || 'n/a');
+      html += row('Full UA Version', high.uaFullVersion || 'n/a');
+      html += row('Model', high.model || '(desktop)');
+    } catch {}
+    html += desc('UA Client Hints are a newer fingerprinting vector. They must be consistent with the User Agent string — mismatches are detectable.');
+    setBadge('badge-hints', 'info', 'INFO');
+  } catch {
+    html = row('Status', 'UA Client Hints not available (older Chrome or policy blocked)', 'muted');
+    setBadge('badge-hints', 'info', 'N/A');
+  }
+  if (body) body.innerHTML = html;
+  setResult('Hints', 'info', 'Done');
+}
+
+// ── Test 20: Timing Precision ─────────────────────────────────────────────────
+function testTiming() {
+  const body = document.getElementById('perf-body');
+  const samples = [];
+  for (let i = 0; i < 10; i++) samples.push(performance.now());
+  const diffs = samples.slice(1).map((v,i) => v - samples[i]);
+  const minDiff = Math.min(...diffs);
+  const resolution = minDiff < 0.001 ? '<0.001ms (full precision)' : minDiff.toFixed(4)+'ms';
+
+  let html = '';
+  html += row('Timer Resolution', resolution);
+  html += row('performance.now()', samples[0].toFixed(4)+'ms');
+  html += row('Date.now()', Date.now()+'ms (Unix)');
+  html += row('Precision Reduced', minDiff > 0.1 ? 'Yes — coarsened for privacy' : 'No — full precision', minDiff > 0.1 ? 'green' : 'warn');
+  html += desc('High-resolution timers can be used for timing attacks and hardware fingerprinting. Reduced precision (100µs+) is better for privacy.');
+  if (body) body.innerHTML = html;
+  setBadge('badge-perf', 'info', 'INFO');
+  setResult('Timing', 'info', resolution);
 }
 
 // ── Run all ───────────────────────────────────────────────────────────────────
@@ -123877,26 +124648,44 @@ async function runAll() {
   if (summaryBar) summaryBar.innerHTML = '';
 
   const resetBadge = (id) => setBadge(id, 'pending', '');
-  ['badge-ip','badge-webrtc','badge-bot','badge-tz','badge-nav','badge-hw','badge-canvas','badge-audio','badge-webgl']
+  ['badge-ip','badge-ipmatch','badge-webrtc','badge-dns','badge-uamatch','badge-bot','badge-fonts','badge-battery','badge-media','badge-perms','badge-hints']
     .forEach(resetBadge);
 
-  // Run synchronous tests immediately
+  // Instant sync tests
+  testIdentity();
   testBot();
+  testUAMatch();
   testTimezone();
   testNavigator();
   testHardware();
   testCanvas();
+  testWebGL();
+  testNetwork();
+  testSpeech();
+  testTiming();
+  testFonts();
 
-  // Run async tests in parallel
+  // Async tests
+  await testIP();
+  testIPMatch();  // needs IP result
+  testWebRTC();   // async but fire-and-forget (resolved internally)
+
   await Promise.all([
-    testIP().then(() => testWebRTC()), // WebRTC needs IP result for comparison
+    testDNS(),
     testAudio(),
+    testBattery(),
+    testMediaDevices(),
+    testPermissions(),
+    testClientHints(),
   ]);
-
-  testWebGL(); // fast, sync
 }
 
 window.addEventListener('DOMContentLoaded', runAll);
+// Voices load async
+window.speechSynthesis?.addEventListener('voiceschanged', () => {
+  const body = document.getElementById('speech-body');
+  if (body) testSpeech();
+});
 </script>
 </body>
 </html>`;
@@ -140864,7 +141653,10 @@ var profiles = sqliteTable("profiles", {
   igApiCookies: text("ig_api_cookies"),
   creatorMode: integer("creator_mode", { mode: "boolean" }).default(false),
   locked: integer("locked", { mode: "boolean" }).default(false),
-  cookieBakerSettings: text("cookie_baker_settings", { mode: "json" }).default(null)
+  cookieBakerSettings: text("cookie_baker_settings", { mode: "json" }).default(null),
+  ebFingerprint: text("eb_fingerprint"),
+  isTemplate: integer("is_template", { mode: "boolean" }).default(false),
+  templateId: text("template_id")
 });
 var tools = sqliteTable("tools", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -141333,6 +142125,15 @@ if (!colNames.has("cookie_baker_settings")) {
 }
 if (!colNames.has("status_message")) {
   sqlite.exec(`ALTER TABLE profiles ADD COLUMN status_message TEXT;`);
+}
+if (!colNames.has("eb_fingerprint")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN eb_fingerprint TEXT;`);
+}
+if (!colNames.has("is_template")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN is_template INTEGER DEFAULT 0;`);
+}
+if (!colNames.has("template_id")) {
+  sqlite.exec(`ALTER TABLE profiles ADD COLUMN template_id TEXT;`);
 }
 var sourcesCols = sqlite.prepare("pragma table_info(sources)").all();
 var sourcesColNames = new Set(sourcesCols.map((c3) => c3.name));
@@ -142167,6 +142968,61 @@ var DatabaseStorage = class {
 };
 var storage = new DatabaseStorage();
 
+// src/instagram/browserFingerprint.ts
+import { randomBytes } from "crypto";
+var GPU_MAP = [
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 750", keys: ["gs302", "Snapdragon8Gen3", "caiman"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 735", keys: ["Snapdragon8Gen2", "b0q", "diamond", "e3q", "SM-S928", "SM-S918"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 720", keys: ["op535", "rtwo", "CPH2551", "CPH2449"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 710", keys: ["Snapdragon7Gen1", "marble"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 695", keys: ["Snapdragon695", "bangkk"] },
+  { vendor: "ARM", renderer: "Mali-G920 MC10", keys: ["exynos2400"] },
+  { vendor: "ARM", renderer: "Mali-G710 MC10", keys: ["exynos2200", "SM-S911"] },
+  { vendor: "ARM", renderer: "Mali-G76 MC12", keys: ["exynos1380", "SM-A54"] },
+  { vendor: "ARM", renderer: "Mali-G610 MC6", keys: ["Dimensity9000"] },
+  { vendor: "Google", renderer: "Tensor G4", keys: ["caiman"] },
+  { vendor: "Google", renderer: "Tensor G3", keys: ["shiba", "gs202"] },
+  { vendor: "Google", renderer: "Tensor G2", keys: ["panther", "gs201"] }
+];
+var FALLBACK_GPU = [
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 750" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 735" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 720" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 710" },
+  { vendor: "ARM", renderer: "Mali-G920 MC10" },
+  { vendor: "ARM", renderer: "Mali-G710 MC10" },
+  { vendor: "Google", renderer: "Tensor G3" }
+];
+function pickGpu(ua) {
+  if (ua) {
+    for (const entry of GPU_MAP) {
+      if (entry.keys.some((k2) => ua.includes(k2))) {
+        return { vendor: entry.vendor, renderer: entry.renderer };
+      }
+    }
+  }
+  return FALLBACK_GPU[randomBytes(1)[0] % FALLBACK_GPU.length];
+}
+function rndHex(bytes) {
+  return randomBytes(bytes).toString("hex");
+}
+function generateEbFingerprint(userAgentApi) {
+  const gpu = pickGpu(userAgentApi);
+  const canvasNoise = randomBytes(1)[0] % 253 + 2;
+  const audioNoise = randomBytes(4).readUInt32BE(0) / 4294967295 * 8e-7 + 1e-7;
+  return {
+    webglVendor: gpu.vendor,
+    webglRenderer: gpu.renderer,
+    canvasNoise,
+    audioNoise: parseFloat(audioNoise.toFixed(10)),
+    mediaVideoId: rndHex(16),
+    mediaAudioId: rndHex(16),
+    mediaSpeakerId: rndHex(16),
+    fontSeed: randomBytes(1)[0] % 99 + 1,
+    speechProfile: randomBytes(1)[0] % 8
+  };
+}
+
 // src/shared/routes.ts
 var errorSchemas = {
   validation: external_exports.object({
@@ -142323,7 +143179,7 @@ var api = {
 
 // src/instagram/instagramLogin.ts
 var import_instagram_private_api3 = __toESM(require_dist2(), 1);
-import { randomBytes as randomBytes3 } from "crypto";
+import { randomBytes as randomBytes4 } from "crypto";
 
 // ../../node_modules/.pnpm/@otplib+core@13.4.0/node_modules/@otplib/core/dist/index.js
 var i = class extends Error {
@@ -142858,7 +143714,7 @@ function createHasher(hashCons, info = {}) {
   Object.assign(hashC, info);
   return Object.freeze(hashC);
 }
-function randomBytes(bytesLength = 32) {
+function randomBytes2(bytesLength = 32) {
   anumber2(bytesLength, "bytesLength");
   const cr = typeof globalThis === "object" ? globalThis.crypto : null;
   if (typeof cr?.getRandomValues !== "function")
@@ -143556,7 +144412,7 @@ var t = class {
     return hmac(r2 === "sha1" ? sha1 : r2 === "sha256" ? sha256 : sha512, n, a2);
   }
   randomBytes(r2) {
-    return randomBytes(r2);
+    return randomBytes2(r2);
   }
   constantTimeEqual(r2, n) {
     return tr(r2, n);
@@ -143586,7 +144442,7 @@ import * as https from "https";
 import * as http2 from "http";
 import * as fs from "fs";
 import * as path2 from "path";
-import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes as randomBytes2, constants as cryptoConstants } from "crypto";
+import { randomUUID, createCipheriv, createHmac, publicEncrypt, randomBytes as randomBytes3, constants as cryptoConstants } from "crypto";
 var import_instagram_private_api2 = __toESM(require_dist2(), 1);
 
 // src/instagram/tlsTransport.ts
@@ -144022,8 +144878,8 @@ function extractCsrf(cookies) {
 function encryptPassword(plaintext, pubKeyBase64, keyId) {
   const time3 = Math.floor(Date.now() / 1e3);
   const pubKeyPem = Buffer.from(pubKeyBase64, "base64").toString("utf8");
-  const aesKey = randomBytes2(32);
-  const iv = randomBytes2(12);
+  const aesKey = randomBytes3(32);
+  const iv = randomBytes3(12);
   const cipher = createCipheriv("aes-256-gcm", aesKey, iv);
   cipher.setAAD(Buffer.from(String(time3)));
   const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
@@ -144262,7 +145118,7 @@ var InstagramWebClient = class {
         const csrfPair = this.igApiCookies.split(";").find((s) => s.trim().startsWith("csrftoken="));
         if (csrfPair) csrf = csrfPair.split("=").slice(1).join("=");
       }
-      if (!csrf) csrf = randomBytes2(16).toString("hex");
+      if (!csrf) csrf = randomBytes3(16).toString("hex");
       this.mobileCookieJar = [`ig_did=${this._mobileIgDid}`, `mid=${this._mobileMid}`, `csrftoken=${csrf}`];
       this.mobileCsrf = csrf;
       this.mobileSessionReady = true;
@@ -145060,6 +145916,51 @@ var InstagramWebClient = class {
       return { ok: false, status: "follow_blocked", reason: msg || "IgApiClient follow failed" };
     }
   }
+  // ── Programmatic consent acceptance ──────────────────────────────────────
+  // When Instagram's mobile API returns consent_required, it means the account
+  // must accept the updated Terms of Service / Privacy Policy before any API
+  // call will succeed. This is a server-side block — completely independent of
+  // what is visible in the EB. instagram-private-api's ConsentRepository exposes
+  // POST /api/v1/consent/existing_user_flow/ which accepts TOS + age consent
+  // programmatically so no EB click is required.
+  async _tryAcceptConsent() {
+    if (!this.igApiCookies) return false;
+    try {
+      const ig = newIgClient();
+      const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
+      if (this.igDeviceState) {
+        try {
+          const saved = JSON.parse(this.igDeviceState);
+          ig.state.generateDevice(deviceSeed);
+          if (saved.deviceId) ig.state.deviceId = saved.deviceId;
+          if (saved.uuid) ig.state.uuid = saved.uuid;
+          if (saved.phoneId) ig.state.phoneId = saved.phoneId;
+          if (saved.adid) ig.state.adid = saved.adid;
+          if (saved.deviceString) ig.state.deviceString = saved.deviceString;
+          if (saved.authorization) ig.state.authorization = saved.authorization;
+          if (saved.igWWWClaim) ig.state.igWWWClaim = saved.igWWWClaim;
+        } catch {
+          ig.state.generateDevice(deviceSeed);
+        }
+      } else {
+        ig.state.generateDevice(deviceSeed);
+      }
+      await this._deserializeIgCookies(ig, this.igApiCookies);
+      ig.state.constants.APP_VERSION = MOBILE_VERSION;
+      ig.state.constants.APP_VERSION_CODE = MOBILE_VERSION_CODE;
+      patchDeviceStringVersionCode(ig, MOBILE_VERSION_CODE);
+      if (this.proxyUrl) ig.state.proxyUrl = this.proxyUrl;
+      patchIgClientTls(ig, this.proxyUrl);
+      await ig.consent.existingUserFlowTosAndTwoAgeButton();
+      console.log(`[webClient] @${this.username}: \u2705 consent accepted via mobile API (TOS+age)`);
+      return true;
+    } catch (e) {
+      const raw = e?.message ?? String(e);
+      const msg = raw.replace(/^[A-Z]+ \/[^\s]+ - [^;]+;\s*/, "").trim() || raw;
+      console.warn(`[webClient] @${this.username}: consent auto-accept failed: ${msg}`);
+      return false;
+    }
+  }
   // ── Shared IgApiClient helpers ────────────────────────────────────────────
   // Deserialize a cookie string into an IgApiClient's tough-cookie jar.
   // Mirrors restoreSessionCookies() in instagramLogin.ts exactly.
@@ -145517,7 +146418,7 @@ var InstagramWebClient = class {
   // ── Scroll the home timeline feed ────────────────────────────────────────
   // Fetches the main home feed and marks up to `count` posts as seen,
   // simulating a user scrolling through their Instagram home feed.
-  async viewTimelineFeed(count = 5, reelWatchPercentMin = 0, reelWatchPercentMax = 0) {
+  async viewTimelineFeed(count = 5, reelWatchPercentMin = 0, reelWatchPercentMax = 0, _consentRetry = false) {
     const j = await this.mobileSessionPost(
       `/api/v1/feed/timeline/`,
       new URLSearchParams({ reason: "cold_start_fetch", is_pull_to_refresh: "0" }).toString()
@@ -145541,6 +146442,14 @@ var InstagramWebClient = class {
       console.warn(`[webClient] viewTimelineFeed: timeline fetch failed \u2014 status="${j?.status}" message="${failMsg}"`);
       if (/challenge_required|checkpoint_required|checkpoint required|login_required|not authorized|session expired|logged.?out|suspended|disabled/i.test(failMsg)) {
         throw new Error(failMsg);
+      }
+      if (failMsg === "consent_required" && !_consentRetry) {
+        console.log(`[webClient] viewTimelineFeed: consent_required \u2014 attempting programmatic consent acceptance`);
+        const accepted = await this._tryAcceptConsent();
+        if (accepted) {
+          console.log(`[webClient] viewTimelineFeed: retrying after consent acceptance`);
+          return this.viewTimelineFeed(count, reelWatchPercentMin, reelWatchPercentMax, true);
+        }
       }
       return { viewed: 0 };
     }
@@ -145579,48 +146488,54 @@ var InstagramWebClient = class {
   // Fetches the media info endpoint — the same call the app makes when a user
   // taps a post to open the detail view.
   async viewFeedPost(mediaId) {
-    try {
-      await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
-      return true;
-    } catch {
-      return false;
-    }
+    return this.timed("ViewFeedPost", async () => {
+      try {
+        await this.mobileSessionGet(`/api/v1/media/${mediaId}/info/`);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Viewed feed post");
   }
   // ── Visit a user's profile page ──────────────────────────────────────────
   // Fetches user info — equivalent to tapping a username to open their profile.
   async visitUserProfile(userId) {
-    try {
-      await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
-      return true;
-    } catch {
-      return false;
-    }
+    return this.timed("VisitUserProfile", async () => {
+      try {
+        await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Visited user profile");
   }
   // ── Scroll through a user's post feed (profile grid) ────────────────────
   // Fetches up to `count` posts from the user's feed and marks them as seen,
   // simulating a user scrolling through someone's profile grid.
   async viewUserFeed(userId, count) {
-    const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=12`);
-    if (!j?.items) return [];
-    const items = j.items.slice(0, Math.max(1, count));
-    const result = [];
-    for (const media of items) {
-      const mediaId = String(media?.id ?? media?.pk ?? "");
-      if (!mediaId) continue;
-      const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
-      await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
-        reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
-        live_vods_skipped: "",
-        nuxes_skipped: ""
-      }).toString()).catch(() => {
-      });
-      result.push({
-        mediaId,
-        shortcode: this.mediaIdToShortcode(mediaId),
-        username: String(media?.user?.username ?? "")
-      });
-    }
-    return result;
+    return this.timed("ViewUserFeed", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/feed/user/${userId}/?count=12`);
+      if (!j?.items) return [];
+      const items = j.items.slice(0, Math.max(1, count));
+      const result = [];
+      for (const media of items) {
+        const mediaId = String(media?.id ?? media?.pk ?? "");
+        if (!mediaId) continue;
+        const takenAt = media.taken_at ?? Math.floor(Date.now() / 1e3);
+        await this.mobileSessionPost(`/api/v1/media/seen/`, new URLSearchParams({
+          reels: `${mediaId}_${takenAt}_${takenAt + 3}`,
+          live_vods_skipped: "",
+          nuxes_skipped: ""
+        }).toString()).catch(() => {
+        });
+        result.push({
+          mediaId,
+          shortcode: this.mediaIdToShortcode(mediaId),
+          username: String(media?.user?.username ?? "")
+        });
+      }
+      return result;
+    }, (r2) => `Viewed user feed: ${r2.length} posts`);
   }
   // ── Watch reels from the home feed Reels tab ─────────────────────────────
   // Fetches the reels explore/home feed and marks up to `count` reels as seen,
@@ -147035,6 +147950,31 @@ Content-Disposition: form-data; name="${part.name}"`;
       await this.mobileSessionGet(`/api/v1/discover/ayml/`);
     }, "Get suggested users");
   }
+  // ── Follow X users from the Suggested Users page ──────────────────────────
+  // Used by the Human Session engine when the timeline returns 0 posts.
+  // Fetches the discover/ayml endpoint, picks the first `count` suggestions,
+  // and follows them using the mobile API — seeding the feed for future runs.
+  async followSuggestedUsers(count) {
+    return this.timed("FollowSuggestedUsers", async () => {
+      const j = await this.mobileSessionGet(`/api/v1/discover/ayml/`);
+      const suggestions = j?.suggested_users ?? j?.users ?? [];
+      const toFollow = suggestions.slice(0, count);
+      const followed = [];
+      for (const item of toFollow) {
+        const user = item.user ?? item;
+        const userId = String(user.pk ?? user.id ?? "");
+        const username = String(user.username ?? userId);
+        if (!userId) continue;
+        try {
+          const res = await this.followUser(userId, username, "suggested_users");
+          if (res.ok) followed.push(username);
+          await new Promise((r2) => setTimeout(r2, 2e3 + Math.floor(Math.random() * 3e3)));
+        } catch {
+        }
+      }
+      return { followed: followed.length, usernames: followed };
+    }, `Follow ${count} suggested user(s)`);
+  }
 };
 var _pendingSignupSessions = /* @__PURE__ */ new Map();
 async function createInstagramAccountViaApi(params) {
@@ -147064,7 +148004,7 @@ async function createInstagramAccountViaApi(params) {
     }
   };
   const ig_did = ebCookies?.ig_did || randomUUID();
-  const mid = ebCookies?.mid || randomBytes2(18).toString("base64").replace(/[+/=]/g, "").slice(0, 24);
+  const mid = ebCookies?.mid || randomBytes3(18).toString("base64").replace(/[+/=]/g, "").slice(0, 24);
   const phone_id = randomUUID();
   const waterfall_id = randomUUID();
   const android_id = `android-${ig_did.replace(/-/g, "").slice(0, 16)}`;
@@ -148028,7 +148968,7 @@ async function verifyInstagramCredentials(profile) {
       console.error(`[instagramLogin] @${profile.username} \u2014 mid from launcher/sync: ${midCookie.value}`);
     }
     if (igPw.state.cookieCsrfToken === "missing") {
-      const syntheticCsrf = randomBytes3(16).toString("hex");
+      const syntheticCsrf = randomBytes4(16).toString("hex");
       try {
         const innerJar = igPw.state.cookieJar?._jar;
         if (innerJar?.setCookieSync) {
@@ -148594,7 +149534,7 @@ async function fetchInstagramCodeFromImap(opts) {
 var import_instagram_private_api4 = __toESM(require_dist2(), 1);
 
 // src/instagram/browserSession.ts
-import https2 from "https";
+import https3 from "https";
 
 // src/instagram/totp.ts
 import { createHmac as createHmac2 } from "crypto";
@@ -149679,7 +150619,13 @@ async function applyStealthScripts(page, userAgent, overrideTZ, apiUA) {
     window.chrome = { app: { isInstalled: false }, runtime: {}, loadTimes: () => ({}), csi: () => ({}) };
     const originalQuery = window.navigator.permissions?.query;
     if (originalQuery) {
-      window.navigator.permissions.query = (params) => params.name === "notifications" ? Promise.resolve({ state: "prompt", onchange: null }) : originalQuery.call(window.navigator.permissions, params);
+      window.navigator.permissions.query = (params) => {
+        if (params.name === "notifications")
+          return Promise.resolve({ state: "prompt", onchange: null });
+        if (params.name === "gyroscope" || params.name === "accelerometer" || params.name === "magnetometer")
+          return Promise.resolve({ state: "granted", onchange: null });
+        return originalQuery.call(window.navigator.permissions, params);
+      };
     }
     if (mobile2) {
       Object.defineProperty(screen, "width", { get: () => _SW });
@@ -149693,6 +150639,58 @@ async function applyStealthScripts(page, userAgent, overrideTZ, apiUA) {
       Object.defineProperty(navigator, "hardwareConcurrency", { get: () => _CORES });
       Object.defineProperty(navigator, "deviceMemory", { get: () => _MEM });
       Object.defineProperty(window, "devicePixelRatio", { get: () => _DPR });
+      Object.defineProperty(window, "innerWidth", { get: () => _SW });
+      Object.defineProperty(window, "innerHeight", { get: () => _SH });
+      try {
+        Object.defineProperty(window, "outerWidth", { get: () => _SW, configurable: true });
+      } catch {
+      }
+      try {
+        Object.defineProperty(window, "outerHeight", { get: () => _SH, configurable: true });
+      } catch {
+      }
+      try {
+        if (window.visualViewport) {
+          Object.defineProperty(window.visualViewport, "width", { get: () => _SW, configurable: true });
+          Object.defineProperty(window.visualViewport, "height", { get: () => _SH, configurable: true });
+          Object.defineProperty(window.visualViewport, "scale", { get: () => 1, configurable: true });
+        }
+      } catch {
+      }
+      try {
+        const _origMM = window.matchMedia.bind(window);
+        window.matchMedia = function(q2) {
+          const _mql = {
+            matches: false,
+            media: q2,
+            onchange: null,
+            addListener() {
+            },
+            removeListener() {
+            },
+            addEventListener() {
+            },
+            removeEventListener() {
+            },
+            dispatchEvent() {
+              return true;
+            }
+          };
+          if (/(pointer:\s*coarse|any-pointer:\s*coarse)/.test(q2)) return { ..._mql, matches: true };
+          if (/(hover:\s*none|any-hover:\s*none)/.test(q2)) return { ..._mql, matches: true };
+          if (/(pointer:\s*fine|any-pointer:\s*fine|hover:\s*hover|any-hover:\s*hover)/.test(q2)) return _mql;
+          try {
+            return _origMM(q2);
+          } catch {
+            return _mql;
+          }
+        };
+      } catch {
+      }
+      try {
+        if (window.ontouchstart === void 0) window.ontouchstart = null;
+      } catch {
+      }
       try {
         Object.defineProperty(window, "orientation", { get: () => 0, configurable: true });
       } catch {
@@ -149774,6 +150772,18 @@ async function applyStealthScripts(page, userAgent, overrideTZ, apiUA) {
       Object.defineProperty(navigator, "deviceMemory", { get: () => _rp([8, 8, 16, 32]) });
     }
     try {
+      document.hasFocus = () => true;
+    } catch {
+    }
+    try {
+      Object.defineProperty(document, "visibilityState", { get: () => "visible", configurable: true });
+    } catch {
+    }
+    try {
+      Object.defineProperty(document, "hidden", { get: () => false, configurable: true });
+    } catch {
+    }
+    try {
       const _batt = {
         charging: _BCHG,
         chargingTime: _BCTM,
@@ -149799,6 +150809,52 @@ async function applyStealthScripts(page, userAgent, overrideTZ, apiUA) {
         }
       }, 6e4);
       navigator.getBattery = () => Promise.resolve(_batt);
+    } catch {
+    }
+    try {
+      const _ua2 = navigator.userAgent;
+      let _gs = 3735928559;
+      for (let i2 = 0; i2 < _ua2.length; i2++) {
+        _gs = Math.imul(_gs ^ _ua2.charCodeAt(i2), 2654435769) >>> 0;
+      }
+      const _gr = () => {
+        _gs = Math.imul(1664525, _gs) + 1013904223 >>> 0;
+        return _gs / 4294967296;
+      };
+      let _alpha = _gr() * 360;
+      let _beta = _gr() * 8;
+      let _gamma = _gr() * 6 - 3;
+      const _fireSensors = () => {
+        _alpha = (_alpha + (_gr() - 0.5) * 0.3 + 360) % 360;
+        _beta = Math.max(-5, Math.min(10, _beta + (_gr() - 0.5) * 0.08));
+        _gamma = Math.max(-5, Math.min(5, _gamma + (_gr() - 0.5) * 0.05));
+        const ax = (_gr() - 0.5) * 0.12;
+        const ay = (_gr() - 0.5) * 0.1;
+        const az = (_gr() - 0.5) * 0.08;
+        try {
+          window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", {
+            alpha: _alpha,
+            beta: _beta,
+            gamma: _gamma,
+            absolute: false
+          }));
+        } catch {
+        }
+        try {
+          window.dispatchEvent(new DeviceMotionEvent("devicemotion", {
+            acceleration: { x: ax, y: ay, z: az },
+            accelerationIncludingGravity: { x: ax, y: ay, z: az + 9.81 },
+            rotationRate: {
+              alpha: (_gr() - 0.5) * 0.4,
+              beta: (_gr() - 0.5) * 0.3,
+              gamma: (_gr() - 0.5) * 0.2
+            },
+            interval: 50
+          }));
+        } catch {
+        }
+      };
+      setInterval(_fireSensors, 50);
     } catch {
     }
     (() => {
@@ -150038,13 +151094,21 @@ async function getOrCreateSession(profileId, userAgent, proxy, userAgentApi) {
     const newProxyKey2 = proxy ? `${proxy.host}:${proxy.port}` : "direct";
     electronSessions.set(profileId, { ws: null, proxyKey: newProxyKey2 });
     const profile = await storage.getProfile(profileId).catch(() => null);
+    let ebFp = profile?.ebFingerprint ?? null;
+    if (!ebFp && profile) {
+      ebFp = JSON.stringify(generateEbFingerprint(profile.userAgentApi ?? void 0));
+      await storage.updateProfile(profileId, { ebFingerprint: ebFp }).catch(() => {
+      });
+    }
     await ebIpc("POST", "/eb/open", {
       profileId,
       username: profile?.username ?? String(profileId),
       password: profile?.password ?? "",
       twoFAKey: profile?.twoFASecretKey ?? "",
       proxy: proxy ? { host: proxy.host, port: proxy.port, user: proxy.username, pass: proxy.password } : void 0,
-      userAgent: userAgent || void 0
+      userAgent: userAgent || void 0,
+      apiUA: profile?.userAgentApi ?? "",
+      ebFingerprint: ebFp ?? void 0
     }).catch((err) => log(`[getOrCreate:${profileId}] EB open failed: ${err?.message}`, "browser"));
     return {};
   }
@@ -150863,7 +151927,7 @@ function _httpGetOneHop(url2, headers, proxy) {
     } catch (e) {
       return reject(e);
     }
-    const req = https2.request(
+    const req = https3.request(
       {
         method: "GET",
         hostname: urlObj.hostname,
@@ -151989,6 +153053,34 @@ async function dismissInstagramPopups(page) {
           const btn = btns.find((b3) => DISMISS_TEXTS.has((b3.innerText || b3.textContent || "").trim().toLowerCase()));
           if (btn) {
             btn.click();
+            return;
+          }
+        }
+        if (body.includes("terms") || body.includes("privacy policy") || body.includes("privacy and cookies")) {
+          const confirmBtn = btns.find((b3) => {
+            const t2 = (b3.innerText || b3.textContent || "").trim().toLowerCase();
+            return t2 === "i agree" || t2 === "i accept" || t2 === "agree and continue" || t2 === "accept and continue";
+          });
+          if (confirmBtn) {
+            confirmBtn.click();
+            return;
+          }
+          const reviewBtn = btns.find((b3) => {
+            const t2 = (b3.innerText || b3.textContent || "").trim().toLowerCase();
+            return t2 === "review now" || t2 === "review" || t2 === "review and accept";
+          });
+          if (reviewBtn) {
+            reviewBtn.click();
+            return;
+          }
+        }
+        if (body.includes("date of birth") || body.includes("birthday") || body.includes("how old are you") || body.includes("age verification")) {
+          const ageBtn = btns.find((b3) => {
+            const t2 = (b3.innerText || b3.textContent || "").trim().toLowerCase();
+            return t2 === "continue" || t2 === "confirm" || t2 === "submit" || t2 === "next" || t2 === "done";
+          });
+          if (ageBtn) {
+            ageBtn.click();
             return;
           }
         }
@@ -153187,6 +154279,148 @@ async function _fillSignupInput(page, selectors, value) {
 function isEBSignupSession(sessionId) {
   return _pendingEBSignups.has(sessionId);
 }
+async function warmupSignupSession(page, opts) {
+  const step = opts.onStep ?? (() => {
+  });
+  const delay = (ms) => new Promise((r2) => setTimeout(r2, ms));
+  const jitter = (base, range) => base + Math.floor(Math.random() * range);
+  const randBetween = (lo, hi) => lo + Math.floor(Math.random() * Math.max(1, hi - lo + 1));
+  const reelsCount = randBetween(opts.reelsMin ?? 1, opts.reelsMax ?? 3);
+  const postsCount = randBetween(opts.postsMin ?? 0, opts.postsMax ?? 2);
+  const profilesCount = randBetween(opts.profilesMin ?? 1, opts.profilesMax ?? 2);
+  if (reelsCount === 0 && postsCount === 0 && profilesCount === 0) {
+    step("EB warmup: all counts are 0 \u2014 skipping warm-up");
+    return;
+  }
+  step("EB warmup: visiting instagram.com homepage...");
+  try {
+    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 3e4 });
+  } catch (e) {
+    step(`EB warmup: homepage nav warning: ${e?.message?.slice(0, 60)}`);
+  }
+  await delay(jitter(1500, 1e3));
+  await dismissCookieBanner(page);
+  await delay(jitter(1e3, 800));
+  for (let i2 = 0; i2 < 3; i2++) {
+    try {
+      const down = 200 + Math.random() * 300;
+      await page.evaluate((d3) => window.scrollBy(0, d3), down);
+      await delay(jitter(1800, 1200));
+      if (Math.random() > 0.5) {
+        await page.evaluate((d3) => window.scrollBy(0, -d3), down * 0.4);
+        await delay(jitter(700, 500));
+      }
+    } catch {
+    }
+  }
+  if (reelsCount > 0) {
+    const reelUrls = [];
+    let hikerApiToken;
+    try {
+      const s = await storage.getGlobalSettings();
+      if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
+    } catch {
+    }
+    if (hikerApiToken) {
+      try {
+        const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
+        const hiker = new HikerApiClient2(hikerApiToken);
+        step("EB warmup: fetching public reel URLs via HikerAPI...");
+        const shortcodes = await hiker.getPublicShortcodes(reelsCount + 2);
+        for (const sc of shortcodes.slice(0, reelsCount)) {
+          reelUrls.push(`https://www.instagram.com/reel/${sc}/`);
+        }
+        if (reelUrls.length > 0) step(`EB warmup: got ${reelUrls.length} reel URL(s) via HikerAPI \u2713`);
+      } catch {
+      }
+    }
+    if (reelUrls.length === 0) {
+      reelUrls.push("https://www.instagram.com/reels/", "https://www.instagram.com/explore/");
+    }
+    for (const url2 of reelUrls.slice(0, reelsCount)) {
+      const label = url2.replace("https://www.instagram.com", "ig.com");
+      step(`EB warmup: viewing reel ${label}...`);
+      try {
+        await page.goto(url2, { waitUntil: "domcontentloaded", timeout: 2e4 });
+        await delay(jitter(2500, 2e3));
+        for (let i2 = 0; i2 < 2; i2++) {
+          try {
+            await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250));
+            await delay(jitter(2e3, 1500));
+          } catch {
+          }
+        }
+      } catch (e) {
+        step(`EB warmup: reel nav warning: ${e?.message?.slice(0, 60)}`);
+      }
+    }
+  }
+  if (postsCount > 0) {
+    const postProfiles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth"];
+    const pickedProfile = postProfiles[Math.floor(Math.random() * postProfiles.length)];
+    step(`EB warmup: visiting @${pickedProfile} to click posts (${postsCount})...`);
+    try {
+      await page.goto(`https://www.instagram.com/${pickedProfile}/`, { waitUntil: "domcontentloaded", timeout: 2e4 });
+      await delay(jitter(2e3, 1500));
+      for (let i2 = 0; i2 < postsCount; i2++) {
+        try {
+          const postHref = await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a[href*="/p/"]'));
+            const visible = links.filter((el) => {
+              const r2 = el.getBoundingClientRect();
+              return r2.width > 50 && r2.height > 50 && r2.top > 0 && r2.top < window.innerHeight * 2;
+            });
+            if (visible.length === 0) return null;
+            return visible[Math.floor(Math.random() * Math.min(visible.length, 9))].href;
+          });
+          if (postHref) {
+            step(`EB warmup: clicking post ${i2 + 1}/${postsCount}...`);
+            await page.goto(postHref, { waitUntil: "domcontentloaded", timeout: 15e3 });
+            await delay(jitter(3e3, 2500));
+            try {
+              await page.evaluate(() => window.scrollBy(0, 200 + Math.random() * 300));
+              await delay(jitter(1500, 1e3));
+            } catch {
+            }
+            await page.goBack({ timeout: 1e4 }).catch(() => {
+            });
+            await delay(jitter(1e3, 800));
+          }
+        } catch (e) {
+          step(`EB warmup: post click warning: ${e?.message?.slice(0, 60)}`);
+        }
+      }
+    } catch (e) {
+      step(`EB warmup: posts profile nav warning: ${e?.message?.slice(0, 60)}`);
+    }
+  }
+  if (profilesCount > 0) {
+    const allHandles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth", "ngc", "cnn"];
+    const shuffled = allHandles.sort(() => Math.random() - 0.5);
+    for (let i2 = 0; i2 < Math.min(profilesCount, shuffled.length); i2++) {
+      const handle = shuffled[i2];
+      step(`EB warmup: visiting @${handle} profile...`);
+      try {
+        await page.goto(`https://www.instagram.com/${handle}/`, { waitUntil: "domcontentloaded", timeout: 2e4 });
+        await delay(jitter(2e3, 1500));
+        for (let j = 0; j < 2; j++) {
+          try {
+            await page.evaluate(() => window.scrollBy(0, 300 + Math.random() * 400));
+            await delay(jitter(2e3, 1500));
+          } catch {
+          }
+        }
+      } catch (e) {
+        step(`EB warmup: profile nav warning: ${e?.message?.slice(0, 60)}`);
+      }
+    }
+  }
+  step("EB warmup: session warm-up complete \u2713");
+}
+async function runWarmupOnOpenBrowser(opts) {
+  if (!_signupPage) throw new Error("Ghost Browser is not open");
+  await warmupSignupSession(_signupPage, opts);
+}
 async function createInstagramAccountViaEBForm(params) {
   const {
     username,
@@ -153273,25 +154507,7 @@ async function createInstagramAccountViaEBForm(params) {
       (e) => step(`EB: stealth warn: ${e?.message?.slice(0, 60)}`)
     );
     step("EB: stealth scripts applied \u2713");
-    step("EB: visiting instagram.com homepage (seeding device cookies)...");
-    try {
-      await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 6e4 });
-    } catch (e) {
-      step(`EB: homepage nav warning: ${e?.message?.slice(0, 80)}`);
-    }
-    await delay(1500);
-    try {
-      await page.evaluate(() => {
-        window.scrollBy(0, 180 + Math.random() * 120);
-      });
-      await delay(700 + Math.random() * 600);
-      await page.evaluate(() => {
-        window.scrollBy(0, -(90 + Math.random() * 60));
-      });
-      await delay(400 + Math.random() * 300);
-    } catch {
-    }
-    await dismissCookieBanner(page);
+    await warmupSignupSession(page, { onStep: step });
     const EMAIL_FORM_SELECTORS = 'input[aria-label="Email"], input[name="emailOrPhone"], input[type="email"], input[placeholder*="email" i], input[autocomplete="email"], input[name="email"], input[name="emailAddress"]';
     const PHONE_GATE_LABELS = ["sign up with email address", "sign up with email", "use email address", "use email", "use your email address"];
     const _waitForEmailForm = async (maxMs) => {
@@ -154221,14 +155437,15 @@ var AutomationEngine = class {
                   (sa.autoStartUnfollowAfterMax ?? 135) * 6e4
                 );
                 console.log(`[engine] @${freshProfile.username}: auto: enabling unfollow tool in ${Math.round(delayMs / 6e4)}min`);
-                await sleepInterruptible(delayMs, state.stop);
+                await sleep(delayMs);
               }
-              if (!state.stop.stopped) {
-                const tools22 = await storage.getToolsByProfile(freshProfile.id);
-                const unfollowTool2 = tools22.find((t2) => t2.type === "unfollow");
-                if (unfollowTool2) await storage.updateTool(unfollowTool2.id, { enabled: true });
-                console.log(`[engine] @${freshProfile.username}: auto: unfollow tool enabled`);
+              const tools22 = await storage.getToolsByProfile(freshProfile.id);
+              const unfollowTool2 = tools22.find((t2) => t2.type === "unfollow");
+              if (unfollowTool2) {
+                await storage.updateTool(unfollowTool2.id, { enabled: true });
+                this.triggerUnfollow(freshProfile.id);
               }
+              console.log(`[engine] @${freshProfile.username}: auto: unfollow tool enabled`);
               break;
             }
           }
@@ -154438,14 +155655,15 @@ ${err?.stack ?? ""}`);
                   (sa.autoStartFollowAfterMax ?? 120) * 6e4
                 );
                 console.log(`[engine] @${freshProfile.username}: auto: enabling follow tool in ${Math.round(delayMs / 6e4)}min`);
-                await sleepInterruptible(delayMs, state.stop);
+                await sleep(delayMs);
               }
-              if (!state.stop.stopped) {
-                const tools22 = await storage.getToolsByProfile(freshProfile.id);
-                const followTool2 = tools22.find((t2) => t2.type === "follow");
-                if (followTool2) await storage.updateTool(followTool2.id, { enabled: true });
-                console.log(`[engine] @${freshProfile.username}: auto: follow tool enabled`);
+              const tools22 = await storage.getToolsByProfile(freshProfile.id);
+              const followTool2 = tools22.find((t2) => t2.type === "follow");
+              if (followTool2) {
+                await storage.updateTool(followTool2.id, { enabled: true });
+                this.triggerFollow(freshProfile.id);
               }
+              console.log(`[engine] @${freshProfile.username}: auto: follow tool enabled`);
               break;
             }
           }
@@ -155122,27 +156340,23 @@ ${err?.stack ?? ""}`);
     }
     state.client.setDeviceInfo(profile.igDeviceState, profile.userAgentApi, profile.igApiCookies);
     const client = state.client;
+    if (client.isMobileLoggedIn()) {
+      console.log(`[engine] @${profile.username}: resuming mobile API session from stored cookies`);
+      client.loadBrowserCookies();
+      return client;
+    }
     const browserOk = client.loadBrowserCookies();
     if (browserOk) {
-      console.log(`[engine] @${profile.username}: using EB browser session (cookies synced)`);
-      const alreadyVerified = client.isMobileLoggedIn();
-      if (alreadyVerified) {
-        console.log(`[engine] @${profile.username}: verified igApiCookies mobile session preserved (EB bootstrap skipped)`);
+      console.log(`[engine] @${profile.username}: no verified session \u2014 attempting EB cookie bootstrap`);
+      const mobileBootOk = client.mobileBootstrapFromWebCookies();
+      if (mobileBootOk) {
+        console.log(`[engine] @${profile.username}: mobile session seeded from EB cookies (Watch Stories/Reels may be skipped until Verify Credentials is run)`);
       } else {
-        const mobileBootOk = client.mobileBootstrapFromWebCookies();
-        if (mobileBootOk) {
-          console.log(`[engine] @${profile.username}: mobile session seeded from EB cookies (account not yet verified \u2014 Watch Stories/Reels may be skipped until Verify Credentials is run)`);
-        } else {
-          console.warn(`[engine] @${profile.username}: EB cookie file has no sessionid \u2014 mobile-API tools skipped this session. Re-verify the account via the Verify button.`);
-        }
+        console.warn(`[engine] @${profile.username}: EB cookie file has no sessionid \u2014 mobile-API tools skipped this session. Re-verify the account via the Verify button.`);
       }
       return client;
     }
-    if (client.isMobileLoggedIn()) {
-      console.log(`[engine] @${profile.username}: resuming mobile API session from stored cookies`);
-      return client;
-    }
-    console.warn(`[engine] @${profile.username}: no EB session and no stored mobile session \u2014 skipping run (verify the account in the browser first)`);
+    console.warn(`[engine] @${profile.username}: no mobile session and no EB session \u2014 skipping run (verify the account in the browser first)`);
     return null;
   }
   // ── Session cookie persistence ────────────────────────────────────────────
@@ -155843,6 +157057,24 @@ ${err?.stack ?? ""}`);
           viewed = vtfResult.viewed;
           console.log(`[engine] @${profile.username}: \u{1F4F0} viewed ${viewed} timeline post(s)`);
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
+          if (viewed === 0 && s.followSuggestedUsersIfEmptyEnabled === true) {
+            const followCount = randInt(
+              Number(s.followSuggestedUsersIfEmptyMin ?? 1),
+              Number(s.followSuggestedUsersIfEmptyMax ?? 3)
+            );
+            try {
+              const result = await client.followSuggestedUsers(followCount);
+              if (result.followed > 0) {
+                for (const username of result.usernames) {
+                  await storage.incrementStat(profile.id, "follow");
+                  this.logAction(profile.id, tool.id, "follow", username, "", "", "ok", "Followed suggested user (empty timeline)");
+                }
+                console.log(`[engine] @${profile.username}: \u{1F465} followed ${result.followed} suggested user(s) \u2014 timeline was empty`);
+              }
+            } catch (se) {
+              console.warn(`[engine] @${profile.username}: follow suggested users error: ${se?.message}`);
+            }
+          }
         } catch (e) {
           if (await checkSessionErr(e, "view_timeline_feed")) return;
           console.warn(`[engine] @${profile.username}: timeline feed error: ${e?.message}`);
@@ -156420,6 +157652,14 @@ ${err?.stack ?? ""}`);
     const injectSearchEnabled = !!s.injectSearchEnabled;
     const injectSearchMin = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
     const injectSearchMax = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
+    const injectProfileBrowsingEnabled = !!s.injectProfileBrowsingEnabled;
+    const injectProfileBrowsingMin = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 30));
+    const injectProfileBrowsingMax = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 50));
+    const injectProfileBrowsingFeedMin = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
+    const injectProfileBrowsingFeedMax = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
+    const injectProfileBrowsingPostPctMin = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
+    const injectProfileBrowsingPostPctMax = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
+    const injectProfileBrowsingBeforeFollow = !!s.injectProfileBrowsingBeforeFollow;
     if (injectSearchEnabled && candidates.length > 0) {
       const searchQuery = source.type === "target_followers" ? source.value.replace(/^@/, "") : candidates[0]?.username ?? source.value;
       if (searchQuery) {
@@ -156432,6 +157672,35 @@ ${err?.stack ?? ""}`);
     }
     let followed = 0, dedupSkipped = 0, filterSkipped = 0, blocked = 0, skipped = 0;
     let hitHardLimit = false;
+    const browseTargetProfile = async (label, targetUser) => {
+      try {
+        await client.visitUserProfile(targetUser.pk);
+        engineLog("INFO", `@${profile.username}: [${label}] visited profile of @${targetUser.username}`);
+        this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `[Profile Browse] Visited @${targetUser.username}'s profile`);
+      } catch {
+      }
+      const feedCount = randInt(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
+      let profilePosts = [];
+      try {
+        profilePosts = await client.viewUserFeed(targetUser.pk, feedCount);
+        engineLog("INFO", `@${profile.username}: [${label}] scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
+        this.logAction(profile.id, tool.id, "view_user_feed", targetUser.username, "", "profile", "ok", `[Profile Browse] Scrolled ${profilePosts.length} post(s) on @${targetUser.username}'s profile`);
+      } catch {
+      }
+      if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
+        const postPct = randInt(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
+        for (const post of profilePosts) {
+          if (Math.random() * 100 < postPct) {
+            try {
+              await client.viewFeedPost(post.mediaId);
+              engineLog("INFO", `@${profile.username}: [${label}] opened post ${post.shortcode} from @${targetUser.username}'s profile`);
+              this.logAction(profile.id, tool.id, "view_profile_post", targetUser.username, post.shortcode, "post", "ok", `[Profile Browse] Opened post from @${targetUser.username}'s profile`);
+            } catch {
+            }
+          }
+        }
+      }
+    };
     for (const user of candidates) {
       if (followed >= processCount) break;
       if (state.stop.stopped) {
@@ -156521,6 +157790,16 @@ ${err?.stack ?? ""}`);
             }
           }
         }
+        if (injectProfileBrowsingEnabled) {
+          const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+          if (Math.random() * 100 < threshold) {
+            engineLog("INFO", `@${profile.username}: injected profile browsing for @${user.username} before follow #${followed + 1}`);
+            await browseTargetProfile("between-follows inject", user);
+          }
+        }
+      }
+      if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow) {
+        await browseTargetProfile("pre-follow browse", user);
       }
       let result;
       try {
@@ -157562,6 +158841,23 @@ function pickUAForAccount(username) {
 }
 var DESKTOP_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 var verifyInFlight = /* @__PURE__ */ new Set();
+var _silentVerifySlotFree = true;
+var _silentVerifyWaiters = [];
+function acquireSilentVerifySlot() {
+  if (_silentVerifySlotFree) {
+    _silentVerifySlotFree = false;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _silentVerifyWaiters.push(resolve));
+}
+function releaseSilentVerifySlot() {
+  const next = _silentVerifyWaiters.shift();
+  if (next) {
+    next();
+  } else {
+    _silentVerifySlotFree = true;
+  }
+}
 var SERVER_START = (/* @__PURE__ */ new Date()).toISOString();
 async function resolveProxyConfig(profile) {
   if (profile.proxyId) {
@@ -157845,7 +159141,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       igDeviceState: null,
       igApiCookies: null,
       accountStatus: "pending",
-      credentialsDirty: true
+      credentialsDirty: true,
+      ebFingerprint: JSON.stringify(generateEbFingerprint(ua.api))
     });
     res.json({ ok: true });
   });
@@ -158122,12 +159419,13 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (!ipcPort) return res.json({ ok: false, message: "Not running in Electron mode" });
     const profile = await storage.getProfile(profileId);
     if (!profile) return res.status(404).json({ ok: false, message: "Profile not found" });
+    const resolvedEbProxy = await resolveProxyConfig(profile);
     const body = {
       profileId,
       username: profile.username,
       password: profile.password,
       twoFAKey: profile.twoFASecretKey ?? "",
-      proxy: profile.proxyHost ? { host: profile.proxyHost, port: profile.proxyPort, user: profile.proxyUsername, pass: profile.proxyPassword } : void 0,
+      proxy: resolvedEbProxy ? { host: resolvedEbProxy.host, port: resolvedEbProxy.port, user: resolvedEbProxy.username, pass: resolvedEbProxy.password, type: resolvedEbProxy.type } : void 0,
       userAgent: profile.userAgentEmbedded ?? ""
     };
     try {
@@ -158160,6 +159458,16 @@ async function registerInstagramRoutes(httpServer2, app2) {
     } catch {
     }
     res.json({ ok: true });
+  });
+  app2.get("/api/profiles/:id/eb-proxy", async (req, res) => {
+    const profileId = Number(req.params.id);
+    const profile = await storage.getProfile(profileId);
+    if (!profile) return res.status(404).json({ proxy: null, userAgent: null });
+    const resolved = await resolveProxyConfig(profile);
+    return res.json({
+      proxy: resolved ? { host: resolved.host, port: resolved.port, user: resolved.username ?? void 0, pass: resolved.password ?? void 0, type: resolved.type ?? "http" } : null,
+      userAgent: profile.userAgentEmbedded ?? null
+    });
   });
   app2.get("/api/profiles/:id/eb-state", async (req, res) => {
     const profileId = Number(req.params.id);
@@ -158233,7 +159541,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
       host: effectiveProfile.proxyHost,
       port: effectiveProfile.proxyPort,
       username: effectiveProfile.proxyUsername ?? void 0,
-      password: effectiveProfile.proxyPassword ?? void 0
+      password: effectiveProfile.proxyPassword ?? void 0,
+      type: effectiveProfile.proxyType === "socks5" ? "socks5" : "http"
     } : void 0;
     if (!effectiveProfile.userAgentEmbedded) {
       verifyInFlight.delete(profileId);
@@ -158245,22 +159554,25 @@ async function registerInstagramRoutes(httpServer2, app2) {
     let loginResult;
     let _silentCookies = null;
     if (process.env.EB_IPC_PORT) {
+      await acquireSilentVerifySlot();
       try {
         const silentRes = await electronSilentVerify({
           profileId,
           username: profile.username,
           password: profile.password,
           twoFAKey: profile.twoFASecretKey || "",
-          proxy: proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : void 0,
+          proxy: proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password, type: proxyConfig.type } : void 0,
           userAgent: ebUA
         });
         loginResult = { ok: silentRes.ok, message: silentRes.message };
         _silentCookies = silentRes.cookies;
       } catch (ebErr) {
+        releaseSilentVerifySlot();
         verifyInFlight.delete(profileId);
         await storage.updateProfile(profile.id, { accountStatus: "pending" });
         return fail(500, `Browser verify failed: ${ebErr?.message ?? "Unknown error"}`);
       }
+      releaseSilentVerifySlot();
     } else {
       try {
         await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
@@ -158685,18 +159997,20 @@ async function registerInstagramRoutes(httpServer2, app2) {
   });
   app2.get("/api/instagram-api-calls", async (req, res) => {
     const sinceParam = req.query.since;
+    const limitParam = req.query.limit;
     const [settings, allProfiles] = await Promise.all([
       storage.getGlobalSettings(),
       storage.getProfiles()
     ]);
     const profileMap = new Map(allProfiles.map((p) => [p.id, p]));
     const logMaxRows = parseInt(settings.logMaxRows ?? "100000", 10);
+    const effectiveLimit = limitParam !== void 0 ? Math.min(parseInt(limitParam, 10) || logMaxRows, logMaxRows) : logMaxRows;
     let data;
     if (sinceParam !== void 0) {
       const sinceId = parseInt(sinceParam, 10);
       data = isNaN(sinceId) ? [] : await storage.getInstagramApiCallsSince(sinceId, 5e3);
     } else {
-      data = await storage.getInstagramApiCalls(logMaxRows);
+      data = await storage.getInstagramApiCalls(effectiveLimit);
     }
     const enriched = data.map((call) => {
       const storedUsername = call.username && call.username !== "" ? call.username : null;
@@ -158959,14 +160273,83 @@ async function registerInstagramRoutes(httpServer2, app2) {
   app2.get("/api/browser/leaks", async (req, res) => {
     const profileId = Number(req.query.profileId) || 0;
     let title = "EQUINOX LEAK TEST";
+    const accountData = {
+      proxy: null,
+      proxyHost: null,
+      proxyPort: null,
+      proxyType: null,
+      proxyHasCredentials: false,
+      ebUA: null,
+      apiUA: null,
+      sessionResolvedProxy: null,
+      sessionProxyRules: null,
+      sessionStoredProxy: null
+    };
     if (profileId) {
       try {
         const profile = await storage.getProfile(profileId);
-        if (profile?.username) title = `${profile.username.toUpperCase()} LEAK TEST`;
+        if (profile) {
+          if (profile.username) title = `${profile.username.toUpperCase()} LEAK TEST`;
+          accountData.ebUA = profile.userAgentEmbedded || null;
+          accountData.apiUA = profile.userAgentApi || null;
+          let proxyHost2 = profile.proxyHost || null;
+          let proxyPort = profile.proxyPort || null;
+          let proxyType = profile.proxyType || null;
+          let proxyUsername = profile.proxyUsername || null;
+          let proxyPassword = profile.proxyPassword || null;
+          if (!proxyHost2 && profile.proxyId) {
+            try {
+              const [proxy] = await db.select().from(proxies).where(eq(proxies.id, profile.proxyId));
+              if (proxy) {
+                proxyHost2 = proxy.host;
+                proxyPort = proxy.port;
+                proxyType = proxy.proxyType || null;
+                proxyUsername = proxy.username || null;
+                proxyPassword = proxy.password || null;
+              }
+            } catch {
+            }
+          }
+          if (proxyHost2) {
+            accountData.proxyHost = proxyHost2;
+            accountData.proxyPort = proxyPort;
+            accountData.proxyType = proxyType || "http";
+            accountData.proxyHasCredentials = !!(proxyUsername && proxyPassword);
+            accountData.proxy = proxyPort ? `${proxyHost2}:${proxyPort}` : proxyHost2;
+          }
+        }
       } catch {
       }
     }
-    const html = LEAKS_PAGE_HTML.replace("__LEAK_TEST_TITLE__", title);
+    const qProxyHost = (req.query.proxyHost ?? "").trim() || null;
+    const qProxyPort = req.query.proxyPort ? Number(req.query.proxyPort) : null;
+    if (qProxyHost && qProxyPort && !accountData.proxyHost) {
+      accountData.proxyHost = qProxyHost;
+      accountData.proxyPort = qProxyPort;
+      accountData.proxy = `${qProxyHost}:${qProxyPort}`;
+    }
+    const qEbUA = (req.query.ebUA ?? "").trim() || null;
+    if (qEbUA && !accountData.ebUA) {
+      accountData.ebUA = qEbUA;
+    }
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort && (profileId || qProxyHost)) {
+      try {
+        const pid = profileId || -1;
+        const r2 = await fetch(
+          `http://127.0.0.1:${ipcPort}/eb/resolve-proxy?profileId=${pid}&url=https://api.ipify.org/`,
+          { signal: AbortSignal.timeout(3e3) }
+        );
+        if (r2.ok) {
+          const d3 = await r2.json();
+          accountData.sessionResolvedProxy = d3.resolved ?? null;
+          accountData.sessionProxyRules = d3.proxyRules ?? null;
+          accountData.sessionStoredProxy = d3.storedProxy ?? null;
+        }
+      } catch {
+      }
+    }
+    const html = LEAKS_PAGE_HTML.replace("__LEAK_TEST_TITLE__", title).replace("__ACCOUNT_DATA__", JSON.stringify(accountData));
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
     res.send(html);
@@ -159157,12 +160540,13 @@ async function registerInstagramRoutes(httpServer2, app2) {
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
     if (ipcPort) {
       try {
-        const { proxyHost: proxyHost2, proxyPort, proxyUsername, proxyPassword, userAgent } = req.body;
+        const { proxyHost: proxyHost2, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint } = req.body;
         const body = {
           profileId: -1,
           username: "Ghost",
-          proxy: proxyHost2 && proxyPort ? { host: proxyHost2, port: Number(proxyPort), user: proxyUsername ?? void 0, pass: proxyPassword ?? void 0 } : void 0,
-          userAgent: userAgent ?? void 0
+          proxy: proxyHost2 && proxyPort ? { host: proxyHost2, port: Number(proxyPort), user: proxyUsername ?? void 0, pass: proxyPassword ?? void 0, type: proxyType ?? "http" } : void 0,
+          userAgent: userAgent ?? void 0,
+          ebFingerprint: fingerprint ?? void 0
         };
         await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
           method: "POST",
@@ -159236,6 +160620,31 @@ async function registerInstagramRoutes(httpServer2, app2) {
     } catch (err) {
       res.status(500).json({ ok: false, error: err?.message });
     }
+  });
+  app2.post("/api/signup/browser/warmup", async (req, res) => {
+    if (!isSignupBrowserOpen()) {
+      return res.status(400).json({ ok: false, error: "Ghost Browser is not open" });
+    }
+    const { reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax } = req.body;
+    res.json({ ok: true });
+    (async () => {
+      try {
+        await runWarmupOnOpenBrowser({
+          reelsMin,
+          reelsMax,
+          postsMin,
+          postsMax,
+          profilesMin,
+          profilesMax,
+          onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg })
+        });
+        sendSignupWsMsg({ type: "warmupDone" });
+      } catch (e) {
+        sendSignupWsMsg({ type: "signupStep", msg: `Warm-up error: ${e?.message ?? "unknown"}` });
+        sendSignupWsMsg({ type: "warmupDone" });
+      }
+    })().catch(() => {
+    });
   });
   app2.post("/api/signup/browser/automate", async (req, res) => {
     const {
@@ -159459,6 +160868,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
         let bulkLoginResult;
         let _bulkSilentCookies = null;
         if (process.env.EB_IPC_PORT) {
+          await acquireSilentVerifySlot();
           try {
             const silentRes = await electronSilentVerify({
               profileId: profile.id,
@@ -159472,6 +160882,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
             _bulkSilentCookies = silentRes.cookies;
           } catch (ebErr) {
             bulkLoginResult = { ok: false, message: ebErr?.message ?? "Browser verify failed" };
+          } finally {
+            releaseSilentVerifySlot();
           }
         } else {
           await getOrCreateSession(profile.id, bulkEbUA, bulkProxyConfig, effectiveP.userAgentApi);
@@ -160760,6 +162172,58 @@ async function registerInstagramRoutes(httpServer2, app2) {
       console.warn("[startup] Cookie file backfill failed (non-fatal):", e);
     }
   })();
+  const TRUST_SCORE_IDS = [
+    "noob",
+    "warmup",
+    "snail",
+    "slug",
+    "slow",
+    "sloth",
+    "tortoise",
+    "turtle",
+    "reptile",
+    "moderate",
+    "high",
+    "monster",
+    "class",
+    "super",
+    "outstanding",
+    "ridiculous",
+    "impossible",
+    "overpowered",
+    "god_level"
+  ];
+  app2.get("/api/trust-score-templates", async (_req, res) => {
+    try {
+      const allProfiles = await storage.getProfiles();
+      const templateMap = /* @__PURE__ */ new Map();
+      for (const p of allProfiles) {
+        if (p.isTemplate && p.templateId) {
+          templateMap.set(p.templateId, p.id);
+        }
+      }
+      for (const tsId of TRUST_SCORE_IDS) {
+        if (!templateMap.has(tsId)) {
+          const created = await storage.createProfile({
+            username: `__tpl_${tsId}__`,
+            password: "template",
+            isTemplate: true,
+            templateId: tsId,
+            accountStatus: "pending"
+          });
+          templateMap.set(tsId, created.id);
+        }
+      }
+      const result = TRUST_SCORE_IDS.map((id) => ({
+        trustScoreId: id,
+        profileId: templateMap.get(id) ?? null
+      }));
+      res.json(result);
+    } catch (err) {
+      console.error("[trust-score-templates] error:", err);
+      res.status(500).json({ error: String(err) });
+    }
+  });
 }
 
 // src/index.ts

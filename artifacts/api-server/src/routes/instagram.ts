@@ -65,6 +65,7 @@ import {
   submitSignupCodeViaEB,
   isEBSignupSession,
   sendSignupWsMsg,
+  runWarmupOnOpenBrowser,
   storePendingAutomateSession,
   consumePendingAutomateSession,
   type ProxyConfig,
@@ -2304,6 +2305,31 @@ export async function registerInstagramRoutes(
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err?.message });
     }
+  });
+
+  // ── Ghost Browser warm-up: runs warmupSignupSession on the open _signupPage ──
+  app.post("/api/signup/browser/warmup", async (req, res) => {
+    if (!isSignupBrowserOpen()) {
+      return res.status(400).json({ ok: false, error: "Ghost Browser is not open" });
+    }
+    const { reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax } = req.body as {
+      reelsMin?: number; reelsMax?: number;
+      postsMin?: number; postsMax?: number;
+      profilesMin?: number; profilesMax?: number;
+    };
+    res.json({ ok: true });
+    (async () => {
+      try {
+        await runWarmupOnOpenBrowser({
+          reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax,
+          onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg }),
+        });
+        sendSignupWsMsg({ type: "warmupDone" });
+      } catch (e: any) {
+        sendSignupWsMsg({ type: "signupStep", msg: `Warm-up error: ${e?.message ?? "unknown"}` });
+        sendSignupWsMsg({ type: "warmupDone" });
+      }
+    })().catch(() => {});
   });
 
   // ── EB form automation: fire-and-forget; results arrive via WS signupStep/signupDone/signupPaused ──

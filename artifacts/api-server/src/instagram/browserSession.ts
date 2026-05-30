@@ -6742,11 +6742,27 @@ export function isEBSignupSession(sessionId: string): boolean {
 // All steps are best-effort: a nav timeout or HikerAPI error silently falls
 // back to the next URL in the list.  The warm-up never blocks the signup.
 async function warmupSignupSession(page: Page, opts: {
+  reelsMin?: number;
+  reelsMax?: number;
+  postsMin?: number;
+  postsMax?: number;
+  profilesMin?: number;
+  profilesMax?: number;
   onStep?: (msg: string) => void;
 }): Promise<void> {
   const step = opts.onStep ?? (() => {});
   const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
   const jitter = (base: number, range: number) => base + Math.floor(Math.random() * range);
+  const randBetween = (lo: number, hi: number) => lo + Math.floor(Math.random() * Math.max(1, hi - lo + 1));
+
+  const reelsCount    = randBetween(opts.reelsMin    ?? 1, opts.reelsMax    ?? 3);
+  const postsCount    = randBetween(opts.postsMin    ?? 0, opts.postsMax    ?? 2);
+  const profilesCount = randBetween(opts.profilesMin ?? 1, opts.profilesMax ?? 2);
+
+  if (reelsCount === 0 && postsCount === 0 && profilesCount === 0) {
+    step("EB warmup: all counts are 0 — skipping warm-up");
+    return;
+  }
 
   // ── 1. Homepage — cookie acceptance + initial session establishment ────────
   step("EB warmup: visiting instagram.com homepage...");
@@ -6759,7 +6775,7 @@ async function warmupSignupSession(page: Page, opts: {
   await dismissCookieBanner(page);
   await delay(jitter(1000, 800));
 
-  // Organic scrolling on homepage — simulates a user reading before clicking sign up
+  // Organic scrolling on homepage
   for (let i = 0; i < 3; i++) {
     try {
       const down = 200 + Math.random() * 300;
@@ -6772,58 +6788,127 @@ async function warmupSignupSession(page: Page, opts: {
     } catch { /* non-fatal */ }
   }
 
-  // ── 2. Browse public content to build deeper session history ─────────────
-  // Priority: real shortcodes from HikerAPI → popular public profile pages.
-  const urlsToVisit: string[] = [];
+  // ── 2. Reels — fetch real shortcodes via HikerAPI, fall back to /reels/ ─────
+  if (reelsCount > 0) {
+    const reelUrls: string[] = [];
 
-  // Try HikerAPI for real post shortcodes
-  let hikerApiToken: string | undefined;
-  try {
-    const s = await storage.getGlobalSettings();
-    if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
-  } catch { /* non-fatal */ }
-
-  if (hikerApiToken) {
+    let hikerApiToken: string | undefined;
     try {
-      const { HikerApiClient } = await import("./hikerApiClient");
-      const hiker = new HikerApiClient(hikerApiToken);
-      step("EB warmup: fetching public reel URLs via HikerAPI...");
-      const shortcodes = await hiker.getPublicShortcodes(3);
-      for (const sc of shortcodes) {
-        urlsToVisit.push(`https://www.instagram.com/reel/${sc}/`);
+      const s = await storage.getGlobalSettings();
+      if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
+    } catch { /* non-fatal */ }
+
+    if (hikerApiToken) {
+      try {
+        const { HikerApiClient } = await import("./hikerApiClient");
+        const hiker = new HikerApiClient(hikerApiToken);
+        step("EB warmup: fetching public reel URLs via HikerAPI...");
+        const shortcodes = await hiker.getPublicShortcodes(reelsCount + 2);
+        for (const sc of shortcodes.slice(0, reelsCount)) {
+          reelUrls.push(`https://www.instagram.com/reel/${sc}/`);
+        }
+        if (reelUrls.length > 0) step(`EB warmup: got ${reelUrls.length} reel URL(s) via HikerAPI ✓`);
+      } catch { /* non-fatal */ }
+    }
+
+    if (reelUrls.length === 0) {
+      reelUrls.push("https://www.instagram.com/reels/", "https://www.instagram.com/explore/");
+    }
+
+    for (const url of reelUrls.slice(0, reelsCount)) {
+      const label = url.replace("https://www.instagram.com", "ig.com");
+      step(`EB warmup: viewing reel ${label}...`);
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+        await delay(jitter(2500, 2000));
+        for (let i = 0; i < 2; i++) {
+          try {
+            await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250));
+            await delay(jitter(2000, 1500));
+          } catch { /* non-fatal */ }
+        }
+      } catch (e: any) {
+        step(`EB warmup: reel nav warning: ${e?.message?.slice(0, 60)}`);
       }
-      if (shortcodes.length > 0) {
-        step(`EB warmup: got ${shortcodes.length} public reel URL(s) ✓`);
-      }
-    } catch { /* non-fatal — fall through to profile page fallback */ }
+    }
   }
 
-  // Fallback: well-known always-public profile pages
-  if (urlsToVisit.length === 0) {
-    urlsToVisit.push(
-      "https://www.instagram.com/instagram/",
-      "https://www.instagram.com/natgeo/",
-    );
-  }
-
-  for (const url of urlsToVisit.slice(0, 3)) {
-    const label = url.replace("https://www.instagram.com", "ig.com");
-    step(`EB warmup: browsing ${label}...`);
+  // ── 3. Posts — navigate to a public profile, click individual post thumbnails ─
+  if (postsCount > 0) {
+    const postProfiles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth"];
+    const pickedProfile = postProfiles[Math.floor(Math.random() * postProfiles.length)];
+    step(`EB warmup: visiting @${pickedProfile} to click posts (${postsCount})...`);
     try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+      await page.goto(`https://www.instagram.com/${pickedProfile}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
       await delay(jitter(2000, 1500));
-      for (let i = 0; i < 2; i++) {
+
+      for (let i = 0; i < postsCount; i++) {
         try {
-          await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250));
-          await delay(jitter(2500, 2000));
-        } catch { /* non-fatal */ }
+          const postHref: string | null = await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/p/"]'));
+            const visible = links.filter(el => {
+              const r = el.getBoundingClientRect();
+              return r.width > 50 && r.height > 50 && r.top > 0 && r.top < window.innerHeight * 2;
+            });
+            if (visible.length === 0) return null;
+            return visible[Math.floor(Math.random() * Math.min(visible.length, 9))].href;
+          });
+
+          if (postHref) {
+            step(`EB warmup: clicking post ${i + 1}/${postsCount}...`);
+            await page.goto(postHref, { waitUntil: "domcontentloaded", timeout: 15000 });
+            await delay(jitter(3000, 2500));
+            try {
+              await page.evaluate(() => window.scrollBy(0, 200 + Math.random() * 300));
+              await delay(jitter(1500, 1000));
+            } catch { /* non-fatal */ }
+            await page.goBack({ timeout: 10000 }).catch(() => {});
+            await delay(jitter(1000, 800));
+          }
+        } catch (e: any) {
+          step(`EB warmup: post click warning: ${e?.message?.slice(0, 60)}`);
+        }
       }
     } catch (e: any) {
-      step(`EB warmup: nav warning ${label}: ${e?.message?.slice(0, 60)}`);
+      step(`EB warmup: posts profile nav warning: ${e?.message?.slice(0, 60)}`);
+    }
+  }
+
+  // ── 4. Profiles — browse public profile pages ─────────────────────────────
+  if (profilesCount > 0) {
+    const allHandles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth", "ngc", "cnn"];
+    const shuffled = allHandles.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < Math.min(profilesCount, shuffled.length); i++) {
+      const handle = shuffled[i];
+      step(`EB warmup: visiting @${handle} profile...`);
+      try {
+        await page.goto(`https://www.instagram.com/${handle}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
+        await delay(jitter(2000, 1500));
+        for (let j = 0; j < 2; j++) {
+          try {
+            await page.evaluate(() => window.scrollBy(0, 300 + Math.random() * 400));
+            await delay(jitter(2000, 1500));
+          } catch { /* non-fatal */ }
+        }
+      } catch (e: any) {
+        step(`EB warmup: profile nav warning: ${e?.message?.slice(0, 60)}`);
+      }
     }
   }
 
   step("EB warmup: session warm-up complete ✓");
+}
+
+/** Run the warm-up session on the already-open Ghost Browser (_signupPage).
+ *  Throws if the Ghost Browser is not currently open. */
+export async function runWarmupOnOpenBrowser(opts: {
+  reelsMin?: number; reelsMax?: number;
+  postsMin?: number; postsMax?: number;
+  profilesMin?: number; profilesMax?: number;
+  onStep?: (msg: string) => void;
+}): Promise<void> {
+  if (!_signupPage) throw new Error("Ghost Browser is not open");
+  await warmupSignupSession(_signupPage as any, opts);
 }
 
 export async function createInstagramAccountViaEBForm(params: {

@@ -9,6 +9,7 @@ import { userAgents as UA_POOL } from "@/shared/userAgents";
 import {
   Ghost, ShieldCheck, Globe, Monitor, Cpu,
   Loader2, ChevronDown, Wifi, WifiOff, AlertTriangle, Plus, ExternalLink, ClipboardPaste, Copy, RefreshCw,
+  Flame, CheckCircle2, PlayCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -86,6 +87,36 @@ function generateGhostFingerprint(): GhostFingerprint {
     fontSeed:       Math.floor(Math.random() * 99) + 1,
     speechProfile:  Math.floor(Math.random() * 8),
   };
+}
+
+// ── Warmup Row ─────────────────────────────────────────────────────────────────
+
+function WarmupRow({ label, min, max, onMin, onMax }: {
+  label: string;
+  min: number;
+  max: number;
+  onMin: (v: number) => void;
+  onMax: (v: number) => void;
+}) {
+  const clamp = (v: number) => Math.max(0, Math.min(10, isNaN(v) ? 0 : v));
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-muted-foreground flex-1 min-w-0 truncate">{label}</span>
+      <div className="flex items-center gap-1 shrink-0">
+        <input
+          type="number" min="0" max="10" value={min}
+          onChange={e => onMin(clamp(parseInt(e.target.value, 10)))}
+          className="w-9 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <span className="text-[10px] text-muted-foreground">–</span>
+        <input
+          type="number" min="0" max="10" value={max}
+          onChange={e => onMax(clamp(parseInt(e.target.value, 10)))}
+          className="w-9 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+      </div>
+    </div>
+  );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -347,6 +378,16 @@ export function CreateGhostPage() {
   const [fingerprint, setFingerprint] = useState<GhostFingerprint>(() => generateGhostFingerprint());
   const [fpOpen, setFpOpen]           = useState(false);
 
+  // Pre-Signup Warm-up
+  const [warmupOpen, setWarmupOpen] = useState(true);
+  const [warmupConfig, setWarmupConfig] = useState({
+    reelsMin: 1, reelsMax: 3,
+    postsMin: 0, postsMax: 2,
+    profilesMin: 1, profilesMax: 2,
+  });
+  const [warmupStatus, setWarmupStatus] = useState<"idle" | "running" | "done">("idle");
+  const [warmupLastStep, setWarmupLastStep] = useState("");
+
   const isOpen = browserState === "open";
 
   const generatedUsername = usernameSpin.trim() ? resolveSpintax(usernameSpin) : "";
@@ -383,9 +424,40 @@ export function CreateGhostPage() {
 
   const hasProxy = proxySelection.kind !== "none" && resolvedProxy !== undefined;
 
+  const handleBrowserMessage = useCallback((msg: any) => {
+    try {
+      const parsed = typeof msg === "string" ? JSON.parse(msg) : msg;
+      if (parsed.type === "signupStep" && parsed.msg) {
+        setWarmupLastStep(parsed.msg);
+      }
+      if (parsed.type === "warmupDone") {
+        setWarmupStatus("done");
+        setWarmupLastStep("Warm-up complete ✓");
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
+  const handleRunWarmup = useCallback(async () => {
+    if (!isOpen) return;
+    setWarmupStatus("running");
+    setWarmupLastStep("Starting warm-up…");
+    try {
+      await fetch("/api/signup/browser/warmup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(warmupConfig),
+      });
+    } catch {
+      setWarmupStatus("idle");
+      setWarmupLastStep("");
+    }
+  }, [isOpen, warmupConfig]);
+
   const handleOpen = async () => {
     if (!manualValid) return;
     setBrowserState("opening");
+    setWarmupStatus("idle");
+    setWarmupLastStep("");
     setActiveUA(selectedUA);
     setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
     await fetch("/api/signup/browser/open", {
@@ -407,10 +479,14 @@ export function CreateGhostPage() {
   const handleClose = async () => {
     await fetch("/api/signup/browser/close", { method: "POST" }).catch(() => {});
     setBrowserState("closed");
+    setWarmupStatus("idle");
+    setWarmupLastStep("");
   };
 
   const handleFresh = async () => {
     setBrowserState("resetting");
+    setWarmupStatus("idle");
+    setWarmupLastStep("");
     await fetch("/api/signup/browser/close", { method: "POST" }).catch(() => {});
     await fetch("/api/signup/browser/reset", { method: "POST" }).catch(() => {});
     setSelectedUA(randomUA());
@@ -572,6 +648,84 @@ export function CreateGhostPage() {
             )}
           </div>
 
+          {/* Pre-Signup Warm-up */}
+          <div className="desktop-card p-2.5 space-y-1.5">
+            <button
+              type="button"
+              onClick={() => setWarmupOpen(o => !o)}
+              className="flex w-full items-center gap-2"
+            >
+              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Pre-Signup Warm-up</p>
+              {warmupStatus === "running" && <Loader2 className="w-3 h-3 text-amber-500 animate-spin shrink-0" />}
+              {warmupStatus === "done"    && <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />}
+              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 shrink-0 ${warmupOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {warmupOpen && (
+              <div className="space-y-2 pt-0.5 border-t border-border/50">
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Browses Instagram content before touching the signup form. Each count is picked randomly within the min–max range.
+                </p>
+
+                {/* Column headers */}
+                <div className="flex items-center gap-2">
+                  <span className="flex-1" />
+                  <span className="w-9 text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Min</span>
+                  <span className="w-2" />
+                  <span className="w-9 text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Max</span>
+                </div>
+
+                <WarmupRow
+                  label="▶ View reels"
+                  min={warmupConfig.reelsMin}
+                  max={warmupConfig.reelsMax}
+                  onMin={v => setWarmupConfig(c => ({ ...c, reelsMin: Math.min(v, c.reelsMax) }))}
+                  onMax={v => setWarmupConfig(c => ({ ...c, reelsMax: Math.max(v, c.reelsMin) }))}
+                />
+                <WarmupRow
+                  label="⊞ Click &amp; view posts"
+                  min={warmupConfig.postsMin}
+                  max={warmupConfig.postsMax}
+                  onMin={v => setWarmupConfig(c => ({ ...c, postsMin: Math.min(v, c.postsMax) }))}
+                  onMax={v => setWarmupConfig(c => ({ ...c, postsMax: Math.max(v, c.postsMin) }))}
+                />
+                <WarmupRow
+                  label="👤 Visit profiles"
+                  min={warmupConfig.profilesMin}
+                  max={warmupConfig.profilesMax}
+                  onMin={v => setWarmupConfig(c => ({ ...c, profilesMin: Math.min(v, c.profilesMax) }))}
+                  onMax={v => setWarmupConfig(c => ({ ...c, profilesMax: Math.max(v, c.profilesMin) }))}
+                />
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={cn(
+                    "w-full h-8 text-xs gap-1.5 mt-1",
+                    warmupStatus === "done" && "border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                  )}
+                  disabled={!isOpen || warmupStatus === "running"}
+                  onClick={handleRunWarmup}
+                >
+                  {warmupStatus === "running" ? (
+                    <><Loader2 className="w-3 h-3 animate-spin" />Running warm-up…</>
+                  ) : warmupStatus === "done" ? (
+                    <><CheckCircle2 className="w-3 h-3" />Warm-up done — run again</>
+                  ) : (
+                    <><PlayCircle className="w-3 h-3" />{isOpen ? "Run Warm-up" : "Open browser first"}</>
+                  )}
+                </Button>
+
+                {warmupLastStep && (
+                  <p className="text-[10px] text-muted-foreground/70 italic truncate" title={warmupLastStep}>
+                    {warmupLastStep}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Actions + Account Fields */}
           <div className="desktop-card p-2.5 space-y-1.5">
             {!isOpen ? (
@@ -715,6 +869,7 @@ export function CreateGhostPage() {
               streamUrl="/api/signup/browser/stream"
               inputUrl="/api/signup/browser/input"
               forceStream={true}
+              onMessage={handleBrowserMessage}
             />
           ) : (
             <div className="flex flex-col items-center justify-center gap-4 text-center p-8">

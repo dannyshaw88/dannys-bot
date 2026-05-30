@@ -59,6 +59,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.661",
+    date: "30 May 2026",
+    items: [
+      { category: "New", text: "Ghost Browser: Pre-Signup Warm-up settings panel — configure how many reels to view, posts to click into, and profiles to browse before the signup form is touched." },
+      { category: "New", text: "Each warm-up count is randomised within the min–max range you set, so the session pattern is never identical between signups." },
+      { category: "New", text: "Run Warm-up button drives the open Ghost Browser through Instagram content in real time; live step progress is shown in the panel as it runs." },
+    ],
+  },
+  {
     version: "1.0.660",
     date: "30 May 2026",
     items: [
