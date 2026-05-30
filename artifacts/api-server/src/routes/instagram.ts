@@ -2307,17 +2307,38 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Ghost Browser warm-up step/done relay endpoints (called by Electron ebManager) ──
+  // The Electron IPC ghost-warmup handler runs asynchronously and POSTs progress
+  // here so the frontend WebSocket receives signupStep / warmupDone messages.
+  app.post("/api/signup/browser/warmup-step", (req, res) => {
+    const { msg } = req.body as { msg?: string };
+    if (msg) sendSignupWsMsg({ type: "signupStep", msg });
+    res.json({ ok: true });
+  });
+
+  app.post("/api/signup/browser/warmup-done", (_req, res) => {
+    sendSignupWsMsg({ type: "warmupDone" });
+    res.json({ ok: true });
+  });
+
   // ── Ghost Browser warm-up: runs warmupSignupSession on the open _signupPage ──
   app.post("/api/signup/browser/warmup", async (req, res) => {
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
     if (ipcPort) {
-      // Desktop (Electron) mode — the Ghost Browser is a native window managed by
-      // the Electron main process; Puppeteer _signupPage is never set so warmup
-      // can't run. Acknowledge immediately and broadcast done so the frontend
-      // status resets correctly instead of hanging on "Running warm-up…".
-      res.json({ ok: true, skipped: true });
-      sendSignupWsMsg({ type: "signupStep", msg: "Warm-up not available in desktop mode — session is ready." });
-      sendSignupWsMsg({ type: "warmupDone" });
+      // Desktop (Electron) mode — forward the warmup config to the Electron main
+      // process which runs it on the native Ghost BrowserWindow.
+      // Progress arrives back via /api/signup/browser/warmup-step and warmup-done.
+      try {
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-warmup`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(req.body),
+        });
+      } catch {
+        sendSignupWsMsg({ type: "signupStep", msg: "Warm-up error: could not reach Electron process." });
+        sendSignupWsMsg({ type: "warmupDone" });
+      }
+      res.json({ ok: true });
       return;
     }
     if (!isSignupBrowserOpen()) {

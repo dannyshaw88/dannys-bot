@@ -59,6 +59,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.664",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser: cookie consent banner is now correctly detected and accepted on Windows — Instagram's 'Allow all cookies' link is now found even when rendered as an anchor element rather than a button." },
+      { category: "Fix", text: "Ghost Browser: Pre-Signup Warm-up now actually runs on Windows — the warm-up navigates the browser through the Instagram homepage, reels, posts, and profiles just like it does on web." },
+      { category: "Fix", text: "Ghost Browser: warm-up progress messages (navigating homepage, watching reels, visiting profiles) now appear in real time on Windows." },
+      { category: "Fix", text: "Pre-Signup Warm-up fields: count fields now accept 0–50 and idle time fields accept 0–3600 seconds — the previous floor of 1 second and ceiling of 10 items has been removed." },
+    ],
+  },
+  {
     version: "1.0.663",
     date: "30 May 2026",
     items: [

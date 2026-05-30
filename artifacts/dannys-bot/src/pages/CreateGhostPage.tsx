@@ -107,31 +107,31 @@ function WarmupRow({ label, min, max, onMin, onMax, idleMin, idleMax, onIdleMin,
   idleMin: number; idleMax: number;
   onIdleMin: (v: number) => void; onIdleMax: (v: number) => void;
 }) {
-  const clampCount = (v: number) => Math.max(0, Math.min(10, isNaN(v) ? 0 : v));
-  const clampIdle  = (v: number) => Math.max(1, Math.min(300, isNaN(v) ? 1 : v));
+  const clampCount = (v: number) => Math.max(0, Math.min(50, isNaN(v) ? 0 : v));
+  const clampIdle  = (v: number) => Math.max(0, Math.min(3600, isNaN(v) ? 0 : v));
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-[10px] text-muted-foreground flex-1 min-w-0 truncate">{label}</span>
       {/* Count */}
       <div className="flex items-center gap-0.5 shrink-0">
-        <input type="number" min="0" max="10" value={min}
+        <input type="number" min="0" max="50" value={min}
           onChange={e => onMin(clampCount(parseInt(e.target.value, 10)))}
           className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <span className="text-[10px] text-muted-foreground">–</span>
-        <input type="number" min="0" max="10" value={max}
+        <input type="number" min="0" max="50" value={max}
           onChange={e => onMax(clampCount(parseInt(e.target.value, 10)))}
           className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       {/* Idle wait */}
       <div className="flex items-center gap-0.5 shrink-0">
-        <input type="number" min="1" max="300" value={idleMin}
+        <input type="number" min="0" max="3600" value={idleMin}
           onChange={e => onIdleMin(clampIdle(parseInt(e.target.value, 10)))}
           className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <span className="text-[10px] text-muted-foreground">–</span>
-        <input type="number" min="1" max="300" value={idleMax}
+        <input type="number" min="0" max="3600" value={idleMax}
           onChange={e => onIdleMax(clampIdle(parseInt(e.target.value, 10)))}
           className="w-8 h-6 text-center text-[10px] font-mono rounded border border-input bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
         />

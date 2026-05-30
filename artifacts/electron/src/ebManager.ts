@@ -136,9 +136,9 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
     var btn=document.querySelector('[data-cookiebanner="accept_button"]')||document.querySelector('[data-testid="cookie-policy-banner-accept"]');
     if(!btn){
       var container=document.querySelector('[data-cookiebanner]')||document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
-      if(container){btn=Array.from(container.querySelectorAll('button,[role="button"]')).find(_isCookieAcceptBtn)||null;}
+      if(container){btn=Array.from(container.querySelectorAll('button,[role="button"],a')).find(_isCookieAcceptBtn)||null;}
     }
-    if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"]')).find(_isCookieAcceptBtn)||null;}
+    if(!btn){btn=Array.from(document.querySelectorAll('button,[role="button"],a')).find(_isCookieAcceptBtn)||null;}
     if(btn){
       __eq_ck_seen=true;
       // Do NOT click from here — untrusted JS events are ignored by Instagram's
@@ -1420,13 +1420,13 @@ export async function openEbWindow(opts: {
       const container = document.querySelector('[data-cookiebanner]')
                      || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
       if (container) {
-        for (const b of container.querySelectorAll('button,[role="button"]')) {
+        for (const b of container.querySelectorAll('button,[role="button"],a')) {
           pos = isCookieAcceptBtn(b); if (pos) break;
         }
       }
     }
     if (!pos) {
-      for (const b of document.querySelectorAll('button,[role="button"]')) {
+      for (const b of document.querySelectorAll('button,[role="button"],a')) {
         pos = isCookieAcceptBtn(b); if (pos) break;
       }
     }
@@ -2473,6 +2473,147 @@ export function startEbIpcServer(
         try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch {}
 
         return send(res, 200, { ok: true });
+      }
+
+      // ── POST /eb/ghost-warmup ─────────────────────────────────────────────────
+      // Runs a lightweight warmup sequence on the Ghost Browser native window:
+      // scrolls the Instagram feed, optionally visits reels and profile pages.
+      // Progress is relayed to the API server via /api/signup/browser/warmup-step
+      // so the frontend status bar updates in real time.
+      if (req.method === "POST" && u.pathname === "/eb/ghost-warmup") {
+        const e = ebMap.get(-1);
+        if (!e || e.win.isDestroyed()) {
+          return send(res, 200, { ok: false, error: "Ghost Browser is not open" });
+        }
+        send(res, 200, { ok: true });
+
+        const {
+          reelsMin = 1, reelsMax = 3,
+          postsMin = 0, postsMax = 2,
+          profilesMin = 1, profilesMax = 2,
+          reelsIdleMin = 5, reelsIdleMax = 12,
+          postsIdleMin = 5, postsIdleMax = 12,
+          profilesIdleMin = 5, profilesIdleMax = 12,
+        } = body as any;
+
+        const randInt = (lo: number, hi: number) =>
+          Math.floor(Math.random() * (hi - lo + 1)) + lo;
+        const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+        const relayStep = (msg: string) => {
+          if (_serverPort) {
+            fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/warmup-step`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ msg }),
+            }).catch(() => {});
+          }
+        };
+
+        const relayDone = () => {
+          if (_serverPort) {
+            fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/warmup-done`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}),
+            }).catch(() => {});
+          }
+        };
+
+        // Run warmup asynchronously — don't block the IPC response
+        (async () => {
+          const wc = e.win.webContents;
+          const nav = (url: string) => wc.loadURL(url).catch(() => {});
+          const js  = (script: string) => wc.executeJavaScript(script).catch(() => null);
+
+          const scrollFeed = () => js(`(function(){
+            var dist = ${randInt(800, 2400)};
+            var start = window.scrollY;
+            var step  = Math.ceil(dist / 20);
+            var i = 0;
+            var t = setInterval(function(){
+              window.scrollBy(0, step + Math.random() * 10 - 5);
+              if (++i >= 20) clearInterval(t);
+            }, 80 + Math.random() * 40);
+          })()`);
+
+          try {
+            // 1. Dismiss cookie banner + browse homepage
+            relayStep("Navigating to Instagram homepage…");
+            await nav("https://www.instagram.com/");
+            await sleep(3000 + Math.random() * 2000);
+            await js(`(function(){
+              const ACCEPT = ${JSON.stringify(_COOKIE_ACCEPT_LABELS)};
+              function ok(b){if(!b)return false;const r=b.getBoundingClientRect();if(r.width<=0)return false;return ACCEPT.indexOf((b.innerText||b.textContent||'').trim().toLowerCase())!==-1;}
+              const btn=document.querySelector('[data-cookiebanner="accept_button"]')||Array.from(document.querySelectorAll('button,[role="button"],a')).find(ok);
+              if(btn){btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}
+            })()`);
+            await sleep(1500);
+            relayStep("Scrolling Instagram feed…");
+            await scrollFeed();
+            await sleep(randInt(3000, 6000));
+            await scrollFeed();
+            await sleep(randInt(2000, 4000));
+
+            // 2. View reels
+            const reelCount = randInt(reelsMin, reelsMax);
+            if (reelCount > 0) {
+              const PUBLIC_REELS = [
+                "https://www.instagram.com/reels/trending/",
+                "https://www.instagram.com/reels/",
+              ];
+              relayStep(`Browsing reels (${reelCount})…`);
+              await nav(PUBLIC_REELS[Math.floor(Math.random() * PUBLIC_REELS.length)]);
+              await sleep(2500 + Math.random() * 1500);
+              for (let i = 0; i < reelCount; i++) {
+                await scrollFeed();
+                const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
+                await sleep(idleMs);
+                relayStep(`Reel ${i + 1}/${reelCount} watched`);
+              }
+            }
+
+            // 3. Click & view posts (visit popular public profiles)
+            const postCount = randInt(postsMin, postsMax);
+            if (postCount > 0) {
+              const PUBLIC_PROFILES = ["natgeo", "nasa", "time", "bbcnews", "cnn"];
+              const profileHandle = PUBLIC_PROFILES[Math.floor(Math.random() * PUBLIC_PROFILES.length)];
+              relayStep(`Browsing posts on @${profileHandle}…`);
+              await nav(`https://www.instagram.com/${profileHandle}/`);
+              await sleep(2500 + Math.random() * 1500);
+              for (let i = 0; i < postCount; i++) {
+                await scrollFeed();
+                const idleMs = randInt(postsIdleMin, postsIdleMax) * 1000;
+                await sleep(idleMs);
+                relayStep(`Post ${i + 1}/${postCount} viewed`);
+              }
+            }
+
+            // 4. Visit profiles
+            const profileCount = randInt(profilesMin, profilesMax);
+            if (profileCount > 0) {
+              const PUBLIC_BROWSE = ["natgeo", "nasa", "instagram", "time", "wwf", "discovery"];
+              for (let i = 0; i < profileCount; i++) {
+                const h = PUBLIC_BROWSE[Math.floor(Math.random() * PUBLIC_BROWSE.length)];
+                relayStep(`Visiting profile @${h}…`);
+                await nav(`https://www.instagram.com/${h}/`);
+                await sleep(2000 + Math.random() * 1000);
+                await scrollFeed();
+                const idleMs = randInt(profilesIdleMin, profilesIdleMax) * 1000;
+                await sleep(idleMs);
+                relayStep(`Profile ${i + 1}/${profileCount} visited`);
+              }
+            }
+
+            relayStep("Warm-up complete ✓");
+          } catch (err: any) {
+            relayStep(`Warm-up error: ${err?.message ?? "unknown"}`);
+          } finally {
+            relayDone();
+          }
+        })().catch(() => { relayDone(); });
+
+        return;
       }
 
       send(res, 404, { error: "not found" });
