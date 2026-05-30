@@ -2496,13 +2496,7 @@ export function startEbIpcServer(
 
         const {
           reelsMin = 1, reelsMax = 3,
-          postsMin = 0, postsMax = 2,
-          profilesMin = 1, profilesMax = 2,
           reelsIdleMin = 5, reelsIdleMax = 12,
-          postsIdleMin = 5, postsIdleMax = 12,
-          profilesIdleMin = 5, profilesIdleMax = 12,
-          postClicksPerProfileMin = 0, postClicksPerProfileMax = 2,
-          postBrowseTimeMin = 8,      postBrowseTimeMax = 20,
         } = body as any;
 
         const randInt = (lo: number, hi: number) =>
@@ -2655,12 +2649,32 @@ export function startEbIpcServer(
           };
 
           try {
-            console.log(`[warmup] START — reels:${reelsMin}-${reelsMax} posts:${postsMin}-${postsMax} profiles:${profilesMin}-${profilesMax}`);
+            console.log(`[warmup] START — reels:${reelsMin}-${reelsMax}`);
 
-            // Wait for openEbWindow's initial loadURL to settle before starting
-            // warmup navigations.  If we skip this, our first nav() call races
-            // with that in-flight load; Chromium aborts one of the navigations
-            // and the page context is not ready.
+            // ── 0. Fetch trending reel URLs via API server (HikerAPI) BEFORE any navigation ──
+            let reelUrls: string[] = [];
+            if (_serverPort) {
+              try {
+                relayStep("Fetching trending reels…");
+                const r = await fetch(`http://127.0.0.1:${_serverPort}/api/signup/browser/trending-reels?n=${reelsMax + 2}`);
+                const j = await r.json() as any;
+                if (Array.isArray(j.urls) && j.urls.length > 0) {
+                  reelUrls = j.urls as string[];
+                  relayStep(`Got ${reelUrls.length} trending reel(s) via HikerAPI ✓`);
+                  console.log(`[warmup] HikerAPI reels: ${reelUrls.join(", ")}`);
+                } else {
+                  console.log(`[warmup] HikerAPI returned no urls: ${JSON.stringify(j)}`);
+                }
+              } catch (e: any) {
+                console.log(`[warmup] trending-reels fetch warning: ${e?.message}`);
+              }
+            }
+            if (reelUrls.length === 0) {
+              relayStep("No HikerAPI reels — using Reels feed fallback");
+              reelUrls = ["https://www.instagram.com/reels/"];
+            }
+
+            // ── 1. Wait for any in-flight navigation to settle ──────────────────────────
             if (wc.isLoading()) {
               relayStep("Waiting for browser to initialize…");
               console.log(`[warmup] initial wait: browser still loading`);
@@ -2681,133 +2695,41 @@ export function startEbIpcServer(
             }
             await sleep(800);
 
-            // 1. Navigate to homepage + dismiss cookie banner + scroll feed
-            relayStep("Navigating to Instagram homepage…");
-            console.log(`[warmup] step 1: navigating to homepage`);
-            await nav("https://www.instagram.com/");
-            await sleep(2500 + Math.random() * 1500);
-
-            // Dismiss cookie banner via JS click (labels-based), then dismiss any
-            // sign-up overlay via CDP (the isTrusted=true approach that React handles).
-            console.log(`[warmup] step 1: dismissing cookie banner`);
-            await js(`(function(){
-              var ACCEPT = ${JSON.stringify(WARMUP_COOKIE_LABELS)};
-              function ok(b){if(!b)return false;var r=b.getBoundingClientRect();if(r.width<=0)return false;return ACCEPT.indexOf((b.innerText||b.textContent||'').trim().toLowerCase())!==-1;}
-              var btn=document.querySelector('[data-cookiebanner="accept_button"]')||Array.from(document.querySelectorAll('button,[role="button"],a')).find(ok);
-              if(btn){btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}
-            })()`);
-            await sleep(1500);
-            await dismissOverlay();
-
-            relayStep("Scrolling Instagram feed…");
-            console.log(`[warmup] step 1: scrolling feed`);
-            await scrollFeed();
-            await sleep(randInt(3000, 6000));
-            await scrollFeed();
-            await sleep(randInt(2000, 4000));
-            console.log(`[warmup] step 1: feed scroll done`);
-
-            // 2. View reels
-            // NOTE: /reels/ and /reels/trending/ require login and show "this link
-            // may be broken" for non-logged-in users.  Use account-specific reels
-            // tabs instead — these work without login for public accounts.
+            // ── 2. Navigate directly to each trending reel — no homepage stop ───────────
             const reelCount = randInt(reelsMin, reelsMax);
-            console.log(`[warmup] step 2: reelCount=${reelCount}`);
-            if (reelCount > 0) {
-              const PUBLIC_REELS = [
-                "https://www.instagram.com/natgeo/reels/",
-                "https://www.instagram.com/nasa/reels/",
-                "https://www.instagram.com/instagram/reels/",
-                "https://www.instagram.com/bbcnews/reels/",
-                "https://www.instagram.com/cnn/reels/",
-                "https://www.instagram.com/discovery/reels/",
-              ];
-              relayStep(`Browsing reels (${reelCount})…`);
-              await nav(PUBLIC_REELS[Math.floor(Math.random() * PUBLIC_REELS.length)]);
+            console.log(`[warmup] reelCount=${reelCount}, urls available=${reelUrls.length}`);
+            for (let i = 0; i < reelCount; i++) {
+              const url = reelUrls[i] ?? reelUrls[reelUrls.length - 1];
+              const label = url.replace("https://www.instagram.com", "ig.com");
+              relayStep(`Viewing trending reel ${i + 1}/${reelCount} — ${label}…`);
+              console.log(`[warmup] reel ${i + 1}/${reelCount}: nav to ${url}`);
+              await nav(url);
               await sleep(1500 + Math.random() * 1000);
-              await dismissOverlay();
-              await sleep(2000 + Math.random() * 1500);
-              for (let i = 0; i < reelCount; i++) {
-                await scrollFeed();
-                const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
-                console.log(`[warmup] reel ${i+1}/${reelCount}: idle ${idleMs}ms`);
-                await sleep(idleMs);
-                relayStep(`Reel ${i + 1}/${reelCount} watched`);
-              }
-            }
 
-            // 3. View posts on public profiles (scrolling only)
-            const postCount = randInt(postsMin, postsMax);
-            console.log(`[warmup] step 3: postCount=${postCount}`);
-            if (postCount > 0) {
-              const PUBLIC_PROFILES = ["natgeo", "nasa", "time", "bbcnews", "cnn"];
-              const profileHandle = PUBLIC_PROFILES[Math.floor(Math.random() * PUBLIC_PROFILES.length)];
-              relayStep(`Browsing posts on @${profileHandle}…`);
-              await nav(`https://www.instagram.com/${profileHandle}/`);
-              await sleep(1500 + Math.random() * 1000);
+              // Dismiss cookie banner
+              await js(`(function(){
+                var ACCEPT = ${JSON.stringify(WARMUP_COOKIE_LABELS)};
+                function ok(b){if(!b)return false;var r=b.getBoundingClientRect();if(r.width<=0)return false;return ACCEPT.indexOf((b.innerText||b.textContent||'').trim().toLowerCase())!==-1;}
+                var btn=document.querySelector('[data-cookiebanner="accept_button"]')||Array.from(document.querySelectorAll('button,[role="button"],a')).find(ok);
+                if(btn){btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}
+              })()`);
+              await sleep(800);
+              // Dismiss sign-up wall / "See photos, videos and more" modal
               await dismissOverlay();
-              await sleep(2000 + Math.random() * 1500);
-              for (let i = 0; i < postCount; i++) {
-                await scrollFeed();
-                const idleMs = randInt(postsIdleMin, postsIdleMax) * 1000;
-                console.log(`[warmup] post ${i+1}/${postCount}: idle ${idleMs}ms`);
-                await sleep(idleMs);
-                relayStep(`Post ${i + 1}/${postCount} viewed`);
-              }
-            }
 
-            // 4. Visit profiles — shuffled so the same one is never hit twice in a row.
-            // For each profile, optionally click into individual posts and spend
-            // postBrowseTime seconds on each (configurable via postClicksPerProfile).
-            const profileCount = randInt(profilesMin, profilesMax);
-            console.log(`[warmup] step 4: profileCount=${profileCount}`);
-            if (profileCount > 0) {
-              const PUBLIC_BROWSE = ["natgeo", "nasa", "instagram", "time", "wwf", "discovery", "bbcnews", "cnn"];
-              // Fisher-Yates shuffle so we never visit the same profile twice in a row
-              const shuffled = [...PUBLIC_BROWSE].sort(() => Math.random() - 0.5);
-              for (let i = 0; i < profileCount; i++) {
-                const h = shuffled[i % shuffled.length];
-                relayStep(`Visiting profile @${h}…`);
-                await nav(`https://www.instagram.com/${h}/`);
-                await sleep(1500 + Math.random() * 1000);
+              // Poll every 3 s during idle so sign-up wall is dismissed within 1-10 s
+              const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
+              const pollMs = 3000;
+              const polls  = Math.max(1, Math.floor(idleMs / pollMs));
+              console.log(`[warmup] reel ${i + 1}: idle ${idleMs}ms (${polls} polls)`);
+              for (let p = 0; p < polls; p++) {
+                await sleep(pollMs);
                 await dismissOverlay();
-                await sleep(1500 + Math.random() * 1000);
                 await scrollFeed();
-                const idleMs = randInt(profilesIdleMin, profilesIdleMax) * 1000;
-                console.log(`[warmup] profile ${i+1}/${profileCount} @${h}: idle ${idleMs}ms`);
-                await sleep(idleMs);
-
-                // Optionally click into individual posts on this profile
-                const clickCount = randInt(postClicksPerProfileMin, postClicksPerProfileMax);
-                console.log(`[warmup] profile ${i+1} post clicks: ${clickCount}`);
-                if (clickCount > 0) {
-                  for (let p = 0; p < clickCount; p++) {
-                    const postUrl = await js(`(function(){
-                      var links=Array.from(document.querySelectorAll('a[href*="/p/"],a[href*="/reel/"]'));
-                      if(!links.length)return null;
-                      var l=links[Math.floor(Math.random()*links.length)];
-                      return l?l.href:null;
-                    })()`);
-                    if (postUrl && typeof postUrl === "string") {
-                      relayStep(`Viewing post ${p+1}/${clickCount} on @${h}…`);
-                      await nav(postUrl as string);
-                      await sleep(800 + Math.random() * 500);
-                      await dismissOverlay();
-                      const browseMs = randInt(postBrowseTimeMin, postBrowseTimeMax) * 1000;
-                      console.log(`[warmup] profile ${i+1} post ${p+1}: browse ${browseMs}ms at ${postUrl}`);
-                      await sleep(browseMs);
-                      // Navigate back to the profile
-                      await nav(`https://www.instagram.com/${h}/`);
-                      await sleep(1200 + Math.random() * 800);
-                      await dismissOverlay();
-                    } else {
-                      console.log(`[warmup] profile ${i+1} post ${p+1}: no post links found, skipping`);
-                    }
-                  }
-                }
-
-                relayStep(`Profile ${i + 1}/${profileCount} visited`);
               }
+              const remainder = idleMs - polls * pollMs;
+              if (remainder > 100) await sleep(remainder);
+              relayStep(`Reel ${i + 1}/${reelCount} done`);
             }
 
             console.log(`[warmup] COMPLETE`);

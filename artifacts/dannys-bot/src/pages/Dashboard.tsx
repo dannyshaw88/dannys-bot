@@ -60,6 +60,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.672",
+    date: "30 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser warm-up now works correctly in the Windows app — the Electron browser also fetches trending reels via HikerAPI first and lands directly on each reel, with no homepage visit, no profile browsing, and no post scrolling." },
+      { category: "Fix", text: "The sign-up wall popup ('See photos, videos and more') is now auto-dismissed every 3 seconds during reel viewing in the Windows app." },
+    ],
+  },
+  {
     version: "1.0.671",
     date: "30 May 2026",
     items: [

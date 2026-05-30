@@ -2337,6 +2337,25 @@ export async function registerInstagramRoutes(
     res.json({ ok: true });
   });
 
+  // ── Trending reels for Ghost Browser warmup (called by Electron ebManager) ──
+  // Returns real trending reel URLs via HikerAPI, or [] if not configured.
+  app.get("/api/signup/browser/trending-reels", async (req, res) => {
+    const n = Math.min(10, Math.max(1, Number(req.query.n) || 5));
+    try {
+      const settings = await storage.getGlobalSettings();
+      if (settings.hikerApiEnabled !== "true" || !settings.hikerApiToken) {
+        return res.json({ urls: [] });
+      }
+      const { HikerApiClient } = await import("../instagram/hikerApiClient");
+      const hiker = new HikerApiClient(settings.hikerApiToken);
+      const shortcodes = await hiker.getTrendingReelShortcodes(n + 2);
+      const urls = shortcodes.slice(0, n).map(sc => `https://www.instagram.com/reel/${sc}/`);
+      return res.json({ urls });
+    } catch (e: any) {
+      return res.json({ urls: [], warning: e?.message?.slice(0, 100) });
+    }
+  });
+
   // ── Ghost Browser warm-up: runs warmupSignupSession on the open _signupPage ──
   app.post("/api/signup/browser/warmup", async (req, res) => {
     const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
