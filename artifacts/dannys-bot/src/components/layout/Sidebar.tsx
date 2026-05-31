@@ -1,12 +1,31 @@
 import { useLocation, useSearch } from "wouter";
-import {
-  Gauge,
-  ChevronLeft, ChevronRight, Upload,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
+
+function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <rect fill="currentColor" x="2"  y="2"  width="9"  height="11" rx="1.8"/>
+      <rect fill="currentColor" x="13" y="2"  width="9"  height="5"  rx="1.8"/>
+      <rect fill="currentColor" x="13" y="9"  width="9"  height="13" rx="1.8"/>
+      <rect fill="currentColor" x="2"  y="15" width="9"  height="7"  rx="1.8"/>
+    </svg>
+  );
+}
+
+function FilledBulkImportIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <rect fill="currentColor" x="2"   y="2"    width="20" height="3"   rx="1.5"/>
+      <rect fill="currentColor" x="2"   y="7"    width="15" height="3"   rx="1.5"/>
+      <rect fill="currentColor" x="10.8" y="11.5" width="2.8" height="7.5" rx="1.2"/>
+      <path fill="currentColor" d="M12 23 L5.5 16.5 H18.5 Z"/>
+    </svg>
+  );
+}
 
 function FilledPersonIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -77,7 +96,7 @@ export function Sidebar() {
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const slot = useSidebarSlot();
-  const { canBack, canForward, pushLocation, back, forward } = useNavigationHistory();
+  const { pushLocation } = useNavigationHistory();
 
   useEffect(() => {
     pushLocation(location);
@@ -89,60 +108,24 @@ export function Sidebar() {
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: Gauge                  },
+    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: FilledDashboardIcon    },
     { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: FilledPersonIcon       },
     { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: FilledBarChartIcon     },
     { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: FilledStarIcon         },
     { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon        },
-    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: Upload                 },
+    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: FilledBulkImportIcon   },
     { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon  },
   ];
-
-  function goBack() {
-    const path = back();
-    if (path) setLocation(path);
-  }
-
-  function goForward() {
-    const path = forward();
-    if (path) setLocation(path);
-  }
 
   return (
     <div className="w-[133px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
 
-      {/* ── Header: logo + wordmark row, then arrows row below centered ── */}
-      <div className="flex flex-col items-center border-b border-border/50 pt-[10px] pb-[7px] px-2">
-        <div className="flex items-center gap-2 mb-1">
-          <img src="/bot-logo.png" alt="Equinox" className="w-[28px] h-[28px] shrink-0 object-contain" />
-          <span className="font-bold text-base tracking-tight text-foreground">
-            Equi<span style={{ color: BRAND }}>nox</span>
-          </span>
-        </div>
-        <div className="flex items-center justify-center gap-1">
-          <button
-            onClick={goBack}
-            className={cn(
-              "p-1.5 rounded transition-colors",
-              canBack ? "hover:bg-accent cursor-pointer" : "cursor-default"
-            )}
-            style={{ color: canBack ? BRAND : BRAND + "60" }}
-            title="Go back"
-          >
-            <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
-          </button>
-          <button
-            onClick={goForward}
-            className={cn(
-              "p-1.5 rounded transition-colors",
-              canForward ? "hover:bg-accent cursor-pointer" : "cursor-default"
-            )}
-            style={{ color: canForward ? BRAND : BRAND + "60" }}
-            title="Go forward"
-          >
-            <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
-          </button>
-        </div>
+      {/* ── Header: logo centred, then Equinox text below ── */}
+      <div className="flex flex-col items-center border-b border-border/50 pt-[14px] pb-[10px] px-2">
+        <img src="/bot-logo.png" alt="Equinox" className="w-[32px] h-[32px] shrink-0 object-contain mb-[6px]" />
+        <span className="font-bold text-base tracking-tight text-foreground">
+          Equi<span style={{ color: BRAND }}>nox</span>
+        </span>
       </div>
 
       {/* ── Jarvee-style nav: icon centred above ALL-CAPS label ── */}

@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.683",
+    date: "31 May 2026",
+    items: [
+      { category: "Improvement", text: "Dashboard and Bulk Import sidebar icons replaced with chunkier filled designs that match the rest of the nav icons." },
+      { category: "Improvement", text: "Sidebar header simplified — back/forward buttons removed, logo centred at nav-icon size, Equinox wordmark placed neatly below it." },
+      { category: "Improvement", text: "TrustScore icon picker Animals category expanded with Rabbit, Squirrel, Shrimp, Paw Print and Feather icons." },
+    ],
+  },
+  {
     version: "1.0.682",
     date: "31 May 2026",
     items: [
