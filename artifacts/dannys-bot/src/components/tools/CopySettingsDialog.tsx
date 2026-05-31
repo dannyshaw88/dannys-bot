@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Copy, CheckCircle2, Loader2, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -39,6 +39,12 @@ interface Props {
 
 type SortBy  = "name" | "status" | "group" | "trustscore";
 type SortDir = "asc" | "desc";
+
+function titleSlug(title: string) {
+  return title.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+}
+function storageTargetsKey(title: string) { return `copyDialog:${titleSlug(title)}:targets`; }
+function storageSettingsKey(title: string) { return `copyDialog:${titleSlug(title)}:settings`; }
 
 function statusBadgeClass(status: string) {
   const s = (status ?? "").toLowerCase().replace(/_/g, " ");
@@ -82,8 +88,6 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
   return result;
 }
 
-const SHARED_TARGETS_KEY = "copyDialog:targets:lastUsed";
-
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
   const [targets, setTargets]    = useState<Set<number>>(new Set());
   const [search, setSearch]      = useState("");
@@ -93,15 +97,37 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [selected, setSelected]  = useState<Set<string>>(() => buildInitialSelected(optionGroups));
   const [status, setStatus]      = useState<"idle" | "copying" | "done">("idle");
 
-  // Persist targets to localStorage whenever they change — shared across all Copy Settings dialogs
+  // Drag-to-select refs — same pattern as the main accounts list
+  const isDragSelecting = useRef(false);
+  const dragAddMode     = useRef(true);
+
+  // Stop drag on mouseup anywhere (including outside the list)
+  useEffect(() => {
+    const onMouseUp = () => { isDragSelecting.current = false; };
+    window.addEventListener("mouseup", onMouseUp);
+    return () => window.removeEventListener("mouseup", onMouseUp);
+  }, []);
+
+  // ── Persistence ────────────────────────────────────────────────────────────
+  // Selections are stored per-dialog (keyed by title) and survive dialog
+  // close/reopen. Only the NONE / Deselect All buttons (or a software
+  // restart) clear the selection — closing the dialog does NOT clear it.
+
+  // Save targets to localStorage whenever they change
   useEffect(() => {
     try {
-      localStorage.setItem(SHARED_TARGETS_KEY, JSON.stringify([...targets]));
+      localStorage.setItem(storageTargetsKey(title), JSON.stringify([...targets]));
     } catch {}
-  }, [targets]);
+  }, [targets, title]);
 
-  // Keep targets in sync with the profiles list — remove any stale IDs that no
-  // longer correspond to an existing profile (e.g. after an account is deleted).
+  // Save settings selection to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageSettingsKey(title), JSON.stringify([...selected]));
+    } catch {}
+  }, [selected, title]);
+
+  // Keep targets in sync with the profiles list — remove stale IDs for deleted accounts
   useEffect(() => {
     const validIds = new Set(profiles.map(p => p.id));
     setTargets(prev => {
@@ -111,15 +137,33 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     });
   }, [profiles]);
 
+  // On dialog open: restore selections from localStorage (do NOT clear them)
   useEffect(() => {
     if (open) {
-      setTargets(new Set());
+      // Restore target accounts
+      try {
+        const raw = localStorage.getItem(storageTargetsKey(title));
+        if (raw) {
+          const ids: number[] = JSON.parse(raw);
+          const validIds = new Set(profiles.map(p => p.id));
+          setTargets(new Set(ids.filter(id => validIds.has(id))));
+        }
+      } catch { /* no stored value */ }
+
+      // Restore settings selection
+      try {
+        const raw = localStorage.getItem(storageSettingsKey(title));
+        if (raw) {
+          const keys: string[] = JSON.parse(raw);
+          setSelected(new Set(keys));
+        }
+      } catch { /* no stored value */ }
+
       setSearch("");
       setStatusFilter("");
       setSortBy("name");
       setSortDir("asc");
       setStatus("idle");
-      setSelected(buildInitialSelected(optionGroups));
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -143,17 +187,25 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     return map;
   }, [profiles]);
 
-  // Multi-term search: split on "||" and match any term against label, username, status, or group
+  // Multi-term search: split on "||" and match any term against username,
+  // label, status, group, OR TrustScore badge name (e.g. "warmup", "snail")
   const filteredProfiles = useMemo(() => {
+    const levels = getTrustLevels();
     const terms = search.split("||").map(t => t.trim().toLowerCase()).filter(Boolean);
-    const afterSearch = terms.length === 0 ? profiles : profiles.filter(p =>
-      terms.some(q =>
+    const afterSearch = terms.length === 0 ? profiles : profiles.filter(p => {
+      const tsId    = getTrustScore(p.id);
+      const tsLevel = tsId ? levels.find(l => l.id === tsId) : null;
+      const tsLabel = (tsLevel?.label ?? "").toLowerCase();
+      const tsIdStr = (tsId ?? "").toLowerCase().replace(/_/g, " ");
+      return terms.some(q =>
         p.username.toLowerCase().includes(q) ||
         (p.accountLabel ?? "").toLowerCase().includes(q) ||
         ((p as any).accountStatus ?? "").toLowerCase().replace(/_/g, " ").includes(q) ||
-        (p.tags ?? "").toLowerCase().includes(q)
-      )
-    );
+        (p.tags ?? "").toLowerCase().includes(q) ||
+        tsLabel.includes(q) ||
+        tsIdStr.includes(q)
+      );
+    });
     const base = statusFilter
       ? afterSearch.filter(p =>
           ((p as any).accountStatus ?? "").replace(/_/g, " ").trim().toLowerCase() === statusFilter.toLowerCase()
@@ -184,7 +236,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       }
       return (a.accountLabel || a.username).localeCompare(b.accountLabel || b.username) * dir;
     });
-  }, [profiles, search, sortBy, sortDir]);
+  }, [profiles, search, sortBy, sortDir, statusFilter]);
 
   const cycleSort = (key: SortBy) => {
     if (sortBy === key) {
@@ -268,7 +320,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         </DialogHeader>
 
         <div className="flex min-h-0" style={{ maxHeight: "calc(81vh - 140px)" }}>
-          {/* LEFT profile list — wider name column */}
+          {/* LEFT profile list */}
           <div className="w-[483px] shrink-0 border-r border-border flex flex-col">
 
             {/* Header row */}
@@ -320,13 +372,13 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               </div>
             )}
 
-            {/* Search */}
+            {/* Search — supports username, group, status, and TrustScore badge name */}
             <div className="px-3 py-2 border-b border-border flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search"
+                  placeholder="Search by name, group, status, badge…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -365,7 +417,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
               </button>
             </div>
 
-            {/* Account rows */}
+            {/* Account rows — drag-to-select: hold and drag down/up to select multiple */}
             <div className="overflow-y-auto flex-1 divide-y divide-border/40">
               {filteredProfiles.length === 0 && (
                 <p className="px-4 py-3 text-xs text-muted-foreground text-center">No profiles match.</p>
@@ -376,12 +428,30 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 const groupLabel = (p.tags ?? "").trim() || "No Group Assigned";
                 const tsId = getTrustScore(p.id);
                 const tsLevel = tsId ? getTrustLevels().find(l => l.id === tsId) : null;
+                const isChecked = targets.has(p.id);
                 return (
-                  <label
+                  <div
                     key={p.id}
                     className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-muted/30 transition-colors"
+                    onClick={() => toggleTarget(p.id)}
+                    onMouseDown={e => {
+                      if (e.button !== 0) return;
+                      e.preventDefault();
+                      dragAddMode.current = !isChecked;
+                      isDragSelecting.current = true;
+                      toggleTarget(p.id);
+                    }}
+                    onMouseEnter={() => {
+                      if (!isDragSelecting.current) return;
+                      if (dragAddMode.current !== isChecked) toggleTarget(p.id);
+                    }}
                   >
-                    <Checkbox checked={targets.has(p.id)} onCheckedChange={() => toggleTarget(p.id)} className="shrink-0 w-4 h-4" />
+                    <Checkbox
+                      checked={isChecked}
+                      onCheckedChange={() => toggleTarget(p.id)}
+                      onClick={e => e.stopPropagation()}
+                      className="shrink-0 w-4 h-4 pointer-events-none"
+                    />
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-semibold truncate block leading-tight">
                         {p.accountLabel || p.username}
@@ -412,7 +482,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                         <span className="text-[10px] text-muted-foreground/40">—</span>
                       )}
                     </div>
-                  </label>
+                  </div>
                 );
               })}
             </div>

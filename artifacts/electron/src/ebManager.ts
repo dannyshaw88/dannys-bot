@@ -1163,36 +1163,64 @@ export async function openEbWindow(opts: {
   // Page.enable() must be called before Page.addScriptToEvaluateOnNewDocument —
   // without it the command may be silently rejected in some Electron builds.
   //
-  // IMPORTANT: fire-and-forget (no await) — awaiting can hang in the packaged
-  // app and prevent ebMap.set() from being reached.  A dom-ready fallback below
-  // covers the rare case where CDP completes after the first navigation starts.
+  // ── Pre-navigation CDP: timezone override ───────────────────────────────────
+  // debugger.attach is synchronous — do it here, before the fire-and-forget block,
+  // so we can call Emulation.setTimezoneOverride synchronously (awaited) before
+  // loadURL fires. If this were inside the fire-and-forget block it would LOSE the
+  // race: the block yields at the first `await Page.enable`, control returns to the
+  // main function, and loadURL starts — meaning the signup page loads with the real
+  // Windows system timezone, then subsequent pages get the proxy timezone.
+  // Instagram fingerprinting detects that inconsistency and can invalidate the
+  // confirmation code server-side (the "The confirmation code is invalid or has
+  // expired" error on signup).
+  //
+  // Only Page.enable and addScriptToEvaluateOnNewDocument remain fire-and-forget
+  // because those CAN hang in the packaged build. A dom-ready fallback below
+  // covers the rare case where they fire after the first navigation starts.
+  try { win.webContents.debugger.attach("1.3"); } catch { /* already attached or unavailable */ }
+
+  if (proxy) {
+    // Resolve proxy timezone — awaited here (max 5 s) so it's ready before loadURL.
+    let _resolvedTz: string | null = null;
+    try {
+      const _tzAc = new AbortController();
+      const _tzTimer = setTimeout(() => _tzAc.abort(), 5000);
+      const tzRes = await fetch(
+        `http://ip-api.com/json/${encodeURIComponent(proxy.host)}?fields=timezone`,
+        { signal: _tzAc.signal },
+      );
+      clearTimeout(_tzTimer);
+      const tzJson = await tzRes.json() as { timezone?: string };
+      if (tzJson.timezone) _resolvedTz = tzJson.timezone;
+    } catch { /* ip-api unreachable — skip override, use machine timezone */ }
+
+    if (_resolvedTz) {
+      // Apply timezone before first navigation. Race against a 2 s safety timer so
+      // a slow CDP response doesn't block openEbWindow indefinitely.
+      try {
+        await Promise.race([
+          win.webContents.debugger.sendCommand("Emulation.setTimezoneOverride",
+            { timezoneId: _resolvedTz }),
+          new Promise<void>(r => setTimeout(r, 2000)),
+        ]);
+      } catch {}
+    }
+  }
+  // No proxy → skip setTimezoneOverride → Chrome uses the real system timezone.
+  // No UTC default — a timezone mismatch between Intl and Date.now() is an
+  // instant bot signal.
+
+  // ── Fire-and-forget: script injection + locale override ─────────────────────
+  // Page.enable and addScriptToEvaluateOnNewDocument CAN hang in the packaged
+  // app, so they remain fire-and-forget. Timezone is already set above.
   const _fpIsMobile = !!userAgent && userAgent.includes("Mobile") && userAgent.includes("Android");
   const _fpScript   = buildFingerprintScript(_fpIsMobile, apiUA ?? null, ebFingerprint ?? null);
   void (async () => {
     try {
-      try { win.webContents.debugger.attach("1.3"); } catch { /* already attached or unavailable */ }
+      // debugger already attached before this block
       await win.webContents.debugger.sendCommand("Page.enable");
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _fpScript });
-
-      // ── Timezone override — match proxy's exit country ──────────────────────
-      // Without this, Intl.DateTimeFormat().resolvedOptions().timeZone returns
-      // the machine's real timezone regardless of what IP the proxy exits from.
-      // A US proxy paired with a Europe/London timezone is an instant bot flag.
-      let proxyTimezone = "UTC";
-      if (proxy) {
-        try {
-          const tzRes = await fetch(
-            `http://ip-api.com/json/${encodeURIComponent(proxy.host)}?fields=timezone`,
-          );
-          const tzJson = await tzRes.json() as { timezone?: string };
-          if (tzJson.timezone) proxyTimezone = tzJson.timezone;
-        } catch { /* fall back to UTC */ }
-      }
-      try {
-        await win.webContents.debugger.sendCommand("Emulation.setTimezoneOverride",
-          { timezoneId: proxyTimezone });
-      } catch {}
 
       // ── Locale override — match navigator.languages ─────────────────────────
       // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
@@ -1512,6 +1540,109 @@ export async function openEbWindow(opts: {
 
   // Trigger on every page load — covers initial open AND all subsequent navigations.
   win.webContents.on("did-finish-load", () => { cdpClickCookieBanner().catch(() => {}); });
+
+  // ── Ghost browser: auto-dismiss Instagram login/signup overlay modals ─────
+  // When the Ghost browser (profileId === -1) browses Instagram logged out,
+  // Instagram shows "Sign up to see more" / "Log in to" / "Save your login
+  // info?" modal overlays after a few seconds. This dismisses them automatically
+  // via CDP Input.dispatchMouseEvent (isTrusted=true, same as the cookie banner).
+  //
+  // Not applied to regular account EBs — those are always logged in and won't
+  // see signup walls. The cookie consent banner is handled separately above.
+  //
+  // NOTE: this is safe for regular Ghost browsing. During the warmup reel flow,
+  // a separate dismissOverlay() is scoped to that handler and not called (per the
+  // warmup comment) to avoid mid-reel redirects. This listener only fires on
+  // did-finish-load (hard navigations), not on the SPA reel transitions.
+  if (profileId === -1) {
+    const _GHOST_OVERLAY_JS = `(function(){
+      function rect(el){
+        if(!el)return null;
+        var r=el.getBoundingClientRect();
+        if(r.width<=0||r.height<=0)return null;
+        return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};
+      }
+      // 1. Standard aria-label Close selectors
+      var sels=[
+        '[role="dialog"] button[aria-label="Close"]',
+        '[role="dialog"] button[aria-label="close"]',
+        '[role="presentation"] button[aria-label="Close"]',
+        '[role="presentation"] button[aria-label="close"]',
+        'button[aria-label="Close"]',
+        'div[role="button"][aria-label="Close"]',
+      ];
+      for(var i=0;i<sels.length;i++){var p=rect(document.querySelector(sels[i]));if(p)return p;}
+      // 2. Detect signup/login/save-info dialogs by their text, then find the dismiss button
+      var containers=Array.from(document.querySelectorAll('[role="dialog"],[role="presentation"]'));
+      for(var c=0;c<containers.length;c++){
+        var txt=(containers[c].innerText||containers[c].textContent||'').toLowerCase();
+        var isOverlay=txt.includes('sign up')||txt.includes('never miss')||
+                      txt.includes('see photos')||txt.includes('see videos')||
+                      txt.includes('log in to')||txt.includes('save your login')||
+                      txt.includes('turn on notifications');
+        if(!isOverlay)continue;
+        var btns=Array.from(containers[c].querySelectorAll('button,div[role="button"]'));
+        // Prefer explicit dismiss labels
+        for(var b=0;b<btns.length;b++){
+          var btxt=(btns[b].innerText||btns[b].textContent||'').trim().toLowerCase();
+          if(btxt==='not now'||btxt==='dismiss'||btxt==='close'||btxt===''||btxt==='×'||btxt==='✕'){
+            var p2=rect(btns[b]);if(p2)return p2;
+          }
+        }
+        // Fallback: any button that is only an SVG icon (the X close button)
+        for(var b2=0;b2<btns.length;b2++){
+          if(btns[b2].querySelector('svg')&&!(btns[b2].innerText||btns[b2].textContent||'').trim().match(/[a-z]/i)){
+            var p3=rect(btns[b2]);if(p3)return p3;
+          }
+        }
+      }
+      return null;
+    })()`;
+
+    let _ghostOverlayRunning = false;
+    const cdpDismissGhostOverlay = async () => {
+      if (win.isDestroyed() || _ghostOverlayRunning) return;
+      _ghostOverlayRunning = true;
+      try {
+        try { win.webContents.debugger.attach("1.3"); } catch {}
+        // Poll up to 6 times — the overlay often appears 2-5 s after page load
+        for (let attempt = 0; attempt < 6; attempt++) {
+          if (win.isDestroyed()) break;
+          await new Promise(r => setTimeout(r, attempt === 0 ? 3000 : 2000));
+          if (win.isDestroyed()) break;
+          const pos = await win.webContents.executeJavaScript(_GHOST_OVERLAY_JS)
+            .catch(() => null) as { x: number; y: number } | null;
+          if (!pos) break; // no overlay present
+          _ebLog(`GhostOverlay#${attempt + 1}: overlay at (${pos.x},${pos.y}), CDP click`);
+          try {
+            await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
+              type: "mousePressed", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0,
+            });
+            await new Promise(r => setTimeout(r, 60));
+            await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
+              type: "mouseReleased", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0,
+            });
+          } catch (cdpErr) {
+            _ebLog(`GhostOverlay: CDP failed (${cdpErr}), falling back to humanMouseClick`);
+            win.webContents.focus();
+            await humanMouseClick(win.webContents, pos.x, pos.y);
+          }
+          await new Promise(r => setTimeout(r, 1000));
+          const stillThere = await win.webContents.executeJavaScript(_GHOST_OVERLAY_JS).catch(() => null);
+          if (!stillThere) {
+            _ebLog(`GhostOverlay: dismissed after ${attempt + 1} attempt(s)`);
+            break;
+          }
+        }
+      } catch (err) {
+        _ebLog(`GhostOverlay error: ${err}`);
+      } finally {
+        _ghostOverlayRunning = false;
+      }
+    };
+
+    win.webContents.on("did-finish-load", () => { cdpDismissGhostOverlay().catch(() => {}); });
+  }
 
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);

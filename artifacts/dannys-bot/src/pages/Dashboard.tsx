@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.678",
+    date: "31 May 2026",
+    items: [
+      { category: "Feature", text: "Copy Settings dialog now remembers your selected accounts and settings between opens — selections persist until you press NONE / Deselect All or restart the app." },
+      { category: "Feature", text: "Copy Settings search now matches TrustScore badge names — type 'warmup', 'snail', 'monster' etc. to filter accounts by their badge." },
+      { category: "Feature", text: "Copy Settings account list now supports click-and-drag to select multiple accounts at once, matching the behaviour on the main Accounts page." },
+    ],
+  },
+  {
     version: "1.0.677",
     date: "31 May 2026",
     items: [
