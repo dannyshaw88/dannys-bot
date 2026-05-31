@@ -394,10 +394,8 @@ export function CreateGhostPage() {
 
   // Ghost fingerprint — regenerated on every Nuke Environment
   const [fingerprint, setFingerprint] = useState<GhostFingerprint>(() => generateGhostFingerprint());
-  const [fpOpen, setFpOpen]           = useState(false);
 
   // Pre-Signup Warm-up — persisted to localStorage so values survive page reloads
-  const [warmupOpen, setWarmupOpen] = useState(true);
   const [warmupConfig, setWarmupConfig] = useState(() => {
     try {
       const saved = localStorage.getItem("ghost-warmup-config");
@@ -672,75 +670,50 @@ export function CreateGhostPage() {
             />
           </div>
 
-          {/* Fingerprint Info */}
+          {/* Pre-Signup Warm-up — no toggle, status inline */}
           <div className="desktop-card p-2.5 space-y-1.5">
-            <button
-              type="button"
-              onClick={() => setFpOpen(o => !o)}
-              className="flex w-full items-center gap-2"
-            >
-              <Cpu className="w-4 h-4 text-cyan-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Fingerprint</p>
-              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 ${fpOpen ? "rotate-180" : ""}`} />
-            </button>
-            {fpOpen && (
-              <div className="space-y-1 pt-0.5 border-t border-border/50">
-                {([
-                  ["WebGL GPU",     `${fingerprint.webglRenderer}`],
-                  ["Canvas Seed",   String(fingerprint.canvasNoise)],
-                  ["Audio Noise",   fingerprint.audioNoise.toFixed(10)],
-                  ["Font Seed",     `${fingerprint.fontSeed} / 99`],
-                  ["Speech",        FP_SPEECH_PROFILES[fingerprint.speechProfile] ?? `Profile ${fingerprint.speechProfile}`],
-                  ["Video Device",  fingerprint.mediaVideoId.slice(0, 14) + "…"],
-                  ["Audio Input",   fingerprint.mediaAudioId.slice(0, 14) + "…"],
-                  ["Speaker Out",   fingerprint.mediaSpeakerId.slice(0, 14) + "…"],
-                ] as [string, string][]).map(([label, val]) => (
-                  <div key={label} className="flex items-start justify-between gap-2 pt-0.5">
-                    <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
-                    <span className="text-[10px] font-mono text-foreground text-right break-all">{val}</span>
-                  </div>
-                ))}
-                <p className="text-[10px] text-muted-foreground/60 pt-1">
-                  Regenerates automatically on Nuke Environment.
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1">Pre-Signup Warm-up</p>
+              {warmupStatus === "running" && <Loader2 className="w-3 h-3 text-amber-500 animate-spin shrink-0" />}
+              {warmupStatus === "done"    && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />}
+            </div>
+
+            {/* Status directly under title */}
+            {!isOpen ? (
+              <p className="text-[10px] text-muted-foreground">Open browser to begin</p>
+            ) : warmupStatus === "running" ? (
+              <div className="flex items-start gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-muted-foreground leading-snug break-words">
+                  {warmupLastStep || "Starting…"}
                 </p>
               </div>
-            )}
-          </div>
-
-          {/* Pre-Signup Warm-up */}
-          <div className="desktop-card p-2.5 space-y-1.5">
-            <button
-              type="button"
-              onClick={() => setWarmupOpen(o => !o)}
-              className="flex w-full items-center gap-2"
-            >
-              <Flame className="w-4 h-4 text-amber-500 shrink-0" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex-1 text-left">Pre-Signup Warm-up</p>
-              {warmupStatus === "running" && <Loader2 className="w-3 h-3 text-amber-500 animate-spin shrink-0" />}
-              {warmupStatus === "done"    && <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />}
-              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 shrink-0 ${warmupOpen ? "rotate-180" : ""}`} />
-            </button>
-
-            {warmupOpen && (
-              <div className="space-y-2 pt-0.5 border-t border-border/50">
-                {/* Column headers */}
-                <div className="flex items-center gap-1.5">
-                  <span className="flex-1" />
-                  <span className="w-[72px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Count</span>
-                  <span className="w-[76px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Wait (s)</span>
-                </div>
-
-                <WarmupRow
-                  label="▶ View trending reels"
-                  min={warmupConfig.reelsMin} max={warmupConfig.reelsMax}
-                  onMin={v => setWarmupConfig(c => ({ ...c, reelsMin: Math.min(v, c.reelsMax) }))}
-                  onMax={v => setWarmupConfig(c => ({ ...c, reelsMax: Math.max(v, c.reelsMin) }))}
-                  idleMin={warmupConfig.reelsIdleMin} idleMax={warmupConfig.reelsIdleMax}
-                  onIdleMin={v => setWarmupConfig(c => ({ ...c, reelsIdleMin: Math.min(v, c.reelsIdleMax) }))}
-                  onIdleMax={v => setWarmupConfig(c => ({ ...c, reelsIdleMax: Math.max(v, c.reelsIdleMin) }))}
-                />
+            ) : warmupStatus === "done" ? (
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                <p className="text-[10px] text-green-600 font-medium">Complete ✓</p>
               </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">Ready</p>
             )}
+
+            <div className="space-y-2 pt-0.5 border-t border-border/50">
+              <div className="flex items-center gap-1.5">
+                <span className="flex-1" />
+                <span className="w-[72px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Count</span>
+                <span className="w-[76px] text-center text-[9px] font-medium text-muted-foreground/60 uppercase tracking-wide shrink-0">Wait (s)</span>
+              </div>
+              <WarmupRow
+                label="▶ View trending reels"
+                min={warmupConfig.reelsMin} max={warmupConfig.reelsMax}
+                onMin={v => setWarmupConfig(c => ({ ...c, reelsMin: Math.min(v, c.reelsMax) }))}
+                onMax={v => setWarmupConfig(c => ({ ...c, reelsMax: Math.max(v, c.reelsMin) }))}
+                idleMin={warmupConfig.reelsIdleMin} idleMax={warmupConfig.reelsIdleMax}
+                onIdleMin={v => setWarmupConfig(c => ({ ...c, reelsIdleMin: Math.min(v, c.reelsIdleMax) }))}
+                onIdleMax={v => setWarmupConfig(c => ({ ...c, reelsIdleMax: Math.max(v, c.reelsIdleMin) }))}
+              />
+            </div>
           </div>
 
           {/* Actions + Account Fields */}
@@ -817,26 +790,32 @@ export function CreateGhostPage() {
             </div>
           </div>
 
-          {/* Warm-up step progress — bottom of left column */}
-          <div className="desktop-card p-2.5 space-y-1.5 mt-auto">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600">Warm-up</p>
-            {!isOpen ? (
-              <p className="text-[10px] text-muted-foreground">Open browser to begin</p>
-            ) : warmupStatus === "running" ? (
-              <div className="flex items-start gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin text-cyan-500 shrink-0 mt-0.5" />
-                <p className="text-[10px] text-muted-foreground leading-snug break-words">
-                  {warmupLastStep || "Starting…"}
-                </p>
-              </div>
-            ) : warmupStatus === "done" ? (
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-                <p className="text-[10px] text-green-600 font-medium">Complete ✓</p>
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground">Ready</p>
-            )}
+          {/* Fingerprint — always expanded at bottom of column */}
+          <div className="desktop-card p-2.5 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-cyan-500 shrink-0" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fingerprint</p>
+            </div>
+            <div className="space-y-1 pt-0.5 border-t border-border/50">
+              {([
+                ["WebGL GPU",     `${fingerprint.webglRenderer}`],
+                ["Canvas Seed",   String(fingerprint.canvasNoise)],
+                ["Audio Noise",   fingerprint.audioNoise.toFixed(10)],
+                ["Font Seed",     `${fingerprint.fontSeed} / 99`],
+                ["Speech",        FP_SPEECH_PROFILES[fingerprint.speechProfile] ?? `Profile ${fingerprint.speechProfile}`],
+                ["Video Device",  fingerprint.mediaVideoId.slice(0, 14) + "…"],
+                ["Audio Input",   fingerprint.mediaAudioId.slice(0, 14) + "…"],
+                ["Speaker Out",   fingerprint.mediaSpeakerId.slice(0, 14) + "…"],
+              ] as [string, string][]).map(([label, val]) => (
+                <div key={label} className="flex items-start justify-between gap-2 pt-0.5">
+                  <span className="text-[10px] text-muted-foreground shrink-0">{label}</span>
+                  <span className="text-[10px] font-mono text-foreground text-right break-all">{val}</span>
+                </div>
+              ))}
+              <p className="text-[10px] text-muted-foreground/60 pt-1">
+                Regenerates automatically on Nuke Environment.
+              </p>
+            </div>
           </div>
 
         </div>

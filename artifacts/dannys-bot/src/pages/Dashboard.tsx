@@ -60,6 +60,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.675",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser no longer keeps viewing the same reel — each warmup session now picks a different set of reels from a randomised pool of 14 popular accounts, with already-seen reels skipped for one hour." },
+      { category: "Fix", text: "When Instagram redirects away from a reel during warmup, the browser immediately moves on to the next reel instead of wasting the remaining idle time on the homepage." },
+      { category: "Fix", text: "All automatic popup dismissal now stops once warmup is complete — signup and verification dialogs are no longer auto-closed while you are filling in the form." },
+      { category: "UI", text: "Fingerprint section is now always visible at the bottom of the Ghost Browser controls — no collapse toggle." },
+      { category: "UI", text: "Pre-Signup Warm-up section now shows its current status directly below the title. Removed the separate Warm-up status card at the bottom." },
+      { category: "Fix", text: "Follow tool now always re-scrapes when below session target — the re-scrape loop no longer requires a global setting to be enabled." },
+      { category: "Fix", text: "Initial candidate pool for follow tool increased to at least 20 users so there are enough candidates to absorb skips without running dry." },
+    ],
+  },
+  {
     version: "1.0.674",
     date: "30 May 2026",
     items: [

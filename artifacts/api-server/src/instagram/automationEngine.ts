@@ -3112,7 +3112,7 @@ class AutomationEngine {
         if (hikerClient) {
           const t0 = Date.now();
           const globalCursor = await storage.getHashtagCursor(source.value);
-          const result = await hikerClient.getHashtagUsers(source.value, processCount + 5, globalCursor);
+          const result = await hikerClient.getHashtagUsers(source.value, Math.max(processCount * 3, 20), globalCursor);
           candidates = result.users;
           if (result.nextCursor) {
             await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
@@ -3157,7 +3157,7 @@ class AutomationEngine {
         }
         if (hikerClient) {
           const t0 = Date.now();
-          candidates = await hikerClient.getFollowers(targetPk, processCount + 5);
+          candidates = await hikerClient.getFollowers(targetPk, Math.max(processCount * 3, 20));
           if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
             const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
             const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);
@@ -3504,7 +3504,7 @@ class AutomationEngine {
     const seenFollowerPksBySource = new Map<string, Set<string>>();
     seenFollowerPksBySource.set(source.id, new Set(candidates.map(c => c.pk)));
     const sourceRoundCount = new Map<string, number>();
-    if (scrapeAllIfSkipped && !hitHardLimit && followed < processCount && !state.stop.stopped) {
+    if (!hitHardLimit && followed < processCount && !state.stop.stopped) {
       let extraRound = 0;
       while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 20) {
         extraRound++;

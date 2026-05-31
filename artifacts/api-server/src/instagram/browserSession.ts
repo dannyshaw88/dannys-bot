@@ -1056,6 +1056,9 @@ let _signupCdp:     any | null = null;
 let _signupWs:      WebSocket | null = null;
 let _signupBrowser: any | null = null;
 let _signupDataDir: string | null = null; // per-attempt unique dir, wiped on every close
+// Set to true when Ghost Browser warmup completes so auto-popup-dismissal stops
+// and the user can interact with Instagram signup dialogs uninterrupted.
+let _ghostWarmupDone = false;
 const pendingFileChoosers = new Map<number, any>(); // profileId → FileChooser
 
 // ── Signup automation WS helpers ─────────────────────────────────────────────
@@ -6622,7 +6625,10 @@ export async function openSignupBrowser(opts?: {
       // to render the dialog before probing for it.  The 2.5 s gap also ensures
       // we never fire mid-redirect (the old "constantly refreshing" bug was caused
       // by clicking a random element while Instagram was still navigating).
-      if (url && url.includes("instagram.com")) {
+      // Only auto-dismiss cookie banner while warmup is running. Once warmup
+      // is complete (_ghostWarmupDone = true) the user is interacting with
+      // signup dialogs — do NOT auto-close anything.
+      if (url && url.includes("instagram.com") && !_ghostWarmupDone) {
         setTimeout(() => { dismissCookieBanner(page as any).catch(() => {}); }, 2500);
       }
     });
@@ -6666,6 +6672,7 @@ export async function openSignupBrowser(opts?: {
 
 export async function closeSignupBrowser(): Promise<void> {
   _signupPage = null;
+  _ghostWarmupDone = false; // reset so next session starts fresh
   if (_signupCdp) {
     try { _signupCdp.send("Page.stopScreencast").catch(() => {}); } catch {}
     _signupCdp = null;
@@ -6844,6 +6851,19 @@ async function warmupSignupSession(page: Page, opts: {
       const polls    = Math.max(1, Math.floor(reelIdle / pollMs));
       for (let p = 0; p < polls; p++) {
         await delay(pollMs);
+        // Detect if Instagram redirected away from the reel (login wall redirect).
+        // When this happens, break out of idle and move to the next reel rather
+        // than polling a page we're no longer on.
+        try {
+          const nowUrl = page.url();
+          if (nowUrl && nowUrl.includes("instagram.com") &&
+              !nowUrl.includes("/reel/") && !nowUrl.includes("/p/") &&
+              !nowUrl.includes("/reels/") && !nowUrl.includes("/explore")) {
+            const shortUrl = nowUrl.split("?")[0].replace("https://www.instagram.com", "ig.com");
+            step(`EB warmup: redirected to ${shortUrl} — moving to next reel`);
+            break;
+          }
+        } catch { /* non-fatal */ }
         await dismissInstagramPopups(page).catch(() => {});
         try { await page.evaluate(() => window.scrollBy(0, 80 + Math.random() * 120)); } catch { /* non-fatal */ }
       }
@@ -6871,7 +6891,9 @@ export async function runWarmupOnOpenBrowser(opts: {
   onStep?: (msg: string) => void;
 }): Promise<void> {
   if (!_signupPage) throw new Error("Ghost Browser is not open");
+  _ghostWarmupDone = false; // re-enable auto-dismissal for this warmup run
   await warmupSignupSession(_signupPage as any, opts);
+  _ghostWarmupDone = true;  // warmup done — user can now interact with dialogs freely
 }
 
 export async function createInstagramAccountViaEBForm(params: {

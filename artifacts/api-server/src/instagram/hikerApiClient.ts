@@ -34,6 +34,26 @@ function hikerGet(path: string, token: string): Promise<any> {
   });
 }
 
+// ── Module-level recently-seen reel shortcodes cache ─────────────────────────
+// Tracks shortcodes returned in the last hour so consecutive warmup sessions
+// never show the same reel twice.  TTL of 1 h keeps the pool rotating.
+const SEEN_REELS_TTL_MS = 60 * 60 * 1000;
+interface _SeenReelEntry { sc: string; addedAt: number; }
+const _seenReels: _SeenReelEntry[] = [];
+
+function _getSeenReelSet(): Set<string> {
+  const now = Date.now();
+  // Evict entries older than TTL (array is insertion-ordered so slice from front)
+  while (_seenReels.length > 0 && now - _seenReels[0].addedAt > SEEN_REELS_TTL_MS) {
+    _seenReels.shift();
+  }
+  return new Set(_seenReels.map(e => e.sc));
+}
+
+function _markReelSeen(sc: string): void {
+  _seenReels.push({ sc, addedAt: Date.now() });
+}
+
 // ── Module-level username → pk cache (shared across all HikerApiClient instances) ──
 // Prevents repeated v1/user/by/username calls for the same username within the same
 // server process. TTL of 24 h — profile PKs never change so a long TTL is safe.
@@ -245,10 +265,23 @@ export class HikerApiClient {
   }
 
   // Fetches shortcodes for trending Instagram Reels (media_type=2 / clips) from
-  // popular high-volume accounts.  Falls back to getPublicShortcodes if no reel-
-  // specific media is found.  Returns up to `n` shortcodes.
+  // popular high-volume accounts.  Shuffles account order on every call and
+  // skips recently seen shortcodes so each warmup session views different reels.
+  // Falls back to getPublicShortcodes if no reel-specific media is found.
   async getTrendingReelShortcodes(n = 3): Promise<string[]> {
-    const REEL_ACCOUNTS = ["instagram", "natgeo", "creators", "reels", "nasa", "discovery"];
+    // Larger pool — shuffled on every call so we don't always start with @instagram
+    const ALL_REEL_ACCOUNTS = [
+      "instagram", "natgeo", "creators", "reels", "nasa", "discovery",
+      "nba", "espn", "bbcnews", "cnn", "gopro", "redbull", "nike", "9gag",
+    ];
+    // Fisher-Yates shuffle for true randomness
+    const REEL_ACCOUNTS = [...ALL_REEL_ACCOUNTS];
+    for (let i = REEL_ACCOUNTS.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [REEL_ACCOUNTS[i], REEL_ACCOUNTS[j]] = [REEL_ACCOUNTS[j], REEL_ACCOUNTS[i]];
+    }
+
+    const seen = _getSeenReelSet();
     const shortcodes: string[] = [];
 
     for (const username of REEL_ACCOUNTS) {
@@ -257,7 +290,7 @@ export class HikerApiClient {
         const user = await this.getUserByUsername(username);
         if (!user) continue;
         const j = await hikerGet(
-          `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=12`,
+          `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=20`,
           this.token,
         );
         const items: any[] = Array.isArray(j) ? j
@@ -273,7 +306,11 @@ export class HikerApiClient {
           const mediaId = String(item.id ?? item.pk ?? "");
           if (!mediaId) continue;
           const sc = item.code || this.mediaIdToShortcode(mediaId);
-          if (sc && sc !== "0") shortcodes.push(sc);
+          if (sc && sc !== "0" && !seen.has(sc)) {
+            shortcodes.push(sc);
+            _markReelSeen(sc);
+            seen.add(sc); // prevent duplicates within this call
+          }
         }
       } catch { /* non-fatal — best-effort */ }
     }
