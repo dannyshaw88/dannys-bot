@@ -920,50 +920,6 @@ export function ProfileDetailsPage() {
                         </button>
                       </>
                     )}
-                    {/* ── Profile Sync — top-right ── */}
-                    <span className="text-border mx-2 select-none shrink-0">|</span>
-                    <Switch
-                      checked={!!formData?.syncEnabled}
-                      onCheckedChange={v => updateField({ syncEnabled: v })}
-                    />
-                    <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
-                        min={1}
-                        value={formData?.syncIntervalMin ?? 60}
-                        onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
-                        className="h-5 text-[11px] w-9 px-1"
-                      />
-                      <span className="text-[10px] text-muted-foreground">–</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={formData?.syncIntervalMax ?? 120}
-                        onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
-                        className="h-5 text-[11px] w-9 px-1"
-                      />
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
-                    </div>
-                    <Checkbox
-                      id="syncUseHikerTopRight"
-                      checked={!!formData?.syncUseHiker}
-                      onCheckedChange={v => updateField({ syncUseHiker: !!v })}
-                    />
-                    <Label htmlFor="syncUseHikerTopRight" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 text-xs px-2 gap-1"
-                      disabled={syncNowStatus === "syncing"}
-                      onClick={handleSyncNow}
-                    >
-                      {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
-                      {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
-                      {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
-                      {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
-                      {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
-                    </Button>
                   </>
                 )}
               </div>
@@ -1820,7 +1776,56 @@ export function ProfileDetailsPage() {
               </CardHeader>
               <CardContent className="px-0 pb-0">
                 <div className="flex items-start gap-4">
-                  {/* Left stat icons */}
+                  {/* Sync controls — left of stats */}
+                  <div className="flex flex-col gap-1.5 shrink-0 border-r border-border pr-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={!!formData?.syncEnabled}
+                        onCheckedChange={v => updateField({ syncEnabled: v })}
+                      />
+                      <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={formData?.syncIntervalMin ?? 60}
+                          onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
+                          className="h-6 text-xs w-11 px-1"
+                        />
+                        <span className="text-[10px] text-muted-foreground">–</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={formData?.syncIntervalMax ?? 120}
+                          onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
+                          className="h-6 text-xs w-11 px-1"
+                        />
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="syncUseHikerCard"
+                        checked={!!formData?.syncUseHiker}
+                        onCheckedChange={v => updateField({ syncUseHiker: !!v })}
+                      />
+                      <Label htmlFor="syncUseHikerCard" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-xs px-2 gap-1"
+                        disabled={syncNowStatus === "syncing"}
+                        onClick={handleSyncNow}
+                      >
+                        {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                        {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
+                        {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
+                        {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
+                      </Button>
+                    </div>
+                  </div>
+                  {/* Right: stat icons */}
                   <div className="flex flex-col gap-2 shrink-0">
                     <div className="grid grid-cols-3 gap-2">
                       <div className="flex flex-col items-center justify-center bg-muted/40 rounded-lg py-1.5 px-2 border border-border">
