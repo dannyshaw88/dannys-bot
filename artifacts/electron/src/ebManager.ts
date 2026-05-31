@@ -2742,39 +2742,42 @@ export function startEbIpcServer(
               await sleep(800);
               // Dismiss sign-up wall / "See photos, videos and more" modal
               await dismissOverlay();
-              // If dismissing the overlay triggered a redirect (Instagram sometimes
-              // navigates to the homepage when the modal is closed), go back to the reel.
+              // If dismissing the overlay triggered a redirect, skip to the next reel.
+              // Navigating back would just trigger the same redirect again — better to move on.
               await sleep(600);
+              let reelRedirected = false;
               {
                 const afterDismiss = wc.getURL();
                 if (afterDismiss && !afterDismiss.includes('/reel/') && !afterDismiss.startsWith('about:')) {
-                  console.log(`[warmup] redirect after dismiss (${afterDismiss}), returning to reel`);
-                  await nav(url);
-                  await sleep(800);
-                  await dismissOverlay();
+                  console.log(`[warmup] redirect after dismiss (${afterDismiss}), skipping to next reel`);
+                  reelRedirected = true;
                 }
               }
 
-              // Watch the reel for the configured idle time — no scrolling, just viewing.
-              const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
-              const pollMs = 3000;
-              const polls  = Math.max(1, Math.floor(idleMs / pollMs));
-              console.log(`[warmup] reel ${i + 1}: watching ${idleMs}ms (${polls} polls)`);
-              for (let p = 0; p < polls; p++) {
-                await sleep(pollMs);
-                // Dismiss sign-up wall if it appeared during watch time
-                await dismissOverlay();
-                // Check for redirect again and return to reel if needed
-                const midUrl = wc.getURL();
-                if (midUrl && !midUrl.includes('/reel/') && !midUrl.startsWith('about:')) {
-                  console.log(`[warmup] mid-watch redirect (${midUrl}), returning to reel`);
-                  await nav(url);
-                  await sleep(800);
+              if (!reelRedirected) {
+                // Watch the reel for the configured idle time — no scrolling, just viewing.
+                const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
+                const pollMs = 3000;
+                const polls  = Math.max(1, Math.floor(idleMs / pollMs));
+                console.log(`[warmup] reel ${i + 1}: watching ${idleMs}ms (${polls} polls)`);
+                for (let p = 0; p < polls; p++) {
+                  await sleep(pollMs);
+                  // Dismiss sign-up wall if it appeared during watch time
                   await dismissOverlay();
+                  // If Instagram redirects mid-watch, break out and move to the next reel.
+                  // Returning to the reel just triggers the same redirect again.
+                  const midUrl = wc.getURL();
+                  if (midUrl && !midUrl.includes('/reel/') && !midUrl.startsWith('about:')) {
+                    console.log(`[warmup] mid-watch redirect (${midUrl}), moving to next reel`);
+                    reelRedirected = true;
+                    break;
+                  }
+                }
+                if (!reelRedirected) {
+                  const remainder = idleMs - polls * pollMs;
+                  if (remainder > 100) await sleep(remainder);
                 }
               }
-              const remainder = idleMs - polls * pollMs;
-              if (remainder > 100) await sleep(remainder);
               relayStep(`Reel ${i + 1}/${reelCount} done`);
             }
 

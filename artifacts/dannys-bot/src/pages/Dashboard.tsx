@@ -60,6 +60,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.676",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser warmup no longer gets stuck in a redirect loop — when Instagram redirects away from a reel (either after popup dismiss or mid-watch), the browser moves straight to the next reel instead of trying to go back." },
+    ],
+  },
+  {
     version: "1.0.675",
     date: "31 May 2026",
     items: [
