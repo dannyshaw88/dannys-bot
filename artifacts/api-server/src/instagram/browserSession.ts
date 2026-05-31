@@ -24,7 +24,7 @@ const EB_IPC_BASE    = `http://127.0.0.1:${process.env.EB_IPC_PORT ?? "0"}`;
 
 async function ebIpc(method: string, urlPath: string, body?: unknown): Promise<any> {
   const ctrl  = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 120_000);
+  const timer = setTimeout(() => ctrl.abort(), 4 * 60_000);
   try {
     const res = await fetch(`${EB_IPC_BASE}${urlPath}`, {
       method,

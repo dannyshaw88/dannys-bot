@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.690",
+    date: "31 May 2026",
+    items: [
+      { category: "UI", text: "Accounts page: the Import Profiles icon is now cyan so it's easier to spot in the Actions menu." },
+      { category: "UI", text: "Accounts page: clicking the Sync column header now sorts by newest first; clicking again switches to oldest first. Same for the Last API Call column." },
+      { category: "UI", text: "Equinox logo in the sidebar is now 15% larger." },
+      { category: "Fix", text: "Login macro (Login button in the EB toolbar): after filling your username and password it now waits for the blue Login button to become active before clicking it, so the form actually submits instead of silently doing nothing." },
+      { category: "Fix", text: "Verify no longer times out with a slow proxy — the internal timeout has been raised from 2 minutes to 4 minutes, giving the hidden browser enough time to load Instagram and complete the login even on a sluggish connection." },
+    ],
+  },
+  {
     version: "1.0.689",
     date: "31 May 2026",
     items: [

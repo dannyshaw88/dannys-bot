@@ -2302,8 +2302,16 @@ function setupToolbarIpc(): void {
             await wait(250);
             if (pInp) { fill(pInp, ${pwd}); pInp.focus(); }
             await wait(400);
-            const btn = document.querySelector('button[type="submit"]');
-            if (btn && !btn.disabled) btn.click();
+            let btn = null;
+            for (let i = 0; i < 20; i++) {
+              const b = document.querySelector('button[type="submit"]');
+              if (b && !b.disabled) { btn = b; break; }
+              await wait(250);
+            }
+            if (btn) { btn.click(); } else {
+              pInp && pInp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+              pInp && pInp.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+            }
           })()`).catch(() => 'navigate');
         if (_needsNav === 'navigate') {
           // Not on the login page — navigate there and fill after load using the
@@ -2332,8 +2340,16 @@ function setupToolbarIpc(): void {
               await wait(300);
               fill(pInp, ${pwd}); pInp.focus();
               await wait(400);
-              const btn = document.querySelector('button[type="submit"]');
-              if (btn && !btn.disabled) btn.click();
+              let btn = null;
+              for (let i = 0; i < 20; i++) {
+                const b = document.querySelector('button[type="submit"]');
+                if (b && !b.disabled) { btn = b; break; }
+                await wait(250);
+              }
+              if (btn) { btn.click(); } else {
+                pInp && pInp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+                pInp && pInp.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+              }
             })()`).catch(() => {});
           };
           wc.once('did-finish-load', _fillAfterLoad);

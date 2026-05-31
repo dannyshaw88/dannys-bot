@@ -474,10 +474,11 @@ export function ProfilesPage() {
   const cycleSort = (field: "account" | "status" | "ip" | "followers" | "following" | "trustscore" | "sync" | "lastApiCall") => {
     let newDir: "asc" | "desc";
     if (sortField !== field) {
-      setSortField(field); setSortDir("asc");
-      newDir = "asc";
+      const defaultDir = (field === "sync" || field === "lastApiCall") ? "desc" : "asc";
+      setSortField(field); setSortDir(defaultDir);
+      newDir = defaultDir;
       localStorage.setItem("profiles:sortField", field);
-      localStorage.setItem("profiles:sortDir", "asc");
+      localStorage.setItem("profiles:sortDir", defaultDir);
     } else {
       newDir = sortDir === "asc" ? "desc" : "asc";
       setSortDir(newDir);
@@ -1691,7 +1692,7 @@ export function ProfilesPage() {
             </div>
             <div className="py-1 grid grid-cols-2">
               <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                <Upload className="w-4 h-4 shrink-0 text-muted-foreground" /> Import Profiles
+                <Upload className="w-4 h-4 shrink-0 text-cyan-500" /> Import Profiles
               </button>
               <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles

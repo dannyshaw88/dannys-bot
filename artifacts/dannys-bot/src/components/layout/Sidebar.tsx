@@ -125,7 +125,7 @@ export function Sidebar() {
 
       {/* ── Header: logo centred, then Equinox text below ── */}
       <div className="flex flex-col items-center border-b border-border/50 pt-[14px] pb-[10px] px-2">
-        <img src="/bot-logo.png" alt="Equinox" className="w-[42px] h-[42px] shrink-0 object-contain mb-[6px]" />
+        <img src="/bot-logo.png" alt="Equinox" className="w-[48px] h-[48px] shrink-0 object-contain mb-[6px]" />
         <span className="font-bold text-base tracking-tight text-foreground">
           Equi<span style={{ color: BRAND }}>nox</span>
         </span>
