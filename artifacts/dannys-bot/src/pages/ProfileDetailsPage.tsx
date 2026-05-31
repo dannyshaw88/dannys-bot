@@ -181,7 +181,7 @@ function GroupCombobox({ value, groups, onChange }: { value: string; groups: str
   return (
     <div className="max-w-[20%] relative" ref={ref}>
       <Input
-        className="h-8 text-xs pr-7 border-black"
+        className="h-8 text-xs font-bold pr-7 border-black"
         placeholder="No group"
         value={value || ""}
         onFocus={() => setOpen(true)}
@@ -396,6 +396,7 @@ export function ProfileDetailsPage() {
   ];
 
   const [syncNowStatus, setSyncNowStatus] = useState<"idle" | "syncing" | "done" | "fail">("idle");
+  const [timingInfo, setTimingInfo] = useState<string | null>(null);
   const handleSyncNow = async () => {
     setSyncNowStatus("syncing");
     try {
@@ -919,6 +920,50 @@ export function ProfileDetailsPage() {
                         </button>
                       </>
                     )}
+                    {/* ── Profile Sync — top-right ── */}
+                    <span className="text-border mx-2 select-none shrink-0">|</span>
+                    <Switch
+                      checked={!!formData?.syncEnabled}
+                      onCheckedChange={v => updateField({ syncEnabled: v })}
+                    />
+                    <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={formData?.syncIntervalMin ?? 60}
+                        onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
+                        className="h-5 text-[11px] w-9 px-1"
+                      />
+                      <span className="text-[10px] text-muted-foreground">–</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={formData?.syncIntervalMax ?? 120}
+                        onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
+                        className="h-5 text-[11px] w-9 px-1"
+                      />
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
+                    </div>
+                    <Checkbox
+                      id="syncUseHikerTopRight"
+                      checked={!!formData?.syncUseHiker}
+                      onCheckedChange={v => updateField({ syncUseHiker: !!v })}
+                    />
+                    <Label htmlFor="syncUseHikerTopRight" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-xs px-2 gap-1"
+                      disabled={syncNowStatus === "syncing"}
+                      onClick={handleSyncNow}
+                    >
+                      {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
+                      {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                      {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
+                      {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
+                      {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
+                    </Button>
                   </>
                 )}
               </div>
@@ -929,13 +974,13 @@ export function ProfileDetailsPage() {
           {!profile?.creatorMode && (
             <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
               {([
-                { value: "settings",      label: "Account Settings",         icon: Settings      },
-                { value: "follow",        label: "Follow Tool",               icon: UserPlus      },
-                { value: "unfollow",      label: "Unfollow Tool",             icon: UserMinus     },
-                { value: "contact",       label: "Contact Tool",              icon: MessageSquare },
-                { value: "human-session", label: "Human Session Emulation",   icon: Fingerprint   },
-                { value: "session-log",   label: "Session Log",               icon: Activity      },
-                { value: "create-cookie", label: "Create a Cookie",           icon: Cookie        },
+                { value: "settings",      label: "ACCOUNT SETTINGS",         icon: Settings      },
+                { value: "follow",        label: "FOLLOW TOOL",               icon: UserPlus      },
+                { value: "unfollow",      label: "UNFOLLOW TOOL",             icon: UserMinus     },
+                { value: "contact",       label: "CONTACT TOOL",              icon: MessageSquare },
+                { value: "human-session", label: "HUMAN SESSION EMULATION",   icon: Fingerprint   },
+                { value: "session-log",   label: "SESSION LOG",               icon: Activity      },
+                { value: "create-cookie", label: "CREATE A COOKIE",           icon: Cookie        },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -956,8 +1001,8 @@ export function ProfileDetailsPage() {
           {profile?.creatorMode && (
             <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
               {([
-                { value: "settings",      label: "Account Settings", icon: Settings },
-                { value: "create-cookie", label: "Create a Cookie",  icon: Cookie   },
+                { value: "settings",      label: "ACCOUNT SETTINGS", icon: Settings },
+                { value: "create-cookie", label: "CREATE A COOKIE",  icon: Cookie   },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -987,71 +1032,17 @@ export function ProfileDetailsPage() {
             onCopy={handleAccountCopy}
           />
 
-          {/* Group + Sync — top row */}
-          <div className="flex gap-6 items-start pb-2">
-            {/* Left: Group */}
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-3">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group</Label>
-              </div>
+          {/* Group — top row */}
+          <div className="pb-2">
+            <div className="flex items-center gap-3">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap shrink-0">Group</Label>
               <GroupCombobox
                 value={formData.tags || ""}
                 groups={Array.from(new Set((allProfiles ?? []).map(p => (p.tags ?? "").trim()).filter(Boolean))).sort()}
                 onChange={val => updateField({ tags: val })}
               />
-              <p className="text-[11px] text-muted-foreground">Pick an existing group or type a new name. Leave blank to remove from any group.</p>
             </div>
-
-            {/* Right: Sync controls */}
-            <div className="shrink-0 flex flex-col gap-1.5 pt-0.5 border-l border-border pl-5 min-w-[185px]">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sync</Label>
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={!!formData?.syncEnabled}
-                  onCheckedChange={v => updateField({ syncEnabled: v })}
-                />
-                <span className="text-xs font-semibold whitespace-nowrap">Auto Sync</span>
-                <div className="flex items-center gap-1 ml-1">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={formData?.syncIntervalMin ?? 60}
-                    onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
-                    className="h-6 text-xs w-11 px-1"
-                  />
-                  <span className="text-[10px] text-muted-foreground">–</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={formData?.syncIntervalMax ?? 120}
-                    onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
-                    className="h-6 text-xs w-11 px-1"
-                  />
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="syncUseHikerTop"
-                  checked={!!formData?.syncUseHiker}
-                  onCheckedChange={v => updateField({ syncUseHiker: !!v })}
-                />
-                <Label htmlFor="syncUseHikerTop" className="text-xs cursor-pointer whitespace-nowrap">HikerAPI</Label>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 text-xs px-2 gap-1 ml-auto"
-                  disabled={syncNowStatus === "syncing"}
-                  onClick={handleSyncNow}
-                >
-                  {syncNowStatus === "syncing" && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {syncNowStatus === "done" && <CheckCircle2 className="w-3 h-3 text-green-500" />}
-                  {syncNowStatus === "fail" && <XCircle className="w-3 h-3 text-destructive" />}
-                  {syncNowStatus === "idle" && <RefreshCw className="w-3 h-3" />}
-                  {syncNowStatus === "syncing" ? "Syncing…" : syncNowStatus === "done" ? "Synced!" : syncNowStatus === "fail" ? "Failed" : "Sync Now"}
-                </Button>
-              </div>
-            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Pick an existing group or type a new name. Leave blank to remove from any group.</p>
           </div>
 
           {/* Account Label */}
@@ -1449,6 +1440,23 @@ export function ProfileDetailsPage() {
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
                         <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} />
+                      </div>
+                      <div className="flex flex-col justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-2 whitespace-nowrap"
+                          onClick={() => {
+                            const minMs = formData.apiLimits.everySecondsMin < 1000 ? formData.apiLimits.everySecondsMin * 1000 : formData.apiLimits.everySecondsMin;
+                            const maxMs = formData.apiLimits.everySecondsMax < 1000 ? formData.apiLimits.everySecondsMax * 1000 : formData.apiLimits.everySecondsMax;
+                            const perCallMin = minMs / Math.max(1, formData.apiLimits.requestsMax);
+                            const perCallMax = maxMs / Math.max(1, formData.apiLimits.requestsMin);
+                            setTimingInfo(`~${(perCallMin/1000).toFixed(0)}–${(perCallMax/1000).toFixed(0)}s/call`);
+                          }}
+                        >
+                          Test Timing
+                        </Button>
+                        {timingInfo && <span className="text-[10px] text-green-600 font-semibold text-center">{timingInfo}</span>}
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>

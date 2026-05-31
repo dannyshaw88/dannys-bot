@@ -75,18 +75,45 @@ function extractCheckpointUrl(err: any): string | undefined {
 
 /** Enforce the per-profile API rate limit between individual cold-start calls.
  *  Uses the exact same formula as InstagramWebClient.apiThrottle() so that
- *  every API call — including the login/verify handshake — obeys the user's settings. */
+ *  every API call — including the login/verify handshake — obeys the user's settings.
+ *
+ *  Unit-aware: everySecondsMin/Max can be stored as milliseconds (≥1000, the
+ *  current UI format) OR as bare seconds (<1000, the legacy schema default of
+ *  30/60).  Values below 1000 are converted to ms automatically so old rows
+ *  produce the same real-world timing as new ones.
+ *
+ *  Null/undefined safety: when apiLimits is missing entirely (column was NULL
+ *  for accounts created before the field existed), falls back to a 2–5 s gap
+ *  between calls instead of firing with zero delay. */
 async function loginApiThrottle(
   apiLimits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number } | null | undefined,
 ): Promise<void> {
-  if (!apiLimits) return;
-  const reqMin = Math.max(1, apiLimits.requestsMin);
-  const reqMax = Math.max(reqMin, apiLimits.requestsMax);
-  const secMin = Math.max(0, apiLimits.everySecondsMin / 1000);
-  const secMax = Math.max(secMin, apiLimits.everySecondsMax / 1000);
-  const calls   = reqMin  + Math.random() * (reqMax  - reqMin);
-  const secs    = secMin  + Math.random() * (secMax  - secMin);
-  const delayMs = Math.floor((secs / Math.max(1, calls)) * 1000);
+  // Convert a stored value to milliseconds regardless of whether it was saved
+  // as bare seconds (<1000, legacy schema default) or as ms (≥1000, UI format).
+  const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+
+  let minMs: number;
+  let maxMs: number;
+  let reqMin: number;
+  let reqMax: number;
+
+  if (!apiLimits) {
+    // Null safety: column was never set for this account (pre-dating the field).
+    // Use a conservative 2–5 s gap so the verify sequence never fires machine-speed.
+    minMs  = 2000;
+    maxMs  = 5000;
+    reqMin = 1;
+    reqMax = 1;
+  } else {
+    reqMin = Math.max(1, apiLimits.requestsMin);
+    reqMax = Math.max(reqMin, apiLimits.requestsMax);
+    minMs  = Math.max(0, toMs(apiLimits.everySecondsMin));
+    maxMs  = Math.max(minMs, toMs(apiLimits.everySecondsMax));
+  }
+
+  const calls   = reqMin + Math.random() * (reqMax - reqMin);
+  const windowMs = minMs + Math.random() * (maxMs - minMs);
+  const delayMs  = Math.floor(windowMs / Math.max(1, calls));
   if (delayMs > 10) {
     await new Promise<void>(r => setTimeout(r, delayMs));
   }

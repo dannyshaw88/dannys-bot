@@ -395,9 +395,11 @@ export class InstagramWebClient {
   setApiLimits(limits: { requestsMin: number; requestsMax: number; everySecondsMin: number; everySecondsMax: number }) {
     this.throttleRequestsMin = Math.max(1, limits.requestsMin);
     this.throttleRequestsMax = Math.max(1, limits.requestsMax);
-    // everySecondsMin/Max are stored as milliseconds in the DB; convert to seconds for throttle logic
-    this.throttleSecondsMin  = Math.max(0, limits.everySecondsMin / 1000);
-    this.throttleSecondsMax  = Math.max(0, limits.everySecondsMax / 1000);
+    // Unit-aware conversion: values <1000 are legacy bare-seconds (schema default was 30/60);
+    // values ≥1000 are milliseconds (current UI format).  Convert all to seconds for throttle logic.
+    const toMs = (v: number) => (v < 1000 ? v * 1000 : v);
+    this.throttleSecondsMin  = Math.max(0, toMs(limits.everySecondsMin) / 1000);
+    this.throttleSecondsMax  = Math.max(0, toMs(limits.everySecondsMax) / 1000);
   }
 
   private async apiThrottle(): Promise<void> {

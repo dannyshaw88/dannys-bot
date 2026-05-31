@@ -68,8 +68,8 @@ export const profiles = sqliteTable("profiles", {
   apiLimits: text("api_limits", { mode: "json" }).default({
     requestsMin: 5,
     requestsMax: 10,
-    everySecondsMin: 30,
-    everySecondsMax: 60
+    everySecondsMin: 30000,
+    everySecondsMax: 60000
   }),
   browserDirectConnection: integer("browser_direct_connection", { mode: "boolean" }).default(true),
   credentialsDirty: integer("credentials_dirty", { mode: "boolean" }).default(true),

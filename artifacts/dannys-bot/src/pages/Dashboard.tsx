@@ -60,6 +60,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.692",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "API call throttle now correctly reads your Min/Max ms settings — calls are now properly spaced 25–60 seconds apart instead of firing instantly." },
+      { category: "UI", text: "Account Settings tab labels and sidebar sub-tabs are now ALL CAPS." },
+      { category: "UI", text: "Profile Sync controls (Auto Sync, interval, HikerAPI, Sync Now) moved to the top-right header of the Account Settings page." },
+      { category: "UI", text: "Group label and dropdown are now on the same row; group name text is bold." },
+      { category: "UI", text: "Test Timing button added next to Max (ms) field — shows the expected per-call delay in seconds based on your current settings." },
+      { category: "UI", text: "Equinox logo in the sidebar is 15% larger." },
+    ],
+  },
+  {
     version: "1.0.691",
     date: "31 May 2026",
     items: [

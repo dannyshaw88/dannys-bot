@@ -87,11 +87,11 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
 }
 
 const TRUST_SCORE_TABS = [
-  { value: "settings",      label: "Settings"      },
-  { value: "follow",        label: "Follow Tool"   },
-  { value: "unfollow",      label: "Unfollow Tool" },
-  { value: "contact",       label: "Contact Tool"  },
-  { value: "human-session", label: "Human Session Emulation" },
+  { value: "settings",      label: "ACCOUNT SETTINGS"       },
+  { value: "follow",        label: "FOLLOW TOOL"             },
+  { value: "unfollow",      label: "UNFOLLOW TOOL"           },
+  { value: "contact",       label: "CONTACT TOOL"            },
+  { value: "human-session", label: "HUMAN SESSION EMULATION" },
 ];
 
 
@@ -125,7 +125,7 @@ export function Sidebar() {
 
       {/* ── Header: logo centred, then Equinox text below ── */}
       <div className="flex flex-col items-center border-b border-border/50 pt-[14px] pb-[10px] px-2">
-        <img src="/bot-logo.png" alt="Equinox" className="w-[48px] h-[48px] shrink-0 object-contain mb-[6px]" />
+        <img src="/bot-logo.png" alt="Equinox" className="w-[55px] h-[55px] shrink-0 object-contain mb-[6px]" />
         <span className="font-bold text-base tracking-tight text-foreground">
           Equi<span style={{ color: BRAND }}>nox</span>
         </span>
