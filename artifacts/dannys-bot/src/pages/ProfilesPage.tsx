@@ -1416,16 +1416,15 @@ export function ProfilesPage() {
                 const allInGroupSelected = groupIds.every(id => selectedProfileIds.includes(id));
                 return (
                   <div key={groupKey}>
-                    {groupKey !== "__ungrouped__" && (
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
-                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 min-w-0 text-left">
-                            {isCollapsed
-                              ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                            <span className="text-sm font-bold text-foreground truncate">{displayName}</span>
-                          </button>
-                          {/* Group icon/favicon picker — click to browse for an image, click again to replace */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-background border-b border-border sticky top-0 z-10 select-none">
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <button onClick={() => toggleGroupCollapse(groupKey)} className="flex items-center gap-2 min-w-0 text-left">
+                          {isCollapsed
+                            ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                          <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground" : "text-foreground"}`}>{displayName}</span>
+                        </button>
+                        {groupKey !== "__ungrouped__" && (
                           <button
                             onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
                             title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
@@ -1436,20 +1435,20 @@ export function ProfilesPage() {
                               : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
                             }
                           </button>
-                          <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (allInGroupSelected) setSelectedProfileIds(prev => prev.filter(id => !groupIds.includes(id)));
-                            else setSelectedProfileIds(prev => [...new Set([...prev, ...groupIds])]);
-                          }}
-                          className="text-[10px] text-primary hover:underline shrink-0 font-medium"
-                        >
-                          {allInGroupSelected ? "None" : "All"}
-                        </button>
+                        )}
+                        <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
                       </div>
-                    )}
-                    {(groupKey === "__ungrouped__" || !isCollapsed) && groupProfiles.map((p, i) => renderProfileRow(p, i))}
+                      <button
+                        onClick={() => {
+                          if (allInGroupSelected) setSelectedProfileIds(prev => prev.filter(id => !groupIds.includes(id)));
+                          else setSelectedProfileIds(prev => [...new Set([...prev, ...groupIds])]);
+                        }}
+                        className="text-[10px] text-primary hover:underline shrink-0 font-medium"
+                      >
+                        {allInGroupSelected ? "None" : "All"}
+                      </button>
+                    </div>
+                    {!isCollapsed && groupProfiles.map((p, i) => renderProfileRow(p, i))}
                   </div>
                 );
               });

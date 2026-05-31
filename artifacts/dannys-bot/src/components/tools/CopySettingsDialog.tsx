@@ -180,7 +180,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const profileGroups = useMemo(() => {
     const map = new Map<string, Profile[]>();
     for (const p of profiles) {
-      const key = (p.tags ?? "").trim() || "No Group Assigned";
+      const key = (p.tags ?? "").trim() || "Ungrouped";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(p);
     }
@@ -289,7 +289,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   };
 
   const handleSelectAllFiltered = () => {
-    setTargets(prev => { const n = new Set(prev); filteredProfiles.forEach(p => n.add(p.id)); return n; });
+    setTargets(new Set(filteredProfiles.map(p => p.id)));
   };
 
   const handleSelectNoneFiltered = () => {
@@ -433,7 +433,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                   <div
                     key={p.id}
                     className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-muted/30 transition-colors"
-                    onClick={() => toggleTarget(p.id)}
                     onMouseDown={e => {
                       if (e.button !== 0) return;
                       e.preventDefault();

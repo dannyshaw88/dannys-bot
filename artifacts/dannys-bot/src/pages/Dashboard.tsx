@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.686",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings: clicking a single account in the list now correctly toggles it — the drag-to-select feature introduced a double-toggle bug that caused every click to cancel itself out." },
+      { category: "Fix", text: "Copy Settings: pressing ALL now selects only the accounts currently visible in the list (respecting any active search/status filter) — previously it added to any accounts that were already ticked from a prior session, which could silently copy settings to unintended accounts." },
+      { category: "Fix", text: "Copy Settings: accounts with no group are now labelled 'Ungrouped' in the group quick-select dropdown, matching the name used everywhere else." },
+      { category: "Improvement", text: "Accounts page group mode: ungrouped accounts now appear under a proper 'Ungrouped' section header (dimmed, collapsible) instead of floating below all groups with no label." },
+    ],
+  },
+  {
     version: "1.0.685",
     date: "31 May 2026",
     items: [
