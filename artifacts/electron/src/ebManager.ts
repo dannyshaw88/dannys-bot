@@ -169,6 +169,7 @@ interface EbEntry {
   username: string;
   proxy?: { host: string; port: number; user?: string; pass?: string; type?: string };
   partition: string;
+  warmupActive?: boolean;
 }
 export const ebMap = new Map<number, EbEntry>();
 
@@ -1555,6 +1556,12 @@ export async function openEbWindow(opts: {
   // warmup comment) to avoid mid-reel redirects. This listener only fires on
   // did-finish-load (hard navigations), not on the SPA reel transitions.
   if (profileId === -1) {
+    // Scroll to top on every hard navigation — the signup page sometimes loads
+    // scrolled down into the middle of the form, which confuses users.
+    win.webContents.on("did-finish-load", () => {
+      win.webContents.executeJavaScript("window.scrollTo(0,0);").catch(() => {});
+    });
+
     const _GHOST_OVERLAY_JS = `(function(){
       function rect(el){
         if(!el)return null;
@@ -1601,7 +1608,9 @@ export async function openEbWindow(opts: {
 
     let _ghostOverlayRunning = false;
     const cdpDismissGhostOverlay = async () => {
-      if (win.isDestroyed() || _ghostOverlayRunning) return;
+      // Skip during warmup — dismissing the signup overlay mid-reel causes Instagram
+      // to redirect to the homepage, breaking the warmup navigation sequence.
+      if (win.isDestroyed() || _ghostOverlayRunning || ebMap.get(-1)?.warmupActive) return;
       _ghostOverlayRunning = true;
       try {
         try { win.webContents.debugger.attach("1.3"); } catch {}
@@ -2660,6 +2669,9 @@ export function startEbIpcServer(
         };
 
         // Run warmup asynchronously — don't block the IPC response
+        // Set warmupActive so cdpDismissGhostOverlay doesn't fire during reel viewing.
+        const _warmupEntry = ebMap.get(-1);
+        if (_warmupEntry) _warmupEntry.warmupActive = true;
         (async () => {
           const wc = e.win.webContents;
 
@@ -2908,9 +2920,13 @@ export function startEbIpcServer(
             relayStep(`Warm-up error: ${err?.message ?? "unknown"}`);
           } finally {
             relayDone();
+            const _weDone = ebMap.get(-1);
+            if (_weDone) _weDone.warmupActive = false;
           }
         })().catch((err: any) => {
           console.log(`[warmup] OUTER CATCH: ${err?.message ?? String(err)}`);
+          const _weDone2 = ebMap.get(-1);
+          if (_weDone2) _weDone2.warmupActive = false;
           relayDone();
         });
 

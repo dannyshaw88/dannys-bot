@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.679",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings now reliably remembers your selected accounts and options between opens — the save-on-mount bug that was clearing your selection has been resolved." },
+      { category: "Fix", text: "Human Session 'Randomise timing' now correctly staggers each account's first session start using the Copy Settings stagger offset, so accounts no longer all fire simultaneously." },
+      { category: "Fix", text: "Account tool tabs (Account Settings, Follow Tool, Unfollow Tool etc.) now display in full foreground colour with a cyan underline on the active tab, matching the sidebar navigation style." },
+      { category: "Fix", text: "Ghost browser signup page now always scrolls to the top on load — the page was previously opening mid-scroll." },
+      { category: "Fix", text: "Pre-signup reel warmup flow no longer triggers the signup overlay dismissal — the dismiss logic is now suppressed during warmup to prevent Instagram from redirecting to the homepage." },
+    ],
+  },
+  {
     version: "1.0.678",
     date: "31 May 2026",
     items: [

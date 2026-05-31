@@ -101,6 +101,13 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const isDragSelecting = useRef(false);
   const dragAddMode     = useRef(true);
 
+  // Refs that mirror state — used to capture current values on dialog close
+  // without needing to re-register the save effect on every state change.
+  const targetsRef  = useRef<Set<number>>(targets);
+  const selectedRef = useRef<Set<string>>(selected);
+  useEffect(() => { targetsRef.current  = targets;  }, [targets]);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+
   // Stop drag on mouseup anywhere (including outside the list)
   useEffect(() => {
     const onMouseUp = () => { isDragSelecting.current = false; };
@@ -109,23 +116,11 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   }, []);
 
   // ── Persistence ────────────────────────────────────────────────────────────
-  // Selections are stored per-dialog (keyed by title) and survive dialog
-  // close/reopen. Only the NONE / Deselect All buttons (or a software
-  // restart) clear the selection — closing the dialog does NOT clear it.
-
-  // Save targets to localStorage whenever they change
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageTargetsKey(title), JSON.stringify([...targets]));
-    } catch {}
-  }, [targets, title]);
-
-  // Save settings selection to localStorage whenever it changes
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageSettingsKey(title), JSON.stringify([...selected]));
-    } catch {}
-  }, [selected, title]);
+  // Save on CLOSE (open → false): write the refs (current state) to localStorage.
+  // Restore on OPEN (false → true): read from localStorage and set state.
+  //
+  // We NEVER save on every state change — that fires on component mount with an
+  // empty Set and immediately wipes any previously stored selection.
 
   // Keep targets in sync with the profiles list — remove stale IDs for deleted accounts
   useEffect(() => {
@@ -137,7 +132,6 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
     });
   }, [profiles]);
 
-  // On dialog open: restore selections from localStorage (do NOT clear them)
   useEffect(() => {
     if (open) {
       // Restore target accounts
@@ -148,7 +142,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
           const validIds = new Set(profiles.map(p => p.id));
           setTargets(new Set(ids.filter(id => validIds.has(id))));
         }
-      } catch { /* no stored value */ }
+      } catch {}
 
       // Restore settings selection
       try {
@@ -157,13 +151,19 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
           const keys: string[] = JSON.parse(raw);
           setSelected(new Set(keys));
         }
-      } catch { /* no stored value */ }
+      } catch {}
 
       setSearch("");
       setStatusFilter("");
       setSortBy("name");
       setSortDir("asc");
       setStatus("idle");
+    } else {
+      // Save to localStorage when dialog closes — refs hold the final state
+      try {
+        localStorage.setItem(storageTargetsKey(title), JSON.stringify([...targetsRef.current]));
+        localStorage.setItem(storageSettingsKey(title), JSON.stringify([...selectedRef.current]));
+      } catch {}
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 

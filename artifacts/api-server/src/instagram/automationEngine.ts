@@ -753,9 +753,18 @@ class AutomationEngine {
     // On user toggle-on (runImmediately = true): nextHumanSessionAt = 0 → fires right away.
     if (!runImmediately) {
       const si = (_tool.settings ?? {}) as any;
-      const waitMs = randInt((si.delayMin ?? 30) * 60_000, (si.delayMax ?? 60) * 60_000);
-      state.nextHumanSessionAt = Date.now() + waitMs;
-      console.log(`[engine] @${profile.username}: startup — first human session in ${Math.round(waitMs / 60000)}min`);
+      const staggerMs = (si.staggerOffsetMins ?? 0) * 60_000;
+      if (si.staggerOffsetMins) {
+        storage.updateTool(_tool.id, { settings: { ...si, staggerOffsetMins: 0 } }).catch(() => {});
+      }
+      if (staggerMs) {
+        state.nextHumanSessionAt = Date.now() + staggerMs;
+        console.log(`[engine] @${profile.username}: startup — human session staggered ${si.staggerOffsetMins}min`);
+      } else {
+        const waitMs = randInt((si.delayMin ?? 30) * 60_000, (si.delayMax ?? 60) * 60_000);
+        state.nextHumanSessionAt = Date.now() + waitMs;
+        console.log(`[engine] @${profile.username}: startup — first human session in ${Math.round(waitMs / 60000)}min`);
+      }
     }
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
