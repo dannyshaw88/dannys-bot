@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.682",
+    date: "31 May 2026",
+    items: [
+      { category: "Improvement", text: "Device pool expanded from 86 to 118 unique devices — duplicate models removed, 6 new 1440p flagship profiles added (Galaxy S23 Ultra, S22 Ultra, S21 Ultra, Note 20 Ultra, OnePlus 12, Pixel 7 Pro), and 5 budget 720p devices added for a more realistic spread." },
+      { category: "Improvement", text: "Seven new locales added to the device pool: Brazilian Portuguese, German, French, Mexican Spanish, Indonesian, Australian and Canadian English — reducing the US-only bias from 69% to 57%." },
+      { category: "Improvement", text: "29 stale embedded Chrome versions (108–121, over two years out of date) updated to the 124–136 range — old Chrome versions on new Android phones are a strong bot signal." },
+      { category: "Improvement", text: "Ghost Browser GPU fingerprint pool expanded from 8 to 20 GPU options covering Adreno 619–750, Mali-G52 through G920, and all three Tensor generations." },
+    ],
+  },
+  {
     version: "1.0.681",
     date: "31 May 2026",
     items: [

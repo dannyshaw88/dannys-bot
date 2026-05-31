@@ -47,12 +47,24 @@ interface GhostFingerprint {
 const FP_GPUS = [
   { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 750" },
   { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 735" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 730" },
   { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 720" },
   { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 710" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 660" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 650" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 642L" },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 619" },
   { vendor: "ARM",                         renderer: "Mali-G920 MC10" },
+  { vendor: "ARM",                         renderer: "Mali-G720 MC12" },
+  { vendor: "ARM",                         renderer: "Mali-G715 MC11" },
   { vendor: "ARM",                         renderer: "Mali-G710 MC10" },
-  { vendor: "Google",                      renderer: "Tensor G3" },
+  { vendor: "ARM",                         renderer: "Mali-G615 MC6" },
+  { vendor: "ARM",                         renderer: "Mali-G610 MC6" },
+  { vendor: "ARM",                         renderer: "Mali-G610 MC4" },
+  { vendor: "ARM",                         renderer: "Mali-G68 MC4" },
   { vendor: "Google",                      renderer: "Tensor G4" },
+  { vendor: "Google",                      renderer: "Tensor G3" },
+  { vendor: "Google",                      renderer: "Tensor G2" },
 ];
 
 const _warmupDefaults = {
