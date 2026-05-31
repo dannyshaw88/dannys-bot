@@ -60,6 +60,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.691",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Verify / API call timeout raised to 10 minutes — Instagram API calls are intentionally slow and must never be cut short." },
+    ],
+  },
+  {
     version: "1.0.690",
     date: "31 May 2026",
     items: [
