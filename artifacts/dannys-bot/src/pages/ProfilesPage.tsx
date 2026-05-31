@@ -274,6 +274,8 @@ export function ProfilesPage() {
   const [addProfileCount, setAddProfileCount] = useState("1");
   const [addProfileCreating, setAddProfileCreating] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [tsSubOpen, setTsSubOpen] = useState(false);
+  const [tsVersion, setTsVersion] = useState(0);
   const [eqxImporting, setEqxImporting] = useState(false);
   const eqxImportRef = useRef<HTMLInputElement>(null);
   const [jarveeImporting, setJarveeImporting] = useState(false);
@@ -871,6 +873,24 @@ export function ProfilesPage() {
     }
   }, [selectedProfileIds, updateProfileMutation, toast]);
 
+  // ── Bulk: Assign TrustScore ───────────────────────────────────────────────
+  const handleBulkAssignTrustScore = useCallback((levelId: string | null) => {
+    if (selectedProfileIds.length === 0) return;
+    for (const id of selectedProfileIds) {
+      setTrustScore(id, levelId);
+    }
+    const level = getTrustLevels().find(l => l.id === levelId);
+    toast({
+      title: levelId ? "TrustScore Assigned" : "TrustScore Cleared",
+      description: levelId
+        ? `${selectedProfileIds.length} account(s) assigned ${level?.label ?? levelId}.`
+        : `TrustScore cleared on ${selectedProfileIds.length} account(s).`,
+    });
+    setTsVersion(v => v + 1);
+    setActionsOpen(false);
+    setTsSubOpen(false);
+  }, [selectedProfileIds, toast]);
+
   // ── Set Group ─────────────────────────────────────────────────────────────
   const handleSetGroup = useCallback(async () => {
     if (selectedProfileIds.length === 0) return;
@@ -1252,7 +1272,7 @@ export function ProfilesPage() {
                     );
                     if (key === "trustscore") return (
                       <div key={key} style={{ width: profColWidths.trustscore }} className="flex items-center justify-center shrink-0" onMouseDown={e => e.stopPropagation()}>
-                        <TrustScoreBadge profileId={profile.id} />
+                        <TrustScoreBadge key={`ts-${profile.id}-${tsVersion}`} profileId={profile.id} />
                       </div>
                     );
                     if (key === "active") return (
@@ -1835,6 +1855,47 @@ export function ProfilesPage() {
                 <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
                 <span className="flex-1">Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+C</span>
               </button>
+              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              {/* Assign TrustScore */}
+              <button
+                onClick={() => setTsSubOpen(o => !o)}
+                disabled={selectedProfileIds.length === 0}
+                className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className="flex h-4 w-4 items-center justify-center rounded-full shrink-0" style={{ background: "#1AD2F2", border: "1px solid #0eb8d4" }}>
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" /></svg>
+                </span>
+                <span className="flex-1">Assign TrustScore{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span>
+                <svg className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${tsSubOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+              {tsSubOpen && (
+                <div className="col-span-2 px-4 pb-3">
+                  <div className="flex flex-wrap gap-1.5 max-h-[180px] overflow-y-auto">
+                    {getTrustLevels().map(lvl => {
+                      const Icon = lvl.icon;
+                      return (
+                        <button
+                          key={lvl.id}
+                          onClick={() => handleBulkAssignTrustScore(lvl.id)}
+                          className="flex items-center gap-1 rounded-full px-2 py-0.5 transition-opacity hover:opacity-75"
+                          style={{ background: lvl.bg, border: `1px solid ${lvl.border}`, cursor: "pointer" }}
+                          title={lvl.label}
+                        >
+                          <Icon size={10} color={lvl.text} fill={lvl.text} strokeWidth={2} />
+                          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: lvl.text, whiteSpace: "nowrap" }}>{lvl.label}</span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => handleBulkAssignTrustScore(null)}
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-muted-foreground hover:text-destructive hover:bg-red-50 transition-colors"
+                      style={{ border: "1px dashed #94a3b8", fontSize: 10, fontWeight: 600, letterSpacing: "0.05em", whiteSpace: "nowrap" }}
+                    >
+                      Clear score
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="col-span-2 mx-4 my-1 border-t border-border" />
               <button
                 onClick={() => { setActionsOpen(false); handleBulkLock(true); }}

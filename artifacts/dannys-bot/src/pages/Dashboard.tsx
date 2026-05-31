@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.685",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Verify button no longer falsely marks valid accounts as 'Account Disabled' — the automated login was being flagged by Instagram's bot detection and misclassified; it now correctly shows as a security challenge (open the EB, log in manually, then click Verify)." },
+      { category: "Improvement", text: "Silent verify (the hidden browser that runs when you click Verify) now sets full Client Hints headers matching the account's user agent, making the automated login less detectable by Instagram." },
+      { category: "Improvement", text: "Cookie consent banner is now dismissed via CDP before credentials are filled in during silent verify, preventing the banner from blocking the submit button." },
+      { category: "Improvement", text: "After the cookie banner is accepted in the interactive embedded browser, the app now automatically clicks the 'Log In' button on the Instagram splash page using a trusted CDP click." },
+      { category: "Improvement", text: "Template accounts are now excluded from the proxy auto-link flow, so they never get a proxy accidentally assigned to them." },
+    ],
+  },
+  {
     version: "1.0.684",
     date: "31 May 2026",
     items: [

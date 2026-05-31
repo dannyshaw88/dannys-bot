@@ -147,11 +147,15 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
       // Banner was visible and is now gone (main process clicked it) — navigate to login.
       clearInterval(window.__eq_cookie_tick);window.__eq_cookie_tick=null;
       setTimeout(function(){
-        if(AF&&window.__eq_doAutoFill())return;
+        if(AF&&window.__eq_fill_done)return;
         var LOGIN_RE=/^log\s*in$/i;
         var loginEl=Array.from(document.querySelectorAll('a[href*="accounts/login"],a[href*="/login/"]')).find(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
-        if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
-        if(loginEl){loginEl.click();}
+        if(!loginEl){loginEl=Array.from(document.querySelectorAll('a,button,[role="button"]')).find(function(el){var t=(el.innerText||el.textContent||'').trim();return LOGIN_RE.test(t)&&el.getBoundingClientRect().width>0;});}
+        if(loginEl){
+          var r2=loginEl.getBoundingClientRect();
+          window.__eq_postCkLoginPos={x:Math.round(r2.left+r2.width/2),y:Math.round(r2.top+r2.height/2)};
+          loginEl.click();
+        }
       },800);
     }
   },500);}
@@ -869,10 +873,41 @@ async function doAutoLogin(
   username: string,
   password: string,
   twoFAKey: string,
+  userAgent?: string,
 ): Promise<{ ok: boolean; message: string }> {
   const wc  = win.webContents;
   const ses = electronSession.fromPartition(ebPartition(profileId));
   const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+  // Apply CDP user-agent override so Client Hints (Sec-CH-UA-*) headers match
+  // the declared UA — same approach as openEbWindow.  Without this the hidden
+  // window advertises "Windows / Mobile: false" via Client Hints regardless of
+  // setUserAgent(), which Instagram fingerprints as an automation bot.
+  if (userAgent) {
+    try {
+      try { wc.debugger.attach("1.3"); } catch {}
+      const _chromeMajor = (userAgent.match(/Chrome\/(\d+)/)?.[1]) ?? "131";
+      const _isMob = userAgent.includes("Mobile") || userAgent.includes("Android");
+      await wc.debugger.sendCommand("Emulation.setUserAgentOverride", {
+        userAgent,
+        acceptLanguage: "en-US,en;q=0.9",
+        platform: _isMob ? "Linux armv8l" : "Win32",
+        userAgentMetadata: {
+          brands: [
+            { brand: "Chromium",      version: _chromeMajor },
+            { brand: "Google Chrome", version: _chromeMajor },
+            { brand: "Not-A.Brand",   version: "99" },
+          ],
+          fullVersion: `${_chromeMajor}.0.0.0`,
+          platform: _isMob ? "Android" : "Windows",
+          platformVersion: _isMob ? "10" : "10.0.0",
+          architecture: _isMob ? "arm" : "x86",
+          model: "",
+          mobile: _isMob,
+        },
+      });
+    } catch {}
+  }
 
   // Navigate to login page
   try {
@@ -885,6 +920,44 @@ async function doAutoLogin(
     return { ok: false, message: `Failed to load login page: ${e?.message}` };
   }
   await delay(1500);
+
+  // ── Dismiss cookie banner before filling credentials ─────────────────────
+  // Instagram overlays a cookie consent modal on the login page in some regions.
+  // The banner does not prevent inputs from being found in the DOM, but it can
+  // block the submit button click — dismiss it first via CDP so form submit works.
+  {
+    const _CK_ACCEPT = ['allow all cookies','accept all cookies','allow all','accept all',
+      'allow essential and optional cookies','accept cookies','allow cookies',
+      'alle cookies akzeptieren','accepter tout','aceptar todo','accetta tutto','tillåt alla','alle accepteren'];
+    const ckDetectJs = `(() => {
+      const A = ${JSON.stringify(_CK_ACCEPT)};
+      function m(b) {
+        if (!b || !b.getBoundingClientRect) return null;
+        const r = b.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return null;
+        const t = (b.innerText||b.textContent||'').trim().toLowerCase();
+        if (A.indexOf(t) === -1) return null;
+        return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) };
+      }
+      let b = document.querySelector('[data-cookiebanner="accept_button"]')
+           || document.querySelector('[data-testid="cookie-policy-banner-accept"]');
+      if (b) { const p = m(b); if (p) return p; }
+      const c = document.querySelector('[data-cookiebanner]') || document.querySelector('[class*="CookieBanner"],[class*="cookie-banner"],[id*="cookie"]');
+      if (c) { for (const el of c.querySelectorAll('button,[role="button"]')) { const p = m(el); if (p) return p; } }
+      for (const el of document.querySelectorAll('button,[role="button"]')) { const p = m(el); if (p) return p; }
+      return null;
+    })()`;
+    const ckPos = await wc.executeJavaScript(ckDetectJs).catch(() => null) as { x: number; y: number } | null;
+    if (ckPos) {
+      try {
+        try { wc.debugger.attach("1.3"); } catch {}
+        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await delay(60);
+        await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
+        await delay(1500);
+      } catch {}
+    }
+  }
 
   // Fill credentials using React-compatible native setter
   const fillResult: boolean = await wc.executeJavaScript(`
@@ -962,13 +1035,19 @@ async function doAutoLogin(
   const finalUrl = wc.getURL();
 
   // Check for challenge redirect
-  if (
-    finalUrl.includes("update_risky_contactpoint") ||
-    finalUrl.includes("/challenge/") ||
-    finalUrl.includes("accounts/suspended") ||
-    finalUrl.includes("accounts/disabled")
-  ) {
+  if (finalUrl.includes("update_risky_contactpoint") || finalUrl.includes("/challenge/")) {
     return { ok: false, message: `Instagram challenge detected: ${finalUrl}` };
+  }
+  if (finalUrl.includes("accounts/suspended")) {
+    return { ok: false, message: `Instagram is asking this account to confirm it is human (URL: ${finalUrl.slice(0, 80)})` };
+  }
+  // accounts/disabled after an automated login is most often a bot-detection
+  // security check, NOT a permanent ban — the account works fine when the user
+  // logs in manually.  Return a "captcha" style message (no "disabled" keyword)
+  // so the route classifies it as "captcha" and prompts the user to open the EB,
+  // rather than permanently marking the account as account_disabled.
+  if (finalUrl.includes("accounts/disabled")) {
+    return { ok: false, message: `Instagram showed a security verification page during automated login. Open the embedded browser for this account, log in manually, then click Verify again.` };
   }
 
   // Verify session cookie exists
@@ -1623,6 +1702,45 @@ export async function openEbWindow(opts: {
         const stillThere = await win.webContents.executeJavaScript(_COOKIE_DETECT_JS).catch(() => null);
         if (!stillThere) {
           _ebLog(`CookieBanner dismissed after ${attempt + 1} attempt(s)`);
+          // After banner dismissal: if we're on the Instagram splash page (not on
+          // the login form yet), detect and click the "Log In" button via CDP so
+          // the navigation to accounts/login/ fires — which then triggers the
+          // did-navigate auto-fill handler.
+          if (!win.isDestroyed()) {
+            await new Promise(r => setTimeout(r, 800));
+            const _currentUrl = win.webContents.getURL();
+            const _isSplash = _currentUrl.includes("instagram.com")
+              && !_currentUrl.includes("accounts/login")
+              && !_currentUrl.includes("two_factor")
+              && !_currentUrl.startsWith("chrome-error://");
+            if (_isSplash) {
+              const _loginBtnJs = `(() => {
+                const LOGIN_RE = /^log\\s*in$/i;
+                function p(el) {
+                  if (!el) return null;
+                  const r = el.getBoundingClientRect();
+                  if (r.width <= 0 || r.height <= 0) return null;
+                  return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) };
+                }
+                let el = document.querySelector('a[href*="accounts/login"], a[href*="/login/"]');
+                if (el) { const pos = p(el); if (pos) return pos; }
+                for (const e of document.querySelectorAll('a, button, [role="button"]')) {
+                  const t = (e.innerText || e.textContent || '').trim();
+                  if (LOGIN_RE.test(t)) { const pos = p(e); if (pos) return pos; }
+                }
+                return null;
+              })()`;
+              const _loginPos = await win.webContents.executeJavaScript(_loginBtnJs).catch(() => null) as { x: number; y: number } | null;
+              if (_loginPos) {
+                _ebLog(`CookieBanner post-dismiss: splash page — clicking Log In at (${_loginPos.x},${_loginPos.y})`);
+                try {
+                  await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: _loginPos.x, y: _loginPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                  await new Promise(r => setTimeout(r, 60));
+                  await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: _loginPos.x, y: _loginPos.y, button: "left", clickCount: 1, modifiers: 0 });
+                } catch {}
+              }
+            }
+          }
           break;
         }
       }
@@ -2567,7 +2685,7 @@ export function startEbIpcServer(
           });
           e = ebMap.get(pid)!;
         }
-        const result = await doAutoLogin(pid, e.win, body.username, body.password, body.twoFAKey ?? "");
+        const result = await doAutoLogin(pid, e.win, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
         return send(res, 200, result);
       }
 
@@ -2644,7 +2762,7 @@ export function startEbIpcServer(
         }
 
         try {
-          const loginResult = await doAutoLogin(pid, hiddenWin, body.username, body.password, body.twoFAKey ?? "");
+          const loginResult = await doAutoLogin(pid, hiddenWin, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
           const c1 = await ses.cookies.get({ domain: ".instagram.com" });
           const c2 = await ses.cookies.get({ domain: "instagram.com" });
           const seen = new Set<string>();

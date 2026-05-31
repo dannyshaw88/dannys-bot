@@ -247,7 +247,7 @@ export function ProxiesPage() {
   const { data: proxies = [], isLoading: proxiesLoading } = useProxies();
   const { data: profiles = [] } = useProfiles();
   const { data: creatorProfiles = [] } = useCreatorProfiles();
-  const allProfiles = [...profiles, ...creatorProfiles];
+  const allProfiles = [...profiles, ...creatorProfiles].filter(p => !p.isTemplate);
   const createProxyMutation = useCreateProxy();
   const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
