@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.677",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser warmup no longer redirects to the Instagram homepage — the warmup now watches reels passively without attempting to close the signup/login dialog (closing it was what triggered the redirect)." },
+      { category: "UI", text: "TrustScores page title and subtitle are now left-aligned." },
+      { category: "Fix", text: "TrustScore badge columns 2–5 now stay aligned even when the last row has fewer than 5 badges (items 16–19 no longer drift out of position)." },
+    ],
+  },
+  {
     version: "1.0.676",
     date: "31 May 2026",
     items: [

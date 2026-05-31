@@ -161,8 +161,8 @@ export function TrustScoresPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 flex flex-col items-center gap-4">
-        <div className="text-center">
+      <div className="p-6 flex flex-col gap-4">
+        <div>
           <h1 className="text-3xl font-bold tracking-tight">TrustScores</h1>
           <p className="text-sm text-muted-foreground mt-1">
             A section to assign and configure trustscores to accounts
@@ -171,7 +171,7 @@ export function TrustScoresPage() {
 
         <div className="space-y-1 w-full overflow-x-auto">
           {rows.map((row, rowIdx) => (
-            <div key={rowIdx} className="flex gap-2 items-center justify-center">
+            <div key={rowIdx} className="flex gap-2 items-center">
               {row.map((level, colIdx) => {
                 const globalIdx = rowIdx * 5 + colIdx;
                 const Icon = level.icon;
