@@ -419,7 +419,7 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
     setFileName(file.name);
     setResults(null);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const buf = e.target?.result as ArrayBuffer;
       try {
         const bytes = new Uint8Array(buf);
@@ -432,12 +432,32 @@ export function ImportProfilesDialog({ open, onOpenChange }: Props) {
           bytes[2] === 0xFF && bytes[3] === 0xFF && bytes[4] === 0xFF;
 
         if (isJarveeBinary) {
-          const profiles = parseJarveeBinaryFile(buf);
-          if (profiles.length === 0) {
-            toast({ title: "No profiles found", description: "The binary profile file contained no recognisable account blocks.", variant: "destructive" });
-            setParsed(null);
-          } else {
-            setParsed(profiles);
+          // Parse on the server using the proper BinaryFormatter parser (jarveeParser.ts).
+          // Chunked base64 encode to avoid stack overflow on large files.
+          let binary = "";
+          const chunkSize = 8192;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+          }
+          const fileBase64 = btoa(binary);
+          try {
+            const resp = await fetch("/api/profiles/parse-jarvee", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileBase64 }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+              toast({ title: "No profiles found", description: data.error ?? "Could not parse binary file", variant: "destructive" });
+              setParsed(null);
+            } else if (!data.profiles?.length) {
+              toast({ title: "No profiles found", description: "The binary profile file contained no recognisable account blocks.", variant: "destructive" });
+              setParsed(null);
+            } else {
+              setParsed(data.profiles);
+            }
+          } catch {
+            toast({ title: "Parse error", description: "Could not connect to server.", variant: "destructive" });
           }
           return;
         }

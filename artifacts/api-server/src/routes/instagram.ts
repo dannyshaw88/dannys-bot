@@ -3425,6 +3425,67 @@ export async function registerInstagramRoutes(
     }
   });
 
+  // ── Jarvee binary file PARSE (preview-only, no DB writes) ───────────────
+  // Accepts the raw binary as base64.  Returns ParsedProfile-compatible JSON
+  // so the frontend can show a preview before the user confirms import.
+
+  app.post("/api/profiles/parse-jarvee", async (req, res) => {
+    try {
+      const { fileBase64 } = req.body as { fileBase64?: string };
+      if (!fileBase64) return res.status(400).json({ error: "fileBase64 is required" });
+
+      let buf: Buffer;
+      try { buf = Buffer.from(fileBase64, "base64"); }
+      catch { return res.status(400).json({ error: "Invalid base64 data" }); }
+
+      const { parseJarveeBinary } = await import("../instagram/jarveeParser.js");
+      let jarveeAccounts: Awaited<ReturnType<typeof parseJarveeBinary>>;
+      try {
+        jarveeAccounts = parseJarveeBinary(buf);
+      } catch (e: any) {
+        return res.status(400).json({ error: e?.message ?? "Failed to parse Jarvee file" });
+      }
+
+      if (jarveeAccounts.length === 0) {
+        return res.status(400).json({ error: "No accounts found in this Jarvee file" });
+      }
+
+      const profiles = jarveeAccounts.map(ja => ({
+        accountLabel:              ja.accountLabel          ?? "",
+        username:                  ja.username,
+        password:                  ja.password,
+        email:                     ja.email                 ?? "",
+        proxyHost:                 ja.proxyHost             ?? "",
+        proxyPort:                 ja.proxyPort != null ? String(ja.proxyPort) : "",
+        proxyUsername:             ja.proxyUsername         ?? "",
+        proxyPassword:             ja.proxyPassword         ?? "",
+        userAgentEmbedded:         ja.userAgentWeb          ?? "",
+        userAgentApi:              "",
+        tags:                      "",
+        dateOfBirth:               "",
+        notes:                     "",
+        phoneNumber:               "",
+        twoFASecretKey:            ja.twoFASecret           ?? "",
+        backupCodes:               "",
+        emailValidationUsername:   ja.email                 ?? "",
+        emailValidationPassword:   ja.emailPassword         ?? "",
+        emailValidationPop3Server: "",
+        emailValidationPort:       "",
+        accStatus:                 "",
+        deviceId:                  "",
+        deviceUuid:                "",
+        phoneId:                   "",
+        adid:                      "",
+        apiCookies:                "",
+      }));
+
+      return res.json({ profiles });
+    } catch (e: any) {
+      req.log.error({ err: e }, "parse-jarvee failed");
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ── Jarvee binary account file import ────────────────────────────────────
   // Accepts the raw binary as base64.  Decodes, XOR-reverses, parses the
   // .NET BinaryFormatter stream, and creates one profile per account found.

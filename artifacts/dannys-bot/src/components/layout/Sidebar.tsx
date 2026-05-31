@@ -19,10 +19,13 @@ function FilledDashboardIcon({ className, style }: { className?: string; style?:
 function FilledBulkImportIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect fill="currentColor" x="2"   y="2"    width="20" height="3"   rx="1.5"/>
-      <rect fill="currentColor" x="2"   y="7"    width="15" height="3"   rx="1.5"/>
-      <rect fill="currentColor" x="10.8" y="11.5" width="2.8" height="7.5" rx="1.2"/>
-      <path fill="currentColor" d="M12 23 L5.5 16.5 H18.5 Z"/>
+      <circle fill="currentColor" cx="3.5" cy="5"   r="1.8"/>
+      <rect   fill="currentColor" x="7"   y="3.5"  width="9" height="3"  rx="1.5"/>
+      <circle fill="currentColor" cx="3.5" cy="12"  r="1.8"/>
+      <rect   fill="currentColor" x="7"   y="10.5" width="9" height="3"  rx="1.5"/>
+      <circle fill="currentColor" cx="3.5" cy="19"  r="1.8"/>
+      <rect   fill="currentColor" x="7"   y="17.5" width="9" height="3"  rx="1.5"/>
+      <path   fill="currentColor" d="M17 12 L22 8 L22 10.5 L24 10.5 L24 13.5 L22 13.5 L22 16 Z"/>
     </svg>
   );
 }
@@ -122,7 +125,7 @@ export function Sidebar() {
 
       {/* ── Header: logo centred, then Equinox text below ── */}
       <div className="flex flex-col items-center border-b border-border/50 pt-[14px] pb-[10px] px-2">
-        <img src="/bot-logo.png" alt="Equinox" className="w-[32px] h-[32px] shrink-0 object-contain mb-[6px]" />
+        <img src="/bot-logo.png" alt="Equinox" className="w-[42px] h-[42px] shrink-0 object-contain mb-[6px]" />
         <span className="font-bold text-base tracking-tight text-foreground">
           Equi<span style={{ color: BRAND }}>nox</span>
         </span>

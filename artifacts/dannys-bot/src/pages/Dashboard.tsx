@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.684",
+    date: "31 May 2026",
+    items: [
+      { category: "Improvement", text: "Bulk Import sidebar icon redesigned — now shows three account rows (avatar dot + name bar) with an arrow entering from the right, clearly communicating what the button does." },
+      { category: "Improvement", text: "Header logo enlarged from 32px to 42px for better visibility." },
+      { category: "Improvement", text: "TrustScore icon picker expanded from ~370 to over 600 icons across all categories — major additions include weather variants, health/body icons, new chart types, Scan icons, more monitor and server variants, bot icons, and new food items." },
+      { category: "Fix", text: "Jarvee binary profile import now correctly reads passwords, proxy credentials, and all other fields — the file is now parsed server-side using the proper binary format decoder instead of the simplified browser parser that was missing data." },
+    ],
+  },
+  {
     version: "1.0.683",
     date: "31 May 2026",
     items: [
