@@ -60,6 +60,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.689",
+    date: "31 May 2026",
+    items: [
+      { category: "UI", text: "Follow Tool: all Inject Profile Browsing settings (%, feed posts, open post %, browse before follow) are now on a single row instead of stacked." },
+      { category: "UI", text: "Copy Settings: the settings panel now shows separate 'Select All' and 'Select None' buttons that are always visible side by side." },
+      { category: "UI", text: "Account profile tool tabs (Follow Tool, Unfollow, Human Session etc.) are now the same blue colour as the top navigation buttons." },
+      { category: "Fix", text: "EB Browser window now opens fully maximised on Windows — the previous 25px gap at the top of the window is gone." },
+      { category: "Fix", text: "Accounts that time out during verify are no longer incorrectly marked as 'locked' — they are reset to 'pending' so you can try again." },
+      { category: "UI", text: "Proxy Manager: clicking 'Add Proxy' immediately adds an empty row to the list so you can fill in the details inline, instead of opening a popup form." },
+    ],
+  },
+  {
     version: "1.0.688",
     date: "31 May 2026",
     items: [

@@ -944,7 +944,7 @@ export function ProfileDetailsPage() {
                     "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
                     activeTab === value
                       ? "text-primary border-primary"
-                      : "text-foreground border-transparent hover:border-border",
+                      : "text-blue-500 border-transparent hover:border-border",
                   ].join(" ")}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -966,7 +966,7 @@ export function ProfileDetailsPage() {
                     "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
                     activeTab === value
                       ? "text-primary border-primary"
-                      : "text-foreground border-transparent hover:border-border",
+                      : "text-blue-500 border-transparent hover:border-border",
                   ].join(" ")}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />

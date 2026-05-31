@@ -6,7 +6,6 @@ import { useProxies, useCreateProxy, useUpdateProxy, useDeleteProxy } from "@/ho
 import { useProfiles, useCreatorProfiles, useUpdateProfile } from "@/hooks/use-profiles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -253,11 +252,6 @@ export function ProxiesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [hostPort, setHostPort] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [newProxyType, setNewProxyType] = useState<"http" | "socks5">("http");
   const [importing, setImporting] = useState(false);
   const [maxPerProxy, setMaxPerProxy] = useState<number>(() => {
     const saved = localStorage.getItem("proxies:maxPerProxy");
@@ -549,16 +543,9 @@ export function ProxiesPage() {
     }
   };
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = hostPort.trim();
-    const lastColon = trimmed.lastIndexOf(":");
-    if (lastColon === -1) { toast({ title: "Invalid format", description: "Enter the proxy as IP:PORT", variant: "destructive" }); return; }
-    const host = trimmed.slice(0, lastColon);
-    const port = Number(trimmed.slice(lastColon + 1));
-    if (!host || isNaN(port) || port < 1 || port > 65535) { toast({ title: "Invalid format", description: "Enter a valid IP:PORT", variant: "destructive" }); return; }
-    createProxyMutation.mutate({ host, port, username: username || null, password: password || null, proxyType: newProxyType }, {
-      onSuccess: () => { setIsAddOpen(false); setHostPort(""); setUsername(""); setPassword(""); setNewProxyType("http"); toast({ title: "Proxy Added" }); },
+  const handleAddEmpty = () => {
+    createProxyMutation.mutate({ host: "0.0.0.0", port: 8080, username: null, password: null, proxyType: "http" }, {
+      onSuccess: () => toast({ title: "Proxy added — fill in the details below" }),
     });
   };
 
@@ -660,49 +647,9 @@ export function ProxiesPage() {
             </button>
           )}
         </div>
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="bg-sky-400 hover:bg-sky-500 text-white border-0 gap-1.5 shrink-0">
-              <Plus className="w-4 h-4" /> Add Proxy
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Add New Proxy</DialogTitle></DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="hostPort">IP Address &amp; Port</Label>
-                  <Input id="hostPort" required value={hostPort} onChange={e => setHostPort(e.target.value)} placeholder="45.80.96.251:29842" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="newProxyType">Proxy Type</Label>
-                  <select
-                    id="newProxyType"
-                    value={newProxyType}
-                    onChange={e => setNewProxyType(e.target.value as "http" | "socks5")}
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="http">HTTP</option>
-                    <option value="socks5">SOCKS5</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="user">Username (Optional)</Label>
-                  <Input id="user" value={username} onChange={e => setUsername(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pass">Password (Optional)</Label>
-                  <PasswordInput id="pass" value={password} onChange={e => setPassword(e.target.value)} />
-                </div>
-              </div>
-              <Button type="submit" className="w-full" disabled={createProxyMutation.isPending}>
-                {createProxyMutation.isPending ? "Adding..." : "Save Proxy"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button size="sm" className="bg-sky-400 hover:bg-sky-500 text-white border-0 gap-1.5 shrink-0" onClick={handleAddEmpty} disabled={createProxyMutation.isPending}>
+          <Plus className="w-4 h-4" /> Add Proxy
+        </Button>
 
         <Dialog open={isPasteImportOpen} onOpenChange={open => { setIsPasteImportOpen(open); if (!open) setPasteRaw(""); }}>
           <DialogTrigger asChild>

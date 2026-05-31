@@ -984,78 +984,73 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                     </div>
                     <div className="w-px self-stretch bg-border/50 hidden sm:block" />
                     {/* ── Inject Profile Browsing ── */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          id="injectProfileBrowsingEnabled"
-                          checked={!!(settings as any).injectProfileBrowsingEnabled}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingEnabled: e.target.checked } as any)}
-                          className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                        />
-                        <label htmlFor="injectProfileBrowsingEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none">
-                          Inject Profile Browsing
-                        </label>
-                      </div>
-                      <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <input
+                        type="checkbox"
+                        id="injectProfileBrowsingEnabled"
+                        checked={!!(settings as any).injectProfileBrowsingEnabled}
+                        onChange={(e) => setSettings({ ...settings, injectProfileBrowsingEnabled: e.target.checked } as any)}
+                        className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                      />
+                      <label htmlFor="injectProfileBrowsingEnabled" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
+                        Inject Profile Browsing
+                      </label>
+                      <div className={`flex items-center gap-1.5 flex-wrap transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingMin ?? 30}
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMin: Number(e.target.value) } as any)}
                         />
-                        <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
+                        <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                        <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
                           value={(settings as any).injectProfileBrowsingMax ?? 50}
                           onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMax: Number(e.target.value) } as any)}
                         />
-                        <span className="text-[10px] text-muted-foreground">%</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">%</span>
+                        <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">FEED POSTS</span>
+                        <Input type="number" min="1" max="30" className="w-10 h-7 text-xs shrink-0"
+                          value={(settings as any).injectProfileBrowsingFeedMin ?? 3}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMin: Math.max(1, Number(e.target.value)) } as any)}
+                        />
+                        <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                        <Input type="number" min="1" max="30" className="w-10 h-7 text-xs shrink-0"
+                          value={(settings as any).injectProfileBrowsingFeedMax ?? 6}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMax: Math.max(1, Number(e.target.value)) } as any)}
+                        />
+                        <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">OPEN POST%</span>
+                        <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
+                          value={(settings as any).injectProfileBrowsingPostPctMin ?? 0}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMin: Number(e.target.value) } as any)}
+                        />
+                        <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+                        <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
+                          value={(settings as any).injectProfileBrowsingPostPctMax ?? 0}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMax: Number(e.target.value) } as any)}
+                        />
+                        <span className="text-[10px] text-muted-foreground shrink-0">%</span>
+                        <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+                        <input
+                          type="checkbox"
+                          id="injectProfileBrowsingBeforeFollow"
+                          checked={!!(settings as any).injectProfileBrowsingBeforeFollow}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollow: e.target.checked } as any)}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                        />
+                        <label htmlFor="injectProfileBrowsingBeforeFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
+                          Browse Before Follow
+                        </label>
+                        <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}
+                          value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: Number(e.target.value) } as any)}
+                        />
+                        <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40' : ''}`}>–</span>
+                        <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}
+                          value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: Number(e.target.value) } as any)}
+                        />
+                        <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40' : ''}`}>%</span>
                       </div>
-                      {!!(settings as any).injectProfileBrowsingEnabled && (
-                        <div className="flex items-center gap-1.5 flex-nowrap pt-0.5 overflow-x-auto">
-                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">FEED POSTS</span>
-                          <Input type="number" min="1" max="30" className="w-10 h-7 text-xs shrink-0"
-                            value={(settings as any).injectProfileBrowsingFeedMin ?? 3}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMin: Math.max(1, Number(e.target.value)) } as any)}
-                          />
-                          <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                          <Input type="number" min="1" max="30" className="w-10 h-7 text-xs shrink-0"
-                            value={(settings as any).injectProfileBrowsingFeedMax ?? 6}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingFeedMax: Math.max(1, Number(e.target.value)) } as any)}
-                          />
-                          <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-                          <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">OPEN POST%</span>
-                          <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
-                            value={(settings as any).injectProfileBrowsingPostPctMin ?? 0}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMin: Number(e.target.value) } as any)}
-                          />
-                          <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                          <Input type="number" min="0" max="100" className="w-10 h-7 text-xs shrink-0"
-                            value={(settings as any).injectProfileBrowsingPostPctMax ?? 0}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingPostPctMax: Number(e.target.value) } as any)}
-                          />
-                          <span className="text-[10px] text-muted-foreground shrink-0">%</span>
-                          <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-                          <input
-                            type="checkbox"
-                            id="injectProfileBrowsingBeforeFollow"
-                            checked={!!(settings as any).injectProfileBrowsingBeforeFollow}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollow: e.target.checked } as any)}
-                            className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                          />
-                          <label htmlFor="injectProfileBrowsingBeforeFollow" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider cursor-pointer select-none whitespace-nowrap shrink-0">
-                            Browse Before Follow
-                          </label>
-                          <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}
-                            value={(settings as any).injectProfileBrowsingBeforeFollowPctMin ?? 0}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMin: Number(e.target.value) } as any)}
-                          />
-                          <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40' : ''}`}>–</span>
-                          <Input type="number" min="0" max="100" className={`w-10 h-7 text-xs shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40 pointer-events-none' : ''}`}
-                            value={(settings as any).injectProfileBrowsingBeforeFollowPctMax ?? 100}
-                            onChange={(e) => setSettings({ ...settings, injectProfileBrowsingBeforeFollowPctMax: Number(e.target.value) } as any)}
-                          />
-                          <span className={`text-[10px] text-muted-foreground shrink-0 transition-opacity ${!(settings as any).injectProfileBrowsingBeforeFollow ? 'opacity-40' : ''}`}>%</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

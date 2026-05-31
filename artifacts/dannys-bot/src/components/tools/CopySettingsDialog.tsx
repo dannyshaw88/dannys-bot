@@ -492,9 +492,14 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             <div className="flex items-center justify-between mb-1">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Settings to Copy</Label>
-              <button className="text-[11px] text-primary hover:underline font-medium" onClick={handleSelectAll}>
-                {allSelected ? "Deselect all" : "Select all"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide" onClick={() => setSelected(buildAllSelected(optionGroups))}>
+                  Select All
+                </button>
+                <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide" onClick={() => setSelected(new Set())}>
+                  Select None
+                </button>
+              </div>
             </div>
 
             {optionGroups.map(group => (

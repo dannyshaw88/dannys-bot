@@ -1311,7 +1311,7 @@ export async function openEbWindow(opts: {
       preload: path.join(__dirname, "ebToolbarPreload.js"),
     },
   });
-  win.once("ready-to-show", () => { win.show(); win.maximize(); });
+  win.once("ready-to-show", () => { win.maximize(); win.show(); });
 
   // Belt-and-suspenders proxy re-apply after first page load.
   // In Electron 33, a persistent session ('persist:eb-N') may re-load its
