@@ -620,6 +620,36 @@ function buildFingerprintScript(isMobile: boolean, apiUA: string | null, fp?: Eb
 }catch(e){}})();`;
 }
 
+// ── Ghost Browser UA helpers ──────────────────────────────────────────────────
+//
+// Instagram's mobile API uses a compact UA format ("34/14; 420dpi; 1080x2340; ...")
+// completely different from the browser UA Chrome sends ("Mozilla/5.0 (Linux; Android...").
+// When the Ghost Browser receives the API-format UA it must be converted to the
+// proper mobile Chrome UA before being set on the BrowserWindow — otherwise
+// navigator.userAgent, Client Hints (Sec-CH-UA-*), navigator.platform, and the
+// device fingerprint script all receive wrong values, exposing the Windows host.
+
+/** Returns true if `ua` is an Instagram API-format UA ("34/14; 420dpi; ..."). */
+function isApiFormatUA(ua: string): boolean {
+  return !!ua && !ua.startsWith("Mozilla") && /^\d+\/\d+;\s*\d+dpi/i.test(ua);
+}
+
+/**
+ * Parses an API-format UA and returns the equivalent mobile Chrome browser UA
+ * along with the extracted Android version and device model for Client Hints.
+ *
+ * "34/14; 420dpi; 1080x2340; Motorola; motorola edge 40 pro; rtwo; Snapdragon8Gen2; en_US"
+ * → { browserUA: "Mozilla/5.0 (Linux; Android 14; motorola edge 40 pro) AppleWebKit/537.36...",
+ *     androidVersion: "14", deviceModel: "motorola edge 40 pro" }
+ */
+function apiUAToBrowserUA(apiUA: string): { browserUA: string; androidVersion: string; deviceModel: string } {
+  const m = apiUA.match(/^\d+\/(\d+);\s*\d+dpi;\s*\d+x\d+;\s*[^;]+;\s*([^;]+)/i);
+  const androidVersion = m ? m[1].trim() : "14";
+  const deviceModel    = m ? m[2].trim() : "motorola edge 40 pro";
+  const browserUA = `Mozilla/5.0 (Linux; Android ${androidVersion}; ${deviceModel}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36`;
+  return { browserUA, androidVersion, deviceModel };
+}
+
 // Native toolbar BrowserView per profile — floats above all page content.
 const toolbarViewMap = new Map<number, BrowserView>();
 
@@ -1214,14 +1244,74 @@ export async function openEbWindow(opts: {
   // ── Fire-and-forget: script injection + locale override ─────────────────────
   // Page.enable and addScriptToEvaluateOnNewDocument CAN hang in the packaged
   // app, so they remain fire-and-forget. Timezone is already set above.
-  const _fpIsMobile = !!userAgent && userAgent.includes("Mobile") && userAgent.includes("Android");
-  const _fpScript   = buildFingerprintScript(_fpIsMobile, apiUA ?? null, ebFingerprint ?? null);
+  // ── Resolve browser UA and API UA ─────────────────────────────────────────
+  // The Ghost Browser may receive an API-format UA ("34/14; 420dpi; ...")
+  // instead of a proper mobile Chrome UA ("Mozilla/5.0 (Linux; Android ...").
+  // Always ensure the BrowserWindow uses the correct mobile Chrome UA format.
+  const _isApiFormat = !!userAgent && isApiFormatUA(userAgent);
+  const _apiParsed   = _isApiFormat ? apiUAToBrowserUA(userAgent!) : null;
+  const _browserUA   = _isApiFormat ? _apiParsed!.browserUA : (userAgent ?? null);
+  const _resolvedApiUA = _isApiFormat ? userAgent! : (apiUA ?? null);
+  const _androidVer  = _apiParsed?.androidVersion ?? (
+    _browserUA?.match(/Android\s+(\d+)/i)?.[1] ?? "14"
+  );
+  const _deviceModel = _apiParsed?.deviceModel ?? (
+    _browserUA?.match(/Android\s+\d+;\s*([^)]+)\)/i)?.[1]?.trim() ?? ""
+  );
+  if (_isApiFormat) {
+    console.log(`[ebManager:${profileId}] API-format UA converted → browserUA="${_browserUA}" apiUA="${userAgent}"`);
+  }
+
+  const _fpIsMobile = !!_browserUA && (_browserUA.includes("Mobile") || isApiFormatUA(_browserUA));
+  const _fpScript   = buildFingerprintScript(_fpIsMobile, _resolvedApiUA ?? null, ebFingerprint ?? null);
   void (async () => {
     try {
       // debugger already attached before this block
       await win.webContents.debugger.sendCommand("Page.enable");
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: WEBRTC_BLOCKER_JS });
       await win.webContents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: _fpScript });
+
+      // ── UA + Client Hints via CDP ──────────────────────────────────────────
+      // win.webContents.setUserAgent() alone does NOT update the Sec-CH-UA-*
+      // headers — Chromium generates those from the Electron binary's compiled-in
+      // platform info (Windows / Mobile: false).  CDP Emulation.setUserAgentOverride
+      // overrides BOTH navigator.userAgent AND all Client Hints headers in one call,
+      // fixing the "Platform: Windows / Mobile: No" leak that Instagram detects.
+      if (_browserUA) {
+        try {
+          const _chromeMajor = (_browserUA.match(/Chrome\/(\d+)/)?.[1]) ?? "131";
+          const _chromeFull  = (_browserUA.match(/Chrome\/([\d.]+)/)?.[1]) ?? "131.0.6778.204";
+          await win.webContents.debugger.sendCommand("Emulation.setUserAgentOverride", {
+            userAgent: _browserUA,
+            acceptLanguage: "en-US,en;q=0.9",
+            platform: _fpIsMobile ? "Linux armv8l" : "Win32",
+            ...(_fpIsMobile ? {
+              userAgentMetadata: {
+                brands: [
+                  { brand: "Not_A Brand",   version: "8" },
+                  { brand: "Chromium",       version: _chromeMajor },
+                  { brand: "Google Chrome",  version: _chromeMajor },
+                ],
+                fullVersionList: [
+                  { brand: "Not_A Brand",   version: "8.0.0.0" },
+                  { brand: "Chromium",       version: _chromeFull },
+                  { brand: "Google Chrome",  version: _chromeFull },
+                ],
+                platform:        "Android",
+                platformVersion: _androidVer,
+                architecture:    "",
+                model:           _deviceModel,
+                mobile:          true,
+                bitness:         "",
+                wow64:           false,
+              },
+            } : {}),
+          });
+          console.log(`[ebManager:${profileId}] Emulation.setUserAgentOverride: UA="${_browserUA.slice(0, 80)}" mobile=${_fpIsMobile} platform=${_fpIsMobile ? "Android" : "Win32"}`);
+        } catch (uaErr) {
+          console.warn(`[ebManager:${profileId}] Emulation.setUserAgentOverride failed:`, uaErr);
+        }
+      }
 
       // ── Locale override — match navigator.languages ─────────────────────────
       // Intl APIs (DateTimeFormat, NumberFormat, Collator) use the real system
@@ -1271,9 +1361,13 @@ export async function openEbWindow(opts: {
     callback(current?.proxy?.user ?? "", current?.proxy?.pass ?? "");
   });
 
-  // Apply user agent
-  if (userAgent) {
-    win.webContents.setUserAgent(userAgent);
+  // Apply the resolved browser UA.
+  // CDP Emulation.setUserAgentOverride (fire-and-forget above) is the authoritative
+  // override for Client Hints; this call ensures navigator.userAgent is correct even
+  // if CDP didn't complete before the first navigation (packaged-app race condition).
+  // NEVER pass the raw API-format UA ("34/14; 420dpi; ...") — it's not a valid browser UA.
+  if (_browserUA) {
+    win.webContents.setUserAgent(_browserUA);
   }
 
   // Store in map
@@ -1608,8 +1702,7 @@ export async function openEbWindow(opts: {
 
     let _ghostOverlayRunning = false;
     const cdpDismissGhostOverlay = async () => {
-      // Skip during warmup — dismissing the signup overlay mid-reel causes Instagram
-      // to redirect to the homepage, breaking the warmup navigation sequence.
+      // Skip during warmup — warmup uses CSS-based hiding so no click occurs.
       if (win.isDestroyed() || _ghostOverlayRunning || ebMap.get(-1)?.warmupActive) return;
       _ghostOverlayRunning = true;
       try {
@@ -1622,7 +1715,9 @@ export async function openEbWindow(opts: {
           const pos = await win.webContents.executeJavaScript(_GHOST_OVERLAY_JS)
             .catch(() => null) as { x: number; y: number } | null;
           if (!pos) break; // no overlay present
-          _ebLog(`GhostOverlay#${attempt + 1}: overlay at (${pos.x},${pos.y}), CDP click`);
+          // Capture current URL so we can recover if dismissing causes a redirect
+          const beforeUrl = win.isDestroyed() ? "" : win.webContents.getURL();
+          _ebLog(`GhostOverlay#${attempt + 1}: overlay at (${pos.x},${pos.y}), CDP click (beforeUrl=${beforeUrl.slice(0, 80)})`);
           try {
             await win.webContents.debugger.sendCommand("Input.dispatchMouseEvent", {
               type: "mousePressed", x: pos.x, y: pos.y, button: "left", clickCount: 1, modifiers: 0,
@@ -1636,7 +1731,24 @@ export async function openEbWindow(opts: {
             win.webContents.focus();
             await humanMouseClick(win.webContents, pos.x, pos.y);
           }
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, 1200));
+          if (win.isDestroyed()) break;
+          // Check if dismissing the overlay triggered an unwanted navigation
+          const afterUrl = win.webContents.getURL();
+          const redirected = beforeUrl && afterUrl !== beforeUrl && (
+            afterUrl.includes("accounts/login") ||
+            afterUrl.includes("accounts/emailsignup") ||
+            afterUrl.includes("accounts/signup") ||
+            afterUrl === "https://www.instagram.com/" ||
+            afterUrl === "https://www.instagram.com"
+          );
+          if (redirected) {
+            _ebLog(`GhostOverlay: dismiss caused redirect (→ ${afterUrl.slice(0, 80)}), recovering to previous page`);
+            const recoverUrl = beforeUrl.includes("instagram.com") ? beforeUrl : "https://www.instagram.com/";
+            win.webContents.loadURL(recoverUrl).catch(() => {});
+            await new Promise(r => setTimeout(r, 2000));
+            break; // overlay is gone (page changed), no need to re-poll
+          }
           const stillThere = await win.webContents.executeJavaScript(_GHOST_OVERLAY_JS).catch(() => null);
           if (!stillThere) {
             _ebLog(`GhostOverlay: dismissed after ${attempt + 1} attempt(s)`);
@@ -1650,7 +1762,15 @@ export async function openEbWindow(opts: {
       }
     };
 
+    // Fire on every hard navigation (did-finish-load) AND on a 7-second interval.
+    // Instagram's signup/login overlay is injected via JS 3–8 s AFTER did-finish-load
+    // fires — the interval catches it reliably without waiting for another navigation.
     win.webContents.on("did-finish-load", () => { cdpDismissGhostOverlay().catch(() => {}); });
+    const _ghostOverlayInterval = setInterval(() => {
+      if (win.isDestroyed()) { clearInterval(_ghostOverlayInterval); return; }
+      if (!ebMap.get(-1)?.warmupActive) cdpDismissGhostOverlay().catch(() => {});
+    }, 7000);
+    win.on("closed", () => clearInterval(_ghostOverlayInterval));
   }
 
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
@@ -2883,11 +3003,20 @@ export function startEbIpcServer(
                 if(btn){btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}
               })()`);
               await sleep(800);
-              // Do NOT call dismissOverlay() here.
-              // Clicking the signup/login dialog close button causes Instagram to redirect
-              // to the homepage. The cookie consent banner is handled separately by
-              // cdpClickCookieBanner (fires on did-finish-load). The signup wall can remain
-              // visible — it doesn't prevent the warmup from behaving like a real viewer.
+              // Hide the signup/login overlay via CSS — avoids the click-triggered redirect
+              // that clicking the X button causes. The overlay is invisible but stays in the
+              // DOM, so the warmup looks like a real viewer without triggering navigation.
+              await js(`(function(){
+                var els=document.querySelectorAll('[role="dialog"],[role="presentation"]');
+                for(var i=0;i<els.length;i++){
+                  var txt=(els[i].innerText||els[i].textContent||'').toLowerCase();
+                  if(txt.includes('sign up')||txt.includes('never miss')||txt.includes('log in to')||txt.includes('see photos')||txt.includes('see videos')){
+                    els[i].style.setProperty('display','none','important');
+                    console.log('[warmup] CSS-hid overlay: '+txt.slice(0,40));
+                  }
+                }
+              })()`);
+              await sleep(300);
 
               // Watch the reel for the configured idle time — no scrolling, just viewing.
               const idleMs = randInt(reelsIdleMin, reelsIdleMax) * 1000;
@@ -2901,7 +3030,12 @@ export function startEbIpcServer(
                 // Do NOT call dismissOverlay() mid-watch — same redirect risk.
                 const midUrl = wc.getURL();
                 if (midUrl && !midUrl.includes('/reel/') && !midUrl.startsWith('about:')) {
-                  console.log(`[warmup] mid-watch redirect (${midUrl}), moving to next reel`);
+                  const isLogin    = midUrl.includes('accounts/login') || midUrl.includes('accounts/emailsignup');
+                  const isHomepage = midUrl === 'https://www.instagram.com/' || midUrl === 'https://www.instagram.com';
+                  const isChallenge = midUrl.includes('/challenge/') || midUrl.includes('update_risky_contactpoint');
+                  const redirectType = isChallenge ? 'CHALLENGE' : isLogin ? 'LOGIN-PAGE' : isHomepage ? 'HOMEPAGE' : 'OTHER';
+                  console.log(`[warmup] mid-watch REDIRECT [${redirectType}] poll=${p}/${polls} expected="${url}" got="${midUrl}"`);
+                  relayStep(`⚠ Redirect [${redirectType}] at poll ${p + 1} — moving on`);
                   reelRedirected = true;
                   break;
                 }

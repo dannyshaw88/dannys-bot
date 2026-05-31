@@ -275,19 +275,22 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
           border: current ? `1px solid ${current.border}` : "1px dashed #94a3b8",
           cursor: "pointer",
           flexShrink: 0,
-          minWidth: 60,
+          width: 72,
+          minWidth: 72,
+          maxWidth: 72,
+          overflow: "hidden",
         }}
-        title="Click to set Trust Score"
+        title={current ? current.label : "Click to set Trust Score"}
       >
         {current ? (
           <>
-            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} />
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap" }}>
+            <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>
               {current.label}
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 9, fontWeight: 500, color: "#94a3b8", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>Score</span>
+          <span style={{ fontSize: 9, fontWeight: 500, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "0.04em", flex: 1, minWidth: 0, textAlign: "center" }}>Score</span>
         )}
       </button>
 

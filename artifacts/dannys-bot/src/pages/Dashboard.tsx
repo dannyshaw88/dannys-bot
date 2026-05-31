@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.680",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Ghost Browser trending reel warmup now fetches content from real Instagram hashtags (#reels, #viral, #trending, #fyp) instead of scraping corporate accounts like NBA and CNN." },
+      { category: "Fix", text: "Ghost Browser signup/login overlay dismiss now catches overlays that appear 3–8 seconds after page load using continuous polling, and navigates back if clicking the dismiss button accidentally redirects to a different page." },
+      { category: "Fix", text: "Ghost Browser warmup no longer triggers an Instagram homepage redirect when hiding the signup overlay — the overlay is now hidden via CSS instead of clicking, avoiding any navigation." },
+      { category: "Fix", text: "Ghost Browser fingerprint now correctly identifies as a mobile Android device — the platform and mobile Client Hints were previously reporting as Windows desktop, causing instant detection by Instagram." },
+      { category: "Improvement", text: "Trust score badge pills are now a uniform fixed width across all accounts, so the Accounts and Dashboard columns stay aligned regardless of the badge label length." },
+    ],
+  },
+  {
     version: "1.0.679",
     date: "31 May 2026",
     items: [

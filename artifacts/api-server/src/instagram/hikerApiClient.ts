@@ -264,27 +264,88 @@ export class HikerApiClient {
     return accumulated.slice(0, max);
   }
 
-  // Fetches shortcodes for trending Instagram Reels (media_type=2 / clips) from
-  // popular high-volume accounts.  Shuffles account order on every call and
-  // skips recently seen shortcodes so each warmup session views different reels.
-  // Falls back to getPublicShortcodes if no reel-specific media is found.
+  // Fetches shortcodes for trending Instagram Reels by querying popular hashtags
+  // (#reels, #viral, #trending, #fyp) via HikerAPI's hashtag endpoints.
+  // This returns organic trending content from Instagram's actual trending pool,
+  // NOT from high-profile corporate/celebrity accounts (NBA, CNN, ESPN, etc.).
+  // Falls back to a neutral organic account list if the hashtag endpoints fail.
   async getTrendingReelShortcodes(n = 3): Promise<string[]> {
-    // Larger pool — shuffled on every call so we don't always start with @instagram
-    const ALL_REEL_ACCOUNTS = [
-      "instagram", "natgeo", "creators", "reels", "nasa", "discovery",
-      "nba", "espn", "bbcnews", "cnn", "gopro", "redbull", "nike", "9gag",
-    ];
-    // Fisher-Yates shuffle for true randomness
-    const REEL_ACCOUNTS = [...ALL_REEL_ACCOUNTS];
-    for (let i = REEL_ACCOUNTS.length - 1; i > 0; i--) {
+    // Hashtags that surface trending/viral Instagram Reels — shuffled per call
+    const ALL_HASHTAGS = ["reels", "viral", "trending", "fyp", "explore", "instagram"];
+    const hashtags = [...ALL_HASHTAGS];
+    for (let i = hashtags.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [REEL_ACCOUNTS[i], REEL_ACCOUNTS[j]] = [REEL_ACCOUNTS[j], REEL_ACCOUNTS[i]];
+      [hashtags[i], hashtags[j]] = [hashtags[j], hashtags[i]];
     }
 
     const seen = _getSeenReelSet();
     const shortcodes: string[] = [];
 
-    for (const username of REEL_ACCOUNTS) {
+    for (const tag of hashtags) {
+      if (shortcodes.length >= n) break;
+      try {
+        let items: any[] = [];
+        // Try v2 endpoint first, fall back to v1
+        for (const endpoint of [
+          `/v2/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=20`,
+          `/v1/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=20`,
+        ]) {
+          try {
+            const j = await hikerGet(endpoint, this.token);
+            const raw: any[] = Array.isArray(j) ? j
+              : Array.isArray(j?.response) ? j.response
+              : Array.isArray(j?.items)    ? j.items
+              : Array.isArray(j?.sections) ? (j.sections as any[]).flatMap((s: any) => s?.layout_content?.medias?.map((m: any) => m?.media) ?? [])
+              : [];
+            if (raw.length > 0) { items = raw; break; }
+          } catch { /* try next endpoint */ }
+        }
+        for (const item of items) {
+          if (shortcodes.length >= n) break;
+          if (!item) continue;
+          const mediaType: number = item?.media_type ?? 0;
+          const productType: string = item?.product_type ?? "";
+          const isReel = mediaType === 2 || productType === "clips";
+          if (!isReel) continue;
+          const mediaId = String(item.id ?? item.pk ?? "");
+          if (!mediaId) continue;
+          const sc = item.code || this.mediaIdToShortcode(mediaId);
+          if (sc && sc !== "0" && !seen.has(sc)) {
+            shortcodes.push(sc);
+            _markReelSeen(sc);
+            seen.add(sc);
+          }
+        }
+        if (items.length > 0) {
+          console.log(`[hikerApi] getTrendingReelShortcodes #${tag}: ${items.length} items, ${shortcodes.length}/${n} reels collected`);
+        }
+      } catch (err: any) {
+        console.warn(`[hikerApi] getTrendingReelShortcodes #${tag} error: ${err?.message}`);
+      }
+    }
+
+    if (shortcodes.length === 0) {
+      console.warn(`[hikerApi] getTrendingReelShortcodes: hashtag endpoints returned nothing, falling back to organic accounts`);
+      return this._getTrendingReelShortcodesFromAccounts(n);
+    }
+    return shortcodes.slice(0, n);
+  }
+
+  // Fallback: neutral organic/lifestyle accounts — NOT corporate brands or celebrities.
+  // Only used when the hashtag-based approach returns nothing.
+  private async _getTrendingReelShortcodesFromAccounts(n = 3): Promise<string[]> {
+    const ALL_ORGANIC = [
+      "instagram", "natgeo", "nasa", "discovery", "creators",
+      "earthpix", "travelandleisure", "foodnetwork", "buzzfeed",
+    ];
+    const accounts = [...ALL_ORGANIC];
+    for (let i = accounts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [accounts[i], accounts[j]] = [accounts[j], accounts[i]];
+    }
+    const seen = _getSeenReelSet();
+    const shortcodes: string[] = [];
+    for (const username of accounts) {
       if (shortcodes.length >= n) break;
       try {
         const user = await this.getUserByUsername(username);
@@ -309,15 +370,12 @@ export class HikerApiClient {
           if (sc && sc !== "0" && !seen.has(sc)) {
             shortcodes.push(sc);
             _markReelSeen(sc);
-            seen.add(sc); // prevent duplicates within this call
+            seen.add(sc);
           }
         }
-      } catch { /* non-fatal — best-effort */ }
+      } catch { /* non-fatal */ }
     }
-
-    if (shortcodes.length === 0) {
-      return this.getPublicShortcodes(n);
-    }
+    if (shortcodes.length === 0) return this.getPublicShortcodes(n);
     return shortcodes.slice(0, n);
   }
 
