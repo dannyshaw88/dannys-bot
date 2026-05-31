@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.687",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Verify button now correctly submits the login form — the automated browser was filling in your credentials but the submit button stayed disabled because React hadn't finished updating; the app now waits up to 5 seconds for the button to become clickable before pressing it, then falls back to pressing Enter if needed." },
+      { category: "Fix", text: "Cookie consent banner during silent verify now polls for up to 6 seconds after the page loads (previously only checked once at 1.5 s) so it's dismissed even when Instagram renders it late." },
+      { category: "Fix", text: "Two-factor authentication detection during silent verify now recognises all input types Instagram uses for the TOTP code field, including the newer one-time-code and numeric input variants." },
+    ],
+  },
+  {
     version: "1.0.686",
     date: "31 May 2026",
     items: [

@@ -24,7 +24,6 @@
     "otplib": "^13.4.0",
     "pino": "^9",
     "pino-http": "^10",
-    "puppeteer": "^24.40.0",
     "sharp": "^0.34.5",
     "socks-proxy-agent": "^10.0.0",
     "ws": "^8.20.0",

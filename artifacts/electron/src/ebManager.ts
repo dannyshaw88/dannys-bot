@@ -919,12 +919,12 @@ async function doAutoLogin(
   } catch (e: any) {
     return { ok: false, message: `Failed to load login page: ${e?.message}` };
   }
-  await delay(1500);
+  await delay(2000);
 
-  // ── Dismiss cookie banner before filling credentials ─────────────────────
+  // ── Dismiss cookie banner before filling credentials (poll up to 6 s) ─────
   // Instagram overlays a cookie consent modal on the login page in some regions.
-  // The banner does not prevent inputs from being found in the DOM, but it can
-  // block the submit button click — dismiss it first via CDP so form submit works.
+  // The banner is React-rendered and may appear 1-3 s after did-finish-load, so
+  // a single check after 1.5 s is not enough — poll until we find it or give up.
   {
     const _CK_ACCEPT = ['allow all cookies','accept all cookies','allow all','accept all',
       'allow essential and optional cookies','accept cookies','allow cookies',
@@ -947,23 +947,42 @@ async function doAutoLogin(
       for (const el of document.querySelectorAll('button,[role="button"]')) { const p = m(el); if (p) return p; }
       return null;
     })()`;
-    const ckPos = await wc.executeJavaScript(ckDetectJs).catch(() => null) as { x: number; y: number } | null;
+    let ckPos: { x: number; y: number } | null = null;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      ckPos = await wc.executeJavaScript(ckDetectJs).catch(() => null) as { x: number; y: number } | null;
+      if (ckPos) break;
+      await delay(500);
+    }
     if (ckPos) {
+      console.log(`[doAutoLogin:${profileId}] @${username} — cookie banner at (${ckPos.x},${ckPos.y}), dismissing via CDP`);
       try {
         try { wc.debugger.attach("1.3"); } catch {}
         await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
         await delay(60);
         await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x: ckPos.x, y: ckPos.y, button: "left", clickCount: 1, modifiers: 0 });
-        await delay(1500);
+        await delay(2000);
       } catch {}
     }
   }
 
-  // Fill credentials using React-compatible native setter
+  // ── Fill credentials with React-compatible events + submit-button polling ──
+  // Critical: React's submit button has a `disabled` prop driven by component
+  // state. Setting the value via the native setter does NOT update React's
+  // internal fiber state — only dispatching synthetic events does. We fire
+  // input + change + keyup on each field, then POLL for the button to become
+  // enabled (up to 5 s) before clicking. Previously the code checked once at
+  // 400 ms and silently skipped the click if the button was still disabled,
+  // causing the 30 s waitForNav to time out with no navigation.
   const fillResult: boolean = await wc.executeJavaScript(`
     (async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      const fireAll = (el, extraKey) => {
+        el.dispatchEvent(new Event("input",  { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new KeyboardEvent("keyup",   { key: extraKey || "a", bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent("keydown", { key: extraKey || "a", bubbles: true }));
+      };
       let uInp, pInp, tries = 0;
       while (tries++ < 20) {
         uInp = document.querySelector('input[name="username"]');
@@ -972,14 +991,39 @@ async function doAutoLogin(
         await wait(500);
       }
       if (!uInp || !pInp) return false;
+
+      uInp.focus();
       setter.call(uInp, ${JSON.stringify(username)});
-      uInp.dispatchEvent(new Event("input", { bubbles: true }));
-      await wait(200);
-      setter.call(pInp, ${JSON.stringify(password)});
-      pInp.dispatchEvent(new Event("input", { bubbles: true }));
+      fireAll(uInp);
       await wait(400);
-      const btn = document.querySelector('button[type="submit"]');
-      if (btn && !btn.disabled) btn.click();
+
+      pInp.focus();
+      setter.call(pInp, ${JSON.stringify(password)});
+      fireAll(pInp);
+      await wait(800);
+
+      // Poll for submit button to become enabled — React re-renders asynchronously
+      // after processing the synthetic events above. 5 s / 250 ms = 20 attempts.
+      let btn = null;
+      for (let i = 0; i < 20; i++) {
+        const b = document.querySelector('button[type="submit"]');
+        if (b && !b.disabled) { btn = b; break; }
+        await wait(250);
+      }
+
+      if (btn) {
+        btn.click();
+        return true;
+      }
+
+      // Fallback: press Enter on password field (works even if button stays disabled)
+      pInp.focus();
+      pInp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+      pInp.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+      pInp.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+      // Also try form.submit() as a last resort
+      const form = pInp.closest("form");
+      if (form) { try { form.submit(); } catch(e) {} }
       return true;
     })()
   `).catch(() => false);
@@ -1001,27 +1045,57 @@ async function doAutoLogin(
   );
   await delay(1000);
 
-  // Handle 2FA if required
-  const needs2FA: boolean = await wc.executeJavaScript(`
-    !!document.querySelector('input[name="verificationCode"], input[aria-label*="security" i], input[aria-label*="code" i]')
-  `).catch(() => false);
+  // ── Handle 2FA if required ─────────────────────────────────────────────────
+  // Instagram uses several different input attributes across app versions —
+  // check all known selectors so TOTP detection is robust.
+  const _2FA_SELECTORS = [
+    'input[name="verificationCode"]',
+    'input[name="verification_code"]',
+    'input[name="totp_code"]',
+    'input[name="security_code"]',
+    'input[name="code"]',
+    'input[autocomplete="one-time-code"]',
+    'input[inputmode="numeric"][maxlength="6"]',
+    'input[aria-label*="security" i]',
+    'input[aria-label*="code" i]',
+    'input[aria-label*="digit" i]',
+    'input[type="tel"][maxlength="6"]',
+  ].join(", ");
+
+  const needs2FA: boolean = await wc.executeJavaScript(
+    `!!(document.querySelector(${JSON.stringify(_2FA_SELECTORS)}))`
+  ).catch(() => false);
 
   if (needs2FA) {
     if (!twoFAKey) {
       return { ok: false, message: "2FA required but no 2FA key configured for this account" };
     }
     const code = generateTotp(twoFAKey);
+    console.log(`[doAutoLogin:${profileId}] @${username} — 2FA page detected, filling TOTP code`);
     await wc.executeJavaScript(`
       (async () => {
         const wait = ms => new Promise(r => setTimeout(r, ms));
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-        const inp = document.querySelector('input[name="verificationCode"], input[aria-label*="security" i], input[aria-label*="code" i]');
+        const SELS = ${JSON.stringify(_2FA_SELECTORS)};
+        let inp = document.querySelector(SELS);
         if (!inp) return;
+        inp.focus();
         setter.call(inp, ${JSON.stringify(code)});
-        inp.dispatchEvent(new Event("input", { bubbles: true }));
-        await wait(400);
-        const btn = document.querySelector('button[type="submit"]');
-        if (btn) btn.click();
+        inp.dispatchEvent(new Event("input",  { bubbles: true, cancelable: true }));
+        inp.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+        inp.dispatchEvent(new KeyboardEvent("keyup", { key: "6", bubbles: true }));
+        await wait(800);
+        // Poll for submit button to become enabled
+        let btn = null;
+        for (let i = 0; i < 16; i++) {
+          const b = document.querySelector('button[type="submit"]');
+          if (b && !b.disabled) { btn = b; break; }
+          await wait(250);
+        }
+        if (btn) { btn.click(); return; }
+        // Fallback: Enter key on the TOTP input
+        inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+        inp.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
       })()
     `).catch(() => {});
     await waitForNav(
