@@ -285,12 +285,12 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
         {current ? (
           <>
             <current.icon size={10} color={current.text} fill={current.text} strokeWidth={2} style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: current.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", flex: 1, minWidth: 0 }}>
               {current.label}
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 9, fontWeight: 500, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "0.04em", flex: 1, minWidth: 0, textAlign: "center" }}>Score</span>
+          <span style={{ fontSize: 9, fontWeight: 500, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "clip", letterSpacing: "0.04em", flex: 1, minWidth: 0, textAlign: "center" }}>Score</span>
         )}
       </button>
 

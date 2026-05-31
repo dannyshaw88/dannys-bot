@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.681",
+    date: "31 May 2026",
+    items: [
+      { category: "Improvement", text: "Account creation now uses a mobile-issued device ID (mid) from Instagram's own API instead of the web browser's mid — removing a key cross-context fingerprint mismatch that was flagging new accounts as bots." },
+      { category: "Improvement", text: "The signup pre-login warmup now includes the is_main_native_login signal that real Android apps send on their first API call, making the device's cold-start sequence indistinguishable from a genuine phone." },
+      { category: "Fix", text: "Trust score badge pills now hard-cut long labels (e.g. WARMUP) at the pill edge instead of showing trailing dots." },
+    ],
+  },
+  {
     version: "1.0.680",
     date: "31 May 2026",
     items: [

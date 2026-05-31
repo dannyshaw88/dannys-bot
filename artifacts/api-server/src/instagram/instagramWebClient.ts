@@ -3977,7 +3977,9 @@ export async function createInstagramAccountViaApi(params: {
     "X-IG-Bandwidth-TotalTime-MS": String(300 + Math.floor(Math.random() * 2000)),
     "X-IG-Device-ID": ig_did,
     "X-IG-Android-ID": android_id,
-    "X-MID": mid,
+    // X-MID intentionally omitted here — it is populated below after launcher/sync
+    // issues a mobile-specific mid.  A real Android app never sends a web-browser mid
+    // as X-MID; it uses the mid returned by the mobile launcher/sync endpoint.
     "X-Bloks-Version-Id": BLOKS_VERSION_ID,
     "X-Bloks-Is-Layout-RTL": "false",
     "X-FB-HTTP-Engine": "Liger",
@@ -3992,6 +3994,14 @@ export async function createInstagramAccountViaApi(params: {
     // Instagram cross-checks this against the connecting IP — mismatch = bot flag.
     "X-IG-Timezone-Offset": String(tzOffset),
   };
+
+  // Mobile mid: starts as the EB-harvested web mid (fallback).  launcher/sync below
+  // will issue a proper mobile mid from Instagram's mobile API.  Once received, this
+  // variable is promoted and baseHeaders["X-MID"] is set — so every call after
+  // launcher/sync uses the mobile-issued mid, not the web-browser mid.
+  // (Real Android apps get their mid from the mobile launcher/sync response; they
+  //  never send a Chrome/web mid as X-MID to i.instagram.com.)
+  let mobileMid = mid;
 
   // CSRF strategy: use the real csrftoken the EB harvested from instagram.com if one
   // was returned, otherwise fall back to "missing".
@@ -4036,6 +4046,8 @@ export async function createInstagramAccountViaApi(params: {
       body: signBody({
         id: guid,
         server_config_retrieval: "1",
+        // is_main_native_login: real Android app always sends this on first launcher/sync
+        is_main_native_login: "1",
         _csrftoken: csrfToken,
         _uuid: guid,
       }),
@@ -4045,7 +4057,28 @@ export async function createInstagramAccountViaApi(params: {
     cookieJar = mergeCookies(cookieJar, launcherRes.cookies);
     step(`launcher/sync HTTP ${launcherRes.status} — cookies: [${launcherRes.cookies.map(c => c.split("=")[0]).join(", ") || "none"}]`);
     console.log(`[accountCreator] launcher/sync HTTP=${launcherRes.status}:`, JSON.stringify(launcherRes.json ?? {}).slice(0, 200));
+
+    // ── Promote the mobile-issued mid ─────────────────────────────────────────
+    // Instagram's mobile API issues its own mid in the launcher/sync response cookies.
+    // This mid is distinct from the web-browser mid the EB harvested — using the
+    // mobile-issued mid for X-MID makes all subsequent calls look like a real Android
+    // app rather than a web browser replaying its session to the mobile API.
+    const launcherMid = launcherRes.cookies
+      .find(c => c.startsWith("mid="))
+      ?.split("=").slice(1).join("=") ?? "";
+    if (launcherMid) {
+      mobileMid = launcherMid;
+      // Merge the new mid into the cookie jar so the Cookie header stays consistent
+      cookieJar = mergeCookies(cookieJar, [`mid=${mobileMid}`]);
+      step(`Mobile mid issued by launcher/sync: ${mobileMid.slice(0, 8)}... (replaced web-origin mid ✓)`);
+    } else {
+      step(`launcher/sync did not return a new mid — keeping EB mid as fallback`);
+    }
+    // Stamp X-MID on baseHeaders so every subsequent request uses the mobile mid
+    baseHeaders["X-MID"] = mobileMid;
   } catch (e: any) {
+    // Even on error, stamp the fallback mid so calls aren't sent without X-MID at all
+    baseHeaders["X-MID"] = mobileMid;
     step(`launcher/sync error (non-fatal): ${e?.message}`);
   }
 
