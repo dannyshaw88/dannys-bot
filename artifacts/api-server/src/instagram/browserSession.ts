@@ -23,16 +23,23 @@ const IS_ELECTRON_EB = !!process.env.EB_IPC_PORT;
 const EB_IPC_BASE    = `http://127.0.0.1:${process.env.EB_IPC_PORT ?? "0"}`;
 
 async function ebIpc(method: string, urlPath: string, body?: unknown): Promise<any> {
-  const res = await fetch(`${EB_IPC_BASE}${urlPath}`, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body != null ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`EB IPC ${method} ${urlPath} → ${res.status}: ${txt}`);
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120_000);
+  try {
+    const res = await fetch(`${EB_IPC_BASE}${urlPath}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body:   body != null ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`EB IPC ${method} ${urlPath} → ${res.status}: ${txt}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 interface ElectronSessionState {

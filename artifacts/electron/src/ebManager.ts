@@ -875,6 +875,7 @@ async function doAutoLogin(
   twoFAKey: string,
   userAgent?: string,
 ): Promise<{ ok: boolean; message: string }> {
+  console.log(`[doAutoLogin:${profileId}] @${username} — starting`);
   const wc  = win.webContents;
   const ses = electronSession.fromPartition(ebPartition(profileId));
   const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -2769,19 +2770,35 @@ export function startEbIpcServer(
       // Opens hidden window → loads existing cookies → auto-login → extract cookies
       // → destroy window → return { ok, message, cookies }.
       if (req.method === "POST" && u.pathname === "/eb/silent-verify") {
+        console.log(`[silent-verify:${pid}] @${body.username} — handler entered`);
         const partition = ebPartition(pid);
         const ses = electronSession.fromPartition(partition);
+        // setProxy has no built-in timeout and can deadlock if the Chromium network
+        // service is busy — race it against a 10s abort so the handler never hangs.
+        const setProxyWithTimeout = (cfg: Parameters<typeof ses.setProxy>[0]) =>
+          Promise.race([
+            ses.setProxy(cfg),
+            new Promise<void>((_, rej) => setTimeout(() => rej(new Error("setProxy timeout (10s)")), 10_000)),
+          ]);
         if (body.proxy) {
-          await ses.setProxy(buildProxyConfig(body.proxy));
+          console.log(`[silent-verify:${pid}] @${body.username} — setProxy #1 (${body.proxy.host}:${body.proxy.port})`);
+          await setProxyWithTimeout(buildProxyConfig(body.proxy));
+          console.log(`[silent-verify:${pid}] @${body.username} — setProxy #1 done`);
           try { await ses.clearHostResolverCache(); } catch {}
           await new Promise(r => setTimeout(r, 150));
-          await ses.setProxy(buildProxyConfig(body.proxy));
+          console.log(`[silent-verify:${pid}] @${body.username} — setProxy #2`);
+          await setProxyWithTimeout(buildProxyConfig(body.proxy));
+          console.log(`[silent-verify:${pid}] @${body.username} — setProxy #2 done`);
           try { (ses as any).setDnsOverHttpsConfig?.({ enabled: false }); } catch {}
         } else {
-          await ses.setProxy({ proxyRules: "direct://" });
+          console.log(`[silent-verify:${pid}] @${body.username} — no proxy, setting direct`);
+          await setProxyWithTimeout({ proxyRules: "direct://" });
+          console.log(`[silent-verify:${pid}] @${body.username} — direct proxy set done`);
         }
         try { ses.setWebRTCIPHandlingPolicy("disable_non_proxied_udp"); } catch {}
+        console.log(`[silent-verify:${pid}] @${body.username} — loading cookies from file`);
         await loadCookiesFromFile(pid, ses);
+        console.log(`[silent-verify:${pid}] @${body.username} — cookies loaded`);
 
         // ── Skip auto-login if already logged in (same check as Puppeteer path) ──
         // The Electron session already has cookies loaded from the file. If there is
@@ -2835,6 +2852,7 @@ export function startEbIpcServer(
           hiddenWin.webContents.setUserAgent(body.userAgent);
         }
 
+        console.log(`[silent-verify:${pid}] @${body.username} — hidden window created, calling doAutoLogin`);
         try {
           const loginResult = await doAutoLogin(pid, hiddenWin, body.username, body.password, body.twoFAKey ?? "", body.userAgent);
           const c1 = await ses.cookies.get({ domain: ".instagram.com" });

@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.688",
+    date: "31 May 2026",
+    items: [
+      { category: "Fix", text: "Silent verify no longer hangs for 5 minutes — the proxy setup step now has a 10-second timeout so a stuck network service call fails fast instead of blocking the entire verify." },
+      { category: "Fix", text: "Verify timeout on the API side reduced from 5 minutes to 2 minutes so a failed verify is reported quickly rather than leaving the account stuck in 'verifying' for 5 minutes." },
+      { category: "Diagnostic", text: "Added step-by-step logging throughout the silent verify process (proxy setup, cookie load, hidden window creation, login) so future failures show exactly which step got stuck." },
+    ],
+  },
+  {
     version: "1.0.687",
     date: "31 May 2026",
     items: [
