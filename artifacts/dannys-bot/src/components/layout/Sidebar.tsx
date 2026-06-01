@@ -19,13 +19,12 @@ function FilledDashboardIcon({ className, style }: { className?: string; style?:
 function FilledBulkImportIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle fill="currentColor" cx="3.5" cy="5"   r="1.8"/>
-      <rect   fill="currentColor" x="7"   y="3.5"  width="9" height="3"  rx="1.5"/>
-      <circle fill="currentColor" cx="3.5" cy="12"  r="1.8"/>
-      <rect   fill="currentColor" x="7"   y="10.5" width="9" height="3"  rx="1.5"/>
-      <circle fill="currentColor" cx="3.5" cy="19"  r="1.8"/>
-      <rect   fill="currentColor" x="7"   y="17.5" width="9" height="3"  rx="1.5"/>
-      <path   fill="currentColor" d="M17 12 L22 8 L22 10.5 L24 10.5 L24 13.5 L22 13.5 L22 16 Z"/>
+      {/* Person silhouette — same blocky shape as Accounts */}
+      <circle fill="currentColor" cx="10" cy="7" r="4"/>
+      <path   fill="currentColor" d="M18.5 21c0-4.694-3.806-8.5-8.5-8.5S1.5 16.306 1.5 21h17z"/>
+      {/* Bold + badge — top right, means "import/add" */}
+      <rect   fill="currentColor" x="17.5" y="3.5" width="5"   height="1.8" rx="0.6"/>
+      <rect   fill="currentColor" x="19.6" y="1.5" width="1.8" height="5"   rx="0.6"/>
     </svg>
   );
 }
@@ -111,13 +110,13 @@ export function Sidebar() {
 
   const BRAND = "#1AD2F2";
   const navItems = [
-    { name: "Dashboard",            shortLabel: "DASHBOARD",      path: "/dashboard",      icon: FilledDashboardIcon    },
-    { name: "Accounts",             shortLabel: "ACCOUNTS",       path: "/profiles",       icon: FilledPersonIcon       },
-    { name: "Statistics",           shortLabel: "STATISTICS",     path: "/stats",          icon: FilledBarChartIcon     },
-    { name: "TrustScores",          shortLabel: "TRUSTSCORES",    path: "/trust-scores",   icon: FilledStarIcon         },
-    { name: "Ghost Browser",        shortLabel: "GHOST BROWSER",  path: "/create-ghost",   icon: FilledGhostIcon        },
-    { name: "Bulk Import Accounts", shortLabel: "BULK IMPORT",    path: "/bulk-import",    icon: FilledBulkImportIcon   },
-    { name: "Proxy Manager",        shortLabel: "PROXY MANAGER",  path: "/proxies",        icon: FilledShieldAlertIcon  },
+    { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
+    { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
+    { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
+    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: FilledGhostIcon       },
+    { name: "TrustScores",     shortLabel: "TRUSTSCORES",    path: "/trust-scores", icon: FilledStarIcon        },
+    { name: "Account Import",  shortLabel: "ACCOUNT IMPORT", path: "/bulk-import",  icon: FilledBulkImportIcon  },
+    { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: FilledShieldAlertIcon },
   ];
 
   return (

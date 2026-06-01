@@ -2459,37 +2459,60 @@ class AutomationEngine {
       "humanSessionNotUsedMin", "humanSessionNotUsedMax",
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
-        try {
-          await client.visitNotifications();
-          console.log(`[engine] @${profile.username}: 🔔 visited notifications`);
-          this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
-        } catch (e: any) {
-          if (await checkSessionErr(e, "visit_notifications")) return;
-          console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
+        // Per-action run chance range (0=never, 100=always). Picks a random threshold between min/max each session.
+        const willRun = (minKey: string, maxKey: string) => {
+          const lo = Number((s as any)[minKey] ?? 100);
+          const hi = Number((s as any)[maxKey] ?? 100);
+          const threshold = randInt(Math.min(lo, hi), Math.max(lo, hi));
+          return Math.random() * 100 < threshold;
+        };
+        if (willRun("notificationsRunChanceMin", "notificationsRunChanceMax")) {
+          try {
+            await client.visitNotifications();
+            console.log(`[engine] @${profile.username}: 🔔 visited notifications`);
+            this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
+          } catch (e: any) {
+            if (await checkSessionErr(e, "visit_notifications")) return;
+            console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: 🔔 notifications skipped by chance`);
         }
-        try {
-          await client.visitOwnProfile();
-          console.log(`[engine] @${profile.username}: 👤 visited own profile`);
-          this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
-        } catch (e: any) {
-          if (await checkSessionErr(e, "visit_own_profile")) return;
-          console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
+        if (willRun("ownProfileRunChanceMin", "ownProfileRunChanceMax")) {
+          try {
+            await client.visitOwnProfile();
+            console.log(`[engine] @${profile.username}: 👤 visited own profile`);
+            this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
+          } catch (e: any) {
+            if (await checkSessionErr(e, "visit_own_profile")) return;
+            console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: 👤 own profile skipped by chance`);
         }
-        try {
-          await client.refreshOwnProfile();
-          console.log(`[engine] @${profile.username}: 🔄 refreshed own profile`);
-          this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
-        } catch (e: any) {
-          if (await checkSessionErr(e, "refresh_own_profile")) return;
-          console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
+        if (willRun("refreshProfileRunChanceMin", "refreshProfileRunChanceMax")) {
+          try {
+            await client.refreshOwnProfile();
+            console.log(`[engine] @${profile.username}: 🔄 refreshed own profile`);
+            this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
+          } catch (e: any) {
+            if (await checkSessionErr(e, "refresh_own_profile")) return;
+            console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: 🔄 refresh profile skipped by chance`);
         }
-        try {
-          await client.visitSettingsAndActivity();
-          console.log(`[engine] @${profile.username}: ⚙️ visited settings & activity`);
-          this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
-        } catch (e: any) {
-          if (await checkSessionErr(e, "visit_settings_activity")) return;
-          console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+        if (willRun("settingsActivityRunChanceMin", "settingsActivityRunChanceMax")) {
+          try {
+            await client.visitSettingsAndActivity();
+            console.log(`[engine] @${profile.username}: ⚙️ visited settings & activity`);
+            this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
+          } catch (e: any) {
+            if (await checkSessionErr(e, "visit_settings_activity")) return;
+            console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: ⚙️ settings/activity skipped by chance`);
         }
       },
     );

@@ -71,9 +71,13 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "vtf_follow_suggested", label: "If 0 Posts → Follow Suggested (enabled + min / max)", settingKeys: ["followSuggestedUsersIfEmptyEnabled","followSuggestedUsersIfEmptyMin","followSuggestedUsersIfEmptyMax"] },
       ]},
       { key: "humanSession", label: "Human Session (Visit Profile)", description: "Core session order and cool-down", subOptions: [
-        { key: "hs_enabled", label: "Enabled",                            settingKeys: ["humanSessionEnabled"] },
-        { key: "hs_order",   label: "Execution order (min / max)",        settingKeys: ["humanSessionOrderMin","humanSessionOrderMax"] },
-        { key: "hs_chance",  label: "Skip chance % (0=always run, 100=never)", settingKeys: ["humanSessionNotUsedMin","humanSessionNotUsedMax"] },
+        { key: "hs_enabled",      label: "Enabled",                                      settingKeys: ["humanSessionEnabled"] },
+        { key: "hs_order",        label: "Execution order (min / max)",                  settingKeys: ["humanSessionOrderMin","humanSessionOrderMax"] },
+        { key: "hs_chance",       label: "Skip chance % (0=always run, 100=never)",      settingKeys: ["humanSessionNotUsedMin","humanSessionNotUsedMax"] },
+        { key: "hs_notif",        label: "Notifications run chance % (min / max)",       settingKeys: ["notificationsRunChanceMin","notificationsRunChanceMax"] },
+        { key: "hs_ownprofile",   label: "Own Profile run chance % (min / max)",         settingKeys: ["ownProfileRunChanceMin","ownProfileRunChanceMax"] },
+        { key: "hs_refresh",      label: "Refresh Profile run chance % (min / max)",     settingKeys: ["refreshProfileRunChanceMin","refreshProfileRunChanceMax"] },
+        { key: "hs_settings",     label: "Settings & Activity run chance % (min / max)", settingKeys: ["settingsActivityRunChanceMin","settingsActivityRunChanceMax"] },
       ]},
       { key: "checkStories", label: "Check Timeline Stories", description: "Watch stories while active", subOptions: [
         { key: "cs_enabled", label: "Enabled",                            settingKeys: ["checkTimelineStoriesEnabled"] },
@@ -139,6 +143,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       humanSessionOrderMax: 0,
       humanSessionNotUsedMin: 0,
       humanSessionNotUsedMax: 0,
+      notificationsRunChanceMin: 100,
+      notificationsRunChanceMax: 100,
+      ownProfileRunChanceMin: 100,
+      ownProfileRunChanceMax: 100,
+      refreshProfileRunChanceMin: 100,
+      refreshProfileRunChanceMax: 100,
+      settingsActivityRunChanceMin: 100,
+      settingsActivityRunChanceMax: 100,
       checkTimelineStoriesEnabled: false,
       checkTimelineStoriesMin: 3,
       checkTimelineStoriesMax: 8,
@@ -513,11 +525,33 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 Human Session
               </label>
             </div>
-            <div className={`flex items-center gap-1.5 flex-wrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-orange-600 font-medium"><Bell className="w-3 h-3" />Notifications</span>
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-600 font-medium"><User className="w-3 h-3" />Own Profile</span>
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-cyan-50 border border-cyan-200 text-cyan-600 font-medium"><RefreshCw className="w-3 h-3" />Refresh Profile</span>
-              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-200 text-gray-600 font-medium"><Settings className="w-3 h-3" />Settings & Activity</span>
+            <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              {([
+                { minKey: "notificationsRunChanceMin",    maxKey: "notificationsRunChanceMax",    label: "Notifs",    Icon: Bell,      color: "text-orange-500" },
+                { minKey: "ownProfileRunChanceMin",       maxKey: "ownProfileRunChanceMax",       label: "Profile",   Icon: User,      color: "text-indigo-500" },
+                { minKey: "refreshProfileRunChanceMin",   maxKey: "refreshProfileRunChanceMax",   label: "Refresh",   Icon: RefreshCw, color: "text-cyan-500"   },
+                { minKey: "settingsActivityRunChanceMin", maxKey: "settingsActivityRunChanceMax", label: "Settings",  Icon: Settings,  color: "text-gray-500"   },
+              ] as { minKey: string; maxKey: string; label: string; Icon: React.ElementType; color: string }[]).map(({ minKey, maxKey, label, Icon, color }) => (
+                <div key={minKey} className="flex items-center gap-1">
+                  <Icon className={`w-3 h-3 shrink-0 ${color}`} />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{label}</span>
+                  <div className="relative">
+                    <Input type="number" min="0" max="100" className="w-12 h-6 text-xs pr-4"
+                      value={(settings as any)[minKey] ?? 100}
+                      onChange={e => setSettings({ ...settings, [minKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                    />
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <div className="relative">
+                    <Input type="number" min="0" max="100" className="w-12 h-6 text-xs pr-4"
+                      value={(settings as any)[maxKey] ?? 100}
+                      onChange={e => setSettings({ ...settings, [maxKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                    />
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           <div className={`flex flex-col items-end gap-1.5 shrink-0 transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>

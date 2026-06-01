@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.694",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Feature", text: "AI Image button added to the embedded browser toolbar — generates a realistic smartphone selfie using Together AI (FLUX model), strips AI metadata, injects randomised camera EXIF (phone model, date, ISO). Requires a free TOGETHER_API_KEY environment variable." },
+      { category: "Feature", text: "Save and Upload buttons in the AI Image dialog — Save downloads the JPEG to your computer; Upload sends it directly to Instagram's active file chooser in the embedded browser." },
+      { category: "UI", text: "Human Session sub-action run chances are now min–max ranges instead of a single fixed percentage — each session picks a random threshold within your range." },
+      { category: "UI", text: "All four Human Session sub-actions (Notifications, Profile, Refresh, Settings) now display on a single compact row with their own min–max chance inputs." },
+      { category: "UI", text: "Sidebar: Account Import icon is now a person with a + badge (no downward arrow). Ghost Browser moved above TrustScores. 'Bulk Import Accounts' renamed to 'Account Import'." },
+    ],
+  },
+  {
     version: "1.0.693",
     date: "31 May 2026",
     items: [

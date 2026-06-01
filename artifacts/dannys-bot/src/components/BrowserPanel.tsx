@@ -3,8 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ChevronLeft, ChevronRight, RefreshCw, Compass, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus, ShieldAlert,
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus, ShieldAlert, Sparkles, Download,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 function cleanLoginError(msg: string): string {
@@ -120,6 +123,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [waitingFirstFrame, setWaitingFirstFrame] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [fileChooserPending, setFileChooserPending] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<{ imageBase64: string; fileName: string; metadata: { make: string; model: string; shotAt: string; iso: number } } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // F12 on the canvas toggles the log panel
   useEffect(() => {
@@ -929,6 +936,14 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             >
               <ShieldAlert className="w-3.5 h-3.5" /> Leak Check
             </Button>
+            <Button
+              variant="ghost" size="sm"
+              className="h-8 px-2 text-xs text-purple-500 hover:text-purple-400 hover:bg-purple-500/10 gap-1 shrink-0 font-semibold"
+              title="Generate an AI selfie photo — realistic, no watermarks, with randomised camera EXIF metadata"
+              onClick={() => { setAiModalOpen(true); setAiResult(null); setAiError(null); }}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> AI Image
+            </Button>
             <label
               className={`inline-flex items-center gap-1 h-8 px-2 text-xs rounded-md transition-colors shrink-0 ${connected ? "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer" : "text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none"}`}
               title="Upload a file to the browser"
@@ -1294,6 +1309,101 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           </div>
         </div>
       )}
+
+      {/* ── AI Selfie Generator ─────────────────────────────────────── */}
+      <Dialog open={aiModalOpen} onOpenChange={setAiModalOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Sparkles className="w-4 h-4 text-purple-500" />
+              AI Selfie Generator
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-[11px] text-muted-foreground">
+              Generates a realistic smartphone selfie with randomised camera EXIF metadata (phone model, date, ISO). No AI watermarks or detectable AI artifacts.
+            </p>
+            <Button
+              className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+              size="sm"
+              disabled={aiLoading}
+              onClick={async () => {
+                setAiLoading(true);
+                setAiError(null);
+                setAiResult(null);
+                try {
+                  const { protocol, hostname, port } = window.location;
+                  const apiOrigin = port === "5000"
+                    ? `${protocol}//${hostname}:8080`
+                    : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+                  const res = await fetch(`${apiOrigin}/api/ai/generate-selfie`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+                  const data = await res.json();
+                  if (!res.ok) { setAiError(data.error ?? "Generation failed"); }
+                  else { setAiResult(data); }
+                } catch (e: any) {
+                  setAiError(e?.message ?? "Network error");
+                } finally {
+                  setAiLoading(false);
+                }
+              }}
+            >
+              {aiLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</> : <><Sparkles className="w-3.5 h-3.5" /> Generate Selfie</>}
+            </Button>
+
+            {aiError && (
+              <div className="text-[11px] text-destructive bg-destructive/10 rounded p-2 break-words">{aiError}</div>
+            )}
+
+            {aiResult && (
+              <div className="space-y-2">
+                <img
+                  src={`data:image/jpeg;base64,${aiResult.imageBase64}`}
+                  alt="Generated selfie"
+                  className="w-full rounded-lg border border-border object-cover aspect-square"
+                />
+                <div className="text-[10px] text-muted-foreground space-y-0.5">
+                  <div>📱 {aiResult.metadata.make} {aiResult.metadata.model}</div>
+                  <div>📅 {new Date(aiResult.metadata.shotAt).toLocaleDateString()} · ISO {aiResult.metadata.iso}</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm" variant="outline" className="flex-1 gap-1 text-xs"
+                    onClick={() => {
+                      const link = document.createElement("a");
+                      link.href = `data:image/jpeg;base64,${aiResult.imageBase64}`;
+                      link.download = aiResult.fileName;
+                      link.click();
+                    }}
+                  >
+                    <Download className="w-3.5 h-3.5" /> Save
+                  </Button>
+                  <Button
+                    size="sm" className="flex-1 gap-1 text-xs bg-gradient-to-r from-pink-500 to-orange-400 hover:from-pink-600 hover:to-orange-500 text-white border-0"
+                    disabled={!connected}
+                    title={connected ? "Upload this selfie to the active Instagram file chooser" : "Open Instagram in the browser first"}
+                    onClick={async () => {
+                      try {
+                        const { protocol, hostname, port } = window.location;
+                        const apiOrigin = port === "5000"
+                          ? `${protocol}//${hostname}:8080`
+                          : `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+                        await fetch(`${apiOrigin}/api/browser/${profileId}/files`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ fileName: aiResult.fileName, data: aiResult.imageBase64 }),
+                        });
+                        setAiModalOpen(false);
+                      } catch {}
+                    }}
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Upload to Instagram
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
