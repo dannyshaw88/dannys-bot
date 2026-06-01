@@ -50,12 +50,15 @@ function FilledBarChartIcon({ className, style }: { className?: string; style?: 
 function FilledTrackApiIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      {/* Network trace / waveform pulse — represents intercepted API traffic */}
-      <rect fill="currentColor" x="2" y="11" width="3" height="2" rx="1"/>
-      <rect fill="currentColor" x="7" y="8" width="2" height="8" rx="1"/>
-      <rect fill="currentColor" x="11" y="5" width="2" height="14" rx="1"/>
-      <rect fill="currentColor" x="15" y="8" width="2" height="8" rx="1"/>
-      <rect fill="currentColor" x="19" y="11" width="3" height="2" rx="1"/>
+      {/* Crosshair / target — represents tracking & intercepting traffic */}
+      <circle cx="12" cy="12" r="9" fill="currentColor"/>
+      <circle cx="12" cy="12" r="6.5" fill="white"/>
+      <circle cx="12" cy="12" r="3.5" fill="currentColor"/>
+      <circle cx="12" cy="12" r="1.5" fill="white"/>
+      <rect fill="currentColor" x="2" y="11" width="3.5" height="2" rx="1"/>
+      <rect fill="currentColor" x="18.5" y="11" width="3.5" height="2" rx="1"/>
+      <rect fill="currentColor" x="11" y="2" width="2" height="3.5" rx="1"/>
+      <rect fill="currentColor" x="11" y="18.5" width="2" height="3.5" rx="1"/>
     </svg>
   );
 }

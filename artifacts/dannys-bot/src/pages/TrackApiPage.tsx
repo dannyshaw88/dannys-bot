@@ -130,7 +130,9 @@ export function TrackApiPage() {
     ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data);
-        if (msg.type === "entry") {
+        if (msg.type === "snapshot") {
+          setEntries(msg.entries ?? []);
+        } else if (msg.type === "entry") {
           setEntries(prev => {
             const next = [...prev, msg.entry];
             return next.length > 2000 ? next.slice(-2000) : next;

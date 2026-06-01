@@ -229,6 +229,14 @@ function getCertForHost(hostname: string): { key: string; cert: string } {
   return result;
 }
 
+// ─── Instagram domain allowlist for MITM ─────────────────────────────────────
+
+const INSTAGRAM_MITM_RE = /^(i\.instagram\.com|instagram\.com|www\.instagram\.com|graph\.instagram\.com|edge-chat\.instagram\.com|b\.i\.instagram\.com|api\.instagram\.com|business\.instagram\.com)$/i;
+
+function isInstagramHost(host: string): boolean {
+  return INSTAGRAM_MITM_RE.test(host);
+}
+
 // ─── MITM HTTPS handler ───────────────────────────────────────────────────────
 
 function handleMitmConnect(clientSocket: net.Socket, host: string, port: number) {
@@ -542,13 +550,15 @@ function startProxy(port: number, mitm: boolean): Promise<void> {
         if (method === "CONNECT") {
           const [host, portStr] = target.split(":");
           const destPort = parseInt(portStr ?? "443", 10);
+          const h = host ?? target;
 
-          if (_mitmEnabled) {
+          // Only MITM Instagram domains — everything else gets a transparent tunnel
+          if (_mitmEnabled && isInstagramHost(h)) {
             // Respond 200 first, THEN hand off to MITM handler
             clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-            handleMitmConnect(clientSocket, host ?? target, destPort);
+            handleMitmConnect(clientSocket, h, destPort);
           } else {
-            handlePassthroughConnect(clientSocket, host ?? target, destPort);
+            handlePassthroughConnect(clientSocket, h, destPort);
           }
         } else if (["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].includes(method)) {
           handlePlainHttp(clientSocket, method, target, lines, headerBuf, headerEnd);
@@ -584,6 +594,10 @@ export function registerTrackApiRoutes(httpServer: HttpServer, app: Express) {
     if (req.url === "/api/track-api/ws") {
       wss.handleUpgrade(req, socket as any, head, (ws) => {
         _clients.add(ws);
+        // Send all existing entries as a snapshot so the UI populates immediately on connect
+        if (_log.length > 0) {
+          try { ws.send(JSON.stringify({ type: "snapshot", entries: _log })); } catch {}
+        }
         ws.on("close", () => _clients.delete(ws));
       });
     }

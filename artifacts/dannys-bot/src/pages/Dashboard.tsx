@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.709",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Track API: phone no longer loses internet connection — the MITM interceptor now only decrypts Instagram domains (i.instagram.com, instagram.com, graph.instagram.com). All other traffic (Facebook SDK, Apple, Google) is tunnelled transparently." },
+      { category: "Fix", text: "Track API log no longer shows gibberish Facebook/Apple SDK calls — only actual Instagram API endpoints are decrypted and labelled. Non-Instagram traffic flows through without appearing in the log." },
+      { category: "Fix", text: "Track API log now populates immediately when you open the page — existing entries are pushed as a snapshot the moment the WebSocket connects, no need to switch away and back." },
+      { category: "UI", text: "Track API sidebar icon updated to a crosshair/target style that clearly communicates traffic tracking." },
+      { category: "UI", text: "TrustScore icon picker: icons are now 50% larger (24px instead of 16px) making it much easier to see which icon you are selecting." },
+    ],
+  },
+  {
     version: "1.0.708",
     date: "1 Jun 2026",
     items: [

@@ -98,7 +98,7 @@ export function IconPicker({ value, onChange, onClose }: IconPickerProps) {
                 No icons match "{search}"
               </div>
             ) : (
-              <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(9, 1fr)" }}>
+              <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
                 {filtered.map(entry => {
                   const isSelected = value === entry.key;
                   return (
@@ -106,14 +106,14 @@ export function IconPicker({ value, onChange, onClose }: IconPickerProps) {
                       key={entry.key}
                       title={entry.label}
                       onClick={() => { onChange(entry.key); onClose(); }}
-                      className="flex flex-col items-center justify-center gap-0.5 rounded-lg p-1.5 transition-colors hover:bg-accent group"
+                      className="flex flex-col items-center justify-center gap-1 rounded-lg p-2 transition-colors hover:bg-accent group"
                       style={{
                         background: isSelected ? "var(--primary)" : undefined,
                         outline: isSelected ? "2px solid var(--primary)" : undefined,
                       }}
                     >
                       <entry.Icon
-                        size={16}
+                        size={24}
                         className={isSelected ? "text-primary-foreground" : "text-foreground"}
                       />
                       <span
