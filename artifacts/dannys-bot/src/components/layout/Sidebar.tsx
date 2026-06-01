@@ -47,22 +47,6 @@ function FilledBarChartIcon({ className, style }: { className?: string; style?: 
   );
 }
 
-function FilledTrackApiIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      {/* Crosshair / target — represents tracking & intercepting traffic */}
-      <circle cx="12" cy="12" r="9" fill="currentColor"/>
-      <circle cx="12" cy="12" r="6.5" fill="white"/>
-      <circle cx="12" cy="12" r="3.5" fill="currentColor"/>
-      <circle cx="12" cy="12" r="1.5" fill="white"/>
-      <rect fill="currentColor" x="2" y="11" width="3.5" height="2" rx="1"/>
-      <rect fill="currentColor" x="18.5" y="11" width="3.5" height="2" rx="1"/>
-      <rect fill="currentColor" x="11" y="2" width="2" height="3.5" rx="1"/>
-      <rect fill="currentColor" x="11" y="18.5" width="2" height="3.5" rx="1"/>
-    </svg>
-  );
-}
-
 function FilledGhostIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -107,7 +91,6 @@ export function Sidebar() {
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
     { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",  icon: FilledGhostIcon       },
-    { name: "Track API",       shortLabel: "TRACK API",      path: "/track-api",     icon: FilledTrackApiIcon    },
     { name: "Account Import",  shortLabel: "ACCOUNT IMPORT", path: "/bulk-import",   icon: FilledBulkImportIcon  },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: FilledShieldAlertIcon },
   ];

@@ -5,7 +5,6 @@ import express from "express";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { registerInstagramRoutes } from "./routes/instagram";
-import { registerTrackApiRoutes } from "./routes/trackApi";
 
 const port = Number(process.env["PORT"] ?? "3000");
 
@@ -72,8 +71,6 @@ console.log(`[server] Log file: ${SERVER_LOG_PATH}`);
 // ─────────────────────────────────────────────────────────────────────────────
 
 const httpServer = createServer(app);
-
-registerTrackApiRoutes(httpServer, app);
 
 registerInstagramRoutes(httpServer, app).then(() => {
   const frontendDist = process.env.FRONTEND_DIST_PATH ||

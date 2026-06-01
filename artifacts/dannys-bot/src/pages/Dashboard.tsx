@@ -60,6 +60,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.711",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Change", text: "Track API tool removed — the proxy/traffic interception feature has been removed from the sidebar and the app entirely." },
+    ],
+  },
+  {
     version: "1.0.710",
     date: "1 Jun 2026",
     items: [
