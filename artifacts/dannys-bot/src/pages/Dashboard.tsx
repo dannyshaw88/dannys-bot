@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.719",
+    date: "1 Jun 2026",
+    items: [
+      { category: "New", text: "Force Emulation — a new section in Human Session settings that fires a sequence of Instagram app-open API calls at the start of every session, before any tools run." },
+      { category: "New", text: "Force Emulation has an optional Randomise Order toggle that shuffles the API call sequence each session for more natural-looking behaviour." },
+      { category: "Change", text: "Tool headers for Follow, Unfollow and Contact tools now show Execution Order and Skip Chance right-aligned on a two-row layout, matching the style of the other session controls." },
+      { category: "Change", text: "Separator borders between embedded tools are now 10px (up from 5px) with extra row spacing above and below for clearer visual separation." },
+      { category: "Change", text: "Tool titles (Follow Tool, Unfollow Tool, Contact Tool) are now bold and slightly larger." },
+    ],
+  },
+  {
     version: "1.0.718",
     date: "1 Jun 2026",
     items: [

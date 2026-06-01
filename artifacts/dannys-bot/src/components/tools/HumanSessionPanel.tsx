@@ -223,6 +223,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       repostDisableComments: false,
       repostDisableAtPostCount: 0,
       repostDisableWhenExhausted: true,
+      forceEmulationEnabled: false,
+      forceEmulationRandomise: false,
     };
     return { ...def, ...(tool.settings as object || {}) };
   });
@@ -304,7 +306,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       {/* ── Master enable/disable ─────────────────────────────── */}
       <div className="border border-border rounded-xl p-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <h4 className="font-semibold text-sm shrink-0">Human Session Emulation Tool</h4>
+          <h4 className="font-bold text-[19px] shrink-0">Human Session Emulation Tool</h4>
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) => {
@@ -351,6 +353,36 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 value={settings.delayMax ?? 60}
                 onChange={(e) => setSettings({ ...settings, delayMax: Math.max(1, Number(e.target.value)) })}
               />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Force Emulation ───────────────────────────────────── */}
+      <div className="border border-border rounded-xl p-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h4 className="font-bold text-[19px]">Force Emulation</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Fires Instagram app-open API calls at the start of every session, before any other tool runs.
+            </p>
+          </div>
+          <div className="flex items-center gap-6 shrink-0">
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="forceEmulationEnabled"
+                checked={!!settings.forceEmulationEnabled}
+                onChange={(e) => setSettings({ ...settings, forceEmulationEnabled: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer"
+              />
+              <label htmlFor="forceEmulationEnabled" className="text-sm font-medium cursor-pointer select-none">Enabled</label>
+            </div>
+            <div className={`flex items-center gap-2 transition-opacity ${!settings.forceEmulationEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              <input type="checkbox" id="forceEmulationRandomise"
+                checked={!!settings.forceEmulationRandomise}
+                onChange={(e) => setSettings({ ...settings, forceEmulationRandomise: e.target.checked })}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer"
+              />
+              <label htmlFor="forceEmulationRandomise" className="text-sm cursor-pointer select-none">Randomise order</label>
             </div>
           </div>
         </div>
@@ -1155,33 +1187,39 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Follow Tool (embedded) ────────────────────────────── */}
       {followTool && (
-        <div style={{ borderTop: '5px solid #06b6d4' }} className="pt-1">
+        <div style={{ borderTop: '10px solid #06b6d4' }} className="my-4 pt-3">
           <div className="border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-b border-border flex-wrap">
-              <UserPlus className="w-4 h-4 text-blue-500 shrink-0" />
-              <h4 className="font-semibold text-sm shrink-0">Follow Tool</h4>
-              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Execution Order</span>
-              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).followOrderMin ?? 0}
-                onChange={(e) => setSettings({ ...settings, followOrderMin: Number(e.target.value) } as any)}
-              />
-              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).followOrderMax ?? 0}
-                onChange={(e) => setSettings({ ...settings, followOrderMax: Number(e.target.value) } as any)}
-              />
-              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
-              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).followSkipMin ?? 0}
-                onChange={(e) => setSettings({ ...settings, followSkipMin: Number(e.target.value) } as any)}
-              />
-              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).followSkipMax ?? 0}
-                onChange={(e) => setSettings({ ...settings, followSkipMax: Number(e.target.value) } as any)}
-              />
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-blue-500 shrink-0" />
+                <h4 className="font-bold text-[19px] shrink-0">Follow Tool</h4>
+              </div>
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    value={(settings as any).followOrderMin ?? 0}
+                    onChange={(e) => setSettings({ ...settings, followOrderMin: Number(e.target.value) } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    value={(settings as any).followOrderMax ?? 0}
+                    onChange={(e) => setSettings({ ...settings, followOrderMax: Number(e.target.value) } as any)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    value={(settings as any).followSkipMin ?? 0}
+                    onChange={(e) => setSettings({ ...settings, followSkipMin: Number(e.target.value) } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    value={(settings as any).followSkipMax ?? 0}
+                    onChange={(e) => setSettings({ ...settings, followSkipMax: Number(e.target.value) } as any)}
+                  />
+                </div>
+              </div>
             </div>
             <div className="p-4">
               <ToolConfigPanel tool={followTool} profile={profile} />
@@ -1192,33 +1230,39 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Unfollow Tool (embedded) ──────────────────────────── */}
       {unfollowTool && (
-        <div style={{ borderTop: '5px solid #06b6d4' }} className="pt-1">
+        <div style={{ borderTop: '10px solid #06b6d4' }} className="my-4 pt-3">
           <div className="border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-b border-border flex-wrap">
-              <UserMinus className="w-4 h-4 text-orange-500 shrink-0" />
-              <h4 className="font-semibold text-sm shrink-0">Unfollow Tool</h4>
-              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Execution Order</span>
-              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).unfollowOrderMin ?? 0}
-                onChange={(e) => setSettings({ ...settings, unfollowOrderMin: Number(e.target.value) } as any)}
-              />
-              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).unfollowOrderMax ?? 0}
-                onChange={(e) => setSettings({ ...settings, unfollowOrderMax: Number(e.target.value) } as any)}
-              />
-              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
-              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).unfollowSkipMin ?? 0}
-                onChange={(e) => setSettings({ ...settings, unfollowSkipMin: Number(e.target.value) } as any)}
-              />
-              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).unfollowSkipMax ?? 0}
-                onChange={(e) => setSettings({ ...settings, unfollowSkipMax: Number(e.target.value) } as any)}
-              />
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
+              <div className="flex items-center gap-2">
+                <UserMinus className="w-4 h-4 text-orange-500 shrink-0" />
+                <h4 className="font-bold text-[19px] shrink-0">Unfollow Tool</h4>
+              </div>
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    value={(settings as any).unfollowOrderMin ?? 0}
+                    onChange={(e) => setSettings({ ...settings, unfollowOrderMin: Number(e.target.value) } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    value={(settings as any).unfollowOrderMax ?? 0}
+                    onChange={(e) => setSettings({ ...settings, unfollowOrderMax: Number(e.target.value) } as any)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    value={(settings as any).unfollowSkipMin ?? 0}
+                    onChange={(e) => setSettings({ ...settings, unfollowSkipMin: Number(e.target.value) } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    value={(settings as any).unfollowSkipMax ?? 0}
+                    onChange={(e) => setSettings({ ...settings, unfollowSkipMax: Number(e.target.value) } as any)}
+                  />
+                </div>
+              </div>
             </div>
             <div className="p-4">
               <UnfollowToolPanel tool={unfollowTool} profile={profile} />
@@ -1229,33 +1273,39 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
       {/* ── Contact Tool (embedded) ───────────────────────────── */}
       {contactTool && (
-        <div style={{ borderTop: '5px solid #06b6d4' }} className="pt-1">
+        <div style={{ borderTop: '10px solid #06b6d4' }} className="my-4 pt-3">
           <div className="border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-b border-border flex-wrap">
-              <MessageSquare className="w-4 h-4 text-green-500 shrink-0" />
-              <h4 className="font-semibold text-sm shrink-0">Contact Tool</h4>
-              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Execution Order</span>
-              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).contactOrderMin ?? 0}
-                onChange={(e) => setSettings({ ...settings, contactOrderMin: Number(e.target.value) } as any)}
-              />
-              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).contactOrderMax ?? 0}
-                onChange={(e) => setSettings({ ...settings, contactOrderMax: Number(e.target.value) } as any)}
-              />
-              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
-              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).contactSkipMin ?? 0}
-                onChange={(e) => setSettings({ ...settings, contactSkipMin: Number(e.target.value) } as any)}
-              />
-              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                value={(settings as any).contactSkipMax ?? 0}
-                onChange={(e) => setSettings({ ...settings, contactSkipMax: Number(e.target.value) } as any)}
-              />
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-green-500 shrink-0" />
+                <h4 className="font-bold text-[19px] shrink-0">Contact Tool</h4>
+              </div>
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    value={(settings as any).contactOrderMin ?? 0}
+                    onChange={(e) => setSettings({ ...settings, contactOrderMin: Number(e.target.value) } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <Input type="number" min="0" className="w-14 h-7 text-xs"
+                    value={(settings as any).contactOrderMax ?? 0}
+                    onChange={(e) => setSettings({ ...settings, contactOrderMax: Number(e.target.value) } as any)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    value={(settings as any).contactSkipMin ?? 0}
+                    onChange={(e) => setSettings({ ...settings, contactSkipMin: Number(e.target.value) } as any)}
+                  />
+                  <span className="text-[10px] text-muted-foreground">–</span>
+                  <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                    value={(settings as any).contactSkipMax ?? 0}
+                    onChange={(e) => setSettings({ ...settings, contactSkipMax: Number(e.target.value) } as any)}
+                  />
+                </div>
+              </div>
             </div>
             <div className="p-4">
               <ContactToolPanel tool={contactTool} profile={profile} />

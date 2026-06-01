@@ -2450,6 +2450,18 @@ class AutomationEngine {
       return false;
     };
 
+    // ── Force Emulation — always runs FIRST if enabled ───────────────────────
+    if (s.forceEmulationEnabled === true) {
+      try {
+        await client.runForceEmulation(s.forceEmulationRandomise === true);
+        console.log(`[engine] @${profile.username}: 📱 force emulation calls complete`);
+        this.logAction(profile.id, tool.id, "force_emulation", "", "", "", "ok", "Force emulation API calls fired");
+      } catch (e: any) {
+        if (await checkSessionErr(e, "force_emulation")) return;
+        console.warn(`[engine] @${profile.username}: force emulation error: ${e?.message}`);
+      }
+    }
+
     // Build the ordered action queue.
     // Each entry: { order: number (random from OrderMin/Max), run: async fn }
     // Actions are sorted ascending by order before executing, so lower numbers

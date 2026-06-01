@@ -1968,6 +1968,31 @@ export class InstagramWebClient {
   // ── Click Settings and Activity ───────────────────────────────────────────
   // Simulates visiting the Settings page — fetches account security info.
   // This endpoint requires POST as of 2024 (GET returns 405).
+  async runForceEmulation(randomise: boolean): Promise<void> {
+    const endpoints = [
+      "/api/v1/feed/timeline/",
+      "/api/v1/feed/reels_tray/",
+      "/api/v1/feed/reels_media/",
+      "/api/v1/notifications/badge/",
+      "/api/v1/direct_v2/inbox/",
+      "/api/v1/users/current_user/",
+      "/api/v1/qe/sync/",
+      "/api/v1/launcher/sync/",
+      "/api/v1/analytics/log/",
+    ];
+    const ordered = randomise
+      ? [...endpoints].sort(() => Math.random() - 0.5)
+      : endpoints;
+    for (const path of ordered) {
+      try {
+        await this.mobileSessionGet(path);
+        console.log(`[webClient] forceEmulation: ${path} ✓`);
+      } catch (e: any) {
+        console.warn(`[webClient] forceEmulation: ${path} error: ${e?.message}`);
+      }
+    }
+  }
+
   async visitSettingsAndActivity(): Promise<boolean> {
     return this.timed("VisitSettingsAndActivity", async () => {
       const j = await this.mobileSessionPost(`/api/v1/accounts/account_security_info/`);
