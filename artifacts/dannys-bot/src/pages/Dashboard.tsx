@@ -60,6 +60,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.696",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Fixed server crash on startup caused by the AI image generator trying to load the image processing library before it was available — the server now starts correctly even if the library is not yet ready." },
+      { category: "Fix", text: "Bundled the image processing library (sharp) into the Windows installer so the AI selfie generator works out of the box without any extra installation steps." },
+    ],
+  },
+  {
     version: "1.0.695",
     date: "1 Jun 2026",
     items: [

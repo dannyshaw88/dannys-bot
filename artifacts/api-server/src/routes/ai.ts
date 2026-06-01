@@ -1,5 +1,16 @@
 import { Router, type Request, type Response } from "express";
-import sharp from "sharp";
+
+let _sharpModule: ((input: Buffer | Uint8Array, options?: any) => any) | null | undefined = undefined;
+async function getSharp() {
+  if (_sharpModule !== undefined) return _sharpModule;
+  try {
+    const mod = await import("sharp");
+    _sharpModule = mod.default;
+  } catch {
+    _sharpModule = null;
+  }
+  return _sharpModule;
+}
 
 export const aiRouter = Router();
 
@@ -125,8 +136,12 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
 
     // Convert to JPEG at randomised output dimensions (strips all AI metadata)
     const inputBuffer = Buffer.from(b64, "base64");
+    const sharpFn = await getSharp();
+    if (!sharpFn) {
+      return res.status(500).json({ error: "Image processing library (sharp) is not available on this platform." });
+    }
     const quality     = randInt(84, 94);
-    const jpegBuffer  = await sharp(inputBuffer)
+    const jpegBuffer  = await sharpFn(inputBuffer)
       .resize(outDim.w, outDim.h, { fit: "cover", position: "attention" })
       .jpeg({ quality })
       .toBuffer();
