@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.697",
+    date: "1 Jun 2026",
+    items: [
+      { category: "New", text: "Added an AI Image button (✨ AI Image) to the native embedded browser toolbar — click it to generate a realistic AI selfie without leaving the browser window." },
+      { category: "New", text: "The AI panel expands below the toolbar tab bar, showing a preview of the generated selfie along with its camera metadata (make, model, ISO)." },
+      { category: "New", text: "Save button: download the generated AI selfie directly to your computer via a native save dialog." },
+      { category: "New", text: "Upload to Instagram button: instantly delivers the AI selfie to the open Instagram file chooser (e.g. new post, story, profile picture) with one click." },
+    ],
+  },
+  {
     version: "1.0.696",
     date: "1 Jun 2026",
     items: [
