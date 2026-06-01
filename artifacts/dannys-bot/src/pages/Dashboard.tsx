@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.721",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix",    text: "Force Emulation now reliably fires when enabled — the setting check was too strict and could silently skip the calls." },
+      { category: "Change", text: "Follow Tool no longer shows the 'Wait Until Next Session' input fields — session timing is controlled by the Human Session delay settings." },
+      { category: "Change", text: "Unfollow Tool enable/disable is now a checkbox instead of a toggle switch, consistent with the rest of the UI." },
+      { category: "Change", text: "Contact New Followers, Auto Reply, and Contact Users Sending sub-panel enables are now checkboxes instead of toggle switches." },
+      { category: "New",    text: "Copy Settings on the Human Session panel now includes Force Emulation settings, and individual Start/Stop states for Unfollow Tool, Contact New Followers, Auto Reply, and Contact Users Sending." },
+    ],
+  },
+  {
     version: "1.0.720",
     date: "1 Jun 2026",
     items: [

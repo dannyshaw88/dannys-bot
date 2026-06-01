@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfileEngineStatus } from "@/hooks/use-engine-status";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -141,12 +140,15 @@ export function ContactUsersPanel({ tool, profile }: Props) {
 
       {/* Master Enable */}
       <div className="flex items-center gap-3 px-1">
-        <Switch
+        <input
+          type="checkbox"
+          id="contactUsersEnabled"
           checked={!!settings.contactUsersEnabled}
-          onCheckedChange={(v) => setSettings({ ...settings, contactUsersEnabled: v })}
+          onChange={(e) => setSettings({ ...settings, contactUsersEnabled: e.target.checked })}
+          className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
         />
         <div>
-          <p className="text-sm font-semibold">Contact Users Sending</p>
+          <label htmlFor="contactUsersEnabled" className="text-sm font-semibold cursor-pointer select-none">Contact Users Sending</label>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] text-muted-foreground">Automatically send DMs from the Pending Messages queue.</p>
             {(() => {

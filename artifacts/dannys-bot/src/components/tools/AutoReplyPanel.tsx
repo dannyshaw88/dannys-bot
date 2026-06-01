@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useUpdateTool } from "@/hooks/use-tools";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -79,12 +78,15 @@ export function AutoReplyPanel({ tool, profile }: Props) {
 
       {/* Master Enable */}
       <div className="flex items-center gap-3 px-1">
-        <Switch
+        <input
+          type="checkbox"
+          id="autoReplyEnabled"
           checked={!!settings.autoReplyEnabled}
-          onCheckedChange={(v) => setSettings({ ...settings, autoReplyEnabled: v })}
+          onChange={(e) => setSettings({ ...settings, autoReplyEnabled: e.target.checked })}
+          className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
         />
         <div>
-          <p className="text-sm font-semibold">Auto Reply</p>
+          <label htmlFor="autoReplyEnabled" className="text-sm font-semibold cursor-pointer select-none">Auto Reply</label>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] text-muted-foreground">Automatically reply to DMs containing specific trigger words.</p>
             {(() => {

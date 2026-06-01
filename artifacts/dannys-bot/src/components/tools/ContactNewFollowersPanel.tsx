@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { MessageSquare, UserCheck, Clock, Users, Zap, Shuffle, Loader2, Download } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile } from "@shared/schema";
@@ -113,12 +112,15 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
 
       {/* Enable toggle */}
       <div className="flex items-center gap-3 px-1">
-        <Switch
+        <input
+          type="checkbox"
+          id="contactNewFollowersEnabled"
           checked={!!settings.contactNewFollowersEnabled}
-          onCheckedChange={(v) => setSettings({ ...settings, contactNewFollowersEnabled: v })}
+          onChange={(e) => setSettings({ ...settings, contactNewFollowersEnabled: e.target.checked })}
+          className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
         />
         <div>
-          <p className="text-sm font-semibold">Contact New Followers</p>
+          <label htmlFor="contactNewFollowersEnabled" className="text-sm font-semibold cursor-pointer select-none">Contact New Followers</label>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] text-muted-foreground">Automatically queue DMs for new followers of this account.</p>
             {(() => {

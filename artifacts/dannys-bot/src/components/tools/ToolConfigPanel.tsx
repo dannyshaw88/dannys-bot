@@ -246,7 +246,6 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
     ]},
     { label: "Timing", options: [
       { key: "ft_timing", label: "Timing", description: "Delays and wait times between actions", subOptions: [
-        { key: "ft_sessionWait",      label: "Wait until next session (min / max mins)", settingKeys: ["delayMin","delayMax"] },
         { key: "ft_delayAfterFollow", label: "Delay after each follow (min / max secs)",  settingKeys: ["delayAfterFollowMin","delayAfterFollowMax"] },
       ]},
     ]},
@@ -779,33 +778,8 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
             )}
             <div className="space-y-6">
               <div className="space-y-5">
-                {/* Top row: Wait Until Next Session / Users Per Session / Delay After Follow */}
+                {/* Top row: Users Per Session / Delay After Follow */}
                 <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
-                  {tool.type === 'follow' && (
-                    <>
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Wait Until Next Session (min)</h4>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <Label htmlFor="sessionWaitMin" className="text-xs whitespace-nowrap text-muted-foreground">Min</Label>
-                            <Input id="sessionWaitMin" type="number" min="0" className="w-16 h-8 text-xs"
-                              value={settings.delayMin}
-                              onChange={(e) => setSettings({...settings, delayMin: Number(e.target.value)})}
-                            />
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Label htmlFor="sessionWaitMax" className="text-xs whitespace-nowrap text-muted-foreground">Max</Label>
-                            <Input id="sessionWaitMax" type="number" min="0" className="w-16 h-8 text-xs"
-                              value={settings.delayMax}
-                              onChange={(e) => setSettings({...settings, delayMax: Number(e.target.value)})}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="w-px self-stretch bg-border/50 hidden sm:block" />
-                    </>
-                  )}
-
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Users Per Session</h4>
                     <div className="flex items-center gap-2">

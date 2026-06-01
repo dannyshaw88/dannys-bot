@@ -61,6 +61,18 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "hs_delayRange", label: "Session delay range (min / max)", settingKeys: ["delayMin","delayMax"] },
       ]},
     ]},
+    { label: "Force Emulation", options: [
+      { key: "hs_forceEmulation", label: "Force Emulation", description: "Fire Instagram app-open API calls at the start of every session", subOptions: [
+        { key: "fe_enabled",   label: "Enabled",          settingKeys: ["forceEmulationEnabled"] },
+        { key: "fe_randomise", label: "Randomise order",  settingKeys: ["forceEmulationRandomise"] },
+      ]},
+    ]},
+    { label: "Embedded Tool States", options: [
+      { key: "hs_unfollowEnabled",    label: "Unfollow Tool — Start / Stop",           description: "Copy the Unfollow Tool enabled checkbox to other profiles" },
+      { key: "hs_cnfEnabled",         label: "Contact New Followers — Start / Stop",   description: "Copy the Contact New Followers enabled checkbox" },
+      { key: "hs_autoReplyEnabled",   label: "Auto Reply — Start / Stop",              description: "Copy the Auto Reply enabled checkbox" },
+      { key: "hs_contactUsersEnabled",label: "Contact Users Sending — Start / Stop",   description: "Copy the Contact Users Sending enabled checkbox" },
+    ]},
     { label: "Actions", options: [
       { key: "viewTimelineFeed", label: "View Timeline Feed", description: "Scrolling through the main feed + inline liking", subOptions: [
         { key: "vtf_enabled",    label: "Enabled",                                       settingKeys: ["viewTimelineFeedEnabled"] },
@@ -113,8 +125,15 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   ];
 
   const handleHumanCopy = async (targetIds: number[], expandedKeys: string[]) => {
-    const copyEnabled = expandedKeys.includes("startStop");
-    const keysToSend  = expandedKeys.filter(k => k !== "startStop");
+    const copyEnabled          = expandedKeys.includes("startStop");
+    const copyUnfollowEnabled  = expandedKeys.includes("hs_unfollowEnabled");
+    const copyCnfEnabled       = expandedKeys.includes("hs_cnfEnabled");
+    const copyAutoReply        = expandedKeys.includes("hs_autoReplyEnabled");
+    const copyContactUsers     = expandedKeys.includes("hs_contactUsersEnabled");
+
+    const SENTINEL_KEYS = ["startStop", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled"];
+    const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k));
+
     const willEnable    = copyEnabled && tool.enabled;
     const willRandomise = expandedKeys.includes("randomiseTiming");
     let staggerOffsets: number[] | undefined;
@@ -125,6 +144,35 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       );
     }
     await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined, staggerOffsets);
+
+    // ── Copy unfollow tool enabled state ──────────────────────────────────────
+    if (copyUnfollowEnabled && unfollowTool) {
+      await Promise.all(targetIds.map(async (profileId) => {
+        try {
+          const res = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+          if (!res.ok) return;
+          const tools: { id: number; type: string }[] = await res.json();
+          const t = tools.find(t => t.type === "unfollow");
+          if (!t) return;
+          await fetch(`/api/tools/${t.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: unfollowTool.enabled }),
+            credentials: "include",
+          });
+        } catch {}
+      }));
+    }
+
+    // ── Copy contact sub-feature states ───────────────────────────────────────
+    const contactSrc: Record<string, unknown> = {};
+    if (copyCnfEnabled && contactTool)    contactSrc.contactNewFollowersEnabled = !!(contactTool.settings as any)?.contactNewFollowersEnabled;
+    if (copyAutoReply && contactTool)     contactSrc.autoReplyEnabled           = !!(contactTool.settings as any)?.autoReplyEnabled;
+    if (copyContactUsers && contactTool)  contactSrc.contactUsersEnabled        = !!(contactTool.settings as any)?.contactUsersEnabled;
+    if (Object.keys(contactSrc).length > 0) {
+      await copyToolSettingsToProfiles(contactSrc, "contact", targetIds, Object.keys(contactSrc));
+    }
+
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 

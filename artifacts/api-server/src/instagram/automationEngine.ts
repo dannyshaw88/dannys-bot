@@ -2451,7 +2451,7 @@ class AutomationEngine {
     };
 
     // ── Force Emulation — always runs FIRST if enabled ───────────────────────
-    if (s.forceEmulationEnabled === true) {
+    if (!!s.forceEmulationEnabled) {
       try {
         await client.runForceEmulation(s.forceEmulationRandomise === true);
         console.log(`[engine] @${profile.username}: 📱 force emulation calls complete`);

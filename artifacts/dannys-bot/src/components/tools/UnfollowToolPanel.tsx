@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useToast } from "@/hooks/use-toast";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -180,18 +179,17 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         <div className="flex items-center gap-2 flex-wrap">
           <UserMinus className="w-4 h-4 text-muted-foreground shrink-0" />
           <h4 className="font-semibold text-sm shrink-0">Unfollow Tool</h4>
-          {!hideEnableToggle && (<>
-          <Switch
+          <input
+            type="checkbox"
+            id={`uf-enabled-${tool.id}`}
             checked={tool.enabled}
-            onCheckedChange={(enabled) =>
-              toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })
-            }
+            onChange={(e) => toggleMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled: e.target.checked })}
             disabled={toggleMutation.isPending}
+            className="w-3.5 h-3.5 accent-primary cursor-pointer"
           />
-          <span className={`text-sm font-medium ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
+          <label htmlFor={`uf-enabled-${tool.id}`} className={`text-sm font-medium cursor-pointer select-none ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
             {tool.enabled ? "ACTIVE" : "STOPPED"}
-          </span>
-          </>)}
+          </label>
           {nextUnfollowStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
