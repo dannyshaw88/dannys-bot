@@ -1070,8 +1070,28 @@ export async function registerInstagramRoutes(
     let loginResult: { ok: boolean; message: string };
     let _silentCookies: Array<{ name: string; value: string }> | null = null;
 
-    {
-      // Open the visible EB session for this profile
+    if (process.env.EB_IPC_PORT) {
+      // Electron mode — run entirely in a hidden background BrowserWindow.
+      // No visible EB window is shown to the user during verify.
+      await acquireSilentVerifySlot();
+      try {
+        const silentRes = await electronSilentVerify({
+          profileId,
+          username:  profile.username,
+          password:  profile.password!,
+          twoFAKey:  profile.twoFASecretKey || "",
+          proxy:     proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : undefined,
+          userAgent: ebUA,
+        });
+        loginResult    = { ok: silentRes.ok, message: silentRes.message };
+        _silentCookies = silentRes.cookies;
+      } catch (ebErr: any) {
+        loginResult = { ok: false, message: ebErr?.message ?? "Browser verify failed" };
+      } finally {
+        releaseSilentVerifySlot();
+      }
+    } else {
+      // Puppeteer / dev mode — use the visible EB window.
       try {
         await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
       } catch (ebErr: any) {

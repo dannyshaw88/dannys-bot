@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.720",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Change", text: "Follow Tool, Unfollow Tool, and Contact Tool no longer show their own enable/disable toggle inside the Human Session panel — the master toggle at the top controls all of them." },
+      { category: "Fix", text: "Clicking Verify Account now runs the full login process silently in the background — no browser window opens on screen during verification." },
+      { category: "Fix", text: "Login button detection during automated verify now tries multiple strategies (submit type, text match, form button) and polls up to 5 seconds for the button to become active before clicking." },
+    ],
+  },
+  {
     version: "1.0.719",
     date: "1 Jun 2026",
     items: [

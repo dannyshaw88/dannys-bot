@@ -18,6 +18,7 @@ interface UnfollowToolPanelProps {
   profile: Profile;
   copyOpen?: boolean;
   onCopyOpenChange?: (v: boolean) => void;
+  hideEnableToggle?: boolean;
 }
 
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
@@ -48,7 +49,7 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
 ];
 
-export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: UnfollowToolPanelProps) {
+export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle }: UnfollowToolPanelProps) {
   const updateToolMutation = useUpdateTool();  // settings saves
   const toggleMutation     = useUpdateTool();  // enable/disable toggle separate so it's never blocked
   const { data: allProfiles = [] } = useProfiles();
@@ -179,6 +180,7 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         <div className="flex items-center gap-2 flex-wrap">
           <UserMinus className="w-4 h-4 text-muted-foreground shrink-0" />
           <h4 className="font-semibold text-sm shrink-0">Unfollow Tool</h4>
+          {!hideEnableToggle && (<>
           <Switch
             checked={tool.enabled}
             onCheckedChange={(enabled) =>
@@ -189,6 +191,7 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           <span className={`text-sm font-medium ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
             {tool.enabled ? "ACTIVE" : "STOPPED"}
           </span>
+          </>)}
           {nextUnfollowStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />

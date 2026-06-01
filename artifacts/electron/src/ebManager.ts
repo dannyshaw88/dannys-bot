@@ -98,10 +98,13 @@ function buildPageUtilsJs(autoFill?: { username: string; password: string }): st
       setTimeout(function(){
         setter.call(pInp,AF.password);
         pInp.dispatchEvent(new Event('input',{bubbles:true}));
-        setTimeout(function(){
-          var btn=document.querySelector('button[type="submit"]');
-          if(btn&&!btn.disabled)btn.click();
-        },500);
+        // Poll up to 5 s for the submit button to become enabled (React re-renders async)
+        var _bp=0;var _bi=setInterval(function(){
+          if(++_bp>20){clearInterval(_bi);return;}
+          var btn=document.querySelector('button[type="submit"]')
+            ||Array.from(document.querySelectorAll('button')).find(function(b){var t=(b.innerText||b.textContent||'').trim();return/log[\s-]*in|sign[\s-]*in/i.test(t)&&b.getBoundingClientRect().width>50;});
+          if(btn&&!btn.disabled){clearInterval(_bi);btn.click();}
+        },250);
       },300);
     };
     // 1. Try immediately (form may already be in the DOM)
@@ -1006,9 +1009,15 @@ async function doAutoLogin(
 
       // Poll for submit button to become enabled — React re-renders asynchronously
       // after processing the synthetic events above. 5 s / 250 ms = 20 attempts.
+      // Try multiple selectors: type=submit, then text-match "Log in", then any form button.
       let btn = null;
       for (let i = 0; i < 20; i++) {
-        const b = document.querySelector('button[type="submit"]');
+        const b = document.querySelector('button[type="submit"]')
+          || Array.from(document.querySelectorAll('button')).find(b => {
+               const t = (b.innerText || b.textContent || '').trim();
+               return /log[\s-]*in|sign[\s-]*in/i.test(t);
+             })
+          || document.querySelector('form button:not([type="button"])');
         if (b && !b.disabled) { btn = b; break; }
         await wait(250);
       }

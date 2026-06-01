@@ -1222,7 +1222,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
             <div className="p-4">
-              <ToolConfigPanel tool={followTool} profile={profile} />
+              <ToolConfigPanel tool={followTool} profile={profile} hideEnableToggle />
             </div>
           </div>
         </div>
@@ -1265,7 +1265,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
             <div className="p-4">
-              <UnfollowToolPanel tool={unfollowTool} profile={profile} />
+              <UnfollowToolPanel tool={unfollowTool} profile={profile} hideEnableToggle />
             </div>
           </div>
         </div>

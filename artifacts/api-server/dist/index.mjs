@@ -20617,11 +20617,11 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module2.exports = Router3;
+    module2.exports = Router4;
     module2.exports.Route = Route;
-    function Router3(options) {
-      if (!(this instanceof Router3)) {
-        return new Router3(options);
+    function Router4(options) {
+      if (!(this instanceof Router4)) {
+        return new Router4(options);
       }
       const opts = options || {};
       function router3(req, res, next) {
@@ -20635,9 +20635,9 @@ var require_router = __commonJS({
       router3.stack = [];
       return router3;
     }
-    Router3.prototype = function() {
+    Router4.prototype = function() {
     };
-    Router3.prototype.param = function param(name, fn) {
+    Router4.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -20657,7 +20657,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router3.prototype.handle = function handle(req, res, callback) {
+    Router4.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -20784,7 +20784,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router3.prototype.use = function use(handler) {
+    Router4.prototype.use = function use(handler) {
       let offset = 0;
       let path6 = "/";
       if (typeof handler !== "function") {
@@ -20817,7 +20817,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router3.prototype.route = function route(path6) {
+    Router4.prototype.route = function route(path6) {
       const route2 = new Route(path6);
       const layer = new Layer(path6, {
         sensitive: this.caseSensitive,
@@ -20832,7 +20832,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router3.prototype[method] = function(path6) {
+      Router4.prototype[method] = function(path6) {
         const route = this.route(path6);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21015,7 +21015,7 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router3 = require_router();
+    var Router4 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports2 = module2.exports = {};
@@ -21031,7 +21031,7 @@ var require_application = __commonJS({
         enumerable: true,
         get: function getrouter() {
           if (router3 === null) {
-            router3 = new Router3({
+            router3 = new Router4({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
@@ -23642,7 +23642,7 @@ var require_express = __commonJS({
     var EventEmitter2 = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router3 = require_router();
+    var Router4 = require_router();
     var req = require_request();
     var res = require_response();
     exports2 = module2.exports = createApplication;
@@ -23664,8 +23664,8 @@ var require_express = __commonJS({
     exports2.application = proto;
     exports2.request = req;
     exports2.response = res;
-    exports2.Route = Router3.Route;
-    exports2.Router = Router3;
+    exports2.Route = Router4.Route;
+    exports2.Router = Router4;
     exports2.json = bodyParser.json;
     exports2.raw = bodyParser.raw;
     exports2.static = require_serve_static();
@@ -28520,6 +28520,2327 @@ var require_logger = __commonJS({
     module2.exports.startTime = startTime;
     module2.exports.default = pinoLogger;
     module2.exports.pinoHttp = pinoLogger;
+  }
+});
+
+// ../../node_modules/.pnpm/piexifjs@1.0.6/node_modules/piexifjs/piexif.js
+var require_piexif = __commonJS({
+  "../../node_modules/.pnpm/piexifjs@1.0.6/node_modules/piexifjs/piexif.js"(exports2, module2) {
+    (function() {
+      "use strict";
+      var that = {};
+      that.version = "1.0.4";
+      that.remove = function(jpeg) {
+        var b64 = false;
+        if (jpeg.slice(0, 2) == "\xFF\xD8") {
+        } else if (jpeg.slice(0, 23) == "data:image/jpeg;base64," || jpeg.slice(0, 22) == "data:image/jpg;base64,") {
+          jpeg = atob2(jpeg.split(",")[1]);
+          b64 = true;
+        } else {
+          throw new Error("Given data is not jpeg.");
+        }
+        var segments = splitIntoSegments(jpeg);
+        var newSegments = segments.filter(function(seg) {
+          return !(seg.slice(0, 2) == "\xFF\xE1" && seg.slice(4, 10) == "Exif\0\0");
+        });
+        var new_data = newSegments.join("");
+        if (b64) {
+          new_data = "data:image/jpeg;base64," + btoa2(new_data);
+        }
+        return new_data;
+      };
+      that.insert = function(exif, jpeg) {
+        var b64 = false;
+        if (exif.slice(0, 6) != "Exif\0\0") {
+          throw new Error("Given data is not exif.");
+        }
+        if (jpeg.slice(0, 2) == "\xFF\xD8") {
+        } else if (jpeg.slice(0, 23) == "data:image/jpeg;base64," || jpeg.slice(0, 22) == "data:image/jpg;base64,") {
+          jpeg = atob2(jpeg.split(",")[1]);
+          b64 = true;
+        } else {
+          throw new Error("Given data is not jpeg.");
+        }
+        var exifStr = "\xFF\xE1" + pack(">H", [exif.length + 2]) + exif;
+        var segments = splitIntoSegments(jpeg);
+        var new_data = mergeSegments(segments, exifStr);
+        if (b64) {
+          new_data = "data:image/jpeg;base64," + btoa2(new_data);
+        }
+        return new_data;
+      };
+      that.load = function(data) {
+        var input_data;
+        if (typeof data == "string") {
+          if (data.slice(0, 2) == "\xFF\xD8") {
+            input_data = data;
+          } else if (data.slice(0, 23) == "data:image/jpeg;base64," || data.slice(0, 22) == "data:image/jpg;base64,") {
+            input_data = atob2(data.split(",")[1]);
+          } else if (data.slice(0, 4) == "Exif") {
+            input_data = data.slice(6);
+          } else {
+            throw new Error("'load' gots invalid file data.");
+          }
+        } else {
+          throw new Error("'load' gots invalid type argument.");
+        }
+        var exifDict = {};
+        var exif_dict = {
+          "0th": {},
+          "Exif": {},
+          "GPS": {},
+          "Interop": {},
+          "1st": {},
+          "thumbnail": null
+        };
+        var exifReader = new ExifReader(input_data);
+        if (exifReader.tiftag === null) {
+          return exif_dict;
+        }
+        if (exifReader.tiftag.slice(0, 2) == "II") {
+          exifReader.endian_mark = "<";
+        } else {
+          exifReader.endian_mark = ">";
+        }
+        var pointer = unpack(
+          exifReader.endian_mark + "L",
+          exifReader.tiftag.slice(4, 8)
+        )[0];
+        exif_dict["0th"] = exifReader.get_ifd(pointer, "0th");
+        var first_ifd_pointer = exif_dict["0th"]["first_ifd_pointer"];
+        delete exif_dict["0th"]["first_ifd_pointer"];
+        if (34665 in exif_dict["0th"]) {
+          pointer = exif_dict["0th"][34665];
+          exif_dict["Exif"] = exifReader.get_ifd(pointer, "Exif");
+        }
+        if (34853 in exif_dict["0th"]) {
+          pointer = exif_dict["0th"][34853];
+          exif_dict["GPS"] = exifReader.get_ifd(pointer, "GPS");
+        }
+        if (40965 in exif_dict["Exif"]) {
+          pointer = exif_dict["Exif"][40965];
+          exif_dict["Interop"] = exifReader.get_ifd(pointer, "Interop");
+        }
+        if (first_ifd_pointer != "\0\0\0\0") {
+          pointer = unpack(
+            exifReader.endian_mark + "L",
+            first_ifd_pointer
+          )[0];
+          exif_dict["1st"] = exifReader.get_ifd(pointer, "1st");
+          if (513 in exif_dict["1st"] && 514 in exif_dict["1st"]) {
+            var end = exif_dict["1st"][513] + exif_dict["1st"][514];
+            var thumb = exifReader.tiftag.slice(exif_dict["1st"][513], end);
+            exif_dict["thumbnail"] = thumb;
+          }
+        }
+        return exif_dict;
+      };
+      that.dump = function(exif_dict_original) {
+        var TIFF_HEADER_LENGTH = 8;
+        var exif_dict = copy(exif_dict_original);
+        var header = "Exif\0\0MM\0*\0\0\0\b";
+        var exif_is = false;
+        var gps_is = false;
+        var interop_is = false;
+        var first_is = false;
+        var zeroth_ifd, exif_ifd, interop_ifd, gps_ifd, first_ifd;
+        if ("0th" in exif_dict) {
+          zeroth_ifd = exif_dict["0th"];
+        } else {
+          zeroth_ifd = {};
+        }
+        if ("Exif" in exif_dict && Object.keys(exif_dict["Exif"]).length || "Interop" in exif_dict && Object.keys(exif_dict["Interop"]).length) {
+          zeroth_ifd[34665] = 1;
+          exif_is = true;
+          exif_ifd = exif_dict["Exif"];
+          if ("Interop" in exif_dict && Object.keys(exif_dict["Interop"]).length) {
+            exif_ifd[40965] = 1;
+            interop_is = true;
+            interop_ifd = exif_dict["Interop"];
+          } else if (Object.keys(exif_ifd).indexOf(that.ExifIFD.InteroperabilityTag.toString()) > -1) {
+            delete exif_ifd[40965];
+          }
+        } else if (Object.keys(zeroth_ifd).indexOf(that.ImageIFD.ExifTag.toString()) > -1) {
+          delete zeroth_ifd[34665];
+        }
+        if ("GPS" in exif_dict && Object.keys(exif_dict["GPS"]).length) {
+          zeroth_ifd[that.ImageIFD.GPSTag] = 1;
+          gps_is = true;
+          gps_ifd = exif_dict["GPS"];
+        } else if (Object.keys(zeroth_ifd).indexOf(that.ImageIFD.GPSTag.toString()) > -1) {
+          delete zeroth_ifd[that.ImageIFD.GPSTag];
+        }
+        if ("1st" in exif_dict && "thumbnail" in exif_dict && exif_dict["thumbnail"] != null) {
+          first_is = true;
+          exif_dict["1st"][513] = 1;
+          exif_dict["1st"][514] = 1;
+          first_ifd = exif_dict["1st"];
+        }
+        var zeroth_set = _dict_to_bytes(zeroth_ifd, "0th", 0);
+        var zeroth_length = zeroth_set[0].length + exif_is * 12 + gps_is * 12 + 4 + zeroth_set[1].length;
+        var exif_set, exif_bytes = "", exif_length = 0, gps_set, gps_bytes = "", gps_length = 0, interop_set, interop_bytes = "", interop_length = 0, first_set, first_bytes = "", thumbnail;
+        if (exif_is) {
+          exif_set = _dict_to_bytes(exif_ifd, "Exif", zeroth_length);
+          exif_length = exif_set[0].length + interop_is * 12 + exif_set[1].length;
+        }
+        if (gps_is) {
+          gps_set = _dict_to_bytes(gps_ifd, "GPS", zeroth_length + exif_length);
+          gps_bytes = gps_set.join("");
+          gps_length = gps_bytes.length;
+        }
+        if (interop_is) {
+          var offset = zeroth_length + exif_length + gps_length;
+          interop_set = _dict_to_bytes(interop_ifd, "Interop", offset);
+          interop_bytes = interop_set.join("");
+          interop_length = interop_bytes.length;
+        }
+        if (first_is) {
+          var offset = zeroth_length + exif_length + gps_length + interop_length;
+          first_set = _dict_to_bytes(first_ifd, "1st", offset);
+          thumbnail = _get_thumbnail(exif_dict["thumbnail"]);
+          if (thumbnail.length > 64e3) {
+            throw new Error("Given thumbnail is too large. max 64kB");
+          }
+        }
+        var exif_pointer = "", gps_pointer = "", interop_pointer = "", first_ifd_pointer = "\0\0\0\0";
+        if (exif_is) {
+          var pointer_value = TIFF_HEADER_LENGTH + zeroth_length;
+          var pointer_str = pack(">L", [pointer_value]);
+          var key = 34665;
+          var key_str = pack(">H", [key]);
+          var type_str = pack(">H", [TYPES["Long"]]);
+          var length_str = pack(">L", [1]);
+          exif_pointer = key_str + type_str + length_str + pointer_str;
+        }
+        if (gps_is) {
+          var pointer_value = TIFF_HEADER_LENGTH + zeroth_length + exif_length;
+          var pointer_str = pack(">L", [pointer_value]);
+          var key = 34853;
+          var key_str = pack(">H", [key]);
+          var type_str = pack(">H", [TYPES["Long"]]);
+          var length_str = pack(">L", [1]);
+          gps_pointer = key_str + type_str + length_str + pointer_str;
+        }
+        if (interop_is) {
+          var pointer_value = TIFF_HEADER_LENGTH + zeroth_length + exif_length + gps_length;
+          var pointer_str = pack(">L", [pointer_value]);
+          var key = 40965;
+          var key_str = pack(">H", [key]);
+          var type_str = pack(">H", [TYPES["Long"]]);
+          var length_str = pack(">L", [1]);
+          interop_pointer = key_str + type_str + length_str + pointer_str;
+        }
+        if (first_is) {
+          var pointer_value = TIFF_HEADER_LENGTH + zeroth_length + exif_length + gps_length + interop_length;
+          first_ifd_pointer = pack(">L", [pointer_value]);
+          var thumbnail_pointer = pointer_value + first_set[0].length + 24 + 4 + first_set[1].length;
+          var thumbnail_p_bytes = "\0\0\0\0" + pack(">L", [thumbnail_pointer]);
+          var thumbnail_length_bytes = "\0\0\0\0" + pack(">L", [thumbnail.length]);
+          first_bytes = first_set[0] + thumbnail_p_bytes + thumbnail_length_bytes + "\0\0\0\0" + first_set[1] + thumbnail;
+        }
+        var zeroth_bytes = zeroth_set[0] + exif_pointer + gps_pointer + first_ifd_pointer + zeroth_set[1];
+        if (exif_is) {
+          exif_bytes = exif_set[0] + interop_pointer + exif_set[1];
+        }
+        return header + zeroth_bytes + exif_bytes + gps_bytes + interop_bytes + first_bytes;
+      };
+      function copy(obj2) {
+        return JSON.parse(JSON.stringify(obj2));
+      }
+      function _get_thumbnail(jpeg) {
+        var segments = splitIntoSegments(jpeg);
+        while ("\xFF\xE0" <= segments[1].slice(0, 2) && segments[1].slice(0, 2) <= "\xFF\xEF") {
+          segments = [segments[0]].concat(segments.slice(2));
+        }
+        return segments.join("");
+      }
+      function _pack_byte(array2) {
+        return pack(">" + nStr("B", array2.length), array2);
+      }
+      function _pack_short(array2) {
+        return pack(">" + nStr("H", array2.length), array2);
+      }
+      function _pack_long(array2) {
+        return pack(">" + nStr("L", array2.length), array2);
+      }
+      function _value_to_bytes(raw_value, value_type, offset) {
+        var four_bytes_over = "";
+        var value_str = "";
+        var length, new_value, num, den;
+        if (value_type == "Byte") {
+          length = raw_value.length;
+          if (length <= 4) {
+            value_str = _pack_byte(raw_value) + nStr("\0", 4 - length);
+          } else {
+            value_str = pack(">L", [offset]);
+            four_bytes_over = _pack_byte(raw_value);
+          }
+        } else if (value_type == "Short") {
+          length = raw_value.length;
+          if (length <= 2) {
+            value_str = _pack_short(raw_value) + nStr("\0\0", 2 - length);
+          } else {
+            value_str = pack(">L", [offset]);
+            four_bytes_over = _pack_short(raw_value);
+          }
+        } else if (value_type == "Long") {
+          length = raw_value.length;
+          if (length <= 1) {
+            value_str = _pack_long(raw_value);
+          } else {
+            value_str = pack(">L", [offset]);
+            four_bytes_over = _pack_long(raw_value);
+          }
+        } else if (value_type == "Ascii") {
+          new_value = raw_value + "\0";
+          length = new_value.length;
+          if (length > 4) {
+            value_str = pack(">L", [offset]);
+            four_bytes_over = new_value;
+          } else {
+            value_str = new_value + nStr("\0", 4 - length);
+          }
+        } else if (value_type == "Rational") {
+          if (typeof raw_value[0] == "number") {
+            length = 1;
+            num = raw_value[0];
+            den = raw_value[1];
+            new_value = pack(">L", [num]) + pack(">L", [den]);
+          } else {
+            length = raw_value.length;
+            new_value = "";
+            for (var n = 0; n < length; n++) {
+              num = raw_value[n][0];
+              den = raw_value[n][1];
+              new_value += pack(">L", [num]) + pack(">L", [den]);
+            }
+          }
+          value_str = pack(">L", [offset]);
+          four_bytes_over = new_value;
+        } else if (value_type == "SRational") {
+          if (typeof raw_value[0] == "number") {
+            length = 1;
+            num = raw_value[0];
+            den = raw_value[1];
+            new_value = pack(">l", [num]) + pack(">l", [den]);
+          } else {
+            length = raw_value.length;
+            new_value = "";
+            for (var n = 0; n < length; n++) {
+              num = raw_value[n][0];
+              den = raw_value[n][1];
+              new_value += pack(">l", [num]) + pack(">l", [den]);
+            }
+          }
+          value_str = pack(">L", [offset]);
+          four_bytes_over = new_value;
+        } else if (value_type == "Undefined") {
+          length = raw_value.length;
+          if (length > 4) {
+            value_str = pack(">L", [offset]);
+            four_bytes_over = raw_value;
+          } else {
+            value_str = raw_value + nStr("\0", 4 - length);
+          }
+        }
+        var length_str = pack(">L", [length]);
+        return [length_str, value_str, four_bytes_over];
+      }
+      function _dict_to_bytes(ifd_dict, ifd, ifd_offset) {
+        var TIFF_HEADER_LENGTH = 8;
+        var tag_count = Object.keys(ifd_dict).length;
+        var entry_header = pack(">H", [tag_count]);
+        var entries_length;
+        if (["0th", "1st"].indexOf(ifd) > -1) {
+          entries_length = 2 + tag_count * 12 + 4;
+        } else {
+          entries_length = 2 + tag_count * 12;
+        }
+        var entries = "";
+        var values = "";
+        var key;
+        for (var key in ifd_dict) {
+          if (typeof key == "string") {
+            key = parseInt(key);
+          }
+          if (ifd == "0th" && [34665, 34853].indexOf(key) > -1) {
+            continue;
+          } else if (ifd == "Exif" && key == 40965) {
+            continue;
+          } else if (ifd == "1st" && [513, 514].indexOf(key) > -1) {
+            continue;
+          }
+          var raw_value = ifd_dict[key];
+          var key_str = pack(">H", [key]);
+          var value_type = TAGS[ifd][key]["type"];
+          var type_str = pack(">H", [TYPES[value_type]]);
+          if (typeof raw_value == "number") {
+            raw_value = [raw_value];
+          }
+          var offset = TIFF_HEADER_LENGTH + entries_length + ifd_offset + values.length;
+          var b3 = _value_to_bytes(raw_value, value_type, offset);
+          var length_str = b3[0];
+          var value_str = b3[1];
+          var four_bytes_over = b3[2];
+          entries += key_str + type_str + length_str + value_str;
+          values += four_bytes_over;
+        }
+        return [entry_header + entries, values];
+      }
+      function ExifReader(data) {
+        var segments, app1;
+        if (data.slice(0, 2) == "\xFF\xD8") {
+          segments = splitIntoSegments(data);
+          app1 = getExifSeg(segments);
+          if (app1) {
+            this.tiftag = app1.slice(10);
+          } else {
+            this.tiftag = null;
+          }
+        } else if (["II", "MM"].indexOf(data.slice(0, 2)) > -1) {
+          this.tiftag = data;
+        } else if (data.slice(0, 4) == "Exif") {
+          this.tiftag = data.slice(6);
+        } else {
+          throw new Error("Given file is neither JPEG nor TIFF.");
+        }
+      }
+      ExifReader.prototype = {
+        get_ifd: function(pointer, ifd_name) {
+          var ifd_dict = {};
+          var tag_count = unpack(
+            this.endian_mark + "H",
+            this.tiftag.slice(pointer, pointer + 2)
+          )[0];
+          var offset = pointer + 2;
+          var t2;
+          if (["0th", "1st"].indexOf(ifd_name) > -1) {
+            t2 = "Image";
+          } else {
+            t2 = ifd_name;
+          }
+          for (var x3 = 0; x3 < tag_count; x3++) {
+            pointer = offset + 12 * x3;
+            var tag = unpack(
+              this.endian_mark + "H",
+              this.tiftag.slice(pointer, pointer + 2)
+            )[0];
+            var value_type = unpack(
+              this.endian_mark + "H",
+              this.tiftag.slice(pointer + 2, pointer + 4)
+            )[0];
+            var value_num = unpack(
+              this.endian_mark + "L",
+              this.tiftag.slice(pointer + 4, pointer + 8)
+            )[0];
+            var value = this.tiftag.slice(pointer + 8, pointer + 12);
+            var v_set = [value_type, value_num, value];
+            if (tag in TAGS[t2]) {
+              ifd_dict[tag] = this.convert_value(v_set);
+            }
+          }
+          if (ifd_name == "0th") {
+            pointer = offset + 12 * tag_count;
+            ifd_dict["first_ifd_pointer"] = this.tiftag.slice(pointer, pointer + 4);
+          }
+          return ifd_dict;
+        },
+        convert_value: function(val) {
+          var data = null;
+          var t2 = val[0];
+          var length = val[1];
+          var value = val[2];
+          var pointer;
+          if (t2 == 1) {
+            if (length > 4) {
+              pointer = unpack(this.endian_mark + "L", value)[0];
+              data = unpack(
+                this.endian_mark + nStr("B", length),
+                this.tiftag.slice(pointer, pointer + length)
+              );
+            } else {
+              data = unpack(this.endian_mark + nStr("B", length), value.slice(0, length));
+            }
+          } else if (t2 == 2) {
+            if (length > 4) {
+              pointer = unpack(this.endian_mark + "L", value)[0];
+              data = this.tiftag.slice(pointer, pointer + length - 1);
+            } else {
+              data = value.slice(0, length - 1);
+            }
+          } else if (t2 == 3) {
+            if (length > 2) {
+              pointer = unpack(this.endian_mark + "L", value)[0];
+              data = unpack(
+                this.endian_mark + nStr("H", length),
+                this.tiftag.slice(pointer, pointer + length * 2)
+              );
+            } else {
+              data = unpack(
+                this.endian_mark + nStr("H", length),
+                value.slice(0, length * 2)
+              );
+            }
+          } else if (t2 == 4) {
+            if (length > 1) {
+              pointer = unpack(this.endian_mark + "L", value)[0];
+              data = unpack(
+                this.endian_mark + nStr("L", length),
+                this.tiftag.slice(pointer, pointer + length * 4)
+              );
+            } else {
+              data = unpack(
+                this.endian_mark + nStr("L", length),
+                value
+              );
+            }
+          } else if (t2 == 5) {
+            pointer = unpack(this.endian_mark + "L", value)[0];
+            if (length > 1) {
+              data = [];
+              for (var x3 = 0; x3 < length; x3++) {
+                data.push([
+                  unpack(
+                    this.endian_mark + "L",
+                    this.tiftag.slice(pointer + x3 * 8, pointer + 4 + x3 * 8)
+                  )[0],
+                  unpack(
+                    this.endian_mark + "L",
+                    this.tiftag.slice(pointer + 4 + x3 * 8, pointer + 8 + x3 * 8)
+                  )[0]
+                ]);
+              }
+            } else {
+              data = [
+                unpack(
+                  this.endian_mark + "L",
+                  this.tiftag.slice(pointer, pointer + 4)
+                )[0],
+                unpack(
+                  this.endian_mark + "L",
+                  this.tiftag.slice(pointer + 4, pointer + 8)
+                )[0]
+              ];
+            }
+          } else if (t2 == 7) {
+            if (length > 4) {
+              pointer = unpack(this.endian_mark + "L", value)[0];
+              data = this.tiftag.slice(pointer, pointer + length);
+            } else {
+              data = value.slice(0, length);
+            }
+          } else if (t2 == 9) {
+            if (length > 1) {
+              pointer = unpack(this.endian_mark + "L", value)[0];
+              data = unpack(
+                this.endian_mark + nStr("l", length),
+                this.tiftag.slice(pointer, pointer + length * 4)
+              );
+            } else {
+              data = unpack(
+                this.endian_mark + nStr("l", length),
+                value
+              );
+            }
+          } else if (t2 == 10) {
+            pointer = unpack(this.endian_mark + "L", value)[0];
+            if (length > 1) {
+              data = [];
+              for (var x3 = 0; x3 < length; x3++) {
+                data.push([
+                  unpack(
+                    this.endian_mark + "l",
+                    this.tiftag.slice(pointer + x3 * 8, pointer + 4 + x3 * 8)
+                  )[0],
+                  unpack(
+                    this.endian_mark + "l",
+                    this.tiftag.slice(pointer + 4 + x3 * 8, pointer + 8 + x3 * 8)
+                  )[0]
+                ]);
+              }
+            } else {
+              data = [
+                unpack(
+                  this.endian_mark + "l",
+                  this.tiftag.slice(pointer, pointer + 4)
+                )[0],
+                unpack(
+                  this.endian_mark + "l",
+                  this.tiftag.slice(pointer + 4, pointer + 8)
+                )[0]
+              ];
+            }
+          } else {
+            throw new Error("Exif might be wrong. Got incorrect value type to decode. type:" + t2);
+          }
+          if (data instanceof Array && data.length == 1) {
+            return data[0];
+          } else {
+            return data;
+          }
+        }
+      };
+      if (typeof window !== "undefined" && typeof window.btoa === "function") {
+        var btoa2 = window.btoa;
+      }
+      if (typeof btoa2 === "undefined") {
+        var btoa2 = function(input) {
+          var output = "";
+          var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+          var i2 = 0;
+          var keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+          while (i2 < input.length) {
+            chr1 = input.charCodeAt(i2++);
+            chr2 = input.charCodeAt(i2++);
+            chr3 = input.charCodeAt(i2++);
+            enc1 = chr1 >> 2;
+            enc2 = (chr1 & 3) << 4 | chr2 >> 4;
+            enc3 = (chr2 & 15) << 2 | chr3 >> 6;
+            enc4 = chr3 & 63;
+            if (isNaN(chr2)) {
+              enc3 = enc4 = 64;
+            } else if (isNaN(chr3)) {
+              enc4 = 64;
+            }
+            output = output + keyStr.charAt(enc1) + keyStr.charAt(enc2) + keyStr.charAt(enc3) + keyStr.charAt(enc4);
+          }
+          return output;
+        };
+      }
+      if (typeof window !== "undefined" && typeof window.atob === "function") {
+        var atob2 = window.atob;
+      }
+      if (typeof atob2 === "undefined") {
+        var atob2 = function(input) {
+          var output = "";
+          var chr1, chr2, chr3;
+          var enc1, enc2, enc3, enc4;
+          var i2 = 0;
+          var keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+          input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+          while (i2 < input.length) {
+            enc1 = keyStr.indexOf(input.charAt(i2++));
+            enc2 = keyStr.indexOf(input.charAt(i2++));
+            enc3 = keyStr.indexOf(input.charAt(i2++));
+            enc4 = keyStr.indexOf(input.charAt(i2++));
+            chr1 = enc1 << 2 | enc2 >> 4;
+            chr2 = (enc2 & 15) << 4 | enc3 >> 2;
+            chr3 = (enc3 & 3) << 6 | enc4;
+            output = output + String.fromCharCode(chr1);
+            if (enc3 != 64) {
+              output = output + String.fromCharCode(chr2);
+            }
+            if (enc4 != 64) {
+              output = output + String.fromCharCode(chr3);
+            }
+          }
+          return output;
+        };
+      }
+      function getImageSize(imageArray) {
+        var segments = slice2Segments(imageArray);
+        var seg, width, height, SOF = [192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207];
+        for (var x3 = 0; x3 < segments.length; x3++) {
+          seg = segments[x3];
+          if (SOF.indexOf(seg[1]) >= 0) {
+            height = seg[5] * 256 + seg[6];
+            width = seg[7] * 256 + seg[8];
+            break;
+          }
+        }
+        return [width, height];
+      }
+      function pack(mark, array2) {
+        if (!(array2 instanceof Array)) {
+          throw new Error("'pack' error. Got invalid type argument.");
+        }
+        if (mark.length - 1 != array2.length) {
+          throw new Error("'pack' error. " + (mark.length - 1) + " marks, " + array2.length + " elements.");
+        }
+        var littleEndian;
+        if (mark[0] == "<") {
+          littleEndian = true;
+        } else if (mark[0] == ">") {
+          littleEndian = false;
+        } else {
+          throw new Error("");
+        }
+        var packed = "";
+        var p = 1;
+        var val = null;
+        var c3 = null;
+        var valStr = null;
+        while (c3 = mark[p]) {
+          if (c3.toLowerCase() == "b") {
+            val = array2[p - 1];
+            if (c3 == "b" && val < 0) {
+              val += 256;
+            }
+            if (val > 255 || val < 0) {
+              throw new Error("'pack' error.");
+            } else {
+              valStr = String.fromCharCode(val);
+            }
+          } else if (c3 == "H") {
+            val = array2[p - 1];
+            if (val > 65535 || val < 0) {
+              throw new Error("'pack' error.");
+            } else {
+              valStr = String.fromCharCode(Math.floor(val % 65536 / 256)) + String.fromCharCode(val % 256);
+              if (littleEndian) {
+                valStr = valStr.split("").reverse().join("");
+              }
+            }
+          } else if (c3.toLowerCase() == "l") {
+            val = array2[p - 1];
+            if (c3 == "l" && val < 0) {
+              val += 4294967296;
+            }
+            if (val > 4294967295 || val < 0) {
+              throw new Error("'pack' error.");
+            } else {
+              valStr = String.fromCharCode(Math.floor(val / 16777216)) + String.fromCharCode(Math.floor(val % 16777216 / 65536)) + String.fromCharCode(Math.floor(val % 65536 / 256)) + String.fromCharCode(val % 256);
+              if (littleEndian) {
+                valStr = valStr.split("").reverse().join("");
+              }
+            }
+          } else {
+            throw new Error("'pack' error.");
+          }
+          packed += valStr;
+          p += 1;
+        }
+        return packed;
+      }
+      function unpack(mark, str) {
+        if (typeof str != "string") {
+          throw new Error("'unpack' error. Got invalid type argument.");
+        }
+        var l2 = 0;
+        for (var markPointer = 1; markPointer < mark.length; markPointer++) {
+          if (mark[markPointer].toLowerCase() == "b") {
+            l2 += 1;
+          } else if (mark[markPointer].toLowerCase() == "h") {
+            l2 += 2;
+          } else if (mark[markPointer].toLowerCase() == "l") {
+            l2 += 4;
+          } else {
+            throw new Error("'unpack' error. Got invalid mark.");
+          }
+        }
+        if (l2 != str.length) {
+          throw new Error("'unpack' error. Mismatch between symbol and string length. " + l2 + ":" + str.length);
+        }
+        var littleEndian;
+        if (mark[0] == "<") {
+          littleEndian = true;
+        } else if (mark[0] == ">") {
+          littleEndian = false;
+        } else {
+          throw new Error("'unpack' error.");
+        }
+        var unpacked = [];
+        var strPointer = 0;
+        var p = 1;
+        var val = null;
+        var c3 = null;
+        var length = null;
+        var sliced = "";
+        while (c3 = mark[p]) {
+          if (c3.toLowerCase() == "b") {
+            length = 1;
+            sliced = str.slice(strPointer, strPointer + length);
+            val = sliced.charCodeAt(0);
+            if (c3 == "b" && val >= 128) {
+              val -= 256;
+            }
+          } else if (c3 == "H") {
+            length = 2;
+            sliced = str.slice(strPointer, strPointer + length);
+            if (littleEndian) {
+              sliced = sliced.split("").reverse().join("");
+            }
+            val = sliced.charCodeAt(0) * 256 + sliced.charCodeAt(1);
+          } else if (c3.toLowerCase() == "l") {
+            length = 4;
+            sliced = str.slice(strPointer, strPointer + length);
+            if (littleEndian) {
+              sliced = sliced.split("").reverse().join("");
+            }
+            val = sliced.charCodeAt(0) * 16777216 + sliced.charCodeAt(1) * 65536 + sliced.charCodeAt(2) * 256 + sliced.charCodeAt(3);
+            if (c3 == "l" && val >= 2147483648) {
+              val -= 4294967296;
+            }
+          } else {
+            throw new Error("'unpack' error. " + c3);
+          }
+          unpacked.push(val);
+          strPointer += length;
+          p += 1;
+        }
+        return unpacked;
+      }
+      function nStr(ch, num) {
+        var str = "";
+        for (var i2 = 0; i2 < num; i2++) {
+          str += ch;
+        }
+        return str;
+      }
+      function splitIntoSegments(data) {
+        if (data.slice(0, 2) != "\xFF\xD8") {
+          throw new Error("Given data isn't JPEG.");
+        }
+        var head = 2;
+        var segments = ["\xFF\xD8"];
+        while (true) {
+          if (data.slice(head, head + 2) == "\xFF\xDA") {
+            segments.push(data.slice(head));
+            break;
+          } else {
+            var length = unpack(">H", data.slice(head + 2, head + 4))[0];
+            var endPoint = head + length + 2;
+            segments.push(data.slice(head, endPoint));
+            head = endPoint;
+          }
+          if (head >= data.length) {
+            throw new Error("Wrong JPEG data.");
+          }
+        }
+        return segments;
+      }
+      function getExifSeg(segments) {
+        var seg;
+        for (var i2 = 0; i2 < segments.length; i2++) {
+          seg = segments[i2];
+          if (seg.slice(0, 2) == "\xFF\xE1" && seg.slice(4, 10) == "Exif\0\0") {
+            return seg;
+          }
+        }
+        return null;
+      }
+      function mergeSegments(segments, exif) {
+        var hasExifSegment = false;
+        var additionalAPP1ExifSegments = [];
+        segments.forEach(function(segment, i2) {
+          if (segment.slice(0, 2) == "\xFF\xE1" && segment.slice(4, 10) == "Exif\0\0") {
+            if (!hasExifSegment) {
+              segments[i2] = exif;
+              hasExifSegment = true;
+            } else {
+              additionalAPP1ExifSegments.unshift(i2);
+            }
+          }
+        });
+        additionalAPP1ExifSegments.forEach(function(segmentIndex) {
+          segments.splice(segmentIndex, 1);
+        });
+        if (!hasExifSegment && exif) {
+          segments = [segments[0], exif].concat(segments.slice(1));
+        }
+        return segments.join("");
+      }
+      function toHex(str) {
+        var hexStr = "";
+        for (var i2 = 0; i2 < str.length; i2++) {
+          var h4 = str.charCodeAt(i2);
+          var hex = (h4 < 10 ? "0" : "") + h4.toString(16);
+          hexStr += hex + " ";
+        }
+        return hexStr;
+      }
+      var TYPES = {
+        "Byte": 1,
+        "Ascii": 2,
+        "Short": 3,
+        "Long": 4,
+        "Rational": 5,
+        "Undefined": 7,
+        "SLong": 9,
+        "SRational": 10
+      };
+      var TAGS = {
+        "Image": {
+          11: {
+            "name": "ProcessingSoftware",
+            "type": "Ascii"
+          },
+          254: {
+            "name": "NewSubfileType",
+            "type": "Long"
+          },
+          255: {
+            "name": "SubfileType",
+            "type": "Short"
+          },
+          256: {
+            "name": "ImageWidth",
+            "type": "Long"
+          },
+          257: {
+            "name": "ImageLength",
+            "type": "Long"
+          },
+          258: {
+            "name": "BitsPerSample",
+            "type": "Short"
+          },
+          259: {
+            "name": "Compression",
+            "type": "Short"
+          },
+          262: {
+            "name": "PhotometricInterpretation",
+            "type": "Short"
+          },
+          263: {
+            "name": "Threshholding",
+            "type": "Short"
+          },
+          264: {
+            "name": "CellWidth",
+            "type": "Short"
+          },
+          265: {
+            "name": "CellLength",
+            "type": "Short"
+          },
+          266: {
+            "name": "FillOrder",
+            "type": "Short"
+          },
+          269: {
+            "name": "DocumentName",
+            "type": "Ascii"
+          },
+          270: {
+            "name": "ImageDescription",
+            "type": "Ascii"
+          },
+          271: {
+            "name": "Make",
+            "type": "Ascii"
+          },
+          272: {
+            "name": "Model",
+            "type": "Ascii"
+          },
+          273: {
+            "name": "StripOffsets",
+            "type": "Long"
+          },
+          274: {
+            "name": "Orientation",
+            "type": "Short"
+          },
+          277: {
+            "name": "SamplesPerPixel",
+            "type": "Short"
+          },
+          278: {
+            "name": "RowsPerStrip",
+            "type": "Long"
+          },
+          279: {
+            "name": "StripByteCounts",
+            "type": "Long"
+          },
+          282: {
+            "name": "XResolution",
+            "type": "Rational"
+          },
+          283: {
+            "name": "YResolution",
+            "type": "Rational"
+          },
+          284: {
+            "name": "PlanarConfiguration",
+            "type": "Short"
+          },
+          290: {
+            "name": "GrayResponseUnit",
+            "type": "Short"
+          },
+          291: {
+            "name": "GrayResponseCurve",
+            "type": "Short"
+          },
+          292: {
+            "name": "T4Options",
+            "type": "Long"
+          },
+          293: {
+            "name": "T6Options",
+            "type": "Long"
+          },
+          296: {
+            "name": "ResolutionUnit",
+            "type": "Short"
+          },
+          301: {
+            "name": "TransferFunction",
+            "type": "Short"
+          },
+          305: {
+            "name": "Software",
+            "type": "Ascii"
+          },
+          306: {
+            "name": "DateTime",
+            "type": "Ascii"
+          },
+          315: {
+            "name": "Artist",
+            "type": "Ascii"
+          },
+          316: {
+            "name": "HostComputer",
+            "type": "Ascii"
+          },
+          317: {
+            "name": "Predictor",
+            "type": "Short"
+          },
+          318: {
+            "name": "WhitePoint",
+            "type": "Rational"
+          },
+          319: {
+            "name": "PrimaryChromaticities",
+            "type": "Rational"
+          },
+          320: {
+            "name": "ColorMap",
+            "type": "Short"
+          },
+          321: {
+            "name": "HalftoneHints",
+            "type": "Short"
+          },
+          322: {
+            "name": "TileWidth",
+            "type": "Short"
+          },
+          323: {
+            "name": "TileLength",
+            "type": "Short"
+          },
+          324: {
+            "name": "TileOffsets",
+            "type": "Short"
+          },
+          325: {
+            "name": "TileByteCounts",
+            "type": "Short"
+          },
+          330: {
+            "name": "SubIFDs",
+            "type": "Long"
+          },
+          332: {
+            "name": "InkSet",
+            "type": "Short"
+          },
+          333: {
+            "name": "InkNames",
+            "type": "Ascii"
+          },
+          334: {
+            "name": "NumberOfInks",
+            "type": "Short"
+          },
+          336: {
+            "name": "DotRange",
+            "type": "Byte"
+          },
+          337: {
+            "name": "TargetPrinter",
+            "type": "Ascii"
+          },
+          338: {
+            "name": "ExtraSamples",
+            "type": "Short"
+          },
+          339: {
+            "name": "SampleFormat",
+            "type": "Short"
+          },
+          340: {
+            "name": "SMinSampleValue",
+            "type": "Short"
+          },
+          341: {
+            "name": "SMaxSampleValue",
+            "type": "Short"
+          },
+          342: {
+            "name": "TransferRange",
+            "type": "Short"
+          },
+          343: {
+            "name": "ClipPath",
+            "type": "Byte"
+          },
+          344: {
+            "name": "XClipPathUnits",
+            "type": "Long"
+          },
+          345: {
+            "name": "YClipPathUnits",
+            "type": "Long"
+          },
+          346: {
+            "name": "Indexed",
+            "type": "Short"
+          },
+          347: {
+            "name": "JPEGTables",
+            "type": "Undefined"
+          },
+          351: {
+            "name": "OPIProxy",
+            "type": "Short"
+          },
+          512: {
+            "name": "JPEGProc",
+            "type": "Long"
+          },
+          513: {
+            "name": "JPEGInterchangeFormat",
+            "type": "Long"
+          },
+          514: {
+            "name": "JPEGInterchangeFormatLength",
+            "type": "Long"
+          },
+          515: {
+            "name": "JPEGRestartInterval",
+            "type": "Short"
+          },
+          517: {
+            "name": "JPEGLosslessPredictors",
+            "type": "Short"
+          },
+          518: {
+            "name": "JPEGPointTransforms",
+            "type": "Short"
+          },
+          519: {
+            "name": "JPEGQTables",
+            "type": "Long"
+          },
+          520: {
+            "name": "JPEGDCTables",
+            "type": "Long"
+          },
+          521: {
+            "name": "JPEGACTables",
+            "type": "Long"
+          },
+          529: {
+            "name": "YCbCrCoefficients",
+            "type": "Rational"
+          },
+          530: {
+            "name": "YCbCrSubSampling",
+            "type": "Short"
+          },
+          531: {
+            "name": "YCbCrPositioning",
+            "type": "Short"
+          },
+          532: {
+            "name": "ReferenceBlackWhite",
+            "type": "Rational"
+          },
+          700: {
+            "name": "XMLPacket",
+            "type": "Byte"
+          },
+          18246: {
+            "name": "Rating",
+            "type": "Short"
+          },
+          18249: {
+            "name": "RatingPercent",
+            "type": "Short"
+          },
+          32781: {
+            "name": "ImageID",
+            "type": "Ascii"
+          },
+          33421: {
+            "name": "CFARepeatPatternDim",
+            "type": "Short"
+          },
+          33422: {
+            "name": "CFAPattern",
+            "type": "Byte"
+          },
+          33423: {
+            "name": "BatteryLevel",
+            "type": "Rational"
+          },
+          33432: {
+            "name": "Copyright",
+            "type": "Ascii"
+          },
+          33434: {
+            "name": "ExposureTime",
+            "type": "Rational"
+          },
+          34377: {
+            "name": "ImageResources",
+            "type": "Byte"
+          },
+          34665: {
+            "name": "ExifTag",
+            "type": "Long"
+          },
+          34675: {
+            "name": "InterColorProfile",
+            "type": "Undefined"
+          },
+          34853: {
+            "name": "GPSTag",
+            "type": "Long"
+          },
+          34857: {
+            "name": "Interlace",
+            "type": "Short"
+          },
+          34858: {
+            "name": "TimeZoneOffset",
+            "type": "Long"
+          },
+          34859: {
+            "name": "SelfTimerMode",
+            "type": "Short"
+          },
+          37387: {
+            "name": "FlashEnergy",
+            "type": "Rational"
+          },
+          37388: {
+            "name": "SpatialFrequencyResponse",
+            "type": "Undefined"
+          },
+          37389: {
+            "name": "Noise",
+            "type": "Undefined"
+          },
+          37390: {
+            "name": "FocalPlaneXResolution",
+            "type": "Rational"
+          },
+          37391: {
+            "name": "FocalPlaneYResolution",
+            "type": "Rational"
+          },
+          37392: {
+            "name": "FocalPlaneResolutionUnit",
+            "type": "Short"
+          },
+          37393: {
+            "name": "ImageNumber",
+            "type": "Long"
+          },
+          37394: {
+            "name": "SecurityClassification",
+            "type": "Ascii"
+          },
+          37395: {
+            "name": "ImageHistory",
+            "type": "Ascii"
+          },
+          37397: {
+            "name": "ExposureIndex",
+            "type": "Rational"
+          },
+          37398: {
+            "name": "TIFFEPStandardID",
+            "type": "Byte"
+          },
+          37399: {
+            "name": "SensingMethod",
+            "type": "Short"
+          },
+          40091: {
+            "name": "XPTitle",
+            "type": "Byte"
+          },
+          40092: {
+            "name": "XPComment",
+            "type": "Byte"
+          },
+          40093: {
+            "name": "XPAuthor",
+            "type": "Byte"
+          },
+          40094: {
+            "name": "XPKeywords",
+            "type": "Byte"
+          },
+          40095: {
+            "name": "XPSubject",
+            "type": "Byte"
+          },
+          50341: {
+            "name": "PrintImageMatching",
+            "type": "Undefined"
+          },
+          50706: {
+            "name": "DNGVersion",
+            "type": "Byte"
+          },
+          50707: {
+            "name": "DNGBackwardVersion",
+            "type": "Byte"
+          },
+          50708: {
+            "name": "UniqueCameraModel",
+            "type": "Ascii"
+          },
+          50709: {
+            "name": "LocalizedCameraModel",
+            "type": "Byte"
+          },
+          50710: {
+            "name": "CFAPlaneColor",
+            "type": "Byte"
+          },
+          50711: {
+            "name": "CFALayout",
+            "type": "Short"
+          },
+          50712: {
+            "name": "LinearizationTable",
+            "type": "Short"
+          },
+          50713: {
+            "name": "BlackLevelRepeatDim",
+            "type": "Short"
+          },
+          50714: {
+            "name": "BlackLevel",
+            "type": "Rational"
+          },
+          50715: {
+            "name": "BlackLevelDeltaH",
+            "type": "SRational"
+          },
+          50716: {
+            "name": "BlackLevelDeltaV",
+            "type": "SRational"
+          },
+          50717: {
+            "name": "WhiteLevel",
+            "type": "Short"
+          },
+          50718: {
+            "name": "DefaultScale",
+            "type": "Rational"
+          },
+          50719: {
+            "name": "DefaultCropOrigin",
+            "type": "Short"
+          },
+          50720: {
+            "name": "DefaultCropSize",
+            "type": "Short"
+          },
+          50721: {
+            "name": "ColorMatrix1",
+            "type": "SRational"
+          },
+          50722: {
+            "name": "ColorMatrix2",
+            "type": "SRational"
+          },
+          50723: {
+            "name": "CameraCalibration1",
+            "type": "SRational"
+          },
+          50724: {
+            "name": "CameraCalibration2",
+            "type": "SRational"
+          },
+          50725: {
+            "name": "ReductionMatrix1",
+            "type": "SRational"
+          },
+          50726: {
+            "name": "ReductionMatrix2",
+            "type": "SRational"
+          },
+          50727: {
+            "name": "AnalogBalance",
+            "type": "Rational"
+          },
+          50728: {
+            "name": "AsShotNeutral",
+            "type": "Short"
+          },
+          50729: {
+            "name": "AsShotWhiteXY",
+            "type": "Rational"
+          },
+          50730: {
+            "name": "BaselineExposure",
+            "type": "SRational"
+          },
+          50731: {
+            "name": "BaselineNoise",
+            "type": "Rational"
+          },
+          50732: {
+            "name": "BaselineSharpness",
+            "type": "Rational"
+          },
+          50733: {
+            "name": "BayerGreenSplit",
+            "type": "Long"
+          },
+          50734: {
+            "name": "LinearResponseLimit",
+            "type": "Rational"
+          },
+          50735: {
+            "name": "CameraSerialNumber",
+            "type": "Ascii"
+          },
+          50736: {
+            "name": "LensInfo",
+            "type": "Rational"
+          },
+          50737: {
+            "name": "ChromaBlurRadius",
+            "type": "Rational"
+          },
+          50738: {
+            "name": "AntiAliasStrength",
+            "type": "Rational"
+          },
+          50739: {
+            "name": "ShadowScale",
+            "type": "SRational"
+          },
+          50740: {
+            "name": "DNGPrivateData",
+            "type": "Byte"
+          },
+          50741: {
+            "name": "MakerNoteSafety",
+            "type": "Short"
+          },
+          50778: {
+            "name": "CalibrationIlluminant1",
+            "type": "Short"
+          },
+          50779: {
+            "name": "CalibrationIlluminant2",
+            "type": "Short"
+          },
+          50780: {
+            "name": "BestQualityScale",
+            "type": "Rational"
+          },
+          50781: {
+            "name": "RawDataUniqueID",
+            "type": "Byte"
+          },
+          50827: {
+            "name": "OriginalRawFileName",
+            "type": "Byte"
+          },
+          50828: {
+            "name": "OriginalRawFileData",
+            "type": "Undefined"
+          },
+          50829: {
+            "name": "ActiveArea",
+            "type": "Short"
+          },
+          50830: {
+            "name": "MaskedAreas",
+            "type": "Short"
+          },
+          50831: {
+            "name": "AsShotICCProfile",
+            "type": "Undefined"
+          },
+          50832: {
+            "name": "AsShotPreProfileMatrix",
+            "type": "SRational"
+          },
+          50833: {
+            "name": "CurrentICCProfile",
+            "type": "Undefined"
+          },
+          50834: {
+            "name": "CurrentPreProfileMatrix",
+            "type": "SRational"
+          },
+          50879: {
+            "name": "ColorimetricReference",
+            "type": "Short"
+          },
+          50931: {
+            "name": "CameraCalibrationSignature",
+            "type": "Byte"
+          },
+          50932: {
+            "name": "ProfileCalibrationSignature",
+            "type": "Byte"
+          },
+          50934: {
+            "name": "AsShotProfileName",
+            "type": "Byte"
+          },
+          50935: {
+            "name": "NoiseReductionApplied",
+            "type": "Rational"
+          },
+          50936: {
+            "name": "ProfileName",
+            "type": "Byte"
+          },
+          50937: {
+            "name": "ProfileHueSatMapDims",
+            "type": "Long"
+          },
+          50938: {
+            "name": "ProfileHueSatMapData1",
+            "type": "Float"
+          },
+          50939: {
+            "name": "ProfileHueSatMapData2",
+            "type": "Float"
+          },
+          50940: {
+            "name": "ProfileToneCurve",
+            "type": "Float"
+          },
+          50941: {
+            "name": "ProfileEmbedPolicy",
+            "type": "Long"
+          },
+          50942: {
+            "name": "ProfileCopyright",
+            "type": "Byte"
+          },
+          50964: {
+            "name": "ForwardMatrix1",
+            "type": "SRational"
+          },
+          50965: {
+            "name": "ForwardMatrix2",
+            "type": "SRational"
+          },
+          50966: {
+            "name": "PreviewApplicationName",
+            "type": "Byte"
+          },
+          50967: {
+            "name": "PreviewApplicationVersion",
+            "type": "Byte"
+          },
+          50968: {
+            "name": "PreviewSettingsName",
+            "type": "Byte"
+          },
+          50969: {
+            "name": "PreviewSettingsDigest",
+            "type": "Byte"
+          },
+          50970: {
+            "name": "PreviewColorSpace",
+            "type": "Long"
+          },
+          50971: {
+            "name": "PreviewDateTime",
+            "type": "Ascii"
+          },
+          50972: {
+            "name": "RawImageDigest",
+            "type": "Undefined"
+          },
+          50973: {
+            "name": "OriginalRawFileDigest",
+            "type": "Undefined"
+          },
+          50974: {
+            "name": "SubTileBlockSize",
+            "type": "Long"
+          },
+          50975: {
+            "name": "RowInterleaveFactor",
+            "type": "Long"
+          },
+          50981: {
+            "name": "ProfileLookTableDims",
+            "type": "Long"
+          },
+          50982: {
+            "name": "ProfileLookTableData",
+            "type": "Float"
+          },
+          51008: {
+            "name": "OpcodeList1",
+            "type": "Undefined"
+          },
+          51009: {
+            "name": "OpcodeList2",
+            "type": "Undefined"
+          },
+          51022: {
+            "name": "OpcodeList3",
+            "type": "Undefined"
+          }
+        },
+        "Exif": {
+          33434: {
+            "name": "ExposureTime",
+            "type": "Rational"
+          },
+          33437: {
+            "name": "FNumber",
+            "type": "Rational"
+          },
+          34850: {
+            "name": "ExposureProgram",
+            "type": "Short"
+          },
+          34852: {
+            "name": "SpectralSensitivity",
+            "type": "Ascii"
+          },
+          34855: {
+            "name": "ISOSpeedRatings",
+            "type": "Short"
+          },
+          34856: {
+            "name": "OECF",
+            "type": "Undefined"
+          },
+          34864: {
+            "name": "SensitivityType",
+            "type": "Short"
+          },
+          34865: {
+            "name": "StandardOutputSensitivity",
+            "type": "Long"
+          },
+          34866: {
+            "name": "RecommendedExposureIndex",
+            "type": "Long"
+          },
+          34867: {
+            "name": "ISOSpeed",
+            "type": "Long"
+          },
+          34868: {
+            "name": "ISOSpeedLatitudeyyy",
+            "type": "Long"
+          },
+          34869: {
+            "name": "ISOSpeedLatitudezzz",
+            "type": "Long"
+          },
+          36864: {
+            "name": "ExifVersion",
+            "type": "Undefined"
+          },
+          36867: {
+            "name": "DateTimeOriginal",
+            "type": "Ascii"
+          },
+          36868: {
+            "name": "DateTimeDigitized",
+            "type": "Ascii"
+          },
+          37121: {
+            "name": "ComponentsConfiguration",
+            "type": "Undefined"
+          },
+          37122: {
+            "name": "CompressedBitsPerPixel",
+            "type": "Rational"
+          },
+          37377: {
+            "name": "ShutterSpeedValue",
+            "type": "SRational"
+          },
+          37378: {
+            "name": "ApertureValue",
+            "type": "Rational"
+          },
+          37379: {
+            "name": "BrightnessValue",
+            "type": "SRational"
+          },
+          37380: {
+            "name": "ExposureBiasValue",
+            "type": "SRational"
+          },
+          37381: {
+            "name": "MaxApertureValue",
+            "type": "Rational"
+          },
+          37382: {
+            "name": "SubjectDistance",
+            "type": "Rational"
+          },
+          37383: {
+            "name": "MeteringMode",
+            "type": "Short"
+          },
+          37384: {
+            "name": "LightSource",
+            "type": "Short"
+          },
+          37385: {
+            "name": "Flash",
+            "type": "Short"
+          },
+          37386: {
+            "name": "FocalLength",
+            "type": "Rational"
+          },
+          37396: {
+            "name": "SubjectArea",
+            "type": "Short"
+          },
+          37500: {
+            "name": "MakerNote",
+            "type": "Undefined"
+          },
+          37510: {
+            "name": "UserComment",
+            "type": "Ascii"
+          },
+          37520: {
+            "name": "SubSecTime",
+            "type": "Ascii"
+          },
+          37521: {
+            "name": "SubSecTimeOriginal",
+            "type": "Ascii"
+          },
+          37522: {
+            "name": "SubSecTimeDigitized",
+            "type": "Ascii"
+          },
+          40960: {
+            "name": "FlashpixVersion",
+            "type": "Undefined"
+          },
+          40961: {
+            "name": "ColorSpace",
+            "type": "Short"
+          },
+          40962: {
+            "name": "PixelXDimension",
+            "type": "Long"
+          },
+          40963: {
+            "name": "PixelYDimension",
+            "type": "Long"
+          },
+          40964: {
+            "name": "RelatedSoundFile",
+            "type": "Ascii"
+          },
+          40965: {
+            "name": "InteroperabilityTag",
+            "type": "Long"
+          },
+          41483: {
+            "name": "FlashEnergy",
+            "type": "Rational"
+          },
+          41484: {
+            "name": "SpatialFrequencyResponse",
+            "type": "Undefined"
+          },
+          41486: {
+            "name": "FocalPlaneXResolution",
+            "type": "Rational"
+          },
+          41487: {
+            "name": "FocalPlaneYResolution",
+            "type": "Rational"
+          },
+          41488: {
+            "name": "FocalPlaneResolutionUnit",
+            "type": "Short"
+          },
+          41492: {
+            "name": "SubjectLocation",
+            "type": "Short"
+          },
+          41493: {
+            "name": "ExposureIndex",
+            "type": "Rational"
+          },
+          41495: {
+            "name": "SensingMethod",
+            "type": "Short"
+          },
+          41728: {
+            "name": "FileSource",
+            "type": "Undefined"
+          },
+          41729: {
+            "name": "SceneType",
+            "type": "Undefined"
+          },
+          41730: {
+            "name": "CFAPattern",
+            "type": "Undefined"
+          },
+          41985: {
+            "name": "CustomRendered",
+            "type": "Short"
+          },
+          41986: {
+            "name": "ExposureMode",
+            "type": "Short"
+          },
+          41987: {
+            "name": "WhiteBalance",
+            "type": "Short"
+          },
+          41988: {
+            "name": "DigitalZoomRatio",
+            "type": "Rational"
+          },
+          41989: {
+            "name": "FocalLengthIn35mmFilm",
+            "type": "Short"
+          },
+          41990: {
+            "name": "SceneCaptureType",
+            "type": "Short"
+          },
+          41991: {
+            "name": "GainControl",
+            "type": "Short"
+          },
+          41992: {
+            "name": "Contrast",
+            "type": "Short"
+          },
+          41993: {
+            "name": "Saturation",
+            "type": "Short"
+          },
+          41994: {
+            "name": "Sharpness",
+            "type": "Short"
+          },
+          41995: {
+            "name": "DeviceSettingDescription",
+            "type": "Undefined"
+          },
+          41996: {
+            "name": "SubjectDistanceRange",
+            "type": "Short"
+          },
+          42016: {
+            "name": "ImageUniqueID",
+            "type": "Ascii"
+          },
+          42032: {
+            "name": "CameraOwnerName",
+            "type": "Ascii"
+          },
+          42033: {
+            "name": "BodySerialNumber",
+            "type": "Ascii"
+          },
+          42034: {
+            "name": "LensSpecification",
+            "type": "Rational"
+          },
+          42035: {
+            "name": "LensMake",
+            "type": "Ascii"
+          },
+          42036: {
+            "name": "LensModel",
+            "type": "Ascii"
+          },
+          42037: {
+            "name": "LensSerialNumber",
+            "type": "Ascii"
+          },
+          42240: {
+            "name": "Gamma",
+            "type": "Rational"
+          }
+        },
+        "GPS": {
+          0: {
+            "name": "GPSVersionID",
+            "type": "Byte"
+          },
+          1: {
+            "name": "GPSLatitudeRef",
+            "type": "Ascii"
+          },
+          2: {
+            "name": "GPSLatitude",
+            "type": "Rational"
+          },
+          3: {
+            "name": "GPSLongitudeRef",
+            "type": "Ascii"
+          },
+          4: {
+            "name": "GPSLongitude",
+            "type": "Rational"
+          },
+          5: {
+            "name": "GPSAltitudeRef",
+            "type": "Byte"
+          },
+          6: {
+            "name": "GPSAltitude",
+            "type": "Rational"
+          },
+          7: {
+            "name": "GPSTimeStamp",
+            "type": "Rational"
+          },
+          8: {
+            "name": "GPSSatellites",
+            "type": "Ascii"
+          },
+          9: {
+            "name": "GPSStatus",
+            "type": "Ascii"
+          },
+          10: {
+            "name": "GPSMeasureMode",
+            "type": "Ascii"
+          },
+          11: {
+            "name": "GPSDOP",
+            "type": "Rational"
+          },
+          12: {
+            "name": "GPSSpeedRef",
+            "type": "Ascii"
+          },
+          13: {
+            "name": "GPSSpeed",
+            "type": "Rational"
+          },
+          14: {
+            "name": "GPSTrackRef",
+            "type": "Ascii"
+          },
+          15: {
+            "name": "GPSTrack",
+            "type": "Rational"
+          },
+          16: {
+            "name": "GPSImgDirectionRef",
+            "type": "Ascii"
+          },
+          17: {
+            "name": "GPSImgDirection",
+            "type": "Rational"
+          },
+          18: {
+            "name": "GPSMapDatum",
+            "type": "Ascii"
+          },
+          19: {
+            "name": "GPSDestLatitudeRef",
+            "type": "Ascii"
+          },
+          20: {
+            "name": "GPSDestLatitude",
+            "type": "Rational"
+          },
+          21: {
+            "name": "GPSDestLongitudeRef",
+            "type": "Ascii"
+          },
+          22: {
+            "name": "GPSDestLongitude",
+            "type": "Rational"
+          },
+          23: {
+            "name": "GPSDestBearingRef",
+            "type": "Ascii"
+          },
+          24: {
+            "name": "GPSDestBearing",
+            "type": "Rational"
+          },
+          25: {
+            "name": "GPSDestDistanceRef",
+            "type": "Ascii"
+          },
+          26: {
+            "name": "GPSDestDistance",
+            "type": "Rational"
+          },
+          27: {
+            "name": "GPSProcessingMethod",
+            "type": "Undefined"
+          },
+          28: {
+            "name": "GPSAreaInformation",
+            "type": "Undefined"
+          },
+          29: {
+            "name": "GPSDateStamp",
+            "type": "Ascii"
+          },
+          30: {
+            "name": "GPSDifferential",
+            "type": "Short"
+          },
+          31: {
+            "name": "GPSHPositioningError",
+            "type": "Rational"
+          }
+        },
+        "Interop": {
+          1: {
+            "name": "InteroperabilityIndex",
+            "type": "Ascii"
+          }
+        }
+      };
+      TAGS["0th"] = TAGS["Image"];
+      TAGS["1st"] = TAGS["Image"];
+      that.TAGS = TAGS;
+      that.ImageIFD = {
+        ProcessingSoftware: 11,
+        NewSubfileType: 254,
+        SubfileType: 255,
+        ImageWidth: 256,
+        ImageLength: 257,
+        BitsPerSample: 258,
+        Compression: 259,
+        PhotometricInterpretation: 262,
+        Threshholding: 263,
+        CellWidth: 264,
+        CellLength: 265,
+        FillOrder: 266,
+        DocumentName: 269,
+        ImageDescription: 270,
+        Make: 271,
+        Model: 272,
+        StripOffsets: 273,
+        Orientation: 274,
+        SamplesPerPixel: 277,
+        RowsPerStrip: 278,
+        StripByteCounts: 279,
+        XResolution: 282,
+        YResolution: 283,
+        PlanarConfiguration: 284,
+        GrayResponseUnit: 290,
+        GrayResponseCurve: 291,
+        T4Options: 292,
+        T6Options: 293,
+        ResolutionUnit: 296,
+        TransferFunction: 301,
+        Software: 305,
+        DateTime: 306,
+        Artist: 315,
+        HostComputer: 316,
+        Predictor: 317,
+        WhitePoint: 318,
+        PrimaryChromaticities: 319,
+        ColorMap: 320,
+        HalftoneHints: 321,
+        TileWidth: 322,
+        TileLength: 323,
+        TileOffsets: 324,
+        TileByteCounts: 325,
+        SubIFDs: 330,
+        InkSet: 332,
+        InkNames: 333,
+        NumberOfInks: 334,
+        DotRange: 336,
+        TargetPrinter: 337,
+        ExtraSamples: 338,
+        SampleFormat: 339,
+        SMinSampleValue: 340,
+        SMaxSampleValue: 341,
+        TransferRange: 342,
+        ClipPath: 343,
+        XClipPathUnits: 344,
+        YClipPathUnits: 345,
+        Indexed: 346,
+        JPEGTables: 347,
+        OPIProxy: 351,
+        JPEGProc: 512,
+        JPEGInterchangeFormat: 513,
+        JPEGInterchangeFormatLength: 514,
+        JPEGRestartInterval: 515,
+        JPEGLosslessPredictors: 517,
+        JPEGPointTransforms: 518,
+        JPEGQTables: 519,
+        JPEGDCTables: 520,
+        JPEGACTables: 521,
+        YCbCrCoefficients: 529,
+        YCbCrSubSampling: 530,
+        YCbCrPositioning: 531,
+        ReferenceBlackWhite: 532,
+        XMLPacket: 700,
+        Rating: 18246,
+        RatingPercent: 18249,
+        ImageID: 32781,
+        CFARepeatPatternDim: 33421,
+        CFAPattern: 33422,
+        BatteryLevel: 33423,
+        Copyright: 33432,
+        ExposureTime: 33434,
+        ImageResources: 34377,
+        ExifTag: 34665,
+        InterColorProfile: 34675,
+        GPSTag: 34853,
+        Interlace: 34857,
+        TimeZoneOffset: 34858,
+        SelfTimerMode: 34859,
+        FlashEnergy: 37387,
+        SpatialFrequencyResponse: 37388,
+        Noise: 37389,
+        FocalPlaneXResolution: 37390,
+        FocalPlaneYResolution: 37391,
+        FocalPlaneResolutionUnit: 37392,
+        ImageNumber: 37393,
+        SecurityClassification: 37394,
+        ImageHistory: 37395,
+        ExposureIndex: 37397,
+        TIFFEPStandardID: 37398,
+        SensingMethod: 37399,
+        XPTitle: 40091,
+        XPComment: 40092,
+        XPAuthor: 40093,
+        XPKeywords: 40094,
+        XPSubject: 40095,
+        PrintImageMatching: 50341,
+        DNGVersion: 50706,
+        DNGBackwardVersion: 50707,
+        UniqueCameraModel: 50708,
+        LocalizedCameraModel: 50709,
+        CFAPlaneColor: 50710,
+        CFALayout: 50711,
+        LinearizationTable: 50712,
+        BlackLevelRepeatDim: 50713,
+        BlackLevel: 50714,
+        BlackLevelDeltaH: 50715,
+        BlackLevelDeltaV: 50716,
+        WhiteLevel: 50717,
+        DefaultScale: 50718,
+        DefaultCropOrigin: 50719,
+        DefaultCropSize: 50720,
+        ColorMatrix1: 50721,
+        ColorMatrix2: 50722,
+        CameraCalibration1: 50723,
+        CameraCalibration2: 50724,
+        ReductionMatrix1: 50725,
+        ReductionMatrix2: 50726,
+        AnalogBalance: 50727,
+        AsShotNeutral: 50728,
+        AsShotWhiteXY: 50729,
+        BaselineExposure: 50730,
+        BaselineNoise: 50731,
+        BaselineSharpness: 50732,
+        BayerGreenSplit: 50733,
+        LinearResponseLimit: 50734,
+        CameraSerialNumber: 50735,
+        LensInfo: 50736,
+        ChromaBlurRadius: 50737,
+        AntiAliasStrength: 50738,
+        ShadowScale: 50739,
+        DNGPrivateData: 50740,
+        MakerNoteSafety: 50741,
+        CalibrationIlluminant1: 50778,
+        CalibrationIlluminant2: 50779,
+        BestQualityScale: 50780,
+        RawDataUniqueID: 50781,
+        OriginalRawFileName: 50827,
+        OriginalRawFileData: 50828,
+        ActiveArea: 50829,
+        MaskedAreas: 50830,
+        AsShotICCProfile: 50831,
+        AsShotPreProfileMatrix: 50832,
+        CurrentICCProfile: 50833,
+        CurrentPreProfileMatrix: 50834,
+        ColorimetricReference: 50879,
+        CameraCalibrationSignature: 50931,
+        ProfileCalibrationSignature: 50932,
+        AsShotProfileName: 50934,
+        NoiseReductionApplied: 50935,
+        ProfileName: 50936,
+        ProfileHueSatMapDims: 50937,
+        ProfileHueSatMapData1: 50938,
+        ProfileHueSatMapData2: 50939,
+        ProfileToneCurve: 50940,
+        ProfileEmbedPolicy: 50941,
+        ProfileCopyright: 50942,
+        ForwardMatrix1: 50964,
+        ForwardMatrix2: 50965,
+        PreviewApplicationName: 50966,
+        PreviewApplicationVersion: 50967,
+        PreviewSettingsName: 50968,
+        PreviewSettingsDigest: 50969,
+        PreviewColorSpace: 50970,
+        PreviewDateTime: 50971,
+        RawImageDigest: 50972,
+        OriginalRawFileDigest: 50973,
+        SubTileBlockSize: 50974,
+        RowInterleaveFactor: 50975,
+        ProfileLookTableDims: 50981,
+        ProfileLookTableData: 50982,
+        OpcodeList1: 51008,
+        OpcodeList2: 51009,
+        OpcodeList3: 51022,
+        NoiseProfile: 51041
+      };
+      that.ExifIFD = {
+        ExposureTime: 33434,
+        FNumber: 33437,
+        ExposureProgram: 34850,
+        SpectralSensitivity: 34852,
+        ISOSpeedRatings: 34855,
+        OECF: 34856,
+        SensitivityType: 34864,
+        StandardOutputSensitivity: 34865,
+        RecommendedExposureIndex: 34866,
+        ISOSpeed: 34867,
+        ISOSpeedLatitudeyyy: 34868,
+        ISOSpeedLatitudezzz: 34869,
+        ExifVersion: 36864,
+        DateTimeOriginal: 36867,
+        DateTimeDigitized: 36868,
+        ComponentsConfiguration: 37121,
+        CompressedBitsPerPixel: 37122,
+        ShutterSpeedValue: 37377,
+        ApertureValue: 37378,
+        BrightnessValue: 37379,
+        ExposureBiasValue: 37380,
+        MaxApertureValue: 37381,
+        SubjectDistance: 37382,
+        MeteringMode: 37383,
+        LightSource: 37384,
+        Flash: 37385,
+        FocalLength: 37386,
+        SubjectArea: 37396,
+        MakerNote: 37500,
+        UserComment: 37510,
+        SubSecTime: 37520,
+        SubSecTimeOriginal: 37521,
+        SubSecTimeDigitized: 37522,
+        FlashpixVersion: 40960,
+        ColorSpace: 40961,
+        PixelXDimension: 40962,
+        PixelYDimension: 40963,
+        RelatedSoundFile: 40964,
+        InteroperabilityTag: 40965,
+        FlashEnergy: 41483,
+        SpatialFrequencyResponse: 41484,
+        FocalPlaneXResolution: 41486,
+        FocalPlaneYResolution: 41487,
+        FocalPlaneResolutionUnit: 41488,
+        SubjectLocation: 41492,
+        ExposureIndex: 41493,
+        SensingMethod: 41495,
+        FileSource: 41728,
+        SceneType: 41729,
+        CFAPattern: 41730,
+        CustomRendered: 41985,
+        ExposureMode: 41986,
+        WhiteBalance: 41987,
+        DigitalZoomRatio: 41988,
+        FocalLengthIn35mmFilm: 41989,
+        SceneCaptureType: 41990,
+        GainControl: 41991,
+        Contrast: 41992,
+        Saturation: 41993,
+        Sharpness: 41994,
+        DeviceSettingDescription: 41995,
+        SubjectDistanceRange: 41996,
+        ImageUniqueID: 42016,
+        CameraOwnerName: 42032,
+        BodySerialNumber: 42033,
+        LensSpecification: 42034,
+        LensMake: 42035,
+        LensModel: 42036,
+        LensSerialNumber: 42037,
+        Gamma: 42240
+      };
+      that.GPSIFD = {
+        GPSVersionID: 0,
+        GPSLatitudeRef: 1,
+        GPSLatitude: 2,
+        GPSLongitudeRef: 3,
+        GPSLongitude: 4,
+        GPSAltitudeRef: 5,
+        GPSAltitude: 6,
+        GPSTimeStamp: 7,
+        GPSSatellites: 8,
+        GPSStatus: 9,
+        GPSMeasureMode: 10,
+        GPSDOP: 11,
+        GPSSpeedRef: 12,
+        GPSSpeed: 13,
+        GPSTrackRef: 14,
+        GPSTrack: 15,
+        GPSImgDirectionRef: 16,
+        GPSImgDirection: 17,
+        GPSMapDatum: 18,
+        GPSDestLatitudeRef: 19,
+        GPSDestLatitude: 20,
+        GPSDestLongitudeRef: 21,
+        GPSDestLongitude: 22,
+        GPSDestBearingRef: 23,
+        GPSDestBearing: 24,
+        GPSDestDistanceRef: 25,
+        GPSDestDistance: 26,
+        GPSProcessingMethod: 27,
+        GPSAreaInformation: 28,
+        GPSDateStamp: 29,
+        GPSDifferential: 30,
+        GPSHPositioningError: 31
+      };
+      that.InteropIFD = {
+        InteroperabilityIndex: 1
+      };
+      that.GPSHelper = {
+        degToDmsRational: function(degFloat) {
+          var degAbs = Math.abs(degFloat);
+          var minFloat = degAbs % 1 * 60;
+          var secFloat = minFloat % 1 * 60;
+          var deg = Math.floor(degAbs);
+          var min = Math.floor(minFloat);
+          var sec = Math.round(secFloat * 100);
+          return [[deg, 1], [min, 1], [sec, 100]];
+        },
+        dmsRationalToDeg: function(dmsArray, ref) {
+          var sign = ref === "S" || ref === "W" ? -1 : 1;
+          var deg = dmsArray[0][0] / dmsArray[0][1] + dmsArray[1][0] / dmsArray[1][1] / 60 + dmsArray[2][0] / dmsArray[2][1] / 3600;
+          return deg * sign;
+        }
+      };
+      if (typeof exports2 !== "undefined") {
+        if (typeof module2 !== "undefined" && module2.exports) {
+          exports2 = module2.exports = that;
+        }
+        exports2.piexif = that;
+      } else {
+        window.piexif = that;
+      }
+    })();
   }
 });
 
@@ -118426,7 +120747,17 @@ function hikerGet(path6, token) {
     req.end();
   });
 }
-var HIKER_HOST, HikerCacheMissError, USERNAME_CACHE_TTL_MS, usernameCache, HikerApiClient;
+function _getSeenReelSet() {
+  const now = Date.now();
+  while (_seenReels.length > 0 && now - _seenReels[0].addedAt > SEEN_REELS_TTL_MS) {
+    _seenReels.shift();
+  }
+  return new Set(_seenReels.map((e) => e.sc));
+}
+function _markReelSeen(sc) {
+  _seenReels.push({ sc, addedAt: Date.now() });
+}
+var HIKER_HOST, HikerCacheMissError, SEEN_REELS_TTL_MS, _seenReels, USERNAME_CACHE_TTL_MS, usernameCache, HikerApiClient;
 var init_hikerApiClient = __esm({
   "src/instagram/hikerApiClient.ts"() {
     "use strict";
@@ -118437,6 +120768,8 @@ var init_hikerApiClient = __esm({
         this.name = "HikerCacheMissError";
       }
     };
+    SEEN_REELS_TTL_MS = 60 * 60 * 1e3;
+    _seenReels = [];
     USERNAME_CACHE_TTL_MS = 24 * 60 * 60 * 1e3;
     usernameCache = /* @__PURE__ */ new Map();
     HikerApiClient = class {
@@ -118603,6 +120936,119 @@ var init_hikerApiClient = __esm({
         }
         return accumulated.slice(0, max);
       }
+      // Fetches shortcodes for trending Instagram Reels by querying popular hashtags
+      // (#reels, #viral, #trending, #fyp) via HikerAPI's hashtag endpoints.
+      // This returns organic trending content from Instagram's actual trending pool,
+      // NOT from high-profile corporate/celebrity accounts (NBA, CNN, ESPN, etc.).
+      // Falls back to a neutral organic account list if the hashtag endpoints fail.
+      async getTrendingReelShortcodes(n = 3) {
+        const ALL_HASHTAGS = ["reels", "viral", "trending", "fyp", "explore", "instagram"];
+        const hashtags = [...ALL_HASHTAGS];
+        for (let i2 = hashtags.length - 1; i2 > 0; i2--) {
+          const j = Math.floor(Math.random() * (i2 + 1));
+          [hashtags[i2], hashtags[j]] = [hashtags[j], hashtags[i2]];
+        }
+        const seen = _getSeenReelSet();
+        const shortcodes = [];
+        for (const tag of hashtags) {
+          if (shortcodes.length >= n) break;
+          try {
+            let items = [];
+            for (const endpoint of [
+              `/v2/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=20`,
+              `/v1/hashtag/medias/recent?name=${encodeURIComponent(tag)}&amount=20`
+            ]) {
+              try {
+                const j = await hikerGet(endpoint, this.token);
+                const raw = Array.isArray(j) ? j : Array.isArray(j?.response) ? j.response : Array.isArray(j?.items) ? j.items : Array.isArray(j?.sections) ? j.sections.flatMap((s) => s?.layout_content?.medias?.map((m2) => m2?.media) ?? []) : [];
+                if (raw.length > 0) {
+                  items = raw;
+                  break;
+                }
+              } catch {
+              }
+            }
+            for (const item of items) {
+              if (shortcodes.length >= n) break;
+              if (!item) continue;
+              const mediaType = item?.media_type ?? 0;
+              const productType = item?.product_type ?? "";
+              const isReel = mediaType === 2 || productType === "clips";
+              if (!isReel) continue;
+              const mediaId = String(item.id ?? item.pk ?? "");
+              if (!mediaId) continue;
+              const sc = item.code || this.mediaIdToShortcode(mediaId);
+              if (sc && sc !== "0" && !seen.has(sc)) {
+                shortcodes.push(sc);
+                _markReelSeen(sc);
+                seen.add(sc);
+              }
+            }
+            if (items.length > 0) {
+              console.log(`[hikerApi] getTrendingReelShortcodes #${tag}: ${items.length} items, ${shortcodes.length}/${n} reels collected`);
+            }
+          } catch (err) {
+            console.warn(`[hikerApi] getTrendingReelShortcodes #${tag} error: ${err?.message}`);
+          }
+        }
+        if (shortcodes.length === 0) {
+          console.warn(`[hikerApi] getTrendingReelShortcodes: hashtag endpoints returned nothing, falling back to organic accounts`);
+          return this._getTrendingReelShortcodesFromAccounts(n);
+        }
+        return shortcodes.slice(0, n);
+      }
+      // Fallback: neutral organic/lifestyle accounts — NOT corporate brands or celebrities.
+      // Only used when the hashtag-based approach returns nothing.
+      async _getTrendingReelShortcodesFromAccounts(n = 3) {
+        const ALL_ORGANIC = [
+          "instagram",
+          "natgeo",
+          "nasa",
+          "discovery",
+          "creators",
+          "earthpix",
+          "travelandleisure",
+          "foodnetwork",
+          "buzzfeed"
+        ];
+        const accounts = [...ALL_ORGANIC];
+        for (let i2 = accounts.length - 1; i2 > 0; i2--) {
+          const j = Math.floor(Math.random() * (i2 + 1));
+          [accounts[i2], accounts[j]] = [accounts[j], accounts[i2]];
+        }
+        const seen = _getSeenReelSet();
+        const shortcodes = [];
+        for (const username of accounts) {
+          if (shortcodes.length >= n) break;
+          try {
+            const user = await this.getUserByUsername(username);
+            if (!user) continue;
+            const j = await hikerGet(
+              `/v1/user/medias?user_id=${encodeURIComponent(user.pk)}&amount=20`,
+              this.token
+            );
+            const items = Array.isArray(j) ? j : Array.isArray(j?.response) ? j.response : Array.isArray(j?.items) ? j.items : [];
+            for (const item of items) {
+              if (shortcodes.length >= n) break;
+              const mediaType = item?.media_type ?? 0;
+              const productType = item?.product_type ?? "";
+              const isReel = mediaType === 2 || productType === "clips";
+              if (!isReel) continue;
+              const mediaId = String(item.id ?? item.pk ?? "");
+              if (!mediaId) continue;
+              const sc = item.code || this.mediaIdToShortcode(mediaId);
+              if (sc && sc !== "0" && !seen.has(sc)) {
+                shortcodes.push(sc);
+                _markReelSeen(sc);
+                seen.add(sc);
+              }
+            }
+          } catch {
+          }
+        }
+        if (shortcodes.length === 0) return this.getPublicShortcodes(n);
+        return shortcodes.slice(0, n);
+      }
       // Fetches shortcodes from well-known public Instagram accounts for use as
       // warmup browsing URLs before a signup attempt.  Returns up to `n` shortcodes.
       // Falls back gracefully: skips accounts that don't respond, returns whatever
@@ -118756,7 +121202,7 @@ function buildConfig(level, custom2) {
     pixelate: custom2.pixelate.enabled ? { min: custom2.pixelate.min, max: custom2.pixelate.max } : { min: 0.3, max: 0.3 }
   };
 }
-async function getSharp() {
+async function getSharp2() {
   if (sharpModule !== void 0) return sharpModule;
   try {
     const mod = await import("sharp");
@@ -118769,7 +121215,7 @@ async function getSharp() {
 async function alterJpegBuffer(input, level, customSettings) {
   const cfg = buildConfig(level, customSettings);
   const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
-  const sharp = await getSharp();
+  const sharp = await getSharp2();
   if (!sharp) {
     return injectComSegment(input, comLen);
   }
@@ -119127,13 +121573,13 @@ var init_jarveeParser = __esm({
 });
 
 // src/index.ts
-var import_express4 = __toESM(require_express2(), 1);
+var import_express5 = __toESM(require_express2(), 1);
 import { createServer } from "http";
 import path5 from "path";
 import fs5 from "fs";
 
 // src/app.ts
-var import_express3 = __toESM(require_express2(), 1);
+var import_express4 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_pino_http = __toESM(require_logger(), 1);
 
@@ -123037,6 +125483,224 @@ var router2 = (0, import_express2.Router)();
 router2.use(health_default);
 var routes_default = router2;
 
+// src/routes/ai.ts
+var import_express3 = __toESM(require_express2(), 1);
+var _sharpModule = void 0;
+async function getSharp() {
+  if (_sharpModule !== void 0) return _sharpModule;
+  try {
+    const mod = await import("sharp");
+    _sharpModule = mod.default;
+  } catch {
+    _sharpModule = null;
+  }
+  return _sharpModule;
+}
+var aiRouter = (0, import_express3.Router)();
+var PHONE_PROFILES = [
+  { make: "Apple", model: "iPhone 14 Pro", software: "16.5.1", focal: [3420, 1e3], aperture: [8, 5], exposure: [1, 120] },
+  { make: "Apple", model: "iPhone 15 Pro", software: "17.2.1", focal: [3420, 1e3], aperture: [8, 5], exposure: [1, 120] },
+  { make: "Apple", model: "iPhone 13", software: "16.7.2", focal: [2650, 1e3], aperture: [7, 5], exposure: [1, 100] },
+  { make: "Apple", model: "iPhone 12", software: "15.8.1", focal: [2650, 1e3], aperture: [7, 5], exposure: [1, 90] },
+  { make: "Apple", model: "iPhone SE", software: "16.7.4", focal: [2870, 1e3], aperture: [7, 5], exposure: [1, 80] },
+  { make: "Samsung", model: "SM-S918B", software: "Android 13", focal: [6200, 1e3], aperture: [9, 5], exposure: [1, 100] },
+  { make: "Samsung", model: "SM-A546B", software: "Android 13", focal: [2650, 1e3], aperture: [7, 5], exposure: [1, 80] },
+  { make: "Samsung", model: "SM-G991B", software: "Android 13", focal: [3430, 1e3], aperture: [8, 5], exposure: [1, 100] },
+  { make: "Google", model: "Pixel 7 Pro", software: "Android 14", focal: [3850, 1e3], aperture: [9, 5], exposure: [1, 110] },
+  { make: "Google", model: "Pixel 8", software: "Android 14", focal: [2650, 1e3], aperture: [8, 5], exposure: [1, 100] },
+  { make: "OnePlus", model: "CPH2449", software: "Android 13", focal: [3850, 1e3], aperture: [9, 5], exposure: [1, 95] },
+  { make: "Xiaomi", model: "2304FPN6DC", software: "MIUI 14", focal: [2870, 1e3], aperture: [8, 5], exposure: [1, 90] }
+];
+var OUTPUT_DIMS = [
+  { w: 1080, h: 1080 },
+  // 1:1 square
+  { w: 1080, h: 1350 },
+  // 4:5 portrait
+  { w: 1080, h: 1920 },
+  // 9:16 story-style portrait
+  { w: 1080, h: 1440 },
+  // 3:4 portrait
+  { w: 828, h: 1472 },
+  // iPhone XR front-cam ratio
+  { w: 1170, h: 2080 },
+  // iPhone 12/13 portrait crop
+  { w: 720, h: 960 },
+  // older Android 3:4
+  { w: 900, h: 1200 }
+  // mid-range portrait
+];
+var CITY_COORDS = [
+  { lat: [51, 30, 26, "N"], lon: [0, 7, 40, "W"], alt: 11 },
+  // London
+  { lat: [40, 42, 46, "N"], lon: [74, 0, 22, "W"], alt: 10 },
+  // New York
+  { lat: [48, 51, 24, "N"], lon: [2, 21, 3, "E"], alt: 35 },
+  // Paris
+  { lat: [53, 33, 0, "N"], lon: [10, 0, 0, "E"], alt: 14 },
+  // Hamburg
+  { lat: [52, 31, 0, "N"], lon: [13, 24, 0, "E"], alt: 34 },
+  // Berlin
+  { lat: [41, 23, 0, "N"], lon: [2, 11, 0, "E"], alt: 12 },
+  // Barcelona
+  { lat: [43, 17, 0, "N"], lon: [5, 22, 0, "E"], alt: 28 },
+  // Marseille
+  { lat: [55, 45, 6, "N"], lon: [37, 36, 56, "E"], alt: 151 },
+  // Moscow
+  { lat: [37, 46, 30, "N"], lon: [122, 25, 10, "W"], alt: 16 },
+  // San Francisco
+  { lat: [34, 3, 8, "N"], lon: [118, 14, 37, "W"], alt: 71 },
+  // Los Angeles
+  { lat: [51, 3, 0, "N"], lon: [3, 43, 0, "E"], alt: 8 },
+  // Ghent
+  { lat: [50, 51, 0, "N"], lon: [4, 21, 0, "E"], alt: 56 },
+  // Brussels
+  { lat: [45, 27, 0, "N"], lon: [9, 12, 0, "E"], alt: 122 },
+  // Milan
+  { lat: [41, 54, 0, "N"], lon: [12, 29, 0, "E"], alt: 37 }
+  // Rome
+];
+var ISO_VALUES = [50, 64, 80, 100, 125, 160, 200];
+var SELFIE_PROMPTS = [
+  "photorealistic selfie photograph of a young woman, face-on, front camera, natural indoor lighting, casual clothing, slight smile, high resolution, authentic photograph, no filters, skin texture visible, real person",
+  "realistic selfie photo of a young man, direct camera angle, natural expression, indoor lighting, smartphone quality, authentic, unfiltered, portrait",
+  "candid selfie photograph of a woman in her mid twenties, face looking at camera, soft natural light from window, casual home setting, real photograph",
+  "authentic selfie photograph of a man aged 20-30, slight head tilt, casual smile, neutral indoor background softly blurred, real skin texture",
+  "genuine selfie photo, young adult woman, natural makeup, window light, direct frontal camera angle, realistic skin pores and texture",
+  "natural selfie photo of a young adult man, casual outfit, slightly off-centre composition, warm indoor light, authentic real-person photograph",
+  "candid front-camera selfie, woman in her twenties, background slightly blurred bedroom setting, natural expression, no flash, real photograph"
+];
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+function randomHex(bytes) {
+  return [...Array(bytes)].map(() => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+aiRouter.post("/generate-selfie", async (req, res) => {
+  try {
+    const outDim = OUTPUT_DIMS[randInt(0, OUTPUT_DIMS.length - 1)];
+    const prompt = SELFIE_PROMPTS[randInt(0, SELFIE_PROMPTS.length - 1)];
+    const MODELS = ["flux-realism", "flux", "flux-realism"];
+    let lastStatus = 0;
+    let imgBuffer = null;
+    for (let attempt = 0; attempt < MODELS.length; attempt++) {
+      const seed = randInt(1, 999999);
+      const model = MODELS[attempt];
+      const url2 = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1536&model=${model}&nologo=true&enhance=true&seed=${seed}&private=true`;
+      try {
+        const imgRes = await fetch(url2, { signal: AbortSignal.timeout(45e3) });
+        lastStatus = imgRes.status;
+        if (imgRes.ok) {
+          imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+          break;
+        }
+      } catch {
+        lastStatus = 0;
+      }
+      if (attempt < MODELS.length - 1) await new Promise((r2) => setTimeout(r2, 2e3));
+    }
+    if (!imgBuffer) {
+      return res.status(500).json({ error: `Image generation failed after 3 attempts (last status: ${lastStatus || "timeout"}). Pollinations.ai may be busy \u2014 try again in a moment.` });
+    }
+    const inputBuffer = imgBuffer;
+    const sharpFn = await getSharp();
+    if (!sharpFn) {
+      return res.status(500).json({ error: "Image processing library (sharp) is not available on this platform." });
+    }
+    const quality = randInt(84, 94);
+    const jpegBuffer = await sharpFn(inputBuffer).resize(outDim.w, outDim.h, { fit: "cover", position: "attention" }).jpeg({ quality }).toBuffer();
+    const piexif = require_piexif();
+    const phone = PHONE_PROFILES[randInt(0, PHONE_PROFILES.length - 1)];
+    const city = CITY_COORDS[randInt(0, CITY_COORDS.length - 1)];
+    const ago = randInt(5, 20160);
+    const shotAt = new Date(Date.now() - ago * 6e4);
+    const dtStr = shotAt.toISOString().replace("T", " ").substring(0, 19).replace(/-/g, ":");
+    const subsec = String(randInt(0, 999)).padStart(3, "0");
+    const iso = ISO_VALUES[randInt(0, ISO_VALUES.length - 1)];
+    const imgUid = randomHex(16);
+    const serial = randomHex(8);
+    const focalNom = phone.focal[0] + randInt(-50, 50);
+    const focalDen = phone.focal[1];
+    const latOff = randInt(-500, 500);
+    const lonOff = randInt(-500, 500);
+    const [baseLat0, baseLat1, baseLat2] = city.lat;
+    const [baseLon0, baseLon1, baseLon2] = city.lon;
+    const latSec = Number(baseLat2) * 100 + latOff;
+    const lonSec = Number(baseLon2) * 100 + lonOff;
+    const altMetres = city.alt + randInt(-5, 5);
+    const exifObj = {
+      "0th": {
+        [piexif.ImageIFD.Make]: phone.make,
+        [piexif.ImageIFD.Model]: phone.model,
+        [piexif.ImageIFD.Software]: phone.software,
+        [piexif.ImageIFD.DateTime]: dtStr,
+        [piexif.ImageIFD.Orientation]: 1,
+        [piexif.ImageIFD.XResolution]: [72, 1],
+        [piexif.ImageIFD.YResolution]: [72, 1],
+        [piexif.ImageIFD.ResolutionUnit]: 2,
+        [piexif.ImageIFD.YCbCrPositioning]: 1
+      },
+      "Exif": {
+        [piexif.ExifIFD.DateTimeOriginal]: dtStr,
+        [piexif.ExifIFD.DateTimeDigitized]: dtStr,
+        [piexif.ExifIFD.SubSecTimeOriginal]: subsec,
+        [piexif.ExifIFD.SubSecTimeDigitized]: subsec,
+        [piexif.ExifIFD.FocalLength]: [focalNom, focalDen],
+        [piexif.ExifIFD.ApertureValue]: [phone.aperture[0], phone.aperture[1]],
+        [piexif.ExifIFD.ExposureTime]: [phone.exposure[0], phone.exposure[1]],
+        [piexif.ExifIFD.FNumber]: [phone.aperture[0], phone.aperture[1]],
+        [piexif.ExifIFD.ISOSpeedRatings]: iso,
+        [piexif.ExifIFD.Flash]: 0,
+        [piexif.ExifIFD.PixelXDimension]: outDim.w,
+        [piexif.ExifIFD.PixelYDimension]: outDim.h,
+        [piexif.ExifIFD.ColorSpace]: 1,
+        [piexif.ExifIFD.ExposureMode]: 0,
+        [piexif.ExifIFD.WhiteBalance]: 0,
+        [piexif.ExifIFD.SceneCaptureType]: 2,
+        [piexif.ExifIFD.ExposureProgram]: 2,
+        [piexif.ExifIFD.MeteringMode]: 2,
+        [piexif.ExifIFD.LightSource]: 0,
+        [piexif.ExifIFD.FocalLengthIn35mmFilm]: Math.round(focalNom / focalDen * 6.5),
+        [piexif.ExifIFD.ImageUniqueID]: imgUid,
+        [piexif.ExifIFD.BodySerialNumber]: serial
+      },
+      "GPS": {
+        [piexif.GPSIFD.GPSLatitudeRef]: city.lat[3],
+        [piexif.GPSIFD.GPSLatitude]: [[Number(baseLat0), 1], [Number(baseLat1), 1], [latSec, 100]],
+        [piexif.GPSIFD.GPSLongitudeRef]: city.lon[3],
+        [piexif.GPSIFD.GPSLongitude]: [[Number(baseLon0), 1], [Number(baseLon1), 1], [lonSec, 100]],
+        [piexif.GPSIFD.GPSAltitudeRef]: 0,
+        [piexif.GPSIFD.GPSAltitude]: [altMetres * 10, 10],
+        [piexif.GPSIFD.GPSImgDirectionRef]: "M",
+        [piexif.GPSIFD.GPSImgDirection]: [randInt(0, 359), 1]
+      },
+      "1st": {},
+      "thumbnail": null
+    };
+    const jpegBase64 = jpegBuffer.toString("base64");
+    const dataUrl = `data:image/jpeg;base64,${jpegBase64}`;
+    const exifStr = piexif.dump(exifObj);
+    const resultUrl = piexif.insert(exifStr, dataUrl);
+    const resultB64 = resultUrl.split(",")[1];
+    const safeModel = phone.model.replace(/\s/g, "_");
+    const fileName = `selfie_${shotAt.getTime()}_${safeModel}_${imgUid.slice(0, 6)}.jpg`;
+    return res.json({
+      imageBase64: resultB64,
+      fileName,
+      dimensions: outDim,
+      metadata: {
+        make: phone.make,
+        model: phone.model,
+        shotAt: shotAt.toISOString(),
+        iso,
+        uid: imgUid
+      }
+    });
+  } catch (err) {
+    console.error("[ai] generate-selfie error:", err);
+    return res.status(500).json({ error: err?.message ?? "Unknown error" });
+  }
+});
+
 // src/lib/logger.ts
 var import_pino = __toESM(require_pino(), 1);
 var isProduction = process.env.NODE_ENV === "production";
@@ -123076,7 +125740,7 @@ function resolveAccountTag(url2) {
   const username = profileUsernameCache.get(parseInt(m2[1], 10));
   return username ? ` [@${username}]` : ` [#${m2[1]}]`;
 }
-var app = (0, import_express3.default)();
+var app = (0, import_express4.default)();
 app.use(
   (0, import_pino_http.default)({
     logger,
@@ -123112,9 +125776,10 @@ app.use(
   })
 );
 app.use((0, import_cors.default)());
-app.use(import_express3.default.json({ limit: "100mb" }));
-app.use(import_express3.default.urlencoded({ extended: true, limit: "100mb" }));
+app.use(import_express4.default.json({ limit: "100mb" }));
+app.use(import_express4.default.urlencoded({ extended: true, limit: "100mb" }));
 app.use("/api", routes_default);
+app.use("/api/ai", aiRouter);
 var app_default = app;
 
 // ../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/wrapper.mjs
@@ -141622,8 +144287,8 @@ var profiles = sqliteTable("profiles", {
   apiLimits: text("api_limits", { mode: "json" }).default({
     requestsMin: 5,
     requestsMax: 10,
-    everySecondsMin: 30,
-    everySecondsMax: 60
+    everySecondsMin: 3e4,
+    everySecondsMax: 6e4
   }),
   browserDirectConnection: integer("browser_direct_connection", { mode: "boolean" }).default(true),
   credentialsDirty: integer("credentials_dirty", { mode: "boolean" }).default(true),
@@ -142205,6 +144870,7 @@ var db = drizzle(sqlite, { schema: schema_exports });
 
 // src/shared/userAgents.ts
 var userAgents = [
+  // ── Google Pixel ──────────────────────────────────────────────────────────────
   {
     api: "35/15; 480dpi; 1344x2992; Google; Pixel 9 Pro; caiman; gs302; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
@@ -142218,6 +144884,47 @@ var userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
+    api: "35/15; 420dpi; 1080x2424; Google; Pixel 9; tokay; gs302; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 8a; akita; gs202; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 8a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "35/15; 480dpi; 1344x2992; Google; Pixel 9 Pro XL; komodo; gs302; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "35/15; 420dpi; 1080x2424; Google; Pixel 9 Pro Fold; comet; gs302; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 7a; lynx; gs201; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "35/15; 480dpi; 1344x2992; Google; Pixel 8 Pro; husky; gs202; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "35/15; 480dpi; 1440x3120; Google; Pixel 7 Pro; cheetah; gs201; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 6a; bluejay; gs101; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2400; Google; Pixel 6; oriole; gs101; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 429dpi; 1080x2340; Google; Pixel 5a; barbet; Snapdragon765G; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 12; Pixel 5a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  // ── Samsung Galaxy S / Note / Z (flagship) ────────────────────────────────────
+  {
     api: "34/14; 420dpi; 1080x2340; Samsung; SM-S928B; e3q; exynos2400; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
@@ -142230,94 +144937,6 @@ var userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "34/14; 393dpi; 1080x2316; Samsung; SM-A546B; a54x; exynos1380; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 440dpi; 1080x2400; OnePlus; CPH2551; op535; Snapdragon8Gen3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2551) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 440dpi; 1080x2400; OnePlus; CPH2449; ovaltine; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; CPH2449) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 400dpi; 1080x2400; Xiaomi; 23127PN0CC; houji; Snapdragon8Gen3; en_CN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 23127PN0CC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 400dpi; 1080x2400; Xiaomi; 2201117TY; viva; Dimensity9000; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; 2201117TY) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2408; Xiaomi; 23049PCD8G; marble; Snapdragon7Gen1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2340; Motorola; motorola edge 40 pro; rtwo; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 40 pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 400dpi; 1080x2400; Motorola; motorola g84 5g; bangkk; Snapdragon695; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; motorola g84 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2400; Sony; XQ-EC54; pdx234; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; XQ-EC54) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2520; Sony; XQ-CQ54; nagara; Snapdragon8Gen1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; XQ-CQ54) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2609) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 440dpi; 1080x2400; OPPO; CPH2495; OP557BL1; Dimensity9000; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; CPH2495) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 440dpi; 1080x2400; vivo; V2309A; PD2309F; Dimensity9200; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; V2309A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2400; vivo; V2145; PD2145F_EX; Snapdragon888; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; V2145) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 400dpi; 1080x2400; realme; RMX3840; RM6985; Dimensity9300; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3840) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 400dpi; 1080x2400; realme; RMX3686; RM6877; Dimensity8100; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2340; Asus; ASUS_AI2302; ASUS_AI2302; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; ASUS_AI2302) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2340; Asus; ASUS_AI2205; ASUS_AI2205; Snapdragon8PlusGen1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; ASUS_AI2205) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 480dpi; 1080x2340; Nothing; A142; Spacewar; Snapdragon8Plus; en_GB",
-    embedded: "Mozilla/5.0 (Linux; Android 14; A142) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2400; Nothing; A063; Asteroids; Snapdragon778G; en_GB",
-    embedded: "Mozilla/5.0 (Linux; Android 13; A063) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "35/15; 420dpi; 1080x2424; Google; Pixel 9; tokay; gs302; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2400; Google; Pixel 8a; akita; gs202; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 8a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
     api: "34/14; 420dpi; 1080x2340; Samsung; SM-S901B; r0q; exynos2200; en_DE",
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
   },
@@ -142326,8 +144945,135 @@ var userAgents = [
     embedded: "Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
   },
   {
+    api: "34/14; 393dpi; 1080x2340; Samsung; SM-S916B; r1q; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S916B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2340; Samsung; SM-S921B; r12s; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2340; Samsung; SM-F946B; q5q; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-F946B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 500dpi; 1440x3088; Samsung; SM-S918U; p3s; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-S918U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 500dpi; 1440x3088; Samsung; SM-S908U; q9s; Snapdragon8Gen1; en_AU",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-S908U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 515dpi; 1440x3200; Samsung; SM-G998U; x1s; Snapdragon888; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-G998U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 494dpi; 1440x3088; Samsung; SM-N986B; c2q; Snapdragon865; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 12; SM-N986B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 425dpi; 1080x2640; Samsung; SM-F731B; b5q; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-F731B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 460dpi; 1080x2340; Samsung; SM-S721B; m44x; Snapdragon8Gen1; de_DE",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S721B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 440dpi; 1080x2340; Samsung; SM-S711B; r11s; Snapdragon8Gen1; fr_FR",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-S711B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 407dpi; 1080x2400; Samsung; SM-G780G; r8q; Snapdragon865; en_AU",
+    embedded: "Mozilla/5.0 (Linux; Android 12; SM-G780G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  // ── Samsung Galaxy A (mid-range / budget) ─────────────────────────────────────
+  {
+    api: "34/14; 393dpi; 1080x2316; Samsung; SM-A546B; a54x; exynos1380; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 393dpi; 1080x2316; Samsung; SM-A735F; a73xq; Snapdragon778G; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A735F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2340; Samsung; SM-A556B; a55x; exynos1480; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A556B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2340; Samsung; SM-A256B; a25x; exynos1280; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A256B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 393dpi; 1080x2316; Samsung; SM-A336B; a33x; exynos1280; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A336B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+  },
+  {
     api: "33/13; 410dpi; 1080x2400; Samsung; SM-A536B; a53x; exynos1280; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Mobile Safari/537.36"
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2340; Samsung; SM-A526B; a52xq; Snapdragon778G; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A526B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 390dpi; 1080x2340; Samsung; SM-A346B; a34x; Dimensity1080; pt_BR",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A346B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 282dpi; 1080x2340; Samsung; SM-A156B; a15x; Dimensity6100Plus; es_MX",
+    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A156B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 282dpi; 1080x2340; Samsung; SM-A245F; m23x; Helio G99; id_ID",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A245F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 393dpi; 1080x2340; Samsung; SM-A336M; a33x; Exynos1280; es_MX",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A336M) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 393dpi; 1080x2400; Samsung; SM-A525F; a52q; Snapdragon750G; en_GB",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A525F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 282dpi; 1080x2408; Samsung; SM-A135F; a13x; Exynos850; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 12; SM-A135F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 269dpi; 720x1600; Samsung; SM-A055F; a05; Snapdragon680; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A055F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 270dpi; 720x1600; Samsung; SM-A047F; a04s; Exynos850; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 12; SM-A047F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+  },
+  // ── OnePlus ───────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 440dpi; 1080x2400; OnePlus; CPH2551; op535; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2551) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 440dpi; 1080x2400; OnePlus; CPH2449; ovaltine; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; CPH2449) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 510dpi; 1440x3168; OnePlus; CPH2583; PJD110; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2583) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36"
+  },
+  // ── Xiaomi / Redmi / POCO ─────────────────────────────────────────────────────
+  {
+    api: "34/14; 400dpi; 1080x2400; Xiaomi; 23127PN0CC; houji; Snapdragon8Gen3; en_CN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; 23127PN0CC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2400; Xiaomi; 2201117TY; viva; Dimensity9000; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; 2201117TY) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2408; Xiaomi; 23049PCD8G; marble; Snapdragon7Gen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; 23049PCD8G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 420dpi; 1080x2400; Xiaomi; 22081212UG; zeus; Dimensity9000Plus; en_US",
@@ -142335,51 +145081,7 @@ var userAgents = [
   },
   {
     api: "33/13; 440dpi; 1080x2400; Xiaomi; 2209129SC; pissarro; Dimensity8100; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; 2209129SC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 430dpi; 1080x2400; Motorola; motorola edge 50 ultra; hiphi; Snapdragon8sGen3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 50 ultra) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 400dpi; 1080x2340; Motorola; motorola g73 5g; tundra; Dimensity930; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; motorola g73 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2520; Sony; XQ-DC72; pdx244; Snapdragon8Gen3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; XQ-DC72) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 440dpi; 1080x2340; OPPO; CPH2577; OP5F19L1; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2577) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2400; realme; RMX3760; RM6985; Dimensity9000; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3760) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2400; vivo; V2307A; PD2307F; Dimensity9200Plus; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; V2307A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 460dpi; 1080x2400; Asus; ASUS_AI2401; ASUS_AI2401; Snapdragon8Gen3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; ASUS_AI2401) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "35/15; 480dpi; 1344x2992; Google; Pixel 9 Pro XL; komodo; gs302; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2400; Google; Pixel 7a; lynx; gs201; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 393dpi; 1080x2340; Samsung; SM-S916B; r1q; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S916B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 393dpi; 1080x2316; Samsung; SM-A735F; a73xq; Snapdragon778G; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A735F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
+    embedded: "Mozilla/5.0 (Linux; Android 13; 2209129SC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 400dpi; 1080x2400; Xiaomi; 23116PN5BC; aurora; Snapdragon8Gen3; en_CN",
@@ -142387,43 +145089,7 @@ var userAgents = [
   },
   {
     api: "33/13; 440dpi; 1080x2400; Xiaomi; 22021211RG; ingres; Dimensity9000; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; 22021211RG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 430dpi; 1080x2400; Motorola; motorola edge 40 neo; manaus; Dimensity7030; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 40 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 440dpi; 1080x2340; OPPO; CPH2525; OP5F25L1; Dimensity9200; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2525) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 440dpi; 1080x2400; vivo; V2250A; PD2250F; Snapdragon8Gen1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; V2250A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 400dpi; 1080x2400; realme; RMX3888; RM6985; Snapdragon8sGen3; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3888) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2340; Nothing; A142; Spacewar; Snapdragon8Plus; en_GB",
-    embedded: "Mozilla/5.0 (Linux; Android 14; A142) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "35/15; 480dpi; 1344x2992; Google; Pixel 8 Pro; husky; gs202; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2400; Google; Pixel 6a; bluejay; gs101; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2340; Samsung; SM-A556B; a55x; exynos1480; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A556B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 393dpi; 1080x2316; Samsung; SM-A336B; a33x; exynos1280; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A336B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36"
+    embedded: "Mozilla/5.0 (Linux; Android 13; 22021211RG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 420dpi; 1080x2340; Xiaomi; 23013RK75C; marble; Snapdragon7sGen2; en_IN",
@@ -142431,59 +145097,7 @@ var userAgents = [
   },
   {
     api: "33/13; 400dpi; 1080x2340; Xiaomi; 2112123AG; mondrian; Snapdragon8Plus; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; 2112123AG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2400; Sony; XQ-BT52; pdx236; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; XQ-BT52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2520; Sony; XQ-AT52; pdx215; Snapdragon888; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; XQ-AT52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 440dpi; 1080x2400; OPPO; CPH2653; OP5F33L1; Dimensity9300; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2653) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2400; OPPO; CPH2413; OP557FL1; Dimensity8100; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; CPH2413) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 440dpi; 1080x2400; vivo; V2404A; PD2404F; Dimensity9300Plus; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; V2404A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2400; vivo; V2157A; PD2157F; Dimensity8100; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; V2157A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 400dpi; 1080x2400; realme; RMX3993; RM3393; Snapdragon7Gen3; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3993) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 400dpi; 1080x2400; realme; RMX3630; RM6877; Dimensity8100Max; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3630) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 460dpi; 1080x2340; Asus; ASUS_AI2302; ASUS_AI2302; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; ASUS_AI2302) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "35/15; 480dpi; 1440x3120; Google; Pixel 7 Pro; cheetah; gs201; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2400; Google; Pixel 6; oriole; gs101; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2340; Samsung; SM-F946B; q5q; Snapdragon8Gen2; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; SM-F946B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2340; Samsung; SM-A526B; a52xq; Snapdragon778G; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; SM-A526B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Mobile Safari/537.36"
+    embedded: "Mozilla/5.0 (Linux; Android 13; 2112123AG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 400dpi; 1080x2400; Xiaomi; 2304FPN6DG; duchamp; Dimensity9200Plus; en_CN",
@@ -142491,7 +145105,60 @@ var userAgents = [
   },
   {
     api: "33/13; 440dpi; 1080x2400; Xiaomi; 22111317I; zeus; Dimensity9000Plus; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; 22111317I) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+    embedded: "Mozilla/5.0 (Linux; Android 13; 22111317I) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 400dpi; 1080x2400; Xiaomi; 23013PC75G; garnet; Dimensity6080; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; 23013PC75G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2400; Xiaomi; 2303CRA44A; diting; Snapdragon8Plus; en_CN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; 2303CRA44A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 446dpi; 1220x2712; Xiaomi; 23124RN87I; sapphire_pro; Dimensity7200Ultra; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; 23124RN87I) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 446dpi; 1080x2400; Xiaomi; 2406EPN60G; rothko; Dimensity9300Plus; de_DE",
+    embedded: "Mozilla/5.0 (Linux; Android 14; 2406EPN60G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 446dpi; 1080x2400; Xiaomi; 2201116SG; dagu; Snapdragon8PlusGen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 12; 2201116SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 419dpi; 1080x2400; Xiaomi; 22111317PG; vili; Snapdragon8Plus; en_CN",
+    embedded: "Mozilla/5.0 (Linux; Android 12; 22111317PG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 446dpi; 1080x2400; Xiaomi; 2309CN75BC; corot; Dimensity8200Ultra; de_DE",
+    embedded: "Mozilla/5.0 (Linux; Android 13; 2309CN75BC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "32/12; 269dpi; 720x1600; Xiaomi; 23028RNCAG; earth; Helio G85; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 12; 23028RNCAG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 269dpi; 720x1600; Xiaomi; 23100RN82L; green; Helio G85; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; 23100RN82L) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  // ── Motorola ──────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 420dpi; 1080x2340; Motorola; motorola edge 40 pro; rtwo; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 40 pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2400; Motorola; motorola g84 5g; bangkk; Snapdragon695; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; motorola g84 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 430dpi; 1080x2400; Motorola; motorola edge 50 ultra; hiphi; Snapdragon8sGen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 50 ultra) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2340; Motorola; motorola g73 5g; tundra; Dimensity930; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; motorola g73 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 420dpi; 1080x2400; Motorola; motorola razr 50 ultra; njord; Snapdragon8sGen3; en_US",
@@ -142499,55 +145166,193 @@ var userAgents = [
   },
   {
     api: "33/13; 400dpi; 1080x2340; Motorola; motorola edge 30 neo; austin; Snapdragon695; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 30 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"
+    embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 30 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 430dpi; 1080x2400; Motorola; motorola edge 40 neo; manaus; Dimensity7030; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; motorola edge 40 neo) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2400; Motorola; motorola g54 5g; cancunf; Snapdragon480Plus; pt_BR",
+    embedded: "Mozilla/5.0 (Linux; Android 13; motorola g54 5g) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2400; Motorola; motorola edge 40; dubai; Dimensity8020; en_CA",
+    embedded: "Mozilla/5.0 (Linux; Android 13; motorola edge 40) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 269dpi; 720x1600; Motorola; moto e14; canopus; Helio G85; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; moto e14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  // ── Sony ──────────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 420dpi; 1080x2400; Sony; XQ-EC54; pdx234; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; XQ-EC54) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2520; Sony; XQ-CQ54; nagara; Snapdragon8Gen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; XQ-CQ54) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2520; Sony; XQ-DC72; pdx244; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; XQ-DC72) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2400; Sony; XQ-BT52; pdx236; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; XQ-BT52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2520; Sony; XQ-AT52; pdx215; Snapdragon888; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; XQ-AT52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2520; Sony; XQ-BE52; pdx223; Snapdragon8Gen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; XQ-BE52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  // ── OPPO ──────────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 440dpi; 1080x2340; OPPO; CPH2609; OP5961L1; Snapdragon8sGen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2609) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 440dpi; 1080x2400; OPPO; CPH2495; OP557BL1; Dimensity9000; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; CPH2495) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 440dpi; 1080x2340; OPPO; CPH2577; OP5F19L1; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2577) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 440dpi; 1080x2340; OPPO; CPH2525; OP5F25L1; Dimensity9200; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2525) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 440dpi; 1080x2400; OPPO; CPH2653; OP5F33L1; Dimensity9300; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2653) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2400; OPPO; CPH2413; OP557FL1; Dimensity8100; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; CPH2413) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 440dpi; 1080x2340; OPPO; CPH2629; OP5F41L1; Dimensity9300; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2629) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 420dpi; 1080x2400; vivo; V2212A; PD2212F; Snapdragon8Plus; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; V2212A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 400dpi; 1080x2400; realme; RMX3741; RM6877; Dimensity9000; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3741) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "35/15; 420dpi; 1080x2424; Google; Pixel 9 Pro Fold; comet; gs302; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro Fold) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2340; Samsung; SM-S921B; r12s; Snapdragon8Gen3; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 420dpi; 1080x2340; Samsung; SM-A256B; a25x; exynos1280; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 14; SM-A256B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "33/13; 420dpi; 1080x2400; Xiaomi; 2303CRA44A; diting; Snapdragon8Plus; en_CN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; 2303CRA44A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
-  },
-  {
-    api: "34/14; 400dpi; 1080x2400; Xiaomi; 23013PC75G; garnet; Dimensity6080; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 14; 23013PC75G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
-  },
-  {
     api: "34/14; 440dpi; 1080x2400; OPPO; CPH2671; OP5F47L1; Snapdragon8sGen3; en_US",
     embedded: "Mozilla/5.0 (Linux; Android 14; CPH2671) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
-    api: "33/13; 420dpi; 1080x2520; Sony; XQ-BE52; pdx223; Snapdragon8Gen1; en_US",
-    embedded: "Mozilla/5.0 (Linux; Android 13; XQ-BE52) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36"
+    api: "34/14; 453dpi; 1080x2412; OPPO; CPH2595; OP5F35L1; Dimensity8200; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; CPH2595) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2400; OPPO; CPH2357; OP4F1BL1; Snapdragon695; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; CPH2357) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  // ── vivo ──────────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 440dpi; 1080x2400; vivo; V2309A; PD2309F; Dimensity9200; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; V2309A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2400; vivo; V2145; PD2145F_EX; Snapdragon888; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; V2145) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2400; vivo; V2307A; PD2307F; Dimensity9200Plus; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; V2307A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 440dpi; 1080x2400; vivo; V2250A; PD2250F; Snapdragon8Gen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; V2250A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 440dpi; 1080x2400; vivo; V2404A; PD2404F; Dimensity9300Plus; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; V2404A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2400; vivo; V2157A; PD2157F; Dimensity8100; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; V2157A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2400; vivo; V2212A; PD2212F; Snapdragon8Plus; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; V2212A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
   },
   {
     api: "34/14; 440dpi; 1080x2400; vivo; V2406A; PD2406F; Snapdragon8Gen3; en_IN",
     embedded: "Mozilla/5.0 (Linux; Android 14; V2406A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
   },
   {
+    api: "34/14; 420dpi; 1080x2400; vivo; V2334A; PD2334F; Snapdragon7Gen3; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; V2334A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 450dpi; 1260x2800; vivo; V2402A; PD2401F; Dimensity9300Plus; en_CN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; V2402A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36"
+  },
+  // ── realme ────────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 400dpi; 1080x2400; realme; RMX3840; RM6985; Dimensity9300; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3840) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2400; realme; RMX3686; RM6877; Dimensity8100; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2400; realme; RMX3760; RM6985; Dimensity9000; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3760) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 400dpi; 1080x2400; realme; RMX3888; RM6985; Snapdragon8sGen3; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3888) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 400dpi; 1080x2400; realme; RMX3993; RM3393; Snapdragon7Gen3; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3993) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 400dpi; 1080x2400; realme; RMX3630; RM6877; Dimensity8100Max; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3630) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 400dpi; 1080x2400; realme; RMX3741; RM6877; Dimensity9000; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3741) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
     api: "33/13; 400dpi; 1080x2400; realme; RMX3710; RM3313; Snapdragon778G; en_IN",
-    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
+    embedded: "Mozilla/5.0 (Linux; Android 13; RMX3710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 420dpi; 1080x2400; realme; RMX3890; RM2351; Snapdragon7sGen3; en_IN",
+    embedded: "Mozilla/5.0 (Linux; Android 14; RMX3890) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36"
+  },
+  // ── Asus ──────────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 420dpi; 1080x2340; Asus; ASUS_AI2302; ASUS_AI2302; Snapdragon8Gen2; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; ASUS_AI2302) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2340; Asus; ASUS_AI2205; ASUS_AI2205; Snapdragon8PlusGen1; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 13; ASUS_AI2205) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "34/14; 460dpi; 1080x2400; Asus; ASUS_AI2401; ASUS_AI2401; Snapdragon8Gen3; en_US",
+    embedded: "Mozilla/5.0 (Linux; Android 14; ASUS_AI2401) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36"
+  },
+  // ── Nothing ───────────────────────────────────────────────────────────────────
+  {
+    api: "34/14; 480dpi; 1080x2340; Nothing; A142; Spacewar; Snapdragon8Plus; en_GB",
+    embedded: "Mozilla/5.0 (Linux; Android 14; A142) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 420dpi; 1080x2400; Nothing; A063; Asteroids; Snapdragon778G; en_GB",
+    embedded: "Mozilla/5.0 (Linux; Android 13; A063) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  },
+  {
+    api: "33/13; 450dpi; 1080x2412; Nothing; A065; Pacman; Snapdragon8PlusGen1; en_GB",
+    embedded: "Mozilla/5.0 (Linux; Android 13; A065) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
   }
 ];
 
@@ -142971,18 +145776,33 @@ var storage = new DatabaseStorage();
 // src/instagram/browserFingerprint.ts
 import { randomBytes } from "crypto";
 var GPU_MAP = [
-  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 750", keys: ["gs302", "Snapdragon8Gen3", "caiman"] },
-  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 735", keys: ["Snapdragon8Gen2", "b0q", "diamond", "e3q", "SM-S928", "SM-S918"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 750", keys: ["gs302", "Snapdragon8Gen3", "caiman", "PJD110", "rothko"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 735", keys: ["Snapdragon8Gen2", "Snapdragon8sGen3", "b0q", "diamond", "e3q", "SM-S928", "SM-S918", "p3s", "r12s"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 730", keys: ["Snapdragon8Gen1", "Snapdragon8PlusGen1", "q9s", "r11s", "b5q", "m44x", "Pacman", "dagu"] },
   { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 720", keys: ["op535", "rtwo", "CPH2551", "CPH2449"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 660", keys: ["Snapdragon888", "x1s", "SM-G998U", "XQ-AT52", "pdx215", "V2145"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 650", keys: ["Snapdragon865", "c2q", "r8q", "SM-N986B", "SM-G780G"] },
   { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 710", keys: ["Snapdragon7Gen1", "marble"] },
-  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 695", keys: ["Snapdragon695", "bangkk"] },
-  { vendor: "ARM", renderer: "Mali-G920 MC10", keys: ["exynos2400"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 695", keys: ["Snapdragon695", "bangkk", "austin"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 642L", keys: ["Snapdragon778G", "Snapdragon7sGen2", "a73xq", "a52xq", "Asteroids"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 619", keys: ["Snapdragon750G", "Snapdragon480Plus", "a52q", "cancunf", "barbet", "Snapdragon765G"] },
+  { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 610", keys: ["Snapdragon680", "a05", "SM-A055F"] },
+  { vendor: "ARM", renderer: "Mali-G920 MC10", keys: ["exynos2400", "SM-S721B"] },
+  { vendor: "ARM", renderer: "Mali-G720 MC12", keys: ["Dimensity9300", "Dimensity9300Plus", "V2402A", "V2404A", "RMX3840", "CPH2653", "CPH2629"] },
+  { vendor: "ARM", renderer: "Mali-G715 MC11", keys: ["Dimensity9200", "Dimensity9200Plus", "V2309A", "V2307A", "CPH2525", "duchamp"] },
   { vendor: "ARM", renderer: "Mali-G710 MC10", keys: ["exynos2200", "SM-S911"] },
-  { vendor: "ARM", renderer: "Mali-G76 MC12", keys: ["exynos1380", "SM-A54"] },
-  { vendor: "ARM", renderer: "Mali-G610 MC6", keys: ["Dimensity9000"] },
-  { vendor: "Google", renderer: "Tensor G4", keys: ["caiman"] },
-  { vendor: "Google", renderer: "Tensor G3", keys: ["shiba", "gs202"] },
-  { vendor: "Google", renderer: "Tensor G2", keys: ["panther", "gs201"] }
+  { vendor: "ARM", renderer: "Mali-G615 MC6", keys: ["Dimensity8200", "Dimensity8200Ultra", "CPH2595", "corot", "OP5F35"] },
+  { vendor: "ARM", renderer: "Mali-G610 MC6", keys: ["Dimensity9000", "Dimensity9000Plus"] },
+  { vendor: "ARM", renderer: "Mali-G610 MC4", keys: ["Dimensity7200", "sapphire_pro", "23124RN87I", "Spacewar"] },
+  { vendor: "ARM", renderer: "Mali-G78 MC22", keys: ["exynos2100", "SM-G998B"] },
+  { vendor: "ARM", renderer: "Mali-G76 MC12", keys: ["exynos1380", "SM-A54", "exynos1480", "exynos1280", "SM-A336", "SM-A526", "SM-A536"] },
+  { vendor: "ARM", renderer: "Mali-G68 MC4", keys: ["Dimensity1080", "a34x", "Dimensity6100", "SM-A346B", "SM-A156B"] },
+  { vendor: "ARM", renderer: "Mali-G57 MC2", keys: ["Helio G99", "m23x", "SM-A245F"] },
+  { vendor: "ARM", renderer: "Mali-G52 MC2", keys: ["Helio G85", "Exynos850", "earth", "green", "canopus", "a04s", "a13x", "SM-A047F", "SM-A135F"] },
+  { vendor: "Google", renderer: "Tensor G4", keys: ["caiman", "komodo", "comet"] },
+  { vendor: "Google", renderer: "Tensor G3", keys: ["shiba", "husky", "gs202"] },
+  { vendor: "Google", renderer: "Tensor G2", keys: ["panther", "cheetah", "lynx", "gs201"] },
+  { vendor: "Google", renderer: "Tensor G1", keys: ["oriole", "bluejay", "gs101"] }
 ];
 var FALLBACK_GPU = [
   { vendor: "Qualcomm Technologies, Inc.", renderer: "Adreno (TM) 750" },
@@ -145023,8 +147843,9 @@ var InstagramWebClient = class {
   setApiLimits(limits) {
     this.throttleRequestsMin = Math.max(1, limits.requestsMin);
     this.throttleRequestsMax = Math.max(1, limits.requestsMax);
-    this.throttleSecondsMin = Math.max(0, limits.everySecondsMin / 1e3);
-    this.throttleSecondsMax = Math.max(0, limits.everySecondsMax / 1e3);
+    const toMs = (v3) => v3 < 1e3 ? v3 * 1e3 : v3;
+    this.throttleSecondsMin = Math.max(0, toMs(limits.everySecondsMin) / 1e3);
+    this.throttleSecondsMax = Math.max(0, toMs(limits.everySecondsMax) / 1e3);
   }
   async apiThrottle() {
     const calls = this.throttleRequestsMin + Math.random() * (this.throttleRequestsMax - this.throttleRequestsMin);
@@ -145828,6 +148649,7 @@ var InstagramWebClient = class {
   // (which uses signed native app requests) worked fine.
   async _followViaIgClient(userId) {
     if (!this.igApiCookies) return { ok: false, status: "follow_blocked", reason: "no igApiCookies \u2014 cannot use IgApiClient" };
+    await this.apiThrottle();
     const ig = newIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
@@ -146120,6 +148942,7 @@ var InstagramWebClient = class {
   // fields (_uid, _uuid, _csrftoken, device_id, radio_type, module_name).
   async _likeViaIgClient(mediaId) {
     if (!this.igApiCookies) return { ok: false, reason: "no igApiCookies" };
+    await this.apiThrottle();
     const ig = newIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
@@ -146409,6 +149232,28 @@ var InstagramWebClient = class {
   // ── Click Settings and Activity ───────────────────────────────────────────
   // Simulates visiting the Settings page — fetches account security info.
   // This endpoint requires POST as of 2024 (GET returns 405).
+  async runForceEmulation(randomise) {
+    const endpoints = [
+      "/api/v1/feed/timeline/",
+      "/api/v1/feed/reels_tray/",
+      "/api/v1/feed/reels_media/",
+      "/api/v1/notifications/badge/",
+      "/api/v1/direct_v2/inbox/",
+      "/api/v1/users/current_user/",
+      "/api/v1/qe/sync/",
+      "/api/v1/launcher/sync/",
+      "/api/v1/analytics/log/"
+    ];
+    const ordered = randomise ? [...endpoints].sort(() => Math.random() - 0.5) : endpoints;
+    for (const path6 of ordered) {
+      try {
+        await this.mobileSessionGet(path6);
+        console.log(`[webClient] forceEmulation: ${path6} \u2713`);
+      } catch (e) {
+        console.warn(`[webClient] forceEmulation: ${path6} error: ${e?.message}`);
+      }
+    }
+  }
   async visitSettingsAndActivity() {
     return this.timed("VisitSettingsAndActivity", async () => {
       const j = await this.mobileSessionPost(`/api/v1/accounts/account_security_info/`);
@@ -147016,6 +149861,7 @@ var InstagramWebClient = class {
   // CSRF, cookie jar management, and HTTPS-proxy routing transparently.
   async _sendDmViaIgClient(userId, text2) {
     if (!this.igApiCookies) return false;
+    await this.apiThrottle();
     const ig = newIgClient();
     const dmDeviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
     if (this.igDeviceState) {
@@ -148051,7 +150897,9 @@ async function createInstagramAccountViaApi(params) {
     "X-IG-Bandwidth-TotalTime-MS": String(300 + Math.floor(Math.random() * 2e3)),
     "X-IG-Device-ID": ig_did,
     "X-IG-Android-ID": android_id,
-    "X-MID": mid,
+    // X-MID intentionally omitted here — it is populated below after launcher/sync
+    // issues a mobile-specific mid.  A real Android app never sends a web-browser mid
+    // as X-MID; it uses the mid returned by the mobile launcher/sync endpoint.
     "X-Bloks-Version-Id": BLOKS_VERSION_ID,
     "X-Bloks-Is-Layout-RTL": "false",
     "X-FB-HTTP-Engine": "Liger",
@@ -148066,6 +150914,7 @@ async function createInstagramAccountViaApi(params) {
     // Instagram cross-checks this against the connecting IP — mismatch = bot flag.
     "X-IG-Timezone-Offset": String(tzOffset)
   };
+  let mobileMid = mid;
   const ebCsrf = (ebCookies.csrftoken ?? "").trim();
   let csrfToken = ebCsrf && ebCsrf !== "missing" ? ebCsrf : "missing";
   if (!ebCsrf || ebCsrf === "missing") {
@@ -148088,6 +150937,8 @@ async function createInstagramAccountViaApi(params) {
       body: signBody({
         id: guid3,
         server_config_retrieval: "1",
+        // is_main_native_login: real Android app always sends this on first launcher/sync
+        is_main_native_login: "1",
         _csrftoken: csrfToken,
         _uuid: guid3
       }),
@@ -148097,7 +150948,17 @@ async function createInstagramAccountViaApi(params) {
     cookieJar = mergeCookies(cookieJar, launcherRes.cookies);
     step(`launcher/sync HTTP ${launcherRes.status} \u2014 cookies: [${launcherRes.cookies.map((c3) => c3.split("=")[0]).join(", ") || "none"}]`);
     console.log(`[accountCreator] launcher/sync HTTP=${launcherRes.status}:`, JSON.stringify(launcherRes.json ?? {}).slice(0, 200));
+    const launcherMid = launcherRes.cookies.find((c3) => c3.startsWith("mid="))?.split("=").slice(1).join("=") ?? "";
+    if (launcherMid) {
+      mobileMid = launcherMid;
+      cookieJar = mergeCookies(cookieJar, [`mid=${mobileMid}`]);
+      step(`Mobile mid issued by launcher/sync: ${mobileMid.slice(0, 8)}... (replaced web-origin mid \u2713)`);
+    } else {
+      step(`launcher/sync did not return a new mid \u2014 keeping EB mid as fallback`);
+    }
+    baseHeaders["X-MID"] = mobileMid;
   } catch (e) {
+    baseHeaders["X-MID"] = mobileMid;
     step(`launcher/sync error (non-fatal): ${e?.message}`);
   }
   await stepDelay();
@@ -148556,14 +151417,25 @@ function extractCheckpointUrl(err) {
   return void 0;
 }
 async function loginApiThrottle(apiLimits) {
-  if (!apiLimits) return;
-  const reqMin = Math.max(1, apiLimits.requestsMin);
-  const reqMax = Math.max(reqMin, apiLimits.requestsMax);
-  const secMin = Math.max(0, apiLimits.everySecondsMin / 1e3);
-  const secMax = Math.max(secMin, apiLimits.everySecondsMax / 1e3);
+  const toMs = (v3) => v3 < 1e3 ? v3 * 1e3 : v3;
+  let minMs;
+  let maxMs;
+  let reqMin;
+  let reqMax;
+  if (!apiLimits) {
+    minMs = 2e3;
+    maxMs = 5e3;
+    reqMin = 1;
+    reqMax = 1;
+  } else {
+    reqMin = Math.max(1, apiLimits.requestsMin);
+    reqMax = Math.max(reqMin, apiLimits.requestsMax);
+    minMs = Math.max(0, toMs(apiLimits.everySecondsMin));
+    maxMs = Math.max(minMs, toMs(apiLimits.everySecondsMax));
+  }
   const calls = reqMin + Math.random() * (reqMax - reqMin);
-  const secs = secMin + Math.random() * (secMax - secMin);
-  const delayMs = Math.floor(secs / Math.max(1, calls) * 1e3);
+  const windowMs = minMs + Math.random() * (maxMs - minMs);
+  const delayMs = Math.floor(windowMs / Math.max(1, calls));
   if (delayMs > 10) {
     await new Promise((r2) => setTimeout(r2, delayMs));
   }
@@ -149575,16 +152447,23 @@ import tls2 from "tls";
 var IS_ELECTRON_EB = !!process.env.EB_IPC_PORT;
 var EB_IPC_BASE = `http://127.0.0.1:${process.env.EB_IPC_PORT ?? "0"}`;
 async function ebIpc(method, urlPath, body) {
-  const res = await fetch(`${EB_IPC_BASE}${urlPath}`, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body != null ? JSON.stringify(body) : void 0
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`EB IPC ${method} ${urlPath} \u2192 ${res.status}: ${txt}`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10 * 6e4);
+  try {
+    const res = await fetch(`${EB_IPC_BASE}${urlPath}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body != null ? JSON.stringify(body) : void 0,
+      signal: ctrl.signal
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`EB IPC ${method} ${urlPath} \u2192 ${res.status}: ${txt}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 var electronSessions = /* @__PURE__ */ new Map();
 function log(msg, _category) {
@@ -150289,6 +153168,7 @@ var _signupCdp = null;
 var _signupWs = null;
 var _signupBrowser = null;
 var _signupDataDir = null;
+var _ghostWarmupDone = false;
 var pendingFileChoosers = /* @__PURE__ */ new Map();
 function sendSignupWsMsg(msg) {
   if (_signupWs && _signupWs.readyState === 1) {
@@ -152854,6 +155734,12 @@ async function wipeEbSession(profileId) {
   }
   log(`EB session wiped for profile ${profileId}`, "browser");
 }
+async function navigateEbToLogin(profileId) {
+  if (!IS_ELECTRON_EB) return;
+  await ebIpc("POST", "/eb/clear-session", { profileId }).catch(
+    (e) => console.warn(`[browserSession] navigateEbToLogin IPC failed for ${profileId}: ${e?.message}`)
+  );
+}
 async function clearEbSessionCookies(profileId, igApiCookies) {
   const sleep2 = (ms) => new Promise((r2) => setTimeout(r2, ms));
   const liveSession = sessions.get(profileId);
@@ -152974,13 +155860,13 @@ async function dismissCookieBanner(page) {
         '[data-cookiebanner], [class*="CookieBanner"], [class*="cookie-banner"], [id*="cookie"]'
       );
       if (container) {
-        const btn = Array.from(container.querySelectorAll('button, [role="button"]')).find(isCookieAcceptBtn);
+        const btn = Array.from(container.querySelectorAll('button, [role="button"], a')).find(isCookieAcceptBtn);
         if (btn) {
           const r2 = btn.getBoundingClientRect();
           return { x: r2.x + r2.width / 2, y: r2.y + r2.height / 2 };
         }
       }
-      const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+      const allBtns = Array.from(document.querySelectorAll('button, [role="button"], a'));
       for (const btn of allBtns) {
         if (isCookieAcceptBtn(btn)) {
           const r2 = btn.getBoundingClientRect();
@@ -153091,6 +155977,21 @@ async function dismissInstagramPopups(page) {
             return;
           }
         }
+        if (body.includes("sign up") && (body.includes("see photos") || body.includes("see videos") || body.includes("never miss") || body.includes("log in"))) {
+          const closeBtn = dialog.querySelector('[aria-label="Close"], [aria-label="close"]');
+          if (closeBtn) {
+            closeBtn.click();
+            return;
+          }
+          const svgOnlyBtn = btns.find((b3) => {
+            const txt = (b3.innerText || b3.textContent || "").trim();
+            return txt === "" && b3.querySelector("svg");
+          });
+          if (svgOnlyBtn) {
+            svgOnlyBtn.click();
+            return;
+          }
+        }
         if (btns.length <= 3) {
           const dismissBtn = btns.find((b3) => DISMISS_TEXTS.has((b3.innerText || b3.textContent || "").trim().toLowerCase()));
           if (dismissBtn) {
@@ -153105,6 +156006,11 @@ async function dismissInstagramPopups(page) {
           btn.click();
           return;
         }
+      }
+      const globalClose = document.querySelector('[aria-label="Close"], [aria-label="close"]');
+      if (globalClose) {
+        globalClose.click();
+        return;
       }
     });
   } catch {
@@ -154180,6 +157086,12 @@ async function openSignupBrowser(opts) {
         _startSignupScreencast().catch(() => {
         });
       }, 500);
+      if (url2 && url2.includes("instagram.com") && !_ghostWarmupDone) {
+        setTimeout(() => {
+          dismissCookieBanner(page).catch(() => {
+          });
+        }, 2500);
+      }
     });
     browser.on("disconnected", () => {
       _signupPage = null;
@@ -154193,6 +157105,10 @@ async function openSignupBrowser(opts) {
       }
     });
     await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 3e4 });
+    setTimeout(() => {
+      dismissCookieBanner(page).catch(() => {
+      });
+    }, 2500);
     if (_signupWs && _signupWs.readyState === wrapper_default.OPEN) {
       _startSignupScreencast().catch(() => {
       });
@@ -154205,6 +157121,7 @@ async function openSignupBrowser(opts) {
 }
 async function closeSignupBrowser() {
   _signupPage = null;
+  _ghostWarmupDone = false;
   if (_signupCdp) {
     try {
       _signupCdp.send("Page.stopScreencast").catch(() => {
@@ -154286,140 +157203,80 @@ async function warmupSignupSession(page, opts) {
   const jitter = (base, range) => base + Math.floor(Math.random() * range);
   const randBetween = (lo, hi) => lo + Math.floor(Math.random() * Math.max(1, hi - lo + 1));
   const reelsCount = randBetween(opts.reelsMin ?? 1, opts.reelsMax ?? 3);
-  const postsCount = randBetween(opts.postsMin ?? 0, opts.postsMax ?? 2);
-  const profilesCount = randBetween(opts.profilesMin ?? 1, opts.profilesMax ?? 2);
-  if (reelsCount === 0 && postsCount === 0 && profilesCount === 0) {
-    step("EB warmup: all counts are 0 \u2014 skipping warm-up");
+  const reelsIdleMs = () => randBetween(opts.reelsIdleMin ?? 5, opts.reelsIdleMax ?? 12) * 1e3;
+  if (reelsCount === 0) {
+    step("EB warmup: reels count is 0 \u2014 skipping warm-up");
     return;
   }
-  step("EB warmup: visiting instagram.com homepage...");
+  const reelUrls = [];
+  let hikerApiToken;
   try {
-    await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 3e4 });
-  } catch (e) {
-    step(`EB warmup: homepage nav warning: ${e?.message?.slice(0, 60)}`);
+    const s = await storage.getGlobalSettings();
+    if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
+  } catch {
   }
-  await delay(jitter(1500, 1e3));
-  await dismissCookieBanner(page);
-  await delay(jitter(1e3, 800));
-  for (let i2 = 0; i2 < 3; i2++) {
+  if (hikerApiToken) {
     try {
-      const down = 200 + Math.random() * 300;
-      await page.evaluate((d3) => window.scrollBy(0, d3), down);
-      await delay(jitter(1800, 1200));
-      if (Math.random() > 0.5) {
-        await page.evaluate((d3) => window.scrollBy(0, -d3), down * 0.4);
-        await delay(jitter(700, 500));
+      const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
+      const hiker = new HikerApiClient2(hikerApiToken);
+      step("EB warmup: fetching trending reels via HikerAPI...");
+      const shortcodes = await hiker.getTrendingReelShortcodes(reelsCount + 2);
+      for (const sc of shortcodes.slice(0, reelsCount)) {
+        reelUrls.push(`https://www.instagram.com/reel/${sc}/`);
       }
-    } catch {
-    }
-  }
-  if (reelsCount > 0) {
-    const reelUrls = [];
-    let hikerApiToken;
-    try {
-      const s = await storage.getGlobalSettings();
-      if (s.hikerApiEnabled === "true" && s.hikerApiToken) hikerApiToken = s.hikerApiToken;
-    } catch {
-    }
-    if (hikerApiToken) {
-      try {
-        const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
-        const hiker = new HikerApiClient2(hikerApiToken);
-        step("EB warmup: fetching public reel URLs via HikerAPI...");
-        const shortcodes = await hiker.getPublicShortcodes(reelsCount + 2);
-        for (const sc of shortcodes.slice(0, reelsCount)) {
-          reelUrls.push(`https://www.instagram.com/reel/${sc}/`);
-        }
-        if (reelUrls.length > 0) step(`EB warmup: got ${reelUrls.length} reel URL(s) via HikerAPI \u2713`);
-      } catch {
-      }
-    }
-    if (reelUrls.length === 0) {
-      reelUrls.push("https://www.instagram.com/reels/", "https://www.instagram.com/explore/");
-    }
-    for (const url2 of reelUrls.slice(0, reelsCount)) {
-      const label = url2.replace("https://www.instagram.com", "ig.com");
-      step(`EB warmup: viewing reel ${label}...`);
-      try {
-        await page.goto(url2, { waitUntil: "domcontentloaded", timeout: 2e4 });
-        await delay(jitter(2500, 2e3));
-        for (let i2 = 0; i2 < 2; i2++) {
-          try {
-            await page.evaluate(() => window.scrollBy(0, 180 + Math.random() * 250));
-            await delay(jitter(2e3, 1500));
-          } catch {
-          }
-        }
-      } catch (e) {
-        step(`EB warmup: reel nav warning: ${e?.message?.slice(0, 60)}`);
-      }
-    }
-  }
-  if (postsCount > 0) {
-    const postProfiles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth"];
-    const pickedProfile = postProfiles[Math.floor(Math.random() * postProfiles.length)];
-    step(`EB warmup: visiting @${pickedProfile} to click posts (${postsCount})...`);
-    try {
-      await page.goto(`https://www.instagram.com/${pickedProfile}/`, { waitUntil: "domcontentloaded", timeout: 2e4 });
-      await delay(jitter(2e3, 1500));
-      for (let i2 = 0; i2 < postsCount; i2++) {
-        try {
-          const postHref = await page.evaluate(() => {
-            const links = Array.from(document.querySelectorAll('a[href*="/p/"]'));
-            const visible = links.filter((el) => {
-              const r2 = el.getBoundingClientRect();
-              return r2.width > 50 && r2.height > 50 && r2.top > 0 && r2.top < window.innerHeight * 2;
-            });
-            if (visible.length === 0) return null;
-            return visible[Math.floor(Math.random() * Math.min(visible.length, 9))].href;
-          });
-          if (postHref) {
-            step(`EB warmup: clicking post ${i2 + 1}/${postsCount}...`);
-            await page.goto(postHref, { waitUntil: "domcontentloaded", timeout: 15e3 });
-            await delay(jitter(3e3, 2500));
-            try {
-              await page.evaluate(() => window.scrollBy(0, 200 + Math.random() * 300));
-              await delay(jitter(1500, 1e3));
-            } catch {
-            }
-            await page.goBack({ timeout: 1e4 }).catch(() => {
-            });
-            await delay(jitter(1e3, 800));
-          }
-        } catch (e) {
-          step(`EB warmup: post click warning: ${e?.message?.slice(0, 60)}`);
-        }
-      }
+      if (reelUrls.length > 0) step(`EB warmup: got ${reelUrls.length} trending reel(s) via HikerAPI \u2713`);
     } catch (e) {
-      step(`EB warmup: posts profile nav warning: ${e?.message?.slice(0, 60)}`);
+      step(`EB warmup: HikerAPI fetch warning: ${e?.message?.slice(0, 60)}`);
     }
   }
-  if (profilesCount > 0) {
-    const allHandles = ["instagram", "natgeo", "nasa", "discovery", "bbcearth", "ngc", "cnn"];
-    const shuffled = allHandles.sort(() => Math.random() - 0.5);
-    for (let i2 = 0; i2 < Math.min(profilesCount, shuffled.length); i2++) {
-      const handle = shuffled[i2];
-      step(`EB warmup: visiting @${handle} profile...`);
-      try {
-        await page.goto(`https://www.instagram.com/${handle}/`, { waitUntil: "domcontentloaded", timeout: 2e4 });
-        await delay(jitter(2e3, 1500));
-        for (let j = 0; j < 2; j++) {
-          try {
-            await page.evaluate(() => window.scrollBy(0, 300 + Math.random() * 400));
-            await delay(jitter(2e3, 1500));
-          } catch {
+  if (reelUrls.length === 0) {
+    if (!hikerApiToken) step("EB warmup: no HikerAPI token \u2014 using Reels feed fallback");
+    reelUrls.push("https://www.instagram.com/reels/");
+  }
+  for (let i2 = 0; i2 < reelsCount; i2++) {
+    const url2 = reelUrls[i2] ?? reelUrls[reelUrls.length - 1];
+    const label = url2.replace("https://www.instagram.com", "ig.com");
+    step(`EB warmup: viewing trending reel ${i2 + 1}/${reelsCount} \u2014 ${label}...`);
+    try {
+      await page.goto(url2, { waitUntil: "domcontentloaded", timeout: 25e3 });
+      await delay(jitter(1500, 1e3));
+      await dismissCookieBanner(page);
+      await dismissInstagramPopups(page).catch(() => {
+      });
+      const reelIdle = reelsIdleMs();
+      const pollMs = 3e3;
+      const polls = Math.max(1, Math.floor(reelIdle / pollMs));
+      for (let p = 0; p < polls; p++) {
+        await delay(pollMs);
+        try {
+          const nowUrl = page.url();
+          if (nowUrl && nowUrl.includes("instagram.com") && !nowUrl.includes("/reel/") && !nowUrl.includes("/p/") && !nowUrl.includes("/reels/") && !nowUrl.includes("/explore")) {
+            const shortUrl = nowUrl.split("?")[0].replace("https://www.instagram.com", "ig.com");
+            step(`EB warmup: redirected to ${shortUrl} \u2014 moving to next reel`);
+            break;
           }
+        } catch {
         }
-      } catch (e) {
-        step(`EB warmup: profile nav warning: ${e?.message?.slice(0, 60)}`);
+        await dismissInstagramPopups(page).catch(() => {
+        });
+        try {
+          await page.evaluate(() => window.scrollBy(0, 80 + Math.random() * 120));
+        } catch {
+        }
       }
+      const remainder = reelIdle - polls * pollMs;
+      if (remainder > 100) await delay(remainder);
+    } catch (e) {
+      step(`EB warmup: reel nav warning: ${e?.message?.slice(0, 60)}`);
     }
   }
   step("EB warmup: session warm-up complete \u2713");
 }
 async function runWarmupOnOpenBrowser(opts) {
   if (!_signupPage) throw new Error("Ghost Browser is not open");
+  _ghostWarmupDone = false;
   await warmupSignupSession(_signupPage, opts);
+  _ghostWarmupDone = true;
 }
 async function createInstagramAccountViaEBForm(params) {
   const {
@@ -154969,7 +157826,15 @@ function resolveCaption(template, candidate, sourceUsername, profileUsername) {
   }
   return result.trim().slice(0, 2200);
 }
-function randInt(min, max) {
+function igErrMsg(e) {
+  const base = e?.message ?? "unknown error";
+  const body = e?.response?.body;
+  if (!body) return base;
+  const igMsg = body.message || body.feedback_message || body.error_title || body.spam_error;
+  if (!igMsg || igMsg === base) return base;
+  return `${base} \u2014 "${igMsg}"`;
+}
+function randInt2(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 function sleep(ms) {
@@ -155183,7 +158048,7 @@ var AutomationEngine = class {
         if (nextAt === void 0) {
           if (profile.lastSyncedAt) {
             const lastMs = new Date(profile.lastSyncedAt).getTime();
-            const intervalMs2 = randInt(
+            const intervalMs2 = randInt2(
               profile.syncIntervalMin * 6e4,
               (profile.syncIntervalMax ?? profile.syncIntervalMin) * 6e4
             );
@@ -155197,7 +158062,7 @@ var AutomationEngine = class {
         this.runProfileSync(profile).catch(
           (e) => console.warn(`[engine] @${profile.username}: profile sync error: ${e?.message}`)
         );
-        const intervalMs = randInt(
+        const intervalMs = randInt2(
           profile.syncIntervalMin * 6e4,
           (profile.syncIntervalMax ?? profile.syncIntervalMin) * 6e4
         );
@@ -155333,7 +158198,7 @@ var AutomationEngine = class {
         const si = _tool.settings ?? {};
         const staggerMs = (si.staggerOffsetMins ?? 0) * 6e4;
         if (!runImmediately || staggerMs > 0) {
-          const baseWait = runImmediately ? 0 : randInt((si.delayMin ?? 1) * 6e4, (si.delayMax ?? 5) * 6e4);
+          const baseWait = runImmediately ? 0 : randInt2((si.delayMin ?? 1) * 6e4, (si.delayMax ?? 5) * 6e4);
           const waitMs = baseWait + staggerMs;
           engineLog("INFO", `@${profile.username}: ${runImmediately ? "stagger" : "startup"} \u2014 first follow session in ${Math.round(waitMs / 6e4)}min${staggerMs > 0 ? ` (+${Math.round(staggerMs / 6e4)}min stagger)` : ""} (Run Now will skip this wait)`);
           state.nextFollowAt = Date.now() + waitMs;
@@ -155424,7 +158289,7 @@ var AutomationEngine = class {
         {
           const sa = followTool.settings;
           if (sa.autoFollowUnfollowEnabled && (freshProfile.followingCount ?? 0) > 0) {
-            const stopAt = randInt(
+            const stopAt = randInt2(
               sa.autoStopFollowAtFollowingsMin ?? 7400,
               sa.autoStopFollowAtFollowingsMax ?? 7400
             );
@@ -155432,7 +158297,7 @@ var AutomationEngine = class {
               console.log(`[engine] @${freshProfile.username}: followings ${freshProfile.followingCount} >= ${stopAt} \u2014 auto: disabling follow tool`);
               await storage.updateTool(followTool.id, { enabled: false });
               if (sa.autoStartUnfollowStaggerEnabled) {
-                const delayMs = randInt(
+                const delayMs = randInt2(
                   (sa.autoStartUnfollowAfterMin ?? 60) * 6e4,
                   (sa.autoStartUnfollowAfterMax ?? 135) * 6e4
                 );
@@ -155451,7 +158316,7 @@ var AutomationEngine = class {
           }
         }
         const s = followTool.settings;
-        const waitMs = randInt(
+        const waitMs = randInt2(
           (s.delayMin ?? 1) * 6e4,
           (s.delayMax ?? 5) * 6e4
         );
@@ -155498,9 +158363,19 @@ ${err?.stack ?? ""}`);
     };
     if (!runImmediately) {
       const si = _tool.settings ?? {};
-      const waitMs = randInt((si.delayMin ?? 30) * 6e4, (si.delayMax ?? 60) * 6e4);
-      state.nextHumanSessionAt = Date.now() + waitMs;
-      console.log(`[engine] @${profile.username}: startup \u2014 first human session in ${Math.round(waitMs / 6e4)}min`);
+      const staggerMs = (si.staggerOffsetMins ?? 0) * 6e4;
+      if (si.staggerOffsetMins) {
+        storage.updateTool(_tool.id, { settings: { ...si, staggerOffsetMins: 0 } }).catch(() => {
+        });
+      }
+      if (staggerMs) {
+        state.nextHumanSessionAt = Date.now() + staggerMs;
+        console.log(`[engine] @${profile.username}: startup \u2014 human session staggered ${si.staggerOffsetMins}min`);
+      } else {
+        const waitMs = randInt2((si.delayMin ?? 30) * 6e4, (si.delayMax ?? 60) * 6e4);
+        state.nextHumanSessionAt = Date.now() + waitMs;
+        console.log(`[engine] @${profile.username}: startup \u2014 first human session in ${Math.round(waitMs / 6e4)}min`);
+      }
     }
     this.humanSessionStates.set(profile.id, state);
     console.log(`[engine] Launching human session runner for @${profile.username}`);
@@ -155543,7 +158418,7 @@ ${err?.stack ?? ""}`);
             console.error(`[engine] @${freshProfile.username}: human session error: ${err?.message}`);
             if (acctStatus) break;
           }
-          const waitMs = randInt(
+          const waitMs = randInt2(
             (s.delayMin ?? 30) * 6e4,
             (s.delayMax ?? 60) * 6e4
           );
@@ -155589,7 +158464,7 @@ ${err?.stack ?? ""}`);
         const si = _tool.settings ?? {};
         const staggerMs = (si.staggerOffsetMins ?? 0) * 6e4;
         if (!runImmediately || staggerMs > 0) {
-          const baseWait = runImmediately ? 0 : randInt((si.delayMin ?? 5) * 6e4, (si.delayMax ?? 15) * 6e4);
+          const baseWait = runImmediately ? 0 : randInt2((si.delayMin ?? 5) * 6e4, (si.delayMax ?? 15) * 6e4);
           const waitMs = baseWait + staggerMs;
           console.log(`[engine] @${profile.username}: ${runImmediately ? "stagger" : "startup"} \u2014 first unfollow session in ${Math.round(waitMs / 6e4)}min${staggerMs > 0 ? ` (+${Math.round(staggerMs / 6e4)}min stagger)` : ""}`);
           state.nextUnfollowAt = Date.now() + waitMs;
@@ -155642,7 +158517,7 @@ ${err?.stack ?? ""}`);
         {
           const sa = unfollowTool.settings;
           if (sa.autoFollowEnabled && (freshProfile.followingCount ?? 0) > 0) {
-            const dropTo = randInt(
+            const dropTo = randInt2(
               sa.autoStartFollowAtFollowingsMin ?? 5e3,
               sa.autoStartFollowAtFollowingsMax ?? 5e3
             );
@@ -155650,7 +158525,7 @@ ${err?.stack ?? ""}`);
               console.log(`[engine] @${freshProfile.username}: followings ${freshProfile.followingCount} <= ${dropTo} \u2014 auto: disabling unfollow tool`);
               await storage.updateTool(unfollowTool.id, { enabled: false });
               if (sa.autoStartFollowStaggerEnabled) {
-                const delayMs = randInt(
+                const delayMs = randInt2(
                   (sa.autoStartFollowAfterMin ?? 60) * 6e4,
                   (sa.autoStartFollowAfterMax ?? 120) * 6e4
                 );
@@ -155669,7 +158544,7 @@ ${err?.stack ?? ""}`);
           }
         }
         const s = unfollowTool.settings;
-        const waitMs = randInt((s.delayMin ?? 5) * 6e4, (s.delayMax ?? 15) * 6e4);
+        const waitMs = randInt2((s.delayMin ?? 5) * 6e4, (s.delayMax ?? 15) * 6e4);
         console.log(`[engine] @${freshProfile.username}: next unfollow session in ${Math.round(waitMs / 6e4)}min`);
         state.nextUnfollowAt = Date.now() + waitMs;
         await sleepInterruptible(waitMs, state.stop);
@@ -155712,7 +158587,7 @@ ${err?.stack ?? ""}`);
         const si = _tool.settings ?? {};
         const staggerMs = (si.staggerOffsetMins ?? 0) * 6e4;
         if (!runImmediately || staggerMs > 0) {
-          const baseWait = runImmediately ? 0 : randInt((si.delayMin ?? 10) * 6e4, (si.delayMax ?? 30) * 6e4);
+          const baseWait = runImmediately ? 0 : randInt2((si.delayMin ?? 10) * 6e4, (si.delayMax ?? 30) * 6e4);
           const waitMs = baseWait + staggerMs;
           console.log(`[engine] @${profile.username}: ${runImmediately ? "stagger" : "startup"} \u2014 first DM session in ${Math.round(waitMs / 6e4)}min${staggerMs > 0 ? ` (+${Math.round(staggerMs / 6e4)}min stagger)` : ""}`);
           if (si.staggerOffsetMins) {
@@ -155761,7 +158636,7 @@ ${err?.stack ?? ""}`);
         await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
         if (state.stop.stopped) break;
         const s = dmTool.settings;
-        const waitMs = randInt((s.delayMin ?? 10) * 6e4, (s.delayMax ?? 30) * 6e4);
+        const waitMs = randInt2((s.delayMin ?? 10) * 6e4, (s.delayMax ?? 30) * 6e4);
         console.log(`[engine] @${freshProfile.username}: next DM session in ${Math.round(waitMs / 6e4)}min`);
         await sleepInterruptible(waitMs, state.stop);
       }
@@ -155803,11 +158678,11 @@ ${err?.stack ?? ""}`);
       storage.updateTool(_tool.id, { settings: { ..._cs, staggerOffsetMins: 0 } }).catch(() => {
       });
     }
-    const _baseFollowerWait = runImmediately ? 0 : randInt(
+    const _baseFollowerWait = runImmediately ? 0 : randInt2(
       (_cs.contactUsersDelayMin ?? _cs.delayMin ?? 30) * 6e4,
       (_cs.contactUsersDelayMax ?? _cs.delayMax ?? 60) * 6e4
     );
-    const _baseUsersWait = runImmediately ? 0 : randInt(
+    const _baseUsersWait = runImmediately ? 0 : randInt2(
       (_cs.contactUsersDelayMin ?? _cs.delayMin ?? 30) * 6e4,
       (_cs.contactUsersDelayMax ?? _cs.delayMax ?? 60) * 6e4
     );
@@ -155873,7 +158748,7 @@ ${err?.stack ?? ""}`);
             }
             await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
           }
-          const waitMs = randInt(
+          const waitMs = randInt2(
             (s.contactCheckIntervalMin ?? 30) * 6e4,
             (s.contactCheckIntervalMax ?? 60) * 6e4
           );
@@ -155895,7 +158770,7 @@ ${err?.stack ?? ""}`);
             }
             await this.persistSessionCookies(state, freshProfile.id, freshProfile.username);
           }
-          const waitMs = randInt(
+          const waitMs = randInt2(
             (s.contactUsersWaitMin ?? 30) * 6e4,
             (s.contactUsersWaitMax ?? 60) * 6e4
           );
@@ -155933,7 +158808,7 @@ ${err?.stack ?? ""}`);
     if (!messageTemplate) {
       throw new Error("No message configured \u2014 type a message in the Contact New Followers settings before extracting.");
     }
-    const usersToCheck = countOverride ?? randInt(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
+    const usersToCheck = countOverride ?? randInt2(s.contactUsersPerCheckMin ?? 1, s.contactUsersPerCheckMax ?? 20);
     const globalSettings2 = await storage.getGlobalSettings();
     const useHiker = s.contactApiSource === "hiker" && globalSettings2.hikerApiEnabled === "true" && !!globalSettings2.hikerApiToken;
     const source = useHiker ? "HikerAPI" : "account";
@@ -156059,7 +158934,7 @@ ${err?.stack ?? ""}`);
       console.log(`[engine] @${profile.username}: no pending contact messages to send`);
       return 0;
     }
-    const sendCount = randInt(s.contactUsersSendCountMin ?? 1, s.contactUsersSendCountMax ?? 5);
+    const sendCount = randInt2(s.contactUsersSendCountMin ?? 1, s.contactUsersSendCountMax ?? 5);
     const delayMin = (s.contactUsersDelayBetweenMin ?? 5) * 1e3;
     const delayMax = (s.contactUsersDelayBetweenMax ?? 15) * 1e3;
     const pickRandom = !!s.contactUsersPickRandom;
@@ -156101,7 +158976,7 @@ ${err?.stack ?? ""}`);
         if (result) {
           sent++;
           const sentAt = (/* @__PURE__ */ new Date()).toISOString();
-          const unsendAt = unsendEnabled ? new Date(Date.now() + randInt(unsendMin, unsendMax)).toISOString() : void 0;
+          const unsendAt = unsendEnabled ? new Date(Date.now() + randInt2(unsendMin, unsendMax)).toISOString() : void 0;
           await storage.updateContactPendingMessage(msg.id, {
             status: "sent",
             sentAt,
@@ -156128,15 +159003,15 @@ ${err?.stack ?? ""}`);
           );
           await storage.incrementStat(profile.id, "dm");
           console.log(`[engine] @${profile.username}: \u{1F4E9} contact DM sent to @${msg.instagramUsername} [${sent}/${queue.length}]`);
-          if (sent < queue.length) await sleep(randInt(delayMin, delayMax));
+          if (sent < queue.length) await sleep(randInt2(delayMin, delayMax));
         } else {
           console.warn(`[engine] @${profile.username}: contact DM to @${msg.instagramUsername} failed (non-block, will retry)`);
           this.logAction(profile.id, tool.id, "contact_dm", msg.instagramUsername, "", "", "error", "DM send failed (will retry)");
           break;
         }
       } catch (e) {
-        const errMsg = e?.message ?? "";
-        const acctStatus = await this.applyAccountLevelError(profile.id, errMsg, state, tool.id);
+        const errMsg = igErrMsg(e);
+        const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: contact DM threw account-level error (${acctStatus}) \u2014 ${errMsg}`);
           this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "error", `[${acctStatus}] ${errMsg}`);
@@ -156477,13 +159352,13 @@ ${err?.stack ?? ""}`);
   // maxDayMin/Max  = daily cap (max number of times per day, randomised each check)
   // maxHourMin/Max = hourly cap
   shouldDoAction(state, key, s, chanceMinKey, chanceMaxKey, beforeMinKey, beforeMaxKey, maxDayMinKey, maxDayMaxKey, maxHourMinKey, maxHourMaxKey) {
-    const chance2 = randInt(s[chanceMinKey] ?? 0, s[chanceMaxKey] ?? 0);
+    const chance2 = randInt2(s[chanceMinKey] ?? 0, s[chanceMaxKey] ?? 0);
     if (chance2 <= 0 || Math.random() * 100 >= chance2) return false;
-    const maxDay = randInt(s[maxDayMinKey] ?? 0, s[maxDayMaxKey] ?? 0);
+    const maxDay = randInt2(s[maxDayMinKey] ?? 0, s[maxDayMaxKey] ?? 0);
     if (maxDay > 0 && this.actionDaily(state, key) >= maxDay) return false;
-    const maxHour = randInt(s[maxHourMinKey] ?? 0, s[maxHourMaxKey] ?? 0);
+    const maxHour = randInt2(s[maxHourMinKey] ?? 0, s[maxHourMaxKey] ?? 0);
     if (maxHour > 0 && this.actionHourly(state, key) >= maxHour) return false;
-    const beforePct = randInt(s[beforeMinKey] ?? 0, s[beforeMaxKey] ?? 0);
+    const beforePct = randInt2(s[beforeMinKey] ?? 0, s[beforeMaxKey] ?? 0);
     if (beforePct <= 0 || Math.random() * 100 >= beforePct) return false;
     return true;
   }
@@ -156504,7 +159379,7 @@ ${err?.stack ?? ""}`);
       "likeMaxPerHourMin",
       "likeMaxPerHourMax"
     )) {
-      const likeCount = randInt(s.likeProcessMin ?? 1, s.likeProcessMax ?? 1);
+      const likeCount = randInt2(s.likeProcessMin ?? 1, s.likeProcessMax ?? 1);
       for (let i2 = 0; i2 < likeCount; i2++) {
         try {
           const mediaId = hikerClient ? await hikerClient.getUserRecentMediaId(uid) : await client.getUserRecentMediaId(uid);
@@ -156529,17 +159404,18 @@ ${err?.stack ?? ""}`);
               await storage.incrementStat(profile.id, "like");
               console.log(`[engine] @${profile.username}: \u2665 liked post of @${uname} (${i2 + 1}/${likeCount})`);
               this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "ok", `Liked post (${i2 + 1}/${likeCount})`);
-              await sleep(randInt((s.likeDelayMin ?? 2) * 1e3, (s.likeDelayMax ?? 6) * 1e3));
+              await sleep(randInt2((s.likeDelayMin ?? 2) * 1e3, (s.likeDelayMax ?? 6) * 1e3));
             }
           }
         } catch (e) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] like @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] like @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -156559,7 +159435,7 @@ ${err?.stack ?? ""}`);
       "viewStoriesMaxPerHourMin",
       "viewStoriesMaxPerHourMax"
     )) {
-      const storyCount = randInt(s.viewStoriesProcessMin ?? 1, s.viewStoriesProcessMax ?? 3);
+      const storyCount = randInt2(s.viewStoriesProcessMin ?? 1, s.viewStoriesProcessMax ?? 3);
       for (let i2 = 0; i2 < storyCount; i2++) {
         try {
           const ok = await client.viewStories(uid, uname);
@@ -156568,16 +159444,17 @@ ${err?.stack ?? ""}`);
             await storage.incrementStat(profile.id, "story");
             console.log(`[engine] @${profile.username}: \u{1F4D6} viewed stories of @${uname} (${i2 + 1}/${storyCount})`);
             this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "ok", `Stories viewed (${i2 + 1}/${storyCount})`);
-            await sleep(randInt((s.viewStoriesDelayMin ?? 2) * 1e3, (s.viewStoriesDelayMax ?? 6) * 1e3));
+            await sleep(randInt2((s.viewStoriesDelayMin ?? 2) * 1e3, (s.viewStoriesDelayMax ?? 6) * 1e3));
           } else break;
         } catch (e) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] stories @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] stories @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -156595,7 +159472,7 @@ ${err?.stack ?? ""}`);
       "viewReelsMaxPerHourMin",
       "viewReelsMaxPerHourMax"
     )) {
-      const reelCount = randInt(s.viewReelsProcessMin ?? 1, s.viewReelsProcessMax ?? 2);
+      const reelCount = randInt2(s.viewReelsProcessMin ?? 1, s.viewReelsProcessMax ?? 2);
       for (let i2 = 0; i2 < reelCount; i2++) {
         try {
           const ok = await client.viewReels(uid, uname);
@@ -156603,16 +159480,17 @@ ${err?.stack ?? ""}`);
             this.bumpAction(state, "viewReels");
             console.log(`[engine] @${profile.username}: \u{1F3AC} viewed reels of @${uname} (${i2 + 1}/${reelCount})`);
             this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "ok", `Reels viewed (${i2 + 1}/${reelCount})`);
-            await sleep(randInt((s.viewReelsDelayMin ?? 2) * 1e3, (s.viewReelsDelayMax ?? 6) * 1e3));
+            await sleep(randInt2((s.viewReelsDelayMin ?? 2) * 1e3, (s.viewReelsDelayMax ?? 6) * 1e3));
           } else break;
         } catch (e) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] reels @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] reels @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -156630,7 +159508,7 @@ ${err?.stack ?? ""}`);
       "viewHighlightsMaxPerHourMin",
       "viewHighlightsMaxPerHourMax"
     )) {
-      const highlightCount = randInt(s.viewHighlightsProcessMin ?? 1, s.viewHighlightsProcessMax ?? 2);
+      const highlightCount = randInt2(s.viewHighlightsProcessMin ?? 1, s.viewHighlightsProcessMax ?? 2);
       for (let i2 = 0; i2 < highlightCount; i2++) {
         try {
           const ok = await client.viewHighlights(uid, uname);
@@ -156638,16 +159516,17 @@ ${err?.stack ?? ""}`);
             this.bumpAction(state, "viewHighlights");
             console.log(`[engine] @${profile.username}: \u2B50 viewed highlights of @${uname} (${i2 + 1}/${highlightCount})`);
             this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "ok", `Highlights viewed (${i2 + 1}/${highlightCount})`);
-            await sleep(randInt((s.viewHighlightsDelayMin ?? 2) * 1e3, (s.viewHighlightsDelayMax ?? 6) * 1e3));
+            await sleep(randInt2((s.viewHighlightsDelayMin ?? 2) * 1e3, (s.viewHighlightsDelayMax ?? 6) * 1e3));
           } else break;
         } catch (e) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] highlights @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] highlights @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -156673,7 +159552,7 @@ ${err?.stack ?? ""}`);
       return { unfollowed: 0 };
     }
     const minAgeDays = s.minFollowAgeDays ?? 3;
-    const processCount = randInt(s.processMin ?? 5, s.processMax ?? 15);
+    const processCount = randInt2(s.processMin ?? 5, s.processMax ?? 15);
     const delayMin = (s.delayAfterUnfollowMin ?? 5) * 1e3;
     const delayMax = (s.delayAfterUnfollowMax ?? 15) * 1e3;
     const maxPerDay = s.maxPerDayMin ?? 0;
@@ -156775,11 +159654,11 @@ ${err?.stack ?? ""}`);
           }
         }
         if (attempted < processCount && !state.stop.stopped) {
-          await sleep(randInt(delayMin, delayMax));
+          await sleep(randInt2(delayMin, delayMax));
         }
       } catch (e) {
-        const msg = e?.message ?? "";
-        const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+        const msg = igErrMsg(e);
+        const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: unfollow threw account-level error (${acctStatus}) \u2014 ${msg}`);
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "error", `[${acctStatus}] ${msg}`);
@@ -156794,7 +159673,7 @@ ${err?.stack ?? ""}`);
   // ── DM session ────────────────────────────────────────────────────────────
   async runDMSession(profile, tool, state) {
     const s = tool.settings;
-    const processCount = randInt(s.processMin ?? 3, s.processMax ?? 8);
+    const processCount = randInt2(s.processMin ?? 3, s.processMax ?? 8);
     const delayMin = (s.delayAfterDMMin ?? 10) * 1e3;
     const delayMax = (s.delayAfterDMMax ?? 30) * 1e3;
     const maxPerDay = s.maxPerDayMin ?? 0;
@@ -156891,11 +159770,11 @@ ${err?.stack ?? ""}`);
           console.log(`[engine] @${profile.username}: \u2709 DM sent to @${user.username} [${sent}/${processCount}]`);
           this.logAction(profile.id, tool.id, "dm", user.username, source.value, source.type, "ok", `DM sent [${sent}/${processCount}]: "${text2.slice(0, 50)}"`);
           await storage.incrementStat(profile.id, "dm");
-          await sleep(randInt(delayMin, delayMax));
+          await sleep(randInt2(delayMin, delayMax));
         }
       } catch (e) {
-        const msg = e?.message ?? "";
-        const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+        const msg = igErrMsg(e);
+        const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: DM threw account-level error (${acctStatus}) \u2014 ${msg}`);
           this.logAction(profile.id, tool.id, "dm_blocked", user.username, source.value, source.type, "error", `[${acctStatus}] ${msg}`);
@@ -156963,7 +159842,7 @@ ${err?.stack ?? ""}`);
     const min = Number(s[minKey] ?? 0);
     const max = Number(s[maxKey] ?? 0);
     if (min <= 0 && max <= 0) return false;
-    const skipChance = randInt(min, max);
+    const skipChance = randInt2(min, max);
     return Math.random() * 100 < skipChance;
   }
   async runHumanSessionTools(profile, tool, state) {
@@ -156982,11 +159861,21 @@ ${err?.stack ?? ""}`);
       }
       return false;
     };
+    if (s.forceEmulationEnabled === true) {
+      try {
+        await client.runForceEmulation(s.forceEmulationRandomise === true);
+        console.log(`[engine] @${profile.username}: \u{1F4F1} force emulation calls complete`);
+        this.logAction(profile.id, tool.id, "force_emulation", "", "", "", "ok", "Force emulation API calls fired");
+      } catch (e) {
+        if (await checkSessionErr(e, "force_emulation")) return;
+        console.warn(`[engine] @${profile.username}: force emulation error: ${e?.message}`);
+      }
+    }
     const queue = [];
     const enqueue = (label, enabled, notUsedMinKey, notUsedMaxKey, orderMinKey, orderMaxKey, fn) => {
       if (!enabled) return;
       if (this.shouldSkipDueToChance(s, notUsedMinKey, notUsedMaxKey)) return;
-      const order = randInt(Number(s[orderMinKey] ?? 0), Number(s[orderMaxKey] ?? 0));
+      const order = randInt2(Number(s[orderMinKey] ?? 0), Number(s[orderMaxKey] ?? 0));
       queue.push({ order, label, run: fn });
     };
     enqueue(
@@ -156997,37 +159886,59 @@ ${err?.stack ?? ""}`);
       "humanSessionOrderMin",
       "humanSessionOrderMax",
       async () => {
-        try {
-          await client.visitNotifications();
-          console.log(`[engine] @${profile.username}: \u{1F514} visited notifications`);
-          this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
-        } catch (e) {
-          if (await checkSessionErr(e, "visit_notifications")) return;
-          console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
+        const willRun = (minKey, maxKey) => {
+          const lo = Number(s[minKey] ?? 100);
+          const hi = Number(s[maxKey] ?? 100);
+          const threshold = randInt2(Math.min(lo, hi), Math.max(lo, hi));
+          return Math.random() * 100 < threshold;
+        };
+        if (willRun("notificationsRunChanceMin", "notificationsRunChanceMax")) {
+          try {
+            await client.visitNotifications();
+            console.log(`[engine] @${profile.username}: \u{1F514} visited notifications`);
+            this.logAction(profile.id, tool.id, "visit_notifications", "", "", "", "ok", "Visited notifications inbox");
+          } catch (e) {
+            if (await checkSessionErr(e, "visit_notifications")) return;
+            console.warn(`[engine] @${profile.username}: notifications error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: \u{1F514} notifications skipped by chance`);
         }
-        try {
-          await client.visitOwnProfile();
-          console.log(`[engine] @${profile.username}: \u{1F464} visited own profile`);
-          this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
-        } catch (e) {
-          if (await checkSessionErr(e, "visit_own_profile")) return;
-          console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
+        if (willRun("ownProfileRunChanceMin", "ownProfileRunChanceMax")) {
+          try {
+            await client.visitOwnProfile();
+            console.log(`[engine] @${profile.username}: \u{1F464} visited own profile`);
+            this.logAction(profile.id, tool.id, "visit_own_profile", "", "", "", "ok", "Visited own profile page");
+          } catch (e) {
+            if (await checkSessionErr(e, "visit_own_profile")) return;
+            console.warn(`[engine] @${profile.username}: own profile error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: \u{1F464} own profile skipped by chance`);
         }
-        try {
-          await client.refreshOwnProfile();
-          console.log(`[engine] @${profile.username}: \u{1F504} refreshed own profile`);
-          this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
-        } catch (e) {
-          if (await checkSessionErr(e, "refresh_own_profile")) return;
-          console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
+        if (willRun("refreshProfileRunChanceMin", "refreshProfileRunChanceMax")) {
+          try {
+            await client.refreshOwnProfile();
+            console.log(`[engine] @${profile.username}: \u{1F504} refreshed own profile`);
+            this.logAction(profile.id, tool.id, "refresh_own_profile", "", "", "", "ok", "Refreshed own profile feed");
+          } catch (e) {
+            if (await checkSessionErr(e, "refresh_own_profile")) return;
+            console.warn(`[engine] @${profile.username}: refresh profile error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: \u{1F504} refresh profile skipped by chance`);
         }
-        try {
-          await client.visitSettingsAndActivity();
-          console.log(`[engine] @${profile.username}: \u2699\uFE0F visited settings & activity`);
-          this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
-        } catch (e) {
-          if (await checkSessionErr(e, "visit_settings_activity")) return;
-          console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+        if (willRun("settingsActivityRunChanceMin", "settingsActivityRunChanceMax")) {
+          try {
+            await client.visitSettingsAndActivity();
+            console.log(`[engine] @${profile.username}: \u2699\uFE0F visited settings & activity`);
+            this.logAction(profile.id, tool.id, "visit_settings_activity", "", "", "", "ok", "Visited settings and activity pages");
+          } catch (e) {
+            if (await checkSessionErr(e, "visit_settings_activity")) return;
+            console.warn(`[engine] @${profile.username}: settings/activity error: ${e?.message}`);
+          }
+        } else {
+          console.log(`[engine] @${profile.username}: \u2699\uFE0F settings/activity skipped by chance`);
         }
       }
     );
@@ -157039,7 +159950,7 @@ ${err?.stack ?? ""}`);
       "viewTimelineFeedOrderMin",
       "viewTimelineFeedOrderMax",
       async () => {
-        const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
+        const feedCount = randInt2(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
         const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
         const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
         let viewed = 0;
@@ -157058,7 +159969,7 @@ ${err?.stack ?? ""}`);
           console.log(`[engine] @${profile.username}: \u{1F4F0} viewed ${viewed} timeline post(s)`);
           this.logAction(profile.id, tool.id, "view_timeline_feed", "", "", "", "ok", `Viewed ${viewed} timeline post${viewed === 1 ? "" : "s"}`);
           if (viewed === 0 && s.followSuggestedUsersIfEmptyEnabled === true) {
-            const followCount = randInt(
+            const followCount = randInt2(
               Number(s.followSuggestedUsersIfEmptyMin ?? 1),
               Number(s.followSuggestedUsersIfEmptyMax ?? 3)
             );
@@ -157082,7 +159993,7 @@ ${err?.stack ?? ""}`);
         const likePctMin = Number(s.likeTimelinePostsPercentMin ?? 0);
         const likePctMax = Number(s.likeTimelinePostsPercentMax ?? 0);
         if (viewed > 0 && likePctMax > 0) {
-          const pct = randInt(likePctMin, likePctMax);
+          const pct = randInt2(likePctMin, likePctMax);
           const exactCount = viewed * pct / 100;
           const likeCount = Math.floor(exactCount) + (Math.random() < exactCount % 1 ? 1 : 0);
           if (likeCount <= 0) {
@@ -157136,7 +160047,7 @@ ${err?.stack ?? ""}`);
         const clickPctMin = Number(s.clickPostPercentMin ?? 0);
         const clickPctMax = Number(s.clickPostPercentMax ?? 0);
         if (viewed > 0 && clickPctMax > 0 && vtfResult?.items && vtfResult.items.length > 0) {
-          const clickPct = randInt(clickPctMin, clickPctMax);
+          const clickPct = randInt2(clickPctMin, clickPctMax);
           const exactClick = vtfResult.items.length * clickPct / 100;
           const clickCount = Math.floor(exactClick) + (Math.random() < exactClick % 1 ? 1 : 0);
           if (clickCount > 0) {
@@ -157154,7 +160065,7 @@ ${err?.stack ?? ""}`);
               const vpPctMin = Number(s.viewPostProfilePercentMin ?? 0);
               const vpPctMax = Number(s.viewPostProfilePercentMax ?? 0);
               if (vpPctMax > 0 && item.userId) {
-                const vpPct = randInt(vpPctMin, vpPctMax);
+                const vpPct = randInt2(vpPctMin, vpPctMax);
                 if (Math.random() * 100 >= vpPct) continue;
                 try {
                   await client.visitUserProfile(item.userId);
@@ -157168,9 +160079,9 @@ ${err?.stack ?? ""}`);
                 const vfPctMin = Number(s.viewProfileFeedPercentMin ?? 0);
                 const vfPctMax = Number(s.viewProfileFeedPercentMax ?? 0);
                 if (vfPctMax > 0) {
-                  const vfPct = randInt(vfPctMin, vfPctMax);
+                  const vfPct = randInt2(vfPctMin, vfPctMax);
                   if (Math.random() * 100 < vfPct) {
-                    const profileFeedCount = randInt(
+                    const profileFeedCount = randInt2(
                       s.viewProfileFeedCountMin ?? 3,
                       s.viewProfileFeedCountMax ?? 8
                     );
@@ -157186,8 +160097,8 @@ ${err?.stack ?? ""}`);
                     const vpPostPctMin = Number(s.viewProfilePostsPercentMin ?? 0);
                     const vpPostPctMax = Number(s.viewProfilePostsPercentMax ?? 0);
                     if (vpPostPctMax > 0 && profilePosts.length > 0) {
-                      const postViewMax = randInt(s.viewProfilePostsCountMin ?? 1, s.viewProfilePostsCountMax ?? 3);
-                      const postViewPct = randInt(vpPostPctMin, vpPostPctMax);
+                      const postViewMax = randInt2(s.viewProfilePostsCountMin ?? 1, s.viewProfilePostsCountMax ?? 3);
+                      const postViewPct = randInt2(vpPostPctMin, vpPostPctMax);
                       let postsOpened = 0;
                       for (const profilePost of profilePosts) {
                         if (postsOpened >= postViewMax) break;
@@ -157219,7 +160130,7 @@ ${err?.stack ?? ""}`);
       "checkTimelineStoriesOrderMin",
       "checkTimelineStoriesOrderMax",
       async () => {
-        const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
+        const storyCount = randInt2(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
         try {
           const watched = await client.viewTimelineStories(storyCount);
           if (watched === -1) {
@@ -157255,7 +160166,7 @@ ${err?.stack ?? ""}`);
       "checkDmOrderMax",
       async () => {
         let inboxThreads = [];
-        let dmOpenCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
+        let dmOpenCount = randInt2(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
         let dmCount = 0;
         let dmOk = false;
         try {
@@ -157289,7 +160200,7 @@ ${err?.stack ?? ""}`);
       "likeTimelinePostsOrderMax",
       async () => {
         console.log(`[engine] @${profile.username}: \u25B6 ENQUEUE FIRED: likeTimelinePosts STANDALONE (likeTimelinePostsEnabled=true). This is the source of any likes logged below.`);
-        const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
+        const likeCount = randInt2(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
         const likeDelayMin = Number(s.likeTimelinePostsDelayMin ?? 3);
         const likeDelayMax = Number(s.likeTimelinePostsDelayMax ?? 8);
         try {
@@ -157358,7 +160269,7 @@ ${err?.stack ?? ""}`);
               this.logAction(profile.id, tool.id, "repost", repostLocalFolderPath, "", "", "skip", "No image files found in local folder");
               return;
             }
-            const targetCount = randInt(
+            const targetCount = randInt2(
               Math.max(1, Number(s.repostMin ?? 1)),
               Math.max(1, Number(s.repostMax ?? 1))
             );
@@ -157427,7 +160338,7 @@ ${err?.stack ?? ""}`);
               return;
             }
           }
-          const targetCount = randInt(
+          const targetCount = randInt2(
             Math.max(1, Number(s.repostMin ?? 1)),
             Math.max(1, Number(s.repostMax ?? 1))
           );
@@ -157514,9 +160425,9 @@ ${err?.stack ?? ""}`);
       this.logAction(profile.id, tool.id, "action_suspended", "", "", "", "skipped", `Tool paused \u2014 blocked by Instagram. ${remStr} remaining`);
       return { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
     }
-    const maxPerDay = randInt(s.maxPerDayMin ?? 150, s.maxPerDayMax ?? 200);
-    const maxPerHour = randInt(s.maxPerHourMin ?? 5, s.maxPerHourMax ?? 15);
-    const processCount = randInt(s.processMin ?? 5, s.processMax ?? 15);
+    const maxPerDay = randInt2(s.maxPerDayMin ?? 150, s.maxPerDayMax ?? 200);
+    const maxPerHour = randInt2(s.maxPerHourMin ?? 5, s.maxPerHourMax ?? 15);
+    const processCount = randInt2(s.processMin ?? 5, s.processMax ?? 15);
     const followMin = (s.delayAfterFollowMin ?? 5) * 1e3;
     const followMax = (s.delayAfterFollowMax ?? 15) * 1e3;
     const globalSettings2 = await storage.getGlobalSettings();
@@ -157576,7 +160487,7 @@ ${err?.stack ?? ""}`);
         if (hikerClient) {
           const t0 = Date.now();
           const globalCursor = await storage.getHashtagCursor(source.value);
-          const result = await hikerClient.getHashtagUsers(source.value, processCount + 5, globalCursor);
+          const result = await hikerClient.getHashtagUsers(source.value, Math.max(processCount * 3, 20), globalCursor);
           candidates = result.users;
           if (result.nextCursor) {
             await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {
@@ -157622,7 +160533,7 @@ ${err?.stack ?? ""}`);
         }
         if (hikerClient) {
           const t0 = Date.now();
-          candidates = await hikerClient.getFollowers(targetPk, processCount + 5);
+          candidates = await hikerClient.getFollowers(targetPk, Math.max(processCount * 3, 20));
           if (globalSettings2.skipScrapedUsers === "true" && candidates.length > 0) {
             const ignoreDays = parseInt(globalSettings2.scrapedUserIgnoreDays ?? "365", 10);
             const alreadyScraped = await storage.getScrapedUserIds(candidates.map((c3) => c3.pk), ignoreDays);
@@ -157679,7 +160590,7 @@ ${err?.stack ?? ""}`);
         this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `[Profile Browse] Visited @${targetUser.username}'s profile`);
       } catch {
       }
-      const feedCount = randInt(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
+      const feedCount = randInt2(injectProfileBrowsingFeedMin, injectProfileBrowsingFeedMax);
       let profilePosts = [];
       try {
         profilePosts = await client.viewUserFeed(targetUser.pk, feedCount);
@@ -157688,7 +160599,7 @@ ${err?.stack ?? ""}`);
       } catch {
       }
       if (injectProfileBrowsingPostPctMax > 0 && profilePosts.length > 0) {
-        const postPct = randInt(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
+        const postPct = randInt2(injectProfileBrowsingPostPctMin, injectProfileBrowsingPostPctMax);
         for (const post of profilePosts) {
           if (Math.random() * 100 < postPct) {
             try {
@@ -157770,7 +160681,7 @@ ${err?.stack ?? ""}`);
       if (followed > 0) {
         let suggestedFired = false;
         if (injectSuggestedEnabled) {
-          const threshold = randInt(injectSuggestedMin, injectSuggestedMax);
+          const threshold = randInt2(injectSuggestedMin, injectSuggestedMax);
           if (Math.random() * 100 < threshold) {
             try {
               await client.getSuggestedUsers();
@@ -157781,7 +160692,7 @@ ${err?.stack ?? ""}`);
           }
         }
         if (!suggestedFired && injectSearchEnabled) {
-          const threshold = randInt(injectSearchMin, injectSearchMax);
+          const threshold = randInt2(injectSearchMin, injectSearchMax);
           if (Math.random() * 100 < threshold) {
             try {
               await client.searchUserByUsername(user.username);
@@ -157791,7 +160702,7 @@ ${err?.stack ?? ""}`);
           }
         }
         if (injectProfileBrowsingEnabled) {
-          const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+          const threshold = randInt2(injectProfileBrowsingMin, injectProfileBrowsingMax);
           if (Math.random() * 100 < threshold) {
             engineLog("INFO", `@${profile.username}: injected profile browsing for @${user.username} before follow #${followed + 1}`);
             await browseTargetProfile("between-follows inject", user);
@@ -157880,7 +160791,7 @@ ${err?.stack ?? ""}`);
           break;
         }
         if (followed + blocked >= processCount) break;
-        await sleep(randInt(followMin, followMax));
+        await sleep(randInt2(followMin, followMax));
         continue;
       }
       if (!result.ok) {
@@ -157906,7 +160817,7 @@ ${err?.stack ?? ""}`);
       this.bump(state);
       followed++;
       console.log(`[engine] @${profile.username}: \u2713 @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
-      await sleep(randInt(followMin, followMax));
+      await sleep(randInt2(followMin, followMax));
     }
     const sameTypeSources = sources2.filter((s2) => s2.type === source.type);
     const initialSourceIdx = sameTypeSources.findIndex((s2) => s2.id === source.id);
@@ -157914,7 +160825,7 @@ ${err?.stack ?? ""}`);
     const seenFollowerPksBySource = /* @__PURE__ */ new Map();
     seenFollowerPksBySource.set(source.id, new Set(candidates.map((c3) => c3.pk)));
     const sourceRoundCount = /* @__PURE__ */ new Map();
-    if (scrapeAllIfSkipped && !hitHardLimit && followed < processCount && !state.stop.stopped) {
+    if (!hitHardLimit && followed < processCount && !state.stop.stopped) {
       let extraRound = 0;
       while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 20) {
         extraRound++;
@@ -158068,7 +160979,7 @@ ${err?.stack ?? ""}`);
               break;
             }
             if (followed + blocked >= processCount) break;
-            await sleep(randInt(followMin, followMax));
+            await sleep(randInt2(followMin, followMax));
             continue;
           }
           if (!result.ok) {
@@ -158084,7 +160995,7 @@ ${err?.stack ?? ""}`);
           this.bump(state);
           followed++;
           console.log(`[engine] @${profile.username}: \u2713 @${user.username} [${followed}/${processCount}] day:${state.dailyCount}`);
-          await sleep(randInt(followMin, followMax));
+          await sleep(randInt2(followMin, followMax));
         }
         if (!hitHardLimit && followed === 0 && blocked >= processCount) {
           engineLog("WARN", `@${profile.username}: re-scrape aborted after round ${extraRound} \u2014 ${blocked} block(s), 0 follows (session dead or action-blocked)`);
@@ -158455,7 +161366,7 @@ ${err?.stack ?? ""}`);
           } catch (err) {
             console.error(`[cookie-baker] @${freshProfile.username}: session error: ${err?.message}`);
           }
-          const waitMs = randInt(
+          const waitMs = randInt2(
             (cbs.execIntervalMin ?? 60) * 6e4,
             (cbs.execIntervalMax ?? 120) * 6e4
           );
@@ -158479,7 +161390,7 @@ ${err?.stack ?? ""}`);
       console.log(`[cookie-baker] @${profile.username}: no sites configured, skipping`);
       return;
     }
-    const count = randInt(settings.sitesMin ?? 3, settings.sitesMax ?? 5);
+    const count = randInt2(settings.sitesMin ?? 3, settings.sitesMax ?? 5);
     const sitesToVisit = settings.visitRandom ? [...sites].sort(() => Math.random() - 0.5).slice(0, count) : sites.slice(0, count);
     let proxyArg = [];
     let proxyAuth;
@@ -158590,7 +161501,7 @@ ${err?.stack ?? ""}`);
           console.log(`[cookie-baker] @${profile.username}: \u2192 ${url2}`);
           await page.goto(url2, { waitUntil: "domcontentloaded", timeout: 3e4 });
           await dismissCookieBanner2(page);
-          const scrollMs = randInt(
+          const scrollMs = randInt2(
             (settings.scrollDelayMin ?? 5) * 1e3,
             (settings.scrollDelayMax ?? 15) * 1e3
           );
@@ -158602,7 +161513,7 @@ ${err?.stack ?? ""}`);
             scrollTimeSec: Math.round(scrollMs / 1e3),
             linksVisited: []
           };
-          const linksCount = randInt(settings.internalLinksMin ?? 1, settings.internalLinksMax ?? 3);
+          const linksCount = randInt2(settings.internalLinksMin ?? 1, settings.internalLinksMax ?? 3);
           if (linksCount > 0) {
             let hostname2 = "";
             try {
@@ -158626,7 +161537,7 @@ ${err?.stack ?? ""}`);
                 console.log(`[cookie-baker] @${profile.username}:   \u21B3 ${link}`);
                 await page.goto(link, { waitUntil: "domcontentloaded", timeout: 2e4 });
                 await dismissCookieBanner2(page);
-                const innerMs = randInt(
+                const innerMs = randInt2(
                   (settings.internalScrollDelayMin ?? 3) * 1e3,
                   (settings.internalScrollDelayMax ?? 10) * 1e3
                 );
@@ -158890,6 +161801,18 @@ async function registerInstagramRoutes(httpServer2, app2) {
     await storage.setGlobalSetting("server_start_time", SERVER_START);
   } catch {
   }
+  storage.createSessionAction({
+    profileId: 0,
+    toolId: 0,
+    action: "server_started",
+    targetUsername: "",
+    sourceValue: "",
+    sourceType: "",
+    result: "ok",
+    detail: `Equinox started \u2014 ${new Date(SERVER_START).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`,
+    timestamp: SERVER_START
+  }).catch(() => {
+  });
   storage.resetStuckVerifyingAccounts().catch(() => {
   });
   automationEngine.start();
@@ -158972,6 +161895,10 @@ async function registerInstagramRoutes(httpServer2, app2) {
     let created = 0;
     let skipped = 0;
     for (const profile of profiles2) {
+      if (profile.isTemplate) {
+        skipped++;
+        continue;
+      }
       if (profile.proxyId) {
         skipped++;
         continue;
@@ -159122,6 +162049,18 @@ async function registerInstagramRoutes(httpServer2, app2) {
         console.warn(`[cookie-guard] BLOCKED attempt to clear igDeviceState via PATCH route for profile ${id}`);
         delete body.igDeviceState;
       }
+      if ("userAgentApi" in body) {
+        console.warn(`[ua-guard] BLOCKED attempt to overwrite userAgentApi via PATCH route for profile ${id} \u2014 use /reset-device-ids`);
+        delete body.userAgentApi;
+      }
+      if ("userAgentEmbedded" in body) {
+        console.warn(`[ua-guard] BLOCKED attempt to overwrite userAgentEmbedded via PATCH route for profile ${id} \u2014 use /reset-device-ids`);
+        delete body.userAgentEmbedded;
+      }
+      if ("ebFingerprint" in body) {
+        console.warn(`[ua-guard] BLOCKED attempt to overwrite ebFingerprint via PATCH route for profile ${id} \u2014 use /reset-device-ids`);
+        delete body.ebFingerprint;
+      }
       const updated = await storage.updateProfile(id, body);
       if (body.igApiCookies && typeof body.igApiCookies === "string") {
         seedBrowserCookieFile(id, body.igApiCookies);
@@ -159247,7 +162186,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     await clearEbSessionCookies(profileId).catch(
       (e) => console.warn(`[profiles] clearEbSessionCookies failed for ${profileId}: ${e?.message}`)
     );
-    console.log(`[profiles] @${profile.username}: session fully cleared \u2014 igApiCookies null, Chrome userdata wiped, no seed file written`);
+    await navigateEbToLogin(profileId).catch(() => {
+    });
+    console.log(`[profiles] @${profile.username}: session fully cleared \u2014 igApiCookies null, Chrome userdata wiped, EB navigated to login`);
     res.json({ ok: true });
   });
   app2.post("/api/profiles/:id/inject-cookies", async (req, res) => {
@@ -159561,18 +162502,16 @@ async function registerInstagramRoutes(httpServer2, app2) {
           username: profile.username,
           password: profile.password,
           twoFAKey: profile.twoFASecretKey || "",
-          proxy: proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password, type: proxyConfig.type } : void 0,
+          proxy: proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password } : void 0,
           userAgent: ebUA
         });
         loginResult = { ok: silentRes.ok, message: silentRes.message };
         _silentCookies = silentRes.cookies;
       } catch (ebErr) {
+        loginResult = { ok: false, message: ebErr?.message ?? "Browser verify failed" };
+      } finally {
         releaseSilentVerifySlot();
-        verifyInFlight.delete(profileId);
-        await storage.updateProfile(profile.id, { accountStatus: "pending" });
-        return fail(500, `Browser verify failed: ${ebErr?.message ?? "Unknown error"}`);
       }
-      releaseSilentVerifySlot();
     } else {
       try {
         await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
@@ -159648,9 +162587,10 @@ async function registerInstagramRoutes(httpServer2, app2) {
       let accountStatus = "locked";
       if (/2fa|two.factor|two_factor/i.test(msg)) accountStatus = "2fa_verification";
       else if (/challenge|checkpoint/i.test(msg)) accountStatus = "captcha";
-      else if (/disabled/i.test(msg)) accountStatus = "account_disabled";
+      else if (/permanently disabled|Account permanently disabled/i.test(msg)) accountStatus = "account_disabled";
       else if (/suspended/i.test(msg)) accountStatus = "suspended";
       else if (/human.*verif|confirm.*human|human verification/i.test(msg)) accountStatus = "confirm_human";
+      else if (/aborted|timed?\s*out|ipc error|operation.*aborted/i.test(msg)) accountStatus = "pending";
       result = { ok: false, accountStatus, message: `@${profile.username} \u2014 ${msg}` };
     }
     sendLoginDone(profileId, result.ok, result.message);
@@ -159990,6 +162930,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       actions = await storage.getRecentSessionActions(limit);
     }
     const enriched = actions.map((a2) => {
+      if (Number(a2.profileId) === 0) return { ...a2, profileLabel: "Equinox" };
       const p = profileMap.get(Number(a2.profileId));
       return { ...a2, profileLabel: p?.accountLabel || p?.username || `#${a2.profileId}` };
     });
@@ -160206,9 +163147,10 @@ async function registerInstagramRoutes(httpServer2, app2) {
         let accountStatus = "locked";
         if (/2fa|two.factor|two_factor/i.test(msg)) accountStatus = "2fa_verification";
         else if (/challenge|checkpoint/i.test(msg)) accountStatus = "captcha";
-        else if (/disabled/i.test(msg)) accountStatus = "account_disabled";
+        else if (/permanently disabled|Account permanently disabled/i.test(msg)) accountStatus = "account_disabled";
         else if (/suspended/i.test(msg)) accountStatus = "suspended";
         else if (/human.*verif|confirm.*human|human verification/i.test(msg)) accountStatus = "confirm_human";
+        else if (/aborted|timed?\s*out|ipc error|operation.*aborted/i.test(msg)) accountStatus = "pending";
         await storage.updateProfile(profileId, { accountStatus }).catch(() => {
         });
         return;
@@ -160541,12 +163483,24 @@ async function registerInstagramRoutes(httpServer2, app2) {
     if (ipcPort) {
       try {
         const { proxyHost: proxyHost2, proxyPort, proxyUsername, proxyPassword, proxyType, userAgent, fingerprint } = req.body;
+        let initialUrl;
+        try {
+          const settings = await storage.getGlobalSettings();
+          if (settings.hikerApiEnabled === "true" && settings.hikerApiToken) {
+            const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
+            const hiker = new HikerApiClient2(settings.hikerApiToken);
+            const shortcodes = await hiker.getTrendingReelShortcodes(3);
+            if (shortcodes.length > 0) initialUrl = `https://www.instagram.com/reel/${shortcodes[0]}/`;
+          }
+        } catch {
+        }
         const body = {
           profileId: -1,
           username: "Ghost",
           proxy: proxyHost2 && proxyPort ? { host: proxyHost2, port: Number(proxyPort), user: proxyUsername ?? void 0, pass: proxyPassword ?? void 0, type: proxyType ?? "http" } : void 0,
           userAgent: userAgent ?? void 0,
-          ebFingerprint: fingerprint ?? void 0
+          ebFingerprint: fingerprint ?? void 0,
+          initialUrl
         };
         await fetch(`http://127.0.0.1:${ipcPort}/eb/open`, {
           method: "POST",
@@ -160621,11 +163575,68 @@ async function registerInstagramRoutes(httpServer2, app2) {
       res.status(500).json({ ok: false, error: err?.message });
     }
   });
+  app2.post("/api/signup/browser/warmup-step", (req, res) => {
+    const { msg } = req.body;
+    if (msg) sendSignupWsMsg({ type: "signupStep", msg });
+    res.json({ ok: true });
+  });
+  app2.post("/api/signup/browser/warmup-done", (_req, res) => {
+    sendSignupWsMsg({ type: "warmupDone" });
+    res.json({ ok: true });
+  });
+  app2.get("/api/signup/browser/trending-reels", async (req, res) => {
+    const n = Math.min(10, Math.max(1, Number(req.query.n) || 5));
+    try {
+      const settings = await storage.getGlobalSettings();
+      if (settings.hikerApiEnabled !== "true" || !settings.hikerApiToken) {
+        return res.json({ urls: [] });
+      }
+      const { HikerApiClient: HikerApiClient2 } = await Promise.resolve().then(() => (init_hikerApiClient(), hikerApiClient_exports));
+      const hiker = new HikerApiClient2(settings.hikerApiToken);
+      const shortcodes = await hiker.getTrendingReelShortcodes(n + 2);
+      const urls = shortcodes.slice(0, n).map((sc) => `https://www.instagram.com/reel/${sc}/`);
+      return res.json({ urls });
+    } catch (e) {
+      return res.json({ urls: [], warning: e?.message?.slice(0, 100) });
+    }
+  });
   app2.post("/api/signup/browser/warmup", async (req, res) => {
+    const ipcPort = Number(process.env.EB_IPC_PORT ?? 0);
+    if (ipcPort) {
+      try {
+        await fetch(`http://127.0.0.1:${ipcPort}/eb/ghost-warmup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(req.body)
+        });
+      } catch {
+        sendSignupWsMsg({ type: "signupStep", msg: "Warm-up error: could not reach Electron process." });
+        sendSignupWsMsg({ type: "warmupDone" });
+      }
+      res.json({ ok: true });
+      return;
+    }
     if (!isSignupBrowserOpen()) {
       return res.status(400).json({ ok: false, error: "Ghost Browser is not open" });
     }
-    const { reelsMin, reelsMax, postsMin, postsMax, profilesMin, profilesMax } = req.body;
+    const {
+      reelsMin,
+      reelsMax,
+      postsMin,
+      postsMax,
+      profilesMin,
+      profilesMax,
+      reelsIdleMin,
+      reelsIdleMax,
+      postsIdleMin,
+      postsIdleMax,
+      profilesIdleMin,
+      profilesIdleMax,
+      postClicksPerProfileMin,
+      postClicksPerProfileMax,
+      postBrowseTimeMin,
+      postBrowseTimeMax
+    } = req.body;
     res.json({ ok: true });
     (async () => {
       try {
@@ -160636,6 +163647,16 @@ async function registerInstagramRoutes(httpServer2, app2) {
           postsMax,
           profilesMin,
           profilesMax,
+          reelsIdleMin,
+          reelsIdleMax,
+          postsIdleMin,
+          postsIdleMax,
+          profilesIdleMin,
+          profilesIdleMax,
+          postClicksPerProfileMin,
+          postClicksPerProfileMax,
+          postBrowseTimeMin,
+          postBrowseTimeMax,
           onStep: (msg) => sendSignupWsMsg({ type: "signupStep", msg })
         });
         sendSignupWsMsg({ type: "warmupDone" });
@@ -160934,8 +163955,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
           let accountStatus = "locked";
           if (/2fa|two.factor|two_factor/i.test(msg)) accountStatus = "2fa_verification";
           else if (/challenge|checkpoint/i.test(msg)) accountStatus = "captcha";
-          else if (/disabled/i.test(msg)) accountStatus = "account_disabled";
+          else if (/permanently disabled|Account permanently disabled/i.test(msg)) accountStatus = "account_disabled";
           else if (/suspended/i.test(msg)) accountStatus = "suspended";
+          else if (/aborted|timed?\s*out|ipc error|operation.*aborted/i.test(msg)) accountStatus = "pending";
           result = { ok: false, accountStatus, message: `@${profile.username} \u2014 ${msg}` };
         }
         await storage.updateProfile(profile.id, {
@@ -161045,6 +164067,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      openaiApiKey: settings.openaiApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
@@ -161056,7 +164079,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
     });
   });
   app2.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -161083,6 +164106,9 @@ async function registerInstagramRoutes(httpServer2, app2) {
     }
     if (typeof twoCaptchaApiKey === "string") {
       await storage.setGlobalSetting("twoCaptchaApiKey", twoCaptchaApiKey);
+    }
+    if (typeof openaiApiKey === "string") {
+      await storage.setGlobalSetting("openaiApiKey", openaiApiKey);
     }
     if (typeof verifyAllDelayMin === "number" && verifyAllDelayMin >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMin", String(Math.round(verifyAllDelayMin)));
@@ -161119,6 +164145,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      openaiApiKey: settings.openaiApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
@@ -161141,6 +164168,21 @@ async function registerInstagramRoutes(httpServer2, app2) {
         return res.json({ ok: true, balance });
       }
       return res.json({ ok: false, error: text2 });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
+    }
+  });
+  app2.get("/api/settings/test-openai", async (_req, res) => {
+    const settings = await storage.getGlobalSettings();
+    const key = (settings.openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
+    if (!key) return res.json({ ok: false, error: "No API key configured" });
+    try {
+      const r2 = await fetch("https://api.openai.com/v1/models", {
+        headers: { "Authorization": `Bearer ${key}` }
+      });
+      if (r2.ok) return res.json({ ok: true });
+      const j = await r2.json();
+      return res.json({ ok: false, error: j?.error?.message ?? `HTTP ${r2.status}` });
     } catch (e) {
       return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
     }
@@ -161494,6 +164536,60 @@ async function registerInstagramRoutes(httpServer2, app2) {
     } catch (e) {
       req.log.error({ err: e }, "import-eqx failed");
       return res.status(500).json({ error: e?.message });
+    }
+  });
+  app2.post("/api/profiles/parse-jarvee", async (req, res) => {
+    try {
+      const { fileBase64 } = req.body;
+      if (!fileBase64) return res.status(400).json({ error: "fileBase64 is required" });
+      let buf;
+      try {
+        buf = Buffer.from(fileBase64, "base64");
+      } catch {
+        return res.status(400).json({ error: "Invalid base64 data" });
+      }
+      const { parseJarveeBinary: parseJarveeBinary2 } = await Promise.resolve().then(() => (init_jarveeParser(), jarveeParser_exports));
+      let jarveeAccounts;
+      try {
+        jarveeAccounts = parseJarveeBinary2(buf);
+      } catch (e) {
+        return res.status(400).json({ error: e?.message ?? "Failed to parse Jarvee file" });
+      }
+      if (jarveeAccounts.length === 0) {
+        return res.status(400).json({ error: "No accounts found in this Jarvee file" });
+      }
+      const profiles2 = jarveeAccounts.map((ja) => ({
+        accountLabel: ja.accountLabel ?? "",
+        username: ja.username,
+        password: ja.password,
+        email: ja.email ?? "",
+        proxyHost: ja.proxyHost ?? "",
+        proxyPort: ja.proxyPort != null ? String(ja.proxyPort) : "",
+        proxyUsername: ja.proxyUsername ?? "",
+        proxyPassword: ja.proxyPassword ?? "",
+        userAgentEmbedded: ja.userAgentWeb ?? "",
+        userAgentApi: "",
+        tags: "",
+        dateOfBirth: "",
+        notes: "",
+        phoneNumber: "",
+        twoFASecretKey: ja.twoFASecret ?? "",
+        backupCodes: "",
+        emailValidationUsername: ja.email ?? "",
+        emailValidationPassword: ja.emailPassword ?? "",
+        emailValidationPop3Server: "",
+        emailValidationPort: "",
+        accStatus: "",
+        deviceId: "",
+        deviceUuid: "",
+        phoneId: "",
+        adid: "",
+        apiCookies: ""
+      }));
+      return res.json({ profiles: profiles2 });
+    } catch (e) {
+      req.log.error({ err: e }, "parse-jarvee failed");
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
   app2.post("/api/profiles/import-jarvee", async (req, res) => {
@@ -162277,7 +165373,7 @@ var httpServer = createServer(app_default);
 registerInstagramRoutes(httpServer, app_default).then(() => {
   const frontendDist = process.env.FRONTEND_DIST_PATH || path5.join(process.cwd(), "artifacts", "dannys-bot", "dist", "public");
   if (fs5.existsSync(frontendDist)) {
-    app_default.use(import_express4.default.static(frontendDist));
+    app_default.use(import_express5.default.static(frontendDist));
     app_default.use((_req, res) => {
       res.sendFile(path5.join(frontendDist, "index.html"));
     });

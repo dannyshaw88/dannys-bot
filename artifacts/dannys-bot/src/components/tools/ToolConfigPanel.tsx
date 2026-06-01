@@ -21,10 +21,11 @@ interface ToolConfigPanelProps {
   profile: Profile;
   copyOpen?: boolean;
   onCopyOpenChange?: (v: boolean) => void;
+  hideEnableToggle?: boolean;
 }
 
 
-export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: ToolConfigPanelProps) {
+export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle }: ToolConfigPanelProps) {
   const { toast } = useToast();
   const { navigateTo } = useBrowserWindows();
   const updateToolMutation = useUpdateTool();  // settings saves
@@ -721,6 +722,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
             {tool.type === 'follow' && (
               <div className="flex items-center gap-2 flex-wrap mb-4 pb-3 border-b border-border">
                 <h2 className="text-sm font-semibold">Follow Tool</h2>
+                {!hideEnableToggle && (<>
                 <Switch
                   checked={tool.enabled}
                   onCheckedChange={handleToggleEnable}
@@ -729,6 +731,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                 <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
                   {tool.enabled ? 'ACTIVE' : 'STOPPED'}
                 </span>
+                </>)}
                 <button
                   onClick={() => setShowSources(true)}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
