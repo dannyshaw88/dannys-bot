@@ -108,7 +108,6 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
         prompt,
         n: 1,
         size: "1024x1792",
-        response_format: "b64_json",
       }),
     });
 
@@ -118,11 +117,15 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
     }
 
     const data = await openaiRes.json() as any;
-    const b64  = data.data?.[0]?.b64_json;
-    if (!b64) return res.status(500).json({ error: "No image data returned from OpenAI" });
+    const imageUrl = data.data?.[0]?.url;
+    if (!imageUrl) return res.status(500).json({ error: "No image URL returned from OpenAI" });
+
+    // Fetch the image bytes from the returned URL
+    const imgFetch = await fetch(imageUrl);
+    if (!imgFetch.ok) return res.status(500).json({ error: "Failed to download generated image" });
 
     // Convert to JPEG at randomised output dimensions (strips all AI metadata)
-    const inputBuffer = Buffer.from(b64, "base64");
+    const inputBuffer = Buffer.from(await imgFetch.arrayBuffer());
     const sharpFn = await getSharp();
     if (!sharpFn) {
       return res.status(500).json({ error: "Image processing library (sharp) is not available on this platform." });
