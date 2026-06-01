@@ -20,10 +20,10 @@ import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "human_session";
 
-const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; color: string; isTool: boolean }[] = [
+const ALL_STAT_TYPES: { key: StatKey; label: string; icon: React.ReactNode; color: string; isTool: boolean; toolTypeKey?: string }[] = [
   { key: "follow",        label: "Follow",        icon: <UserPlus className="w-3.5 h-3.5" />,     color: "text-blue-500",    isTool: true  },
   { key: "unfollow",      label: "Unfollow",      icon: <UserMinus className="w-3.5 h-3.5" />,    color: "text-orange-500",  isTool: true  },
-  { key: "dm",            label: "DMs Sent",      icon: <Mail className="w-3.5 h-3.5" />,          color: "text-violet-500",  isTool: true  },
+  { key: "dm",            label: "DMs Sent",      icon: <Mail className="w-3.5 h-3.5" />,          color: "text-violet-500",  isTool: true,  toolTypeKey: "contact" },
   { key: "like",          label: "Likes",         icon: <Heart className="w-3.5 h-3.5" />,         color: "text-rose-500",    isTool: false },
   { key: "comment",       label: "Comments",      icon: <MessageCircle className="w-3.5 h-3.5" />, color: "text-indigo-500",  isTool: false },
   { key: "story",         label: "Story Views",   icon: <Eye className="w-3.5 h-3.5" />,           color: "text-emerald-500", isTool: false },
@@ -36,9 +36,9 @@ const DEFAULT_COL_WIDTHS: Record<StatKey | "account" | "open_eb" | "trustscore",
 };
 
 
-const DEFAULT_VISIBLE: Record<StatKey, boolean> = {
+const DEFAULT_VISIBLE: Record<StatKey | "open_eb", boolean> = {
   follow: true, unfollow: true, dm: true, like: true,
-  comment: true, story: true, human_session: true,
+  comment: true, story: true, human_session: true, open_eb: true,
 };
 
 const DEFAULT_STAT_COL_ORDER: StatKey[] = ["follow", "unfollow", "dm", "like", "comment", "story", "human_session"];
@@ -53,7 +53,7 @@ function ProfileStatsRow({
   onNavigateToProfile,
 }: {
   profile: Profile;
-  visibleCols: Record<StatKey, boolean>;
+  visibleCols: Record<StatKey | "open_eb", boolean>;
   statColOrder: StatKey[];
   colWidths: Record<StatKey | "account" | "open_eb" | "trustscore", number>;
   statsData: any[];
@@ -92,16 +92,18 @@ function ProfileStatsRow({
       </td>
 
       {/* Open EB column */}
-      <td style={{ width: colWidths.open_eb }} className="px-4 py-3">
-        <button
-          className="flex items-center gap-1.5 text-xs text-cyan-500 hover:text-cyan-400 transition-colors font-medium whitespace-nowrap"
-          onClick={onOpenBrowser}
-          title="Open Embedded Browser for this account"
-        >
-          <Monitor className="w-3.5 h-3.5 shrink-0" />
-          <span>Open EB</span>
-        </button>
-      </td>
+      {visibleCols.open_eb && (
+        <td style={{ width: colWidths.open_eb }} className="px-4 py-3">
+          <button
+            className="flex items-center gap-1.5 text-xs text-cyan-500 hover:text-cyan-400 transition-colors font-medium whitespace-nowrap"
+            onClick={onOpenBrowser}
+            title="Open Embedded Browser for this account"
+          >
+            <Monitor className="w-3.5 h-3.5 shrink-0" />
+            <span>Open EB</span>
+          </button>
+        </td>
+      )}
 
       {/* TrustScore column */}
       <td style={{ width: colWidths.trustscore }} className="px-4 py-3">
@@ -114,7 +116,8 @@ function ProfileStatsRow({
       {statColOrder.filter(key => visibleCols[key]).map(key => {
         const statType = ALL_STAT_TYPES.find(s => s.key === key)!;
         const isTool = statType.isTool;
-        const tool = isTool ? tools?.find((t: Tool) => t.type === key) : undefined;
+        const lookupType = statType.toolTypeKey ?? key;
+        const tool = isTool ? tools?.find((t: Tool) => t.type === lookupType) : undefined;
         const todayCount = getStat(key, today);
         const lifetime = getStat(key, "lifetime");
         return (
@@ -152,7 +155,7 @@ export function StatsPage() {
     (s, d) => ({ ...d, ...s }),
   );
 
-  const [visibleCols, setVisibleCols] = usePersistentSetting<Record<StatKey, boolean>>(
+  const [visibleCols, setVisibleCols] = usePersistentSetting<Record<StatKey | "open_eb", boolean>>(
     "stats_visible_cols",
     DEFAULT_VISIBLE,
     (s, d) => ({ ...d, ...s }),
@@ -288,7 +291,7 @@ export function StatsPage() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const toggleVisible = (key: StatKey, val: boolean) => {
+  const toggleVisible = (key: StatKey | "open_eb", val: boolean) => {
     const next = { ...visibleCols, [key]: val };
     setVisibleCols(next);
     localStorage.setItem("stats_visible_cols", JSON.stringify(next));
@@ -302,8 +305,8 @@ export function StatsPage() {
   };
 
   const visibleTypes = ALL_STAT_TYPES.filter(({ key }) => visibleCols[key]);
-  // Account + Browser Embedded + stat columns
-  const colCount = 3 + visibleTypes.length;
+  // Account + (Open EB if visible) + TrustScore + stat columns
+  const colCount = 2 + (visibleCols.open_eb ? 1 : 0) + visibleTypes.length;
 
   const colGroups: [string, string][] = [
     ["account", "Account"],
@@ -356,6 +359,15 @@ export function StatsPage() {
                   <div className="absolute right-0 top-full mt-2 z-50 bg-background border border-border rounded-lg shadow-xl p-4 w-72">
                     <p className="text-[11px] font-bold uppercase tracking-wide mb-2 text-muted-foreground">Show / Hide Columns</p>
                     <div className="space-y-1.5 mb-3">
+                      {/* Fixed column: Open EB */}
+                      <div className="flex items-center gap-1.5 select-none">
+                        <div className="w-[18px] shrink-0" />
+                        <label className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Checkbox checked={visibleCols.open_eb} onCheckedChange={(val) => toggleVisible("open_eb", !!val)} className="h-3.5 w-3.5 shrink-0" />
+                          <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-cyan-500"><Monitor className="w-3.5 h-3.5" /> Open EB</span>
+                        </label>
+                      </div>
+                      {/* Orderable stat columns */}
                       {statColOrder.map((key, ordIdx) => {
                         const st = ALL_STAT_TYPES.find(s => s.key === key)!;
                         return (
@@ -421,7 +433,7 @@ export function StatsPage() {
             <table className="text-sm text-left" style={{ tableLayout: "fixed", width: "100%" }}>
               <colgroup>
                 <col style={{ width: colWidths.account }} />
-                <col style={{ width: colWidths.open_eb }} />
+                {visibleCols.open_eb && <col style={{ width: colWidths.open_eb }} />}
                 <col style={{ width: colWidths.trustscore }} />
                 {statColOrder.filter(key => visibleCols[key]).map(key => <col key={key} style={{ width: colWidths[key] }} />)}
               </colgroup>
@@ -435,12 +447,14 @@ export function StatsPage() {
                       Account Name
                     </button>
                   </th>
-                  <th style={{ width: colWidths.open_eb }} className="px-4 py-3 font-bold uppercase tracking-wide">
-                    <span className="flex items-center gap-1 text-cyan-500/70">
-                      <Monitor className="w-3 h-3" />
-                      <span className="text-[10px]">Open EB</span>
-                    </span>
-                  </th>
+                  {visibleCols.open_eb && (
+                    <th style={{ width: colWidths.open_eb }} className="px-4 py-3 font-bold uppercase tracking-wide">
+                      <span className="flex items-center gap-1 text-cyan-500/70">
+                        <Monitor className="w-3 h-3" />
+                        <span className="text-[10px]">Open EB</span>
+                      </span>
+                    </th>
+                  )}
                   <th style={{ width: colWidths.trustscore }} className="px-4 py-3 font-bold uppercase tracking-wide text-[10px] text-muted-foreground/60">TrustScore</th>
                   {statColOrder.filter(key => visibleCols[key]).map(key => {
                     const st = ALL_STAT_TYPES.find(s => s.key === key)!;

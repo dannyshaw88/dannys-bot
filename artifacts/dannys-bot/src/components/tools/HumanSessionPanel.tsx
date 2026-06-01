@@ -1253,6 +1253,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-blue-500 shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0">Follow Tool</h4>
+                <input
+                  type="checkbox"
+                  id={`ft-enabled-${followTool.id}`}
+                  checked={followTool.enabled}
+                  onChange={(e) => embeddedUpdateTool.mutate({ id: followTool.id, profileId: followTool.profileId, enabled: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor={`ft-enabled-${followTool.id}`} className={`text-sm font-medium cursor-pointer select-none ${followTool.enabled ? "text-primary" : "text-muted-foreground"}`}>
+                  {followTool.enabled ? "ACTIVE" : "STOPPED"}
+                </label>
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <div className="flex items-center gap-2">

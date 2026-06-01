@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.723",
+    date: "1 Jun 2026",
+    items: [
+      { category: "New",  text: "Follow Tool inside the Human Session panel now has its own enable/disable checkbox, same as the Unfollow Tool — you can start or stop it independently without touching the master toggle." },
+      { category: "Fix",  text: "DMs Sent toggle on the Statistics page is now linked to the Contact tool (which handles all outgoing DMs) instead of the legacy standalone DM tool." },
+      { category: "Fix",  text: "Follow and Unfollow toggles on the Statistics page now correctly reflect the same enabled state as the checkboxes inside the Human Session tool." },
+      { category: "New",  text: "Open EB column can now be shown or hidden from the Columns dialog on the Statistics page, just like any other column." },
+    ],
+  },
+  {
     version: "1.0.722",
     date: "1 Jun 2026",
     items: [
