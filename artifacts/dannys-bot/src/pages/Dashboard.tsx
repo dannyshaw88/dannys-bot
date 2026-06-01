@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.706",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Control throttle (min/max calls, min/max delay) now correctly applies to Follow, Like, and DM actions — they were bypassing the rate limit entirely when the account had a stored session cookie." },
+      { category: "Fix", text: "Track API iPhone Setup Guide now includes 'Click Start Proxy' as step 1 — it was missing from the numbered steps, causing confusion about the correct order." },
+      { category: "Fix", text: "Track API guide now explains that Instagram traffic shows as CONNECT (tunnel) entries in the log since Instagram uses HTTPS — no USB needed, WiFi only." },
+    ],
+  },
+  {
     version: "1.0.705",
     date: "1 Jun 2026",
     items: [

@@ -444,18 +444,22 @@ function IPhoneSetupGuide({
               <ol className="space-y-2 text-xs text-muted-foreground">
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">1</span>
-                  <span>Make sure your iPhone is connected to the <strong className="text-foreground">same WiFi network</strong> as this PC.</span>
+                  <span>In the <strong className="text-foreground">Proxy Control</strong> panel above, click <strong className="text-foreground">Start Proxy</strong>. Note your PC's IP address that appears.</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">2</span>
-                  <span>On your iPhone go to <strong className="text-foreground">Settings → Wi-Fi</strong> and tap the <strong className="text-foreground">ⓘ</strong> next to your connected network.</span>
+                  <span>Make sure your iPhone is connected to the <strong className="text-foreground">same WiFi network</strong> as this PC. USB is not needed.</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">3</span>
-                  <span>Scroll down to <strong className="text-foreground">HTTP Proxy</strong> → tap <strong className="text-foreground">Configure Proxy</strong> → select <strong className="text-foreground">Manual</strong>.</span>
+                  <span>On your iPhone go to <strong className="text-foreground">Settings → Wi-Fi</strong> and tap the <strong className="text-foreground">ⓘ</strong> next to your connected network.</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">4</span>
+                  <span>Scroll down to <strong className="text-foreground">HTTP Proxy</strong> → tap <strong className="text-foreground">Configure Proxy</strong> → select <strong className="text-foreground">Manual</strong>.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
                   <div>
                     <span>Set <strong className="text-foreground">Server</strong> to </span>
                     <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code>
@@ -465,12 +469,12 @@ function IPhoneSetupGuide({
                   </div>
                 </li>
                 <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
                   <span>Tap <strong className="text-foreground">Save</strong> in the top-right corner.</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
-                  <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone and browse normally — traffic appears in the log below instantly.</span>
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">7</span>
+                  <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone and browse normally — traffic appears in the log below instantly. Instagram uses HTTPS, so entries show as <strong className="text-foreground">CONNECT</strong> (tunnel) lines — you'll see which servers it contacts (e.g. <code className="bg-muted px-1 rounded font-mono">i.instagram.com:443</code>).</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center font-bold text-[10px]">✓</span>

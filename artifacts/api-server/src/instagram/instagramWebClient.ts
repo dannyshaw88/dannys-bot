@@ -1312,6 +1312,11 @@ export class InstagramWebClient {
   private async _followViaIgClient(userId: string): Promise<{ ok: boolean; status?: string; reason?: string; checkpointUrl?: string }> {
     if (!this.igApiCookies) return { ok: false, status: "follow_blocked", reason: "no igApiCookies — cannot use IgApiClient" };
 
+    // Apply the per-account API throttle before making any Instagram API call.
+    // _followViaIgClient creates its own IgApiClient (no attachRequestLogger),
+    // so apiThrottle() MUST be called here to honour the API Control setting.
+    await this.apiThrottle();
+
     const ig = newIgClient();
 
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
@@ -1627,6 +1632,11 @@ export class InstagramWebClient {
   // fields (_uid, _uuid, _csrftoken, device_id, radio_type, module_name).
   private async _likeViaIgClient(mediaId: string): Promise<{ ok: boolean; reason?: string }> {
     if (!this.igApiCookies) return { ok: false, reason: "no igApiCookies" };
+
+    // Apply the per-account API throttle before making any Instagram API call.
+    // _likeViaIgClient creates its own IgApiClient (no attachRequestLogger),
+    // so apiThrottle() MUST be called here to honour the API Control setting.
+    await this.apiThrottle();
 
     const ig = newIgClient();
     const deviceSeed = (this.userAgentApi ?? this.username ?? "instagram") + "|" + (this.username ?? "instagram");
@@ -2705,6 +2715,11 @@ export class InstagramWebClient {
   // CSRF, cookie jar management, and HTTPS-proxy routing transparently.
   private async _sendDmViaIgClient(userId: string, text: string): Promise<{ threadId: string; itemId: string } | "blocked" | "session_expired" | false> {
     if (!this.igApiCookies) return false;
+
+    // Apply the per-account API throttle before making any Instagram API call.
+    // _sendDmViaIgClient creates its own IgApiClient (no attachRequestLogger),
+    // so apiThrottle() MUST be called here to honour the API Control setting.
+    await this.apiThrottle();
 
     const ig = newIgClient();
 
