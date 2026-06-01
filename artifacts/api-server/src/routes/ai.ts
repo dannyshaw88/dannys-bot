@@ -84,44 +84,20 @@ function randomHex(bytes: number): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
-  const settings = await storage.getGlobalSettings().catch(() => ({} as Record<string, string>));
-  const apiKey = (settings.openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
-  if (!apiKey) {
-    return res.status(400).json({
-      error: "OpenAI API key not set. Go to Settings → Security, paste your key in the OpenAI field, and save. Get a key at platform.openai.com.",
-    });
-  }
-
   try {
     const outDim = OUTPUT_DIMS[randInt(0, OUTPUT_DIMS.length - 1)];
     const prompt = SELFIE_PROMPTS[randInt(0, SELFIE_PROMPTS.length - 1)];
 
-    // gpt-image-1 portrait — 1024×1536, returns b64_json directly
-    const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-image-1",
-        prompt,
-        n: 1,
-        size: "1024x1536",
-      }),
-    });
-
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
-      return res.status(500).json({ error: `OpenAI error: ${errText}` });
+    // Pollinations.ai — completely free, no API key needed
+    const seed = randInt(1, 999999);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1536&model=flux-realism&nologo=true&enhance=true&seed=${seed}`;
+    const imgRes = await fetch(url, { signal: AbortSignal.timeout(60000) });
+    if (!imgRes.ok) {
+      return res.status(500).json({ error: `Image generation failed (status ${imgRes.status}). Try again.` });
     }
 
-    const data = await openaiRes.json() as any;
-    const b64 = data.data?.[0]?.b64_json;
-    if (!b64) return res.status(500).json({ error: "No image data returned from OpenAI" });
-
     // Convert to JPEG at randomised output dimensions (strips all AI metadata)
-    const inputBuffer = Buffer.from(b64, "base64");
+    const inputBuffer = Buffer.from(await imgRes.arrayBuffer());
     const sharpFn = await getSharp();
     if (!sharpFn) {
       return res.status(500).json({ error: "Image processing library (sharp) is not available on this platform." });

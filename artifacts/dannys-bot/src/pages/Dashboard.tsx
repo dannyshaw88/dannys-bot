@@ -60,6 +60,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.702",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Change", text: "AI Image generator is now completely free — switched to Pollinations.ai, no API key or account required. The OpenAI key field has been removed from Settings." },
+    ],
+  },
+  {
     version: "1.0.701",
     date: "1 Jun 2026",
     items: [
