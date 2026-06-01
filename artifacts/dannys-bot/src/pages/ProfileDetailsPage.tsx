@@ -351,7 +351,7 @@ export function ProfileDetailsPage() {
     const creatorMode = !!profile?.creatorMode;
     const tabMap: Record<string, string> = creatorMode
       ? { "1": "settings" }
-      : { "1": "settings", "2": "human-session", "3": "follow", "4": "unfollow", "5": "contact", "6": "session-log" };
+      : { "1": "settings", "2": "human-session", "3": "session-log" };
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
@@ -855,39 +855,6 @@ export function ProfileDetailsPage() {
                         </button>
                       </>
                     )}
-                    {activeTab === "follow" && getTool('follow') && (
-                      <>
-                        <span className="text-border mx-1 select-none shrink-0">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
-                          onClick={() => setFollowCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "unfollow" && getTool('unfollow') && (
-                      <>
-                        <span className="text-border mx-1 select-none shrink-0">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
-                          onClick={() => setUnfollowCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "contact" && getTool('contact') && (
-                      <>
-                        <span className="text-border mx-1 select-none shrink-0">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
-                          onClick={() => setContactCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
                     {activeTab === "human-session" && getTool('human_sessions') && (
                       <>
                         <span className="text-border mx-1 select-none shrink-0">|</span>
@@ -910,9 +877,6 @@ export function ProfileDetailsPage() {
             <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
               {([
                 { value: "settings",      label: "ACCOUNT SETTINGS",         icon: Settings      },
-                { value: "follow",        label: "FOLLOW TOOL",               icon: UserPlus      },
-                { value: "unfollow",      label: "UNFOLLOW TOOL",             icon: UserMinus     },
-                { value: "contact",       label: "CONTACT TOOL",              icon: MessageSquare },
                 { value: "human-session", label: "HUMAN SESSION EMULATION",   icon: Fingerprint   },
                 { value: "session-log",   label: "SESSION LOG",               icon: Activity      },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
@@ -1843,7 +1807,15 @@ export function ProfileDetailsPage() {
 
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
           {getTool('human_sessions')
-            ? <HumanSessionPanel tool={getTool('human_sessions')!} profile={profile} copyOpen={humanCopyOpen} onCopyOpenChange={setHumanCopyOpen} />
+            ? <HumanSessionPanel
+                tool={getTool('human_sessions')!}
+                profile={profile}
+                copyOpen={humanCopyOpen}
+                onCopyOpenChange={setHumanCopyOpen}
+                followTool={getTool('follow') ?? undefined}
+                unfollowTool={getTool('unfollow') ?? undefined}
+                contactTool={getTool('contact') ?? undefined}
+              />
             : <p className="text-sm text-muted-foreground py-8">Human sessions tool not found for this profile.</p>
           }
         </Tabs.Content>

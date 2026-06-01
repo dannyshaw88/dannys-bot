@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.718",
+    date: "1 Jun 2026",
+    items: [
+      { category: "New", text: "Follow Tool, Unfollow Tool, and Contact Tool (with all sub-tools) are now embedded directly inside the Human Session Emulation tab — configure everything from one place." },
+      { category: "New", text: "Each embedded tool (Follow, Unfollow, Contact) has its own Execution Order and Skip Chance % controls for fine-grained scheduling within the session." },
+      { category: "New", text: "The Human Session master toggle now controls all embedded tools in one shot — enabling or disabling the session also enables or disables Follow, Unfollow, and Contact simultaneously." },
+      { category: "Change", text: "Follow Tool, Unfollow Tool, and Contact Tool tabs have been removed from the account tab bar — all tool settings are now in the Human Session Emulation tab." },
+    ],
+  },
+  {
     version: "1.0.717",
     date: "1 Jun 2026",
     items: [

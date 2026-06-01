@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Bell, User, RefreshCw, Settings, PlaySquare, BookOpen,
   MessageSquare, Repeat2, AtSign, Clock, ExternalLink, Image as ImageIcon,
-  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus,
+  ChevronDown, ChevronUp, Heart, Copy, FolderOpen, UserPlus, UserMinus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { type Tool, type Profile, type RepostedPost, type SessionAction } from "@shared/schema";
@@ -20,16 +20,23 @@ import { useToast } from "@/hooks/use-toast";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
 import { ImageSettingsDialog } from "@/components/tools/ImageSettingsDialog";
+import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
+import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
+import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
 
 interface HumanSessionPanelProps {
   tool: Tool;
   profile: Profile;
   copyOpen?: boolean;
   onCopyOpenChange?: (v: boolean) => void;
+  followTool?: Tool;
+  unfollowTool?: Tool;
+  contactTool?: Tool;
 }
 
-export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: HumanSessionPanelProps) {
+export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, followTool, unfollowTool, contactTool }: HumanSessionPanelProps) {
   const updateToolMutation = useUpdateTool();
+  const embeddedUpdateTool = useUpdateTool();
   const { navigateTo } = useBrowserWindows();
   const { toast } = useToast();
   const [showReposted, setShowReposted] = useState(false);
@@ -300,7 +307,12 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           <h4 className="font-semibold text-sm shrink-0">Human Session Emulation Tool</h4>
           <Switch
             checked={tool.enabled}
-            onCheckedChange={(enabled) => updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled })}
+            onCheckedChange={(enabled) => {
+              updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled });
+              if (followTool) embeddedUpdateTool.mutate({ id: followTool.id, profileId: followTool.profileId, enabled });
+              if (unfollowTool) embeddedUpdateTool.mutate({ id: unfollowTool.id, profileId: unfollowTool.profileId, enabled });
+              if (contactTool) embeddedUpdateTool.mutate({ id: contactTool.id, profileId: contactTool.profileId, enabled });
+            }}
             disabled={updateToolMutation.isPending}
           />
           <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
@@ -1140,6 +1152,117 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           )}
         </div>
       </div>
+
+      {/* ── Follow Tool (embedded) ────────────────────────────── */}
+      {followTool && (
+        <div style={{ borderTop: '5px solid #06b6d4' }} className="pt-1">
+          <div className="border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-b border-border flex-wrap">
+              <UserPlus className="w-4 h-4 text-blue-500 shrink-0" />
+              <h4 className="font-semibold text-sm shrink-0">Follow Tool</h4>
+              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Execution Order</span>
+              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).followOrderMin ?? 0}
+                onChange={(e) => setSettings({ ...settings, followOrderMin: Number(e.target.value) } as any)}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).followOrderMax ?? 0}
+                onChange={(e) => setSettings({ ...settings, followOrderMax: Number(e.target.value) } as any)}
+              />
+              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
+              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).followSkipMin ?? 0}
+                onChange={(e) => setSettings({ ...settings, followSkipMin: Number(e.target.value) } as any)}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).followSkipMax ?? 0}
+                onChange={(e) => setSettings({ ...settings, followSkipMax: Number(e.target.value) } as any)}
+              />
+            </div>
+            <div className="p-4">
+              <ToolConfigPanel tool={followTool} profile={profile} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Unfollow Tool (embedded) ──────────────────────────── */}
+      {unfollowTool && (
+        <div style={{ borderTop: '5px solid #06b6d4' }} className="pt-1">
+          <div className="border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-b border-border flex-wrap">
+              <UserMinus className="w-4 h-4 text-orange-500 shrink-0" />
+              <h4 className="font-semibold text-sm shrink-0">Unfollow Tool</h4>
+              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Execution Order</span>
+              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).unfollowOrderMin ?? 0}
+                onChange={(e) => setSettings({ ...settings, unfollowOrderMin: Number(e.target.value) } as any)}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).unfollowOrderMax ?? 0}
+                onChange={(e) => setSettings({ ...settings, unfollowOrderMax: Number(e.target.value) } as any)}
+              />
+              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
+              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).unfollowSkipMin ?? 0}
+                onChange={(e) => setSettings({ ...settings, unfollowSkipMin: Number(e.target.value) } as any)}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).unfollowSkipMax ?? 0}
+                onChange={(e) => setSettings({ ...settings, unfollowSkipMax: Number(e.target.value) } as any)}
+              />
+            </div>
+            <div className="p-4">
+              <UnfollowToolPanel tool={unfollowTool} profile={profile} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Contact Tool (embedded) ───────────────────────────── */}
+      {contactTool && (
+        <div style={{ borderTop: '5px solid #06b6d4' }} className="pt-1">
+          <div className="border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-b border-border flex-wrap">
+              <MessageSquare className="w-4 h-4 text-green-500 shrink-0" />
+              <h4 className="font-semibold text-sm shrink-0">Contact Tool</h4>
+              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Execution Order</span>
+              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).contactOrderMin ?? 0}
+                onChange={(e) => setSettings({ ...settings, contactOrderMin: Number(e.target.value) } as any)}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+              <Input type="number" min="0" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).contactOrderMax ?? 0}
+                onChange={(e) => setSettings({ ...settings, contactOrderMax: Number(e.target.value) } as any)}
+              />
+              <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">Skip Chance %</span>
+              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).contactSkipMin ?? 0}
+                onChange={(e) => setSettings({ ...settings, contactSkipMin: Number(e.target.value) } as any)}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">–</span>
+              <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
+                value={(settings as any).contactSkipMax ?? 0}
+                onChange={(e) => setSettings({ ...settings, contactSkipMax: Number(e.target.value) } as any)}
+              />
+            </div>
+            <div className="p-4">
+              <ContactToolPanel tool={contactTool} profile={profile} />
+            </div>
+          </div>
+        </div>
+      )}
 
       <CopySettingsDialog
         key={_copyOpen ? "open" : "closed"}
