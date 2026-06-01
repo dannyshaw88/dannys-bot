@@ -188,8 +188,10 @@ export function SettingsPage() {
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [twoCaptchaKeyDraft, setTwoCaptchaKeyDraft] = useState<string | null>(null);
   const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
-  const [togetherKeyDraft, setTogetherKeyDraft] = useState<string | null>(null);
-  const [togetherKeyInitialized, setTogetherKeyInitialized] = useState(false);
+  const [openaiKeyDraft, setOpenaiKeyDraft] = useState<string | null>(null);
+  const [openaiKeyInitialized, setOpenaiKeyInitialized] = useState(false);
+  const [openaiTestState, setOpenaiTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+  const [openaiTestResult, setOpenaiTestResult] = useState<string>("");
   const [captchaTestState, setCaptchaTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
   const [captchaTestResult, setCaptchaTestResult] = useState<string>("");
   const [settingsTab, setSettingsTab] = useState("general");
@@ -232,10 +234,10 @@ export function SettingsPage() {
   if (settings && !tokenInitialized) {
     setTokenDraft(settings.hikerApiToken ?? "");
     setTwoCaptchaKeyDraft(settings.twoCaptchaApiKey ?? "");
-    setTogetherKeyDraft(settings.togetherApiKey ?? "");
+    setOpenaiKeyDraft(settings.openaiApiKey ?? "");
     setTokenInitialized(true);
     setTwoCaptchaKeyInitialized(true);
-    setTogetherKeyInitialized(true);
+    setOpenaiKeyInitialized(true);
   }
 
   const mutation = useMutation({
@@ -613,34 +615,71 @@ export function SettingsPage() {
 
 
 
-        {/* Together AI Integration */}
+        {/* OpenAI — AI Image Generator */}
         <div className="desktop-card p-6" style={{ display: settingsTab !== "security" ? "none" : undefined }}>
           <div className="flex items-center gap-3 mb-1">
             <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
               <KeyRound className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-semibold">Together AI — AI Image Generator</h3>
+            <h3 className="text-base font-semibold">OpenAI — AI Image Generator</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Used by the <span className="font-medium">✨ AI Image</span> button in the embedded browser toolbar to generate realistic selfies.
-            Get a free API key at <span className="font-medium">api.together.xyz</span> — the free tier includes enough credits to generate images.
+            Used by the <span className="font-medium">✨ AI Image</span> button in the embedded browser toolbar to generate realistic selfies using DALL-E 3.
+            Get an API key at <span className="font-medium">platform.openai.com/api-keys</span>.
           </p>
           <div className="space-y-3">
             <Label className="text-sm font-medium">API Key</Label>
-            <Input
-              type="password"
-              placeholder="Enter your Together AI API key"
-              value={togetherKeyDraft ?? ""}
-              onChange={(e) => setTogetherKeyDraft(e.target.value)}
-              onBlur={(e) => {
-                const v = e.target.value;
-                if (v !== (settings?.togetherApiKey ?? "")) {
-                  mutation.mutate({ togetherApiKey: v });
-                }
-              }}
-              className="font-mono text-sm"
-              disabled={isLoading}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                type="password"
+                placeholder="sk-..."
+                value={openaiKeyDraft ?? ""}
+                onChange={(e) => setOpenaiKeyDraft(e.target.value)}
+                onBlur={(e) => {
+                  const v = e.target.value;
+                  if (v !== (settings?.openaiApiKey ?? "")) {
+                    mutation.mutate({ openaiApiKey: v });
+                  }
+                }}
+                className="font-mono text-sm flex-1"
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={openaiTestState === "loading" || !openaiKeyDraft}
+                onClick={async () => {
+                  if (openaiKeyDraft !== (settings?.openaiApiKey ?? "")) {
+                    mutation.mutate({ openaiApiKey: openaiKeyDraft ?? "" });
+                  }
+                  setOpenaiTestState("loading");
+                  try {
+                    const r = await fetch("/api/settings/test-openai");
+                    const j = await r.json();
+                    if (j.ok) {
+                      setOpenaiTestResult("Key is valid");
+                      setOpenaiTestState("ok");
+                    } else {
+                      setOpenaiTestResult(j.error ?? "Invalid key");
+                      setOpenaiTestState("fail");
+                    }
+                  } catch {
+                    setOpenaiTestResult("Request failed");
+                    setOpenaiTestState("fail");
+                  }
+                }}
+                className="shrink-0"
+              >
+                {openaiTestState === "loading" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Test"}
+              </Button>
+            </div>
+            {openaiTestState !== "idle" && openaiTestState !== "loading" && (
+              <p className={`text-xs flex items-center gap-1.5 ${openaiTestState === "ok" ? "text-green-600" : "text-destructive"}`}>
+                {openaiTestState === "ok" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                {openaiTestResult}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Saved to the local database — no environment variable needed.
             </p>

@@ -17,41 +17,33 @@ export const aiRouter = Router();
 
 // ── Realistic phone profiles ────────────────────────────────────────────────
 const PHONE_PROFILES = [
-  { make: "Apple",   model: "iPhone 14 Pro",  software: "16.5.1",  focal: [3420, 1000], aperture: [8, 5],  exposure: [1, 120], focalMm: "3.0 mm" },
-  { make: "Apple",   model: "iPhone 15 Pro",  software: "17.2.1",  focal: [3420, 1000], aperture: [8, 5],  exposure: [1, 120], focalMm: "3.0 mm" },
-  { make: "Apple",   model: "iPhone 13",      software: "16.7.2",  focal: [2650, 1000], aperture: [7, 5],  exposure: [1, 100], focalMm: "2.65 mm" },
-  { make: "Apple",   model: "iPhone 12",      software: "15.8.1",  focal: [2650, 1000], aperture: [7, 5],  exposure: [1, 90],  focalMm: "2.65 mm" },
-  { make: "Apple",   model: "iPhone SE",      software: "16.7.4",  focal: [2870, 1000], aperture: [7, 5],  exposure: [1, 80],  focalMm: "2.87 mm" },
-  { make: "Samsung", model: "SM-S918B",       software: "Android 13", focal: [6200, 1000], aperture: [9, 5],  exposure: [1, 100], focalMm: "6.2 mm" },
-  { make: "Samsung", model: "SM-A546B",       software: "Android 13", focal: [2650, 1000], aperture: [7, 5],  exposure: [1, 80],  focalMm: "2.65 mm" },
-  { make: "Samsung", model: "SM-G991B",       software: "Android 13", focal: [3430, 1000], aperture: [8, 5],  exposure: [1, 100], focalMm: "3.43 mm" },
-  { make: "Google",  model: "Pixel 7 Pro",    software: "Android 14", focal: [3850, 1000], aperture: [9, 5],  exposure: [1, 110], focalMm: "3.85 mm" },
-  { make: "Google",  model: "Pixel 8",        software: "Android 14", focal: [2650, 1000], aperture: [8, 5],  exposure: [1, 100], focalMm: "2.65 mm" },
-  { make: "OnePlus", model: "CPH2449",        software: "Android 13", focal: [3850, 1000], aperture: [9, 5],  exposure: [1, 95],  focalMm: "3.85 mm" },
-  { make: "Xiaomi",  model: "2304FPN6DC",     software: "MIUI 14",   focal: [2870, 1000], aperture: [8, 5],  exposure: [1, 90],  focalMm: "2.87 mm" },
+  { make: "Apple",   model: "iPhone 14 Pro",  software: "16.5.1",  focal: [3420, 1000], aperture: [8, 5],  exposure: [1, 120] },
+  { make: "Apple",   model: "iPhone 15 Pro",  software: "17.2.1",  focal: [3420, 1000], aperture: [8, 5],  exposure: [1, 120] },
+  { make: "Apple",   model: "iPhone 13",      software: "16.7.2",  focal: [2650, 1000], aperture: [7, 5],  exposure: [1, 100] },
+  { make: "Apple",   model: "iPhone 12",      software: "15.8.1",  focal: [2650, 1000], aperture: [7, 5],  exposure: [1, 90]  },
+  { make: "Apple",   model: "iPhone SE",      software: "16.7.4",  focal: [2870, 1000], aperture: [7, 5],  exposure: [1, 80]  },
+  { make: "Samsung", model: "SM-S918B",       software: "Android 13", focal: [6200, 1000], aperture: [9, 5],  exposure: [1, 100] },
+  { make: "Samsung", model: "SM-A546B",       software: "Android 13", focal: [2650, 1000], aperture: [7, 5],  exposure: [1, 80]  },
+  { make: "Samsung", model: "SM-G991B",       software: "Android 13", focal: [3430, 1000], aperture: [8, 5],  exposure: [1, 100] },
+  { make: "Google",  model: "Pixel 7 Pro",    software: "Android 14", focal: [3850, 1000], aperture: [9, 5],  exposure: [1, 110] },
+  { make: "Google",  model: "Pixel 8",        software: "Android 14", focal: [2650, 1000], aperture: [8, 5],  exposure: [1, 100] },
+  { make: "OnePlus", model: "CPH2449",        software: "Android 13", focal: [3850, 1000], aperture: [9, 5],  exposure: [1, 95]  },
+  { make: "Xiaomi",  model: "2304FPN6DC",     software: "MIUI 14",   focal: [2870, 1000], aperture: [8, 5],  exposure: [1, 90]  },
 ];
 
-// Output dimensions that vary per image — mirrors real phone photo sizes after crop
+// Output dimensions — mirrors real phone photo sizes after crop
 const OUTPUT_DIMS = [
   { w: 1080, h: 1080 }, // 1:1 square
-  { w: 1080, h: 1350 }, // 4:5 portrait (most common Instagram selfie)
+  { w: 1080, h: 1350 }, // 4:5 portrait
   { w: 1080, h: 1920 }, // 9:16 story-style portrait
   { w: 1080, h: 1440 }, // 3:4 portrait
-  { w: 828,  h: 1472 }, // iPhone XR native front-cam ratio
+  { w: 828,  h: 1472 }, // iPhone XR front-cam ratio
   { w: 1170, h: 2080 }, // iPhone 12/13 portrait crop
   { w: 720,  h: 960  }, // older Android 3:4
   { w: 900,  h: 1200 }, // mid-range portrait
 ];
 
-// Together AI generation dimensions (FLUX max ~1MP, multiples of 8)
-const GEN_DIMS = [
-  { w: 768,  h: 1024 }, // 3:4 portrait
-  { w: 576,  h: 1024 }, // 9:16 portrait
-  { w: 832,  h: 1152 }, // portrait
-  { w: 704,  h: 1024 }, // portrait
-];
-
-// Realistic city GPS coords (no actual tracking)
+// Realistic city GPS coords
 const CITY_COORDS = [
   { lat: [51, 30, 26, "N"], lon: [0, 7, 40, "W"],  alt: 11  }, // London
   { lat: [40, 42, 46, "N"], lon: [74, 0, 22, "W"],  alt: 10  }, // New York
@@ -85,10 +77,6 @@ function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function toGpsRational(deg: number, min: number, sec: number): [number, number][] {
-  return [[deg, 1], [min, 1], [sec * 100, 100]];
-}
-
 function randomHex(bytes: number): string {
   return [...Array(bytes)].map(() => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("").toUpperCase();
 }
@@ -97,44 +85,41 @@ function randomHex(bytes: number): string {
 
 aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
   const settings = await storage.getGlobalSettings().catch(() => ({} as Record<string, string>));
-  const apiKey = (settings.togetherApiKey ?? "").trim() || (process.env.TOGETHER_API_KEY ?? "").trim();
+  const apiKey = (settings.openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
   if (!apiKey) {
     return res.status(400).json({
-      error: "Together AI API key not set. Go to Settings → Security, paste your key in the Together AI field, and save. Get a free key at https://api.together.xyz/",
+      error: "OpenAI API key not set. Go to Settings → Security, paste your key in the OpenAI field, and save. Get a key at platform.openai.com.",
     });
   }
 
   try {
-    // Pick random gen dimensions (FLUX) and output dimensions independently
-    const genDim    = GEN_DIMS[randInt(0, GEN_DIMS.length - 1)];
-    const outDim    = OUTPUT_DIMS[randInt(0, OUTPUT_DIMS.length - 1)];
-    const prompt    = SELFIE_PROMPTS[randInt(0, SELFIE_PROMPTS.length - 1)];
+    const outDim = OUTPUT_DIMS[randInt(0, OUTPUT_DIMS.length - 1)];
+    const prompt = SELFIE_PROMPTS[randInt(0, SELFIE_PROMPTS.length - 1)];
 
-    const togetherRes = await fetch("https://api.together.xyz/v1/images/generations", {
+    // DALL-E 3 portrait — 1024×1792 is the closest to a phone selfie ratio
+    const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "black-forest-labs/FLUX.1-schnell-Free",
+        model: "dall-e-3",
         prompt,
-        width:  genDim.w,
-        height: genDim.h,
-        steps: 4,
         n: 1,
+        size: "1024x1792",
         response_format: "b64_json",
       }),
     });
 
-    if (!togetherRes.ok) {
-      const errText = await togetherRes.text();
-      return res.status(500).json({ error: `Together AI error: ${errText}` });
+    if (!openaiRes.ok) {
+      const errText = await openaiRes.text();
+      return res.status(500).json({ error: `OpenAI error: ${errText}` });
     }
 
-    const data = await togetherRes.json() as any;
+    const data = await openaiRes.json() as any;
     const b64  = data.data?.[0]?.b64_json;
-    if (!b64) return res.status(500).json({ error: "No image data returned from Together AI" });
+    if (!b64) return res.status(500).json({ error: "No image data returned from OpenAI" });
 
     // Convert to JPEG at randomised output dimensions (strips all AI metadata)
     const inputBuffer = Buffer.from(b64, "base64");
@@ -142,8 +127,8 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
     if (!sharpFn) {
       return res.status(500).json({ error: "Image processing library (sharp) is not available on this platform." });
     }
-    const quality     = randInt(84, 94);
-    const jpegBuffer  = await sharpFn(inputBuffer)
+    const quality    = randInt(84, 94);
+    const jpegBuffer = await sharpFn(inputBuffer)
       .resize(outDim.w, outDim.h, { fit: "cover", position: "attention" })
       .jpeg({ quality })
       .toBuffer();
@@ -152,25 +137,23 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
     const piexif  = require("piexifjs");
     const phone   = PHONE_PROFILES[randInt(0, PHONE_PROFILES.length - 1)];
     const city    = CITY_COORDS[randInt(0, CITY_COORDS.length - 1)];
-    const ago     = randInt(5, 20160); // 5 min–2 weeks ago
+    const ago     = randInt(5, 20160);
     const shotAt  = new Date(Date.now() - ago * 60000);
     const dtStr   = shotAt.toISOString().replace("T", " ").substring(0, 19).replace(/-/g, ":");
     const subsec  = String(randInt(0, 999)).padStart(3, "0");
     const iso     = ISO_VALUES[randInt(0, ISO_VALUES.length - 1)];
-    const imgUid  = randomHex(16); // unique per image
-    const serial  = randomHex(8);  // unique body serial
+    const imgUid  = randomHex(16);
+    const serial  = randomHex(8);
 
-    // Slight focal length variation (+/- a few mm)
     const focalNom = phone.focal[0] + randInt(-50, 50);
     const focalDen = phone.focal[1];
 
-    // GPS — slight random offset within city (~1 km radius)
-    const latOff = randInt(-500, 500);  // offset in arc-seconds/100
+    const latOff = randInt(-500, 500);
     const lonOff = randInt(-500, 500);
     const [baseLat0, baseLat1, baseLat2] = city.lat;
     const [baseLon0, baseLon1, baseLon2] = city.lon;
-    const latSec = Number(baseLat2) * 100 + latOff;
-    const lonSec = Number(baseLon2) * 100 + lonOff;
+    const latSec    = Number(baseLat2) * 100 + latOff;
+    const lonSec    = Number(baseLon2) * 100 + lonOff;
     const altMetres = city.alt + randInt(-5, 5);
 
     const exifObj: any = {
@@ -201,10 +184,10 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
         [piexif.ExifIFD.ColorSpace]:         1,
         [piexif.ExifIFD.ExposureMode]:       0,
         [piexif.ExifIFD.WhiteBalance]:       0,
-        [piexif.ExifIFD.SceneCaptureType]:   2,  // portrait
-        [piexif.ExifIFD.ExposureProgram]:    2,  // normal program
-        [piexif.ExifIFD.MeteringMode]:       2,  // centre-weighted average
-        [piexif.ExifIFD.LightSource]:        0,  // unknown (auto)
+        [piexif.ExifIFD.SceneCaptureType]:   2,
+        [piexif.ExifIFD.ExposureProgram]:    2,
+        [piexif.ExifIFD.MeteringMode]:       2,
+        [piexif.ExifIFD.LightSource]:        0,
         [piexif.ExifIFD.FocalLengthIn35mmFilm]: Math.round(focalNom / focalDen * 6.5),
         [piexif.ExifIFD.ImageUniqueID]:      imgUid,
         [piexif.ExifIFD.BodySerialNumber]:   serial,

@@ -60,10 +60,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.699",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Change", text: "AI Image generator now uses OpenAI DALL-E 3 instead of Together AI — better quality selfies and no credits required beyond your own OpenAI key." },
+      { category: "New", text: "Settings → Security: new Test button next to the OpenAI API key field — click it to verify your key is valid before trying to generate an image." },
+    ],
+  },
+  {
     version: "1.0.698",
     date: "1 Jun 2026",
     items: [
-      { category: "New", text: "Together AI API key can now be entered directly in Settings → Security — no need to set a Windows environment variable." },
+      { category: "New", text: "OpenAI API key can now be entered directly in Settings → Security — no need to set a Windows environment variable." },
       { category: "Fix", text: "The AI Image button now shows a clear message directing you to Settings if no API key is configured, instead of a cryptic error." },
     ],
   },
@@ -99,7 +107,7 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     version: "1.0.694",
     date: "1 Jun 2026",
     items: [
-      { category: "Feature", text: "AI Image button added to the embedded browser toolbar — generates a realistic smartphone selfie using Together AI (FLUX model), strips AI metadata, injects randomised camera EXIF (phone model, date, ISO). Requires a free TOGETHER_API_KEY environment variable." },
+      { category: "Feature", text: "AI Image button added to the embedded browser toolbar — generates a realistic smartphone selfie using DALL-E 3, strips AI metadata, injects randomised camera EXIF (phone model, date, ISO). Requires an OpenAI API key in Settings → Security." },
       { category: "Feature", text: "Save and Upload buttons in the AI Image dialog — Save downloads the JPEG to your computer; Upload sends it directly to Instagram's active file chooser in the embedded browser." },
       { category: "UI", text: "Human Session sub-action run chances are now min–max ranges instead of a single fixed percentage — each session picks a random threshold within your range." },
       { category: "UI", text: "All four Human Session sub-actions (Notifications, Profile, Refresh, Settings) now display on a single compact row with their own min–max chance inputs." },

@@ -260,7 +260,7 @@ export type GlobalSettings = {
   scrapeAllIfSkipped: boolean;
   useLocalTime: boolean;
   twoCaptchaApiKey: string;
-  togetherApiKey: string;
+  openaiApiKey: string;
   verifyAllDelayMin: number;
   verifyAllDelayMax: number;
   logMaxRows: number;

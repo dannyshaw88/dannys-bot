@@ -2905,7 +2905,7 @@ export async function registerInstagramRoutes(
       scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
-      togetherApiKey: settings.togetherApiKey ?? "",
+      openaiApiKey: settings.openaiApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
@@ -2918,7 +2918,7 @@ export async function registerInstagramRoutes(
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, togetherApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, openaiApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -2946,8 +2946,8 @@ export async function registerInstagramRoutes(
     if (typeof twoCaptchaApiKey === "string") {
       await storage.setGlobalSetting("twoCaptchaApiKey", twoCaptchaApiKey);
     }
-    if (typeof togetherApiKey === "string") {
-      await storage.setGlobalSetting("togetherApiKey", togetherApiKey);
+    if (typeof openaiApiKey === "string") {
+      await storage.setGlobalSetting("openaiApiKey", openaiApiKey);
     }
     if (typeof verifyAllDelayMin === "number" && verifyAllDelayMin >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMin", String(Math.round(verifyAllDelayMin)));
@@ -2984,7 +2984,7 @@ export async function registerInstagramRoutes(
       scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
-      togetherApiKey: settings.togetherApiKey ?? "",
+      openaiApiKey: settings.openaiApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
@@ -3008,6 +3008,22 @@ export async function registerInstagramRoutes(
         return res.json({ ok: true, balance });
       }
       return res.json({ ok: false, error: text });
+    } catch (e: any) {
+      return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
+    }
+  });
+
+  app.get("/api/settings/test-openai", async (_req, res) => {
+    const settings = await storage.getGlobalSettings();
+    const key = (settings.openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
+    if (!key) return res.json({ ok: false, error: "No API key configured" });
+    try {
+      const r = await fetch("https://api.openai.com/v1/models", {
+        headers: { "Authorization": `Bearer ${key}` },
+      });
+      if (r.ok) return res.json({ ok: true });
+      const j = await r.json() as any;
+      return res.json({ ok: false, error: j?.error?.message ?? `HTTP ${r.status}` });
     } catch (e: any) {
       return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
     }
