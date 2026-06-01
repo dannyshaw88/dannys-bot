@@ -60,6 +60,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.698",
+    date: "1 Jun 2026",
+    items: [
+      { category: "New", text: "Together AI API key can now be entered directly in Settings → Security — no need to set a Windows environment variable." },
+      { category: "Fix", text: "The AI Image button now shows a clear message directing you to Settings if no API key is configured, instead of a cryptic error." },
+    ],
+  },
+  {
     version: "1.0.697",
     date: "1 Jun 2026",
     items: [

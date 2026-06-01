@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { storage } from "../storage";
 
 let _sharpModule: ((input: Buffer | Uint8Array, options?: any) => any) | null | undefined = undefined;
 async function getSharp() {
@@ -95,10 +96,11 @@ function randomHex(bytes: number): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
-  const apiKey = process.env.TOGETHER_API_KEY;
+  const settings = await storage.getGlobalSettings().catch(() => ({} as Record<string, string>));
+  const apiKey = (settings.togetherApiKey ?? "").trim() || (process.env.TOGETHER_API_KEY ?? "").trim();
   if (!apiKey) {
     return res.status(400).json({
-      error: "TOGETHER_API_KEY not set. Get a free API key at https://api.together.xyz/ then add it as an environment variable named TOGETHER_API_KEY.",
+      error: "Together AI API key not set. Go to Settings → Security, paste your key in the Together AI field, and save. Get a free key at https://api.together.xyz/",
     });
   }
 

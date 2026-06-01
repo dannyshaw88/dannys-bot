@@ -188,6 +188,8 @@ export function SettingsPage() {
   const [tokenDraft, setTokenDraft] = useState<string | null>(null);
   const [twoCaptchaKeyDraft, setTwoCaptchaKeyDraft] = useState<string | null>(null);
   const [twoCaptchaKeyInitialized, setTwoCaptchaKeyInitialized] = useState(false);
+  const [togetherKeyDraft, setTogetherKeyDraft] = useState<string | null>(null);
+  const [togetherKeyInitialized, setTogetherKeyInitialized] = useState(false);
   const [captchaTestState, setCaptchaTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
   const [captchaTestResult, setCaptchaTestResult] = useState<string>("");
   const [settingsTab, setSettingsTab] = useState("general");
@@ -230,8 +232,10 @@ export function SettingsPage() {
   if (settings && !tokenInitialized) {
     setTokenDraft(settings.hikerApiToken ?? "");
     setTwoCaptchaKeyDraft(settings.twoCaptchaApiKey ?? "");
+    setTogetherKeyDraft(settings.togetherApiKey ?? "");
     setTokenInitialized(true);
     setTwoCaptchaKeyInitialized(true);
+    setTogetherKeyInitialized(true);
   }
 
   const mutation = useMutation({
@@ -608,6 +612,40 @@ export function SettingsPage() {
         </div>
 
 
+
+        {/* Together AI Integration */}
+        <div className="desktop-card p-6" style={{ display: settingsTab !== "security" ? "none" : undefined }}>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold">Together AI — AI Image Generator</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">
+            Used by the <span className="font-medium">✨ AI Image</span> button in the embedded browser toolbar to generate realistic selfies.
+            Get a free API key at <span className="font-medium">api.together.xyz</span> — the free tier includes enough credits to generate images.
+          </p>
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">API Key</Label>
+            <Input
+              type="password"
+              placeholder="Enter your Together AI API key"
+              value={togetherKeyDraft ?? ""}
+              onChange={(e) => setTogetherKeyDraft(e.target.value)}
+              onBlur={(e) => {
+                const v = e.target.value;
+                if (v !== (settings?.togetherApiKey ?? "")) {
+                  mutation.mutate({ togetherApiKey: v });
+                }
+              }}
+              className="font-mono text-sm"
+              disabled={isLoading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Saved to the local database — no environment variable needed.
+            </p>
+          </div>
+        </div>
 
         {/* Dashboard Log Limit */}
         <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>

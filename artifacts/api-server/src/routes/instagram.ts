@@ -2905,6 +2905,7 @@ export async function registerInstagramRoutes(
       scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      togetherApiKey: settings.togetherApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
@@ -2917,7 +2918,7 @@ export async function registerInstagramRoutes(
   });
 
   app.put("/api/settings", async (req, res) => {
-    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
+    const { skipFollowedUsers, skipAlreadySkippedUsers, hikerApiEnabled, hikerApiToken, skipScrapedUsers, scrapedUserIgnoreDays, scrapeAllIfSkipped, useLocalTime, twoCaptchaApiKey, togetherApiKey, verifyAllDelayMin, verifyAllDelayMax, logMaxRows, backupEnabled, backupIntervalDays, themeColor, themeMode, preFilledPhoneNumber } = req.body;
     if (typeof skipFollowedUsers === "boolean") {
       await storage.setGlobalSetting("skipFollowedUsers", String(skipFollowedUsers));
     }
@@ -2944,6 +2945,9 @@ export async function registerInstagramRoutes(
     }
     if (typeof twoCaptchaApiKey === "string") {
       await storage.setGlobalSetting("twoCaptchaApiKey", twoCaptchaApiKey);
+    }
+    if (typeof togetherApiKey === "string") {
+      await storage.setGlobalSetting("togetherApiKey", togetherApiKey);
     }
     if (typeof verifyAllDelayMin === "number" && verifyAllDelayMin >= 0) {
       await storage.setGlobalSetting("verifyAllDelayMin", String(Math.round(verifyAllDelayMin)));
@@ -2980,6 +2984,7 @@ export async function registerInstagramRoutes(
       scrapeAllIfSkipped: settings.scrapeAllIfSkipped === "true",
       useLocalTime: settings.useLocalTime === "true",
       twoCaptchaApiKey: settings.twoCaptchaApiKey ?? "",
+      togetherApiKey: settings.togetherApiKey ?? "",
       verifyAllDelayMin: parseInt(settings.verifyAllDelayMin ?? "5", 10),
       verifyAllDelayMax: parseInt(settings.verifyAllDelayMax ?? "15", 10),
       logMaxRows: parseInt(settings.logMaxRows ?? "100000", 10),
