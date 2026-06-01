@@ -10,7 +10,7 @@
  * server at serverPort via HTTP.
  */
 
-import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain, WebContents, dialog } from "electron";
+import { BrowserWindow, BrowserView, Menu, session as electronSession, ipcMain, WebContents, dialog, shell } from "electron";
 import http from "http";
 import fs from "fs";
 import path from "path";
@@ -1042,7 +1042,7 @@ async function doAutoLogin(
     wc,
     url =>
       url.includes("instagram.com") &&
-      (!url.includes("accounts/login/") || url.includes("two_factor")),
+      (!url.includes("accounts/login/") || url.includes("two_factor") || /#/.test(url)),
     30000,
   );
   await delay(1000);
@@ -2098,24 +2098,14 @@ export async function openEbWindow(opts: {
       click: async () => {
         try {
           const html = await win.webContents.executeJavaScript("document.documentElement.outerHTML");
-          const ts = Date.now();
-          const savePath = path.join(_cookiesDir, `source-${profileId}-${ts}.html`);
+          const savePath = path.join(_cookiesDir, `source-${profileId}-${Date.now()}.txt`);
           fs.writeFileSync(savePath, String(html), "utf8");
           console.log(`[ebManager:${profileId}] Page source saved: ${savePath}`);
-          dialog.showMessageBox(win, {
-            type:    "info",
-            title:   "Page Source Saved",
-            message: `Source saved to:\n${savePath}`,
-            buttons: ["OK"],
-          }).catch(() => {});
+          shell.openPath(savePath).catch(() => {});
         } catch (err) {
           console.error(`[ebManager:${profileId}] View Source failed:`, err);
         }
       },
-    });
-    tpl.push({
-      label: "Open DevTools",
-      click: () => { win.webContents.openDevTools(); },
     });
     Menu.buildFromTemplate(tpl).popup({ window: win });
   });
@@ -2131,6 +2121,33 @@ export async function openEbWindow(opts: {
     }
     const ts = tabsStateMap.get(profileId);
     if (ts && ts.tabs[0] && ts.activeId === 0) ts.tabs[0].url = navUrl;
+
+    // ── Post-2FA blank-screen recovery ────────────────────────────────────
+    // After 2FA verification Instagram's SPA does history.pushState to
+    // accounts/login/# (a hash route the React app doesn't render), leaving a
+    // blank page.  Wait 3 s then check: if a 2FA input is still visible the
+    // user is still typing — leave it.  If blank, force-navigate to the feed.
+    if (navUrl.includes("accounts/login/") && /#/.test(navUrl)) {
+      setTimeout(async () => {
+        if (win.isDestroyed()) return;
+        const cur = win.webContents.getURL();
+        if (!cur.includes("accounts/login/")) return; // already navigated away
+        const has2FA: boolean = await win.webContents.executeJavaScript(`
+          !!(document.querySelector(
+            'input[name="verificationCode"],input[name="verification_code"],' +
+            'input[name="totp_code"],input[name="security_code"],' +
+            'input[autocomplete="one-time-code"],input[inputmode="numeric"][maxlength="6"],' +
+            'input[aria-label*="code" i],input[aria-label*="digit" i]'
+          ))
+        `).catch(() => false);
+        if (has2FA) return; // 2FA form is up — don't interrupt
+        console.warn(`[ebManager:${profileId}] accounts/login/# stuck — no 2FA form, recovering to feed`);
+        const sCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
+        win.webContents.loadURL(
+          sCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+        ).catch(() => {});
+      }, 3000);
+    }
   });
 
   win.on("closed", () => {

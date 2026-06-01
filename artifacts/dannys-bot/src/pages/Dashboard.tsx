@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.715",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser: blank screen after 2FA is now auto-recovered — if the browser lands on the login hash route with no 2FA form visible, it navigates to the home feed after 3 seconds." },
+      { category: "Fix", text: "Embedded browser: 2FA entry is protected — the recovery only fires when no 2FA input is on screen, so manual code entry is never interrupted." },
+      { category: "Change", text: "Right-click View Page Source now opens the source directly in your text editor instead of showing a save-to-disk dialog." },
+    ],
+  },
+  {
     version: "1.0.714",
     date: "1 Jun 2026",
     items: [
