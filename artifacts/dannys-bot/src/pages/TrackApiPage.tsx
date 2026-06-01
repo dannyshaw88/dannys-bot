@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Play, Square, Trash2, Copy, Download, RefreshCw, Wifi, Signal, ChevronRight, Circle, Copy as CopyIcon } from "lucide-react";
+import { Play, Square, Trash2, Copy, Download, RefreshCw, Wifi, Signal, ChevronRight, Circle, Copy as CopyIcon, ShieldCheck, AlertTriangle } from "lucide-react";
 
 interface LocalAdapter {
   ip: string;
@@ -11,10 +11,12 @@ interface LocalAdapter {
 interface StatusData {
   running: boolean;
   port: number;
+  mitm: boolean;
   localIps: string[];
   adapters: LocalAdapter[];
   publicIp: string | null;
   entryCount: number;
+  caCertReady: boolean;
 }
 
 interface LogEntry {
@@ -23,20 +25,21 @@ interface LogEntry {
   method: string;
   host: string;
   path: string;
+  label: string | null;
   status: number | null;
   durationMs: number | null;
-  type: "http" | "connect";
+  type: "http" | "connect" | "https";
   size: number | null;
 }
 
 const METHOD_COLORS: Record<string, string> = {
-  GET:     "text-emerald-700",
-  POST:    "text-blue-700",
-  PUT:     "text-yellow-700",
-  PATCH:   "text-orange-700",
-  DELETE:  "text-red-700",
-  CONNECT: "text-purple-700",
-  HEAD:    "text-cyan-700",
+  GET:     "text-emerald-600",
+  POST:    "text-blue-600",
+  PUT:     "text-yellow-600",
+  PATCH:   "text-orange-600",
+  DELETE:  "text-red-600",
+  CONNECT: "text-purple-500",
+  HEAD:    "text-cyan-600",
 };
 
 function formatTs(iso: string): string {
@@ -89,6 +92,7 @@ export function TrackApiPage() {
   const [port, setPort] = useState("8899");
   const [selectedIp, setSelectedIp] = useState<string>("");
   const [connectionMode, setConnectionMode] = useState<"wifi" | "sim">("wifi");
+  const [hideConnectTunnels, setHideConnectTunnels] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -119,26 +123,23 @@ export function TrackApiPage() {
     return () => clearInterval(iv);
   }, [fetchStatus, fetchLogs]);
 
-  // WebSocket for live log streaming
   useEffect(() => {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${proto}//${window.location.host}/api/track-api/ws`);
     wsRef.current = ws;
-
     ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data);
         if (msg.type === "entry") {
           setEntries(prev => {
             const next = [...prev, msg.entry];
-            return next.length > 1000 ? next.slice(-1000) : next;
+            return next.length > 2000 ? next.slice(-2000) : next;
           });
         } else if (msg.type === "clear") {
           setEntries([]);
         }
       } catch {}
     };
-
     return () => { ws.close(); };
   }, []);
 
@@ -155,7 +156,7 @@ export function TrackApiPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ port: parseInt(port, 10) }),
+        body: JSON.stringify({ port: parseInt(port, 10), mitm: true }),
       });
       await fetchStatus();
     } finally { setLoading(false); }
@@ -175,16 +176,18 @@ export function TrackApiPage() {
   };
 
   const copyLogs = () => {
-    const text = filteredEntries.map(e =>
-      `${formatTs(e.ts)}  ${e.method.padEnd(7)}  ${e.host}${e.path}${e.status ? `  ${e.status}` : ""}${e.durationMs != null ? `  ${e.durationMs}ms` : ""}`
-    ).join("\n");
+    const text = filteredEntries.map(e => {
+      const label = e.label ? ` [${e.label}]` : "";
+      return `${formatTs(e.ts)}  ${e.method.padEnd(7)}  ${e.host}${e.path}${label}${e.status ? `  ${e.status}` : ""}${e.durationMs != null ? `  ${e.durationMs}ms` : ""}`;
+    }).join("\n");
     navigator.clipboard.writeText(text);
   };
 
   const exportLogs = () => {
-    const text = filteredEntries.map(e =>
-      `${e.ts}  ${e.method.padEnd(7)}  ${e.host}${e.path}${e.status ? `  ${e.status}` : ""}${e.durationMs != null ? `  ${e.durationMs}ms` : ""}${e.size != null ? `  ${formatSize(e.size)}` : ""}`
-    ).join("\n");
+    const text = filteredEntries.map(e => {
+      const label = e.label ? ` [${e.label}]` : "";
+      return `${e.ts}  ${e.method.padEnd(7)}  ${e.host}${e.path}${label}${e.status ? `  ${e.status}` : ""}${e.durationMs != null ? `  ${e.durationMs}ms` : ""}${e.size != null ? `  ${formatSize(e.size)}` : ""}`;
+    }).join("\n");
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -195,13 +198,16 @@ export function TrackApiPage() {
   };
 
   const filteredEntries = entries.filter(e => {
-    const methodOk = filterMethod === "ALL" || e.method === filterMethod || (filterMethod === "CONNECT" && e.type === "connect");
-    const textOk = !filter || `${e.host}${e.path}`.toLowerCase().includes(filter.toLowerCase());
+    if (hideConnectTunnels && e.type === "connect") return false;
+    const methodOk = filterMethod === "ALL" || e.method === filterMethod;
+    const textOk = !filter || `${e.host}${e.path}${e.label ?? ""}`.toLowerCase().includes(filter.toLowerCase());
     return methodOk && textOk;
   });
 
   const running = status?.running ?? false;
   const proxyHost = connectionMode === "sim" ? (status?.publicIp ?? null) : selectedIp;
+  const caCertReady = status?.caCertReady ?? false;
+  const igCount = filteredEntries.filter(e => e.type === "https").length;
 
   return (
     <AppLayout>
@@ -211,14 +217,18 @@ export function TrackApiPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Track API</h1>
-            <p className="text-muted-foreground mt-0.5 text-sm">Intercept iPhone Instagram traffic via proxy — see every endpoint hit in real time.</p>
+            <p className="text-muted-foreground mt-0.5 text-sm">Intercept iPhone Instagram traffic — see every endpoint hit in real time.</p>
           </div>
-
           <div className="flex items-center gap-2">
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${running ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700"}`}>
               <Circle className={`w-2 h-2 fill-current ${running ? "text-emerald-500" : "text-zinc-400"}`} />
               {running ? `Running on :${status?.port}` : "Stopped"}
             </div>
+            {running && (
+              <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold border bg-sky-500/10 text-sky-600 border-sky-500/30">
+                <ShieldCheck className="w-3 h-3" /> MITM Active
+              </div>
+            )}
             <button onClick={fetchStatus} className="p-1.5 rounded hover:bg-accent text-muted-foreground transition-colors">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
@@ -234,7 +244,6 @@ export function TrackApiPage() {
               <Wifi className="w-4 h-4 text-primary" />
               <span className="text-sm font-bold">Proxy Control</span>
             </div>
-
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-10 shrink-0">Port</span>
               <input
@@ -273,9 +282,6 @@ export function TrackApiPage() {
                     </button>
                   ))}
                 </div>
-                {(status?.adapters ?? []).filter(a => !a.likely).length > 0 && (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400">Only select an IP labelled <strong>WiFi ✓</strong>. Others are virtual adapters (Hyper-V, VPN, Docker) that your phone cannot reach.</p>
-                )}
               </div>
             )}
           </div>
@@ -286,8 +292,6 @@ export function TrackApiPage() {
               <span className="text-base">📱</span>
               <span className="text-sm font-bold">iPhone Connection</span>
             </div>
-
-            {/* Mode toggle */}
             <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
               <button
                 onClick={() => setConnectionMode("wifi")}
@@ -321,7 +325,7 @@ export function TrackApiPage() {
               </div>
             ) : (
               <div className="space-y-1.5 text-xs text-muted-foreground">
-                <p>Your iPhone uses <strong className="text-foreground">mobile data (SIM)</strong>. Your PC's port {port} must be reachable from the internet — set up port forwarding on your router.</p>
+                <p>Your iPhone uses <strong className="text-foreground">mobile data (SIM)</strong>. Your PC's port {port} must be reachable from the internet.</p>
                 {running ? (
                   status?.publicIp ? (
                     <div className="flex items-center gap-1 bg-muted px-2 py-1.5 rounded font-mono text-foreground text-xs">
@@ -333,31 +337,30 @@ export function TrackApiPage() {
                       <CopyButton value={port} />
                     </div>
                   ) : (
-                    <p className="text-orange-500 text-xs">Could not detect public IP. Check your internet connection.</p>
+                    <p className="text-orange-500 text-xs">Could not detect public IP.</p>
                   )
                 ) : (
                   <p className="text-orange-500 text-xs">Start the proxy first.</p>
                 )}
-                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-2 text-amber-800 dark:text-amber-300">
-                  <strong>Router setup required:</strong> Forward TCP port <span className="font-mono">{port}</span> to this PC's local IP in your router settings. Your iPhone's SIM traffic will then reach the proxy.
-                </div>
               </div>
             )}
           </div>
         </div>
 
         {/* ── iPhone setup guide ── */}
-        <IPhoneSetupGuide running={running} port={port} proxyHost={proxyHost} connectionMode={connectionMode} />
+        <IPhoneSetupGuide running={running} port={port} proxyHost={proxyHost} connectionMode={connectionMode} caCertReady={caCertReady} />
 
         {/* ── Log viewer ── */}
         <div className="flex-1 desktop-card flex flex-col overflow-hidden min-h-0">
-          {/* Toolbar */}
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0 flex-wrap">
             <span className="text-xs font-bold text-muted-foreground">{filteredEntries.length} entries</span>
+            {igCount > 0 && (
+              <span className="text-xs text-sky-600 font-semibold">{igCount} Instagram calls</span>
+            )}
             <div className="flex-1 min-w-[120px] max-w-xs">
               <input
                 type="text"
-                placeholder="Filter host/path…"
+                placeholder="Filter host/path/label…"
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
                 className="w-full px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono"
@@ -368,10 +371,14 @@ export function TrackApiPage() {
               onChange={e => setFilterMethod(e.target.value)}
               className="px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono"
             >
-              {["ALL", "CONNECT", "GET", "POST", "PUT", "PATCH", "DELETE"].map(m => (
+              {["ALL", "GET", "POST", "PUT", "PATCH", "DELETE", "CONNECT"].map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+              <input type="checkbox" checked={hideConnectTunnels} onChange={e => setHideConnectTunnels(e.target.checked)} className="w-3 h-3" />
+              Hide tunnels
+            </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
               <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} className="w-3 h-3" />
               Auto-scroll
@@ -390,7 +397,7 @@ export function TrackApiPage() {
           {/* Log lines */}
           <div
             ref={logRef}
-            className="flex-1 overflow-y-auto bg-white border border-black font-mono text-[11px] leading-relaxed p-2 min-h-0"
+            className="flex-1 overflow-y-auto bg-white dark:bg-zinc-950 font-mono text-[11px] leading-relaxed p-2 min-h-0"
             onScroll={(e) => {
               const el = e.currentTarget;
               const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
@@ -400,17 +407,25 @@ export function TrackApiPage() {
             {filteredEntries.length === 0 ? (
               <div className="text-gray-400 italic p-4">
                 {running
-                  ? "Waiting for iPhone traffic… Configure your iPhone's WiFi proxy settings, then open Instagram."
-                  : "Start the proxy first, then configure your iPhone to route its traffic through it."}
+                  ? "Waiting for iPhone traffic… Configure your iPhone's WiFi proxy settings and install the CA certificate, then open Instagram."
+                  : "Start the proxy first, then follow the setup guide above."}
               </div>
             ) : (
               filteredEntries.map(e => (
-                <div key={e.id} className="flex items-baseline gap-2 hover:bg-gray-50 px-1 rounded group">
-                  <span className="text-gray-500 shrink-0 w-[90px]">{formatTs(e.ts)}</span>
-                  <span className={`w-[58px] shrink-0 font-bold ${METHOD_COLORS[e.method] ?? "text-gray-700"}`}>{e.method}</span>
-                  <span className="text-black">{e.host}</span>
-                  {e.path && <span className="text-gray-600">{e.path}</span>}
-                  {e.status && <span className={`ml-auto shrink-0 ${statusColor(e.status)}`}>{e.status}</span>}
+                <div
+                  key={e.id}
+                  className={`flex items-baseline gap-2 hover:bg-gray-50 dark:hover:bg-zinc-900 px-1 rounded group ${e.type === "https" && e.label ? "bg-sky-50/40 dark:bg-sky-950/20" : ""}`}
+                >
+                  <span className="text-gray-400 shrink-0 w-[90px]">{formatTs(e.ts)}</span>
+                  <span className={`w-[52px] shrink-0 font-bold ${METHOD_COLORS[e.method] ?? "text-gray-700"}`}>{e.method}</span>
+                  <span className={`shrink-0 ${e.type === "https" ? "text-sky-700 dark:text-sky-400" : "text-gray-700 dark:text-gray-300"}`}>{e.host}</span>
+                  {e.path && <span className="text-gray-500 dark:text-gray-400 truncate">{e.path}</span>}
+                  {e.label && (
+                    <span className="shrink-0 ml-1 px-1.5 py-0 rounded text-[10px] font-bold bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                      {e.label}
+                    </span>
+                  )}
+                  {e.status != null && e.status > 0 && <span className={`ml-auto shrink-0 ${statusColor(e.status)}`}>{e.status}</span>}
                   {e.durationMs != null && <span className="text-gray-400 shrink-0 text-[10px]">{e.durationMs}ms</span>}
                   {e.size != null && <span className="text-gray-400 shrink-0 text-[10px]">{formatSize(e.size)}</span>}
                 </div>
@@ -428,14 +443,20 @@ function IPhoneSetupGuide({
   port,
   proxyHost,
   connectionMode,
+  caCertReady,
 }: {
   running: boolean;
   port: string;
   proxyHost: string | null;
   connectionMode: "wifi" | "sim";
+  caCertReady: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const hostDisplay = proxyHost ?? "<PC_IP>";
+
+  const downloadCaCert = () => {
+    window.open("/api/track-api/ca-cert", "_blank");
+  };
 
   return (
     <div className="desktop-card shrink-0">
@@ -449,112 +470,117 @@ function IPhoneSetupGuide({
       </button>
 
       {open && (
-        <div className="px-5 pb-5 space-y-4 text-sm">
+        <div className="px-5 pb-5 space-y-5 text-sm">
 
-          {/* Step-by-step iOS proxy setup */}
+          {/* MITM explanation banner */}
+          <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-lg p-3 text-xs text-sky-800 dark:text-sky-300">
+            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <strong>How it works:</strong> The proxy intercepts your iPhone's HTTPS traffic using a custom CA certificate you install on your phone. Once trusted, it can decrypt Instagram API calls and show you exact endpoints like <code className="bg-sky-100 dark:bg-sky-900 px-1 rounded font-mono">Follow User</code>, <code className="bg-sky-100 dark:bg-sky-900 px-1 rounded font-mono">Timeline Feed</code>, etc. in real time.
+            </div>
+          </div>
+
+          {/* Step 1 — Download & install CA cert */}
           <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-              {connectionMode === "wifi" ? "WiFi Proxy Setup on iPhone" : "SIM / Cellular Proxy Setup on iPhone"}
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-orange-500/15 text-orange-500 flex items-center justify-center font-bold text-[10px]">1</span>
+              Install the CA Certificate on iPhone (one time only)
+            </p>
+
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-2.5 text-xs text-amber-800 dark:text-amber-300">
+              <strong>⚠ Required for HTTPS decryption.</strong> Without this, Instagram traffic stays encrypted and only hostnames are logged. You only need to do this once — the certificate is saved permanently.
+            </div>
+
+            <ol className="space-y-2 text-xs text-muted-foreground">
+              <li className="flex gap-2">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">A</span>
+                <div className="space-y-1">
+                  <span>Click the button below to download the CA certificate file.</span>
+                  <div>
+                    <button
+                      onClick={downloadCaCert}
+                      disabled={!caCertReady && !running}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    >
+                      <Download className="w-3 h-3" />
+                      Download equinox-track-api-ca.crt
+                    </button>
+                    {!running && <span className="ml-2 text-orange-500">Start the proxy first to generate the cert.</span>}
+                  </div>
+                </div>
+              </li>
+              <li className="flex gap-2">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">B</span>
+                <span>AirDrop the <code className="bg-muted px-1 rounded font-mono text-foreground">.crt</code> file to your iPhone, or email it to yourself and open it on the iPhone. iOS will prompt: <em>"Profile Downloaded"</em> — tap <strong className="text-foreground">Close</strong>.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">C</span>
+                <span>On iPhone go to <strong className="text-foreground">Settings → General → VPN & Device Management</strong>. Tap the <strong className="text-foreground">Equinox Track API CA</strong> profile → tap <strong className="text-foreground">Install</strong> → enter your passcode → tap <strong className="text-foreground">Install</strong> again.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">D</span>
+                <span>Go to <strong className="text-foreground">Settings → General → About → Certificate Trust Settings</strong>. Under <em>Enable Full Trust For Root Certificates</em>, toggle <strong className="text-foreground">Equinox Track API CA</strong> to <span className="text-emerald-600 font-bold">ON</span>. Tap Continue when warned.</span>
+              </li>
+            </ol>
+          </div>
+
+          {/* Step 2 — Proxy setup */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <span className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">2</span>
+              {connectionMode === "wifi" ? "Configure WiFi Proxy on iPhone" : "Configure SIM Proxy on iPhone"}
             </p>
 
             {connectionMode === "wifi" ? (
               <>
                 <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded p-2.5 text-red-800 dark:text-red-300 text-xs">
-                  <strong>⚠ Phone loses internet after setting proxy?</strong> Windows Firewall is blocking the connection. Fix it first (Step 2 below) — this is the #1 cause.
+                  <strong>⚠ Phone loses internet after setting proxy?</strong> Windows Firewall is blocking port {port}. Run this in Admin PowerShell:
+                  <div className="flex items-center gap-1 mt-1 bg-zinc-900 text-green-400 px-2 py-1.5 rounded font-mono text-[10px] break-all">
+                    <span>netsh advfirewall firewall add rule name="Equinox Proxy" dir=in action=allow protocol=TCP localport={port}</span>
+                    <CopyButton value={`netsh advfirewall firewall add rule name="Equinox Proxy" dir=in action=allow protocol=TCP localport=${port}`} />
+                  </div>
                 </div>
                 <ol className="space-y-2 text-xs text-muted-foreground">
                   <li className="flex gap-2">
                     <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">1</span>
-                    <span>In the <strong className="text-foreground">Proxy Control</strong> panel above, click <strong className="text-foreground">Start Proxy</strong>. Then pick the IP labelled <strong className="text-foreground">WiFi ✓</strong> — avoid any Hyper-V / VPN / Docker IPs.</span>
+                    <span>Make sure your iPhone is on the <strong className="text-foreground">same WiFi</strong> as this PC. Start the proxy above and pick the IP labelled <strong className="text-foreground">WiFi ✓</strong>.</span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-red-500/15 text-red-500 flex items-center justify-center font-bold text-[10px]">2</span>
-                    <div className="space-y-1">
-                      <span className="text-foreground font-semibold">Allow the proxy through Windows Firewall</span>
-                      <p>Press <strong className="text-foreground">Win + R</strong>, type <code className="bg-muted px-1 rounded font-mono text-foreground">wf.msc</code>, press Enter. In the left panel click <strong className="text-foreground">Inbound Rules → New Rule</strong>. Choose <strong className="text-foreground">Port</strong>, TCP, enter <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>, allow the connection, apply to all profiles, name it <em>Equinox Proxy</em>.</p>
-                      <p className="text-muted-foreground">Or run this one-liner in an <strong className="text-foreground">Admin PowerShell</strong>:</p>
-                      <div className="flex items-center gap-1 bg-zinc-900 text-green-400 px-2 py-1.5 rounded font-mono text-[10px] break-all">
-                        <span>netsh advfirewall firewall add rule name="Equinox Proxy" dir=in action=allow protocol=TCP localport={port}</span>
-                        <CopyButton value={`netsh advfirewall firewall add rule name="Equinox Proxy" dir=in action=allow protocol=TCP localport=${port}`} />
-                      </div>
-                    </div>
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">2</span>
+                    <span>On iPhone: <strong className="text-foreground">Settings → Wi-Fi → ⓘ</strong> next to your network → <strong className="text-foreground">Configure Proxy → Manual</strong>.</span>
                   </li>
                   <li className="flex gap-2">
                     <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">3</span>
-                    <span>Make sure your iPhone is connected to the <strong className="text-foreground">same WiFi network</strong> as this PC.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">4</span>
-                    <span>On your iPhone go to <strong className="text-foreground">Settings → Wi-Fi</strong> and tap the <strong className="text-foreground">ⓘ</strong> next to your connected network.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
-                    <span>Scroll down to <strong className="text-foreground">HTTP Proxy</strong> → tap <strong className="text-foreground">Configure Proxy</strong> → select <strong className="text-foreground">Manual</strong>.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
                     <div>
-                      <span>Set <strong className="text-foreground">Server</strong> to </span>
-                      <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code>
-                      <span> and <strong className="text-foreground">Port</strong> to </span>
-                      <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>
-                      <span>. Leave Authentication off.</span>
+                      Set <strong className="text-foreground">Server</strong> to <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code> and <strong className="text-foreground">Port</strong> to <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>. Tap <strong className="text-foreground">Save</strong>.
                     </div>
                   </li>
                   <li className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">7</span>
-                    <span>Tap <strong className="text-foreground">Save</strong> in the top-right corner.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">8</span>
-                    <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone and browse normally — traffic appears in the log instantly. Instagram uses HTTPS, so entries show as <strong className="text-foreground">CONNECT</strong> lines (e.g. <code className="bg-muted px-1 rounded font-mono">i.instagram.com:443</code>).</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center font-bold text-[10px]">✓</span>
-                    <span>When done, go back to <strong className="text-foreground">Settings → Wi-Fi → ⓘ → Configure Proxy → Off</strong> to remove the proxy from your iPhone.</span>
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold text-[10px]">✓</span>
+                    <span>Open Instagram — API calls appear in the log below with labelled endpoints. When done, go back and set <strong className="text-foreground">Configure Proxy → Off</strong>.</span>
                   </li>
                 </ol>
               </>
-            
             ) : (
               <ol className="space-y-2 text-xs text-muted-foreground">
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">1</span>
-                  <span>On your router, set up <strong className="text-foreground">port forwarding</strong>: forward external TCP port <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code> to this PC's local IP address.</span>
+                  <span>On your router, forward external TCP port <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code> to this PC's local IP.</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">2</span>
-                  <span>Turn <strong className="text-foreground">WiFi off</strong> on your iPhone so it uses SIM data only (Settings → Wi-Fi → toggle off).</span>
+                  <span>Turn <strong className="text-foreground">WiFi off</strong> on iPhone so it uses SIM only.</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">3</span>
-                  <span>On your iPhone go to <strong className="text-foreground">Settings → Mobile Data → Mobile Data Options → Mobile Data Network</strong> (or <strong className="text-foreground">Cellular → Cellular Data Options → Cellular Data Network</strong> in some regions).</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">4</span>
                   <div>
-                    <span>Under the <strong className="text-foreground">Personal Hotspot</strong> or <strong className="text-foreground">LTE/4G</strong> section, scroll to <strong className="text-foreground">Proxy</strong> and enter Server: </span>
-                    <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code>
-                    <span> Port: </span>
-                    <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>.
+                    iPhone → <strong className="text-foreground">Settings → Mobile Data → APNs</strong> or use an app like <strong className="text-foreground">Shadowrocket</strong>: set proxy host to <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code> port <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>.
                   </div>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
-                  <span>Alternatively, use a <strong className="text-foreground">VPN / profile</strong> that routes all traffic through your proxy — see apps like <strong className="text-foreground">Shadowrocket</strong> or <strong className="text-foreground">Quantumult X</strong> (App Store).</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
-                  <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone — all traffic will appear in the log below.</span>
                 </li>
               </ol>
             )}
           </div>
 
-          {/* HTTPS note */}
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-300">
-            <strong>HTTPS note:</strong> Instagram uses HTTPS for all API calls. This proxy logs the destination hostname for every HTTPS connection (e.g. <code className="font-mono">CONNECT i.instagram.com:443</code>) but not the path inside the encrypted tunnel. To see full paths like <code className="font-mono">/api/v1/feed/timeline/</code>, you need a MITM proxy with a trusted CA certificate installed on your iPhone — use <strong>mitmproxy</strong> or <strong>Charles Proxy</strong> and trust their root cert in iPhone Settings → General → About → Certificate Trust Settings.
-          </div>
         </div>
       )}
     </div>

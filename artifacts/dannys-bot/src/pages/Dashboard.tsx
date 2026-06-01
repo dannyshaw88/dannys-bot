@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.708",
+    date: "1 Jun 2026",
+    items: [
+      { category: "New", text: "Track API is now a full TLS MITM proxy — instead of just showing CONNECT tunnel hostnames, it decrypts HTTPS traffic and logs the actual Instagram API endpoints (e.g. Timeline Feed, Follow User, Like Post, Send DM)." },
+      { category: "New", text: "Track API shows a plain-English label badge on every recognised Instagram API call — over 60 endpoint patterns mapped including feed, friendships, media, direct messages, stories, explore, and more." },
+      { category: "New", text: "Track API generates a CA certificate on first start — download it, AirDrop to iPhone, install the profile, and trust it in Certificate Trust Settings to enable full HTTPS decryption." },
+      { category: "Improvement", text: "Track API log now has a Hide Tunnels toggle (on by default) that removes raw CONNECT lines so only decoded API calls are visible. An Instagram calls counter shows how many IG endpoints were captured." },
+    ],
+  },
+  {
     version: "1.0.707",
     date: "1 Jun 2026",
     items: [
