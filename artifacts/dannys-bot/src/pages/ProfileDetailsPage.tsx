@@ -1241,6 +1241,15 @@ export function ProfileDetailsPage() {
                         value={formData.userAgentApi ?? ""}
                         onSelect={handleUaDeviceSelect}
                       />
+                      {formData.userAgentApi && (
+                        <input
+                          readOnly
+                          className="flex h-9 w-full rounded-md border border-input bg-muted/30 px-3 py-1 text-xs font-mono text-muted-foreground shadow-sm cursor-text select-all"
+                          value={formData.userAgentApi}
+                          title={formData.userAgentApi}
+                          onFocus={e => e.currentTarget.select()}
+                        />
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">

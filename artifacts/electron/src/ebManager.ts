@@ -1275,6 +1275,58 @@ export async function openEbWindow(opts: {
   // Flush any stale DNS cache that could route requests around the proxy
   try { await ses.clearHostResolverCache(); } catch {}
 
+  // ── ig_nrcb pre-seed ───────────────────────────────────────────────────────
+  // ig_nrcb (non-removable cookie backup) tells Instagram this device has
+  // previously accepted cookies.  On a completely fresh session the cookie is
+  // absent, which triggers Instagram's cookie-consent challenge flow:
+  //   scraping_warning → consent/?flow=user_cookie_choice_v2 → scraping_warning (loop)
+  // Setting it to "1" before the first navigation prevents the challenge from
+  // firing entirely.  Only set when absent so we never overwrite a real value
+  // that Instagram has already written (device fingerprint continuity).
+  (async () => {
+    try {
+      const existing = await ses.cookies.get({ name: "ig_nrcb", domain: ".instagram.com" });
+      if (existing.length === 0) {
+        await ses.cookies.set({
+          url:            "https://www.instagram.com",
+          name:           "ig_nrcb",
+          value:          "1",
+          domain:         ".instagram.com",
+          path:           "/",
+          secure:         true,
+          sameSite:       "lax",
+          expirationDate: Math.floor(Date.now() / 1000) + 365 * 24 * 3600,
+        });
+        console.log(`[ebManager:${profileId}] ig_nrcb pre-seeded for fresh session`);
+      }
+    } catch { /* non-fatal */ }
+  })();
+
+  // ── Scraping-warning intercept ─────────────────────────────────────────────
+  // Intercept /accounts/scraping_warning/ BEFORE Chrome follows the redirect so
+  // the loop never starts.  Extract the 'next' param (the cookie-consent URL),
+  // strip __coig_challenge_redirected=1 (the flag that makes consent/ loop back),
+  // and redirect Chrome directly to the consent page.
+  ses.webRequest.onBeforeRequest(
+    { urls: ["*://www.instagram.com/accounts/scraping_warning/*"] },
+    (details, callback) => {
+      try {
+        const u = new URL(details.url);
+        const nextRaw = u.searchParams.get("next");
+        if (nextRaw) {
+          const nu = new URL(nextRaw);
+          nu.searchParams.delete("__coig_challenge_redirected");
+          console.warn(`[ebManager:${profileId}] scraping_warning intercepted — redirecting to consent page`);
+          callback({ redirectURL: nu.toString() });
+        } else {
+          callback({ redirectURL: "https://www.instagram.com/accounts/login/" });
+        }
+      } catch {
+        callback({ redirectURL: "https://www.instagram.com/accounts/login/" });
+      }
+    }
+  );
+
   // ── Accept-Language header alignment ───────────────────────────────────────
   // navigator.languages is overridden in JS to ["en-US","en"], but the actual
   // HTTP Accept-Language header Chrome sends is determined by the process locale,
@@ -1584,6 +1636,37 @@ export async function openEbWindow(opts: {
           `window.updateUrl && window.updateUrl(${JSON.stringify(navUrl)})`
         ).catch(() => {});
       }
+    }
+    // Consent page auto-accept: fires when the scraping_warning intercept
+    // redirects Chrome to the cookie-consent page.  Click "Allow all cookies"
+    // automatically so the session can proceed without manual intervention.
+    if (navUrl.includes("instagram.com/consent/") && navUrl.includes("user_cookie_choice")) {
+      console.log(`[ebManager:${profileId}] consent page loaded — auto-accepting cookies`);
+      await new Promise(r => setTimeout(r, 1800));
+      if (!win.isDestroyed()) {
+        win.webContents.executeJavaScript(`
+          (function() {
+            var btns = Array.from(document.querySelectorAll('button,[role="button"]'));
+            var accept = btns.find(function(b) {
+              var t = (b.textContent || b.getAttribute('aria-label') || '').toLowerCase().trim();
+              return t.includes('allow') || t.includes('accept') || t.includes('akzept') ||
+                     t.includes('accepter') || t.includes('izin') || t.includes('kabul') ||
+                     t.includes('alle') || t.includes('tout');
+            });
+            if (accept) { accept.click(); return 'clicked:' + accept.textContent.trim().slice(0,30); }
+            // Fallback: first non-decline button
+            var fallback = btns.find(function(b) {
+              var t = (b.textContent || '').toLowerCase().trim();
+              return !t.includes('decline') && !t.includes('reject') && !t.includes('refuse') && t.length > 2;
+            });
+            if (fallback) { fallback.click(); return 'fallback:' + fallback.textContent.trim().slice(0,30); }
+            return 'no-button-found';
+          })()
+        `).then((r: unknown) => {
+          console.log(`[ebManager:${profileId}] consent auto-accept result: ${r}`);
+        }).catch(() => {});
+      }
+      return;
     }
     if (!navUrl.includes("instagram.com")) return;
     await new Promise(r => setTimeout(r, 600));
@@ -2002,13 +2085,38 @@ export async function openEbWindow(opts: {
     if (ts && ts.tabs[0]) { ts.tabs[0].title = `@${username}`; pushTabUpdate(profileId); }
   });
 
-  // Right-click context menu: cut / copy / paste / select-all
+  // Right-click context menu: cut / copy / paste / select-all + debug tools
   win.webContents.on("context-menu", (_e, params) => {
     const tpl: Electron.MenuItemConstructorOptions[] = [];
     if (params.editFlags.canCut)   tpl.push({ role: "cut" });
     if (params.editFlags.canCopy)  tpl.push({ role: "copy" });
     if (params.editFlags.canPaste) tpl.push({ role: "paste" });
     tpl.push({ type: "separator" }, { role: "selectAll" });
+    tpl.push({ type: "separator" });
+    tpl.push({
+      label: "View Page Source",
+      click: async () => {
+        try {
+          const html = await win.webContents.executeJavaScript("document.documentElement.outerHTML");
+          const ts = Date.now();
+          const savePath = path.join(_cookiesDir, `source-${profileId}-${ts}.html`);
+          fs.writeFileSync(savePath, String(html), "utf8");
+          console.log(`[ebManager:${profileId}] Page source saved: ${savePath}`);
+          dialog.showMessageBox(win, {
+            type:    "info",
+            title:   "Page Source Saved",
+            message: `Source saved to:\n${savePath}`,
+            buttons: ["OK"],
+          }).catch(() => {});
+        } catch (err) {
+          console.error(`[ebManager:${profileId}] View Source failed:`, err);
+        }
+      },
+    });
+    tpl.push({
+      label: "Open DevTools",
+      click: () => { win.webContents.openDevTools(); },
+    });
     Menu.buildFromTemplate(tpl).popup({ window: win });
   });
 

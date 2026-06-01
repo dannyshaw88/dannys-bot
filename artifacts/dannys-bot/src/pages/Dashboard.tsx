@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.714",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser: scraping-warning blank screen now prevented at the source — fresh sessions have the cookie-consent token pre-seeded so Instagram skips the challenge entirely." },
+      { category: "Fix", text: "Embedded browser: if the consent page does load, the app automatically clicks Allow All Cookies and continues, with no blank screen." },
+      { category: "Fix", text: "Account settings: full API User Agent string is now shown in a readable field below the device picker so you can see the complete string without truncation." },
+      { category: "New", text: "Embedded browser: right-click now shows View Page Source — saves the page HTML to a file and shows you the path, useful for diagnosing blank screens." },
+      { category: "New", text: "Embedded browser: right-click now includes Open DevTools for live debugging of any page in the embedded browser." },
+    ],
+  },
+  {
     version: "1.0.713",
     date: "1 Jun 2026",
     items: [
