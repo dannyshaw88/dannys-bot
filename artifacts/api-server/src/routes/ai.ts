@@ -96,7 +96,7 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
     const outDim = OUTPUT_DIMS[randInt(0, OUTPUT_DIMS.length - 1)];
     const prompt = SELFIE_PROMPTS[randInt(0, SELFIE_PROMPTS.length - 1)];
 
-    // DALL-E 3 portrait — 1024×1792 is the closest to a phone selfie ratio
+    // gpt-image-1 portrait — 1024×1536, returns b64_json directly
     const openaiRes = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
@@ -104,10 +104,10 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "dall-e-3",
+        model: "gpt-image-1",
         prompt,
         n: 1,
-        size: "1024x1792",
+        size: "1024x1536",
       }),
     });
 
@@ -117,15 +117,11 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
     }
 
     const data = await openaiRes.json() as any;
-    const imageUrl = data.data?.[0]?.url;
-    if (!imageUrl) return res.status(500).json({ error: "No image URL returned from OpenAI" });
-
-    // Fetch the image bytes from the returned URL
-    const imgFetch = await fetch(imageUrl);
-    if (!imgFetch.ok) return res.status(500).json({ error: "Failed to download generated image" });
+    const b64 = data.data?.[0]?.b64_json;
+    if (!b64) return res.status(500).json({ error: "No image data returned from OpenAI" });
 
     // Convert to JPEG at randomised output dimensions (strips all AI metadata)
-    const inputBuffer = Buffer.from(await imgFetch.arrayBuffer());
+    const inputBuffer = Buffer.from(b64, "base64");
     const sharpFn = await getSharp();
     if (!sharpFn) {
       return res.status(500).json({ error: "Image processing library (sharp) is not available on this platform." });

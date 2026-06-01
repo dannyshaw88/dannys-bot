@@ -60,6 +60,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.701",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "AI Image generator switched to OpenAI's new gpt-image-1 model — the previous dall-e-3 model is no longer available on standard API keys." },
+    ],
+  },
+  {
     version: "1.0.700",
     date: "1 Jun 2026",
     items: [
