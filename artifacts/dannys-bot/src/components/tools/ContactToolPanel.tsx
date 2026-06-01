@@ -14,6 +14,7 @@ interface Props {
   profile: Profile;
   copyOpen?: boolean;
   onCopyOpenChange?: (v: boolean) => void;
+  embedded?: boolean;
 }
 
 type SubTab = "new-followers" | "contact-users" | "auto-reply";
@@ -57,7 +58,7 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
 ];
 
-export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange }: Props) {
+export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, embedded }: Props) {
   const [activeTab, setActiveTab] = useState<SubTab>("new-followers");
   const [copyOpen, _setCopyOpen] = useState(false);
   const _copyOpen = copyOpenProp ?? copyOpen;
@@ -140,13 +141,13 @@ export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopy
 
       {/* Panel content */}
       {activeTab === "new-followers" && (
-        <ContactNewFollowersPanel tool={tool} profile={profile} />
+        <ContactNewFollowersPanel tool={tool} profile={profile} embedded={embedded} />
       )}
       {activeTab === "contact-users" && (
-        <ContactUsersPanel tool={tool} profile={profile} />
+        <ContactUsersPanel tool={tool} profile={profile} embedded={embedded} />
       )}
       {activeTab === "auto-reply" && (
-        <AutoReplyPanel tool={tool} profile={profile} />
+        <AutoReplyPanel tool={tool} profile={profile} embedded={embedded} />
       )}
 
       <CopySettingsDialog

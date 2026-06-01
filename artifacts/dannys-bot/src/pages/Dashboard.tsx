@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.722",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix",    text: "Force Emulation now sends POST requests to the endpoints that require it (timeline, QE sync, launcher sync, analytics) — previously they used GET and were silently rejected by Instagram." },
+      { category: "Fix",    text: "Enabling the Human Session master toggle no longer forces the Unfollow and Contact tools on — each tool's own checkbox controls it independently." },
+      { category: "Fix",    text: "Execution-status timestamps (Executing / Scheduled for…) are now hidden next to embedded tool checkboxes inside the Human Session panel, since timing is managed by the session itself." },
+      { category: "New",    text: "Copy Settings on the Human Session panel now includes Execution Order and Skip Chance settings for the Follow, Unfollow and Contact embedded tools." },
+      { category: "Fix",    text: "Clicking Target Sources in the Follow Tool no longer causes a visible UI stutter — the view transition is now deferred." },
+    ],
+  },
+  {
     version: "1.0.721",
     date: "1 Jun 2026",
     items: [

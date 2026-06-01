@@ -12,6 +12,7 @@ import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 interface Props {
   tool: Tool;
   profile: Profile;
+  embedded?: boolean;
 }
 
 function applySpintax(text: string): string {
@@ -21,7 +22,7 @@ function applySpintax(text: string): string {
   });
 }
 
-export function ContactNewFollowersPanel({ tool, profile }: Props) {
+export function ContactNewFollowersPanel({ tool, profile, embedded }: Props) {
   const updateToolMutation = useUpdateTool();
   const queryClient = useQueryClient();
   const engineStatus = useProfileEngineStatus(tool.profileId);
@@ -123,7 +124,7 @@ export function ContactNewFollowersPanel({ tool, profile }: Props) {
           <label htmlFor="contactNewFollowersEnabled" className="text-sm font-semibold cursor-pointer select-none">Contact New Followers</label>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] text-muted-foreground">Automatically queue DMs for new followers of this account.</p>
-            {(() => {
+            {!embedded && (() => {
               if (!settings.contactNewFollowersEnabled) return null;
               const nextAt = engineStatus?.nextContactAt ?? 0;
               if (!nextAt) return null;

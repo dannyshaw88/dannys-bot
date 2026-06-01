@@ -16,6 +16,7 @@ interface AutoReplyRule {
 interface Props {
   tool: Tool;
   profile: Profile;
+  embedded?: boolean;
 }
 
 function applySpintax(text: string): string {
@@ -25,7 +26,7 @@ function applySpintax(text: string): string {
   });
 }
 
-export function AutoReplyPanel({ tool, profile }: Props) {
+export function AutoReplyPanel({ tool, profile, embedded }: Props) {
   const updateToolMutation = useUpdateTool();
   const engineStatus = useProfileEngineStatus(tool.profileId);
 
@@ -89,7 +90,7 @@ export function AutoReplyPanel({ tool, profile }: Props) {
           <label htmlFor="autoReplyEnabled" className="text-sm font-semibold cursor-pointer select-none">Auto Reply</label>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] text-muted-foreground">Automatically reply to DMs containing specific trigger words.</p>
-            {(() => {
+            {!embedded && (() => {
               if (!settings.autoReplyEnabled) return null;
               const nextAt = engineStatus?.nextContactAt ?? 0;
               if (!nextAt) return null;

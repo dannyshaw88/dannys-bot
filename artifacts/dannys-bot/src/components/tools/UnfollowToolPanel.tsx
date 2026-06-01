@@ -190,7 +190,7 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           <label htmlFor={`uf-enabled-${tool.id}`} className={`text-sm font-medium cursor-pointer select-none ${tool.enabled ? "text-primary" : "text-muted-foreground"}`}>
             {tool.enabled ? "ACTIVE" : "STOPPED"}
           </label>
-          {nextUnfollowStatus && (
+          {!hideEnableToggle && nextUnfollowStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextUnfollowStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
               {nextUnfollowStatus.executing
@@ -199,7 +199,7 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               }
             </span>
           )}
-          {tool.enabled && perHour > 0 && (
+          {!hideEnableToggle && tool.enabled && perHour > 0 && (
             <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
               {perHour}/hr · {perDay}/day
             </span>

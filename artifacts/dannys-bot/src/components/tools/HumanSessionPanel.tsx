@@ -73,6 +73,20 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       { key: "hs_autoReplyEnabled",   label: "Auto Reply — Start / Stop",              description: "Copy the Auto Reply enabled checkbox" },
       { key: "hs_contactUsersEnabled",label: "Contact Users Sending — Start / Stop",   description: "Copy the Contact Users Sending enabled checkbox" },
     ]},
+    { label: "Embedded Tool Execution Order", options: [
+      { key: "hs_followOrder", label: "Follow Tool — Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Follow Tool", subOptions: [
+        { key: "fo_orderRange", label: "Execution order (min / max)", settingKeys: ["followOrderMin","followOrderMax"] },
+        { key: "fo_skipRange",  label: "Skip chance % (min / max)",   settingKeys: ["followSkipMin","followSkipMax"] },
+      ]},
+      { key: "hs_unfollowOrder", label: "Unfollow Tool — Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Unfollow Tool", subOptions: [
+        { key: "ufo_orderRange", label: "Execution order (min / max)", settingKeys: ["unfollowOrderMin","unfollowOrderMax"] },
+        { key: "ufo_skipRange",  label: "Skip chance % (min / max)",   settingKeys: ["unfollowSkipMin","unfollowSkipMax"] },
+      ]},
+      { key: "hs_contactOrder", label: "Contact Tool — Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Contact Tool", subOptions: [
+        { key: "co_orderRange", label: "Execution order (min / max)", settingKeys: ["contactOrderMin","contactOrderMax"] },
+        { key: "co_skipRange",  label: "Skip chance % (min / max)",   settingKeys: ["contactSkipMin","contactSkipMax"] },
+      ]},
+    ]},
     { label: "Actions", options: [
       { key: "viewTimelineFeed", label: "View Timeline Feed", description: "Scrolling through the main feed + inline liking", subOptions: [
         { key: "vtf_enabled",    label: "Enabled",                                       settingKeys: ["viewTimelineFeedEnabled"] },
@@ -360,8 +374,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             onCheckedChange={(enabled) => {
               updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled });
               if (followTool) embeddedUpdateTool.mutate({ id: followTool.id, profileId: followTool.profileId, enabled });
-              if (unfollowTool) embeddedUpdateTool.mutate({ id: unfollowTool.id, profileId: unfollowTool.profileId, enabled });
-              if (contactTool) embeddedUpdateTool.mutate({ id: contactTool.id, profileId: contactTool.profileId, enabled });
             }}
             disabled={updateToolMutation.isPending}
           />
@@ -1356,7 +1368,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
             <div className="p-4">
-              <ContactToolPanel tool={contactTool} profile={profile} />
+              <ContactToolPanel tool={contactTool} profile={profile} embedded />
             </div>
           </div>
         </div>

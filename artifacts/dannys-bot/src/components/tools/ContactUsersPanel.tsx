@@ -14,6 +14,7 @@ import { type Tool, type Profile, type ContactPendingMessage } from "@shared/sch
 interface Props {
   tool: Tool;
   profile: Profile;
+  embedded?: boolean;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -28,7 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
   unsent: "text-gray-500 bg-gray-50 border-gray-200",
 };
 
-export function ContactUsersPanel({ tool, profile }: Props) {
+export function ContactUsersPanel({ tool, profile, embedded }: Props) {
   const updateToolMutation = useUpdateTool();
   const queryClient = useQueryClient();
   const engineStatus = useProfileEngineStatus(tool.profileId);
@@ -151,7 +152,7 @@ export function ContactUsersPanel({ tool, profile }: Props) {
           <label htmlFor="contactUsersEnabled" className="text-sm font-semibold cursor-pointer select-none">Contact Users Sending</label>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] text-muted-foreground">Automatically send DMs from the Pending Messages queue.</p>
-            {(() => {
+            {!embedded && (() => {
               if (!settings.contactUsersEnabled) return null;
               const nextAt = engineStatus?.nextContactAt ?? 0;
               if (!nextAt) return null;

@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useTransition, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useProfileEngineStatus } from "@/hooks/use-engine-status";
@@ -208,6 +208,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const [sourceSearch, setSourceSearch] = useState("");
   const [showSources, setShowSources] = useState(false);
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
+  const [, startSourcesTransition] = useTransition();
 
   const { data: followedUsersList, isLoading: followedUsersLoading } = useQuery<FollowedUser[]>({
     queryKey: [`/api/profiles/${tool.profileId}/followed-users`],
@@ -732,7 +733,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                 </span>
                 </>)}
                 <button
-                  onClick={() => setShowSources(true)}
+                  onClick={() => startSourcesTransition(() => setShowSources(true))}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border bg-background hover:bg-accent/50 hover:border-primary/40 transition-colors text-xs font-medium text-foreground"
                 >
                   <Users className="w-3.5 h-3.5 text-primary" />
