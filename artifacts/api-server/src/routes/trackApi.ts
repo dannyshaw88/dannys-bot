@@ -8,6 +8,7 @@ import * as tls from "tls";
 import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "node:crypto";
 import * as forge from "node-forge";
 import { WebSocketServer, WebSocket } from "ws";
 
@@ -164,10 +165,18 @@ function ensureCa(): { caKey: forge.pki.rsa.PrivateKey; caCert: forge.pki.Certif
     } catch {}
   }
 
-  console.log("[track-api] Generating new CA certificate (first run, ~2s)…");
-  const keypair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+  console.log("[track-api] Generating new CA certificate (first run)…");
+  // Use Node.js native crypto (OpenSSL C++) — ~50ms vs ~2000ms with forge's pure-JS RSA
+  const { privateKey: caKeyPem, publicKey: caPubKeyPem } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs1", format: "pem" },
+  });
+  const caPrivKeyForge = forge.pki.privateKeyFromPem(caKeyPem as string);
+  const caPubKeyForge = forge.pki.publicKeyFromPem(caPubKeyPem as string);
+
   const cert = forge.pki.createCertificate();
-  cert.publicKey = keypair.publicKey;
+  cert.publicKey = caPubKeyForge;
   cert.serialNumber = "01";
   cert.validity.notBefore = new Date();
   cert.validity.notAfter = new Date();
@@ -185,14 +194,14 @@ function ensureCa(): { caKey: forge.pki.rsa.PrivateKey; caCert: forge.pki.Certif
     { name: "keyUsage", keyCertSign: true, cRLSign: true },
     { name: "subjectKeyIdentifier" },
   ]);
-  cert.sign(keypair.privateKey, forge.md.sha256.create());
+  cert.sign(caPrivKeyForge, forge.md.sha256.create());
 
-  const keyPem = forge.pki.privateKeyToPem(keypair.privateKey);
+  const keyPem = caKeyPem as string;
   const certPem = forge.pki.certificateToPem(cert);
   fs.writeFileSync(keyPath, keyPem);
   fs.writeFileSync(certPath, certPem);
 
-  _caKey = keypair.privateKey;
+  _caKey = caPrivKeyForge;
   _caCert = cert;
   console.log("[track-api] CA certificate generated and saved.");
   return { caKey: _caKey, caCert: _caCert };
@@ -203,9 +212,19 @@ function getCertForHost(hostname: string): { key: string; cert: string } {
   if (cached) return cached;
 
   const { caKey, caCert } = ensureCa();
-  const keypair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+
+  // Use Node.js native crypto (OpenSSL C++) — ~50ms vs ~2000ms with forge's pure-JS RSA.
+  // Without this, generating certs for each Instagram subdomain blocks the entire event loop
+  // for ~2 seconds, causing ALL iPhone proxy traffic to queue up and time out ("No Internet").
+  const { privateKey: domKeyPem, publicKey: domPubKeyPem } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs1", format: "pem" },
+  });
+  const domPubKeyForge = forge.pki.publicKeyFromPem(domPubKeyPem as string);
+
   const cert = forge.pki.createCertificate();
-  cert.publicKey = keypair.publicKey;
+  cert.publicKey = domPubKeyForge;
   cert.serialNumber = String(Date.now());
   cert.validity.notBefore = new Date();
   cert.validity.notAfter = new Date();
@@ -222,7 +241,7 @@ function getCertForHost(hostname: string): { key: string; cert: string } {
   cert.sign(caKey, forge.md.sha256.create());
 
   const result = {
-    key: forge.pki.privateKeyToPem(keypair.privateKey),
+    key: domKeyPem as string,
     cert: forge.pki.certificateToPem(cert),
   };
   _certCache.set(hostname, result);

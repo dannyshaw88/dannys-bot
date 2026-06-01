@@ -60,6 +60,13 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.710",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Track API: phone no longer loses internet connection when the proxy is active — root cause was forge's pure-JavaScript RSA key generation (1–3 seconds per domain cert) blocking the entire Node.js event loop, causing every queued iPhone connection to time out. Cert generation now uses Node.js's native OpenSSL implementation (~50ms) so the proxy stays responsive at all times." },
+    ],
+  },
+  {
     version: "1.0.709",
     date: "1 Jun 2026",
     items: [
