@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.703",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "AI Image generator now retries up to 3 times if Pollinations.ai is busy, so a single rate-limit no longer blocks generation." },
+      { category: "Fix", text: "Generated selfie now displays correctly in portrait — was previously squished into a square." },
+      { category: "Fix", text: "Generate button now shows a live second counter (e.g. 'Generating… 12s') so you can see it's working." },
+    ],
+  },
+  {
     version: "1.0.702",
     date: "1 Jun 2026",
     items: [

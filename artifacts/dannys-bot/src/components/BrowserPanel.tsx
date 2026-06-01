@@ -125,6 +125,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [fileChooserPending, setFileChooserPending] = useState(false);
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiElapsed, setAiElapsed] = useState(0);
   const [aiResult, setAiResult] = useState<{ imageBase64: string; fileName: string; metadata: { make: string; model: string; shotAt: string; iso: number } } | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -1329,8 +1330,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               disabled={aiLoading}
               onClick={async () => {
                 setAiLoading(true);
+                setAiElapsed(0);
                 setAiError(null);
                 setAiResult(null);
+                const timer = setInterval(() => setAiElapsed(s => s + 1), 1000);
                 try {
                   const { protocol, hostname, port } = window.location;
                   const apiOrigin = port === "5000"
@@ -1343,11 +1346,12 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                 } catch (e: any) {
                   setAiError(e?.message ?? "Network error");
                 } finally {
+                  clearInterval(timer);
                   setAiLoading(false);
                 }
               }}
             >
-              {aiLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</> : <><Sparkles className="w-3.5 h-3.5" /> Generate Selfie</>}
+              {aiLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating… {aiElapsed}s</> : <><Sparkles className="w-3.5 h-3.5" /> Generate Selfie</>}
             </Button>
 
             {aiError && (
@@ -1359,7 +1363,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                 <img
                   src={`data:image/jpeg;base64,${aiResult.imageBase64}`}
                   alt="Generated selfie"
-                  className="w-full rounded-lg border border-border object-cover aspect-square"
+                  className="w-full rounded-lg border border-border object-contain max-h-72"
                 />
                 <div className="text-[10px] text-muted-foreground space-y-0.5">
                   <div>📱 {aiResult.metadata.make} {aiResult.metadata.model}</div>

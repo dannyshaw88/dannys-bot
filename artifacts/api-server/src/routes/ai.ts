@@ -89,15 +89,33 @@ aiRouter.post("/generate-selfie", async (req: Request, res: Response) => {
     const prompt = SELFIE_PROMPTS[randInt(0, SELFIE_PROMPTS.length - 1)];
 
     // Pollinations.ai — completely free, no API key needed
-    const seed = randInt(1, 999999);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1536&model=flux-realism&nologo=true&enhance=true&seed=${seed}`;
-    const imgRes = await fetch(url, { signal: AbortSignal.timeout(60000) });
-    if (!imgRes.ok) {
-      return res.status(500).json({ error: `Image generation failed (status ${imgRes.status}). Try again.` });
+    // Try up to 3 times — rotate models so a busy server doesn't block all retries
+    const MODELS = ["flux-realism", "flux", "flux-realism"];
+    let lastStatus = 0;
+    let imgBuffer: Buffer | null = null;
+    for (let attempt = 0; attempt < MODELS.length; attempt++) {
+      const seed = randInt(1, 999999);
+      const model = MODELS[attempt];
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1536&model=${model}&nologo=true&enhance=true&seed=${seed}&private=true`;
+      try {
+        const imgRes = await fetch(url, { signal: AbortSignal.timeout(45000) });
+        lastStatus = imgRes.status;
+        if (imgRes.ok) {
+          imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+          break;
+        }
+      } catch {
+        lastStatus = 0;
+      }
+      // Small wait before retry
+      if (attempt < MODELS.length - 1) await new Promise(r => setTimeout(r, 2000));
+    }
+    if (!imgBuffer) {
+      return res.status(500).json({ error: `Image generation failed after 3 attempts (last status: ${lastStatus || "timeout"}). Pollinations.ai may be busy — try again in a moment.` });
     }
 
     // Convert to JPEG at randomised output dimensions (strips all AI metadata)
-    const inputBuffer = Buffer.from(await imgRes.arrayBuffer());
+    const inputBuffer = imgBuffer;
     const sharpFn = await getSharp();
     if (!sharpFn) {
       return res.status(500).json({ error: "Image processing library (sharp) is not available on this platform." });
