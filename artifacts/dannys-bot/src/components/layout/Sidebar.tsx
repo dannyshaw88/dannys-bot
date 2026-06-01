@@ -1,5 +1,4 @@
-import { useLocation, useSearch } from "wouter";
-import { ChevronRight } from "lucide-react";
+import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
@@ -48,10 +47,15 @@ function FilledBarChartIcon({ className, style }: { className?: string; style?: 
   );
 }
 
-function FilledStarIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+function FilledTrackApiIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path fill="currentColor" stroke="none" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+      {/* Network trace / waveform pulse — represents intercepted API traffic */}
+      <rect fill="currentColor" x="2" y="11" width="3" height="2" rx="1"/>
+      <rect fill="currentColor" x="7" y="8" width="2" height="8" rx="1"/>
+      <rect fill="currentColor" x="11" y="5" width="2" height="14" rx="1"/>
+      <rect fill="currentColor" x="15" y="8" width="2" height="8" rx="1"/>
+      <rect fill="currentColor" x="19" y="11" width="3" height="2" rx="1"/>
     </svg>
   );
 }
@@ -85,18 +89,8 @@ function FilledShieldAlertIcon({ className, style }: { className?: string; style
   );
 }
 
-const TRUST_SCORE_TABS = [
-  { value: "settings",      label: "ACCOUNT SETTINGS"       },
-  { value: "follow",        label: "FOLLOW TOOL"             },
-  { value: "unfollow",      label: "UNFOLLOW TOOL"           },
-  { value: "contact",       label: "CONTACT TOOL"            },
-  { value: "human-session", label: "HUMAN SESSION EMULATION" },
-];
-
-
 export function Sidebar() {
   const [location, setLocation] = useLocation();
-  const search = useSearch();
   const slot = useSidebarSlot();
   const { pushLocation } = useNavigationHistory();
 
@@ -104,18 +98,14 @@ export function Sidebar() {
     pushLocation(location);
   }, [location]);
 
-  const trustScoreMatch = location.match(/^\/trust-scores\/([^?/]+)/);
-  const activeTrustScoreId = trustScoreMatch ? trustScoreMatch[1] : null;
-  const activeTab = new URLSearchParams(search).get("tab") ?? "settings";
-
   const BRAND = "#1AD2F2";
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Accounts",        shortLabel: "ACCOUNTS",       path: "/profiles",     icon: FilledPersonIcon      },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon    },
-    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: FilledGhostIcon       },
-    { name: "TrustScores",     shortLabel: "TRUSTSCORES",    path: "/trust-scores", icon: FilledStarIcon        },
-    { name: "Account Import",  shortLabel: "ACCOUNT IMPORT", path: "/bulk-import",  icon: FilledBulkImportIcon  },
+    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost",  icon: FilledGhostIcon       },
+    { name: "Track API",       shortLabel: "TRACK API",      path: "/track-api",     icon: FilledTrackApiIcon    },
+    { name: "Account Import",  shortLabel: "ACCOUNT IMPORT", path: "/bulk-import",   icon: FilledBulkImportIcon  },
     { name: "Proxy Manager",   shortLabel: "PROXY MANAGER",  path: "/proxies",      icon: FilledShieldAlertIcon },
   ];
 
@@ -159,29 +149,6 @@ export function Sidebar() {
                   {item.shortLabel}
                 </span>
               </button>
-
-  
-              {/* TrustScore sub-tabs */}
-              {item.path === "/trust-scores" && activeTrustScoreId && (
-                <div className="ml-2 mt-1.5 mb-0.5 space-y-0 border-t border-border/40 pt-1">
-                  {TRUST_SCORE_TABS.map(({ value, label }) => {
-                    const isSubActive = activeTab === value;
-                    return (
-                      <button
-                        key={value}
-                        onClick={() => setLocation(`/trust-scores/${activeTrustScoreId}?tab=${value}`)}
-                        className={cn(
-                          "flex items-center w-full px-2 py-1.5 text-[9px] font-bold transition-all duration-150 text-left rounded-md whitespace-nowrap",
-                          isSubActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        <ChevronRight className="w-3 h-3 text-black dark:text-white mr-1 shrink-0" />
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           );
         })}

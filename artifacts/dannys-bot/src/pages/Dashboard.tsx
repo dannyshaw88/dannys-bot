@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.704",
+    date: "1 Jun 2026",
+    items: [
+      { category: "New", text: "Track API — new section in the sidebar. Start a local proxy, connect your Android phone via USB or WiFi, and see every HTTP request and HTTPS tunnel destination hit by Instagram in a live log viewer." },
+      { category: "New", text: "ADB integration in Track API — click 'Set Proxy via ADB' to automatically configure the proxy on your connected phone without touching phone settings manually." },
+      { category: "Fix", text: "Account user agents are now fully protected from accidental overwrite. Any form save or settings change that might have silently changed the UA string is now blocked — only Reset Device IDs can change the UA." },
+      { category: "Change", text: "TrustScores moved from the sidebar into Settings → TrustScores tab. The sidebar slot has been replaced by the new Track API section." },
+    ],
+  },
+  {
     version: "1.0.703",
     date: "1 Jun 2026",
     items: [

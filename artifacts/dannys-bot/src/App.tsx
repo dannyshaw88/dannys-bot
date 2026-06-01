@@ -16,6 +16,7 @@ import { BulkImportPage } from "@/pages/BulkImportPage";
 import { MobilePage } from "@/pages/MobilePage";
 import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
+import { TrackApiPage } from "@/pages/TrackApiPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/browser/:id" component={StandaloneBrowserPage} />
       <Route path="/bulk-import" component={BulkImportPage} />
       <Route path="/mobile" component={MobilePage} />
+      <Route path="/track-api" component={TrackApiPage} />
       <Route path="/trust-scores" component={TrustScoresPage} />
       <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
       <Route path="/readme" component={ReadmePage} />

@@ -468,6 +468,28 @@ export async function registerInstagramRoutes(
         console.warn(`[cookie-guard] BLOCKED attempt to clear igDeviceState via PATCH route for profile ${id}`);
         delete body.igDeviceState;
       }
+      // ── Protect device fingerprint from accidental overwrite via PATCH ────────
+      // userAgentApi, userAgentEmbedded, and ebFingerprint together form the
+      // account's permanent device identity (the Android UA that Instagram binds
+      // to its device token).  These must ONLY change when the user explicitly
+      // presses "Reset Device IDs" — which goes through the dedicated
+      // /api/profiles/:id/reset-device-ids route.  Any PATCH carrying these
+      // fields (including empty values rendered by form fields that were not
+      // filled in) is silently stripped here so a form save, copy-settings
+      // operation, or any other generic update can never silently change the UA
+      // and trigger Instagram's "Try a trusted device" security challenge.
+      if ("userAgentApi" in body) {
+        console.warn(`[ua-guard] BLOCKED attempt to overwrite userAgentApi via PATCH route for profile ${id} — use /reset-device-ids`);
+        delete body.userAgentApi;
+      }
+      if ("userAgentEmbedded" in body) {
+        console.warn(`[ua-guard] BLOCKED attempt to overwrite userAgentEmbedded via PATCH route for profile ${id} — use /reset-device-ids`);
+        delete body.userAgentEmbedded;
+      }
+      if ("ebFingerprint" in body) {
+        console.warn(`[ua-guard] BLOCKED attempt to overwrite ebFingerprint via PATCH route for profile ${id} — use /reset-device-ids`);
+        delete body.ebFingerprint;
+      }
       const updated = await storage.updateProfile(id, body);
       // If cookies were changed via the edit form, refresh the browser cookie file
       if (body.igApiCookies && typeof body.igApiCookies === "string") {
