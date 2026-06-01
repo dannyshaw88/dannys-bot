@@ -42,15 +42,44 @@ function pushEntry(entry: Omit<TrackLogEntry, "id" | "ts">) {
 let _proxyServer: net.Server | null = null;
 let _proxyPort = 8899;
 
-function getLocalIps(): string[] {
-  const ips: string[] = [];
+export interface LocalAdapter {
+  ip: string;
+  name: string;
+  likely: boolean;
+}
+
+function getLocalAdapters(): LocalAdapter[] {
+  const adapters: LocalAdapter[] = [];
   const ifaces = os.networkInterfaces();
-  for (const iface of Object.values(ifaces)) {
+
+  const VIRTUAL_PATTERNS = [
+    /hyper-v/i, /vethernet/i, /virtualbox/i, /vmware/i, /vmnet/i,
+    /docker/i, /loopback/i, /pseudo/i, /tunnel/i, /isatap/i, /teredo/i,
+    /6to4/i, /wsl/i, /bluetooth/i,
+  ];
+
+  for (const [name, iface] of Object.entries(ifaces)) {
     for (const info of iface ?? []) {
-      if (info.family === "IPv4" && !info.internal) ips.push(info.address);
+      if (info.family !== "IPv4" || info.internal) continue;
+      const isVirtual = VIRTUAL_PATTERNS.some(p => p.test(name));
+      const isPrivate192 = info.address.startsWith("192.168.");
+      const isPrivate10 = info.address.startsWith("10.");
+      const isPrivate172 = /^172\.(1[6-9]|2\d|3[01])\./.test(info.address);
+      const isTypicalWifi = isPrivate192 || (isPrivate10 && !isVirtual) || (isPrivate172 && !isVirtual);
+      adapters.push({
+        ip: info.address,
+        name,
+        likely: isTypicalWifi && !isVirtual,
+      });
     }
   }
-  return ips;
+
+  adapters.sort((a, b) => (b.likely ? 1 : 0) - (a.likely ? 1 : 0));
+  return adapters;
+}
+
+function getLocalIps(): string[] {
+  return getLocalAdapters().map(a => a.ip);
 }
 
 // Attempt to detect the machine's public (WAN) IP for SIM/cellular connections.
@@ -242,6 +271,7 @@ export function registerTrackApiRoutes(httpServer: HttpServer, app: Express) {
       running: !!_proxyServer,
       port: _proxyPort,
       localIps: getLocalIps(),
+      adapters: getLocalAdapters(),
       publicIp,
       entryCount: _log.length,
     });

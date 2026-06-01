@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.707",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Track API WiFi proxy: phone no longer loses internet when the proxy is configured — Windows Firewall step added to the setup guide with a one-click PowerShell command to allow the proxy port." },
+      { category: "Improvement", text: "Track API now shows each PC network adapter by name alongside its IP, with a green WiFi badge on the most likely WiFi adapter — prevents accidentally picking a Hyper-V, VPN, or Docker virtual adapter IP." },
+      { category: "Improvement", text: "Track API auto-selects the correct WiFi adapter IP on startup instead of defaulting to the first IP in the list." },
+    ],
+  },
+  {
     version: "1.0.706",
     date: "1 Jun 2026",
     items: [

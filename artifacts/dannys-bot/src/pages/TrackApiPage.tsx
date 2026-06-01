@@ -2,10 +2,17 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Play, Square, Trash2, Copy, Download, RefreshCw, Wifi, Signal, ChevronRight, Circle, Copy as CopyIcon } from "lucide-react";
 
+interface LocalAdapter {
+  ip: string;
+  name: string;
+  likely: boolean;
+}
+
 interface StatusData {
   running: boolean;
   port: number;
   localIps: string[];
+  adapters: LocalAdapter[];
   publicIp: string | null;
   entryCount: number;
 }
@@ -90,7 +97,10 @@ export function TrackApiPage() {
       const res = await fetch("/api/track-api/status", { credentials: "include" });
       const data: StatusData = await res.json();
       setStatus(data);
-      if (!selectedIp && data.localIps.length > 0) setSelectedIp(data.localIps[0]);
+      if (!selectedIp && data.adapters?.length > 0) {
+        const preferred = data.adapters.find(a => a.likely) ?? data.adapters[0];
+        setSelectedIp(preferred.ip);
+      }
     } catch {}
   }, [selectedIp]);
 
@@ -247,18 +257,25 @@ export function TrackApiPage() {
 
             {running && (
               <div className="space-y-2">
-                <p className="text-xs text-muted-foreground font-medium">PC IP addresses (WiFi):</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(status?.localIps ?? []).map(ip => (
+                <p className="text-xs text-muted-foreground font-medium">PC network adapters — pick your WiFi one:</p>
+                <div className="flex flex-col gap-1.5">
+                  {(status?.adapters ?? []).map(adapter => (
                     <button
-                      key={ip}
-                      onClick={() => setSelectedIp(ip)}
-                      className={`px-2 py-0.5 rounded font-mono text-xs border transition-colors ${selectedIp === ip ? "bg-primary/10 border-primary text-primary" : "bg-muted border-border text-foreground hover:border-primary"}`}
+                      key={adapter.ip}
+                      onClick={() => setSelectedIp(adapter.ip)}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded border transition-colors text-left ${selectedIp === adapter.ip ? "bg-primary/10 border-primary" : "bg-muted border-border hover:border-primary"}`}
                     >
-                      {ip}
+                      <span className={`font-mono text-xs font-bold ${selectedIp === adapter.ip ? "text-primary" : "text-foreground"}`}>{adapter.ip}</span>
+                      <span className="text-[10px] text-muted-foreground truncate flex-1">{adapter.name}</span>
+                      {adapter.likely && (
+                        <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">WiFi ✓</span>
+                      )}
                     </button>
                   ))}
                 </div>
+                {(status?.adapters ?? []).filter(a => !a.likely).length > 0 && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400">Only select an IP labelled <strong>WiFi ✓</strong>. Others are virtual adapters (Hyper-V, VPN, Docker) that your phone cannot reach.</p>
+                )}
               </div>
             )}
           </div>
@@ -441,46 +458,64 @@ function IPhoneSetupGuide({
             </p>
 
             {connectionMode === "wifi" ? (
-              <ol className="space-y-2 text-xs text-muted-foreground">
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">1</span>
-                  <span>In the <strong className="text-foreground">Proxy Control</strong> panel above, click <strong className="text-foreground">Start Proxy</strong>. Note your PC's IP address that appears.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">2</span>
-                  <span>Make sure your iPhone is connected to the <strong className="text-foreground">same WiFi network</strong> as this PC. USB is not needed.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">3</span>
-                  <span>On your iPhone go to <strong className="text-foreground">Settings → Wi-Fi</strong> and tap the <strong className="text-foreground">ⓘ</strong> next to your connected network.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">4</span>
-                  <span>Scroll down to <strong className="text-foreground">HTTP Proxy</strong> → tap <strong className="text-foreground">Configure Proxy</strong> → select <strong className="text-foreground">Manual</strong>.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
-                  <div>
-                    <span>Set <strong className="text-foreground">Server</strong> to </span>
-                    <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code>
-                    <span> and <strong className="text-foreground">Port</strong> to </span>
-                    <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>
-                    <span>. Leave Authentication off.</span>
-                  </div>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
-                  <span>Tap <strong className="text-foreground">Save</strong> in the top-right corner.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">7</span>
-                  <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone and browse normally — traffic appears in the log below instantly. Instagram uses HTTPS, so entries show as <strong className="text-foreground">CONNECT</strong> (tunnel) lines — you'll see which servers it contacts (e.g. <code className="bg-muted px-1 rounded font-mono">i.instagram.com:443</code>).</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center font-bold text-[10px]">✓</span>
-                  <span>When done, go back to <strong className="text-foreground">Settings → Wi-Fi → ⓘ → Configure Proxy → Off</strong> to remove the proxy from your iPhone.</span>
-                </li>
-              </ol>
+              <>
+                <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded p-2.5 text-red-800 dark:text-red-300 text-xs">
+                  <strong>⚠ Phone loses internet after setting proxy?</strong> Windows Firewall is blocking the connection. Fix it first (Step 2 below) — this is the #1 cause.
+                </div>
+                <ol className="space-y-2 text-xs text-muted-foreground">
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">1</span>
+                    <span>In the <strong className="text-foreground">Proxy Control</strong> panel above, click <strong className="text-foreground">Start Proxy</strong>. Then pick the IP labelled <strong className="text-foreground">WiFi ✓</strong> — avoid any Hyper-V / VPN / Docker IPs.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-red-500/15 text-red-500 flex items-center justify-center font-bold text-[10px]">2</span>
+                    <div className="space-y-1">
+                      <span className="text-foreground font-semibold">Allow the proxy through Windows Firewall</span>
+                      <p>Press <strong className="text-foreground">Win + R</strong>, type <code className="bg-muted px-1 rounded font-mono text-foreground">wf.msc</code>, press Enter. In the left panel click <strong className="text-foreground">Inbound Rules → New Rule</strong>. Choose <strong className="text-foreground">Port</strong>, TCP, enter <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>, allow the connection, apply to all profiles, name it <em>Equinox Proxy</em>.</p>
+                      <p className="text-muted-foreground">Or run this one-liner in an <strong className="text-foreground">Admin PowerShell</strong>:</p>
+                      <div className="flex items-center gap-1 bg-zinc-900 text-green-400 px-2 py-1.5 rounded font-mono text-[10px] break-all">
+                        <span>netsh advfirewall firewall add rule name="Equinox Proxy" dir=in action=allow protocol=TCP localport={port}</span>
+                        <CopyButton value={`netsh advfirewall firewall add rule name="Equinox Proxy" dir=in action=allow protocol=TCP localport=${port}`} />
+                      </div>
+                    </div>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">3</span>
+                    <span>Make sure your iPhone is connected to the <strong className="text-foreground">same WiFi network</strong> as this PC.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">4</span>
+                    <span>On your iPhone go to <strong className="text-foreground">Settings → Wi-Fi</strong> and tap the <strong className="text-foreground">ⓘ</strong> next to your connected network.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
+                    <span>Scroll down to <strong className="text-foreground">HTTP Proxy</strong> → tap <strong className="text-foreground">Configure Proxy</strong> → select <strong className="text-foreground">Manual</strong>.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
+                    <div>
+                      <span>Set <strong className="text-foreground">Server</strong> to </span>
+                      <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code>
+                      <span> and <strong className="text-foreground">Port</strong> to </span>
+                      <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>
+                      <span>. Leave Authentication off.</span>
+                    </div>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">7</span>
+                    <span>Tap <strong className="text-foreground">Save</strong> in the top-right corner.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">8</span>
+                    <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone and browse normally — traffic appears in the log instantly. Instagram uses HTTPS, so entries show as <strong className="text-foreground">CONNECT</strong> lines (e.g. <code className="bg-muted px-1 rounded font-mono">i.instagram.com:443</code>).</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center font-bold text-[10px]">✓</span>
+                    <span>When done, go back to <strong className="text-foreground">Settings → Wi-Fi → ⓘ → Configure Proxy → Off</strong> to remove the proxy from your iPhone.</span>
+                  </li>
+                </ol>
+              </>
+            
             ) : (
               <ol className="space-y-2 text-xs text-muted-foreground">
                 <li className="flex gap-2">
