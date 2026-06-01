@@ -4609,6 +4609,18 @@ export async function wipeEbSession(profileId: number): Promise<void> {
  * The optional igApiCookies parameter is kept for API compatibility but is no
  * longer used — device tokens are NOT written back.
  */
+/**
+ * Clears the Electron session (cookies + storage) for the given profile and
+ * navigates the open EB window to the Instagram login page.
+ * No-op when not running in Electron mode (EB_IPC_PORT not set).
+ */
+export async function navigateEbToLogin(profileId: number): Promise<void> {
+  if (!IS_ELECTRON_EB) return;
+  await ebIpc("POST", "/eb/clear-session", { profileId }).catch((e: any) =>
+    console.warn(`[browserSession] navigateEbToLogin IPC failed for ${profileId}: ${e?.message}`)
+  );
+}
+
 export async function clearEbSessionCookies(profileId: number, igApiCookies?: string): Promise<void> {
   const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 

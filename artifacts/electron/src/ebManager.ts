@@ -2113,6 +2113,7 @@ export async function openEbWindow(opts: {
   // SPA navigations (Instagram pushState) don't fire did-navigate/did-finish-load —
   // update the toolbar URL bar directly from the main process.
   win.webContents.on("did-navigate-in-page", (_e, navUrl) => {
+    console.log(`[ebDiag:${profileId}] did-navigate-in-page url="${navUrl}"`);
     const tv = toolbarViewMap.get(profileId);
     if (tv && !tv.webContents.isDestroyed()) {
       tv.webContents.executeJavaScript(
@@ -2122,16 +2123,26 @@ export async function openEbWindow(opts: {
     const ts = tabsStateMap.get(profileId);
     if (ts && ts.tabs[0] && ts.activeId === 0) ts.tabs[0].url = navUrl;
 
-    // ── Post-2FA blank-screen recovery ────────────────────────────────────
+    // ── Post-2FA blank-screen recovery (SPA pushState path) ───────────────
     // After 2FA verification Instagram's SPA does history.pushState to
     // accounts/login/# (a hash route the React app doesn't render), leaving a
     // blank page.  Wait 3 s then check: if a 2FA input is still visible the
     // user is still typing — leave it.  If blank, force-navigate to the feed.
     if (navUrl.includes("accounts/login/") && /#/.test(navUrl)) {
+      console.warn(`[ebDiag:${profileId}] did-navigate-in-page hit accounts/login/# — scheduling 3s blank-screen check`);
       setTimeout(async () => {
         if (win.isDestroyed()) return;
         const cur = win.webContents.getURL();
-        if (!cur.includes("accounts/login/")) return; // already navigated away
+        if (!cur.includes("accounts/login/")) {
+          console.log(`[ebDiag:${profileId}] 3s check: already navigated away to "${cur}" — no recovery needed`);
+          return;
+        }
+        let bodySnap = "{}";
+        try {
+          bodySnap = await win.webContents.executeJavaScript(
+            `JSON.stringify({ bodyLen: document.body.innerHTML.trim().length, children: document.body.children.length, title: document.title })`
+          );
+        } catch {}
         const has2FA: boolean = await win.webContents.executeJavaScript(`
           !!(document.querySelector(
             'input[name="verificationCode"],input[name="verification_code"],' +
@@ -2140,8 +2151,11 @@ export async function openEbWindow(opts: {
             'input[aria-label*="code" i],input[aria-label*="digit" i]'
           ))
         `).catch(() => false);
-        if (has2FA) return; // 2FA form is up — don't interrupt
-        console.warn(`[ebManager:${profileId}] accounts/login/# stuck — no 2FA form, recovering to feed`);
+        if (has2FA) {
+          console.log(`[ebDiag:${profileId}] 3s check: 2FA form visible — not interrupting. body=${bodySnap}`);
+          return;
+        }
+        console.warn(`[ebDiag:${profileId}] 3s check: accounts/login/# with no 2FA form — recovering. body=${bodySnap}`);
         const sCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
         win.webContents.loadURL(
           sCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
@@ -2150,18 +2164,40 @@ export async function openEbWindow(opts: {
     }
   });
 
-  // Blank-page safety net on full-page loads: if did-finish-load fires on
-  // accounts/login/# with an empty body (post-2FA full navigation where
-  // did-navigate-in-page does NOT fire), recover to feed or login page.
-  // This catches regressions where Instagram issues a real navigation instead
-  // of a pushState after 2FA — the in-page handler only covers pushState.
+  // ── Comprehensive blank-screen diagnostics + general recovery ─────────────
+  // Fires on EVERY full-page load (not SPA pushState — those go to did-navigate-in-page).
+  // Logs URL + body state + session cookie presence on every load so we can pinpoint
+  // which URL causes the blank screen even when it's not accounts/login/#.
+  // Also performs general blank-screen recovery: if any Instagram page finishes
+  // loading with an empty body and no 2FA form, navigates to feed or login.
   win.webContents.on("did-finish-load", async () => {
     if (win.isDestroyed()) return;
     const url = win.webContents.getURL();
-    if (!url.includes("instagram.com")) return;
-    if (!url.includes("accounts/login/") || !url.includes("#")) return;
+    if (!url.startsWith("http")) return; // skip about:blank, devtools, data: etc.
 
-    // Do NOT interrupt manual 2FA entry
+    // ── Diagnostic snapshot ───────────────────────────────────────────────
+    let snapshot = "{}";
+    try {
+      snapshot = await win.webContents.executeJavaScript(`
+        JSON.stringify({
+          childCount: document.body ? document.body.children.length : -1,
+          bodyLen: document.body ? document.body.innerHTML.trim().length : -1,
+          title: document.title.slice(0, 80),
+          readyState: document.readyState,
+        })
+      `);
+    } catch {}
+    const diagSes = electronSession.fromPartition(`persist:eb-${profileId}`);
+    const diagCks = await diagSes.cookies.get({ name: "sessionid", domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
+    console.log(`[ebDiag:${profileId}] did-finish-load url="${url}" session=${diagCks.length > 0 ? "present" : "absent"} body=${snapshot}`);
+
+    // ── General blank-screen recovery ─────────────────────────────────────
+    if (!url.includes("instagram.com")) return;
+    let snap: { childCount?: number; bodyLen?: number } = {};
+    try { snap = JSON.parse(snapshot); } catch {}
+    if ((snap.bodyLen ?? 9999) > 200) return; // page rendered content — nothing to do
+
+    // Don't interrupt 2FA entry
     const has2FA: boolean = await win.webContents.executeJavaScript(`
       !!(document.querySelector(
         'input[name="verificationCode"],input[name="verification_code"],' +
@@ -2170,19 +2206,31 @@ export async function openEbWindow(opts: {
         'input[aria-label*="code" i],input[aria-label*="digit" i]'
       ))
     `).catch(() => false);
-    if (has2FA) return;
+    if (has2FA) {
+      console.log(`[ebDiag:${profileId}] blank body but 2FA form present — not recovering`);
+      return;
+    }
 
-    // Only recover if the body is genuinely empty (no React root mounted)
-    const isEmpty: boolean = await win.webContents.executeJavaScript(
-      `document.body.children.length === 0 || document.body.innerHTML.trim() === ''`
-    ).catch(() => false);
-    if (!isEmpty) return;
-
-    console.warn(`[ebManager:${profileId}] did-finish-load on accounts/login/# with empty body — recovering`);
-    const recCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
+    console.warn(`[ebDiag:${profileId}] BLANK BODY on "${url}" (bodyLen=${snap.bodyLen ?? "?"},children=${snap.childCount ?? "?"}) — recovering to ${diagCks.length > 0 ? "feed" : "login"}`);
     win.webContents.loadURL(
-      recCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+      diagCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
     ).catch(() => {});
+  });
+
+  win.webContents.on("did-fail-load", (_e, errorCode, errorDesc, validatedUrl, isMainFrame) => {
+    if (win.isDestroyed() || !isMainFrame) return;
+    if (errorCode === -3) return; // ERR_ABORTED — user navigated away, expected
+    console.warn(`[ebDiag:${profileId}] did-fail-load url="${validatedUrl}" code=${errorCode} desc="${errorDesc}"`);
+  });
+
+  win.webContents.on("render-process-gone", (_e, details) => {
+    if (win.isDestroyed()) return;
+    console.error(`[ebDiag:${profileId}] render-process-gone reason="${details.reason}" exitCode=${details.exitCode}`);
+  });
+
+  win.webContents.on("unresponsive", () => {
+    if (win.isDestroyed()) return;
+    console.warn(`[ebDiag:${profileId}] page-unresponsive`);
   });
 
   win.on("closed", () => {
@@ -2898,6 +2946,36 @@ export function startEbIpcServer(
         const e = ebMap.get(pid);
         if (e && !e.win.isDestroyed()) {
           e.win.webContents.loadURL(body.url).catch(() => {});
+        }
+        return send(res, 200, { ok: true });
+      }
+
+      // ── POST /eb/clear-session ─────────────────────────────────────────────────
+      // Clears the Electron session storage (all cookies + localStorage + IndexedDB)
+      // for the account's partition, then navigates the open EB window (if any) to
+      // the Instagram login page.  Called by the clear-session-cookies API route so
+      // the user sees the login page immediately after pressing "Clear Cookies".
+      if (req.method === "POST" && u.pathname === "/eb/clear-session") {
+        const partition = ebPartition(pid);
+        const ses = electronSession.fromPartition(partition);
+        for (const origin of ["https://www.instagram.com", "https://i.instagram.com"]) {
+          await ses.clearStorageData({
+            origin,
+            storages: ["cookies", "localstorage", "indexdb", "serviceworkers", "cachestorage"] as any,
+          }).catch(() => {});
+        }
+        // Belt-and-suspenders: remove all .instagram.com cookies by name
+        const allCks = await ses.cookies.get({ domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
+        for (const c of allCks) {
+          await ses.cookies.remove("https://www.instagram.com", c.name).catch(() => {});
+          await ses.cookies.remove("https://instagram.com", c.name).catch(() => {});
+        }
+        const e = ebMap.get(pid);
+        if (e && !e.win.isDestroyed()) {
+          e.win.webContents.loadURL("https://www.instagram.com/accounts/login/").catch(() => {});
+          console.log(`[clear-session:${pid}] Electron session cleared + window navigated to login`);
+        } else {
+          console.log(`[clear-session:${pid}] Electron session cleared (no open window)`);
         }
         return send(res, 200, { ok: true });
       }

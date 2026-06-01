@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.717",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Clear Cookies now immediately navigates the open embedded browser to the Instagram login page and wipes the Electron session storage — you will no longer see a stale white screen after clearing." },
+      { category: "Change", text: "Removed the Create a Cookie tab from Account Settings — cookie injection is still available within the Settings tab." },
+      { category: "Debug", text: "Added comprehensive page-load diagnostics to the embedded browser: every navigation and load event is now logged with URL, body length, and session cookie presence, making blank-screen diagnosis much easier." },
+      { category: "Debug", text: "Blank-screen recovery now covers all Instagram pages (not only accounts/login/#) — any page that finishes loading with an empty body will auto-recover to the feed or login." },
+    ],
+  },
+  {
     version: "1.0.716",
     date: "1 Jun 2026",
     items: [

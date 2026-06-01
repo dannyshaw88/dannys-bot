@@ -8,7 +8,6 @@ import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
 import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
 import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
-import { CreateCookiePanel } from "@/components/tools/CreateCookiePanel";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -268,7 +267,6 @@ export function ProfileDetailsPage() {
   const [unfollowCopyOpen, setUnfollowCopyOpen] = useState(false);
   const [contactCopyOpen, setContactCopyOpen] = useState(false);
   const [humanCopyOpen, setHumanCopyOpen] = useState(false);
-  const [cookieCopyOpen, setCookieCopyOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [totpCode, setTotpCode] = useState<string | null>(null);
   const [totpError, setTotpError] = useState<string | null>(null);
@@ -352,8 +350,8 @@ export function ProfileDetailsPage() {
   useEffect(() => {
     const creatorMode = !!profile?.creatorMode;
     const tabMap: Record<string, string> = creatorMode
-      ? { "1": "settings", "2": "create-cookie" }
-      : { "1": "settings", "2": "human-session", "3": "follow", "4": "unfollow", "5": "contact", "6": "session-log", "7": "create-cookie" };
+      ? { "1": "settings" }
+      : { "1": "settings", "2": "human-session", "3": "follow", "4": "unfollow", "5": "contact", "6": "session-log" };
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
@@ -901,17 +899,6 @@ export function ProfileDetailsPage() {
                         </button>
                       </>
                     )}
-                    {activeTab === "create-cookie" && (
-                      <>
-                        <span className="text-border mx-1 select-none shrink-0">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
-                          onClick={() => setCookieCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
                   </>
                 )}
               </div>
@@ -928,29 +915,6 @@ export function ProfileDetailsPage() {
                 { value: "contact",       label: "CONTACT TOOL",              icon: MessageSquare },
                 { value: "human-session", label: "HUMAN SESSION EMULATION",   icon: Fingerprint   },
                 { value: "session-log",   label: "SESSION LOG",               icon: Activity      },
-                { value: "create-cookie", label: "CREATE A COOKIE",           icon: Cookie        },
-              ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  onClick={() => navigate(`/profiles/${profileId}?tab=${value}`)}
-                  className={[
-                    "flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold transition-all border-b-2 whitespace-nowrap shrink-0",
-                    activeTab === value
-                      ? "text-primary border-primary"
-                      : "text-blue-500 border-transparent hover:border-border",
-                  ].join(" ")}
-                >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-          {profile?.creatorMode && (
-            <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
-              {([
-                { value: "settings",      label: "ACCOUNT SETTINGS", icon: Settings },
-                { value: "create-cookie", label: "CREATE A COOKIE",  icon: Cookie   },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -1891,9 +1855,6 @@ export function ProfileDetailsPage() {
           }
         </Tabs.Content>
 
-        <Tabs.Content value="create-cookie" className="outline-none animate-in fade-in duration-300">
-          <CreateCookiePanel profile={profile} copyOpen={cookieCopyOpen} onCopyOpenChange={setCookieCopyOpen} />
-        </Tabs.Content>
 
         </div>
       </Tabs.Root>

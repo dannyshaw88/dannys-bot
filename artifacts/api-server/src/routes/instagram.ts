@@ -41,6 +41,7 @@ import {
   closeSession,
   wipeEbSession,
   clearEbSessionCookies,
+  navigateEbToLogin,
   browserAutoLogin,
   sendLoginDone,
   setCheckpointUrl,
@@ -639,7 +640,10 @@ export async function registerInstagramRoutes(
       console.warn(`[profiles] clearEbSessionCookies failed for ${profileId}: ${e?.message}`),
     );
 
-    console.log(`[profiles] @${profile.username}: session fully cleared — igApiCookies null, Chrome userdata wiped, no seed file written`);
+    // Navigate the open EB window to the login page (clears Electron session
+    // cookies too) so the user sees the login screen immediately.
+    await navigateEbToLogin(profileId).catch(() => {});
+    console.log(`[profiles] @${profile.username}: session fully cleared — igApiCookies null, Chrome userdata wiped, EB navigated to login`);
     res.json({ ok: true });
   });
 
