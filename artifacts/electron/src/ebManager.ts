@@ -23,9 +23,9 @@ import { createHmac } from "crypto";
 // of the page DOM, so challenge pages, iframes, CSS transforms, overflow:hidden,
 // and any other page-level styling CANNOT hide or remove it.
 function buildNativeToolbarHtml(): string {
-  const styles = `*{box-sizing:border-box;margin:0;padding:0}body{min-height:92px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;flex-direction:column;font-family:-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none}#navbar{height:58px;display:flex;align-items:center;gap:4px;padding:0 8px;flex-shrink:0}button{height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #d1d5db;color:#6b7280;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap}button:hover{background:#f3f4f6;color:#374151}button:disabled{opacity:.5;cursor:default}.sep{width:1px;height:18px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:30px;padding:0 8px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{border-color:#3b82f6}#timer{font-size:11px;color:#9ca3af;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}#tabbar{height:34px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:2px;padding:0 6px;overflow-x:auto;overflow-y:hidden;flex-shrink:0}#tabbar::-webkit-scrollbar{height:3px}#tabbar::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}.tab{height:26px;max-width:160px;min-width:56px;display:flex;align-items:center;gap:3px;padding:0 8px;border-radius:4px;cursor:pointer;font-size:11px;color:#9ca3af;border:1px solid transparent;flex-shrink:0;overflow:hidden}.tab:hover{background:#f1f5f9;color:#374151}.tab.active{background:#fff;border-color:#d1d5db;color:#374151}.tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.tab-x{border:none!important;min-width:0!important;height:14px!important;width:14px!important;padding:0!important;font-size:13px!important;line-height:1;color:#9ca3af;flex-shrink:0;background:none!important}.tab-x:hover{color:#374151!important}.newtab{height:22px;min-width:22px;max-width:22px;padding:0!important;font-size:13px;border-style:dashed!important;color:#9ca3af;flex-shrink:0}#ai-panel{display:none;flex-direction:column;gap:8px;padding:10px;border-top:1px solid #e2e8f0;background:#faf5ff}#ai-panel.visible{display:flex}#ai-img{width:100%;border-radius:6px;border:1px solid #e2e8f0;max-height:140px;object-fit:cover}.ai-meta{font-size:10px;color:#9ca3af;padding:2px 0}.ai-btns{display:flex;gap:6px;flex-shrink:0}#ai-err{display:none;font-size:11px;color:#dc2626;background:#fef2f2;border-radius:6px;padding:6px}#ai-save{flex:1}#ai-upload{flex:2;background:linear-gradient(90deg,#ec4899,#f97316)!important;color:#fff!important;border-color:transparent!important}#ai-close{min-width:32px;padding:0 8px}`;
+  const styles = `*{box-sizing:border-box;margin:0;padding:0}body{min-height:92px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;flex-direction:column;font-family:-apple-system,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none}#navbar{height:58px;display:flex;align-items:center;gap:4px;padding:0 8px;flex-shrink:0}button{height:30px;min-width:30px;padding:0 8px;background:transparent;border:1px solid #d1d5db;color:#6b7280;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;display:flex;align-items:center;gap:3px;white-space:nowrap}button:hover{background:#f3f4f6;color:#374151}button:disabled{opacity:.5;cursor:default}.sep{width:1px;height:18px;background:#e2e8f0;margin:0 2px;flex-shrink:0}#url{flex:1;min-width:0;height:30px;padding:0 8px;background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;color:#111827;font-size:12px;font-family:monospace;outline:none;-webkit-user-select:text;user-select:text}#url:focus{border-color:#3b82f6}#timer{font-size:11px;color:#9ca3af;white-space:nowrap;min-width:34px;text-align:right;font-variant-numeric:tabular-nums;padding-right:2px}#tabbar{height:34px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:2px;padding:0 6px;overflow-x:auto;overflow-y:hidden;flex-shrink:0}#tabbar::-webkit-scrollbar{height:3px}#tabbar::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}.tab{height:26px;max-width:160px;min-width:56px;display:flex;align-items:center;gap:3px;padding:0 8px;border-radius:4px;cursor:pointer;font-size:11px;color:#9ca3af;border:1px solid transparent;flex-shrink:0;overflow:hidden}.tab:hover{background:#f1f5f9;color:#374151}.tab.active{background:#fff;border-color:#d1d5db;color:#374151}.tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.tab-x{border:none!important;min-width:0!important;height:14px!important;width:14px!important;padding:0!important;font-size:13px!important;line-height:1;color:#9ca3af;flex-shrink:0;background:none!important}.tab-x:hover{color:#374151!important}.newtab{height:22px;min-width:22px;max-width:22px;padding:0!important;font-size:13px;border-style:dashed!important;color:#9ca3af;flex-shrink:0}`;
 
-  const navHtml = `<button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button title="Reload" onclick="cmd('reload')">&#8635;</button><button title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button id="lbtn" title="Fill login fields and submit" onclick="doLogin()">Login</button><button title="Generate TOTP code" onclick="cmd('totp')">2FA</button><button title="Type phone number" onclick="cmd('phone')">Phone</button><button title="Type email address" onclick="cmd('email-user')">Email</button><button title="Type email password" onclick="cmd('email-pass')">Email Pass</button><button title="Run in-app leak test — checks IP, WebRTC, WebDriver, Canvas, Audio, WebGL and more" onclick="cmd('leak-check')" style="color:#16a34a;border-color:#16a34a;font-weight:600">&#128737; Leak Check</button><span class="sep"></span><button id="aibtn" title="Generate a realistic AI selfie and upload it to Instagram — requires TOGETHER_API_KEY" onclick="doAiImage()" style="color:#9333ea;border-color:#9333ea;font-weight:600">&#10024; AI Image</button><span class="sep"></span><span id="timer">0:00</span>`;
+  const navHtml = `<button title="Back" onclick="cmd('back')">&#9664;</button><button title="Forward" onclick="cmd('forward')">&#9654;</button><button title="Reload" onclick="cmd('reload')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button><button title="Instagram Home" onclick="cmd('navigate',{url:'https://www.instagram.com/'})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button><span class="sep"></span><input id="url" type="text" spellcheck="false"><span class="sep"></span><button id="lbtn" title="Fill login fields and submit" onclick="doLogin()">Login</button><button title="Generate TOTP code" onclick="cmd('totp')">2FA</button><button title="Type phone number" onclick="cmd('phone')">Phone</button><button title="Type email address" onclick="cmd('email-user')">Email</button><button title="Type email password" onclick="cmd('email-pass')">Email Pass</button><button title="Run in-app leak test — checks IP, WebRTC, WebDriver, Canvas, Audio, WebGL and more" onclick="cmd('leak-check')">&#128737; Leak Check</button><span class="sep"></span><span id="timer">0:00</span>`;
 
   const script = `function cmd(c,p){return window.__eq&&window.__eq.command(c,p);}
 function doLogin(){var b=document.getElementById('lbtn');if(!b)return;b.disabled=true;Promise.resolve(cmd('login')).then(function(){b.disabled=false;}).catch(function(){b.disabled=false;});}
@@ -50,11 +50,9 @@ function renderTabs(){
   tb.appendChild(nb);
 }
 renderTabs();
-var _aiB64='',_aiFile='';
-async function doAiImage(){var b=document.getElementById('aibtn');if(!b)return;b.disabled=true;b.textContent='\u2026';var p=document.getElementById('ai-panel');p.classList.add('visible');document.getElementById('ai-img-wrap').style.display='none';document.getElementById('ai-err').style.display='none';document.getElementById('ai-save').style.display='none';document.getElementById('ai-upload').style.display='none';try{var r=await cmd('ai-image');if(r&&r.imageBase64){_aiB64=r.imageBase64;_aiFile=r.fileName||'selfie.jpg';document.getElementById('ai-img').src='data:image/jpeg;base64,'+r.imageBase64;var m=r.metadata;document.getElementById('ai-meta').textContent=m?('\u{1F4F1} '+m.make+' '+m.model+' \u00b7 ISO '+m.iso):'';document.getElementById('ai-img-wrap').style.display='block';document.getElementById('ai-save').style.display='flex';document.getElementById('ai-upload').style.display='flex';}else{var e2=document.getElementById('ai-err');e2.textContent=(r&&r.error)||'Generation failed';e2.style.display='block';}}catch(ex){var e3=document.getElementById('ai-err');e3.textContent=String(ex);e3.style.display='block';}b.disabled=false;b.innerHTML='&#10024; AI Image';}
-function doAiClose(){document.getElementById('ai-panel').classList.remove('visible');_aiB64='';_aiFile='';cmd('ai-panel-close');}`;
+`;
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body><div id="navbar">${navHtml}</div><div id="tabbar"></div><div id="ai-panel"><div id="ai-img-wrap" style="display:none"><img id="ai-img" src="" alt=""><div id="ai-meta" class="ai-meta"></div></div><div id="ai-err"></div><div class="ai-btns"><button id="ai-save" style="display:none" onclick="cmd('ai-save',{base64:_aiB64,fileName:_aiFile})">&#11015; Save</button><button id="ai-upload" style="display:none" onclick="cmd('ai-upload',{base64:_aiB64,fileName:_aiFile})">&#8679; Upload to Instagram</button><button id="ai-close" onclick="doAiClose()">&#10005; Close</button></div></div><script>${script}<\/script></body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${styles}</style></head><body><div id="navbar">${navHtml}</div><div id="tabbar"></div><script>${script}<\/script></body></html>`;
 }
 
 // ── Minimal page-level utilities ───────────────────────────────────────────────
@@ -1969,7 +1967,7 @@ export async function openEbWindow(opts: {
     win.on("closed", () => clearInterval(_ghostOverlayInterval));
   }
 
-  win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+  win.webContents.on("did-fail-load", async (_e, code, desc, url) => {
     console.error(`[ebManager] did-fail-load for @${username}: code=${code} desc=${desc} url=${url}`);
     // Push the error to the server log AND to the address bar relay so it's visible
     if (url && url.includes("instagram.com")) {
@@ -1978,6 +1976,20 @@ export async function openEbWindow(opts: {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ code, desc, url }),
       }).catch(() => {});
+    }
+    // ERR_TOO_MANY_REDIRECTS on scraping_warning — Instagram's anti-bot redirect loop
+    // between /accounts/scraping_warning/ and /consent/?flow=user_cookie_choice_v2.
+    // After successful 2FA the sessionid cookie already exists, so navigating directly
+    // to instagram.com/ bypasses the broken redirect chain and lands on the home feed.
+    if (code === -310 && url && url.includes("scraping_warning")) {
+      console.warn(`[ebManager] scraping_warning redirect loop for @${username} — recovering`);
+      await new Promise(r => setTimeout(r, 1500));
+      if (!win.isDestroyed()) {
+        const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+        win.webContents.loadURL(
+          recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/",
+        ).catch(() => {});
+      }
     }
   });
 
@@ -2561,88 +2573,6 @@ function setupToolbarIpc(): void {
           const val = (p.emailValidationPassword ?? "").trim();
           if (val) await typeIntoFocused(val);
         } catch {}
-        break;
-      }
-
-      case "ai-image": {
-        try {
-          const _aiRes = await fetch(`http://127.0.0.1:${_serverPort}/api/ai/generate-selfie`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: "{}",
-          });
-          const _aiData = await _aiRes.json() as any;
-          // Expand toolbar BrowserView to show AI panel
-          if (foundWin && !foundWin.isDestroyed()) {
-            const [_aiW, _aiH] = foundWin.getContentSize();
-            const AI_PANEL_H = TOOLBAR_H + 280;
-            const _aiTv = toolbarViewMap.get(foundPid);
-            if (_aiTv && !_aiTv.webContents.isDestroyed()) {
-              _aiTv.setBounds({ x: 0, y: 0, width: _aiW, height: AI_PANEL_H });
-            }
-            const _aiSt = tabsStateMap.get(foundPid);
-            if (_aiSt) {
-              for (const [, _aiV] of _aiSt.views) {
-                if (!_aiV.webContents.isDestroyed()) {
-                  _aiV.setBounds({ x: 0, y: AI_PANEL_H, width: _aiW, height: Math.max(1, _aiH - AI_PANEL_H) });
-                }
-              }
-            }
-            foundWin.webContents.executeJavaScript(
-              `(function(){var s=document.getElementById('__eq_tb');if(s)s.textContent='body{padding-top:${AI_PANEL_H}px!important;box-sizing:border-box!important}';})()`
-            ).catch(() => {});
-          }
-          return _aiData;
-        } catch (err: any) {
-          return { error: err?.message ?? "Generation failed" };
-        }
-      }
-
-      case "ai-save": {
-        if (!payload?.base64 || !payload?.fileName) break;
-        try {
-          const _saveDlg = await dialog.showSaveDialog(foundWin, {
-            defaultPath: payload.fileName as string,
-            filters: [{ name: "JPEG Images", extensions: ["jpg", "jpeg"] }],
-          });
-          if (!_saveDlg.canceled && _saveDlg.filePath) {
-            fs.writeFileSync(_saveDlg.filePath, Buffer.from(payload.base64 as string, "base64"));
-          }
-        } catch {}
-        break;
-      }
-
-      case "ai-upload": {
-        if (!payload?.base64 || !payload?.fileName) break;
-        try {
-          await fetch(`http://127.0.0.1:${_serverPort}/api/browser/${foundPid}/files`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileName: payload.fileName, data: payload.base64 }),
-          });
-        } catch {}
-        break;
-      }
-
-      case "ai-panel-close": {
-        if (foundWin && !foundWin.isDestroyed()) {
-          const [_clW, _clH] = foundWin.getContentSize();
-          const _clTv = toolbarViewMap.get(foundPid);
-          if (_clTv && !_clTv.webContents.isDestroyed()) {
-            _clTv.setBounds({ x: 0, y: 0, width: _clW, height: TOOLBAR_H });
-          }
-          const _clSt = tabsStateMap.get(foundPid);
-          if (_clSt) {
-            for (const [, _clV] of _clSt.views) {
-              if (!_clV.webContents.isDestroyed()) {
-                _clV.setBounds({ x: 0, y: TOOLBAR_H, width: _clW, height: Math.max(1, _clH - TOOLBAR_H) });
-              }
-            }
-          }
-          foundWin.webContents.executeJavaScript(
-            `(function(){var s=document.getElementById('__eq_tb');if(s)s.textContent='body{padding-top:${TOOLBAR_H}px!important;box-sizing:border-box!important}';})()`
-          ).catch(() => {});
-        }
         break;
       }
 

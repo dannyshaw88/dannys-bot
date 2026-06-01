@@ -60,6 +60,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.713",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Embedded browser: white screen after entering a 2FA code is now auto-recovered — the app detects the Instagram scraping-warning redirect loop and navigates to the home feed automatically." },
+      { category: "Fix", text: "Verify button: clicking Verify now opens the visible embedded browser and runs the full login flow there, so you can see it working in real time." },
+      { category: "Fix", text: "Reset Device IDs: status is now correctly reset to Pending even when the account was in a Locked or other protected state." },
+      { category: "Fix", text: "Account settings: removed the duplicate tiny API User Agent string shown below the device picker — the picker alone now represents the selected agent." },
+      { category: "Change", text: "Embedded browser toolbar: removed the AI Image button and its panel." },
+      { category: "Change", text: "Embedded browser toolbar: Leak Check button now uses the same plain style as all other toolbar buttons." },
+      { category: "Change", text: "Embedded browser toolbar: the Reload button now shows a standard circular-arrows icon." },
+    ],
+  },
+  {
     version: "1.0.712",
     date: "1 Jun 2026",
     items: [

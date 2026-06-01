@@ -1059,39 +1059,15 @@ export async function registerInstagramRoutes(
     }
     const ebUA = effectiveProfile.userAgentEmbedded as string;
 
-    // Steps 1-2: Launch EB + auto-login.
-    // Electron mode: hidden silent window — Verify never pops up a visible browser.
-    // Puppeteer mode: open the visible embedded browser session and auto-login.
+    // Steps 1-2: Launch EB + auto-login via the visible embedded browser.
+    // The visible EB handles the cookie consent banner, credential entry, 2FA,
+    // and any challenges — exactly as the user would see it.
     let result: { ok: boolean; message: string; accountStatus: string; igApiCookies?: string; checkpointUrl?: string };
     let loginResult: { ok: boolean; message: string };
     let _silentCookies: Array<{ name: string; value: string }> | null = null;
 
-    if (process.env.EB_IPC_PORT) {
-      // Electron silent path — no visible window ever opens during verify.
-      // Acquire the global slot first: only 1 silent-verify BrowserWindow at a
-      // time so the Electron main process is never overwhelmed by multiple
-      // concurrent Chromium renderer processes (crashes with 3+ accounts).
-      await acquireSilentVerifySlot();
-      try {
-        const silentRes = await electronSilentVerify({
-          profileId,
-          username:  profile.username,
-          password:  profile.password!,
-          twoFAKey:  profile.twoFASecretKey || "",
-          proxy:     proxyConfig ? { host: proxyConfig.host, port: proxyConfig.port, user: proxyConfig.username, pass: proxyConfig.password, type: proxyConfig.type } : undefined,
-          userAgent: ebUA,
-        });
-        loginResult    = { ok: silentRes.ok, message: silentRes.message };
-        _silentCookies = silentRes.cookies;
-      } catch (ebErr: any) {
-        releaseSilentVerifySlot();
-        verifyInFlight.delete(profileId);
-        await storage.updateProfile(profile.id, { accountStatus: "pending" });
-        return fail(500, `Browser verify failed: ${ebErr?.message ?? "Unknown error"}`);
-      }
-      releaseSilentVerifySlot();
-    } else {
-      // Puppeteer path — opens a visible EB session
+    {
+      // Open the visible EB session for this profile
       try {
         await getOrCreateSession(profileId, ebUA, proxyConfig, effectiveProfile.userAgentApi);
       } catch (ebErr: any) {

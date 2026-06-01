@@ -603,30 +603,22 @@ export function ProfileDetailsPage() {
     }
   };
 
-  const handleResetDeviceIds = () => {
+  const handleResetDeviceIds = async () => {
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
-    const patch = {
-      userAgentApi: randomUA.api,
-      userAgentEmbedded: randomUA.embedded,
-      credentialsDirty: true,
-      accountStatus: "pending" as AccountStatus,
-    };
-    updateProfileMutation.mutate(
-      { id: profileId, ...patch },
-      {
-        onSuccess: () => {
-          // Wipe the EB browser session (closes Chrome + deletes Puppeteer
-          // user-data-dir) so the next EB open starts as a clean new device
-          // with no stored Instagram login cookies.
-          fetch(`/api/browser/${profileId}/wipe`, { method: "POST" }).catch(() => {});
-          setFormData((prev: any) => ({ ...prev, userAgentApi: randomUA.api, userAgentEmbedded: randomUA.embedded }));
-          setVerifyStatus("idle");
-          queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
-          toast({ title: "Device IDs Reset", description: "New device fingerprint assigned. EB session cleared." });
-        },
-        onError: () => toast({ title: "Error", description: "Failed to reset device IDs.", variant: "destructive" }),
-      }
-    );
+    try {
+      await fetch(`/api/profiles/${profileId}/reset-device-ids`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userAgentApi: randomUA.api, userAgentEmbedded: randomUA.embedded }),
+      });
+      await fetch(`/api/browser/${profileId}/wipe`, { method: "POST" }).catch(() => {});
+      setFormData((prev: any) => ({ ...prev, userAgentApi: randomUA.api, userAgentEmbedded: randomUA.embedded }));
+      setVerifyStatus("idle");
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles", profileId] });
+      toast({ title: "Device IDs Reset", description: "New device fingerprint assigned. EB session cleared." });
+    } catch {
+      toast({ title: "Error", description: "Failed to reset device IDs.", variant: "destructive" });
+    }
   };
 
   const handleUaDeviceSelect = (ua: UaEntry) => {
@@ -1249,11 +1241,6 @@ export function ProfileDetailsPage() {
                         value={formData.userAgentApi ?? ""}
                         onSelect={handleUaDeviceSelect}
                       />
-                      {formData.userAgentApi && (
-                        <p className="text-[10px] text-muted-foreground font-mono break-all leading-relaxed">
-                          {formData.userAgentApi}
-                        </p>
-                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
