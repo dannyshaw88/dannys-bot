@@ -525,31 +525,34 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 Human Session
               </label>
             </div>
-            <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className={`flex items-center gap-2.5 flex-nowrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
               {([
-                { minKey: "notificationsRunChanceMin",    maxKey: "notificationsRunChanceMax",    label: "Notifs",    Icon: Bell,      color: "text-orange-500" },
-                { minKey: "ownProfileRunChanceMin",       maxKey: "ownProfileRunChanceMax",       label: "Profile",   Icon: User,      color: "text-indigo-500" },
-                { minKey: "refreshProfileRunChanceMin",   maxKey: "refreshProfileRunChanceMax",   label: "Refresh",   Icon: RefreshCw, color: "text-cyan-500"   },
-                { minKey: "settingsActivityRunChanceMin", maxKey: "settingsActivityRunChanceMax", label: "Settings",  Icon: Settings,  color: "text-gray-500"   },
-              ] as { minKey: string; maxKey: string; label: string; Icon: React.ElementType; color: string }[]).map(({ minKey, maxKey, label, Icon, color }) => (
-                <div key={minKey} className="flex items-center gap-1">
+                { minKey: "notificationsRunChanceMin",    maxKey: "notificationsRunChanceMax",    label: "Notifs",   Icon: Bell,      color: "text-orange-500" },
+                { minKey: "ownProfileRunChanceMin",       maxKey: "ownProfileRunChanceMax",       label: "Profile",  Icon: User,      color: "text-indigo-500" },
+                { minKey: "refreshProfileRunChanceMin",   maxKey: "refreshProfileRunChanceMax",   label: "Refresh",  Icon: RefreshCw, color: "text-cyan-500"   },
+                { minKey: "settingsActivityRunChanceMin", maxKey: "settingsActivityRunChanceMax", label: "Settings", Icon: Settings,  color: "text-gray-500"   },
+              ] as { minKey: string; maxKey: string; label: string; Icon: React.ElementType; color: string }[]).map(({ minKey, maxKey, label, Icon, color }, idx, arr) => (
+                <div key={minKey} className="flex items-center gap-1 shrink-0">
                   <Icon className={`w-3 h-3 shrink-0 ${color}`} />
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{label}</span>
-                  <div className="relative">
-                    <Input type="number" min="0" max="100" className="w-12 h-6 text-xs pr-4"
-                      value={(settings as any)[minKey] ?? 100}
-                      onChange={e => setSettings({ ...settings, [minKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
-                    />
-                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide whitespace-nowrap shrink-0">{label}</span>
+                  <div className="flex items-center gap-0.5">
+                    <div className="relative">
+                      <Input type="number" min="0" max="100" className="w-14 h-6 text-xs pr-5 pl-1.5"
+                        value={(settings as any)[minKey] ?? 100}
+                        onChange={e => setSettings({ ...settings, [minKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                      />
+                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground px-0.5">–</span>
+                    <div className="relative">
+                      <Input type="number" min="0" max="100" className="w-14 h-6 text-xs pr-5 pl-1.5"
+                        value={(settings as any)[maxKey] ?? 100}
+                        onChange={e => setSettings({ ...settings, [maxKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
+                      />
+                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">–</span>
-                  <div className="relative">
-                    <Input type="number" min="0" max="100" className="w-12 h-6 text-xs pr-4"
-                      value={(settings as any)[maxKey] ?? 100}
-                      onChange={e => setSettings({ ...settings, [maxKey]: Math.min(100, Math.max(0, Number(e.target.value))) } as any)}
-                    />
-                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none">%</span>
-                  </div>
+                  {idx < arr.length - 1 && <span className="text-border text-xs ml-1 shrink-0">|</span>}
                 </div>
               ))}
             </div>

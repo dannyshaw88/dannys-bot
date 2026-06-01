@@ -85,6 +85,21 @@ function resolveCaption(
   return result.trim().slice(0, 2200);
 }
 
+/**
+ * Extracts the most informative error message from an Instagram API error.
+ * instagram-private-api errors carry the raw IG response in e.response.body.
+ * e.message is often just the HTTP error class (e.g. "IgResponseError").
+ * This helper builds "base — IG message" so logs show exactly what Instagram returned.
+ */
+function igErrMsg(e: any): string {
+  const base = e?.message ?? "unknown error";
+  const body = e?.response?.body;
+  if (!body) return base;
+  const igMsg = body.message || body.feedback_message || body.error_title || body.spam_error;
+  if (!igMsg || igMsg === base) return base;
+  return `${base} — "${igMsg}"`;
+}
+
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -1428,8 +1443,8 @@ class AutomationEngine {
           break; // stop this batch but keep message pending
         }
       } catch (e: any) {
-        const errMsg = e?.message ?? "";
-        const acctStatus = await this.applyAccountLevelError(profile.id, errMsg, state, tool.id);
+        const errMsg = igErrMsg(e);
+        const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: contact DM threw account-level error (${acctStatus}) — ${errMsg}`);
           this.logAction(profile.id, tool.id, "contact_dm_blocked", msg.instagramUsername, "", "", "error", `[${acctStatus}] ${errMsg}`);
@@ -1936,13 +1951,14 @@ class AutomationEngine {
             }
           }
         } catch (e: any) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] like @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] like @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "like", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -1972,13 +1988,14 @@ class AutomationEngine {
             await sleep(randInt((s.viewStoriesDelayMin ?? 2) * 1000, (s.viewStoriesDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] stories @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] stories @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "view_stories", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -2005,13 +2022,14 @@ class AutomationEngine {
             await sleep(randInt((s.viewReelsDelayMin ?? 2) * 1000, (s.viewReelsDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] reels @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] reels @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "view_reels", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -2038,13 +2056,14 @@ class AutomationEngine {
             await sleep(randInt((s.viewHighlightsDelayMin ?? 2) * 1000, (s.viewHighlightsDelayMax ?? 6) * 1000));
           } else break;
         } catch (e: any) {
+          const _em = igErrMsg(e);
           const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
           if (acctStatus) {
-            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${e?.message}`);
+            this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", `[${acctStatus}] ${_em}`);
             return true;
           }
-          console.warn(`[engine] highlights @${uname} error: ${e?.message}`);
-          this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", e?.message ?? "");
+          console.warn(`[engine] highlights @${uname} error: ${_em}`);
+          this.logAction(profile.id, tool.id, "view_highlights", uname, source.value, source.type, "error", _em);
           break;
         }
       }
@@ -2211,8 +2230,8 @@ class AutomationEngine {
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
-        const msg = e?.message ?? "";
-        const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+        const msg = igErrMsg(e);
+        const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: unfollow threw account-level error (${acctStatus}) — ${msg}`);
           this.logAction(profile.id, tool.id, "unfollow_blocked", fu.instagramUsername, "", "", "error", `[${acctStatus}] ${msg}`);
@@ -2338,8 +2357,8 @@ class AutomationEngine {
           await sleep(randInt(delayMin, delayMax));
         }
       } catch (e: any) {
-        const msg = e?.message ?? "";
-        const acctStatus = await this.applyAccountLevelError(profile.id, msg, state, tool.id);
+        const msg = igErrMsg(e);
+        const acctStatus = await this.applyAccountLevelError(profile.id, e?.message ?? "", state, tool.id);
         if (acctStatus) {
           console.warn(`[engine] @${profile.username}: DM threw account-level error (${acctStatus}) — ${msg}`);
           this.logAction(profile.id, tool.id, "dm_blocked", user.username, source.value, source.type, "error", `[${acctStatus}] ${msg}`);

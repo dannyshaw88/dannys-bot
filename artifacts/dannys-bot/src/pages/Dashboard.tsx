@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.695",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "AI Image generator now produces different-sized photos every time — portrait, square, story format, and more — so each image has unique dimensions instead of always being the same square." },
+      { category: "Fix", text: "AI Image EXIF data is now fully unique per image: different GPS location (randomised within a real city), unique image ID, random focal length variation, and unique body serial number." },
+      { category: "UI",  text: "Human Session sub-action chance inputs are wider and labels (Notifs, Profile, Refresh, Settings) are fully visible — all four still fit on a single row." },
+      { category: "Fix", text: "Error logs now include the exact message Instagram returned (e.g. 'Please wait a few minutes before trying again') alongside the error type, for all Follow, Unfollow, DM, Like, Stories, Reels, and Highlights errors." },
+    ],
+  },
+  {
     version: "1.0.694",
     date: "1 Jun 2026",
     items: [
