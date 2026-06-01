@@ -282,6 +282,7 @@ export function ProfilesPage() {
   const jarveeImportRef = useRef<HTMLInputElement>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ ids: number[] } | null>(null);
   const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
+  const [resetAndClearConfirmOpen, setResetAndClearConfirmOpen] = useState(false);
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [fixingCaptcha, setFixingCaptcha] = useState(false);
   const [fixingAbd, setFixingAbd] = useState(false);
@@ -664,6 +665,29 @@ export function ProfilesPage() {
       toast({ title: "Device IDs Reset", description: `${selectedProfileIds.length} account(s) assigned new device fingerprints.` });
     } catch {
       toast({ title: "Error", description: "Failed to reset some device IDs.", variant: "destructive" });
+    }
+  }, [selectedProfileIds, updateProfileMutation, toast]);
+
+  const handleBulkResetAndClear = useCallback(async () => {
+    if (selectedProfileIds.length === 0) return;
+    try {
+      for (const id of selectedProfileIds) {
+        await fetch(`/api/profiles/${id}/clear-session-cookies`, { method: "POST" }).catch(() => {});
+      }
+      for (const id of selectedProfileIds) {
+        const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
+        await updateProfileMutation.mutateAsync({
+          id,
+          userAgentApi: ua.api,
+          userAgentEmbedded: ua.embedded,
+          credentialsDirty: true,
+          accountStatus: "pending",
+        });
+      }
+      setSelectedProfileIds([]);
+      toast({ title: "Reset & Cleared", description: `${selectedProfileIds.length} account(s) had cookies cleared and device IDs reset.` });
+    } catch {
+      toast({ title: "Error", description: "Failed to reset some accounts.", variant: "destructive" });
     }
   }, [selectedProfileIds, updateProfileMutation, toast]);
 
@@ -1686,11 +1710,11 @@ export function ProfilesPage() {
       {actionsOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setActionsOpen(false)} />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[500px] overflow-hidden">
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[720px] overflow-hidden">
             <div className="px-5 pt-4 pb-3 border-b border-border">
               <p className="text-sm font-semibold">Actions</p>
             </div>
-            <div className="py-1 grid grid-cols-2">
+            <div className="py-1 grid grid-cols-3">
               <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Upload className="w-4 h-4 shrink-0 text-cyan-500" /> Import Profiles
               </button>
@@ -1806,14 +1830,14 @@ export function ProfilesPage() {
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Export API Calls{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleBulkOpenBrowsers(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <Globe className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Open EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+O</span>
               </button>
               <button onClick={() => { setActionsOpen(false); handleBulkLoginEB(); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <LogIn className="w-4 h-4 shrink-0 text-muted-foreground" /><span className="whitespace-nowrap">Login EB</span><span className="ml-1 text-[8px] font-semibold text-foreground">Ctrl+L</span>
               </button>
-              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button onClick={() => { setActionsOpen(false); handleVerifyAll(); }} disabled={verifyingAll || selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 {verifyingAll ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <RefreshCw className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1">Verify {selectedProfileIds.length} Account{selectedProfileIds.length !== 1 ? "s" : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+R</span>
@@ -1832,7 +1856,10 @@ export function ProfilesPage() {
               <button onClick={() => { setActionsOpen(false); setResetDeviceConfirmOpen(true); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Smartphone className="w-4 h-4 shrink-0 text-muted-foreground" /> Reset Device IDs
               </button>
-              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); setResetAndClearConfirmOpen(true); }} disabled={selectedProfileIds.length === 0} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+                <Smartphone className="w-4 h-4 shrink-0 text-destructive" /> Reset IDs + Clear Cookies
+              </button>
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button
                 onClick={() => {
                   setActionsOpen(false);
@@ -1855,12 +1882,12 @@ export function ProfilesPage() {
                 <Tag className="w-4 h-4 shrink-0 text-muted-foreground" />
                 <span className="flex-1">Ungroup Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}</span><span className="ml-1 text-[7px] text-foreground">Ctrl+C</span>
               </button>
-              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               {/* Assign TrustScore */}
               <button
                 onClick={() => setTsSubOpen(o => !o)}
                 disabled={selectedProfileIds.length === 0}
-                className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="flex h-4 w-4 items-center justify-center rounded-full shrink-0" style={{ background: "#1AD2F2", border: "1px solid #0eb8d4" }}>
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" /></svg>
@@ -1869,7 +1896,7 @@ export function ProfilesPage() {
                 <svg className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${tsSubOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
               </button>
               {tsSubOpen && (
-                <div className="col-span-2 px-4 pb-3">
+                <div className="col-span-3 px-4 pb-3">
                   <div className="flex flex-wrap gap-1.5 max-h-[180px] overflow-y-auto">
                     {getTrustLevels().map(lvl => {
                       const Icon = lvl.icon;
@@ -1896,7 +1923,7 @@ export function ProfilesPage() {
                   </div>
                 </div>
               )}
-              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button
                 onClick={() => { setActionsOpen(false); handleBulkLock(true); }}
                 disabled={selectedProfileIds.length === 0}
@@ -1911,17 +1938,17 @@ export function ProfilesPage() {
               >
                 <LockOpen className="w-4 h-4 shrink-0 text-muted-foreground" /> Unlock Accounts{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <div className="col-span-2 mx-4 my-1 border-t border-border" />
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
               <button
                 onClick={() => { setActionsOpen(false); setChangeDetailsOpen(true); }}
                 disabled={selectedProfileIds.length === 0}
-                className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <UserCog className="w-4 h-4 shrink-0 text-muted-foreground" />
                 Change Details{selectedProfileIds.length > 0 ? ` (${selectedProfileIds.length})` : ""}
               </button>
-              <div className="col-span-2 mx-4 my-1 border-t border-border" />
-              <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-2 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
+              <div className="col-span-3 mx-4 my-1 border-t border-border" />
+              <button onClick={() => { setActionsOpen(false); handleBulkDelete(); }} disabled={selectedProfileIds.length === 0} className="col-span-3 flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-red-50 text-destructive transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
                 <Trash2 className="w-4 h-4 shrink-0" /><span className="flex-1">Delete Selected</span><span className="ml-auto text-[7px] text-muted-foreground/50">Ctrl+D</span>
               </button>
             </div>
@@ -2102,6 +2129,27 @@ export function ProfilesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleBulkResetDeviceIds}>Reset</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resetAndClearConfirmOpen} onOpenChange={setResetAndClearConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Device IDs + Clear Cookies?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will clear all session cookies AND assign new random device fingerprints to{" "}
+              {selectedProfileIds.length} selected account{selectedProfileIds.length !== 1 ? "s" : ""}. The account{selectedProfileIds.length !== 1 ? "s" : ""} will be logged out and set to Pending — a fresh login and verification will be required.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleBulkResetAndClear}
+            >
+              Reset &amp; Clear
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

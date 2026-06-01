@@ -1121,7 +1121,7 @@ export function ProfileDetailsPage() {
                               )}
                               <button
                                 type="button"
-                                disabled={clearCookiesStatus === "clearing" || (!hasSession && clearCookiesStatus === "idle")}
+                                disabled={clearCookiesStatus === "clearing"}
                                 onClick={async () => {
                                   setClearCookiesStatus("clearing");
                                   try {
@@ -1242,13 +1242,9 @@ export function ProfileDetailsPage() {
                         onSelect={handleUaDeviceSelect}
                       />
                       {formData.userAgentApi && (
-                        <input
-                          readOnly
-                          className="flex h-9 w-full rounded-md border border-input bg-muted/30 px-3 py-1 text-xs font-mono text-muted-foreground shadow-sm cursor-text select-all"
-                          value={formData.userAgentApi}
-                          title={formData.userAgentApi}
-                          onFocus={e => e.currentTarget.select()}
-                        />
+                        <p className="text-[10px] font-mono text-muted-foreground break-all select-all leading-relaxed px-1 pt-0.5">
+                          {formData.userAgentApi}
+                        </p>
                       )}
                     </div>
                     <div className="space-y-2">

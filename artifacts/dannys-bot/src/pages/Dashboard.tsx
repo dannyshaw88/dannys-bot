@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.716",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix", text: "Account settings: API User Agent string is no longer shown twice — the picker is the only control and the full string is displayed below it as plain readable text." },
+      { category: "Fix", text: "Account settings: Clear Cookies button is now always clickable — you no longer need a verified session to clear cookies." },
+      { category: "Fix", text: "Embedded browser: added a second blank-screen recovery path covering full-page navigations to accounts/login/# with an empty body, closing the gap that caused persistent white screens after 2FA on newer builds." },
+      { category: "New", text: "Accounts: new Reset Device IDs + Clear Cookies action wipes cookies and assigns fresh device fingerprints in one step." },
+      { category: "Change", text: "Accounts actions popup is now 3 columns wide, fitting more actions without scrolling." },
+    ],
+  },
+  {
     version: "1.0.715",
     date: "1 Jun 2026",
     items: [

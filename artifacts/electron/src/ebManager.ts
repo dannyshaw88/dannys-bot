@@ -2150,6 +2150,41 @@ export async function openEbWindow(opts: {
     }
   });
 
+  // Blank-page safety net on full-page loads: if did-finish-load fires on
+  // accounts/login/# with an empty body (post-2FA full navigation where
+  // did-navigate-in-page does NOT fire), recover to feed or login page.
+  // This catches regressions where Instagram issues a real navigation instead
+  // of a pushState after 2FA — the in-page handler only covers pushState.
+  win.webContents.on("did-finish-load", async () => {
+    if (win.isDestroyed()) return;
+    const url = win.webContents.getURL();
+    if (!url.includes("instagram.com")) return;
+    if (!url.includes("accounts/login/") || !url.includes("#")) return;
+
+    // Do NOT interrupt manual 2FA entry
+    const has2FA: boolean = await win.webContents.executeJavaScript(`
+      !!(document.querySelector(
+        'input[name="verificationCode"],input[name="verification_code"],' +
+        'input[name="totp_code"],input[name="security_code"],' +
+        'input[autocomplete="one-time-code"],input[inputmode="numeric"][maxlength="6"],' +
+        'input[aria-label*="code" i],input[aria-label*="digit" i]'
+      ))
+    `).catch(() => false);
+    if (has2FA) return;
+
+    // Only recover if the body is genuinely empty (no React root mounted)
+    const isEmpty: boolean = await win.webContents.executeJavaScript(
+      `document.body.children.length === 0 || document.body.innerHTML.trim() === ''`
+    ).catch(() => false);
+    if (!isEmpty) return;
+
+    console.warn(`[ebManager:${profileId}] did-finish-load on accounts/login/# with empty body — recovering`);
+    const recCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" }).catch(() => [] as Electron.Cookie[]);
+    win.webContents.loadURL(
+      recCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+    ).catch(() => {});
+  });
+
   win.on("closed", () => {
     toolbarViewMap.delete(profileId);
     const ts = tabsStateMap.get(profileId);
