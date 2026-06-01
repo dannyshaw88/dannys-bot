@@ -203,17 +203,16 @@ function ProxyRow({
       <div className="border-b border-border/40 bg-accent/10 px-4 py-2">
         <div className="flex flex-col gap-0.5">
           {assigned.map(profile => (
-            <div key={profile.id} className="flex items-center justify-between gap-2 px-2 py-0.5 rounded hover:bg-accent/40 transition-colors group">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-foreground min-w-0">
-                <User className="w-3 h-3 shrink-0 text-primary" />
-                <span className="truncate">{profile.username}</span>
-              </div>
+            <div key={profile.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent/40 transition-colors group">
+              <User className="w-3.5 h-3.5 shrink-0 text-primary" />
+              <span className="text-sm font-medium text-foreground truncate flex-1">{profile.username}</span>
               <button
                 onClick={() => handleUnassign(profile)}
                 disabled={updateProfileMutation.isPending}
-                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
+                title="Remove from proxy"
+                className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-all shrink-0"
               >
-                <X className="w-3 h-3" />
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
@@ -309,14 +308,9 @@ export function ProxiesPage() {
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
-      if (sortDir === "asc") {
-        setSortDir("desc");
-        localStorage.setItem("proxies:sortDir", "desc");
-      } else {
-        setSortKey(null); setSortDir("asc");
-        localStorage.removeItem("proxies:sortKey");
-        localStorage.setItem("proxies:sortDir", "asc");
-      }
+      const next = sortDir === "asc" ? "desc" : "asc";
+      setSortDir(next);
+      localStorage.setItem("proxies:sortDir", next);
     } else {
       setSortKey(key);
       setSortDir("asc");

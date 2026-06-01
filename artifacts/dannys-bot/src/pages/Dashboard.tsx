@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.712",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Improvement", text: "Proxy Manager: account names assigned to each proxy are now larger and easier to read." },
+      { category: "Improvement", text: "Proxy Manager: the remove-account button is now a red bin icon shown beside the account name on hover, replacing the small X at the far right." },
+      { category: "Fix", text: "Proxy Manager: the Accounts column now toggles between least-to-most and most-to-least — the previous unsorted third state has been removed." },
+    ],
+  },
+  {
     version: "1.0.711",
     date: "1 Jun 2026",
     items: [
