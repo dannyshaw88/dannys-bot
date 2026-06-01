@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Play, Square, Trash2, Copy, Download, RefreshCw, Wifi, Smartphone, ChevronRight, Circle } from "lucide-react";
+import { Play, Square, Trash2, Copy, Download, RefreshCw, Wifi, Signal, ChevronRight, Circle, Copy as CopyIcon } from "lucide-react";
 
 interface StatusData {
   running: boolean;
   port: number;
   localIps: string[];
-  adbAvailable: boolean;
-  devices: { serial: string; state: string }[];
+  publicIp: string | null;
   entryCount: number;
 }
 
@@ -24,13 +23,13 @@ interface LogEntry {
 }
 
 const METHOD_COLORS: Record<string, string> = {
-  GET:     "text-emerald-400",
-  POST:    "text-blue-400",
-  PUT:     "text-yellow-400",
-  PATCH:   "text-orange-400",
-  DELETE:  "text-red-400",
-  CONNECT: "text-purple-400",
-  HEAD:    "text-cyan-400",
+  GET:     "text-emerald-700",
+  POST:    "text-blue-700",
+  PUT:     "text-yellow-700",
+  PATCH:   "text-orange-700",
+  DELETE:  "text-red-700",
+  CONNECT: "text-purple-700",
+  HEAD:    "text-cyan-700",
 };
 
 function formatTs(iso: string): string {
@@ -47,11 +46,30 @@ function formatSize(bytes: number | null): string {
 }
 
 function statusColor(code: number | null): string {
-  if (!code) return "text-zinc-500";
-  if (code < 300) return "text-emerald-400";
-  if (code < 400) return "text-yellow-400";
-  if (code < 500) return "text-orange-400";
-  return "text-red-400";
+  if (!code) return "text-gray-400";
+  if (code < 300) return "text-emerald-600";
+  if (code < 400) return "text-yellow-600";
+  if (code < 500) return "text-orange-600";
+  return "text-red-600";
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={copy}
+      title="Copy"
+      className="ml-1 p-0.5 rounded hover:bg-accent text-muted-foreground transition-colors"
+    >
+      <CopyIcon className="w-3 h-3" />
+      {copied && <span className="sr-only">Copied!</span>}
+    </button>
+  );
 }
 
 export function TrackApiPage() {
@@ -62,20 +80,19 @@ export function TrackApiPage() {
   const [autoScroll, setAutoScroll] = useState(true);
   const [loading, setLoading] = useState(false);
   const [port, setPort] = useState("8899");
+  const [selectedIp, setSelectedIp] = useState<string>("");
+  const [connectionMode, setConnectionMode] = useState<"wifi" | "sim">("wifi");
   const logRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const [selectedDevice, setSelectedDevice] = useState<string>("");
-  const [selectedIp, setSelectedIp] = useState<string>("");
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/track-api/status", { credentials: "include" });
       const data: StatusData = await res.json();
       setStatus(data);
-      if (!selectedDevice && data.devices.length > 0) setSelectedDevice(data.devices[0].serial);
       if (!selectedIp && data.localIps.length > 0) setSelectedIp(data.localIps[0]);
     } catch {}
-  }, [selectedDevice, selectedIp]);
+  }, [selectedIp]);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -88,7 +105,7 @@ export function TrackApiPage() {
   useEffect(() => {
     fetchStatus();
     fetchLogs();
-    const iv = setInterval(fetchStatus, 3000);
+    const iv = setInterval(fetchStatus, 5000);
     return () => clearInterval(iv);
   }, [fetchStatus, fetchLogs]);
 
@@ -167,27 +184,6 @@ export function TrackApiPage() {
     URL.revokeObjectURL(url);
   };
 
-  const setAdbProxy = async () => {
-    if (!selectedDevice || !selectedIp) return;
-    await fetch("/api/track-api/adb/set-proxy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ serial: selectedDevice, host: selectedIp, port: parseInt(port, 10) }),
-    });
-    await fetchStatus();
-  };
-
-  const clearAdbProxy = async () => {
-    if (!selectedDevice) return;
-    await fetch("/api/track-api/adb/clear-proxy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ serial: selectedDevice }),
-    });
-  };
-
   const filteredEntries = entries.filter(e => {
     const methodOk = filterMethod === "ALL" || e.method === filterMethod || (filterMethod === "CONNECT" && e.type === "connect");
     const textOk = !filter || `${e.host}${e.path}`.toLowerCase().includes(filter.toLowerCase());
@@ -195,6 +191,7 @@ export function TrackApiPage() {
   });
 
   const running = status?.running ?? false;
+  const proxyHost = connectionMode === "sim" ? (status?.publicIp ?? null) : selectedIp;
 
   return (
     <AppLayout>
@@ -204,7 +201,7 @@ export function TrackApiPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Track API</h1>
-            <p className="text-muted-foreground mt-0.5 text-sm">Intercept HTTP traffic from your phone via proxy — see every endpoint hit by Instagram.</p>
+            <p className="text-muted-foreground mt-0.5 text-sm">Intercept iPhone Instagram traffic via proxy — see every endpoint hit in real time.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -249,8 +246,8 @@ export function TrackApiPage() {
             </div>
 
             {running && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground font-medium">PC IP addresses — type one of these as the proxy host on your phone:</p>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium">PC IP addresses (WiFi):</p>
                 <div className="flex flex-wrap gap-1.5">
                   {(status?.localIps ?? []).map(ip => (
                     <button
@@ -266,54 +263,74 @@ export function TrackApiPage() {
             )}
           </div>
 
-          {/* ADB / device control */}
+          {/* iPhone connection panel */}
           <div className="desktop-card p-4 space-y-3">
             <div className="flex items-center gap-2 mb-1">
-              <Smartphone className="w-4 h-4 text-primary" />
-              <span className="text-sm font-bold">Android Device (ADB)</span>
-              {status?.adbAvailable === false && (
-                <span className="ml-auto text-[10px] text-orange-500 font-semibold">ADB not found in PATH</span>
-              )}
+              <span className="text-base">📱</span>
+              <span className="text-sm font-bold">iPhone Connection</span>
             </div>
 
-            {(status?.devices ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground">No devices detected. Connect your phone via USB with USB Debugging enabled.</p>
+            {/* Mode toggle */}
+            <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+              <button
+                onClick={() => setConnectionMode("wifi")}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-colors ${connectionMode === "wifi" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Wifi className="w-3 h-3" /> Same WiFi
+              </button>
+              <button
+                onClick={() => setConnectionMode("sim")}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-colors ${connectionMode === "sim" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Signal className="w-3 h-3" /> SIM / Cellular
+              </button>
+            </div>
+
+            {connectionMode === "wifi" ? (
+              <div className="space-y-1.5 text-xs text-muted-foreground">
+                <p>Your iPhone must be on the <strong className="text-foreground">same WiFi network</strong> as this PC.</p>
+                {running && selectedIp ? (
+                  <div className="flex items-center gap-1 bg-muted px-2 py-1.5 rounded font-mono text-foreground text-xs">
+                    <span className="text-muted-foreground">Host:</span>
+                    <span className="font-bold">{selectedIp}</span>
+                    <CopyButton value={selectedIp} />
+                    <span className="ml-2 text-muted-foreground">Port:</span>
+                    <span className="font-bold">{port}</span>
+                    <CopyButton value={port} />
+                  </div>
+                ) : (
+                  <p className="text-orange-500 text-xs">Start the proxy to see your IP address.</p>
+                )}
+              </div>
             ) : (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-1.5">
-                  {(status?.devices ?? []).map(d => (
-                    <button
-                      key={d.serial}
-                      onClick={() => setSelectedDevice(d.serial)}
-                      className={`px-2 py-0.5 rounded font-mono text-xs border transition-colors ${selectedDevice === d.serial ? "bg-primary/10 border-primary text-primary" : "bg-muted border-border text-foreground hover:border-primary"}`}
-                    >
-                      {d.serial} <span className="text-muted-foreground">({d.state})</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={setAdbProxy}
-                    disabled={!running || !selectedDevice || !selectedIp}
-                    className="px-3 py-1 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
-                  >
-                    Set Proxy via ADB
-                  </button>
-                  <button
-                    onClick={clearAdbProxy}
-                    disabled={!selectedDevice}
-                    className="px-3 py-1 text-xs font-semibold rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-40"
-                  >
-                    Clear Proxy
-                  </button>
+              <div className="space-y-1.5 text-xs text-muted-foreground">
+                <p>Your iPhone uses <strong className="text-foreground">mobile data (SIM)</strong>. Your PC's port {port} must be reachable from the internet — set up port forwarding on your router.</p>
+                {running ? (
+                  status?.publicIp ? (
+                    <div className="flex items-center gap-1 bg-muted px-2 py-1.5 rounded font-mono text-foreground text-xs">
+                      <span className="text-muted-foreground">Host:</span>
+                      <span className="font-bold">{status.publicIp}</span>
+                      <CopyButton value={status.publicIp} />
+                      <span className="ml-2 text-muted-foreground">Port:</span>
+                      <span className="font-bold">{port}</span>
+                      <CopyButton value={port} />
+                    </div>
+                  ) : (
+                    <p className="text-orange-500 text-xs">Could not detect public IP. Check your internet connection.</p>
+                  )
+                ) : (
+                  <p className="text-orange-500 text-xs">Start the proxy first.</p>
+                )}
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-2 text-amber-800 dark:text-amber-300">
+                  <strong>Router setup required:</strong> Forward TCP port <span className="font-mono">{port}</span> to this PC's local IP in your router settings. Your iPhone's SIM traffic will then reach the proxy.
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* ── Setup guide (collapsed by default) ── */}
-        <SetupGuide running={running} port={port} selectedIp={selectedIp} />
+        {/* ── iPhone setup guide ── */}
+        <IPhoneSetupGuide running={running} port={port} proxyHost={proxyHost} connectionMode={connectionMode} />
 
         {/* ── Log viewer ── */}
         <div className="flex-1 desktop-card flex flex-col overflow-hidden min-h-0">
@@ -356,7 +373,7 @@ export function TrackApiPage() {
           {/* Log lines */}
           <div
             ref={logRef}
-            className="flex-1 overflow-y-auto bg-zinc-950 font-mono text-[11px] leading-relaxed p-2 min-h-0"
+            className="flex-1 overflow-y-auto bg-white border border-black font-mono text-[11px] leading-relaxed p-2 min-h-0"
             onScroll={(e) => {
               const el = e.currentTarget;
               const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
@@ -364,19 +381,21 @@ export function TrackApiPage() {
             }}
           >
             {filteredEntries.length === 0 ? (
-              <div className="text-zinc-600 italic p-4">
-                {running ? "Waiting for traffic… Configure your phone to use this PC as its HTTP proxy, then open Instagram." : "Start the proxy first, then configure your phone to route traffic through it."}
+              <div className="text-gray-400 italic p-4">
+                {running
+                  ? "Waiting for iPhone traffic… Configure your iPhone's WiFi proxy settings, then open Instagram."
+                  : "Start the proxy first, then configure your iPhone to route its traffic through it."}
               </div>
             ) : (
               filteredEntries.map(e => (
-                <div key={e.id} className="flex items-baseline gap-2 hover:bg-zinc-900 px-1 rounded group">
-                  <span className="text-zinc-600 shrink-0 w-[84px]">{formatTs(e.ts)}</span>
-                  <span className={`w-[58px] shrink-0 font-bold ${METHOD_COLORS[e.method] ?? "text-zinc-400"}`}>{e.method}</span>
-                  <span className="text-zinc-300">{e.host}</span>
-                  {e.path && <span className="text-zinc-500">{e.path}</span>}
+                <div key={e.id} className="flex items-baseline gap-2 hover:bg-gray-50 px-1 rounded group">
+                  <span className="text-gray-500 shrink-0 w-[90px]">{formatTs(e.ts)}</span>
+                  <span className={`w-[58px] shrink-0 font-bold ${METHOD_COLORS[e.method] ?? "text-gray-700"}`}>{e.method}</span>
+                  <span className="text-black">{e.host}</span>
+                  {e.path && <span className="text-gray-600">{e.path}</span>}
                   {e.status && <span className={`ml-auto shrink-0 ${statusColor(e.status)}`}>{e.status}</span>}
-                  {e.durationMs != null && <span className="text-zinc-600 shrink-0 text-[10px]">{e.durationMs}ms</span>}
-                  {e.size != null && <span className="text-zinc-700 shrink-0 text-[10px]">{formatSize(e.size)}</span>}
+                  {e.durationMs != null && <span className="text-gray-400 shrink-0 text-[10px]">{e.durationMs}ms</span>}
+                  {e.size != null && <span className="text-gray-400 shrink-0 text-[10px]">{formatSize(e.size)}</span>}
                 </div>
               ))
             )}
@@ -387,43 +406,115 @@ export function TrackApiPage() {
   );
 }
 
-function SetupGuide({ running, port, selectedIp }: { running: boolean; port: string; selectedIp: string }) {
+function IPhoneSetupGuide({
+  running,
+  port,
+  proxyHost,
+  connectionMode,
+}: {
+  running: boolean;
+  port: string;
+  proxyHost: string | null;
+  connectionMode: "wifi" | "sim";
+}) {
   const [open, setOpen] = useState(false);
-  const proxyStr = selectedIp ? `${selectedIp}:${port}` : `<YOUR_PC_IP>:${port}`;
+  const hostDisplay = proxyHost ?? "<PC_IP>";
 
   return (
     <div className="desktop-card shrink-0">
-      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-2 w-full px-4 py-3 text-sm font-semibold hover:bg-accent/30 transition-colors rounded-[inherit]">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 w-full px-4 py-3 text-sm font-semibold hover:bg-accent/30 transition-colors rounded-[inherit]"
+      >
         <ChevronRight className={`w-4 h-4 transition-transform ${open ? "rotate-90" : ""}`} />
-        Setup Guide — How to route your phone through this proxy
+        <span>📱 iPhone Setup Guide</span>
         {!running && <span className="ml-auto text-xs text-orange-500 font-normal">Start the proxy first</span>}
       </button>
 
       {open && (
-        <div className="px-5 pb-4 space-y-3 text-sm">
+        <div className="px-5 pb-5 space-y-4 text-sm">
+
+          {/* Step-by-step iOS proxy setup */}
           <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Option A — Auto via ADB (USB cable)</p>
-            <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
-              <li>Enable <strong>USB Debugging</strong> on your phone (Settings → Developer Options → USB Debugging)</li>
-              <li>Connect your phone via USB cable and accept the "Allow USB Debugging?" prompt</li>
-              <li>Start the proxy above, then click <strong>Set Proxy via ADB</strong> — this auto-configures the phone</li>
-              <li>Open Instagram and browse normally — all traffic appears in the log below</li>
-              <li>When done, click <strong>Clear Proxy</strong> to remove the proxy setting from the phone</li>
-            </ol>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              {connectionMode === "wifi" ? "WiFi Proxy Setup on iPhone" : "SIM / Cellular Proxy Setup on iPhone"}
+            </p>
+
+            {connectionMode === "wifi" ? (
+              <ol className="space-y-2 text-xs text-muted-foreground">
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">1</span>
+                  <span>Make sure your iPhone is connected to the <strong className="text-foreground">same WiFi network</strong> as this PC.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">2</span>
+                  <span>On your iPhone go to <strong className="text-foreground">Settings → Wi-Fi</strong> and tap the <strong className="text-foreground">ⓘ</strong> next to your connected network.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">3</span>
+                  <span>Scroll down to <strong className="text-foreground">HTTP Proxy</strong> → tap <strong className="text-foreground">Configure Proxy</strong> → select <strong className="text-foreground">Manual</strong>.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">4</span>
+                  <div>
+                    <span>Set <strong className="text-foreground">Server</strong> to </span>
+                    <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code>
+                    <span> and <strong className="text-foreground">Port</strong> to </span>
+                    <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>
+                    <span>. Leave Authentication off.</span>
+                  </div>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
+                  <span>Tap <strong className="text-foreground">Save</strong> in the top-right corner.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
+                  <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone and browse normally — traffic appears in the log below instantly.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center font-bold text-[10px]">✓</span>
+                  <span>When done, go back to <strong className="text-foreground">Settings → Wi-Fi → ⓘ → Configure Proxy → Off</strong> to remove the proxy from your iPhone.</span>
+                </li>
+              </ol>
+            ) : (
+              <ol className="space-y-2 text-xs text-muted-foreground">
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">1</span>
+                  <span>On your router, set up <strong className="text-foreground">port forwarding</strong>: forward external TCP port <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code> to this PC's local IP address.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">2</span>
+                  <span>Turn <strong className="text-foreground">WiFi off</strong> on your iPhone so it uses SIM data only (Settings → Wi-Fi → toggle off).</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">3</span>
+                  <span>On your iPhone go to <strong className="text-foreground">Settings → Mobile Data → Mobile Data Options → Mobile Data Network</strong> (or <strong className="text-foreground">Cellular → Cellular Data Options → Cellular Data Network</strong> in some regions).</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">4</span>
+                  <div>
+                    <span>Under the <strong className="text-foreground">Personal Hotspot</strong> or <strong className="text-foreground">LTE/4G</strong> section, scroll to <strong className="text-foreground">Proxy</strong> and enter Server: </span>
+                    <code className="bg-muted px-1 rounded font-mono text-foreground">{hostDisplay}</code>
+                    <span> Port: </span>
+                    <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code>.
+                  </div>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">5</span>
+                  <span>Alternatively, use a <strong className="text-foreground">VPN / profile</strong> that routes all traffic through your proxy — see apps like <strong className="text-foreground">Shadowrocket</strong> or <strong className="text-foreground">Quantumult X</strong> (App Store).</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px]">6</span>
+                  <span>Open <strong className="text-foreground">Instagram</strong> on your iPhone — all traffic will appear in the log below.</span>
+                </li>
+              </ol>
+            )}
           </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Option B — Manual WiFi proxy</p>
-            <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
-              <li>Make sure your phone is on the <strong>same WiFi network</strong> as this PC</li>
-              <li>On Android: Settings → WiFi → long-press your network → Modify → Advanced → Proxy: Manual</li>
-              <li>Set <strong>Proxy hostname</strong> to <code className="bg-muted px-1 rounded font-mono text-foreground">{proxyStr.split(":")[0]}</code> and <strong>Port</strong> to <code className="bg-muted px-1 rounded font-mono text-foreground">{port}</code></li>
-              <li>Open Instagram — traffic appears in the log</li>
-            </ol>
-          </div>
-
+          {/* HTTPS note */}
           <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-300">
-            <strong>HTTPS note:</strong> Instagram uses HTTPS for all API calls. This proxy logs the destination hostname for every HTTPS connection (you will see <code className="font-mono">CONNECT i.instagram.com:443</code>) but not the actual path inside the encrypted tunnel. To see full paths like <code className="font-mono">/api/v1/feed/timeline/</code>, you need a MITM proxy (e.g. mitmproxy or Charles Proxy) with a trusted CA certificate installed on your phone, and SSL pinning bypassed (Frida/Magisk on rooted device).
+            <strong>HTTPS note:</strong> Instagram uses HTTPS for all API calls. This proxy logs the destination hostname for every HTTPS connection (e.g. <code className="font-mono">CONNECT i.instagram.com:443</code>) but not the path inside the encrypted tunnel. To see full paths like <code className="font-mono">/api/v1/feed/timeline/</code>, you need a MITM proxy with a trusted CA certificate installed on your iPhone — use <strong>mitmproxy</strong> or <strong>Charles Proxy</strong> and trust their root cert in iPhone Settings → General → About → Certificate Trust Settings.
           </div>
         </div>
       )}

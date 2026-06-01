@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.705",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Change", text: "Track API is now iPhone-only — Android/ADB support removed. Connection panel shows a Same WiFi / SIM toggle with step-by-step iOS proxy setup instructions." },
+      { category: "New", text: "Track API log now has a white background with black border and black text, making it easier to read captured traffic at a glance." },
+      { category: "New", text: "Track API detects your PC's public IP automatically so you can route your iPhone's SIM (cellular) traffic through the proxy when on mobile data." },
+    ],
+  },
+  {
     version: "1.0.704",
     date: "1 Jun 2026",
     items: [

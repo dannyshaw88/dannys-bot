@@ -3,11 +3,8 @@ import type { Server as HttpServer } from "http";
 import * as net from "net";
 import * as http from "http";
 import * as os from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
+import * as https from "https";
 import { WebSocketServer, WebSocket } from "ws";
-
-const execAsync = promisify(exec);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +51,38 @@ function getLocalIps(): string[] {
     }
   }
   return ips;
+}
+
+// Attempt to detect the machine's public (WAN) IP for SIM/cellular connections.
+// Falls back to null quickly if unreachable so it doesn't block the status endpoint.
+let _cachedPublicIp: string | null = null;
+let _publicIpFetchedAt = 0;
+const PUBLIC_IP_TTL_MS = 60_000;
+
+function fetchPublicIp(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const now = Date.now();
+    if (_cachedPublicIp && now - _publicIpFetchedAt < PUBLIC_IP_TTL_MS) {
+      return resolve(_cachedPublicIp);
+    }
+    const timeout = setTimeout(() => resolve(null), 3000);
+    https.get("https://api.ipify.org", (res) => {
+      let data = "";
+      res.on("data", (c: Buffer) => { data += c.toString(); });
+      res.on("end", () => {
+        clearTimeout(timeout);
+        const ip = data.trim();
+        if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+          _cachedPublicIp = ip;
+          _publicIpFetchedAt = Date.now();
+          resolve(ip);
+        } else {
+          resolve(null);
+        }
+      });
+      res.on("error", () => { clearTimeout(timeout); resolve(null); });
+    }).on("error", () => { clearTimeout(timeout); resolve(null); });
+  });
 }
 
 function startProxy(port: number): Promise<void> {
@@ -193,40 +222,6 @@ function stopProxy(): Promise<void> {
   });
 }
 
-// ─── ADB helpers ──────────────────────────────────────────────────────────────
-
-async function adbDevices(): Promise<{ serial: string; state: string }[]> {
-  try {
-    const { stdout } = await execAsync("adb devices");
-    return stdout
-      .split("\n")
-      .slice(1)
-      .map(l => l.trim())
-      .filter(l => l && !l.startsWith("*"))
-      .map(l => {
-        const [serial, ...rest] = l.split(/\s+/);
-        return { serial: serial ?? "", state: rest.join(" ") };
-      })
-      .filter(d => d.serial);
-  } catch {
-    return [];
-  }
-}
-
-async function adbSetProxy(serial: string, host: string, port: number): Promise<void> {
-  await execAsync(`adb -s ${serial} shell settings put global http_proxy ${host}:${port}`);
-  await execAsync(`adb -s ${serial} shell settings put global https_proxy ${host}:${port}`);
-}
-
-async function adbClearProxy(serial: string): Promise<void> {
-  await execAsync(`adb -s ${serial} shell settings put global http_proxy :0`);
-  await execAsync(`adb -s ${serial} shell settings delete global https_proxy`);
-}
-
-async function adbAvailable(): Promise<boolean> {
-  try { await execAsync("adb version"); return true; } catch { return false; }
-}
-
 // ─── Route registration ───────────────────────────────────────────────────────
 
 export function registerTrackApiRoutes(httpServer: HttpServer, app: Express) {
@@ -242,13 +237,12 @@ export function registerTrackApiRoutes(httpServer: HttpServer, app: Express) {
   });
 
   app.get("/api/track-api/status", async (_req, res) => {
-    const [devices, hasAdb] = await Promise.all([adbDevices(), adbAvailable()]);
+    const [publicIp] = await Promise.all([fetchPublicIp()]);
     res.json({
       running: !!_proxyServer,
       port: _proxyPort,
       localIps: getLocalIps(),
-      adbAvailable: hasAdb,
-      devices,
+      publicIp,
       entryCount: _log.length,
     });
   });
@@ -279,30 +273,5 @@ export function registerTrackApiRoutes(httpServer: HttpServer, app: Express) {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "clear" }));
     }
     res.json({ ok: true });
-  });
-
-  app.post("/api/track-api/adb/set-proxy", async (req, res) => {
-    const { serial, host, port } = req.body ?? {};
-    if (!serial || !host || !port) {
-      res.status(400).json({ message: "serial, host, and port are required" });
-      return;
-    }
-    try {
-      await adbSetProxy(serial, host, Number(port));
-      res.json({ ok: true });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message ?? "ADB command failed" });
-    }
-  });
-
-  app.post("/api/track-api/adb/clear-proxy", async (req, res) => {
-    const { serial } = req.body ?? {};
-    if (!serial) { res.status(400).json({ message: "serial is required" }); return; }
-    try {
-      await adbClearProxy(serial);
-      res.json({ ok: true });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message ?? "ADB command failed" });
-    }
   });
 }
