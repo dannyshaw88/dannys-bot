@@ -56,6 +56,7 @@ export interface IStorage {
   createSource(source: InsertSource): Promise<Source>;
   createSourcesBulk(rows: InsertSource[]): Promise<Source[]>;
   deleteSource(id: number): Promise<void>;
+  deleteSourcesByTool(toolId: number): Promise<void>;
   updateSourceTargetUserId(id: number, targetUserId: string): Promise<void>;
   updateSourceHashtagCursor(id: number, cursor: string): Promise<void>;
 
@@ -241,6 +242,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSource(id: number): Promise<void> {
     await db.delete(sources).where(eq(sources.id, id));
+  }
+
+  async deleteSourcesByTool(toolId: number): Promise<void> {
+    await db.delete(sources).where(eq(sources.toolId, toolId));
   }
 
   async updateSourceTargetUserId(id: number, targetUserId: string): Promise<void> {

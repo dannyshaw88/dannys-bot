@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { useProfileEngineStatus } from "@/hooks/use-engine-status";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
-import { useSources, useCreateSource, useDeleteSource, useImportSources, parseJarveeHashtagFile } from "@/hooks/use-sources";
+import { useSources, useCreateSource, useDeleteSource, useImportSources, useClearSources, parseJarveeHashtagFile } from "@/hooks/use-sources";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
+import { api } from "@shared/routes";
 interface ToolConfigPanelProps {
   tool: Tool;
   profile: Profile;
@@ -36,6 +37,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const createSourceMutation = useCreateSource();
   const deleteSourceMutation = useDeleteSource();
   const importSourcesMutation = useImportSources();
+  const clearSourcesMutation = useClearSources();
   const importFileRef = useRef<HTMLInputElement>(null);
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -316,14 +318,16 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
       ]},
     ]},
     { label: "Sources", options: [
-      { key: "ft_sources", label: "Target Sources", description: "Copy all target sources to other profiles adds to existing sources" },
+      { key: "ft_sources", label: "Target Sources", description: "Copy all target sources to other profiles — adds to their existing sources" },
+      { key: "ft_clearSources", label: "Clear Sources First", description: "Remove all existing sources from destination profiles before copying" },
     ]},
   ];
 
   const handleFollowToolCopy = async (targetIds: number[], expandedKeys: string[]) => {
-    const copyEnabled  = expandedKeys.includes("startStop");
-    const copySources  = expandedKeys.includes("ft_sources");
-    const keysToSend   = expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources");
+    const copyEnabled       = expandedKeys.includes("startStop");
+    const copySources       = expandedKeys.includes("ft_sources");
+    const clearSourcesFirst = expandedKeys.includes("ft_clearSources");
+    const keysToSend        = expandedKeys.filter(k => k !== "startStop" && k !== "ft_sources" && k !== "ft_clearSources");
 
     // When "Randomise timing" is selected and accounts are being enabled,
     // give each account a random start time within [delayMin, delayMax] so
@@ -340,38 +344,57 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
       );
     }
 
-    await copyToolSettingsToProfiles(
-      settings as Record<string, unknown>,
-      tool.type,
-      targetIds,
-      keysToSend,
-      copyEnabled ? tool.enabled : undefined,
-      staggerOffsets,
-    );
+    try {
+      await copyToolSettingsToProfiles(
+        settings as Record<string, unknown>,
+        tool.type,
+        targetIds,
+        keysToSend,
+        copyEnabled ? tool.enabled : undefined,
+        staggerOffsets,
+      );
+    } catch (err) {
+      console.error("[copySettings] Failed to copy follow tool settings:", err);
+    }
 
-    if (copySources) {
-      const sourcesRes = await fetch(`/api/tools/${tool.id}/sources`, { credentials: "include" });
+    if (clearSourcesFirst || copySources) {
+      const sourcesRes = copySources
+        ? await fetch(`/api/tools/${tool.id}/sources`, { credentials: "include" })
+        : null;
       const currentSources: { type: string; value: string; rank?: number | null; nrPosts?: number | null }[] =
-        sourcesRes.ok ? await sourcesRes.json() : [];
+        sourcesRes?.ok ? await sourcesRes.json() : [];
+      const payload = copySources && currentSources.length > 0
+        ? currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
+        : [];
 
-      if (currentSources.length > 0) {
-        const payload = currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }));
-        await Promise.all(
-          targetIds.map(async profileId => {
-            const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
-            if (!toolsRes.ok) return;
-            const tools: { id: number; type: string }[] = await toolsRes.json();
-            const targetTool = tools.find(t => t.type === "follow");
-            if (!targetTool) return;
-            await fetch(`/api/tools/${targetTool.id}/sources/import`, {
+      await Promise.all(
+        targetIds.map(async profileId => {
+          const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+          if (!toolsRes.ok) return;
+          const profileTools: { id: number; type: string }[] = await toolsRes.json();
+          const targetTool = profileTools.find(t => t.type === "follow");
+          if (!targetTool) return;
+
+          if (clearSourcesFirst) {
+            await fetch(`/api/tools/${targetTool.id}/sources`, { method: "DELETE", credentials: "include" });
+            queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, targetTool.id] });
+          }
+
+          if (payload.length > 0) {
+            const importRes = await fetch(`/api/tools/${targetTool.id}/sources/import`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
               credentials: "include",
             });
-          })
-        );
-      }
+            if (importRes.ok) {
+              queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, targetTool.id] });
+            } else {
+              console.error(`[copySettings] Sources import failed for profile ${profileId}: ${importRes.status}`);
+            }
+          }
+        })
+      );
     }
 
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
@@ -493,11 +516,19 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
         <div className="desktop-card p-6">
           <div className="flex gap-3 mb-6 flex-wrap">
             <form onSubmit={handleAddSource} className="flex gap-3 flex-1 min-w-0">
-              <select className="h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 shrink-0"
-                value={newSourceType} onChange={(e) => setNewSourceType(e.target.value as any)}>
-                <option value="hashtag">Hashtag</option>
-                <option value="target_followers">Followers of Account</option>
-              </select>
+              <div className="flex rounded-lg border border-border overflow-hidden text-sm shrink-0">
+                <button type="button"
+                  className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${newSourceType === 'hashtag' ? 'bg-primary text-primary-foreground font-medium' : 'bg-background text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
+                  onClick={() => setNewSourceType('hashtag')}>
+                  <Hash className="w-3.5 h-3.5" />Hashtag
+                </button>
+                <div className="w-px bg-border" />
+                <button type="button"
+                  className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${newSourceType === 'target_followers' ? 'bg-primary text-primary-foreground font-medium' : 'bg-background text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
+                  onClick={() => setNewSourceType('target_followers')}>
+                  <Users className="w-3.5 h-3.5" />Followers of Account
+                </button>
+              </div>
               <Input placeholder={newSourceType === 'hashtag' ? "e.g. #photography" : "e.g. @natgeo"}
                 value={newSourceValue} onChange={(e) => setNewSourceValue(e.target.value)} className="flex-1" />
               <Button type="submit" disabled={createSourceMutation.isPending || !newSourceValue.trim()}>
@@ -510,6 +541,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
             </Button>
             <Button type="button" variant="outline" onClick={handleExport}>
               <Download className="w-4 h-4 mr-2" /> Export
+            </Button>
+            <Button type="button" variant="outline"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+              disabled={clearSourcesMutation.isPending || !sources?.length}
+              onClick={() => clearSourcesMutation.mutate(tool.id)}>
+              <Trash2 className="w-4 h-4 mr-2" />{clearSourcesMutation.isPending ? 'Clearing…' : 'Clear All'}
             </Button>
           </div>
           {(sources?.length ?? 0) > 0 && (
@@ -1391,14 +1428,19 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
             
             <div className="flex gap-3 mb-6 flex-wrap">
               <form onSubmit={handleAddSource} className="flex gap-3 flex-1 min-w-0">
-                <select 
-                  className="h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 shrink-0"
-                  value={newSourceType}
-                  onChange={(e) => setNewSourceType(e.target.value as any)}
-                >
-                  <option value="hashtag">Hashtag</option>
-                  <option value="target_followers">Followers of Account</option>
-                </select>
+                <div className="flex rounded-lg border border-border overflow-hidden text-sm shrink-0">
+                  <button type="button"
+                    className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${newSourceType === 'hashtag' ? 'bg-primary text-primary-foreground font-medium' : 'bg-background text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
+                    onClick={() => setNewSourceType('hashtag')}>
+                    <Hash className="w-3.5 h-3.5" />Hashtag
+                  </button>
+                  <div className="w-px bg-border" />
+                  <button type="button"
+                    className={`flex items-center gap-1.5 px-3 py-2 transition-colors ${newSourceType === 'target_followers' ? 'bg-primary text-primary-foreground font-medium' : 'bg-background text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
+                    onClick={() => setNewSourceType('target_followers')}>
+                    <Users className="w-3.5 h-3.5" />Followers of Account
+                  </button>
+                </div>
                 <Input 
                   placeholder={newSourceType === 'hashtag' ? "e.g. #photography" : "e.g. @natgeo"} 
                   value={newSourceValue}
@@ -1420,6 +1462,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
               </Button>
               <Button type="button" variant="outline" onClick={handleExport}>
                 <Download className="w-4 h-4 mr-2" /> Export
+              </Button>
+              <Button type="button" variant="outline"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                disabled={clearSourcesMutation.isPending || !sources?.length}
+                onClick={() => clearSourcesMutation.mutate(tool.id)}>
+                <Trash2 className="w-4 h-4 mr-2" />{clearSourcesMutation.isPending ? 'Clearing…' : 'Clear All'}
               </Button>
             </div>
 

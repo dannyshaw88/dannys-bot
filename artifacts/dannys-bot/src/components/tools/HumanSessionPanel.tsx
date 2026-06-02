@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpdateTool } from "@/hooks/use-tools";
 import { useProfiles } from "@/hooks/use-profiles";
 import { Switch } from "@/components/ui/switch";
@@ -19,6 +19,7 @@ import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useToast } from "@/hooks/use-toast";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { copyToolSettingsToProfiles } from "@/lib/copyToolSettings";
+import { api } from "@shared/routes";
 import { ImageSettingsDialog } from "@/components/tools/ImageSettingsDialog";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
@@ -39,6 +40,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const embeddedUpdateTool = useUpdateTool();
   const { navigateTo } = useBrowserWindows();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [showReposted, setShowReposted] = useState(false);
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
@@ -190,6 +192,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "hf_stopMinutes", label: "Stop duration", settingKeys: ["follow:stopOnBlockMinutes"] },
       ]},
       { key: "hs_followSources", label: "Target Sources", description: "Copy all follow tool target sources to other profiles — adds to their existing sources" },
+      { key: "hs_clearFollowSources", label: "Clear Sources First", description: "Remove all existing sources from destination follow tools before copying" },
     ]},
     { label: "Unfollow Tool Settings", options: [
       { key: "hs_unfollowSettings", label: "Settings", description: "Unfollow timing, limits and age filters", subOptions: [
@@ -240,8 +243,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     const copyAutoReply        = expandedKeys.includes("hs_autoReplyEnabled");
     const copyContactUsers     = expandedKeys.includes("hs_contactUsersEnabled");
     const copyFollowSources    = expandedKeys.includes("hs_followSources");
+    const clearFollowSources   = expandedKeys.includes("hs_clearFollowSources");
 
-    const SENTINEL_KEYS = ["startStop", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources"];
+    const SENTINEL_KEYS = ["startStop", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources", "hs_clearFollowSources"];
     const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k) && !k.includes(":"));
 
     const willEnable    = copyEnabled && tool.enabled;
@@ -253,7 +257,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
       );
     }
-    await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined, staggerOffsets);
+    try {
+      await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined, staggerOffsets);
+    } catch (err) {
+      console.error("[copySettings] Failed to copy human session settings:", err);
+    }
 
     // ── Copy unfollow tool enabled state ──────────────────────────────────────
     if (copyUnfollowEnabled && unfollowTool) {
@@ -280,65 +288,97 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     if (copyAutoReply && contactTool)     contactSrc.autoReplyEnabled           = !!(contactTool.settings as any)?.autoReplyEnabled;
     if (copyContactUsers && contactTool)  contactSrc.contactUsersEnabled        = !!(contactTool.settings as any)?.contactUsersEnabled;
     if (Object.keys(contactSrc).length > 0) {
-      await copyToolSettingsToProfiles(contactSrc, "contact", targetIds, Object.keys(contactSrc));
+      try {
+        await copyToolSettingsToProfiles(contactSrc, "contact", targetIds, Object.keys(contactSrc));
+      } catch (err) {
+        console.error("[copySettings] Failed to copy contact settings:", err);
+      }
     }
 
     // ── Copy follow tool target sources ───────────────────────────────────────
-    if (copyFollowSources && followTool) {
-      const sourcesRes = await fetch(`/api/tools/${followTool.id}/sources`, { credentials: "include" });
+    if ((copyFollowSources || clearFollowSources) && followTool) {
+      const sourcesRes = copyFollowSources
+        ? await fetch(`/api/tools/${followTool.id}/sources`, { credentials: "include" })
+        : null;
       const currentSources: { type: string; value: string; rank?: number | null; nrPosts?: number | null }[] =
-        sourcesRes.ok ? await sourcesRes.json() : [];
-      if (currentSources.length > 0) {
-        const payload = currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }));
-        await Promise.all(
-          targetIds.map(async profileId => {
-            const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
-            if (!toolsRes.ok) return;
-            const tools: { id: number; type: string }[] = await toolsRes.json();
-            const targetFollowTool = tools.find(t => t.type === "follow");
-            if (!targetFollowTool) return;
-            await fetch(`/api/tools/${targetFollowTool.id}/sources/import`, {
+        sourcesRes?.ok ? await sourcesRes.json() : [];
+      const payload = copyFollowSources && currentSources.length > 0
+        ? currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }))
+        : [];
+
+      await Promise.all(
+        targetIds.map(async profileId => {
+          const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+          if (!toolsRes.ok) return;
+          const profileTools: { id: number; type: string }[] = await toolsRes.json();
+          const targetFollowTool = profileTools.find(t => t.type === "follow");
+          if (!targetFollowTool) return;
+
+          if (clearFollowSources) {
+            await fetch(`/api/tools/${targetFollowTool.id}/sources`, { method: "DELETE", credentials: "include" });
+            queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, targetFollowTool.id] });
+          }
+
+          if (payload.length > 0) {
+            const importRes = await fetch(`/api/tools/${targetFollowTool.id}/sources/import`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
               credentials: "include",
             });
-          })
-        );
-      }
+            if (importRes.ok) {
+              queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, targetFollowTool.id] });
+            } else {
+              console.error(`[copySettings] Sources import failed for profile ${profileId}: ${importRes.status}`);
+            }
+          }
+        })
+      );
     }
 
     // ── Copy follow tool settings (prefixed keys "follow:...") ───────────────
     const followKeys = expandedKeys.filter(k => k.startsWith("follow:")).map(k => k.slice(7));
     if (followKeys.length > 0 && followTool) {
-      await copyToolSettingsToProfiles(
-        (followTool.settings as Record<string, unknown>) ?? {},
-        "follow",
-        targetIds,
-        followKeys,
-      );
+      try {
+        await copyToolSettingsToProfiles(
+          (followTool.settings as Record<string, unknown>) ?? {},
+          "follow",
+          targetIds,
+          followKeys,
+        );
+      } catch (err) {
+        console.error("[copySettings] Failed to copy follow tool settings:", err);
+      }
     }
 
     // ── Copy unfollow tool settings (prefixed keys "unfollow:...") ───────────
     const unfollowKeys = expandedKeys.filter(k => k.startsWith("unfollow:")).map(k => k.slice(9));
     if (unfollowKeys.length > 0 && unfollowTool) {
-      await copyToolSettingsToProfiles(
-        (unfollowTool.settings as Record<string, unknown>) ?? {},
-        "unfollow",
-        targetIds,
-        unfollowKeys,
-      );
+      try {
+        await copyToolSettingsToProfiles(
+          (unfollowTool.settings as Record<string, unknown>) ?? {},
+          "unfollow",
+          targetIds,
+          unfollowKeys,
+        );
+      } catch (err) {
+        console.error("[copySettings] Failed to copy unfollow tool settings:", err);
+      }
     }
 
     // ── Copy contact tool settings (prefixed keys "contact:...") ─────────────
     const contactKeys = expandedKeys.filter(k => k.startsWith("contact:")).map(k => k.slice(8));
     if (contactKeys.length > 0 && contactTool) {
-      await copyToolSettingsToProfiles(
-        (contactTool.settings as Record<string, unknown>) ?? {},
-        "contact",
-        targetIds,
-        contactKeys,
-      );
+      try {
+        await copyToolSettingsToProfiles(
+          (contactTool.settings as Record<string, unknown>) ?? {},
+          "contact",
+          targetIds,
+          contactKeys,
+        );
+      } catch (err) {
+        console.error("[copySettings] Failed to copy contact tool settings:", err);
+      }
     }
 
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });

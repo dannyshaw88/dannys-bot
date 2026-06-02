@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.742",
+    date: "2 Jun 2026",
+    items: [
+      { category: "New", text: "Target Sources: added a Clear All button — removes every source from the current tool in one click." },
+      { category: "New", text: "Target Sources: replaced the Hashtag / Followers of Account dropdown with inline tabs for faster switching." },
+      { category: "New", text: "Copy Settings: added a Clear Sources First option — wipes all existing sources from destination profiles before copying, so they end up with exactly the source's list rather than a merged one." },
+    ],
+  },
+  {
     version: "1.0.741",
     date: "2 Jun 2026",
     items: [

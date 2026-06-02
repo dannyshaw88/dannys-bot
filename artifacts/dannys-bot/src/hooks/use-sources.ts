@@ -71,6 +71,22 @@ export function useImportSources() {
   });
 }
 
+export function useClearSources() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (toolId: number) => {
+      const res = await fetch(`/api/tools/${toolId}/sources`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to clear sources');
+    },
+    onSuccess: (_, toolId) => {
+      queryClient.invalidateQueries({ queryKey: [api.sources.listByTool.path, toolId] });
+    },
+  });
+}
+
 /** Parse a Jarvee hashtag export file (UTF-16LE TSV with BOM). */
 export async function parseJarveeHashtagFile(file: File): Promise<{ value: string; nrPosts: number | null; rank: number | null }[]> {
   return new Promise((resolve, reject) => {
