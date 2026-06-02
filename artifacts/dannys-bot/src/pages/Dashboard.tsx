@@ -23,6 +23,8 @@ const ERROR_ACTIONS = new Set([
 const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }> = {
   tool_start:              { label: "Started",         cls: "text-blue-700",      icon: "▶" },
   tool_complete:           { label: "Complete",        cls: "text-emerald-700",   icon: "✓" },
+  follow_tool_start:       { label: "Follow Tool Starting", cls: "text-blue-600",  icon: "▶" },
+  follow_tool_complete:    { label: "Follow Tool Ended",    cls: "text-emerald-600", icon: "✓" },
   verified:                { label: "Verified",        cls: "text-green-700",     icon: "✓" },
   verification_failed:     { label: "Verify Fail",     cls: "text-red-700",       icon: "✗" },
   follow:                  { label: "Follow",          cls: "text-sky-700",       icon: "+" },
@@ -59,6 +61,19 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.730",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix",    text: "Human Session no longer loops immediately after completing — the Execute Every timer is now respected and the session waits the correct interval before running again." },
+      { category: "Fix",    text: "Toggling the Human Session master switch OFF no longer disables the Follow Tool — the toggle now only controls the overall Human Session operation." },
+      { category: "UI",     text: "Execute Every (min/max) inputs are now shown inline on the same row as the Human Session title and master toggle, freeing a card slot." },
+      { category: "UI",     text: "Dashboard activity log now shows 'Follow Tool Starting' and 'Follow Tool Ended' for follow sessions, separate from the Human Session 'Started'/'Complete' events." },
+      { category: "Fix",    text: "EQX export now includes the trust score badge — importing the file on another machine restores it automatically." },
+      { category: "UI",     text: "API calls log export now has a dedicated 'API Call' column for endpoint names (sync, timeline, etc.) with 'Human Session Emulation' in the Operation Name column for all emulation calls." },
+      { category: "UI",     text: "Test Timing button result now appears inline to the right of the button and shows a random sample time from the configured range each click." },
+    ],
+  },
   {
     version: "1.0.729",
     date: "2 Jun 2026",

@@ -73,6 +73,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       { key: "hs_autoReplyEnabled",   label: "Auto Reply — Start / Stop",              description: "Copy the Auto Reply enabled checkbox" },
       { key: "hs_contactUsersEnabled",label: "Contact Users Sending — Start / Stop",   description: "Copy the Contact Users Sending enabled checkbox" },
     ]},
+    { label: "Follow Sources", options: [
+      { key: "hs_followSources", label: "Target Sources", description: "Copy all follow tool target sources (hashtags and accounts) to other profiles — adds to their existing sources" },
+    ]},
     { label: "Embedded Tool Execution Order", options: [
       { key: "hs_followOrder", label: "Follow Tool — Execution Order & Skip", description: "Copy execution order and skip chance for the embedded Follow Tool", subOptions: [
         { key: "fo_orderRange", label: "Execution order (min / max)", settingKeys: ["followOrderMin","followOrderMax"] },
@@ -144,8 +147,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     const copyCnfEnabled       = expandedKeys.includes("hs_cnfEnabled");
     const copyAutoReply        = expandedKeys.includes("hs_autoReplyEnabled");
     const copyContactUsers     = expandedKeys.includes("hs_contactUsersEnabled");
+    const copyFollowSources    = expandedKeys.includes("hs_followSources");
 
-    const SENTINEL_KEYS = ["startStop", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled"];
+    const SENTINEL_KEYS = ["startStop", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources"];
     const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k));
 
     const willEnable    = copyEnabled && tool.enabled;
@@ -185,6 +189,31 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     if (copyContactUsers && contactTool)  contactSrc.contactUsersEnabled        = !!(contactTool.settings as any)?.contactUsersEnabled;
     if (Object.keys(contactSrc).length > 0) {
       await copyToolSettingsToProfiles(contactSrc, "contact", targetIds, Object.keys(contactSrc));
+    }
+
+    // ── Copy follow tool target sources ───────────────────────────────────────
+    if (copyFollowSources && followTool) {
+      const sourcesRes = await fetch(`/api/tools/${followTool.id}/sources`, { credentials: "include" });
+      const currentSources: { type: string; value: string; rank?: number | null; nrPosts?: number | null }[] =
+        sourcesRes.ok ? await sourcesRes.json() : [];
+      if (currentSources.length > 0) {
+        const payload = currentSources.map(s => ({ type: s.type, value: s.value, rank: s.rank, nrPosts: s.nrPosts }));
+        await Promise.all(
+          targetIds.map(async profileId => {
+            const toolsRes = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+            if (!toolsRes.ok) return;
+            const tools: { id: number; type: string }[] = await toolsRes.json();
+            const targetFollowTool = tools.find(t => t.type === "follow");
+            if (!targetFollowTool) return;
+            await fetch(`/api/tools/${targetFollowTool.id}/sources/import`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+              credentials: "include",
+            });
+          })
+        );
+      }
     }
 
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
@@ -373,13 +402,30 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             checked={tool.enabled}
             onCheckedChange={(enabled) => {
               updateToolMutation.mutate({ id: tool.id, profileId: tool.profileId, enabled });
-              if (followTool) embeddedUpdateTool.mutate({ id: followTool.id, profileId: followTool.profileId, enabled });
             }}
             disabled={updateToolMutation.isPending}
           />
           <span className={`text-sm font-medium ${tool.enabled ? 'text-primary' : 'text-muted-foreground'}`}>
             {tool.enabled ? 'ACTIVE' : 'STOPPED'}
           </span>
+          {/* ── Execute Every — inline on title row ── */}
+          <div className="flex items-center gap-2 ml-2 pl-2 border-l border-border">
+            <span className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap">Execute Every (min)</span>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-[10px] text-muted-foreground">Min</Label>
+              <Input type="number" min="1" max="10000" className="w-14 h-7 text-xs"
+                value={settings.delayMin ?? 30}
+                onChange={(e) => setSettings({ ...settings, delayMin: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="text-[10px] text-muted-foreground">Max</Label>
+              <Input type="number" min="1" max="10000" className="w-14 h-7 text-xs"
+                value={settings.delayMax ?? 60}
+                onChange={(e) => setSettings({ ...settings, delayMax: Math.max(1, Number(e.target.value)) })}
+              />
+            </div>
+          </div>
           {nextRunStatus && (
             <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
               <Clock className="w-3 h-3 shrink-0" />
@@ -389,32 +435,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               }
             </span>
           )}
-        </div>
-      </div>
-
-      {/* ── Timer ─────────────────────────────────────────────── */}
-      <div className="border border-border rounded-xl p-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div>
-            <h4 className="font-semibold text-sm">Execute Every (min)</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">How often the actions below run.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Min</Label>
-              <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
-                value={settings.delayMin ?? 30}
-                onChange={(e) => setSettings({ ...settings, delayMin: Math.max(1, Number(e.target.value)) })}
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Max</Label>
-              <Input type="number" min="1" max="10000" className="w-16 h-7 text-xs"
-                value={settings.delayMax ?? 60}
-                onChange={(e) => setSettings({ ...settings, delayMax: Math.max(1, Number(e.target.value)) })}
-              />
-            </div>
-          </div>
         </div>
       </div>
 

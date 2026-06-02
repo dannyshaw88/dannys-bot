@@ -148576,8 +148576,10 @@ var InstagramWebClient = class {
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
     if (res.status >= 400) {
-      console.warn(`[webClient] mobileSessionGet ${path6} \u2192 HTTP ${res.status} (session expired/invalid): ${res.rawBody.slice(0, 200)}`);
-      return null;
+      const bodyMsg = res.json?.message ?? "";
+      const errMsg = bodyMsg || "login_required";
+      console.warn(`[webClient] mobileSessionGet ${path6} \u2192 HTTP ${res.status} (${errMsg}): ${res.rawBody.slice(0, 200)}`);
+      throw new Error(errMsg);
     }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path6} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
@@ -149233,25 +149235,40 @@ var InstagramWebClient = class {
   // Simulates visiting the Settings page — fetches account security info.
   // This endpoint requires POST as of 2024 (GET returns 405).
   async runForceEmulation(randomise) {
-    const endpoints = [
-      "/api/v1/feed/timeline/",
-      "/api/v1/feed/reels_tray/",
-      "/api/v1/feed/reels_media/",
-      "/api/v1/notifications/badge/",
-      "/api/v1/direct_v2/inbox/",
-      "/api/v1/users/current_user/",
-      "/api/v1/qe/sync/",
-      "/api/v1/launcher/sync/",
-      "/api/v1/analytics/log/"
+    const entries = [
+      { method: "GET", path: "/api/v1/feed/reels_tray/", opName: "FE:ReelsTray" },
+      // reels_media removed — requires a list of reel IDs in the query string;
+      // a bare GET with no IDs returns "Invalid reel id list" every time.
+      { method: "GET", path: "/api/v1/notifications/badge/", opName: "FE:NotifBadge" },
+      { method: "GET", path: "/api/v1/direct_v2/inbox/", opName: "FE:DirectInbox" },
+      { method: "GET", path: "/api/v1/users/current_user/", opName: "FE:CurrentUser" },
+      { method: "POST", path: "/api/v1/feed/timeline/", opName: "FE:Timeline" },
+      { method: "POST", path: "/api/v1/launcher/sync/", opName: "FE:LauncherSync" },
+      { method: "POST", path: "/api/v1/analytics/log/", opName: "FE:Analytics" }
     ];
-    const ordered = randomise ? [...endpoints].sort(() => Math.random() - 0.5) : endpoints;
-    for (const path6 of ordered) {
-      try {
-        await this.mobileSessionGet(path6);
-        console.log(`[webClient] forceEmulation: ${path6} \u2713`);
-      } catch (e) {
-        console.warn(`[webClient] forceEmulation: ${path6} error: ${e?.message}`);
-      }
+    const ordered = randomise ? [...entries].sort(() => Math.random() - 0.5) : entries;
+    for (const { path: path6, method, opName } of ordered) {
+      await this.timed(opName, async () => {
+        try {
+          let result;
+          if (method === "POST") {
+            result = await this.mobileSessionPost(path6);
+          } else {
+            result = await this.mobileSessionGet(path6);
+          }
+          if (result?.status === "fail" || result?.message === "login_required" || result?.require_login) {
+            const errMsg = (result?.message ?? result?.status ?? "error").slice(0, 80);
+            console.warn(`[webClient] forceEmulation: ${method} ${path6} FAIL: ${errMsg}`);
+            return `FAIL: ${errMsg}`;
+          }
+          console.log(`[webClient] forceEmulation: ${method} ${path6} OK`);
+          return "OK";
+        } catch (e) {
+          const errMsg = (e?.message ?? "error").slice(0, 80);
+          console.warn(`[webClient] forceEmulation: ${method} ${path6} FAIL: ${errMsg}`);
+          return `FAIL: ${errMsg}`;
+        }
+      }, (res) => res);
     }
   }
   async visitSettingsAndActivity() {
@@ -149542,13 +149559,22 @@ var InstagramWebClient = class {
   // Returns the full mapped inbox thread list so auto-reply can reuse it
   // without a second warm-up or second inbox fetch.
   async getDirectMessagesInternal(count = 5) {
-    const built = await this._buildWarmedIgClient();
-    if (!built) {
+    if (!this.igApiCookies) {
       console.warn("[webClient] getDirectMessagesInternal: no igApiCookies \u2014 skipping DM check");
       return { count: 0, ok: false, threads: [] };
     }
-    const { ig } = built;
-    const myUserId = String(ig.state.cookieUserId ?? "");
+    const _dmPairs = this.igApiCookies.split(";").map((s) => s.trim()).filter(Boolean);
+    const _dmSessionPair = _dmPairs.find((p) => p.toLowerCase().startsWith("sessionid="));
+    let myUserId = _dmPairs.find((p) => p.toLowerCase().startsWith("ds_user_id="))?.split("=").slice(1).join("=").trim() ?? "";
+    if (!myUserId && _dmSessionPair) {
+      const _rawVal = _dmSessionPair.slice("sessionid=".length);
+      let _decoded = _rawVal;
+      try {
+        _decoded = decodeURIComponent(_rawVal);
+      } catch {
+      }
+      myUserId = _decoded.split(":")[0] ?? "";
+    }
     const mapThread = (thread) => {
       const otherUser = (thread.users ?? [])[0];
       if (!thread.thread_id || !otherUser?.username) return null;
@@ -157960,32 +157986,37 @@ var AutomationEngine = class {
         const wasCrashed = this.runnerCrashedIds.has(profile.id);
         if (wasCrashed) this.runnerCrashedIds.delete(profile.id);
         const profileRunImmediately = runImmediately && !wasCrashed;
-        const followTool = tools2.find((t2) => t2.type === "follow" && t2.enabled);
-        if (followTool && profile.accountStatus === "valid") {
-          activeFollow.add(profile.id);
-          if (!this.states.has(profile.id)) this.launch(profile, followTool, profileRunImmediately);
-        }
-        const unfollowTool = tools2.find((t2) => t2.type === "unfollow" && t2.enabled);
-        if (unfollowTool && profile.accountStatus === "valid") {
-          activeUnfollow.add(profile.id);
-          if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool, profileRunImmediately);
-        }
-        const dmTool = tools2.find((t2) => t2.type === "dm" && t2.enabled);
-        if (dmTool && profile.accountStatus === "valid") {
-          activeDM.add(profile.id);
-          if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, profileRunImmediately);
-        }
-        const contactTool = tools2.find((t2) => t2.type === "contact");
-        const cs = contactTool?.settings;
-        const contactEffective = contactTool && (contactTool.enabled || cs?.contactUsersEnabled === true || cs?.contactNewFollowersEnabled === true);
-        if (contactEffective && profile.accountStatus === "valid") {
-          activeContact.add(profile.id);
-          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool, profileRunImmediately);
-        }
         const humanSessionTool = tools2.find((t2) => t2.type === "human_sessions" && t2.enabled);
+        const hasHumanSessionTool = tools2.some((t2) => t2.type === "human_sessions");
         if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
-          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool, profileRunImmediately);
+          if (!this.humanSessionStates.has(profile.id)) {
+            this.launchHumanSession(profile, humanSessionTool, profileRunImmediately);
+          }
+        }
+        if (!hasHumanSessionTool) {
+          const followTool = tools2.find((t2) => t2.type === "follow" && t2.enabled);
+          if (followTool && profile.accountStatus === "valid") {
+            activeFollow.add(profile.id);
+            if (!this.states.has(profile.id)) this.launch(profile, followTool, profileRunImmediately);
+          }
+          const unfollowTool = tools2.find((t2) => t2.type === "unfollow" && t2.enabled);
+          if (unfollowTool && profile.accountStatus === "valid") {
+            activeUnfollow.add(profile.id);
+            if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool, profileRunImmediately);
+          }
+          const dmTool = tools2.find((t2) => t2.type === "dm" && t2.enabled);
+          if (dmTool && profile.accountStatus === "valid") {
+            activeDM.add(profile.id);
+            if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, profileRunImmediately);
+          }
+          const contactTool = tools2.find((t2) => t2.type === "contact");
+          const cs = contactTool?.settings;
+          const contactEffective = contactTool && (contactTool.enabled || cs?.contactUsersEnabled === true || cs?.contactNewFollowersEnabled === true);
+          if (contactEffective && profile.accountStatus === "valid") {
+            activeContact.add(profile.id);
+            if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool, profileRunImmediately);
+          }
         }
       }
       for (const [id, state] of this.states) {
@@ -158265,7 +158296,7 @@ var AutomationEngine = class {
           engineLog("WARN", `@${freshProfile.username}: follow loop exiting \u2014 tool disabled or runner stopped`);
           break;
         }
-        this.logAction(freshProfile.id, followTool.id, "tool_start", "", "", "", "ok", "Follow Tool session started");
+        this.logAction(freshProfile.id, followTool.id, "follow_tool_start", "", "", "", "ok", "Follow Tool session started");
         let sessionResult = { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
         try {
           sessionResult = await this.runSession(freshProfile, followTool, state);
@@ -158277,10 +158308,10 @@ var AutomationEngine = class {
           if (blocked > 0) parts.push(`${blocked} blocked`);
           if (skipped > 0) parts.push(`${skipped} skipped`);
           const summary = parts.length ? parts.join(", ") : "nothing to do";
-          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete ${summary}`);
+          this.logAction(freshProfile.id, followTool.id, "follow_tool_complete", "", "", "", "ok", `Follow Tool session complete ${summary}`);
         } catch (err) {
           const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, followTool.id);
-          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
+          this.logAction(freshProfile.id, followTool.id, "follow_tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
           if (acctStatus) break;
         }
@@ -158395,10 +158426,12 @@ ${err?.stack ?? ""}`);
           continue;
         }
         if (freshProfile.accountStatus !== "valid") {
+          engineLog("WARN", `@${freshProfile.username}: HS waiting \u2014 account status is "${freshProfile.accountStatus}" (not yet valid), pausing 5min`);
           await sleepInterruptible(5 * 6e4, state.stop);
           continue;
         }
         if (freshProfile.accountStatus === "captcha") {
+          engineLog("WARN", `@${freshProfile.username}: HS waiting \u2014 captcha challenge, pausing 5min`);
           await sleepInterruptible(5 * 6e4, state.stop);
           continue;
         }
@@ -159848,7 +159881,19 @@ ${err?.stack ?? ""}`);
   async runHumanSessionTools(profile, tool, state) {
     const s = tool.settings;
     const client = await this.ensureClient(profile, state);
-    if (!client) return;
+    if (!client) {
+      this.logAction(
+        profile.id,
+        tool.id,
+        "session_skipped",
+        "",
+        "",
+        "",
+        "warn",
+        "Human Session skipped \u2014 no Instagram session found. Run Verify Credentials to establish one."
+      );
+      return;
+    }
     let sessionError = null;
     const checkSessionErr = async (e, actionLabel) => {
       const msg = e?.message ?? "";
@@ -159861,7 +159906,7 @@ ${err?.stack ?? ""}`);
       }
       return false;
     };
-    if (s.forceEmulationEnabled === true) {
+    if (!!s.forceEmulationEnabled) {
       try {
         await client.runForceEmulation(s.forceEmulationRandomise === true);
         console.log(`[engine] @${profile.username}: \u{1F4F1} force emulation calls complete`);
@@ -160200,7 +160245,11 @@ ${err?.stack ?? ""}`);
       "likeTimelinePostsOrderMax",
       async () => {
         console.log(`[engine] @${profile.username}: \u25B6 ENQUEUE FIRED: likeTimelinePosts STANDALONE (likeTimelinePostsEnabled=true). This is the source of any likes logged below.`);
-        const likeCount = randInt2(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
+        const likeCount = randInt2(s.likeTimelinePostsMin ?? 0, s.likeTimelinePostsMax ?? 0);
+        if (likeCount <= 0) {
+          console.log(`[engine] @${profile.username}: likeTimelinePosts STANDALONE skipped \u2014 likeCount resolved to 0 (likeTimelinePostsMin=${s.likeTimelinePostsMin}, likeTimelinePostsMax=${s.likeTimelinePostsMax})`);
+          return;
+        }
         const likeDelayMin = Number(s.likeTimelinePostsDelayMin ?? 3);
         const likeDelayMax = Number(s.likeTimelinePostsDelayMax ?? 8);
         try {
@@ -160406,6 +160455,84 @@ ${err?.stack ?? ""}`);
         }
       }
     );
+    {
+      const hsTools = await storage.getToolsByProfile(profile.id);
+      const followTool = hsTools.find((t2) => t2.type === "follow");
+      enqueue(
+        "followTool",
+        followTool?.enabled === true,
+        "followSkipMin",
+        "followSkipMax",
+        "followOrderMin",
+        "followOrderMax",
+        async () => {
+          if (!followTool) return;
+          this.logAction(profile.id, followTool.id, "tool_start", "", "", "", "ok", "Follow Tool session started");
+          try {
+            const r2 = await this.runSession(profile, followTool, state);
+            const parts = [];
+            if (r2.followed > 0) parts.push(`${r2.followed} followed`);
+            if (r2.dedupSkipped > 0) parts.push(`${r2.dedupSkipped} dedup skipped`);
+            if (r2.filterSkipped > 0) parts.push(`${r2.filterSkipped} filtered`);
+            if (r2.blocked > 0) parts.push(`${r2.blocked} blocked`);
+            this.logAction(profile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete \u2014 ${parts.join(", ") || "nothing to do"}`);
+          } catch (e) {
+            if (await checkSessionErr(e, "followTool")) return;
+            console.warn(`[engine] @${profile.username}: follow tool error in HS: ${e?.message}`);
+            this.logAction(profile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool error: ${e?.message}`);
+          }
+        }
+      );
+      const unfollowTool = hsTools.find((t2) => t2.type === "unfollow");
+      enqueue(
+        "unfollowTool",
+        unfollowTool?.enabled === true,
+        "unfollowSkipMin",
+        "unfollowSkipMax",
+        "unfollowOrderMin",
+        "unfollowOrderMax",
+        async () => {
+          if (!unfollowTool) return;
+          this.logAction(profile.id, unfollowTool.id, "tool_start", "", "", "", "ok", "Unfollow Tool session started");
+          try {
+            await this.runUnfollowSession(profile, unfollowTool, state);
+            this.logAction(profile.id, unfollowTool.id, "tool_complete", "", "", "", "ok", "Unfollow Tool session complete");
+          } catch (e) {
+            if (await checkSessionErr(e, "unfollowTool")) return;
+            console.warn(`[engine] @${profile.username}: unfollow tool error in HS: ${e?.message}`);
+            this.logAction(profile.id, unfollowTool.id, "tool_complete", "", "", "", "error", `Unfollow Tool error: ${e?.message}`);
+          }
+        }
+      );
+      const contactTool = hsTools.find((t2) => t2.type === "contact");
+      const cSett = contactTool?.settings ?? {};
+      const contactAnyEnabled = !!(contactTool && (contactTool.enabled || cSett.contactNewFollowersEnabled || cSett.autoReplyEnabled || cSett.contactUsersEnabled));
+      enqueue(
+        "contactTool",
+        contactAnyEnabled,
+        "contactSkipMin",
+        "contactSkipMax",
+        "contactOrderMin",
+        "contactOrderMax",
+        async () => {
+          if (!contactTool) return;
+          this.logAction(profile.id, contactTool.id, "tool_start", "", "", "", "ok", "Contact Tool session started");
+          try {
+            if (cSett.contactNewFollowersEnabled) {
+              await this.runContactNewFollowersSession(profile, contactTool, state);
+            }
+            if (cSett.contactUsersEnabled) {
+              await this.runContactUsersSession(profile, contactTool, state);
+            }
+            this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "ok", "Contact Tool session complete");
+          } catch (e) {
+            if (await checkSessionErr(e, "contactTool")) return;
+            console.warn(`[engine] @${profile.username}: contact tool error in HS: ${e?.message}`);
+            this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool error: ${e?.message}`);
+          }
+        }
+      );
+    }
     queue.sort((a2, b3) => a2.order - b3.order);
     const orderSummary = queue.map((e) => `${e.label}(${e.order})`).join(" \u2192 ");
     console.log(`[engine] @${profile.username}: session order: ${orderSummary || "(nothing to run)"}`);
@@ -163037,6 +163164,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
         "Date",
         "Name",
         "Operation Name",
+        "API Call",
         "Message",
         "Source",
         "NavChain",
@@ -163077,11 +163205,15 @@ async function registerInstagramRoutes(httpServer2, app2) {
           }
         }
         const ipPort = ip && port2 ? `${ip}:${port2}` : ip;
+        const isFE = typeof call.operationName === "string" && call.operationName.startsWith("FE:");
+        const operationName = isFE ? "Human Session Emulation" : call.operationName ?? "";
+        const apiCall = isFE ? call.operationName.slice(3) : "";
         return [
           `Instagram_${call.profileId}`,
           date5,
           username,
-          call.operationName,
+          operationName,
+          apiCall,
           call.message ?? "",
           call.source ?? "",
           call.navChain ?? "",
@@ -164287,7 +164419,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
     eocd.writeUInt16LE(0, 20);
     return Buffer.concat([...localParts, cdBuf, eocd]);
   }
-  async function buildEqxPayload(id) {
+  async function buildEqxPayload(id, trustScore) {
     const profile = await storage.getProfile(id);
     if (!profile) return null;
     const [allTools, followedUsers2, statsData, apiCallsData] = await Promise.all([
@@ -164328,6 +164460,7 @@ async function registerInstagramRoutes(httpServer2, app2) {
       version: 2,
       software: "EQUINOX_BOT",
       exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      trustScore: trustScore ?? null,
       profile: {
         ...profileData,
         ...resolvedProxy ? {
@@ -164387,7 +164520,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
   app2.get("/api/profiles/:id/export-eqx", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const result = await buildEqxPayload(id);
+      const trustScore = req.query.trustScore ? String(req.query.trustScore) : null;
+      const result = await buildEqxPayload(id, trustScore);
       if (!result) return res.status(404).json({ error: "Profile not found" });
       const { encrypted, safeUsername } = result;
       res.setHeader("Content-Type", "application/octet-stream");
@@ -164531,7 +164665,8 @@ async function registerInstagramRoutes(httpServer2, app2) {
         ok: true,
         profileId: created.id,
         username: created.username,
-        followedImported: fuData?.length ?? 0
+        followedImported: fuData?.length ?? 0,
+        trustScore: payload.trustScore ?? null
       });
     } catch (e) {
       req.log.error({ err: e }, "import-eqx failed");

@@ -304,15 +304,6 @@ class AutomationEngine {
           activeHumanSession.add(profile.id);
           if (!this.humanSessionStates.has(profile.id)) {
             this.launchHumanSession(profile, humanSessionTool, profileRunImmediately);
-          } else if (profileRunImmediately) {
-            // User just toggled HS ON while a runner was already active (e.g. startup
-            // delay still counting down). Reset the timer so the session fires immediately
-            // on the next loop tick instead of waiting out the original delay.
-            const existingState = this.humanSessionStates.get(profile.id)!;
-            if (existingState.nextHumanSessionAt > Date.now()) {
-              existingState.nextHumanSessionAt = 0;
-              console.log(`[engine] @${profile.username}: HS toggle — forcing immediate run`);
-            }
           }
         }
 
@@ -681,7 +672,7 @@ class AutomationEngine {
           break;
         }
 
-        this.logAction(freshProfile.id, followTool.id, "tool_start", "", "", "", "ok", "Follow Tool session started");
+        this.logAction(freshProfile.id, followTool.id, "follow_tool_start", "", "", "", "ok", "Follow Tool session started");
         let sessionResult: { followed: number; scraped: number; dedupSkipped: number; filterSkipped: number; blocked: number; skipped: number } = { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
         try {
           sessionResult = await this.runSession(freshProfile, followTool, state);
@@ -693,10 +684,10 @@ class AutomationEngine {
           if (blocked > 0)       parts.push(`${blocked} blocked`);
           if (skipped > 0)       parts.push(`${skipped} skipped`);
           const summary = parts.length ? parts.join(", ") : "nothing to do";
-          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete ${summary}`);
+          this.logAction(freshProfile.id, followTool.id, "follow_tool_complete", "", "", "", "ok", `Follow Tool session complete ${summary}`);
         } catch (err: any) {
           const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, followTool.id);
-          this.logAction(freshProfile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
+          this.logAction(freshProfile.id, followTool.id, "follow_tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
           if (acctStatus) break;
         }
