@@ -60,6 +60,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.729",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verify button on the accounts list page now immediately shows 'Verifying' status — previously only the account detail page updated the badge instantly." },
+      { category: "Fix", text: "Force Emulation calls no longer mark an account as Logged Out when a single endpoint fails — each of the 7 calls is now logged individually (OK or FAIL) and errors are contained per-endpoint." },
+      { category: "Fix", text: "Removed the reels_media endpoint from Force Emulation — it requires reel IDs and always returned 'Invalid reel id list' on a bare call." },
+      { category: "Fix", text: "FetchConfig (qe/sync) removed from the Verify login sequence — it consistently returned '400 Invalid experiment' and never provided value." },
+      { category: "Fix", text: "Expired session errors from the mobile API are now correctly surfaced as Logged Out on the account rather than being silently swallowed." },
+    ],
+  },
+  {
     version: "1.0.728",
     date: "2 Jun 2026",
     items: [

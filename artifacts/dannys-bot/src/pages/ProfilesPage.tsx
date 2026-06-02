@@ -27,6 +27,7 @@ import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { useSidebarSetSlot } from "@/contexts/SidebarSlotContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels, setTrustScore } from "@/components/TrustScoreBadge";
 import type { AccountStatus } from "@shared/schema";
+import { api } from "@shared/routes";
 
 // ── Status metadata ──────────────────────────────────────────────────────────
 const STATUS_META: Record<AccountStatus, {
@@ -150,10 +151,15 @@ export function ProfilesPage() {
     if (verifyingInProgress.current.has(id)) return;
     verifyingInProgress.current.add(id);
     setVerifyingIds(prev => { const n = new Set(prev); n.add(id); return n; });
-    // Do NOT call updateAccountStatus.mutate("verifying") here — the verify
-    // endpoint sets accountStatus="verifying" itself (line 900 in routes).
-    // A competing PATCH running in parallel can land in the DB AFTER the verify
-    // has already written the final status, silently overriding "valid" → "verifying".
+    // Optimistically patch the local React Query cache so the status badge
+    // changes to "Verifying" immediately — no PATCH request, just a cache write.
+    // The finally block's invalidateQueries will overwrite this with the real
+    // server value once the POST resolves.
+    const patchVerifying = (old: any) =>
+      Array.isArray(old) ? old.map((p: any) => p.id === id ? { ...p, accountStatus: "verifying" } : p) : old;
+    queryClient.setQueriesData({ queryKey: [api.profiles.list.path] }, patchVerifying);
+    queryClient.setQueryData([api.profiles.get.path, id], (old: any) =>
+      old ? { ...old, accountStatus: "verifying" } : old);
     try {
       const res  = await fetch(`/api/profiles/${id}/verify`, { method: "POST", credentials: "include" });
       const data = await res.json() as { ok: boolean; message: string };
@@ -1223,7 +1229,7 @@ export function ProfilesPage() {
             <>
           {(() => {
             const renderProfileRow = (profile: typeof filteredProfiles[0], idx: number) => {
-              const acctStatus = (profile.accountStatus ?? "pending") as AccountStatus;
+              const acctStatus = (verifyingIds.has(profile.id) ? "verifying" : (profile.accountStatus ?? "pending")) as AccountStatus;
               const isStopped  = acctStatus === "stopped";
               const isEven     = idx % 2 === 1;
               const hasProxy   = !!(profile.proxyId || (profile.proxyHost && profile.proxyPort));

@@ -385,28 +385,10 @@ async function ensureEncryptionKeys(ig: IgApiClient): Promise<void> {
     console.error(`[instagramLogin] si/fetch_headers failed: ${e?.message}`);
   }
 
-  // Strategy 2: qe/sync (minimal — no experiments field to avoid "400 Invalid experiment"
-  // from the library's outdated LOGIN_EXPERIMENTS list vs our declared app version)
-  try {
-    await ig.request.send({
-      url: "/api/v1/qe/sync/",
-      method: "POST",
-      form: ig.request.sign({
-        id: ig.state.uuid,
-        server_config_retrieval: "1",
-        _csrftoken: ig.state.cookieCsrfToken,
-        _uuid: ig.state.uuid,
-      }),
-    });
-    if (ig.state.passwordEncryptionPubKey) {
-      console.error(`[instagramLogin] Got encryption keys via qe/sync (keyId=${ig.state.passwordEncryptionKeyId})`);
-      return;
-    }
-  } catch (e: any) {
-    console.error(`[instagramLogin] qe/sync failed: ${e?.message}`);
-  }
-
-  // Strategy 3: read_msisdn_header
+  // Strategy 2: read_msisdn_header
+  // (qe/sync was removed — it consistently returns "400 Invalid experiment"
+  // because the library's LOGIN_EXPERIMENTS list is outdated vs our app version,
+  // and it never successfully returned encryption keys in practice.)
   try {
     await ig.account.readMsisdnHeader();
     if (ig.state.passwordEncryptionPubKey) {

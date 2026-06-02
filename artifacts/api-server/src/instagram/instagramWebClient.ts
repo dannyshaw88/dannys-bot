@@ -1226,8 +1226,13 @@ export class InstagramWebClient {
       if (newCsrf) this.mobileCsrf = newCsrf;
     }
     if (res.status >= 400) {
-      console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (session expired/invalid): ${res.rawBody.slice(0, 200)}`);
-      return null;
+      // Extract the message Instagram sent (may be empty for plain session-expired 400s).
+      // Fall back to "login_required" so getAccountLevelStatus() classifies it as
+      // "logged_out" and applyAccountLevelError() marks the account for re-verification.
+      const bodyMsg: string = (res.json as any)?.message ?? "";
+      const errMsg = bodyMsg || "login_required";
+      console.warn(`[webClient] mobileSessionGet ${path} → HTTP ${res.status} (${errMsg}): ${res.rawBody.slice(0, 200)}`);
+      throw new Error(errMsg);
     }
     if (!res.json) console.log(`[webClient] mobileSessionGet ${path} status=${res.status} body(200):`, res.rawBody.slice(0, 200));
     return res.json;
@@ -1969,46 +1974,45 @@ export class InstagramWebClient {
   // Simulates visiting the Settings page — fetches account security info.
   // This endpoint requires POST as of 2024 (GET returns 405).
   async runForceEmulation(randomise: boolean): Promise<void> {
-    await this.timed("ForceEmulation", async () => {
-      // Endpoints that accept GET (read-only fetches)
-      const getEndpoints = [
-        "/api/v1/feed/reels_tray/",
-        "/api/v1/feed/reels_media/",
-        "/api/v1/notifications/badge/",
-        "/api/v1/direct_v2/inbox/",
-        "/api/v1/users/current_user/",
-      ];
-      // Endpoints that require POST (Instagram returns 405 on GET)
-      const postEndpoints = [
-        "/api/v1/feed/timeline/",
-        "/api/v1/qe/sync/",
-        "/api/v1/launcher/sync/",
-        "/api/v1/analytics/log/",
-      ];
-      const entries: Array<{ path: string; method: "GET" | "POST" }> = [
-        ...getEndpoints.map(path => ({ path, method: "GET" as const })),
-        ...postEndpoints.map(path => ({ path, method: "POST" as const })),
-      ];
-      const ordered = randomise
-        ? [...entries].sort(() => Math.random() - 0.5)
-        : entries;
-      const results: string[] = [];
-      for (const { path, method } of ordered) {
+    // Endpoints that accept GET (read-only fetches).
+    // NOTE: /api/v1/qe/sync/ (FetchConfig) is intentionally excluded — it
+    // returns "400 Invalid experiment" because the library's LOGIN_EXPERIMENTS
+    // list is outdated vs our declared app version. Removed to avoid noise.
+    const entries: Array<{ path: string; method: "GET" | "POST"; opName: string }> = [
+      { method: "GET",  path: "/api/v1/feed/reels_tray/",      opName: "FE:ReelsTray"    },
+      // reels_media removed — requires a list of reel IDs in the query string;
+      // a bare GET with no IDs returns "Invalid reel id list" every time.
+      { method: "GET",  path: "/api/v1/notifications/badge/",  opName: "FE:NotifBadge"   },
+      { method: "GET",  path: "/api/v1/direct_v2/inbox/",      opName: "FE:DirectInbox"  },
+      { method: "GET",  path: "/api/v1/users/current_user/",   opName: "FE:CurrentUser"  },
+      { method: "POST", path: "/api/v1/feed/timeline/",        opName: "FE:Timeline"     },
+      { method: "POST", path: "/api/v1/launcher/sync/",        opName: "FE:LauncherSync" },
+      { method: "POST", path: "/api/v1/analytics/log/",        opName: "FE:Analytics"    },
+    ];
+    const ordered = randomise
+      ? [...entries].sort(() => Math.random() - 0.5)
+      : entries;
+    for (const { path, method, opName } of ordered) {
+      // Each endpoint gets its own timed() entry so every call appears
+      // individually in the API calls log instead of as one bundled summary.
+      // Errors are caught per-endpoint so a single 400 never propagates out
+      // and incorrectly marks the account as logged_out.
+      await this.timed(opName, async () => {
         try {
           if (method === "POST") {
             await this.mobileSessionPost(path);
           } else {
             await this.mobileSessionGet(path);
           }
-          console.log(`[webClient] forceEmulation: ${method} ${path} ✓`);
-          results.push(`${method} ${path} ✓`);
+          console.log(`[webClient] forceEmulation: ${method} ${path} OK`);
+          return `${method} ${path} OK`;
         } catch (e: any) {
-          console.warn(`[webClient] forceEmulation: ${method} ${path} error: ${e?.message}`);
-          results.push(`${method} ${path} ✗`);
+          const errMsg = (e?.message ?? "error").slice(0, 80);
+          console.warn(`[webClient] forceEmulation: ${method} ${path} failed: ${errMsg}`);
+          return `${method} ${path} FAIL: ${errMsg}`;
         }
-      }
-      return `${results.length} emulation calls fired`;
-    }, (msg) => msg);
+      }, (res) => res);
+    }
   }
 
   async visitSettingsAndActivity(): Promise<boolean> {
