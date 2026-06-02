@@ -22,10 +22,12 @@ interface ToolConfigPanelProps {
   copyOpen?: boolean;
   onCopyOpenChange?: (v: boolean) => void;
   hideEnableToggle?: boolean;
+  skipChanceMin?: number;
+  skipChanceMax?: number;
 }
 
 
-export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle }: ToolConfigPanelProps) {
+export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax }: ToolConfigPanelProps) {
   const { toast } = useToast();
   const { navigateTo } = useBrowserWindows();
   const updateToolMutation = useUpdateTool();  // settings saves
@@ -773,7 +775,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                   const avgDelay      = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
                   const avgProcess    = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
                   const avgMaxPerDay  = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
-                  const perHour       = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+                  const avgSkip       = ((skipChanceMin ?? 0) + (skipChanceMax ?? 0)) / 2;
+                  const skipFactor    = Math.max(0, 1 - avgSkip / 100);
+                  const perHour       = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60 * skipFactor) : 0;
                   const perDayRaw     = perHour * 24;
                   const perDay        = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
                   return perHour > 0 ? (
@@ -962,7 +966,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         <span className="text-[10px] text-muted-foreground">–</span>
                         <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
                           value={(settings as any).injectSuggestedMax ?? 1}
-                          onChange={(e) => setSettings({ ...settings, injectSuggestedMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectSuggestedMin ?? 1) } as any)}
+                          onChange={(e) => { const v = Math.max(1, Number(e.target.value)); setSettings({ ...settings, injectSuggestedMax: v, injectSuggestedMin: Math.min((settings as any).injectSuggestedMin ?? 1, v) } as any); }}
                         />
                         <span className="text-[10px] text-muted-foreground">%</span>
                       </div>

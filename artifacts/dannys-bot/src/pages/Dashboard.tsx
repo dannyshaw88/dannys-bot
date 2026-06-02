@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.741",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings: Select All now expands all sections and ticks parent checkboxes, not just the hidden sub-settings." },
+      { category: "Fix", text: "Copy Settings: tools that are already running are no longer interrupted when you copy settings — the new values apply on their next cycle. Only tools being turned on (from off) restart immediately." },
+      { category: "Fix", text: "Copy Settings: Randomise Timing now correctly staggers tools — each account waits a random time from the Execute Every range before starting, instead of all starting at once." },
+      { category: "Fix", text: "Inject GetSuggestedUsers: the Max value can now be lowered below the current Min — Min follows it down automatically." },
+      { category: "Fix", text: "Follow Tool, Unfollow Tool and Contact Tool icons in the Human Session panel are now twice as large." },
+      { category: "Fix", text: "Users/hr and users/day estimates for the Follow and Unfollow tools now account for the Skip Chance setting — a 50% skip chance halves the shown estimate." },
+    ],
+  },
+  {
     version: "1.0.740",
     date: "2 Jun 2026",
     items: [

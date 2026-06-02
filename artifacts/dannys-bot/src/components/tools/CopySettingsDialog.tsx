@@ -517,7 +517,12 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
             <div className="flex items-center justify-between mb-1">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Settings to Copy</Label>
               <div className="flex items-center gap-2">
-                <button className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide" onClick={() => setSelected(buildAllSelected(optionGroups))}>
+                <button className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide" onClick={() => {
+                  setSelected(buildAllSelected(optionGroups));
+                  const exp = new Set<string>();
+                  optionGroups.forEach(g => g.options.forEach(o => { if (o.subOptions?.length) exp.add(o.key); }));
+                  setExpandedOptions(exp);
+                }}>
                   Select All
                 </button>
                 <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide" onClick={() => { setSelected(new Set()); setExpandedOptions(new Set()); }}>

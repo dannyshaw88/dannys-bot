@@ -18,6 +18,8 @@ interface UnfollowToolPanelProps {
   copyOpen?: boolean;
   onCopyOpenChange?: (v: boolean) => void;
   hideEnableToggle?: boolean;
+  skipChanceMin?: number;
+  skipChanceMax?: number;
 }
 
 const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
@@ -48,7 +50,7 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
 ];
 
-export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle }: UnfollowToolPanelProps) {
+export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, hideEnableToggle, skipChanceMin, skipChanceMax }: UnfollowToolPanelProps) {
   const updateToolMutation = useUpdateTool();  // settings saves
   const toggleMutation     = useUpdateTool();  // enable/disable toggle separate so it's never blocked
   const { data: allProfiles = [] } = useProfiles();
@@ -160,7 +162,9 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
   const avgDelay     = ((s.delayMin ?? 5) + (s.delayMax ?? 15)) / 2;
   const avgProcess   = ((s.processMin ?? 5) + (s.processMax ?? 15)) / 2;
   const avgMaxPerDay = ((s.maxPerDayMin ?? 0) + (s.maxPerDayMax ?? 0)) / 2;
-  const perHour      = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60) : 0;
+  const avgSkip      = ((skipChanceMin ?? 0) + (skipChanceMax ?? 0)) / 2;
+  const skipFactor   = Math.max(0, 1 - avgSkip / 100);
+  const perHour      = avgDelay > 0 ? Math.round((avgProcess / avgDelay) * 60 * skipFactor) : 0;
   const perDayRaw    = perHour * 24;
   const perDay       = avgMaxPerDay > 0 ? Math.min(perDayRaw, avgMaxPerDay) : perDayRaw;
 

@@ -4,9 +4,15 @@
 // TWO-PHASE WRITE to eliminate the race condition:
 //   Phase 1 save settings (including staggerOffsetMins) for ALL profiles.
 //              No enable signal is sent, so no reconcile fires yet.
-//   Phase 2 send enabled=true for ALL profiles (only if requested).
+//   Phase 2 send enabled signal for profiles that need it (only if requested).
 //              By now every profile's staggerOffsetMins is already in the DB,
 //              so whichever reconcile runs first will read the correct value.
+//
+// Cold-restart rules (Fixes #5 & #6):
+//   - enabled=true + stagger > 0 → cold=true (restart with stagger delay)
+//   - enabled=true + stagger = 0 + tool already running → SKIP (don't interrupt)
+//   - enabled=true + stagger = 0 + tool was off → enable normally (no cold)
+//   - enabled=false → always send to disable
 //
 // Pass `staggerOffsetMins` (one entry per target profile) to spread start
 // times across the configured wait window when randomiseTiming is active.
@@ -33,7 +39,7 @@ export async function copyToolSettingsToProfiles(
     targetProfileIds.map(async profileId => {
       const res = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
       if (!res.ok) throw new Error(`Failed to fetch tools for profile ${profileId}`);
-      const tools: { id: number; type: string; settings: Record<string, unknown> }[] = await res.json();
+      const tools: { id: number; type: string; enabled: boolean; settings: Record<string, unknown> }[] = await res.json();
       return { profileId, tool: tools.find(t => t.type === toolType) ?? null };
     })
   );
@@ -61,21 +67,39 @@ export async function copyToolSettingsToProfiles(
     );
   }
 
-  // ── PHASE 2: enable/disable all profiles (now that stagger is committed) ─
-  // `cold: true` tells the server to stop any running runner and relaunch it
-  // with a full startup wait, so the staggerOffsetMins saved in Phase 1 applies.
+  // ── PHASE 2: enable/disable (respecting cold-restart rules) ──────────────
   if (hasEnabled) {
     await Promise.all(
-      toolRecords.map(async ({ profileId, tool }) => {
+      toolRecords.map(async ({ profileId, tool }, i) => {
         if (!tool) return;
-        const body = enabled === true ? { enabled, cold: true } : { enabled };
-        const res = await fetch(`/api/tools/${tool.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error(`Failed to set enabled=${enabled} for tool ${tool.id} (profile ${profileId})`);
+        const stagger = staggerOffsetMins?.[i] ?? 0;
+        const hasCold = stagger > 0;
+        const alreadyEnabled = !!tool.enabled;
+
+        if (enabled === true) {
+          if (!hasCold && alreadyEnabled) {
+            // Tool is already running and no stagger: don't interrupt it.
+            // The new settings written in Phase 1 will apply on its next cycle.
+            return;
+          }
+          const body = hasCold ? { enabled: true, cold: true } : { enabled: true };
+          const res = await fetch(`/api/tools/${tool.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            credentials: "include",
+          });
+          if (!res.ok) throw new Error(`Failed to set enabled=true for tool ${tool.id} (profile ${profileId})`);
+        } else {
+          // Disabling: always send
+          const res = await fetch(`/api/tools/${tool.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled }),
+            credentials: "include",
+          });
+          if (!res.ok) throw new Error(`Failed to set enabled=${enabled} for tool ${tool.id} (profile ${profileId})`);
+        }
       })
     );
   }

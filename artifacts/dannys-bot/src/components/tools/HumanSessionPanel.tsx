@@ -1396,7 +1396,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
               <div className="flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-blue-500 shrink-0" />
+                <UserPlus className="w-8 h-8 text-blue-500 shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0">Follow Tool</h4>
                 <input
                   type="checkbox"
@@ -1437,7 +1437,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
             {followTool.enabled && <div className="p-4">
-              <ToolConfigPanel tool={followTool} profile={profile} hideEnableToggle />
+              <ToolConfigPanel tool={followTool} profile={profile} hideEnableToggle skipChanceMin={(settings as any).followSkipMin ?? 0} skipChanceMax={(settings as any).followSkipMax ?? 0} />
             </div>}
           </div>
         </div>
@@ -1449,7 +1449,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
               <div className="flex items-center gap-2">
-                <UserMinus className="w-4 h-4 text-orange-500 shrink-0" />
+                <UserMinus className="w-8 h-8 text-orange-500 shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0">Unfollow Tool</h4>
                 <input
                   type="checkbox"
@@ -1490,7 +1490,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
             {unfollowTool.enabled && <div className="p-4">
-              <UnfollowToolPanel tool={unfollowTool} profile={profile} hideEnableToggle />
+              <UnfollowToolPanel tool={unfollowTool} profile={profile} hideEnableToggle skipChanceMin={(settings as any).unfollowSkipMin ?? 0} skipChanceMax={(settings as any).unfollowSkipMax ?? 0} />
             </div>}
           </div>
         </div>
@@ -1502,7 +1502,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-b border-border gap-4">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-green-500 shrink-0" />
+                <MessageSquare className="w-8 h-8 text-green-500 shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0">Contact Tool</h4>
                 <input
                   type="checkbox"
