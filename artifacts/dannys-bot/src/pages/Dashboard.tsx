@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.725",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix",  text: "Follow Tool inside the Human Session panel no longer shows an 'Executing' timestamp — only the master Human Session toggle shows execution status." },
+      { category: "Fix",  text: "Unfollow Tool inside the Human Session panel now shows the estimated users per hour and per day, the same as the Follow Tool." },
+      { category: "Fix",  text: "Enabling the Human Session master toggle now correctly runs Force Emulation followed by the Follow, Unfollow, and Contact tools in execution-order sequence with skip-chance logic applied to each." },
+    ],
+  },
+  {
     version: "1.0.724",
     date: "1 Jun 2026",
     items: [

@@ -3083,6 +3083,86 @@ class AutomationEngine {
       },
     );
 
+    // ── Follow Tool (run as full session within the HS) ───────────────────────
+    {
+      const hsTools = await storage.getToolsByProfile(profile.id);
+      const followTool = hsTools.find(t => t.type === "follow");
+      enqueue("followTool",
+        followTool?.enabled === true,
+        "followSkipMin", "followSkipMax",
+        "followOrderMin", "followOrderMax",
+        async () => {
+          if (!followTool) return;
+          this.logAction(profile.id, followTool.id, "tool_start", "", "", "", "ok", "Follow Tool session started");
+          try {
+            const r = await this.runSession(profile, followTool, state);
+            const parts: string[] = [];
+            if (r.followed > 0)      parts.push(`${r.followed} followed`);
+            if (r.dedupSkipped > 0)  parts.push(`${r.dedupSkipped} dedup skipped`);
+            if (r.filterSkipped > 0) parts.push(`${r.filterSkipped} filtered`);
+            if (r.blocked > 0)       parts.push(`${r.blocked} blocked`);
+            this.logAction(profile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete — ${parts.join(", ") || "nothing to do"}`);
+          } catch (e: any) {
+            if (await checkSessionErr(e, "followTool")) return;
+            console.warn(`[engine] @${profile.username}: follow tool error in HS: ${e?.message}`);
+            this.logAction(profile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool error: ${e?.message}`);
+          }
+        },
+      );
+
+      // ── Unfollow Tool (run as full session within the HS) ─────────────────
+      const unfollowTool = hsTools.find(t => t.type === "unfollow");
+      enqueue("unfollowTool",
+        unfollowTool?.enabled === true,
+        "unfollowSkipMin", "unfollowSkipMax",
+        "unfollowOrderMin", "unfollowOrderMax",
+        async () => {
+          if (!unfollowTool) return;
+          this.logAction(profile.id, unfollowTool.id, "tool_start", "", "", "", "ok", "Unfollow Tool session started");
+          try {
+            await this.runUnfollowSession(profile, unfollowTool, state);
+            this.logAction(profile.id, unfollowTool.id, "tool_complete", "", "", "", "ok", "Unfollow Tool session complete");
+          } catch (e: any) {
+            if (await checkSessionErr(e, "unfollowTool")) return;
+            console.warn(`[engine] @${profile.username}: unfollow tool error in HS: ${e?.message}`);
+            this.logAction(profile.id, unfollowTool.id, "tool_complete", "", "", "", "error", `Unfollow Tool error: ${e?.message}`);
+          }
+        },
+      );
+
+      // ── Contact Tool (run as full session within the HS) ──────────────────
+      const contactTool = hsTools.find(t => t.type === "contact");
+      const cSett = (contactTool?.settings ?? {}) as any;
+      const contactAnyEnabled = !!(contactTool && (
+        contactTool.enabled ||
+        cSett.contactNewFollowersEnabled ||
+        cSett.autoReplyEnabled ||
+        cSett.contactUsersEnabled
+      ));
+      enqueue("contactTool",
+        contactAnyEnabled,
+        "contactSkipMin", "contactSkipMax",
+        "contactOrderMin", "contactOrderMax",
+        async () => {
+          if (!contactTool) return;
+          this.logAction(profile.id, contactTool.id, "tool_start", "", "", "", "ok", "Contact Tool session started");
+          try {
+            if (cSett.contactNewFollowersEnabled) {
+              await this.runContactNewFollowersSession(profile, contactTool, state);
+            }
+            if (cSett.contactUsersEnabled) {
+              await this.runContactUsersSession(profile, contactTool, state);
+            }
+            this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "ok", "Contact Tool session complete");
+          } catch (e: any) {
+            if (await checkSessionErr(e, "contactTool")) return;
+            console.warn(`[engine] @${profile.username}: contact tool error in HS: ${e?.message}`);
+            this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool error: ${e?.message}`);
+          }
+        },
+      );
+    }
+
     // Sort ascending by order value (stable — ties keep insertion order)
     queue.sort((a, b) => a.order - b.order);
 

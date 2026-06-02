@@ -752,7 +752,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                     ({followedUsersLoading && !followedUsersList ? '…' : followedUsersList?.length ?? 0})
                   </span>
                 </button>
-                {nextRunStatus && (
+                {!hideEnableToggle && nextRunStatus && (
                   <span className="flex items-center gap-1 text-[11px] font-bold ml-2" style={{ color: nextRunStatus.executing ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
                     <Clock className="w-3 h-3 shrink-0" />
                     {nextRunStatus.executing

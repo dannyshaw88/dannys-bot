@@ -199,7 +199,7 @@ export function UnfollowToolPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               }
             </span>
           )}
-          {!hideEnableToggle && tool.enabled && perHour > 0 && (
+          {tool.enabled && perHour > 0 && (
             <span className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
               {perHour}/hr · {perDay}/day
             </span>
