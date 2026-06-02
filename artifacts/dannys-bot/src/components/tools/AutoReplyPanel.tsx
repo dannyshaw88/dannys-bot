@@ -109,8 +109,7 @@ export function AutoReplyPanel({ tool, profile, embedded }: Props) {
         </div>
       </div>
 
-      {/* Info note */}
-      <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-[11px] text-blue-700">
+      <div className={settings.autoReplyEnabled ? "space-y-4" : "hidden"}><div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-[11px] text-blue-700">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
         <span>
           Auto Reply scans your DMs each time the <strong>Check DMs</strong> action fires in the Human Session Tools tab.
@@ -264,6 +263,7 @@ export function AutoReplyPanel({ tool, profile, embedded }: Props) {
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

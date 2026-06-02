@@ -182,8 +182,7 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
         </div>
       </div>
 
-      {/* ── Send Settings ────────────────────────────────────── */}
-      <div className="border border-border rounded-xl p-4 space-y-4">
+      <div className={settings.contactUsersEnabled ? "space-y-4" : "hidden"}><div className="border border-border rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Send className="w-4 h-4 text-blue-500" />
           <h4 className="font-semibold text-sm">Send Settings</h4>
@@ -465,6 +464,7 @@ export function ContactUsersPanel({ tool, profile, embedded }: Props) {
             </table>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -1311,9 +1311,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
             </div>
-            <div className={`p-4 transition-opacity ${!followTool.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            {followTool.enabled && <div className="p-4">
               <ToolConfigPanel tool={followTool} profile={profile} hideEnableToggle />
-            </div>
+            </div>}
           </div>
         </div>
       )}
@@ -1326,6 +1326,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="flex items-center gap-2">
                 <UserMinus className="w-4 h-4 text-orange-500 shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0">Unfollow Tool</h4>
+                <input
+                  type="checkbox"
+                  id={`uft-enabled-${unfollowTool.id}`}
+                  checked={unfollowTool.enabled}
+                  onChange={(e) => embeddedUpdateTool.mutate({ id: unfollowTool.id, profileId: unfollowTool.profileId, enabled: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor={`uft-enabled-${unfollowTool.id}`} className={`text-sm font-medium cursor-pointer select-none ${unfollowTool.enabled ? "text-primary" : "text-muted-foreground"}`}>
+                  {unfollowTool.enabled ? "ACTIVE" : "STOPPED"}
+                </label>
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <div className="flex items-center gap-2">
@@ -1354,9 +1364,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
             </div>
-            <div className={`p-4 transition-opacity ${!unfollowTool.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            {unfollowTool.enabled && <div className="p-4">
               <UnfollowToolPanel tool={unfollowTool} profile={profile} hideEnableToggle />
-            </div>
+            </div>}
           </div>
         </div>
       )}
@@ -1369,6 +1379,16 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-green-500 shrink-0" />
                 <h4 className="font-bold text-[19px] shrink-0">Contact Tool</h4>
+                <input
+                  type="checkbox"
+                  id={`ct-enabled-${contactTool.id}`}
+                  checked={contactTool.enabled}
+                  onChange={(e) => embeddedUpdateTool.mutate({ id: contactTool.id, profileId: contactTool.profileId, enabled: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-primary cursor-pointer"
+                />
+                <label htmlFor={`ct-enabled-${contactTool.id}`} className={`text-sm font-medium cursor-pointer select-none ${contactTool.enabled ? "text-primary" : "text-muted-foreground"}`}>
+                  {contactTool.enabled ? "ACTIVE" : "STOPPED"}
+                </label>
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <div className="flex items-center gap-2">
@@ -1397,9 +1417,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
             </div>
-            <div className={`p-4 transition-opacity ${!contactTool.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+            {contactTool.enabled && <div className="p-4">
               <ContactToolPanel tool={contactTool} profile={profile} embedded />
-            </div>
+            </div>}
           </div>
         </div>
       )}

@@ -154,7 +154,7 @@ export function ContactNewFollowersPanel({ tool, profile, embedded }: Props) {
         </div>
       </div>
 
-      <div className="border border-border rounded-xl p-4 space-y-4">
+      <div className={settings.contactNewFollowersEnabled ? "space-y-4" : "hidden"}><div className="border border-border rounded-xl p-4 space-y-4">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-blue-500" />
           <h4 className="font-semibold text-sm">Settings</h4>
@@ -290,7 +290,6 @@ export function ContactNewFollowersPanel({ tool, profile, embedded }: Props) {
         </div>
       </div>
 
-      {/* Extract Now */}
       <div className="flex items-center gap-3 pt-1">
         <Button
           variant="outline"
@@ -322,6 +321,7 @@ export function ContactNewFollowersPanel({ tool, profile, embedded }: Props) {
             </span>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ const ERROR_ACTIONS = new Set([
 const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }> = {
   tool_start:              { label: "Started",         cls: "text-blue-700",      icon: "▶" },
   tool_complete:           { label: "Complete",        cls: "text-emerald-700",   icon: "✓" },
-  follow_tool_start:       { label: "Follow Tool Starting", cls: "text-blue-600",  icon: "▶" },
+  follow_tool_start:       { label: "Executing",            cls: "text-blue-600",    icon: "▶" },
   follow_tool_complete:    { label: "Follow Tool Ended",    cls: "text-emerald-600", icon: "✓" },
   verified:                { label: "Verified",        cls: "text-green-700",     icon: "✓" },
   verification_failed:     { label: "Verify Fail",     cls: "text-red-700",       icon: "✗" },
@@ -61,6 +61,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.731",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Unfollow Tool now has its own enable/disable checkbox in the Human Session panel header, matching the Follow and Contact tools." },
+      { category: "Fix", text: "Contact Tool now has a master enable/disable checkbox in the Human Session panel header." },
+      { category: "Fix", text: "Contact New Followers, Auto Reply, and Contact Users settings panels now collapse fully when their individual checkbox is unchecked." },
+      { category: "Fix", text: "Dashboard activity log now shows 'Executing' instead of the tool name for follow_tool_start events." },
+    ],
+  },
   {
     version: "1.0.730",
     date: "2 Jun 2026",
