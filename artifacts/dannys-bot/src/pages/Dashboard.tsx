@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.727",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix",  text: "Clicking an account name in the Activity Log now opens the Human Session tab instead of the old standalone Follow tab." },
+      { category: "Fix",  text: "Removed the standalone Follow, Unfollow and Contact tabs from the account detail page — all tool configuration now lives exclusively inside the Human Session tab." },
+      { category: "Fix",  text: "Timeline likes can no longer fire when Like Min/Max are both 0 — the standalone like action now skips immediately instead of defaulting to 2–5 likes." },
+      { category: "Fix",  text: "Force Emulation calls are now recorded in the API call log export so you can verify they fired." },
+    ],
+  },
+  {
     version: "1.0.726",
     date: "2 Jun 2026",
     items: [
@@ -4896,7 +4906,7 @@ export function Dashboard() {
                           return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(imp.ts), "MMM d yyyy, HH:mm:ss")}</span><button onClick={() => { localStorage.setItem("equinox_import_dismissed", String(imp.ts)); setImportDismissed(imp.ts); }} className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Dismiss"><X className="w-3 h-3" /></button></span></td>;
                         }
                         if (item.kind === "api") {
-                          if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=follow`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
+                          if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
                           if (col === "event") return <td key={col} className="px-3 py-3 truncate"><span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full">{(item.operationName ?? "").replace(/_/g, " ")}</span></td>;
                           if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate"> </td>;
                           if (col === "detail") {
@@ -4919,7 +4929,7 @@ export function Dashboard() {
                           return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span></span></td>;
                         }
                         const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "text-muted-foreground", icon: "·" };
-                        if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=follow`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
+                        if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
                         if (col === "event") return <td key={col} className="px-3 py-3 truncate"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider truncate inline-flex items-center gap-1 max-w-full ${style.cls}`}><span>{style.label}</span><span className="shrink-0 leading-none">{style.icon}</span></span></td>;
                         if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-foreground/80 truncate" title={item.targetUsername || undefined}>{item.targetUsername ? `@${item.targetUsername}` : " "}</td>;
                         if (col === "detail") return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={item.detail || undefined}>{item.detail || " "}</td>;

@@ -2860,7 +2860,11 @@ class AutomationEngine {
       "likeTimelinePostsOrderMin",   "likeTimelinePostsOrderMax",
       async () => {
         console.log(`[engine] @${profile.username}: ▶ ENQUEUE FIRED: likeTimelinePosts STANDALONE (likeTimelinePostsEnabled=true). This is the source of any likes logged below.`);
-        const likeCount = randInt(s.likeTimelinePostsMin ?? 2, s.likeTimelinePostsMax ?? 5);
+        const likeCount = randInt(s.likeTimelinePostsMin ?? 0, s.likeTimelinePostsMax ?? 0);
+        if (likeCount <= 0) {
+          console.log(`[engine] @${profile.username}: likeTimelinePosts STANDALONE skipped — likeCount resolved to 0 (likeTimelinePostsMin=${s.likeTimelinePostsMin}, likeTimelinePostsMax=${s.likeTimelinePostsMax})`);
+          return;
+        }
         const likeDelayMin = Number(s.likeTimelinePostsDelayMin ?? 3);
         const likeDelayMax = Number(s.likeTimelinePostsDelayMax ?? 8);
         try {

@@ -6,8 +6,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
 import { HumanSessionPanel } from "@/components/tools/HumanSessionPanel";
 import { SessionLogPanel } from "@/components/tools/SessionLogPanel";
-import { ContactToolPanel } from "@/components/tools/ContactToolPanel";
-import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
 import { CopySettingsDialog, type CopyOptionGroup } from "@/components/tools/CopySettingsDialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
@@ -263,9 +261,6 @@ export function ProfileDetailsPage() {
   const [linkedPassword, setLinkedPassword] = useState("");
 
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
-  const [followCopyOpen, setFollowCopyOpen] = useState(false);
-  const [unfollowCopyOpen, setUnfollowCopyOpen] = useState(false);
-  const [contactCopyOpen, setContactCopyOpen] = useState(false);
   const [humanCopyOpen, setHumanCopyOpen] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const [totpCode, setTotpCode] = useState<string | null>(null);
@@ -1782,27 +1777,6 @@ export function ProfileDetailsPage() {
             </Card>
 
           </div>
-        </Tabs.Content>
-
-        <Tabs.Content value="follow" className="outline-none animate-in fade-in duration-300">
-          {getTool('follow')
-            ? <ToolConfigPanel tool={getTool('follow')!} profile={profile} copyOpen={followCopyOpen} onCopyOpenChange={setFollowCopyOpen} />
-            : <p className="text-sm text-muted-foreground py-8">Follow tool not found for this profile.</p>
-          }
-        </Tabs.Content>
-
-        <Tabs.Content value="unfollow" className="outline-none animate-in fade-in duration-300">
-          {getTool('unfollow')
-            ? <UnfollowToolPanel tool={getTool('unfollow')!} profile={profile} copyOpen={unfollowCopyOpen} onCopyOpenChange={setUnfollowCopyOpen} />
-            : <p className="text-sm text-muted-foreground py-8">Unfollow tool not found for this profile.</p>
-          }
-        </Tabs.Content>
-
-        <Tabs.Content value="contact" className="outline-none animate-in fade-in duration-300">
-          {getTool('contact')
-            ? <ContactToolPanel tool={getTool('contact')!} profile={profile} copyOpen={contactCopyOpen} onCopyOpenChange={setContactCopyOpen} />
-            : <p className="text-sm text-muted-foreground py-8">Contact tool not found for this profile.</p>
-          }
         </Tabs.Content>
 
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">

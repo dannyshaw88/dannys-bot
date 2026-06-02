@@ -1969,40 +1969,46 @@ export class InstagramWebClient {
   // Simulates visiting the Settings page — fetches account security info.
   // This endpoint requires POST as of 2024 (GET returns 405).
   async runForceEmulation(randomise: boolean): Promise<void> {
-    // Endpoints that accept GET (read-only fetches)
-    const getEndpoints = [
-      "/api/v1/feed/reels_tray/",
-      "/api/v1/feed/reels_media/",
-      "/api/v1/notifications/badge/",
-      "/api/v1/direct_v2/inbox/",
-      "/api/v1/users/current_user/",
-    ];
-    // Endpoints that require POST (Instagram returns 405 on GET)
-    const postEndpoints = [
-      "/api/v1/feed/timeline/",
-      "/api/v1/qe/sync/",
-      "/api/v1/launcher/sync/",
-      "/api/v1/analytics/log/",
-    ];
-    const entries: Array<{ path: string; method: "GET" | "POST" }> = [
-      ...getEndpoints.map(path => ({ path, method: "GET" as const })),
-      ...postEndpoints.map(path => ({ path, method: "POST" as const })),
-    ];
-    const ordered = randomise
-      ? [...entries].sort(() => Math.random() - 0.5)
-      : entries;
-    for (const { path, method } of ordered) {
-      try {
-        if (method === "POST") {
-          await this.mobileSessionPost(path);
-        } else {
-          await this.mobileSessionGet(path);
+    await this.timed("ForceEmulation", async () => {
+      // Endpoints that accept GET (read-only fetches)
+      const getEndpoints = [
+        "/api/v1/feed/reels_tray/",
+        "/api/v1/feed/reels_media/",
+        "/api/v1/notifications/badge/",
+        "/api/v1/direct_v2/inbox/",
+        "/api/v1/users/current_user/",
+      ];
+      // Endpoints that require POST (Instagram returns 405 on GET)
+      const postEndpoints = [
+        "/api/v1/feed/timeline/",
+        "/api/v1/qe/sync/",
+        "/api/v1/launcher/sync/",
+        "/api/v1/analytics/log/",
+      ];
+      const entries: Array<{ path: string; method: "GET" | "POST" }> = [
+        ...getEndpoints.map(path => ({ path, method: "GET" as const })),
+        ...postEndpoints.map(path => ({ path, method: "POST" as const })),
+      ];
+      const ordered = randomise
+        ? [...entries].sort(() => Math.random() - 0.5)
+        : entries;
+      const results: string[] = [];
+      for (const { path, method } of ordered) {
+        try {
+          if (method === "POST") {
+            await this.mobileSessionPost(path);
+          } else {
+            await this.mobileSessionGet(path);
+          }
+          console.log(`[webClient] forceEmulation: ${method} ${path} ✓`);
+          results.push(`${method} ${path} ✓`);
+        } catch (e: any) {
+          console.warn(`[webClient] forceEmulation: ${method} ${path} error: ${e?.message}`);
+          results.push(`${method} ${path} ✗`);
         }
-        console.log(`[webClient] forceEmulation: ${method} ${path} ✓`);
-      } catch (e: any) {
-        console.warn(`[webClient] forceEmulation: ${method} ${path} error: ${e?.message}`);
       }
-    }
+      return `${results.length} emulation calls fired`;
+    }, (msg) => msg);
   }
 
   async visitSettingsAndActivity(): Promise<boolean> {
