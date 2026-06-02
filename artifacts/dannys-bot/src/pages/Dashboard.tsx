@@ -7,7 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
-  Users, UserCheck, ImageIcon, CheckCircle2, Fingerprint, ThumbsUp,
+  Fingerprint, ThumbsUp,
 } from "lucide-react";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 import { format } from "date-fns";
@@ -28,6 +28,7 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
   verification_failed:     { label: "Verify Fail",     cls: "text-red-700",       icon: "✗" },
   follow:                  { label: "Follow",          cls: "text-sky-700",       icon: "+" },
   follow_blocked:          { label: "Blocked",         cls: "text-rose-700",      icon: "⊘" },
+  follow_abandoned:        { label: "Abandoned",       cls: "text-amber-600",     icon: "↩" },
   follow_skipped:          { label: "Skipped",         cls: "text-orange-700",    icon: "⇥" },
   dedup_skip:              { label: "Skipped",         cls: "text-amber-700",     icon: "⇥" },
   filter_skip:             { label: "Filter Skip",     cls: "text-yellow-800",    icon: "⊘" },
@@ -61,6 +62,29 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.737",
+    date: "2 Jun 2026",
+    items: [
+      { category: "New", text: "Browse Before Follow now has an Abandon Follow X–Y% sub-setting — after browsing a profile, the bot skips the follow a random percentage of the time so Instagram sees profile visits that don't always lead to a follow." },
+    ],
+  },
+  {
+    version: "1.0.736",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Dashboard activity log no longer shows raw Instagram API calls — only tool actions (Follow, Unfollow, DM, Contact, etc.) appear in the ACTION and DETAIL columns." },
+      { category: "Fix", text: "Test Timing result now appears to the right of the button instead of below it, and shows a random sample timing drawn from your configured range each time you click." },
+    ],
+  },
+  {
+    version: "1.0.735",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "EQX export now correctly embeds the account's TrustScore badge — the badge was always missing from exported files because the server was reading the query parameter from the wrong scope." },
+      { category: "Fix", text: "EQX import now correctly restores the TrustScore badge that was saved in the file." },
+    ],
+  },
+  {
     version: "1.0.734",
     date: "2 Jun 2026",
     items: [
@@ -78,6 +102,15 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
       { category: "Fix", text: "Timezone fallback pool no longer includes Europe/Berlin — random fallback now stays within US timezones and Europe/London only." },
       { category: "Fix", text: "Export API Calls now includes a dedicated 'API Call' column showing the raw Instagram endpoint (e.g. AutoFollow, UnfollowUser) alongside the 'Operation Name' column showing the responsible tool." },
       { category: "Fix", text: "Human Session execution order is now shown in the activity log so you can see exactly which actions ran and in what sequence each session." },
+    ],
+  },
+  {
+    version: "1.0.738",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Improvement", text: "All min/max delay, process, and rate limit pairs now clamp automatically — setting the minimum above the maximum (or vice versa) corrects the other value instantly." },
+      { category: "Improvement", text: "Browser Fingerprint Preview in Account Settings is now collapsed by default — click to expand and see what the Leak Tool measures." },
+      { category: "Improvement", text: "Account Details, Security, and Email Validation cards in Account Settings are now collapsed by default — click the header to expand them." },
     ],
   },
   {
@@ -4438,7 +4471,6 @@ export function Dashboard() {
   });
   const [showOnlyErrors, setShowOnlyErrors] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const lastApiIdRef = useRef<number>(0);
   const lastSessionIdRef = useRef<number>(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logMaxRowsRef = useRef<number>(2000);
@@ -4451,42 +4483,12 @@ export function Dashboard() {
 
   const fetchFeed = useCallback(async (isInitial = false) => {
     try {
-      const [apiRes, sessionRes] = await Promise.all([
-        fetch(lastApiIdRef.current > 0
-          ? `/api/instagram-api-calls?since=${lastApiIdRef.current}`
-          : "/api/instagram-api-calls?limit=2000"),
+      const [sessionRes] = await Promise.all([
         fetch("/api/all-session-actions?limit=500"),
       ]);
-      const [apiRows, sessionRows]: [any[], any[]] = await Promise.all([
-        apiRes.ok ? apiRes.json() : Promise.resolve([]),
+      const [sessionRows]: [any[]] = await Promise.all([
         sessionRes.ok ? sessionRes.json() : Promise.resolve([]),
       ]);
-
-      // Operations already covered by a clean session_action entry no need to
-      // show the raw API log row as well (it would just be ugly duplicate noise).
-      const HIDDEN_OPS = new Set(["getNewFollowersHikerAPI", "getNewFollowers", "v1/user/by/username"]);
-
-      const newApiRows: FeedItem[] = apiRows
-        // "Account" source = timed() calls from InstagramWebClient already
-        // surfaced as session_actions, so skip to avoid duplicate entries.
-        // "Browser"/"Verify" = EB and login calls never useful in the feed.
-        // "HikerAPI" = scrape metadata shown since it adds unique context.
-        .filter((c: any) => c.source !== "Browser" && c.source !== "Verify" && c.source !== "Account")
-        .filter((c: any) => !HIDDEN_OPS.has(c.operationName))
-        .map((c: any) => ({
-          key: `api-${c.id}`,
-          ts: new Date(c.date).getTime(),
-          profileId: Number(c.profileId),
-          kind: "api",
-          operationName: c.operationName,
-          message: c.message,
-          profileLabel: c.username,
-        }));
-
-      if (apiRows.length > 0) {
-        const maxApiId = Math.max(...apiRows.map((r: any) => r.id));
-        lastApiIdRef.current = Math.max(lastApiIdRef.current, maxApiId);
-      }
 
       const newSessionRows = isInitial
         ? sessionRows
@@ -4509,10 +4511,10 @@ export function Dashboard() {
       }));
 
       if (isInitial) {
-        const all = [...newApiRows, ...newSessionItems].sort((a, b) => b.ts - a.ts).slice(0, logMaxRowsRef.current);
+        const all = [...newSessionItems].sort((a, b) => b.ts - a.ts).slice(0, logMaxRowsRef.current);
         setFeedItems(all);
       } else {
-        const incoming = [...newApiRows, ...newSessionItems];
+        const incoming = [...newSessionItems];
         if (incoming.length > 0) {
           setFeedItems(prev => [...incoming, ...prev].sort((a, b) => b.ts - a.ts).slice(0, logMaxRowsRef.current));
         }
@@ -4573,13 +4575,6 @@ export function Dashboard() {
       if (!apiLogSearch.trim()) return true;
       const q = apiLogSearch.toLowerCase();
       const label = (profileLookup.get(item.profileId) ?? item.profileLabel ?? `#${item.profileId}`).toLowerCase();
-      if (item.kind === "api") {
-        return (
-          label.includes(q) ||
-          (item.operationName ?? "").toLowerCase().includes(q) ||
-          (item.message ?? "").toLowerCase().includes(q)
-        );
-      }
       return (
         label.includes(q) ||
         (item.action ?? "").toLowerCase().includes(q) ||
@@ -4626,12 +4621,11 @@ export function Dashboard() {
       return colOrder.map(col => {
         if (col === "account") return label;
         if (col === "event") {
-          if (item.kind === "api") return (item.operationName ?? "").replace(/_/g, " ");
           const style = ACTION_STYLES[item.action ?? ""];
           return style ? style.label : (item.action ?? "").replace(/_/g, " ");
         }
         if (col === "target") return item.targetUsername ? `@${item.targetUsername}` : "";
-        if (col === "detail") return item.kind === "api" ? (item.message ?? "") : (item.detail ?? "");
+        if (col === "detail") return item.detail ?? "";
         return format(new Date(item.ts), "yyyy-MM-dd HH:mm:ss");
       });
     });
@@ -4976,29 +4970,6 @@ export function Dashboard() {
                           if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate" title={imp.fileName}>{imp.fileName}</td>;
                           if (col === "detail") return <td key={col} className="px-3 py-3 text-xs truncate"><span className="flex items-center gap-2">{imp.created > 0 && <span className="font-semibold text-emerald-600">{imp.created} created</span>}{imp.updated > 0 && <span className="font-semibold text-blue-600">{imp.updated} updated</span>}{imp.failed > 0 && <span className="font-semibold text-destructive">{imp.failed} failed</span>}</span></td>;
                           return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(imp.ts), "MMM d yyyy, HH:mm:ss")}</span><button onClick={() => { localStorage.setItem("equinox_import_dismissed", String(imp.ts)); setImportDismissed(imp.ts); }} className="ml-auto text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Dismiss"><X className="w-3 h-3" /></button></span></td>;
-                        }
-                        if (item.kind === "api") {
-                          if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;
-                          if (col === "event") return <td key={col} className="px-3 py-3 truncate"><span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider truncate inline-block max-w-full">{(item.operationName ?? "").replace(/_/g, " ")}</span></td>;
-                          if (col === "target") return <td key={col} className="px-3 py-3 text-xs text-muted-foreground truncate"> </td>;
-                          if (col === "detail") {
-                            const msg = item.message || "";
-                            const syncMatch = msg.match(/^followers=(\d+)\s+following=(\d+)\s+posts=(\d+)\s+Synced$/);
-                            if (syncMatch) {
-                              return (
-                                <td key={col} className="px-3 py-3 truncate">
-                                  <span className="flex items-center gap-3 text-xs">
-                                    <span className="flex items-center gap-1 text-muted-foreground"><Users className="w-3 h-3 text-primary/70" />{syncMatch[1]}</span>
-                                    <span className="flex items-center gap-1 text-muted-foreground"><UserCheck className="w-3 h-3 text-primary/70" />{syncMatch[2]}</span>
-                                    <span className="flex items-center gap-1 text-muted-foreground"><ImageIcon className="w-3 h-3 text-primary/70" />{syncMatch[3]}</span>
-                                    <span className="flex items-center gap-1 text-emerald-500 font-medium"><CheckCircle2 className="w-3 h-3" />Synced</span>
-                                  </span>
-                                </td>
-                              );
-                            }
-                            return <td key={col} className="px-3 py-3 text-foreground truncate text-xs" title={msg || undefined}>{msg || " "}</td>;
-                          }
-                          return <td key={col} className="px-3 py-3 text-muted-foreground text-xs font-mono truncate"><span className="flex items-center gap-1 min-w-0"><Clock className="w-3 h-3 shrink-0" /><span className="truncate">{format(new Date(item.ts), "MMM d yyyy, HH:mm:ss")}</span></span></td>;
                         }
                         const style = ACTION_STYLES[item.action ?? ""] ?? { label: (item.action ?? "event").replace(/_/g, " "), cls: "text-muted-foreground", icon: "·" };
                         if (col === "account") return <td key={col} className="px-3 py-3 font-medium truncate"><Link href={`/profiles/${item.profileId}?tab=human-session`} className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors group min-w-0"><User className="w-3.5 h-3.5 text-primary shrink-0" /><span className="group-hover:underline underline-offset-2 truncate">{label}</span></Link></td>;

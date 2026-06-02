@@ -252,6 +252,8 @@ export function ProfileDetailsPage() {
   const [resetDeviceConfirmOpen, setResetDeviceConfirmOpen] = useState(false);
   const [pendingUa, setPendingUa] = useState<UaEntry | null>(null);
   const [uaChangeConfirmOpen, setUaChangeConfirmOpen] = useState(false);
+  const [showFingerprintPreview, setShowFingerprintPreview] = useState(false);
+  const [showAccountDetails, setShowAccountDetails] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);
   const preStoppedStatusRef = useRef<string>("pending");
@@ -1184,7 +1186,21 @@ export function ProfileDetailsPage() {
                     </div>
 
                     {/* ── Browser Fingerprint Preview ── */}
-                    {formData.userAgentEmbedded && (() => {
+                    {formData.userAgentEmbedded && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowFingerprintPreview(v => !v)}
+                          className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-primary transition-colors select-none"
+                        >
+                          <Fingerprint className="w-3.5 h-3.5 text-primary" />
+                          Browser Fingerprint Preview
+                          <span className="text-[10px] text-slate-400 font-normal normal-case ml-1">— what the Leak Tool measures</span>
+                          <span className="ml-auto text-[10px]">{showFingerprintPreview ? "▲" : "▼"}</span>
+                        </button>
+                      </div>
+                    )}
+                    {formData.userAgentEmbedded && showFingerprintPreview && (() => {
                       const fp = computeFingerprint(formData.userAgentEmbedded, formData.userAgentApi);
                       const isMob = formData.userAgentEmbedded.includes("Mobile") && formData.userAgentEmbedded.includes("Android");
 
@@ -1214,11 +1230,6 @@ export function ProfileDetailsPage() {
 
                       return (
                         <div className="border border-slate-200 rounded-lg overflow-hidden mt-2">
-                          <div className="bg-slate-50 px-3 py-2 flex items-center gap-2 border-b border-slate-200">
-                            <Fingerprint className="w-3.5 h-3.5 text-primary" />
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Browser Fingerprint Preview</span>
-                            <span className="text-[10px] text-slate-400 ml-1">— what the Leak Tool measures</span>
-                          </div>
                           <div className="grid grid-cols-2 divide-x divide-slate-100">
                             {/* Screen & Hardware */}
                             <div className="px-3 py-2 space-y-0">
@@ -1298,21 +1309,21 @@ export function ProfileDetailsPage() {
                     <div className="flex gap-2 items-end">
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Math.min(Number(e.target.value), formData.apiLimits.requestsMax ?? Infinity)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(Number(e.target.value), formData.apiLimits.requestsMin ?? 0)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Math.min(Number(e.target.value), formData.apiLimits.everySecondsMax ?? Infinity)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(Number(e.target.value), formData.apiLimits.everySecondsMin ?? 0)} })} />
                       </div>
-                      <div className="flex flex-col justify-end gap-1">
+                      <div className="flex items-end gap-2">
                         <Button
                           size="sm"
                           variant="outline"
@@ -1320,14 +1331,15 @@ export function ProfileDetailsPage() {
                           onClick={() => {
                             const minMs = formData.apiLimits.everySecondsMin < 1000 ? formData.apiLimits.everySecondsMin * 1000 : formData.apiLimits.everySecondsMin;
                             const maxMs = formData.apiLimits.everySecondsMax < 1000 ? formData.apiLimits.everySecondsMax * 1000 : formData.apiLimits.everySecondsMax;
-                            const perCallMin = minMs / Math.max(1, formData.apiLimits.requestsMax);
-                            const perCallMax = maxMs / Math.max(1, formData.apiLimits.requestsMin);
-                            setTimingInfo(`~${(perCallMin/1000).toFixed(0)}–${(perCallMax/1000).toFixed(0)}s/call`);
+                            const calls = Math.round(formData.apiLimits.requestsMin + Math.random() * Math.max(0, formData.apiLimits.requestsMax - formData.apiLimits.requestsMin));
+                            const windowMs = minMs + Math.random() * Math.max(0, maxMs - minMs);
+                            const perCallMs = windowMs / Math.max(1, calls);
+                            setTimingInfo(`~${(perCallMs / 1000).toFixed(1)}s/call`);
                           }}
                         >
                           Test Timing
                         </Button>
-                        {timingInfo && <span className="text-[10px] text-green-600 font-semibold text-center">{timingInfo}</span>}
+                        {timingInfo && <span className="text-[10px] text-green-600 font-semibold whitespace-nowrap pb-1">{timingInfo}</span>}
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">Allow x-y calls every x-y ms globally for this account.</p>
@@ -1516,7 +1528,19 @@ export function ProfileDetailsPage() {
           </div>
 
           {/* ── Second row: Account Details + Security + Email Validation ── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setShowAccountDetails(v => !v)}
+              className="flex items-center gap-2 w-full px-0 py-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors select-none border-b border-border mb-0"
+            >
+              <Tag className="w-4 h-4 text-primary" />
+              Account Details, Security &amp; Email Validation
+              <span className="ml-auto text-xs font-normal">{showAccountDetails ? "▲ Collapse" : "▼ Expand"}</span>
+            </button>
+          </div>
+          {showAccountDetails && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
 
             {/* Account Details */}
             <Card className="border-none shadow-none !bg-transparent">
@@ -1704,7 +1728,7 @@ export function ProfileDetailsPage() {
                           type="number"
                           min={1}
                           value={formData?.syncIntervalMin ?? 60}
-                          onChange={e => updateField({ syncIntervalMin: Number(e.target.value) })}
+                          onChange={e => updateField({ syncIntervalMin: Math.min(Number(e.target.value), formData?.syncIntervalMax ?? Infinity) })}
                           className="h-6 text-xs w-11 px-1"
                         />
                         <span className="text-[10px] text-muted-foreground">–</span>
@@ -1712,7 +1736,7 @@ export function ProfileDetailsPage() {
                           type="number"
                           min={1}
                           value={formData?.syncIntervalMax ?? 120}
-                          onChange={e => updateField({ syncIntervalMax: Number(e.target.value) })}
+                          onChange={e => updateField({ syncIntervalMax: Math.max(Number(e.target.value), formData?.syncIntervalMin ?? 0) })}
                           className="h-6 text-xs w-11 px-1"
                         />
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">min</span>
@@ -1777,6 +1801,7 @@ export function ProfileDetailsPage() {
             </Card>
 
           </div>
+          )}
         </Tabs.Content>
 
         <Tabs.Content value="human-session" className="outline-none animate-in fade-in duration-300">
