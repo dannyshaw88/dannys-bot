@@ -293,43 +293,52 @@ class AutomationEngine {
         if (wasCrashed) this.runnerCrashedIds.delete(profile.id);
         const profileRunImmediately = runImmediately && !wasCrashed;
 
-        const followTool = tools.find(t => t.type === "follow" && t.enabled);
-        if (followTool && profile.accountStatus === "valid") {
-          activeFollow.add(profile.id);
-          if (!this.states.has(profile.id)) this.launch(profile, followTool, profileRunImmediately);
-        }
-
-        const unfollowTool = tools.find(t => t.type === "unfollow" && t.enabled);
-        if (unfollowTool && profile.accountStatus === "valid") {
-          activeUnfollow.add(profile.id);
-          if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool, profileRunImmediately);
-        }
-
-        const dmTool = tools.find(t => t.type === "dm" && t.enabled);
-        if (dmTool && profile.accountStatus === "valid") {
-          activeDM.add(profile.id);
-          if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, profileRunImmediately);
-        }
-
-        // Contact tool is "effectively enabled" if the top-level flag OR either
-        // sub-feature toggle is on — the sub-toggles live in settings, not t.enabled.
-        const contactTool = tools.find(t => t.type === "contact");
-        const cs = contactTool?.settings as any;
-        const contactEffective = contactTool && (
-          contactTool.enabled ||
-          cs?.contactUsersEnabled === true ||
-          cs?.contactNewFollowersEnabled === true
-        );
-        if (contactEffective && profile.accountStatus === "valid") {
-          activeContact.add(profile.id);
-          if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!, profileRunImmediately);
-        }
-
-        // Human session runner has its own tool record — completely independent of all other tools
+        // Human Session tool — check first so we can gate standalone runners below.
+        // HS is a single orchestrating tool: when it is active, follow/unfollow/dm/contact
+        // run INSIDE the HS loop only. Launching them as standalone runners simultaneously
+        // would duplicate every action and cause the UI to show spurious execution timestamps.
         const humanSessionTool = tools.find(t => t.type === "human_sessions" && t.enabled);
         if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
           if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool, profileRunImmediately);
+        }
+
+        // Standalone runners only start when there is NO active Human Session for this profile.
+        // If HS is active these profile IDs are intentionally absent from activeFollow/activeUnfollow/
+        // activeDM/activeContact, so the stop-loops below will also clean up any runners that were
+        // already running before HS was turned on.
+        if (!humanSessionTool) {
+          const followTool = tools.find(t => t.type === "follow" && t.enabled);
+          if (followTool && profile.accountStatus === "valid") {
+            activeFollow.add(profile.id);
+            if (!this.states.has(profile.id)) this.launch(profile, followTool, profileRunImmediately);
+          }
+
+          const unfollowTool = tools.find(t => t.type === "unfollow" && t.enabled);
+          if (unfollowTool && profile.accountStatus === "valid") {
+            activeUnfollow.add(profile.id);
+            if (!this.unfollowStates.has(profile.id)) this.launchUnfollow(profile, unfollowTool, profileRunImmediately);
+          }
+
+          const dmTool = tools.find(t => t.type === "dm" && t.enabled);
+          if (dmTool && profile.accountStatus === "valid") {
+            activeDM.add(profile.id);
+            if (!this.dmStates.has(profile.id)) this.launchDM(profile, dmTool, profileRunImmediately);
+          }
+
+          // Contact tool is "effectively enabled" if the top-level flag OR either
+          // sub-feature toggle is on — the sub-toggles live in settings, not t.enabled.
+          const contactTool = tools.find(t => t.type === "contact");
+          const cs = contactTool?.settings as any;
+          const contactEffective = contactTool && (
+            contactTool.enabled ||
+            cs?.contactUsersEnabled === true ||
+            cs?.contactNewFollowersEnabled === true
+          );
+          if (contactEffective && profile.accountStatus === "valid") {
+            activeContact.add(profile.id);
+            if (!this.contactStates.has(profile.id)) this.launchContact(profile, contactTool!, profileRunImmediately);
+          }
         }
       }
 

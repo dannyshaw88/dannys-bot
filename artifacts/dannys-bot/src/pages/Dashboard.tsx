@@ -60,6 +60,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.724",
+    date: "1 Jun 2026",
+    items: [
+      { category: "Fix",  text: "Enabling a sub-tool checkbox inside the Human Session panel (Follow, Unfollow, Contact) no longer launches it as a standalone independent runner. Sub-tools now only execute when the Human Session master toggle is active." },
+      { category: "Fix",  text: "When the Human Session is active, any existing standalone Follow/Unfollow/Contact runners for that profile are automatically stopped to prevent duplicated actions." },
+      { category: "New",  text: "The Contact tool's three sections (Contact New Followers, Auto Reply, Contact Users) are now displayed as a single scrollable page instead of separate tabs, consistent with all other tools." },
+    ],
+  },
+  {
     version: "1.0.723",
     date: "1 Jun 2026",
     items: [

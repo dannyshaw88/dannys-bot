@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Users, UserPlus, MessageSquare } from "lucide-react";
 import { type Tool, type Profile } from "@shared/schema";
+
 import { ContactNewFollowersPanel } from "./ContactNewFollowersPanel";
 import { ContactUsersPanel } from "./ContactUsersPanel";
 import { AutoReplyPanel } from "./AutoReplyPanel";
@@ -16,8 +16,6 @@ interface Props {
   onCopyOpenChange?: (v: boolean) => void;
   embedded?: boolean;
 }
-
-type SubTab = "new-followers" | "contact-users" | "auto-reply";
 
 const RANDOMISE_DESC = "Spread each account's session start times across the wait window so they don't all fire simultaneously";
 
@@ -59,20 +57,17 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
 ];
 
 export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopyOpenChange, embedded }: Props) {
-  const [activeTab, setActiveTab] = useState<SubTab>("new-followers");
   const [copyOpen, _setCopyOpen] = useState(false);
   const _copyOpen = copyOpenProp ?? copyOpen;
   const _setCopyOpenFn = onCopyOpenChange ?? _setCopyOpen;
   const { data: allProfiles = [] } = useProfiles();
   const { toast } = useToast();
   const otherProfiles = allProfiles.filter(p => p.id !== tool.profileId && !p.locked && !p.isTemplate);
-  const hasOtherProfiles = allProfiles.some(p => p.id !== tool.profileId);
 
   const START_STOP_KEYS = ["contactNewFollowersEnabled", "contactUsersEnabled", "autoReplyEnabled"];
 
   const handleContactCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const src = (tool.settings as Record<string, unknown>) ?? {};
-    // "__randomiseTiming__" is a sentinel — filter it out before passing real setting keys
     const willRandomise = expandedKeys.includes("__randomiseTiming__");
     const realKeys = expandedKeys.filter(k => k !== "__randomiseTiming__");
     let staggerOffsets: number[] | undefined;
@@ -82,17 +77,7 @@ export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopy
         Math.round((i * delayMax) / Math.max(1, targetIds.length - 1))
       );
     }
-    await copyToolSettingsToProfiles(
-      src,
-      tool.type,
-      targetIds,
-      realKeys,
-      undefined,
-      staggerOffsets,
-    );
-    // If any start/stop toggles were included in the copy, send a cold restart to
-    // each target tool so the runner immediately picks up the new enabled/disabled
-    // state rather than waiting for its next natural cycle.
+    await copyToolSettingsToProfiles(src, tool.type, targetIds, realKeys, undefined, staggerOffsets);
     const hasStartStop = realKeys.some(k => START_STOP_KEYS.includes(k));
     if (hasStartStop) {
       await Promise.all(targetIds.map(async (targetProfileId) => {
@@ -114,41 +99,13 @@ export function ContactToolPanel({ tool, profile, copyOpen: copyOpenProp, onCopy
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });
   };
 
-  const triggerClass = (tab: SubTab) =>
-    `flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap cursor-pointer ${
-      activeTab === tab
-        ? "text-primary border-primary"
-        : "text-muted-foreground border-transparent hover:text-foreground hover:border-muted-foreground/40"
-    }`;
-
   return (
-    <div className="space-y-4">
-      {/* Sub-tab bar */}
-      <div className="flex items-center border-b border-border -mx-1">
-        <button className={triggerClass("new-followers")} onClick={() => setActiveTab("new-followers")}>
-          <UserPlus className="w-3.5 h-3.5" />
-          Contact New Followers
-        </button>
-        <button className={triggerClass("auto-reply")} onClick={() => setActiveTab("auto-reply")}>
-          <MessageSquare className="w-3.5 h-3.5" />
-          Auto Reply
-        </button>
-        <button className={triggerClass("contact-users")} onClick={() => setActiveTab("contact-users")}>
-          <Users className="w-3.5 h-3.5" />
-          Contact Users
-        </button>
-      </div>
-
-      {/* Panel content */}
-      {activeTab === "new-followers" && (
-        <ContactNewFollowersPanel tool={tool} profile={profile} embedded={embedded} />
-      )}
-      {activeTab === "contact-users" && (
-        <ContactUsersPanel tool={tool} profile={profile} embedded={embedded} />
-      )}
-      {activeTab === "auto-reply" && (
-        <AutoReplyPanel tool={tool} profile={profile} embedded={embedded} />
-      )}
+    <div className="space-y-0">
+      <ContactNewFollowersPanel tool={tool} profile={profile} embedded={embedded} />
+      <div className="border-t border-border/60 my-2" />
+      <AutoReplyPanel tool={tool} profile={profile} embedded={embedded} />
+      <div className="border-t border-border/60 my-2" />
+      <ContactUsersPanel tool={tool} profile={profile} embedded={embedded} />
 
       <CopySettingsDialog
         key={_copyOpen ? "open" : "closed"}
