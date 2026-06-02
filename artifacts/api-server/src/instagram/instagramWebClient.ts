@@ -311,6 +311,7 @@ export class InstagramWebClient {
   private proxyUrl?: string;
   private logCallFn?: ApiCallLogger;
   private profileId?: number;
+  private _apiCallSource = "Account";
   // User-agent to use for web (www.instagram.com) POST requests.
   // Should match the EB browser's UA so that cookies and UA are consistent.
   private webUserAgent = WEB_UA;
@@ -516,6 +517,14 @@ export class InstagramWebClient {
 
   setLogger(fn: ApiCallLogger) {
     this.logCallFn = fn;
+  }
+
+  get apiCallSource(): string {
+    return this._apiCallSource;
+  }
+
+  setApiCallSource(source: string) {
+    this._apiCallSource = source;
   }
 
   // Returns the current mobile cookie jar serialised in igApiCookies format
@@ -1978,21 +1987,25 @@ export class InstagramWebClient {
     // NOTE: /api/v1/qe/sync/ (FetchConfig) is intentionally excluded — it
     // returns "400 Invalid experiment" because the library's LOGIN_EXPERIMENTS
     // list is outdated vs our declared app version. Removed to avoid noise.
-    const entries: Array<{ path: string; method: "GET" | "POST"; opName: string }> = [
-      { method: "GET",  path: "/api/v1/feed/reels_tray/",      opName: "FE:ReelsTray"    },
+    const entries: Array<{ path: string; method: "GET" | "POST"; opName: string; body?: string }> = [
+      // ?surface=2 — matches the real app's reels tray fetch (line 2260 uses same param)
+      { method: "GET",  path: "/api/v1/feed/reels_tray/?surface=2",                                                                    opName: "GetReelsTray"       },
       // reels_media removed — requires a list of reel IDs in the query string;
       // a bare GET with no IDs returns "Invalid reel id list" every time.
-      { method: "GET",  path: "/api/v1/notifications/badge/",  opName: "FE:NotifBadge"   },
-      { method: "GET",  path: "/api/v1/direct_v2/inbox/",      opName: "FE:DirectInbox"  },
-      { method: "GET",  path: "/api/v1/users/current_user/",   opName: "FE:CurrentUser"  },
-      { method: "POST", path: "/api/v1/feed/timeline/",        opName: "FE:Timeline"     },
-      { method: "POST", path: "/api/v1/launcher/sync/",        opName: "FE:LauncherSync" },
-      { method: "POST", path: "/api/v1/analytics/log/",        opName: "FE:Analytics"    },
+      { method: "GET",  path: "/api/v1/news/inbox/?mark_as_seen=true&warning_sweep_enabled=true",                                      opName: "NotificationsBadge" },
+      // Full params match the real GetDirectMessages call at line 2415
+      { method: "GET",  path: "/api/v1/direct_v2/inbox/?visual_message_return_type=unseen&thread_message_limit=10&persistentBadging=true&limit=20", opName: "GetDirectInbox"     },
+      { method: "GET",  path: "/api/v1/accounts/current_user/?edit=true",                                                              opName: "GetCurrentUser"     },
+      // Body matches viewTimelineFeed() at line 2033 — required by Instagram for cold-start fetches
+      { method: "POST", path: "/api/v1/feed/timeline/",   body: "reason=cold_start_fetch&is_pull_to_refresh=0",                        opName: "ViewTimelineFeed"   },
+      // server_config_retrieval=1 is the minimum body the real app sends on launcher/sync
+      { method: "POST", path: "/api/v1/launcher/sync/",   body: "server_config_retrieval=1",                                          opName: "LauncherSync"       },
+      { method: "POST", path: "/api/v1/analytics/log/",                                                                                opName: "AnalyticsLog"       },
     ];
     const ordered = randomise
       ? [...entries].sort(() => Math.random() - 0.5)
       : entries;
-    for (const { path, method, opName } of ordered) {
+    for (const { path, method, opName, body } of ordered) {
       // Each endpoint gets its own timed() entry so every call appears
       // individually in the API calls log instead of as one bundled summary.
       // Errors are caught per-endpoint so a single 400 never propagates out
@@ -2000,7 +2013,7 @@ export class InstagramWebClient {
       await this.timed(opName, async () => {
         try {
           if (method === "POST") {
-            await this.mobileSessionPost(path);
+            await this.mobileSessionPost(path, body ?? "");
           } else {
             await this.mobileSessionGet(path);
           }

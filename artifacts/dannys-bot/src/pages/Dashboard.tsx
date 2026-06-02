@@ -7,7 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
-  Users, UserCheck, ImageIcon, CheckCircle2,
+  Users, UserCheck, ImageIcon, CheckCircle2, Fingerprint, ThumbsUp,
 } from "lucide-react";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 import { format } from "date-fns";
@@ -20,11 +20,10 @@ const ERROR_ACTIONS = new Set([
   "dm_blocked", "contact_dm_blocked", "logged_out",
 ]);
 
-const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string }> = {
-  tool_start:              { label: "Started",         cls: "text-blue-700",      icon: "▶" },
+const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string | React.ReactNode }> = {
+  human_session_start:     { label: "Started",         cls: "text-blue-600",      icon: <ThumbsUp size={11} /> },
+  tool_start:              { label: "Started",         cls: "text-blue-700",      icon: <ThumbsUp size={11} /> },
   tool_complete:           { label: "Complete",        cls: "text-emerald-700",   icon: "✓" },
-  follow_tool_start:       { label: "Executing",            cls: "text-blue-600",    icon: "▶" },
-  follow_tool_complete:    { label: "Follow Tool Ended",    cls: "text-emerald-600", icon: "✓" },
   verified:                { label: "Verified",        cls: "text-green-700",     icon: "✓" },
   verification_failed:     { label: "Verify Fail",     cls: "text-red-700",       icon: "✗" },
   follow:                  { label: "Follow",          cls: "text-sky-700",       icon: "+" },
@@ -61,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 };
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
+  {
+    version: "1.0.734",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Activity log no longer shows Started / Complete entries for sub-tools (Follow, Unfollow, Contact, DM) — only the Human Session Emulation tool logs session start and complete." },
+      { category: "Fix", text: "Session order line removed from the activity log detail column." },
+      { category: "Fix", text: "Started badge now shows a thumbs-up icon instead of the play arrow." },
+      { category: "Fix", text: "Export API Calls now correctly labels the Operation Name column with the responsible tool (Human Session Emulation, Follow Tool, Unfollow Tool, Contact Tool) instead of copying the API Call column." },
+    ],
+  },
   {
     version: "1.0.733",
     date: "2 Jun 2026",

@@ -672,22 +672,11 @@ class AutomationEngine {
           break;
         }
 
-        this.logAction(freshProfile.id, followTool.id, "follow_tool_start", "", "", "", "ok", "Follow Tool session started");
         let sessionResult: { followed: number; scraped: number; dedupSkipped: number; filterSkipped: number; blocked: number; skipped: number } = { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
         try {
           sessionResult = await this.runSession(freshProfile, followTool, state);
-          const { followed, dedupSkipped, filterSkipped, blocked, skipped } = sessionResult;
-          const parts: string[] = [];
-          if (followed > 0)      parts.push(`${followed} followed`);
-          if (dedupSkipped > 0)  parts.push(`${dedupSkipped} skipped`);
-          if (filterSkipped > 0) parts.push(`${filterSkipped} filtered`);
-          if (blocked > 0)       parts.push(`${blocked} blocked`);
-          if (skipped > 0)       parts.push(`${skipped} skipped`);
-          const summary = parts.length ? parts.join(", ") : "nothing to do";
-          this.logAction(freshProfile.id, followTool.id, "follow_tool_complete", "", "", "", "ok", `Follow Tool session complete ${summary}`);
         } catch (err: any) {
           const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, followTool.id);
-          this.logAction(freshProfile.id, followTool.id, "follow_tool_complete", "", "", "", "error", `Follow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unexpected session error: ${err?.message}`);
           if (acctStatus) break;
         }
@@ -831,7 +820,7 @@ class AutomationEngine {
         const s = hsTool.settings as any;
 
         if (Date.now() >= state.nextHumanSessionAt) {
-          this.logAction(freshProfile.id, hsTool.id, "tool_start", "", "", "", "ok", "Human Session started");
+          this.logAction(freshProfile.id, hsTool.id, "human_session_start", "", "", "", "ok", "Human Session Emulation started");
           try {
             await this.runHumanSessionTools(freshProfile, hsTool, state);
             await storage.incrementStat(freshProfile.id, "human_session");
@@ -914,13 +903,10 @@ class AutomationEngine {
         const unfollowTool = tools.find(t => t.type === "unfollow");
         if (!unfollowTool?.enabled || state.stop.stopped) break;
 
-        this.logAction(freshProfile.id, unfollowTool.id, "tool_start", "", "", "", "ok", "Unfollow Tool session started");
         try {
           await this.runUnfollowSession(freshProfile, unfollowTool, state);
-          this.logAction(freshProfile.id, unfollowTool.id, "tool_complete", "", "", "", "ok", "Unfollow Tool session complete");
         } catch (err: any) {
           const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, unfollowTool.id);
-          this.logAction(freshProfile.id, unfollowTool.id, "tool_complete", "", "", "", "error", `Unfollow Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: unfollow session error: ${err?.message}`);
           if (acctStatus) break;
         }
@@ -1030,13 +1016,10 @@ class AutomationEngine {
         const dmTool = tools.find(t => t.type === "dm");
         if (!dmTool?.enabled || state.stop.stopped) break;
 
-        this.logAction(freshProfile.id, dmTool.id, "tool_start", "", "", "", "ok", "DM Tool session started");
         try {
           await this.runDMSession(freshProfile, dmTool, state);
-          this.logAction(freshProfile.id, dmTool.id, "tool_complete", "", "", "", "ok", "DM Tool session complete");
         } catch (err: any) {
           const acctStatus = await this.applyAccountLevelError(freshProfile.id, err?.message ?? "", state, dmTool.id);
-          this.logAction(freshProfile.id, dmTool.id, "tool_complete", "", "", "", "error", `DM Tool session error: ${err?.message ?? "unknown"}`);
           console.error(`[engine] @${freshProfile.username}: DM session error: ${err?.message}`);
           if (acctStatus) break;
         }
@@ -1282,6 +1265,7 @@ class AutomationEngine {
     // Ensure client is initialised (needed for non-HikerAPI DM send path later).
     const client = await this.ensureClient(profile, state);
     if (!client) return { fetched: 0, source };
+    client.setApiCallSource("Contact Tool");
 
     let followers: { pk: string; username: string; fullName: string }[] = [];
     if (hikerClient) {
@@ -1394,6 +1378,7 @@ class AutomationEngine {
 
     const client = await this.ensureClient(profile, state);
     if (!client) return;
+    client.setApiCallSource("Contact Tool");
 
     let sent = 0;
     for (const msg of queue) {
@@ -1479,6 +1464,7 @@ class AutomationEngine {
 
     const client = await this.ensureClient(profile, state);
     if (!client) return;
+    client.setApiCallSource("Contact Tool");
 
     for (const msg of due) {
       if (state.stop.stopped) break;
@@ -1683,7 +1669,7 @@ class AutomationEngine {
           operationName: op,
           date: new Date().toISOString(),
           message: message ?? "",
-          source: "Account",
+          source: state.client!.apiCallSource,
           durationMs,
         }).catch(() => {});
       });
@@ -2125,6 +2111,7 @@ class AutomationEngine {
 
     const client = await this.ensureClient(profile, state);
     if (!client) return { unfollowed: 0 };
+    client.setApiCallSource("Unfollow Tool");
 
     // Fetch followed users older than minAgeDays
     const all = await storage.getFollowedUsersByProfile(profile.id, 100_000);
@@ -2473,6 +2460,7 @@ class AutomationEngine {
 
     // ── Force Emulation — always runs FIRST if enabled ───────────────────────
     if (!!s.forceEmulationEnabled) {
+      client.setApiCallSource("Human Session Emulation");
       try {
         await client.runForceEmulation(s.forceEmulationRandomise === true);
         console.log(`[engine] @${profile.username}: 📱 force emulation calls complete`);
@@ -2511,6 +2499,7 @@ class AutomationEngine {
       "humanSessionNotUsedMin", "humanSessionNotUsedMax",
       "humanSessionOrderMin",   "humanSessionOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         // Per-action run chance range (0=never, 100=always). Picks a random threshold between min/max each session.
         const willRun = (minKey: string, maxKey: string) => {
           const lo = Number((s as any)[minKey] ?? 100);
@@ -3109,19 +3098,11 @@ class AutomationEngine {
         "followOrderMin", "followOrderMax",
         async () => {
           if (!followTool) return;
-          this.logAction(profile.id, followTool.id, "tool_start", "", "", "", "ok", "Follow Tool session started");
           try {
-            const r = await this.runSession(profile, followTool, state);
-            const parts: string[] = [];
-            if (r.followed > 0)      parts.push(`${r.followed} followed`);
-            if (r.dedupSkipped > 0)  parts.push(`${r.dedupSkipped} dedup skipped`);
-            if (r.filterSkipped > 0) parts.push(`${r.filterSkipped} filtered`);
-            if (r.blocked > 0)       parts.push(`${r.blocked} blocked`);
-            this.logAction(profile.id, followTool.id, "tool_complete", "", "", "", "ok", `Follow Tool session complete — ${parts.join(", ") || "nothing to do"}`);
+            await this.runSession(profile, followTool, state);
           } catch (e: any) {
             if (await checkSessionErr(e, "followTool")) return;
             console.warn(`[engine] @${profile.username}: follow tool error in HS: ${e?.message}`);
-            this.logAction(profile.id, followTool.id, "tool_complete", "", "", "", "error", `Follow Tool error: ${e?.message}`);
           }
         },
       );
@@ -3134,14 +3115,11 @@ class AutomationEngine {
         "unfollowOrderMin", "unfollowOrderMax",
         async () => {
           if (!unfollowTool) return;
-          this.logAction(profile.id, unfollowTool.id, "tool_start", "", "", "", "ok", "Unfollow Tool session started");
           try {
             await this.runUnfollowSession(profile, unfollowTool, state);
-            this.logAction(profile.id, unfollowTool.id, "tool_complete", "", "", "", "ok", "Unfollow Tool session complete");
           } catch (e: any) {
             if (await checkSessionErr(e, "unfollowTool")) return;
             console.warn(`[engine] @${profile.username}: unfollow tool error in HS: ${e?.message}`);
-            this.logAction(profile.id, unfollowTool.id, "tool_complete", "", "", "", "error", `Unfollow Tool error: ${e?.message}`);
           }
         },
       );
@@ -3161,7 +3139,6 @@ class AutomationEngine {
         "contactOrderMin", "contactOrderMax",
         async () => {
           if (!contactTool) return;
-          this.logAction(profile.id, contactTool.id, "tool_start", "", "", "", "ok", "Contact Tool session started");
           try {
             if (cSett.contactNewFollowersEnabled) {
               await this.runContactNewFollowersSession(profile, contactTool, state);
@@ -3169,11 +3146,9 @@ class AutomationEngine {
             if (cSett.contactUsersEnabled) {
               await this.runContactUsersSession(profile, contactTool, state);
             }
-            this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "ok", "Contact Tool session complete");
           } catch (e: any) {
             if (await checkSessionErr(e, "contactTool")) return;
             console.warn(`[engine] @${profile.username}: contact tool error in HS: ${e?.message}`);
-            this.logAction(profile.id, contactTool.id, "tool_complete", "", "", "", "error", `Contact Tool error: ${e?.message}`);
           }
         },
       );
@@ -3182,10 +3157,8 @@ class AutomationEngine {
     // Sort ascending by order value (stable — ties keep insertion order)
     queue.sort((a, b) => a.order - b.order);
 
-    const orderSummary = queue.map(e => `${e.label}(${e.order})`).join(" → ");
+    const orderSummary = queue.map(e => e.label).join(" → ");
     console.log(`[engine] @${profile.username}: session order: ${orderSummary || "(nothing to run)"}`);
-    this.logAction(profile.id, tool.id, "tool_start", "", "", "", "info",
-      `Session order: ${orderSummary || "(nothing to run)"}`);
 
     // Execute in sorted order — stop immediately on any account-level error
     for (const entry of queue) {
@@ -3251,6 +3224,7 @@ class AutomationEngine {
       this.logAction(profile.id, tool.id, "follow", "", "", "", "skip", "No active session — verify the account in the embedded browser first (Verify Credentials)");
       return zero;
     }
+    client.setApiCallSource("Follow Tool");
 
     // Pick source
     const sources = await storage.getSourcesByTool(tool.id);
