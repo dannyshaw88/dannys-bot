@@ -139,6 +139,100 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
         { key: "rp_stop",       label: "Stop conditions",                   settingKeys: ["repostDisableAtPostCount","repostDisableWhenExhausted"] },
       ]},
     ]},
+    { label: "Follow Tool Settings", options: [
+      { key: "hs_followTiming", label: "Timing", description: "Delays between each follow action", subOptions: [
+        { key: "hf_delayAfterFollow", label: "Delay after each follow (min / max secs)", settingKeys: ["follow:delayAfterFollowMin","follow:delayAfterFollowMax"] },
+      ]},
+      { key: "hs_followLimits", label: "Limits", description: "Caps on follow actions per session, day and hour", subOptions: [
+        { key: "hf_usersPerSession", label: "Users per session (min / max)",    settingKeys: ["follow:processMin","follow:processMax"] },
+        { key: "hf_maxPerDay",       label: "Max actions per day (min / max)",  settingKeys: ["follow:maxPerDayMin","follow:maxPerDayMax"] },
+        { key: "hf_maxPerHour",      label: "Max actions per hour (min / max)", settingKeys: ["follow:maxPerHourMin","follow:maxPerHourMax"] },
+      ]},
+      { key: "hs_followScraping", label: "Scraping", description: "Source quality and follow-age filters", subOptions: [
+        { key: "hf_scrapeAbort",  label: "Abort scrape after (min / max results)", settingKeys: ["follow:abortScrapeAfterMin","follow:abortScrapeAfterMax"] },
+        { key: "hf_minFollowAge", label: "Min follow age (days)",                  settingKeys: ["follow:minFollowAgeDays"] },
+      ]},
+      { key: "hs_followFilters", label: "Filters", description: "Account quality filters applied before following", subOptions: [
+        { key: "hf_skipIndian", label: "Skip Indian Users", settingKeys: ["follow:skipIndianUsers"] },
+      ]},
+      { key: "hs_followInjection", label: "Injection Settings", description: "API calls injected between follows to simulate natural behaviour", subOptions: [
+        { key: "hf_injectSearch",          label: "Inject SearchByUsername (enabled + %)",      settingKeys: ["follow:injectSearchEnabled","follow:injectSearchMin","follow:injectSearchMax"] },
+        { key: "hf_injectSuggested",       label: "Inject GetSuggestedUsers (enabled + %)",     settingKeys: ["follow:injectSuggestedEnabled","follow:injectSuggestedMin","follow:injectSuggestedMax"] },
+        { key: "hf_injectProfileBrowsing", label: "Inject Profile Browsing (enabled + % + all settings)", settingKeys: ["follow:injectProfileBrowsingEnabled","follow:injectProfileBrowsingMin","follow:injectProfileBrowsingMax","follow:injectProfileBrowsingFeedMin","follow:injectProfileBrowsingFeedMax","follow:injectProfileBrowsingPostPctMin","follow:injectProfileBrowsingPostPctMax","follow:injectProfileBrowsingBeforeFollow","follow:injectProfileBrowsingBeforeFollowPctMin","follow:injectProfileBrowsingBeforeFollowPctMax","follow:injectProfileBrowsingAbandonFollow","follow:injectProfileBrowsingAbandonFollowPctMin","follow:injectProfileBrowsingAbandonFollowPctMax"] },
+      ]},
+      { key: "hs_followAutoFU", label: "Auto Follow / Unfollow", description: "Automatic switching between follow and unfollow tools", subOptions: [
+        { key: "hf_autoEnabled",    label: "Enabled",                                     settingKeys: ["follow:autoFollowUnfollowEnabled"] },
+        { key: "hf_autoStopAt",     label: "Stop follow at followings count (min / max)", settingKeys: ["follow:autoStopFollowAtFollowingsMin","follow:autoStopFollowAtFollowingsMax"] },
+        { key: "hf_autoStartAfter", label: "Start unfollow after (min / max mins)",       settingKeys: ["follow:autoStartUnfollowAfterMin","follow:autoStartUnfollowAfterMax"] },
+      ]},
+      { key: "hs_followSAV", label: "Session Action Variation", description: "Extra actions performed during a follow session (likes, reels, stories, highlights)", subOptions: [
+        { key: "hf_sav_enabled",   label: "Enabled",                                        settingKeys: ["follow:sessionActionVariationEnabled"] },
+        { key: "hf_likeChance",    label: "Like — Chance % (min / max)",                    settingKeys: ["follow:likeChanceMin","follow:likeChanceMax"] },
+        { key: "hf_likeCount",     label: "Like — Posts to like (min / max)",               settingKeys: ["follow:likeProcessMin","follow:likeProcessMax"] },
+        { key: "hf_likeBefore",    label: "Like — Before follow % (min / max)",             settingKeys: ["follow:likeBeforeMin","follow:likeBeforeMax"] },
+        { key: "hf_likeMaxDay",    label: "Like — Max per day (min / max)",                 settingKeys: ["follow:likeMaxPerDayMin","follow:likeMaxPerDayMax"] },
+        { key: "hf_likeDelay",     label: "Like — Delay between likes (min / max secs)",   settingKeys: ["follow:likeDelayMin","follow:likeDelayMax"] },
+        { key: "hf_reelsChance",   label: "Reels — Chance % (min / max)",                  settingKeys: ["follow:viewReelsChanceMin","follow:viewReelsChanceMax"] },
+        { key: "hf_reelsCount",    label: "Reels — Count to watch (min / max)",            settingKeys: ["follow:viewReelsProcessMin","follow:viewReelsProcessMax"] },
+        { key: "hf_reelsBefore",   label: "Reels — Before follow % (min / max)",           settingKeys: ["follow:viewReelsBeforeMin","follow:viewReelsBeforeMax"] },
+        { key: "hf_reelsMaxDay",   label: "Reels — Max per day (min / max)",               settingKeys: ["follow:viewReelsMaxPerDayMin","follow:viewReelsMaxPerDayMax"] },
+        { key: "hf_reelsDelay",    label: "Reels — Delay (min / max secs)",                settingKeys: ["follow:viewReelsDelayMin","follow:viewReelsDelayMax"] },
+        { key: "hf_storiesChance", label: "Stories — Chance % (min / max)",                settingKeys: ["follow:viewStoriesChanceMin","follow:viewStoriesChanceMax"] },
+        { key: "hf_storiesCount",  label: "Stories — Count to watch (min / max)",          settingKeys: ["follow:viewStoriesProcessMin","follow:viewStoriesProcessMax"] },
+        { key: "hf_storiesBefore", label: "Stories — Before follow % (min / max)",         settingKeys: ["follow:viewStoriesBeforeMin","follow:viewStoriesBeforeMax"] },
+        { key: "hf_storiesMaxDay", label: "Stories — Max per day (min / max)",             settingKeys: ["follow:viewStoriesMaxPerDayMin","follow:viewStoriesMaxPerDayMax"] },
+        { key: "hf_storiesDelay",  label: "Stories — Delay (min / max secs)",              settingKeys: ["follow:viewStoriesDelayMin","follow:viewStoriesDelayMax"] },
+        { key: "hf_hlChance",      label: "Highlights — Chance % (min / max)",             settingKeys: ["follow:viewHighlightsChanceMin","follow:viewHighlightsChanceMax"] },
+        { key: "hf_hlCount",       label: "Highlights — Count to watch (min / max)",       settingKeys: ["follow:viewHighlightsProcessMin","follow:viewHighlightsProcessMax"] },
+        { key: "hf_hlBefore",      label: "Highlights — Before follow % (min / max)",      settingKeys: ["follow:viewHighlightsBeforeMin","follow:viewHighlightsBeforeMax"] },
+        { key: "hf_hlMaxDay",      label: "Highlights — Max per day (min / max)",          settingKeys: ["follow:viewHighlightsMaxPerDayMin","follow:viewHighlightsMaxPerDayMax"] },
+        { key: "hf_hlDelay",       label: "Highlights — Delay (min / max secs)",           settingKeys: ["follow:viewHighlightsDelayMin","follow:viewHighlightsDelayMax"] },
+      ]},
+      { key: "hs_followStopBlock", label: "Stop if Blocked", description: "Pause follow tool for a set time when Instagram blocks a follow action", subOptions: [
+        { key: "hf_stopEnabled", label: "Enabled",              settingKeys: ["follow:stopOnBlockEnabled"] },
+        { key: "hf_stopMinutes", label: "Stop duration (mins)", settingKeys: ["follow:stopOnBlockMinutes"] },
+      ]},
+    ]},
+    { label: "Unfollow Tool Settings", options: [
+      { key: "hs_unfollowSettings", label: "Settings", description: "Unfollow timing, limits and age filters", subOptions: [
+        { key: "uf_h_age",   label: "Unfollow after min days since follow",           settingKeys: ["unfollow:minFollowAgeDays"] },
+        { key: "uf_h_wait",  label: "Wait between sessions (min / max mins)",         settingKeys: ["unfollow:delayMin","unfollow:delayMax"] },
+        { key: "uf_h_count", label: "Users per session (min / max)",                  settingKeys: ["unfollow:processMin","unfollow:processMax"] },
+        { key: "uf_h_delay", label: "Delay after each unfollow (min / max secs)",    settingKeys: ["unfollow:delayAfterUnfollowMin","unfollow:delayAfterUnfollowMax"] },
+      ]},
+      { key: "hs_unfollowAutoFU", label: "Auto Follow / Unfollow", description: "Automatic switching between unfollow and follow tools", subOptions: [
+        { key: "uf_h_autoEnabled",    label: "Enabled",                                          settingKeys: ["unfollow:autoFollowUnfollowEnabled"] },
+        { key: "uf_h_autoStopAt",     label: "Stop unfollow at followings count (min / max)",   settingKeys: ["unfollow:autoStopUnfollowAtFollowingsMin","unfollow:autoStopUnfollowAtFollowingsMax"] },
+        { key: "uf_h_autoStartAfter", label: "Start follow after (min / max mins)",             settingKeys: ["unfollow:autoStartFollowAfterMin","unfollow:autoStartFollowAfterMax"] },
+      ]},
+      { key: "hs_unfollowStopBlock", label: "Stop if Blocked", description: "Pause unfollow tool for a set time when Instagram blocks an unfollow action", subOptions: [
+        { key: "uf_h_stopEnabled", label: "Enabled",              settingKeys: ["unfollow:stopOnBlockEnabled"] },
+        { key: "uf_h_stopMinutes", label: "Stop duration (mins)", settingKeys: ["unfollow:stopOnBlockMinutes"] },
+      ]},
+    ]},
+    { label: "Contact Tool Settings", options: [
+      { key: "hs_contactNewFollowers", label: "Contact New Followers", description: "Auto-messaging settings for new followers", subOptions: [
+        { key: "ct_h_onlyApp",   label: "Only app-followed users",              settingKeys: ["contact:contactOnlyAppFollowed"] },
+        { key: "ct_h_message",   label: "Message template",                     settingKeys: ["contact:contactMessage"] },
+        { key: "ct_h_interval",  label: "Check interval (min / max mins)",      settingKeys: ["contact:contactCheckIntervalMin","contact:contactCheckIntervalMax"] },
+        { key: "ct_h_perCheck",  label: "Users per check (min / max)",          settingKeys: ["contact:contactUsersPerCheckMin","contact:contactUsersPerCheckMax"] },
+        { key: "ct_h_apiSource", label: "API source",                           settingKeys: ["contact:contactApiSource"] },
+      ]},
+      { key: "hs_autoReplySettings", label: "Auto Reply", description: "Auto-respond to incoming messages", subOptions: [
+        { key: "ct_h_arRules", label: "Reply rules", settingKeys: ["contact:autoReplies"] },
+      ]},
+      { key: "hs_contactUsersSettings", label: "Contact Users", description: "Manual user contact list settings", subOptions: [
+        { key: "ct_h_usersWait",       label: "Wait between sessions (min / max mins)",     settingKeys: ["contact:contactUsersWaitMin","contact:contactUsersWaitMax"] },
+        { key: "ct_h_usersSendCount",  label: "Send count per session (min / max)",         settingKeys: ["contact:contactUsersSendCountMin","contact:contactUsersSendCountMax"] },
+        { key: "ct_h_usersDelay",      label: "Delay between messages (min / max secs)",    settingKeys: ["contact:contactUsersDelayBetweenMin","contact:contactUsersDelayBetweenMax"] },
+        { key: "ct_h_usersPickRandom", label: "Pick users randomly",                        settingKeys: ["contact:contactUsersPickRandom"] },
+        { key: "ct_h_usersUnsend",     label: "Unsend settings",                            settingKeys: ["contact:contactUsersUnsendEnabled","contact:contactUsersUnsendMin","contact:contactUsersUnsendMax"] },
+      ]},
+      { key: "hs_contactStopBlock", label: "Stop if Blocked", description: "Pause contact tool for a set time when Instagram blocks a contact action", subOptions: [
+        { key: "ct_h_stopEnabled", label: "Enabled",              settingKeys: ["contact:stopOnBlockEnabled"] },
+        { key: "ct_h_stopMinutes", label: "Stop duration (mins)", settingKeys: ["contact:stopOnBlockMinutes"] },
+      ]},
+    ]},
   ];
 
   const handleHumanCopy = async (targetIds: number[], expandedKeys: string[]) => {
@@ -150,7 +244,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     const copyFollowSources    = expandedKeys.includes("hs_followSources");
 
     const SENTINEL_KEYS = ["startStop", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources"];
-    const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k));
+    const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k) && !k.includes(":"));
 
     const willEnable    = copyEnabled && tool.enabled;
     const willRandomise = expandedKeys.includes("randomiseTiming");
@@ -214,6 +308,39 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
           })
         );
       }
+    }
+
+    // ── Copy follow tool settings (prefixed keys "follow:...") ───────────────
+    const followKeys = expandedKeys.filter(k => k.startsWith("follow:")).map(k => k.slice(7));
+    if (followKeys.length > 0 && followTool) {
+      await copyToolSettingsToProfiles(
+        (followTool.settings as Record<string, unknown>) ?? {},
+        "follow",
+        targetIds,
+        followKeys,
+      );
+    }
+
+    // ── Copy unfollow tool settings (prefixed keys "unfollow:...") ───────────
+    const unfollowKeys = expandedKeys.filter(k => k.startsWith("unfollow:")).map(k => k.slice(9));
+    if (unfollowKeys.length > 0 && unfollowTool) {
+      await copyToolSettingsToProfiles(
+        (unfollowTool.settings as Record<string, unknown>) ?? {},
+        "unfollow",
+        targetIds,
+        unfollowKeys,
+      );
+    }
+
+    // ── Copy contact tool settings (prefixed keys "contact:...") ─────────────
+    const contactKeys = expandedKeys.filter(k => k.startsWith("contact:")).map(k => k.slice(8));
+    if (contactKeys.length > 0 && contactTool) {
+      await copyToolSettingsToProfiles(
+        (contactTool.settings as Record<string, unknown>) ?? {},
+        "contact",
+        targetIds,
+        contactKeys,
+      );
     }
 
     toast({ title: "Settings copied", description: `Copied to ${targetIds.length} profile${targetIds.length !== 1 ? "s" : ""}.` });

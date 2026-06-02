@@ -267,7 +267,12 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
       { key: "ft_injection", label: "Injection Settings", description: "API calls injected between follows to simulate natural behaviour", subOptions: [
         { key: "ft_injectSearch",    label: "Inject SearchByUsername (enabled + %)",  settingKeys: ["injectSearchEnabled","injectSearchMin","injectSearchMax"] },
         { key: "ft_injectSuggested", label: "Inject GetSuggestedUsers (enabled + %)", settingKeys: ["injectSuggestedEnabled","injectSuggestedMin","injectSuggestedMax"] },
-        { key: "ft_injectProfileBrowsing", label: "Inject Profile Browsing (enabled + % + settings)", settingKeys: ["injectProfileBrowsingEnabled","injectProfileBrowsingMin","injectProfileBrowsingMax","injectProfileBrowsingFeedMin","injectProfileBrowsingFeedMax","injectProfileBrowsingPostPctMin","injectProfileBrowsingPostPctMax","injectProfileBrowsingBeforeFollow"] },
+        { key: "ft_injectProfileBrowsing", label: "Inject Profile Browsing (enabled + % + settings)", settingKeys: ["injectProfileBrowsingEnabled","injectProfileBrowsingMin","injectProfileBrowsingMax","injectProfileBrowsingFeedMin","injectProfileBrowsingFeedMax","injectProfileBrowsingPostPctMin","injectProfileBrowsingPostPctMax","injectProfileBrowsingBeforeFollow","injectProfileBrowsingBeforeFollowPctMin","injectProfileBrowsingBeforeFollowPctMax","injectProfileBrowsingAbandonFollow","injectProfileBrowsingAbandonFollowPctMin","injectProfileBrowsingAbandonFollowPctMax"] },
+      ]},
+    ]},
+    { label: "Filters", options: [
+      { key: "ft_filters", label: "Filters", description: "Account quality filters applied before following", subOptions: [
+        { key: "ft_skipIndian", label: "Skip Indian Users", settingKeys: ["skipIndianUsers"] },
       ]},
     ]},
     { label: "Auto Follow / Unfollow", options: [
@@ -923,14 +928,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         </label>
                       </div>
                       <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSearchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                          value={(settings as any).injectSearchMin ?? 30}
-                          onChange={(e) => setSettings({ ...settings, injectSearchMin: Math.min(Number(e.target.value), (settings as any).injectSearchMax ?? 100) } as any)}
+                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSearchMin ?? 1}
+                          onChange={(e) => setSettings({ ...settings, injectSearchMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectSearchMax ?? 100) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                          value={(settings as any).injectSearchMax ?? 50}
-                          onChange={(e) => setSettings({ ...settings, injectSearchMax: Math.max(Number(e.target.value), (settings as any).injectSearchMin ?? 0) } as any)}
+                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSearchMax ?? 1}
+                          onChange={(e) => setSettings({ ...settings, injectSearchMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectSearchMin ?? 1) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground">%</span>
                       </div>
@@ -950,14 +955,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         </label>
                       </div>
                       <div className={`flex items-center gap-1.5 transition-opacity ${!(settings as any).injectSuggestedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                          value={(settings as any).injectSuggestedMin ?? 40}
-                          onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Math.min(Number(e.target.value), (settings as any).injectSuggestedMax ?? 100) } as any)}
+                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSuggestedMin ?? 1}
+                          onChange={(e) => setSettings({ ...settings, injectSuggestedMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectSuggestedMax ?? 100) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground">–</span>
-                        <Input type="number" min="0" max="100" className="w-14 h-8 text-xs"
-                          value={(settings as any).injectSuggestedMax ?? 60}
-                          onChange={(e) => setSettings({ ...settings, injectSuggestedMax: Math.max(Number(e.target.value), (settings as any).injectSuggestedMin ?? 0) } as any)}
+                        <Input type="number" min="1" max="100" className="w-14 h-8 text-xs"
+                          value={(settings as any).injectSuggestedMax ?? 1}
+                          onChange={(e) => setSettings({ ...settings, injectSuggestedMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectSuggestedMin ?? 1) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground">%</span>
                       </div>
@@ -976,14 +981,14 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         Inject Profile Browsing
                       </label>
                       <div className={`flex items-center gap-1.5 flex-wrap transition-opacity ${!(settings as any).injectProfileBrowsingEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                          value={(settings as any).injectProfileBrowsingMin ?? 30}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMin: Math.min(Number(e.target.value), (settings as any).injectProfileBrowsingMax ?? 100) } as any)}
+                        <Input type="number" min="1" max="100" className="w-14 h-7 text-xs shrink-0"
+                          value={(settings as any).injectProfileBrowsingMin ?? 1}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMin: Math.min(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingMax ?? 100) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">–</span>
-                        <Input type="number" min="0" max="100" className="w-14 h-7 text-xs shrink-0"
-                          value={(settings as any).injectProfileBrowsingMax ?? 50}
-                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMax: Math.max(Number(e.target.value), (settings as any).injectProfileBrowsingMin ?? 0) } as any)}
+                        <Input type="number" min="1" max="100" className="w-14 h-7 text-xs shrink-0"
+                          value={(settings as any).injectProfileBrowsingMax ?? 1}
+                          onChange={(e) => setSettings({ ...settings, injectProfileBrowsingMax: Math.max(Math.max(1, Number(e.target.value)), (settings as any).injectProfileBrowsingMin ?? 1) } as any)}
                         />
                         <span className="text-[10px] text-muted-foreground shrink-0">%</span>
                         <div className="w-px h-4 bg-border/50 shrink-0 mx-0.5" />

@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.739",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Follow Tool Copy Settings now includes the Skip Indian Users filter and all Browse Before Follow sub-settings (Before Follow %, Abandon Follow, Abandon %)." },
+      { category: "New", text: "Human Session Copy Settings now has dedicated Follow Tool, Unfollow Tool, and Contact Tool sections — every setting for each tool can be copied independently in one dialog." },
+    ],
+  },
+  {
     version: "1.0.737",
     date: "2 Jun 2026",
     items: [
