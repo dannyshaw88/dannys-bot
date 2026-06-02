@@ -300,7 +300,18 @@ class AutomationEngine {
         const humanSessionTool = tools.find(t => t.type === "human_sessions" && t.enabled);
         if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
-          if (!this.humanSessionStates.has(profile.id)) this.launchHumanSession(profile, humanSessionTool, profileRunImmediately);
+          if (!this.humanSessionStates.has(profile.id)) {
+            this.launchHumanSession(profile, humanSessionTool, profileRunImmediately);
+          } else if (profileRunImmediately) {
+            // User just toggled HS ON while a runner was already active (e.g. startup
+            // delay still counting down). Reset the timer so the session fires immediately
+            // on the next loop tick instead of waiting out the original delay.
+            const existingState = this.humanSessionStates.get(profile.id)!;
+            if (existingState.nextHumanSessionAt > Date.now()) {
+              existingState.nextHumanSessionAt = 0;
+              console.log(`[engine] @${profile.username}: HS toggle — forcing immediate run`);
+            }
+          }
         }
 
         // Standalone runners only start when there is NO active Human Session for this profile.
@@ -809,10 +820,12 @@ class AutomationEngine {
           continue;
         }
         if (freshProfile.accountStatus !== "valid") {
+          engineLog("WARN", `@${freshProfile.username}: HS waiting — account status is "${freshProfile.accountStatus}" (not yet valid), pausing 5min`);
           await sleepInterruptible(5 * 60_000, state.stop);
           continue;
         }
         if (freshProfile.accountStatus === "captcha") {
+          engineLog("WARN", `@${freshProfile.username}: HS waiting — captcha challenge, pausing 5min`);
           await sleepInterruptible(5 * 60_000, state.stop);
           continue;
         }
@@ -2440,7 +2453,11 @@ class AutomationEngine {
   private async runHumanSessionTools(profile: Profile, tool: Tool, state: ProfileState): Promise<void> {
     const s = tool.settings as any;
     const client = await this.ensureClient(profile, state);
-    if (!client) return;
+    if (!client) {
+      this.logAction(profile.id, tool.id, "session_skipped", "", "", "", "warn",
+        "Human Session skipped — no Instagram session found. Run Verify Credentials to establish one.");
+      return;
+    }
 
     // Shared account-level error detector for every action in this session.
     // If Instagram returns login_required / checkpoint / banned / etc., we

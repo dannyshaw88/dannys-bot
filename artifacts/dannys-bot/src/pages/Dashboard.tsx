@@ -60,6 +60,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.726",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix",  text: "Enabling the Human Session master toggle when a session was already running (e.g. startup countdown active) now forces it to run immediately instead of waiting out the original delay." },
+      { category: "Fix",  text: "If the Human Session fires but the account has no Instagram session yet, it now logs a clear warning in the Activity panel — 'Run Verify Credentials to establish one' — instead of silently doing nothing." },
+      { category: "Fix",  text: "Human Session now logs a visible warning when the account status is not valid (e.g. verifying, action_blocked) so you can see exactly why a session is being held." },
+      { category: "New",  text: "Sub-tool settings inside the Human Session panel (Follow, Unfollow, Contact) are now greyed out when their checkbox is unchecked, making it clear which tools are active in the next session." },
+    ],
+  },
+  {
     version: "1.0.725",
     date: "2 Jun 2026",
     items: [

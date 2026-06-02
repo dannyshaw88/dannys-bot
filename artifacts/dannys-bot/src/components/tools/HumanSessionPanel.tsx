@@ -1291,7 +1291,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
             </div>
-            <div className="p-4">
+            <div className={`p-4 transition-opacity ${!followTool.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <ToolConfigPanel tool={followTool} profile={profile} hideEnableToggle />
             </div>
           </div>
@@ -1334,7 +1334,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
             </div>
-            <div className="p-4">
+            <div className={`p-4 transition-opacity ${!unfollowTool.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <UnfollowToolPanel tool={unfollowTool} profile={profile} hideEnableToggle />
             </div>
           </div>
@@ -1377,7 +1377,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
             </div>
-            <div className="p-4">
+            <div className={`p-4 transition-opacity ${!(contactTool.enabled || (contactTool.settings as any)?.contactNewFollowersEnabled || (contactTool.settings as any)?.autoReplyEnabled || (contactTool.settings as any)?.contactUsersEnabled) ? 'opacity-40 pointer-events-none' : ''}`}>
               <ContactToolPanel tool={contactTool} profile={profile} embedded />
             </div>
           </div>
