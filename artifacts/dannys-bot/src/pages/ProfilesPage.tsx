@@ -1678,6 +1678,11 @@ export function ProfilesPage() {
               if (!res.ok) {
                 results.push({ username: file.name, ok: false, error: data.error ?? "Unknown error" });
               } else {
+                // Restore trust score from EQX payload into localStorage so the
+                // badge shows the correct level immediately after import.
+                if (data.trustScoreId && data.profileId) {
+                  localStorage.setItem(`trustscore_v2_${data.profileId}`, String(data.trustScoreId));
+                }
                 results.push({ username: data.username, ok: true });
               }
             } catch (err: any) {
@@ -1757,7 +1762,9 @@ export function ProfilesPage() {
                       const profile = profiles?.find(p => p.id === id);
                       const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                       try {
-                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        const tsId = localStorage.getItem(`trustscore_v2_${id}`);
+                        const exportUrl = `/api/profiles/${id}/export-eqx${tsId ? `?trustScoreId=${encodeURIComponent(tsId)}` : ""}`;
+                        const res = await fetch(exportUrl, { credentials: "include" });
                         if (!res.ok) { fetchErrors.push(safeUsername); continue; }
                         const arrayBuf = await res.arrayBuffer();
                         const bytes = new Uint8Array(arrayBuf);
@@ -1779,7 +1786,9 @@ export function ProfilesPage() {
                       const profile = profiles?.find(p => p.id === id);
                       const safeUsername = (profile?.username || String(id)).replace(/[^a-zA-Z0-9_-]/g, "_");
                       try {
-                        const res = await fetch(`/api/profiles/${id}/export-eqx`, { credentials: "include" });
+                        const tsId2 = localStorage.getItem(`trustscore_v2_${id}`);
+                        const exportUrl2 = `/api/profiles/${id}/export-eqx${tsId2 ? `?trustScoreId=${encodeURIComponent(tsId2)}` : ""}`;
+                        const res = await fetch(exportUrl2, { credentials: "include" });
                         if (!res.ok) { toast({ title: "Export failed", description: `Could not export ${safeUsername}`, variant: "destructive" }); continue; }
                         const blob = await res.blob();
                         const objectUrl = URL.createObjectURL(blob);

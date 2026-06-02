@@ -1739,9 +1739,24 @@ export async function registerInstagramRoutes(
         });
 
       const headers = [
-        "UniqueNameAccount", "Date", "Name", "Operation Name",
+        "UniqueNameAccount", "Date", "Name", "Operation Name", "API Call",
         "Message", "Source", "NavChain", "IpAddress", "Duration(miliseconds)"
       ];
+
+      // "Operation Name" is the tool that made the call.  "API Call" is the raw endpoint.
+      // Source-to-tool-name mapping:
+      const resolveOperationName = (source: string, operationName: string): string => {
+        if (source === "Verify")    return "Verify Account";
+        if (source === "HikerAPI")  return "HikerAPI";
+        if (source === "Browser")   return "Browser Session";
+        if (source === "ProfileSync") return "Profile Sync";
+        if (source === "Human Session Emulation") return "Human Session Emulation";
+        if (source === "Follow Tool")   return "Follow Tool";
+        if (source === "Unfollow Tool") return "Unfollow Tool";
+        if (source === "Contact Tool")  return "Contact Tool";
+        // Legacy / untagged calls — fall back to the operation name itself
+        return operationName;
+      };
 
       const esc = (v: string) => /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
@@ -1787,7 +1802,8 @@ export async function registerInstagramRoutes(
           `Instagram_${call.profileId}`,
           date,
           username,
-          call.operationName,
+          resolveOperationName(call.source ?? "", call.operationName ?? ""),
+          call.operationName ?? "",
           call.message ?? "",
           call.source ?? "",
           call.navChain ?? "",
@@ -3207,10 +3223,17 @@ export async function registerInstagramRoutes(
       }
     }
 
+    // Trust score is a frontend-only localStorage value.  The export endpoint
+    // accepts it as an optional query param so it round-trips through the EQX file.
+    const trustScoreId = (req as any).query?.trustScoreId
+      ? String((req as any).query.trustScoreId)
+      : undefined;
+
     const payload = {
       version: 2,
       software: "EQUINOX_BOT",
       exportedAt: new Date().toISOString(),
+      ...(trustScoreId ? { trustScoreId } : {}),
       profile: {
         ...profileData,
         ...(resolvedProxy ? {
@@ -3465,6 +3488,7 @@ export async function registerInstagramRoutes(
         profileId: created.id,
         username: created.username,
         followedImported: fuData?.length ?? 0,
+        ...(payload.trustScoreId ? { trustScoreId: payload.trustScoreId } : {}),
       });
     } catch (e: any) {
       req.log.error({ err: e }, "import-eqx failed");

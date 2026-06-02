@@ -62,6 +62,25 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.733",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Trust Score level is now included in EQX exports and restored automatically on import — no more resetting the badge after moving accounts." },
+      { category: "Fix", text: "Timezone fallback pool no longer includes Europe/Berlin — random fallback now stays within US timezones and Europe/London only." },
+      { category: "Fix", text: "Export API Calls now includes a dedicated 'API Call' column showing the raw Instagram endpoint (e.g. AutoFollow, UnfollowUser) alongside the 'Operation Name' column showing the responsible tool." },
+      { category: "Fix", text: "Human Session execution order is now shown in the activity log so you can see exactly which actions ran and in what sequence each session." },
+    ],
+  },
+  {
+    version: "1.0.732",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Removed duplicate enable checkbox from Unfollow Tool when it is embedded inside the Human Session panel — the header checkbox is the one control." },
+      { category: "Fix", text: "Follow Tool Start / Stop is now included in the Human Session Copy Settings dialog under Embedded Tool States." },
+      { category: "Fix", text: "Per-hour and per-day action estimates on Follow, Unfollow, and Contact Users tools now reflect the Human Session delay timing when embedded, rather than each tool's own delay setting." },
+    ],
+  },
+  {
     version: "1.0.731",
     date: "2 Jun 2026",
     items: [

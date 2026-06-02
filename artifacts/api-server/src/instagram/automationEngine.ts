@@ -2427,6 +2427,8 @@ class AutomationEngine {
   private async applyAccountLevelError(profileId: number, rawError: string, state?: ProfileState, toolId?: number): Promise<string | null> {
     const status = this.getAccountLevelStatus(rawError);
     if (!status) return null;
+    // Debug-log every account-level error so the exact triggering message is visible
+    console.error(`[engine] applyAccountLevelError profileId=${profileId} status=${status} raw=${rawError.slice(0, 400)}`);
     await storage.updateProfile(profileId, { accountStatus: status, statusMessage: rawError.slice(0, 500) });
     if (state && status === "logged_out") state.client = null;
     if (status === "logged_out" && toolId !== undefined) {
@@ -3182,6 +3184,8 @@ class AutomationEngine {
 
     const orderSummary = queue.map(e => `${e.label}(${e.order})`).join(" → ");
     console.log(`[engine] @${profile.username}: session order: ${orderSummary || "(nothing to run)"}`);
+    this.logAction(profile.id, tool.id, "tool_start", "", "", "", "info",
+      `Session order: ${orderSummary || "(nothing to run)"}`);
 
     // Execute in sorted order — stop immediately on any account-level error
     for (const entry of queue) {

@@ -1447,7 +1447,6 @@ export async function applyStealthScripts(
       ["America/Denver",      420, 360] as const,  // MST/MDT
       ["America/Phoenix",     420, 420] as const,  // MST (no DST)
       ["Europe/London",         0, -60] as const,  // GMT/BST
-      ["Europe/Berlin",        -60,-120] as const, // CET/CEST
     ];
     const _TZ_PRNG = _rp(_TZ_POOL); // advance PRNG regardless — keeps call sequence stable
     const [_TZNAME, _TZSTD, _TZDST] = (_overrideTZ as any) ?? _TZ_PRNG;
