@@ -60,6 +60,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.728",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Turning the Human Session master toggle OFF no longer causes the Follow, Unfollow or Contact tools to fire as standalone runners — the master toggle is now the only switch that controls execution." },
+      { category: "Fix", text: "Contact Tool settings inside the Human Session panel are now greyed out when the Contact Tool checkbox is off, matching the behaviour of Follow and Unfollow." },
+    ],
+  },
+  {
     version: "1.0.727",
     date: "2 Jun 2026",
     items: [

@@ -1377,7 +1377,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 </div>
               </div>
             </div>
-            <div className={`p-4 transition-opacity ${!(contactTool.enabled || (contactTool.settings as any)?.contactNewFollowersEnabled || (contactTool.settings as any)?.autoReplyEnabled || (contactTool.settings as any)?.contactUsersEnabled) ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className={`p-4 transition-opacity ${!contactTool.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
               <ContactToolPanel tool={contactTool} profile={profile} embedded />
             </div>
           </div>

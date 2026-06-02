@@ -294,10 +294,12 @@ class AutomationEngine {
         const profileRunImmediately = runImmediately && !wasCrashed;
 
         // Human Session tool — check first so we can gate standalone runners below.
-        // HS is a single orchestrating tool: when it is active, follow/unfollow/dm/contact
-        // run INSIDE the HS loop only. Launching them as standalone runners simultaneously
-        // would duplicate every action and cause the UI to show spurious execution timestamps.
+        // HS is the single orchestrating tool. ANY profile that has an HS tool configured
+        // (enabled OR disabled) must NEVER also run standalone follow/unfollow/dm/contact
+        // runners — those run inside the HS loop only. The standalone gate uses existence,
+        // not the enabled flag, so turning HS OFF doesn't accidentally re-activate them.
         const humanSessionTool = tools.find(t => t.type === "human_sessions" && t.enabled);
+        const hasHumanSessionTool = tools.some(t => t.type === "human_sessions");
         if (humanSessionTool && profile.accountStatus === "valid") {
           activeHumanSession.add(profile.id);
           if (!this.humanSessionStates.has(profile.id)) {
@@ -314,11 +316,11 @@ class AutomationEngine {
           }
         }
 
-        // Standalone runners only start when there is NO active Human Session for this profile.
-        // If HS is active these profile IDs are intentionally absent from activeFollow/activeUnfollow/
-        // activeDM/activeContact, so the stop-loops below will also clean up any runners that were
-        // already running before HS was turned on.
-        if (!humanSessionTool) {
+        // Standalone runners are PERMANENTLY blocked for any profile that has an HS tool
+        // configured, regardless of whether HS is currently enabled or disabled.
+        // This ensures that toggling the HS master toggle OFF does not re-activate
+        // the standalone runners — the HS tool is the only execution path for this profile.
+        if (!hasHumanSessionTool) {
           const followTool = tools.find(t => t.type === "follow" && t.enabled);
           if (followTool && profile.accountStatus === "valid") {
             activeFollow.add(profile.id);
