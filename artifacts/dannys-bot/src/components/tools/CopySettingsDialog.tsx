@@ -94,8 +94,9 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy]      = useState<SortBy>("name");
   const [sortDir, setSortDir]    = useState<SortDir>("asc");
-  const [selected, setSelected]  = useState<Set<string>>(() => buildInitialSelected(optionGroups));
-  const [status, setStatus]      = useState<"idle" | "copying" | "done">("idle");
+  const [selected, setSelected]       = useState<Set<string>>(() => buildInitialSelected(optionGroups));
+  const [expandedOptions, setExpandedOptions] = useState<Set<string>>(new Set());
+  const [status, setStatus]           = useState<"idle" | "copying" | "done">("idle");
 
   // Drag-to-select refs — same pattern as the main accounts list
   const isDragSelecting = useRef(false);
@@ -144,14 +145,27 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
         }
       } catch {}
 
-      // Restore settings selection
+      // Restore settings selection + derive which parent options should be expanded
       try {
         const raw = localStorage.getItem(storageSettingsKey(title));
         if (raw) {
           const keys: string[] = JSON.parse(raw);
-          setSelected(new Set(keys));
+          const restoredSel = new Set(keys);
+          setSelected(restoredSel);
+          // Expand any parent whose sub-options have at least one restored selection
+          const exp = new Set<string>();
+          for (const g of optionGroups) {
+            for (const o of g.options) {
+              if (o.subOptions?.length && o.subOptions.some(s => restoredSel.has(s.key))) {
+                exp.add(o.key);
+              }
+            }
+          }
+          setExpandedOptions(exp);
+        } else {
+          setExpandedOptions(new Set());
         }
-      } catch {}
+      } catch { setExpandedOptions(new Set()); }
 
       setSearch("");
       setStatusFilter("");
@@ -262,14 +276,17 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       });
       return;
     }
-    const subKeys = opt.subOptions.map(s => s.key);
-    const allSel  = subKeys.every(k => selected.has(k));
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (allSel) subKeys.forEach(k => next.delete(k));
-      else        subKeys.forEach(k => next.add(k));
-      return next;
-    });
+    const subKeys  = opt.subOptions.map(s => s.key);
+    const isExpanded = expandedOptions.has(opt.key);
+    if (isExpanded) {
+      // Collapse + deselect all sub-options
+      setExpandedOptions(prev => { const n = new Set(prev); n.delete(opt.key); return n; });
+      setSelected(prev => { const n = new Set(prev); subKeys.forEach(k => n.delete(k)); return n; });
+    } else {
+      // Expand + select all sub-options
+      setExpandedOptions(prev => { const n = new Set(prev); n.add(opt.key); return n; });
+      setSelected(prev => { const n = new Set(prev); subKeys.forEach(k => n.add(k)); return n; });
+    }
   };
 
   const toggleSubOption = (key: string) => setSelected(prev => {
@@ -284,8 +301,15 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   const allSelected = selected.size === totalItems;
 
   const handleSelectAll = () => {
-    if (allSelected) setSelected(new Set());
-    else             setSelected(buildAllSelected(optionGroups));
+    if (allSelected) {
+      setSelected(new Set());
+      setExpandedOptions(new Set());
+    } else {
+      setSelected(buildAllSelected(optionGroups));
+      const exp = new Set<string>();
+      optionGroups.forEach(g => g.options.forEach(o => { if (o.subOptions?.length) exp.add(o.key); }));
+      setExpandedOptions(exp);
+    }
   };
 
   const handleSelectAllFiltered = () => {
@@ -496,7 +520,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 <button className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide" onClick={() => setSelected(buildAllSelected(optionGroups))}>
                   Select All
                 </button>
-                <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide" onClick={() => setSelected(new Set())}>
+                <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide" onClick={() => { setSelected(new Set()); setExpandedOptions(new Set()); }}>
                   Select None
                 </button>
               </div>
@@ -509,25 +533,30 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 </div>
                 <div className="divide-y divide-border/40">
                   {group.options.map(opt => {
-                    const hasSubs = !!opt.subOptions?.length;
+                    const hasSubs    = !!opt.subOptions?.length;
+                    const isExpanded = hasSubs && expandedOptions.has(opt.key);
 
                     let checked       = false;
                     let indeterminate = false;
                     if (hasSubs) {
-                      const subKeys = opt.subOptions!.map(s => s.key);
-                      const selCount = subKeys.filter(k => selected.has(k)).length;
-                      checked       = selCount === subKeys.length;
-                      indeterminate = selCount > 0 && selCount < subKeys.length;
+                      if (isExpanded) {
+                        const subKeys  = opt.subOptions!.map(s => s.key);
+                        const selCount = subKeys.filter(k => selected.has(k)).length;
+                        checked       = selCount === subKeys.length;
+                        indeterminate = selCount > 0 && selCount < subKeys.length;
+                      }
+                      // collapsed → unchecked, no indeterminate
                     } else {
                       checked = selected.has(opt.key);
                     }
 
                     return (
                       <div key={opt.key}>
-                        <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/10">
+                        <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/10 cursor-pointer select-none hover:bg-muted/20 transition-colors" onClick={() => toggleOptionGroup(opt)}>
                           <Checkbox
                             checked={indeterminate ? "indeterminate" : checked}
                             onCheckedChange={() => toggleOptionGroup(opt)}
+                            onClick={e => e.stopPropagation()}
                             className="shrink-0"
                           />
                           <div className="flex-1 min-w-0">
@@ -536,9 +565,14 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                               <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
                             )}
                           </div>
+                          {hasSubs && (
+                            <span className="text-[10px] text-muted-foreground shrink-0 select-none">
+                              {isExpanded ? "▲" : "▼"}
+                            </span>
+                          )}
                         </div>
 
-                        {hasSubs && (
+                        {hasSubs && isExpanded && (
                           <div className="border-t border-border/60 bg-muted/5 divide-y divide-border/30">
                             {opt.subOptions!.map(sub => (
                               <label

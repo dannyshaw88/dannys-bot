@@ -27,23 +27,23 @@ const UNFOLLOW_COPY_GROUPS: CopyOptionGroup[] = [
   ]},
   { label: "Settings", options: [
     { key: "uf_settings", label: "Unfollow Settings", description: "Timing, limits and age filters for unfollow actions", subOptions: [
-      { key: "uf_age",    label: "Min follow age (days)",                    settingKeys: ["minFollowAgeDays"] },
-      { key: "uf_wait",   label: "Wait between sessions (min / max mins)",   settingKeys: ["delayMin","delayMax"] },
-      { key: "uf_count",  label: "Users per session (min / max)",            settingKeys: ["processMin","processMax"] },
-      { key: "uf_delay",  label: "Delay after each unfollow (min / max secs)", settingKeys: ["delayAfterUnfollowMin","delayAfterUnfollowMax"] },
+      { key: "uf_age",    label: "Min follow age",                    settingKeys: ["minFollowAgeDays"] },
+      { key: "uf_wait",   label: "Wait between sessions",   settingKeys: ["delayMin","delayMax"] },
+      { key: "uf_count",  label: "Users per session",            settingKeys: ["processMin","processMax"] },
+      { key: "uf_delay",  label: "Delay after each unfollow", settingKeys: ["delayAfterUnfollowMin","delayAfterUnfollowMax"] },
     ]},
   ]},
   { label: "Auto Follow / Unfollow", options: [
     { key: "uf_autoFU", label: "Auto Follow / Unfollow", description: "Automatic switching between unfollow and follow tools", subOptions: [
       { key: "uf_autoEnabled",    label: "Enabled",                                        settingKeys: ["autoFollowUnfollowEnabled"] },
-      { key: "uf_autoStopAt",     label: "Stop unfollow at followings count (min / max)", settingKeys: ["autoStopUnfollowAtFollowingsMin","autoStopUnfollowAtFollowingsMax"] },
-      { key: "uf_autoStartAfter", label: "Start follow after (min / max mins)",           settingKeys: ["autoStartFollowAfterMin","autoStartFollowAfterMax"] },
+      { key: "uf_autoStopAt",     label: "Stop unfollow at followings count", settingKeys: ["autoStopUnfollowAtFollowingsMin","autoStopUnfollowAtFollowingsMax"] },
+      { key: "uf_autoStartAfter", label: "Start follow after",           settingKeys: ["autoStartFollowAfterMin","autoStartFollowAfterMax"] },
     ]},
   ]},
   { label: "Stop if Blocked", options: [
     { key: "uf_stopOnBlock", label: "Stop if Blocked", description: "Pause the tool for a set time when Instagram blocks an unfollow action", subOptions: [
       { key: "uf_stopOnBlockEnabled", label: "Enabled",              settingKeys: ["stopOnBlockEnabled"] },
-      { key: "uf_stopOnBlockMinutes", label: "Stop duration (mins)", settingKeys: ["stopOnBlockMinutes"] },
+      { key: "uf_stopOnBlockMinutes", label: "Stop duration", settingKeys: ["stopOnBlockMinutes"] },
     ]},
   ]},
 ];

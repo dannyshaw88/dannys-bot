@@ -26,8 +26,8 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
       { key: "ct_newFollowersRandomise", label: "Randomise timing",                      description: RANDOMISE_DESC, settingKeys: ["__randomiseTiming__"] },
       { key: "ct_onlyApp",               label: "Only app-followed users",               settingKeys: ["contactOnlyAppFollowed"] },
       { key: "ct_message",               label: "Message template",                      settingKeys: ["contactMessage"] },
-      { key: "ct_interval",              label: "Check interval (min / max mins)",       settingKeys: ["contactCheckIntervalMin","contactCheckIntervalMax"] },
-      { key: "ct_perCheck",              label: "Users per check (min / max)",           settingKeys: ["contactUsersPerCheckMin","contactUsersPerCheckMax"] },
+      { key: "ct_interval",              label: "Check interval",       settingKeys: ["contactCheckIntervalMin","contactCheckIntervalMax"] },
+      { key: "ct_perCheck",              label: "Users per check",           settingKeys: ["contactUsersPerCheckMin","contactUsersPerCheckMax"] },
       { key: "ct_apiSource",             label: "API source",                            settingKeys: ["contactApiSource"] },
     ]},
   ]},
@@ -35,9 +35,9 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
     { key: "ct_users", label: "Contact Users", description: "Settings for the manual user contact list", subOptions: [
       { key: "ct_usersStartStop",      label: "Start / Stop",                              settingKeys: ["contactUsersEnabled"] },
       { key: "ct_usersRandomise",      label: "Randomise timing",                          description: RANDOMISE_DESC, settingKeys: ["__randomiseTiming__"] },
-      { key: "ct_usersWait",           label: "Wait between sessions (min / max mins)",    settingKeys: ["contactUsersWaitMin","contactUsersWaitMax"] },
-      { key: "ct_usersSendCount",      label: "Send count per session (min / max)",        settingKeys: ["contactUsersSendCountMin","contactUsersSendCountMax"] },
-      { key: "ct_usersDelay",          label: "Delay between messages (min / max secs)",   settingKeys: ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"] },
+      { key: "ct_usersWait",           label: "Wait between sessions",    settingKeys: ["contactUsersWaitMin","contactUsersWaitMax"] },
+      { key: "ct_usersSendCount",      label: "Send count per session",        settingKeys: ["contactUsersSendCountMin","contactUsersSendCountMax"] },
+      { key: "ct_usersDelay",          label: "Delay between messages",   settingKeys: ["contactUsersDelayBetweenMin","contactUsersDelayBetweenMax"] },
       { key: "ct_usersPickRandom",     label: "Pick users randomly",                       settingKeys: ["contactUsersPickRandom"] },
       { key: "ct_usersUnsend",         label: "Unsend settings",                           settingKeys: ["contactUsersUnsendEnabled","contactUsersUnsendMin","contactUsersUnsendMax"] },
     ]},
@@ -51,7 +51,7 @@ const CONTACT_COPY_GROUPS: CopyOptionGroup[] = [
   { label: "Stop if Blocked", options: [
     { key: "ct_stopOnBlock", label: "Stop if Blocked", description: "Pause the tool for a set time when Instagram blocks a contact action", subOptions: [
       { key: "ct_stopOnBlockEnabled", label: "Enabled",              settingKeys: ["stopOnBlockEnabled"] },
-      { key: "ct_stopOnBlockMinutes", label: "Stop duration (mins)", settingKeys: ["stopOnBlockMinutes"] },
+      { key: "ct_stopOnBlockMinutes", label: "Stop duration", settingKeys: ["stopOnBlockMinutes"] },
     ]},
   ]},
 ];

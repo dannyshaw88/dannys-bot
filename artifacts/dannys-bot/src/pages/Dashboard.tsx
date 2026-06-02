@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.740",
+    date: "2 Jun 2026",
+    items: [
+      { category: "Fix", text: "Copy Settings dialog: every sub-setting section is now collapsed by default — click the row to expand and select individual options. Avoids accidentally copying everything." },
+      { category: "Fix", text: "Copy Settings labels cleaned up — removed all the redundant bracket descriptions from every option in every tool's copy dialog." },
+      { category: "Fix", text: "Follow Sources moved into the Follow Tool Settings section of the Human Session copy dialog." },
+    ],
+  },
+  {
     version: "1.0.739",
     date: "2 Jun 2026",
     items: [
