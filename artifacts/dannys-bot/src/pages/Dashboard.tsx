@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.753",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Browser button no longer occasionally opens two browser windows when clicked quickly — duplicate clicks are now ignored until the first window finishes opening." },
+      { category: "Fix", text: "Editing an account's label no longer clears its group assignment when the page loaded with cached data." },
+      { category: "Fix", text: "TrustScore badge picker now opens upward when the account row is near the bottom of the screen." },
+    ],
+  },
+  {
     version: "1.0.752",
     date: "3 Jun 2026",
     items: [

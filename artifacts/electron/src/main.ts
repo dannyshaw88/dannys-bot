@@ -749,11 +749,20 @@ function setupBackupHandlers() {
     scheduleAutoBackup(enabled, intervalDays);
   });
 
+  // Tracks profileIds whose EB window is currently being opened.
+  // Guards against double-click / rapid IPC duplicates that race past the ebMap check
+  // in openEbWindow (the map is only written near the END of that async function, so a
+  // second call arriving while the first is mid-flight sees an empty map and spawns a
+  // second window).
+  const pendingEbOpens = new Set<number>();
+
   // open-browser-window: opens a NATIVE Electron BrowserWindow that loads
   // Instagram directly — no Puppeteer, no screencasting, no canvas.
   // This is the Jarvee-style CEF embedded browser approach.
   ipcMain.handle("open-browser-window", async (_event, { profileId, username }: any) => {
     if (!profileId) return;
+    if (pendingEbOpens.has(profileId)) return; // second click arrived before first window opened
+    pendingEbOpens.add(profileId);
     try {
       // Fetch the profile's proxy + UA from the API server so the native window
       // can be configured correctly (same proxy the mobile API uses).
@@ -784,6 +793,8 @@ function setupBackupHandlers() {
       });
     } catch (err: any) {
       console.error(`[EB] open-browser-window error for profile ${profileId}:`, err?.message);
+    } finally {
+      pendingEbOpens.delete(profileId);
     }
   });
 

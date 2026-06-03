@@ -313,7 +313,19 @@ export function TrustScoreBadge({ profileId }: TrustScoreBadgeProps) {
             const btn = ref.current?.querySelector("button");
             if (!btn) return;
             const rect = btn.getBoundingClientRect();
-            el.style.top = `${rect.bottom + 4}px`;
+            const dropdownMaxH = 380;
+            const spaceBelow = window.innerHeight - rect.bottom - 8;
+            const spaceAbove = rect.top - 8;
+            if (spaceBelow >= Math.min(dropdownMaxH, 120) || spaceBelow >= spaceAbove) {
+              // Open downward, capping height to available space
+              el.style.top = `${rect.bottom + 4}px`;
+              el.style.maxHeight = `${Math.min(dropdownMaxH, spaceBelow)}px`;
+            } else {
+              // Flip upward
+              const maxH = Math.min(dropdownMaxH, spaceAbove);
+              el.style.top = `${rect.top - maxH - 4}px`;
+              el.style.maxHeight = `${maxH}px`;
+            }
             el.style.left = `${rect.left}px`;
           }}
         >

@@ -257,6 +257,10 @@ export function ProfileDetailsPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedProfileIdRef = useRef<number | null>(null);
   const preStoppedStatusRef = useRef<string>("pending");
+  // Tracks the tags value the user has explicitly set in this session (null = not changed by user).
+  // Used so auto-saves triggered by other field edits never send a stale formData.tags
+  // that was initialized from a cached (pre-group-assignment) profile snapshot.
+  const userTagsRef = useRef<string | null>(null);
 
   const [linkedHostPort, setLinkedHostPort] = useState("");
   const [linkedUsername, setLinkedUsername] = useState("");
@@ -557,7 +561,17 @@ export function ProfileDetailsPage() {
   const updateField = (patch: any) => {
     const next = { ...formData, ...patch };
     setFormData(next);
-    scheduleAutoSave(next);
+    // Track explicit user changes to tags so that saves triggered by other
+    // field edits don't accidentally clobber the group with a stale formData.tags.
+    if ("tags" in patch) {
+      userTagsRef.current = patch.tags;
+    }
+    // When saving, resolve tags: prefer what the user explicitly typed this session,
+    // then the live server value, then whatever is in formData (fallback only).
+    const resolvedTags = userTagsRef.current !== null
+      ? userTagsRef.current
+      : (profile?.tags ?? formData?.tags ?? "");
+    scheduleAutoSave({ ...next, tags: resolvedTags });
     // Reset verify badge whenever credentials change
     if ("username" in patch || "password" in patch) setVerifyStatus("idle");
   };

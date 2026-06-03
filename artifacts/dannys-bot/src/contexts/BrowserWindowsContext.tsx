@@ -34,12 +34,21 @@ export function BrowserWindowsProvider({ children }: { children: ReactNode }) {
 
   const topZ = useCallback(() => ++baseZ, []);
 
+  // Track profileIds whose native EB window is currently being opened (Electron mode).
+  // Prevents a double-click from sending two IPC calls before the first window appears,
+  // which would race past the ebMap guard in openEbWindow and spawn two browsers.
+  const pendingEbOpensRef = useRef<Set<number>>(new Set());
+
   const openWindow = useCallback((profileId: number, username: string, userAgent: string) => {
     const electronAPI = (window as any).electronAPI;
     if (electronAPI?.openBrowserWindow) {
       // Electron mode: open a native OS BrowserWindow (appears in Windows taskbar,
       // minimises like any OS window). Do NOT add a floating in-app overlay — the
       // native window IS the browser. Controls live in the Human Session tab.
+      if (pendingEbOpensRef.current.has(profileId)) return; // already opening, ignore duplicate
+      pendingEbOpensRef.current.add(profileId);
+      // Clear the pending marker after 5 s so a failed open doesn't permanently block
+      setTimeout(() => pendingEbOpensRef.current.delete(profileId), 5000);
       electronAPI.openBrowserWindow(profileId, username, userAgent);
       return;
     }
