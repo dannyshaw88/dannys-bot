@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.745",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Browser panel: accounts with verification challenges (captcha, automated behaviour detected) now show a visible error page in the embedded browser instead of a blank white screen — the challenge URL is displayed so you can open it in your own browser to resolve it." },
+      { category: "Fix", text: "Copy Settings: Randomise Timing now correctly staggers when accounts are started via Copy Settings — previously all accounts started instantly at the same time instead of being spread across the delay window." },
+    ],
+  },
+  {
     version: "1.0.744",
     date: "3 Jun 2026",
     items: [

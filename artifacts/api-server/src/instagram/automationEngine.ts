@@ -767,16 +767,18 @@ class AutomationEngine {
       nextUnfollowAt: 0,
     };
     // On startup: schedule first run using configured X-Y timers.
-    // On user toggle-on (runImmediately = true): nextHumanSessionAt = 0 → fires right away.
-    if (!runImmediately) {
-      const si = (_tool.settings ?? {}) as any;
-      const staggerMs = (si.staggerOffsetMins ?? 0) * 60_000;
-      if (si.staggerOffsetMins) {
-        storage.updateTool(_tool.id, { settings: { ...si, staggerOffsetMins: 0 } }).catch(() => {});
-      }
+    // On user toggle-on (runImmediately = true, no stagger): nextHumanSessionAt = 0 → fires right away.
+    // On copy-settings cold restart (runImmediately = true, staggerOffsetMins > 0): apply stagger delay.
+    // Matches the follow/unfollow pattern: `if (!runImmediately || staggerMs > 0)`.
+    const si = (_tool.settings ?? {}) as any;
+    const staggerMs = (si.staggerOffsetMins ?? 0) * 60_000;
+    if (si.staggerOffsetMins) {
+      storage.updateTool(_tool.id, { settings: { ...si, staggerOffsetMins: 0 } }).catch(() => {});
+    }
+    if (!runImmediately || staggerMs > 0) {
       if (staggerMs) {
         state.nextHumanSessionAt = Date.now() + staggerMs;
-        console.log(`[engine] @${profile.username}: startup — human session staggered ${si.staggerOffsetMins}min`);
+        console.log(`[engine] @${profile.username}: ${runImmediately ? "stagger" : "startup"} — human session staggered ${si.staggerOffsetMins}min`);
       } else {
         const waitMs = randInt((si.delayMin ?? 30) * 60_000, (si.delayMax ?? 60) * 60_000);
         state.nextHumanSessionAt = Date.now() + waitMs;

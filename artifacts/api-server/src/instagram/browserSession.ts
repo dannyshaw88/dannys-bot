@@ -2536,8 +2536,9 @@ export async function getOrCreateSession(
       }
       if (sc.challengeManualFollowAttempted) {
         sc.navProtectedUntil = Date.now() + 3600_000;
-        log(`[challenge:${profileId}] manual redirect-follow already attempted, leaving parked on chrome-error.`, "browser");
+        log(`[challenge:${profileId}] manual redirect-follow already attempted — injecting challenge info page`, "browser");
         sendStatus(profileId, `⚠ Instagram verification page could not load. Open this link in your own browser: ${sc.challengeUrl}`);
+        injectChallengePage(page, sc.challengeUrl).catch(() => {});
         return;
       }
       sc.challengeManualFollowAttempted = true;
@@ -2553,12 +2554,16 @@ export async function getOrCreateSession(
           sendStatus(profileId, `⚠ Instagram verification required. Complete the check shown in the browser window.`);
         } else {
           s2.navProtectedUntil = Date.now() + 3600_000;
-          log(`[challenge:${profileId}] manual redirect-follow failed — leaving parked on chrome-error (keepalive will restart screencast)`, "browser");
+          log(`[challenge:${profileId}] manual redirect-follow failed — injecting challenge info page`, "browser");
           sendStatus(profileId, `⚠ Instagram requires verification for this account. Open this link in your browser to complete it: ${s2.challengeUrl} — After finishing the check, click Clear EB Session here to reset and log back in.`);
+          injectChallengePage(page, s2.challengeUrl ?? "").catch(() => {});
         }
       }).catch(() => {
         const s2 = sessions.get(profileId);
-        if (s2) s2.navProtectedUntil = Date.now() + 3600_000;
+        if (s2) {
+          s2.navProtectedUntil = Date.now() + 3600_000;
+          injectChallengePage(page, s2.challengeUrl ?? "").catch(() => {});
+        }
       });
     }
   });
@@ -2997,16 +3002,14 @@ export function attachWS(profileId: number, ws: WebSocket) {
         log(`[attachSSE:${profileId}] initial navigation → ${target}`, "browser");
         session.page.goto(target, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
       } else if (isBlankOrError) {
-        // If this account has an active Instagram challenge, do NOT navigate anywhere.
-        // Navigating to instagram.com/ triggers the challenge redirect loop again
-        // (ERR_TOO_MANY_REDIRECTS → chrome-error → attachWS → navigate → loop).
-        // Leave the browser parked on chrome-error; the status bar already shows
-        // the challenge URL for the user to open in their own browser.
+        // If this account has an active Instagram challenge, inject a visible info page
+        // instead of leaving Chrome parked on chrome-error:// (which appears blank/white).
+        // Navigating to instagram.com would re-trigger the redirect loop, so we go to
+        // about:blank first and then setContent() with a helpful error page.
         if (session.challengeUrl) {
-          log(`[attachSSE:${profileId}] page is chrome-error but account has challenge — leaving parked, not navigating`, "browser");
-          // Re-send the challenge URL message to the newly connected client so the
-          // user sees it even after a WS reconnect (the original message is not buffered).
+          log(`[attachSSE:${profileId}] page is chrome-error/blank but account has challenge — injecting challenge info page`, "browser");
           const challengeMsg = `⚠ Instagram requires verification for this account. Open this link in your browser to complete it: ${session.challengeUrl} — After finishing the check, click Clear EB Session here to reset and log back in.`;
+          injectChallengePage(session.page, session.challengeUrl).catch(() => {});
           setTimeout(() => {
             const s = sessions.get(profileId);
             if (s?.ws && s.ws.readyState === WebSocket.OPEN) wsWrite(s.ws, { type: "loginStatus", message: challengeMsg });
@@ -3484,6 +3487,35 @@ async function startApprovalPolling(profileId: number, page: Page): Promise<void
     log(`[challenge:${profileId}] device-approval timed out after ${checkCount} checks`, "browser");
     sendStatus(profileId, `⚠ Verification timed out — no approval in 5 minutes. Press Clear EB Session and try again.`);
   }
+}
+
+// Navigates Chrome to about:blank (escaping chrome-error://) then injects a
+// visible HTML page telling the user about the Instagram verification requirement.
+// This replaces the blank/white screen that appeared when Chrome was parked on
+// chrome-error:// after ERR_TOO_MANY_REDIRECTS.
+async function injectChallengePage(page: Page, challengeUrl: string): Promise<void> {
+  try {
+    await page.goto("about:blank", { waitUntil: "domcontentloaded", timeout: 5_000 }).catch(() => {});
+    const safeUrl = challengeUrl.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    await page.setContent(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Instagram Verification Required</title></head>
+<body style="margin:0;padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0a0a;color:#e0e0e0">
+  <div style="max-width:600px;margin:0 auto">
+    <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+    <h1 style="color:#f5a623;font-size:22px;margin:0 0 12px">Instagram Verification Required</h1>
+    <p style="color:#aaa;line-height:1.6;margin:0 0 24px">
+      Instagram has placed a security check on this account.<br>
+      Open the link below in your own browser, complete the verification,
+      then click <strong style="color:#fff">Clear EB Session</strong> in Equinox to reset and log back in.
+    </p>
+    <div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px;word-break:break-all;font-size:13px;color:#60a5fa">
+      ${safeUrl}
+    </div>
+  </div>
+</body>
+</html>`, { waitUntil: "domcontentloaded" });
+  } catch { /* non-fatal — Chrome may be closing */ }
 }
 
 async function followChallengeRedirects(
