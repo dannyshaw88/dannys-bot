@@ -133,13 +133,15 @@ function LoginSplash() {
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "#ffffff" }}>
       <div className="w-full max-w-sm mx-auto px-6">
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-7">
           <img
             src="/bot-logo.png"
             alt="Equinox"
-            className="w-16 h-16 mb-4 object-contain"
+            className="w-16 h-16 mb-2 object-contain"
           />
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#111827" }}>Equinox</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            <span style={{ color: "#111827" }}>Equi</span><span style={{ color: "#1AD2F2" }}>nox</span>
+          </h1>
           <p className="text-sm mt-1" style={{ color: "#6b7280" }}>Sign in to your account</p>
         </div>
 
@@ -186,7 +188,7 @@ function LoginSplash() {
               onChange={e => setSaveLogin(e.target.checked)}
               className="w-3.5 h-3.5"
             />
-            <span className="text-xs" style={{ color: "#6b7280" }}>Save login — stay signed in when Equinox restarts</span>
+            <span className="text-xs" style={{ color: "#6b7280" }}>Save login</span>
           </label>
 
           {error && <p className="text-xs font-medium" style={{ color: "#dc2626" }}>{error}</p>}

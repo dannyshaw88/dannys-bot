@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.756",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "CAPTCHA images on the suspended/challenge page now load correctly in the embedded browser — Instagram's CSP header was blocking them." },
+      { category: "Fix", text: "Login screen 'Equinox' title now matches the sidebar style with the cyan 'nox' ending." },
+      { category: "Fix", text: "Logo and title on the login screen are now closer together." },
+      { category: "Fix", text: "Save login checkbox label shortened." },
+    ],
+  },
+  {
     version: "1.0.755",
     date: "3 Jun 2026",
     items: [

@@ -1377,6 +1377,32 @@ export async function openEbWindow(opts: {
     }
   );
 
+  // ── CSP removal — lets CAPTCHA images and challenge page resources load ──────
+  // Instagram's challenge/suspended pages (and some consent pages) send a
+  // Content-Security-Policy header whose img-src directive restricts image
+  // loading to a subset of CDN origins.  In Electron's Chromium context the
+  // dynamically-loaded CAPTCHA image (fetched via JS after page load) can fail
+  // this check and render as a broken image, making it impossible for the user
+  // to solve the CAPTCHA and unblock their account.
+  // Stripping CSP (and the legacy X-Frame-Options) from Instagram responses in
+  // the EB session fixes this without relaxing any other security boundary —
+  // the EB is a dedicated Instagram browser already holding the account session,
+  // so the same-origin isolation that CSP normally enforces is not meaningful here.
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    const headers: Record<string, string | string[]> = { ...details.responseHeaders };
+    // Delete case-insensitively (Electron lowercases response header keys on
+    // some builds but not all, so delete both casings to be safe).
+    for (const key of Object.keys(headers)) {
+      const lower = key.toLowerCase();
+      if (lower === "content-security-policy" ||
+          lower === "content-security-policy-report-only" ||
+          lower === "x-frame-options") {
+        delete headers[key];
+      }
+    }
+    callback({ responseHeaders: headers });
+  });
+
   // ── Accept-Language header alignment ───────────────────────────────────────
   // navigator.languages is overridden in JS to ["en-US","en"], but the actual
   // HTTP Accept-Language header Chrome sends is determined by the process locale,
