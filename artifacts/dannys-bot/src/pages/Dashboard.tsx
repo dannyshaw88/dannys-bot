@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.757",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Profile browsing in the Follow tool now correctly fires at the configured percentage — it was firing on every single follow regardless of the probability setting." },
+      { category: "Fix", text: "Profile visit API call now includes the correct navigation context parameter, matching what the real Instagram app sends." },
+    ],
+  },
+  {
     version: "1.0.756",
     date: "3 Jun 2026",
     items: [

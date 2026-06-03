@@ -2139,10 +2139,14 @@ export class InstagramWebClient {
 
   // ── Visit a user's profile page ──────────────────────────────────────────
   // Fetches user info — equivalent to tapping a username to open their profile.
-  async visitUserProfile(userId: string): Promise<boolean> {
+  // `fromModule` matches the `from_module` query param the real Instagram app
+  // sends to indicate navigation context (e.g. "followers", "feed_timeline",
+  // "discover_people").  Omitting it produces a bare endpoint with no context
+  // which looks anomalous in Instagram's traffic logs.
+  async visitUserProfile(userId: string, fromModule: string = "profile"): Promise<boolean> {
     return this.timed("VisitUserProfile", async () => {
       try {
-        await this.mobileSessionGet(`/api/v1/users/${userId}/info/`);
+        await this.mobileSessionGet(`/api/v1/users/${userId}/info/?from_module=${encodeURIComponent(fromModule)}`);
         return true;
       } catch { return false; }
     }, "Visited user profile");

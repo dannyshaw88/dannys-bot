@@ -2704,7 +2704,8 @@ class AutomationEngine {
                 const vpPct = randInt(vpPctMin, vpPctMax);
                 if (Math.random() * 100 >= vpPct) continue;
                 try {
-                  await client.visitUserProfile(item.userId);
+                  // "feed_timeline" — navigating to a profile by tapping a username in the home feed
+                  await client.visitUserProfile(item.userId, "feed_timeline");
                   console.log(`[engine] @${profile.username}: 👤 visited profile of @${item.username}`);
                   this.logAction(profile.id, tool.id, "visit_profile", item.username, "", "profile", "ok", `Visited @${item.username}'s profile`);
                 } catch (e: any) {
@@ -3373,7 +3374,8 @@ class AutomationEngine {
     // Used for both the between-follows injection and the before-follow browse.
     const browseTargetProfile = async (label: string, targetUser: { pk: string; username: string }) => {
       try {
-        await client.visitUserProfile(targetUser.pk);
+        // "profile" from_module — navigating to a user's profile from the followers list
+        await client.visitUserProfile(targetUser.pk, "profile");
         engineLog("INFO", `@${profile.username}: [${label}] visited profile of @${targetUser.username}`);
         this.logAction(profile.id, tool.id, "visit_profile", targetUser.username, "", "profile", "ok", `[Profile Browse] Visited @${targetUser.username}'s profile`);
       } catch { /* non-critical */ }
@@ -3507,9 +3509,14 @@ class AutomationEngine {
         }
       }
 
-      // Browse before follow — fires for EVERY follow (including the first) when enabled
+      // Browse before follow — fires with the same percentage gate as the between-follows
+      // inject.  (Without this gate it was firing 100% of the time regardless of the
+      // configured probability, because the pre-follow path had no Math.random() check.)
       if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow) {
-        await browseTargetProfile("pre-follow browse", user);
+        const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+        if (Math.random() * 100 < threshold) {
+          await browseTargetProfile("pre-follow browse", user);
+        }
       }
 
       // Follow
