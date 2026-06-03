@@ -984,6 +984,13 @@ export async function registerInstagramRoutes(
     if (verifyInFlight.has(profileId)) {
       return res.status(429).json({ ok: false, message: "Verification already in progress for this account. Please wait." });
     }
+    // Hard cap: never queue more than 3 simultaneous verifications (1 running + 2
+    // queued) — Electron's main process can crash under memory pressure when many
+    // hidden BrowserWindow instances are queued at once.  Reject any request beyond
+    // the limit so the user gets a clear message instead of a silent hang or crash.
+    if (verifyInFlight.size >= 3) {
+      return res.status(429).json({ ok: false, message: "Too many verifications in progress. Wait for the current ones to finish, then try again." });
+    }
     verifyInFlight.add(profileId);
 
     // Helper: release lock + send error (avoids repeating delete on every early return)

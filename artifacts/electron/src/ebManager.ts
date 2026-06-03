@@ -1216,19 +1216,45 @@ export async function openEbWindow(opts: {
         // Reload so the new proxy takes effect for the current page.
         existing.win.webContents.reload();
       }
+      const _wasHidden = !existing.win.isVisible();
       if (existing.win.isMinimized()) existing.win.restore();
       if (!existing.win.isMaximized()) existing.win.maximize();
       if (!existing.win.isVisible()) existing.win.show();
       existing.win.focus();
+
       // Toolbar is a native BrowserView — it is always present; nothing to re-inject.
       // If the current page is a chrome error or about:blank, navigate back to Instagram
       const currentUrl: string = existing.win.webContents.getURL();
+
+      // Seed the toolbar URL bar immediately — did-navigate only fires on new
+      // navigations, so if the window was hidden while already at a page the URL
+      // bar would stay blank until the next navigation event.
+      {
+        const _tv = toolbarViewMap.get(profileId);
+        if (_tv && !_tv.webContents.isDestroyed()) {
+          _tv.webContents.executeJavaScript(
+            `window.updateUrl && window.updateUrl(${JSON.stringify(currentUrl || "")})`
+          ).catch(() => {});
+        }
+      }
+
       if (!currentUrl || currentUrl.startsWith("chrome-error://") || currentUrl === "about:blank") {
-        const existingSes = electronSession.fromPartition(existing.partition);
-        const existingSessionCks = await existingSes.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+        const existingSes2 = electronSession.fromPartition(existing.partition);
+        const existingSessionCks = await existingSes2.cookies.get({ name: "sessionid", domain: ".instagram.com" });
         existing.win.webContents.loadURL(
           existingSessionCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
         ).catch(() => {});
+      } else if (_wasHidden) {
+        // Window was hidden (not minimized) — the renderer may have been suspended
+        // and can show a blank frame when re-shown.  Reload if the URL is a safe
+        // Instagram page (not mid-challenge or 2FA) to guarantee the content paints.
+        const isSafe = currentUrl.includes("instagram.com") &&
+          !currentUrl.includes("challenge") &&
+          !currentUrl.includes("two_factor") &&
+          !currentUrl.includes("2fa");
+        if (isSafe) {
+          existing.win.webContents.reload();
+        }
       }
       return;
     }

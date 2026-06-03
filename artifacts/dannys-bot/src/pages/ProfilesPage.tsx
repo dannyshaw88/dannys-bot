@@ -1726,8 +1726,9 @@ export function ProfilesPage() {
               <p className="text-sm font-semibold">Actions</p>
             </div>
             <div className="py-1 grid grid-cols-3">
-              <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
-                <Upload className="w-4 h-4 shrink-0 text-cyan-500" /> Import Profiles
+              <button onClick={() => { setActionsOpen(false); setImportOpen(true); }} className="flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
+                Import Profiles
+                <ChevronDown className="w-4 h-4 shrink-0 text-cyan-500" />
               </button>
               <button onClick={() => { setActionsOpen(false); handleExportProfiles(); }} className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/60 transition-colors text-left">
                 <FileDown className="w-4 h-4 shrink-0 text-muted-foreground" /> Export Profiles

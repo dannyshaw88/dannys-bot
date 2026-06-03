@@ -152,6 +152,18 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.747",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Verifying more than 4 accounts simultaneously no longer crashes the software — a queue limit now rejects excess verify requests with a clear message instead of hanging." },
+      { category: "Fix", text: "Embedded browser (Electron) no longer shows a blank screen when reopening an account — the URL bar is seeded immediately and the page is reloaded if it failed to render." },
+      { category: "Change", text: "Status indicator in the bottom-left corner changed from amber Developing to green Operational." },
+      { category: "Change", text: "AI Image Generator card removed from Settings → Security — the button was already removed from the toolbar in an earlier update." },
+      { category: "Change", text: "Import Profiles button in the Actions menu: removed the upload icon on the left, added a cyan arrow on the right." },
+      { category: "Fix", text: "Proxy Manager column headers no longer show a grab cursor — drag-to-reorder cursor removed as requested." },
+    ],
+  },
+  {
     version: "1.0.735",
     date: "2 Jun 2026",
     items: [

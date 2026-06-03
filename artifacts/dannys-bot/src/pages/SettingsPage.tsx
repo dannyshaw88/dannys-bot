@@ -912,18 +912,6 @@ export function SettingsPage() {
 
 
 
-        {/* AI Image Generator — free, no key needed */}
-        <div className="desktop-card p-6" style={{ display: settingsTab !== "security" ? "none" : undefined }}>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
-              <KeyRound className="w-4 h-4" />
-            </div>
-            <h3 className="text-base font-semibold">AI Image Generator</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            The <span className="font-medium">✨ AI Image</span> button in the embedded browser toolbar generates realistic selfies using <span className="font-medium">Pollinations.ai</span> — completely free, no API key or account required.
-          </p>
-        </div>
 
         {/* Dashboard Log Limit */}
         <div className="desktop-card p-6" style={{ display: settingsTab !== "automation" ? "none" : undefined }}>
