@@ -359,11 +359,15 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
     // anchor, so we also search the 40 records immediately preceding it.
     let password = "";
 
-    // Primary: look inside smtp→proxy window, skipping the email password we already found
+    // Primary: look inside smtp→proxy window, skipping the email password AND proxy
+    // password we already found.  The proxy password sits immediately before the proxy
+    // host:port record — if we don't exclude it here, it gets double-assigned as the
+    // IG password too (the most common mis-import symptom).
     if (smtpIdx >= 0) {
       for (let k = smtpIdx + 1; k < proxyIdx; k++) {
         const v = window[k].value;
         if (v === emailPassword) continue;       // already claimed as email password
+        if (v === proxyPassword) continue;       // already claimed as proxy password
         if (EMAIL_RE.test(v) || SMTP_RE.test(v)) continue;
         if (isLikelyPassword(v)) { password = v; break; }
       }
@@ -374,6 +378,7 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       const smtpBoundary = smtpIdx >= 0 ? smtpIdx : proxyIdx;
       for (let k = 0; k < smtpBoundary; k++) {
         const v = window[k].value;
+        if (v === proxyPassword || v === emailPassword) continue;
         if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v)) continue;
         if (isLikelyPassword(v)) { password = v; break; }
       }
@@ -384,6 +389,7 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
       const priorWindow = sortedByOffset.slice(Math.max(0, i - 40), i).reverse();
       for (const pw of priorWindow) {
         const v = pw.value;
+        if (v === proxyPassword || v === emailPassword) continue;
         if (TOTP_RE.test(normaliseTOTP(v))) continue;
         if (EMAIL_RE.test(v) || SMTP_RE.test(v) || PROXY_RE.test(v) || URL_RE.test(v)) continue;
         if (decodeB64Username(v)) continue;
@@ -402,6 +408,16 @@ export function parseJarveeBinary(buffer: Buffer): JarveeAccount[] {
         const decoded = decodeB64Password(pw.value);
         if (decoded && decoded !== username) { password = decoded; break; }
       }
+    }
+
+    // Quinary: Jarvee sometimes serialises the IG password and the email password
+    // as the SAME BinaryObjectString object (same objectId, one 0x06 record and
+    // one 0x09 MemberReference back to it).  The 0x06-only scanner sees the string
+    // once and Step 3 claims it as emailPassword.  Step 4 then finds nothing.
+    // When every search step above yielded nothing, fall back to emailPassword —
+    // the account uses the same password for Instagram and the recovery email.
+    if (!password && emailPassword) {
+      password = emailPassword;
     }
 
     // Post-search b64 decode check: if the password found by primary/secondary/tertiary
