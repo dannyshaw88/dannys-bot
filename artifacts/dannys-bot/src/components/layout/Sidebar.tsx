@@ -18,15 +18,15 @@ function FilledDashboardIcon({ className, style }: { className?: string; style?:
 function FilledBulkImportIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      {/* Person silhouette — same blocky shape as Accounts */}
-      <circle fill="currentColor" cx="10" cy="7" r="4"/>
-      <path   fill="currentColor" d="M18.5 21c0-4.694-3.806-8.5-8.5-8.5S1.5 16.306 1.5 21h17z"/>
-      {/* Bold + badge — top right, means "import/add" */}
-      <rect   fill="currentColor" x="17.5" y="3.5" width="5"   height="1.8" rx="0.6"/>
-      <rect   fill="currentColor" x="19.6" y="1.5" width="1.8" height="5"   rx="0.6"/>
+      {/* Person silhouette (left) */}
+      <circle fill="currentColor" cx="9" cy="7" r="4"/>
+      <path fill="currentColor" d="M17 21c0-4.418-3.582-8-8-8S1 16.582 1 21h16z"/>
+      {/* Bold import arrow from right */}
+      <path fill="currentColor" d="M23 12.5l-5-4v2.5h-3v3h3v2.5z"/>
     </svg>
   );
 }
+
 
 function FilledPersonIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (

@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.758",
+    date: "3 Jun 2026",
+    items: [
+      { category: "New", text: "Human Session Tool actions (View Timeline Feed, Human Session, Check Stories, Check DMs, Repost, Open Instagram Calls) are now grouped under a single Emulation panel with a cyan top border." },
+      { category: "Improvement", text: "Execution Order and Skip Chance controls now appear inline beside each action's checkbox and label instead of floating to the right." },
+      { category: "Improvement", text: "Force Emulation renamed to Open Instagram Calls throughout the tool and its copy settings." },
+      { category: "Improvement", text: "Human Session Tool panel title simplified to Human Session Tool." },
+      { category: "Improvement", text: "Account Import sidebar icon redesigned to a person with a bold import arrow." },
+    ],
+  },
+  {
     version: "1.0.757",
     date: "3 Jun 2026",
     items: [
