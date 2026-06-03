@@ -214,7 +214,30 @@ sqlite.exec(`
     date_of_birth TEXT,
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS licenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    tier TEXT NOT NULL DEFAULT 'starter',
+    account_limit INTEGER NOT NULL DEFAULT 15,
+    active INTEGER NOT NULL DEFAULT 1,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+  );
 `);
+
+// Seed owner license account if not already present
+{
+  const ownerExists = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'equinox'").get();
+  if (!ownerExists) {
+    sqlite.prepare(
+      "INSERT INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at) VALUES (?, ?, 'owner', 9999, 1, 1, ?)"
+    ).run("EQUINOX", "6b371d058acf35caefe10819c1ee07bee49f9fdfe19869f63a7d4c3cc836e01f", new Date().toISOString());
+    console.log("[db] Owner license account seeded");
+  }
+}
 
 // ── Schema migrations for existing databases ────────────────────────────────
 // SQLite does not support IF NOT EXISTS on ALTER TABLE, so we try/catch each.

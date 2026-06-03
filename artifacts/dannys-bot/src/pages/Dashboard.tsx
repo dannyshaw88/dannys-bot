@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.750",
+    date: "3 Jun 2026",
+    items: [
+      { category: "New", text: "My Account tab in Settings: sign in with your Equinox license credentials to view your plan tier and account slot limit." },
+      { category: "New", text: "Account limits: attempting to add accounts beyond your plan limit now shows an upgrade prompt instead of silently failing." },
+      { category: "New", text: "Force Emulation: added BatchFetchWeb and AttributionLaunch to the startup call sequence — two API calls that real Instagram sends on every app open." },
+      { category: "Fix", text: "Session Actions export: human session calls (feed view, DM check, story check) now correctly show 'Human Session Emulation' as their source instead of 'Follow Tool'." },
+    ],
+  },
+  {
     version: "1.0.749",
     date: "3 Jun 2026",
     items: [

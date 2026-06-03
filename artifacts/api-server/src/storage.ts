@@ -526,6 +526,23 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: globalSettings.key, set: { value } });
   }
 
+  getLicenseByUsername(username: string): { id: number; username: string; password_hash: string; tier: string; account_limit: number; active: number; is_admin: number } | undefined {
+    return (db as any).$client.prepare(
+      "SELECT * FROM licenses WHERE LOWER(username) = LOWER(?) AND active = 1"
+    ).get(username) as any;
+  }
+
+  async getLicenseSession(): Promise<{ ok: true; username: string; tier: string; accountLimit: number; isAdmin: boolean } | { ok: false }> {
+    const settings = await this.getGlobalSettings();
+    const raw = settings["license_session"];
+    if (!raw) return { ok: false };
+    try {
+      const s = JSON.parse(raw);
+      if (!s?.username) return { ok: false };
+      return { ok: true, username: s.username, tier: s.tier, accountLimit: s.accountLimit, isAdmin: !!s.isAdmin };
+    } catch { return { ok: false }; }
+  }
+
   async isGloballySkipped(username: string): Promise<boolean> {
     const rows = await db.select({ id: skippedUsers.id })
       .from(skippedUsers)

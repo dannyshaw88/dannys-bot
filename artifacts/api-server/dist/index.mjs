@@ -149069,7 +149069,28 @@ sqlite.exec(`
     date_of_birth TEXT,
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS licenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    tier TEXT NOT NULL DEFAULT 'starter',
+    account_limit INTEGER NOT NULL DEFAULT 15,
+    active INTEGER NOT NULL DEFAULT 1,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+  );
 `);
+{
+  const ownerExists = sqlite.prepare("SELECT 1 FROM licenses WHERE LOWER(username) = 'equinox'").get();
+  if (!ownerExists) {
+    sqlite.prepare(
+      "INSERT INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at) VALUES (?, ?, 'owner', 9999, 1, 1, ?)"
+    ).run("EQUINOX", "6b371d058acf35caefe10819c1ee07bee49f9fdfe19869f63a7d4c3cc836e01f", (/* @__PURE__ */ new Date()).toISOString());
+    console.log("[db] Owner license account seeded");
+  }
+}
 var _migrations = [
   "ALTER TABLE proxies ADD COLUMN proxy_type TEXT DEFAULT 'http'"
 ];
@@ -149963,6 +149984,23 @@ var DatabaseStorage = class {
   }
   async setGlobalSetting(key, value) {
     await db.insert(globalSettings).values({ key, value }).onConflictDoUpdate({ target: globalSettings.key, set: { value } });
+  }
+  getLicenseByUsername(username) {
+    return db.$client.prepare(
+      "SELECT * FROM licenses WHERE LOWER(username) = LOWER(?) AND active = 1"
+    ).get(username);
+  }
+  async getLicenseSession() {
+    const settings = await this.getGlobalSettings();
+    const raw = settings["license_session"];
+    if (!raw) return { ok: false };
+    try {
+      const s = JSON.parse(raw);
+      if (!s?.username) return { ok: false };
+      return { ok: true, username: s.username, tier: s.tier, accountLimit: s.accountLimit, isAdmin: !!s.isAdmin };
+    } catch {
+      return { ok: false };
+    }
   }
   async isGloballySkipped(username) {
     const rows = await db.select({ id: skippedUsers.id }).from(skippedUsers).where(sql`LOWER(${skippedUsers.instagramUsername}) = LOWER(${username})`).limit(1);
@@ -169918,6 +169956,44 @@ async function registerInstagramRoutes(httpServer2, app2) {
       console.error("[trust-score-templates] error:", err);
       res.status(500).json({ error: String(err) });
     }
+  });
+  const hashLicensePwd = (u, p) => crypto2.createHash("sha256").update(`${u.toLowerCase()}:${p}`).digest("hex");
+  app2.post("/api/license/login", async (req, res) => {
+    try {
+      const { username, password } = req.body ?? {};
+      if (!username || !password) return res.status(400).json({ ok: false, error: "Missing credentials" });
+      const row = storage.getLicenseByUsername(username);
+      if (!row) return res.json({ ok: false });
+      if (hashLicensePwd(username, password) !== row.password_hash) return res.json({ ok: false });
+      const sessionData = { username: row.username, tier: row.tier, accountLimit: row.account_limit, isAdmin: row.is_admin === 1 };
+      await storage.setGlobalSetting("license_session", JSON.stringify(sessionData));
+      res.json({ ok: true, ...sessionData });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+  app2.get("/api/license/me", async (_req, res) => {
+    try {
+      res.json(await storage.getLicenseSession());
+    } catch {
+      res.json({ ok: false });
+    }
+  });
+  app2.post("/api/license/logout", async (_req, res) => {
+    try {
+      await storage.setGlobalSetting("license_session", "");
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ ok: false });
+    }
+  });
+  app2.get("/api/license/tiers", (_req, res) => {
+    res.json([
+      { id: "starter", label: "Starter", price: "\xA325/mo", accountLimit: 15 },
+      { id: "pro", label: "Pro", price: "\xA350/mo", accountLimit: 100 },
+      { id: "business", label: "Business", price: "\xA3100/mo", accountLimit: 250 },
+      { id: "enterprise", label: "Enterprise", price: "\xA3250/mo", accountLimit: 1e3 }
+    ]);
   });
 }
 

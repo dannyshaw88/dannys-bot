@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, GripVertical, Pencil, X, Plus } from "lucide-react";
+import { Users, Ban, Shield, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, Upload, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, GripVertical, Pencil, X, Plus, Crown, LogOut, UserCircle } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -593,7 +593,7 @@ export function SettingsPage() {
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60">
-        {(["General", "Scraping", "Automation", "Security", "Data", "TrustScores"] as const).map(tab => (
+        {(["General", "Scraping", "Automation", "Security", "Data", "TrustScores", "My Account"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setSettingsTab(tab.toLowerCase())}
@@ -610,7 +610,13 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className={`space-y-4 max-w-2xl ${settingsTab === "trustscores" ? "hidden" : ""}`}>
+      {settingsTab === "my account" && (
+        <div className="desktop-card p-6">
+          <MyAccountTabContent />
+        </div>
+      )}
+
+      <div className={`space-y-4 max-w-2xl ${settingsTab === "trustscores" || settingsTab === "my account" ? "hidden" : ""}`}>
 
         {/* README & FAQ shortcut */}
         <Link href="/readme" className="block" style={{ display: settingsTab !== "general" ? "none" : undefined }}>
@@ -1604,6 +1610,166 @@ function ServerLogCard() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const PLAN_TIERS = [
+  { id: "starter",    label: "Starter",    price: "£25/mo",  limit: 15,   badge: "bg-slate-100 text-slate-700"   },
+  { id: "pro",        label: "Pro",         price: "£50/mo",  limit: 100,  badge: "bg-blue-100 text-blue-700"    },
+  { id: "business",   label: "Business",    price: "£100/mo", limit: 250,  badge: "bg-purple-100 text-purple-700" },
+  { id: "enterprise", label: "Enterprise",  price: "£250/mo", limit: 1000, badge: "bg-amber-100 text-amber-700"  },
+];
+
+function MyAccountTabContent() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const { data: me, isLoading: meLoading } = useQuery<{ ok: boolean; username?: string; tier?: string; accountLimit?: number; isAdmin?: boolean }>({
+    queryKey: ["/api/license/me"],
+    queryFn: async () => { const r = await fetch("/api/license/me", { credentials: "include" }); return r.json(); },
+    staleTime: 30_000,
+  });
+
+  const handleLogin = async () => {
+    if (!username.trim() || !password) return;
+    setLoading(true);
+    try {
+      const r = await fetch("/api/license/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password }),
+        credentials: "include",
+      });
+      const data = await r.json();
+      if (data.ok) {
+        toast({ title: "Signed in", description: `Welcome back, ${data.username}` });
+        queryClient.invalidateQueries({ queryKey: ["/api/license/me"] });
+        setUsername(""); setPassword("");
+      } else {
+        toast({ title: "Invalid credentials", description: "Check your username and password.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Sign in failed", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/license/logout", { method: "POST", credentials: "include" });
+    queryClient.invalidateQueries({ queryKey: ["/api/license/me"] });
+    toast({ title: "Signed out" });
+  };
+
+  if (meLoading) {
+    return <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span></div>;
+  }
+
+  if (!me?.ok) {
+    return (
+      <div className="max-w-sm space-y-5">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="p-2 rounded-lg bg-primary/10"><UserCircle className="w-5 h-5 text-primary" /></div>
+          <div>
+            <h3 className="text-base font-semibold">Sign in to My Account</h3>
+            <p className="text-xs text-muted-foreground">Enter your Equinox license credentials</p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs font-medium mb-1.5 block">Username</Label>
+            <Input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" className="h-9" autoComplete="off" />
+          </div>
+          <div>
+            <Label className="text-xs font-medium mb-1.5 block">Password</Label>
+            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="h-9" onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          </div>
+          <Button onClick={handleLogin} disabled={loading || !username.trim() || !password} className="w-full h-9">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
+          </Button>
+        </div>
+        <div className="pt-4 border-t border-border/60">
+          <p className="text-xs text-muted-foreground mb-3 font-medium">Available plans:</p>
+          <div className="space-y-2">
+            {PLAN_TIERS.map(t => (
+              <div key={t.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
+                  <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
+                </div>
+                <span className="text-xs font-medium">{t.price}</span>
+              </div>
+            ))}
+          </div>
+          <Button variant="outline" className="w-full h-9 mt-4 gap-2" disabled>
+            <Crown className="w-3.5 h-3.5" /> Get a License — coming soon
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const tier = PLAN_TIERS.find(t => t.id === me.tier) ?? null;
+  const currentTierIndex = PLAN_TIERS.findIndex(t => t.id === me.tier);
+
+  return (
+    <div className="space-y-5 max-w-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10"><UserCircle className="w-5 h-5 text-primary" /></div>
+          <div>
+            <p className="text-sm font-semibold">{me.username}</p>
+            {me.isAdmin && <p className="text-xs text-primary font-medium">Administrator</p>}
+          </div>
+        </div>
+        {tier && (
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${tier.badge}`}>
+            {me.isAdmin ? "Owner" : tier.label}
+          </span>
+        )}
+        {!tier && me.isAdmin && (
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-cyan-100 text-cyan-700">Owner</span>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Plan</span>
+          <span className="font-semibold">{me.isAdmin ? "Owner (Unlimited)" : tier?.label ?? me.tier}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Account slots</span>
+          <span className="font-semibold">{me.isAdmin ? "Unlimited" : `${me.accountLimit ?? "—"}`}</span>
+        </div>
+      </div>
+
+      {!me.isAdmin && currentTierIndex < PLAN_TIERS.length - 1 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground font-medium">Upgrade your plan:</p>
+          {PLAN_TIERS.filter((_, i) => i > currentTierIndex).map(t => (
+            <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/30 transition-colors">
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
+                <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium">{t.price}</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1" disabled>
+                  <Crown className="w-3 h-3" /> Upgrade
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground w-fit">
+        <LogOut className="w-3.5 h-3.5" /> Sign out
+      </Button>
     </div>
   );
 }

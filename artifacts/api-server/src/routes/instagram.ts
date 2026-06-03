@@ -4342,4 +4342,40 @@ export async function registerInstagramRoutes(
       res.status(500).json({ error: String(err) });
     }
   });
+
+  // ── License routes ───────────────────────────────────────────────────────
+  const hashLicensePwd = (u: string, p: string) =>
+    crypto.createHash("sha256").update(`${u.toLowerCase()}:${p}`).digest("hex");
+
+  app.post("/api/license/login", async (req, res) => {
+    try {
+      const { username, password } = req.body ?? {};
+      if (!username || !password) return res.status(400).json({ ok: false, error: "Missing credentials" });
+      const row = storage.getLicenseByUsername(username);
+      if (!row) return res.json({ ok: false });
+      if (hashLicensePwd(username, password) !== row.password_hash) return res.json({ ok: false });
+      const sessionData = { username: row.username, tier: row.tier, accountLimit: row.account_limit, isAdmin: row.is_admin === 1 };
+      await storage.setGlobalSetting("license_session", JSON.stringify(sessionData));
+      res.json({ ok: true, ...sessionData });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  app.get("/api/license/me", async (_req, res) => {
+    try { res.json(await storage.getLicenseSession()); }
+    catch { res.json({ ok: false }); }
+  });
+
+  app.post("/api/license/logout", async (_req, res) => {
+    try { await storage.setGlobalSetting("license_session", ""); res.json({ ok: true }); }
+    catch { res.status(500).json({ ok: false }); }
+  });
+
+  app.get("/api/license/tiers", (_req, res) => {
+    res.json([
+      { id: "starter",    label: "Starter",    price: "£25/mo",  accountLimit: 15   },
+      { id: "pro",        label: "Pro",         price: "£50/mo",  accountLimit: 100  },
+      { id: "business",   label: "Business",    price: "£100/mo", accountLimit: 250  },
+      { id: "enterprise", label: "Enterprise",  price: "£250/mo", accountLimit: 1000 },
+    ]);
+  });
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePersistentSetting } from "@/hooks/use-persistent-setting";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -135,6 +135,13 @@ export function ProfilesPage() {
   const updateAccountStatus   = useUpdateAccountStatus();
   const updateProfileMutation = useUpdateProfile();
   const queryClient           = useQueryClient();
+  const { data: licenseData } = useQuery<{ ok: boolean; username?: string; tier?: string; accountLimit?: number; isAdmin?: boolean }>({
+    queryKey: ["/api/license/me"],
+    queryFn: async () => { const r = await fetch("/api/license/me", { credentials: "include" }); return r.json(); },
+    staleTime: 60_000,
+  });
+  const isAtLimit = !!(licenseData?.ok && !licenseData?.isAdmin && (profiles?.length ?? 0) >= (licenseData?.accountLimit ?? Infinity));
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const { toast } = useToast();
   const { openWindow, closeWindow } = useBrowserWindows();
   const { data: proxies } = useProxies();
@@ -547,6 +554,7 @@ export function ProfilesPage() {
   };
 
   const handleCreate = () => {
+    if (isAtLimit) { setShowUpgradeDialog(true); return; }
     const nextNum = getNextAccountNum();
     const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
     createProfileMutation.mutate({
@@ -568,6 +576,7 @@ export function ProfilesPage() {
   };
 
   const handleCreateMultiple = async () => {
+    if (isAtLimit) { setShowUpgradeDialog(true); return; }
     const count = Math.max(1, Math.min(500, parseInt(addProfileCount, 10) || 1));
     setAddProfileCreating(true);
     let startNum = getNextAccountNum();
@@ -2166,6 +2175,21 @@ export function ProfilesPage() {
             >
               Reset &amp; Clear
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Account Limit Reached</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your current plan allows up to {licenseData?.accountLimit ?? 0} account{(licenseData?.accountLimit ?? 0) !== 1 ? "s" : ""}.
+              You have reached that limit. Sign in to My Account in Settings to upgrade your plan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
