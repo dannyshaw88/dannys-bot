@@ -82,17 +82,49 @@ export class HikerApiClient {
   constructor(private readonly token: string) {}
 
   async testConnection(): Promise<boolean> {
-    try {
-      const j = await hikerGet(`/v1/user/by/username?username=instagram`, this.token);
-      const topKeys = j && typeof j === "object" ? Object.keys(j) : [];
-      console.log(`[hikerApi] testConnection raw keys: ${JSON.stringify(topKeys)}`);
-      const u = resolveUserObj(j);
-      console.log(`[hikerApi] testConnection resolved pk=${u?.pk ?? u?.id ?? "null"}`);
-      return !!(u?.pk || u?.id);
-    } catch (e: any) {
-      console.error(`[hikerApi] testConnection error: ${e?.message}`);
-      return false;
+    // Try a few popular usernames — HikerAPI's cache may not have all of them
+    const testUsernames = ["instagram", "cristiano", "leomessi"];
+    for (const username of testUsernames) {
+      try {
+        const j = await hikerGet(`/v1/user/by/username?username=${username}`, this.token);
+        const topKeys = j && typeof j === "object" ? Object.keys(j) : [];
+        console.log(`[hikerApi] testConnection @${username} raw keys: ${JSON.stringify(topKeys)}`);
+
+        // Explicit auth failure signals — these mean the token is bad
+        if (j && typeof j === "object" && !Array.isArray(j)) {
+          const msg = (j.detail ?? j.error ?? j.message ?? "").toString().toLowerCase();
+          if (/invalid.*token|unauthorized|forbidden|not.*authenticat|api.?key/i.test(msg)) {
+            console.error(`[hikerApi] testConnection: auth error — "${msg}"`);
+            return false;
+          }
+          // {"state":false,"error":"Service Unavailable"} — service down, NOT an auth error
+          if (j.state === false && j.error) {
+            console.log(`[hikerApi] testConnection @${username}: service error "${j.error}", trying next username`);
+            continue;
+          }
+        }
+
+        // Resolved user object = definitive success
+        const u = resolveUserObj(j);
+        console.log(`[hikerApi] testConnection @${username} resolved pk=${u?.pk ?? u?.id ?? "null"}`);
+        if (u?.pk || u?.id) return true;
+
+        // Non-error non-empty object = API is reachable, token is likely valid
+        if (j && typeof j === "object" && !Array.isArray(j) && topKeys.length > 0) {
+          console.log(`[hikerApi] testConnection @${username}: got ${topKeys.length} keys — treating as connected`);
+          return true;
+        }
+
+        // Empty array [] = endpoint reachable but no cached data — token is still valid
+        if (Array.isArray(j)) {
+          console.log(`[hikerApi] testConnection @${username}: got empty array — API reachable, token valid`);
+          return true;
+        }
+      } catch (e: any) {
+        console.error(`[hikerApi] testConnection @${username} error: ${e?.message}`);
+      }
     }
+    return false;
   }
 
   async getUserByUsername(username: string): Promise<{ pk: string; username: string } | null> {
@@ -594,24 +626,37 @@ export class HikerApiClient {
       return { users, nextCursor };
     };
 
-    // Try v1 first (correct/stable HikerAPI endpoint), fall back to v2.
-    for (const endpoint of ["/v1/hashtag/medias/recent", "/v2/hashtag/medias/recent"]) {
+    // Build endpoint list to try in order.
+    // v1 recent uses ?name=, v2 recent uses ?hashtag= (HikerAPI v2 param name differs).
+    // Also try /top variants — HikerAPI's /recent cache is often empty for niche tags.
+    const endpointList: Array<{ path: string; param: string }> = [
+      { path: "/v1/hashtag/medias/recent", param: "name" },
+      { path: "/v1/hashtag/medias/top",    param: "name" },
+      { path: "/v2/hashtag/medias/recent", param: "hashtag" },
+      { path: "/v2/hashtag/medias/top",    param: "hashtag" },
+    ];
+
+    for (const { path: endpoint, param } of endpointList) {
       try {
-        const qs = new URLSearchParams({ name: tag, amount: String(amount) });
+        const qs = new URLSearchParams({ [param]: tag, amount: String(amount) });
         if (cursor) qs.set("next_max_id", cursor);
         const j = await hikerGet(`${endpoint}?${qs}`, this.token);
 
-        if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
-          const detail: string = j.detail ?? j.exc_type ?? JSON.stringify(j);
-          console.warn(`[hikerApi] getHashtagUsers #${tag} ${endpoint}: API error — "${detail}", trying next endpoint`);
-          continue;
+        // Catch all error response shapes:
+        // { detail: "..." } | { exc_type: "..." } | { state: false, error: "..." } | { error: "..." }
+        if (j && !Array.isArray(j) && typeof j === "object") {
+          const hasError = j.detail || j.exc_type || (j.state === false && j.error) || (typeof j.error === "string" && !j.items && !j.medias && !j.data && !j.response);
+          if (hasError) {
+            const detail: string = j.detail ?? j.exc_type ?? j.error ?? JSON.stringify(j);
+            console.warn(`[hikerApi] getHashtagUsers #${tag} ${endpoint}: API error — "${detail}", trying next endpoint`);
+            continue;
+          }
         }
 
         const result = extractFromResponse(j, endpoint);
         console.log(`[hikerApi] getHashtagUsers #${tag} (${endpoint}): ${result.users.length} users, nextCursor=${result.nextCursor ?? "none"}`);
 
-        // If v1 returned results, use them. If empty, fall through to v2.
-        if (result.users.length > 0 || endpoint === "/v2/hashtag/medias/recent") {
+        if (result.users.length > 0) {
           return { users: result.users.slice(0, max), nextCursor: result.nextCursor };
         }
         console.warn(`[hikerApi] getHashtagUsers #${tag} ${endpoint}: 0 users, trying next endpoint`);

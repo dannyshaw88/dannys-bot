@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.764",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "HikerAPI hashtag scraping now finds users again — added /top endpoint variants (recent cache is often empty for niche tags) and fixed the v2 endpoint parameter name. Previously all hashtag rounds returned 0 users." },
+      { category: "Fix", text: "HikerAPI token status no longer shows Failed incorrectly — the test now distinguishes between a bad token and a temporary service/cache miss from HikerAPI's servers." },
+      { category: "Fix", text: "Exec Order and Skip Chance % fields in all Emulation section rows (View Timeline Feed, Human Session, Check Stories, Check DMs, Repost) are now neatly stacked on the right side of each row — matching the embedded tool header layout." },
+    ],
+  },
+  {
     version: "1.0.762",
     date: "3 Jun 2026",
     items: [

@@ -661,47 +661,67 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             {/* ── View Timeline Feed ── */}
             <div className="px-4 py-3 space-y-2">
-              <div className="flex items-center gap-3 flex-wrap">
-                <input type="checkbox" id="viewTimelineFeedEnabled"
-                  checked={!!settings.viewTimelineFeedEnabled}
-                  onChange={(e) => setSettings({ ...settings, viewTimelineFeedEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="viewTimelineFeedEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
-                  <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />
-                  View Timeline Feed
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Exec Order</span>
-                  {pctInputs("viewTimelineFeedOrderMin", "viewTimelineFeedOrderMax")}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <input type="checkbox" id="viewTimelineFeedEnabled"
+                    checked={!!settings.viewTimelineFeedEnabled}
+                    onChange={(e) => setSettings({ ...settings, viewTimelineFeedEnabled: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="viewTimelineFeedEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+                    <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />
+                    View Timeline Feed
+                  </label>
+                  <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
+                      <Label className="text-xs text-muted-foreground">Min</Label>
+                      <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                        value={settings.viewTimelineFeedMin ?? 3}
+                        onChange={(e) => setSettings({ ...settings, viewTimelineFeedMin: Math.max(1, Number(e.target.value)) })}
+                      />
+                      <Label className="text-xs text-muted-foreground">Max</Label>
+                      <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                        value={settings.viewTimelineFeedMax ?? 8}
+                        onChange={(e) => setSettings({ ...settings, viewTimelineFeedMax: Math.max(1, Number(e.target.value)) })}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like%</span>
+                      {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
+                      {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip %</span>
-                  {pctInputs("viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax")}
-                </div>
-                <div className={`flex items-center gap-3 flex-wrap transition-opacity ${!settings.viewTimelineFeedEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
-                      value={settings.viewTimelineFeedMin ?? 3}
-                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedMin: Math.max(1, Number(e.target.value)) })}
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.viewTimelineFeedOrderMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedOrderMin: Math.max(0, Number(e.target.value)) })}
                     />
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
-                      value={settings.viewTimelineFeedMax ?? 8}
-                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedMax: Math.max(1, Number(e.target.value)) })}
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.viewTimelineFeedOrderMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedOrderMax: Math.max(0, Number(e.target.value)) })}
                     />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Heart className="w-3.5 h-3.5 text-pink-500 shrink-0" />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Like%</span>
-                    {pctInputs("likeTimelinePostsPercentMin", "likeTimelinePostsPercentMax")}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <PlaySquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reel View%</span>
-                    {pctInputs("reelWatchPercentMin", "reelWatchPercentMax")}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.viewTimelineFeedNotUsedMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.viewTimelineFeedNotUsedMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, viewTimelineFeedNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
                   </div>
                 </div>
               </div>
@@ -823,7 +843,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             {/* ── Human Session ── */}
             <div className="px-4 py-3 space-y-2">
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-wrap">
                 <input type="checkbox" id="humanSessionEnabled"
                   checked={!!settings.humanSessionEnabled}
                   onChange={(e) => setSettings({ ...settings, humanSessionEnabled: e.target.checked })}
@@ -833,14 +854,6 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   <User className="w-4 h-4 text-violet-500" />
                   Human Session
                 </label>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Exec Order</span>
-                  {pctInputs("humanSessionOrderMin", "humanSessionOrderMax")}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip %</span>
-                  {pctInputs("humanSessionNotUsedMin", "humanSessionNotUsedMax")}
-                </div>
                 <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
                   {([
                     { minKey: "notificationsRunChanceMin",    maxKey: "notificationsRunChanceMax",    label: "Notifs",   Icon: Bell,      color: "text-orange-500" },
@@ -872,6 +885,33 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                     </div>
                   ))}
                 </div>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.humanSessionOrderMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, humanSessionOrderMin: Math.max(0, Number(e.target.value)) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.humanSessionOrderMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, humanSessionOrderMax: Math.max(0, Number(e.target.value)) })}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.humanSessionNotUsedMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, humanSessionNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.humanSessionNotUsedMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, humanSessionNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                  </div>
+                </div>
               </div>
               <p className={`text-[11px] text-muted-foreground transition-opacity ${!settings.humanSessionEnabled ? 'opacity-40' : ''}`}>
                 Runs all four sub-actions in a random order each session: visits the notification inbox, browses the account's own profile, pull-to-refreshes it, and opens Settings &amp; Activity.
@@ -880,95 +920,155 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             {/* ── Check Stories from Timeline ── */}
             <div className="px-4 py-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <input type="checkbox" id="checkTimelineStoriesEnabled"
-                  checked={!!settings.checkTimelineStoriesEnabled}
-                  onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="checkTimelineStoriesEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
-                  <BookOpen className="w-4 h-4 text-sky-500 shrink-0" />
-                  Check Stories from Timeline
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Exec Order</span>
-                  {pctInputs("checkTimelineStoriesOrderMin", "checkTimelineStoriesOrderMax")}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip %</span>
-                  {pctInputs("checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax")}
-                </div>
-                <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
-                  <Label className="text-xs text-muted-foreground">Min</Label>
-                  <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
-                    value={settings.checkTimelineStoriesMin ?? 3}
-                    onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMin: Math.max(1, Number(e.target.value)) })}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <input type="checkbox" id="checkTimelineStoriesEnabled"
+                    checked={!!settings.checkTimelineStoriesEnabled}
+                    onChange={(e) => setSettings({ ...settings, checkTimelineStoriesEnabled: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
                   />
-                  <Label className="text-xs text-muted-foreground">Max</Label>
-                  <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
-                    value={settings.checkTimelineStoriesMax ?? 8}
-                    onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMax: Math.max(1, Number(e.target.value)) })}
-                  />
+                  <label htmlFor="checkTimelineStoriesEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+                    <BookOpen className="w-4 h-4 text-sky-500 shrink-0" />
+                    Check Stories from Timeline
+                  </label>
+                  <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Watch</span>
+                    <Label className="text-xs text-muted-foreground">Min</Label>
+                    <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
+                      value={settings.checkTimelineStoriesMin ?? 3}
+                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMin: Math.max(1, Number(e.target.value)) })}
+                    />
+                    <Label className="text-xs text-muted-foreground">Max</Label>
+                    <Input type="number" min="1" max="50" className="w-14 h-7 text-xs"
+                      value={settings.checkTimelineStoriesMax ?? 8}
+                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesMax: Math.max(1, Number(e.target.value)) })}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.checkTimelineStoriesOrderMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesOrderMin: Math.max(0, Number(e.target.value)) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.checkTimelineStoriesOrderMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesOrderMax: Math.max(0, Number(e.target.value)) })}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.checkTimelineStoriesNotUsedMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.checkTimelineStoriesNotUsedMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkTimelineStoriesNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* ── Check Direct Messages ── */}
             <div className="px-4 py-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <input type="checkbox" id="checkDmEnabled"
-                  checked={!!settings.checkDmEnabled}
-                  onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
-                  <MessageSquare className="w-4 h-4 text-teal-500 shrink-0" />
-                  Check Direct Messages
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Exec Order</span>
-                  {pctInputs("checkDmOrderMin", "checkDmOrderMax")}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip %</span>
-                  {pctInputs("checkDmNotUsedMin", "checkDmNotUsedMax")}
-                </div>
-                <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
-                  <Label className="text-xs text-muted-foreground">Min</Label>
-                  <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
-                    value={settings.checkDmMin ?? 5}
-                    onChange={(e) => setSettings({ ...settings, checkDmMin: Math.max(1, Number(e.target.value)) })}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <input type="checkbox" id="checkDmEnabled"
+                    checked={!!settings.checkDmEnabled}
+                    onChange={(e) => setSettings({ ...settings, checkDmEnabled: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
                   />
-                  <Label className="text-xs text-muted-foreground">Max</Label>
-                  <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
-                    value={settings.checkDmMax ?? 15}
-                    onChange={(e) => setSettings({ ...settings, checkDmMax: Math.max(1, Number(e.target.value)) })}
-                  />
+                  <label htmlFor="checkDmEnabled" className="font-semibold text-sm flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap shrink-0">
+                    <MessageSquare className="w-4 h-4 text-teal-500 shrink-0" />
+                    Check Direct Messages
+                  </label>
+                  <div className={`flex items-center gap-1.5 transition-opacity ${!settings.checkDmEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Check</span>
+                    <Label className="text-xs text-muted-foreground">Min</Label>
+                    <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                      value={settings.checkDmMin ?? 5}
+                      onChange={(e) => setSettings({ ...settings, checkDmMin: Math.max(1, Number(e.target.value)) })}
+                    />
+                    <Label className="text-xs text-muted-foreground">Max</Label>
+                    <Input type="number" min="1" max="100" className="w-14 h-7 text-xs"
+                      value={settings.checkDmMax ?? 15}
+                      onChange={(e) => setSettings({ ...settings, checkDmMax: Math.max(1, Number(e.target.value)) })}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.checkDmOrderMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkDmOrderMin: Math.max(0, Number(e.target.value)) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.checkDmOrderMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkDmOrderMax: Math.max(0, Number(e.target.value)) })}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.checkDmNotUsedMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkDmNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.checkDmNotUsedMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, checkDmNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* ── Repost ── */}
             <div className="px-4 py-3 space-y-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <input type="checkbox" id="repostEnabled"
-                  checked={!!settings.repostEnabled}
-                  onChange={(e) => setSettings({ ...settings, repostEnabled: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor="repostEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none whitespace-nowrap shrink-0">
-                  <Repeat2 className="w-4 h-4 text-green-500" />
-                  Repost
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Exec Order</span>
-                  {pctInputs("repostOrderMin", "repostOrderMax")}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input type="checkbox" id="repostEnabled"
+                    checked={!!settings.repostEnabled}
+                    onChange={(e) => setSettings({ ...settings, repostEnabled: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+                  />
+                  <label htmlFor="repostEnabled" className="font-semibold text-sm flex items-center gap-2 cursor-pointer select-none whitespace-nowrap shrink-0">
+                    <Repeat2 className="w-4 h-4 text-green-500" />
+                    Repost
+                  </label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip %</span>
-                  {pctInputs("repostNotUsedMin", "repostNotUsedMax")}
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Exec Order</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.repostOrderMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, repostOrderMin: Math.max(0, Number(e.target.value)) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" className="w-14 h-7 text-xs"
+                      value={settings.repostOrderMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, repostOrderMax: Math.max(0, Number(e.target.value)) })}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.repostNotUsedMin ?? 0}
+                      onChange={(e) => setSettings({ ...settings, repostNotUsedMin: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                    <span className="text-[10px] text-muted-foreground">–</span>
+                    <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
+                      value={settings.repostNotUsedMax ?? 0}
+                      onChange={(e) => setSettings({ ...settings, repostNotUsedMax: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                    />
+                  </div>
                 </div>
               </div>
 
