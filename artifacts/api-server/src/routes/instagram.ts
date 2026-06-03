@@ -3373,7 +3373,29 @@ export async function registerInstagramRoutes(
         cleanProfile.proxyUsername = (cleanProfile as any).resolvedProxyUsername ?? null;
         cleanProfile.proxyPassword = (cleanProfile as any).resolvedProxyPassword ?? null;
       }
-      cleanProfile.proxyId = null;
+      // Auto-resolve proxyId from embedded proxy credentials (mirrors Jarvee import logic)
+      {
+        const eqxHost = ((cleanProfile.proxyHost as string) || "").trim();
+        const eqxPort = cleanProfile.proxyPort ? Number(cleanProfile.proxyPort) : 0;
+        let resolvedProxyId: number | null = null;
+        if (eqxHost && eqxPort) {
+          const existingProxies = await storage.getProxies();
+          const match = existingProxies.find(px => px.host === eqxHost && px.port === eqxPort);
+          if (match) {
+            resolvedProxyId = match.id;
+          } else {
+            const newProxy = await storage.createProxy({
+              name: `${eqxHost}:${eqxPort}`,
+              host: eqxHost,
+              port: eqxPort,
+              username: (cleanProfile.proxyUsername as string | null) ?? null,
+              password: (cleanProfile.proxyPassword as string | null) ?? null,
+            });
+            resolvedProxyId = newProxy.id;
+          }
+        }
+        cleanProfile.proxyId = resolvedProxyId;
+      }
 
       // Save the intended status BEFORE createProfile, because Drizzle's SQLite
       // dialect can silently fall back to the column's SQL DEFAULT ('pending') when

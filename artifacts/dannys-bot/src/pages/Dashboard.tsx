@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.743",
+    date: "3 Jun 2026",
+    items: [
+      { category: "New", text: "Proxy Manager: each assigned account now shows its Status pill and TrustScore badge directly in the account sub-panel." },
+      { category: "New", text: "Proxy Manager: Ping All button moved to the top toolbar, next to Import Proxies, for quicker access." },
+      { category: "Fix", text: "Proxy Manager: Split Now no longer freezes the button if multiple accounts are assigned at once — fixed a race condition in the mutation." },
+      { category: "Fix", text: "EQX import: accounts imported with a linked proxy now auto-create or re-link the proxy entry, instead of always importing as unassigned." },
+    ],
+  },
+  {
     version: "1.0.742",
     date: "2 Jun 2026",
     items: [

@@ -3,7 +3,7 @@ import { usePersistentSetting } from "@/hooks/use-persistent-setting";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProxies, useCreateProxy, useUpdateProxy, useDeleteProxy } from "@/hooks/use-proxies";
-import { useProfiles, useCreatorProfiles, useUpdateProfile } from "@/hooks/use-profiles";
+import { useProfiles, useCreatorProfiles } from "@/hooks/use-profiles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,13 +16,40 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Proxy, Profile } from "@shared/schema";
+import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 
 type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
 
-type ProxyCol = "proxy" | "type" | "username" | "password" | "accounts" | "status";
-const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status"];
-const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, accounts: 76, status: 88 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", type: "Type", username: "Username", password: "Password", accounts: "Accounts", status: "Status" };
+type ProxyCol = "proxy" | "type" | "username" | "password" | "accounts" | "status" | "acctStatus" | "acctTrustScore";
+const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore"];
+const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, accounts: 76, status: 88, acctStatus: 90, acctTrustScore: 90 };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", type: "Type", username: "Username", password: "Password", accounts: "Accounts", status: "Status", acctStatus: "Acct Status", acctTrustScore: "TrustScore" };
+
+// Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
+function acctStatusPill(s: string): string {
+  if (s === "valid") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (s === "banned" || s === "account_disabled" || s === "compromised" || s === "invalid_credentials") return "bg-red-50 text-red-700 border-red-200";
+  if (s === "captcha" || s === "suspended" || s === "temporary_locked" || s === "automated_behaviour_detected" || s === "scrape_warning") return "bg-amber-50 text-amber-700 border-amber-200";
+  if (s === "verifying") return "bg-sky-50 text-sky-700 border-sky-200";
+  if (s === "logged_out" || s === "bad_password") return "bg-orange-50 text-orange-700 border-orange-200";
+  if (s === "email_verification" || s === "phone_validation" || s === "password_reset" || s === "own_phone_verification") return "bg-blue-50 text-blue-700 border-blue-200";
+  if (s === "selfie_verification") return "bg-purple-50 text-purple-700 border-purple-200";
+  return "bg-slate-100 text-slate-600 border-slate-200";
+}
+function acctStatusLabel(s: string): string {
+  const m: Record<string, string> = {
+    valid: "Valid", pending: "Pending", banned: "Banned", verifying: "Verifying",
+    captcha: "Captcha", bad_password: "Bad Pass", logged_out: "Logged Out",
+    account_disabled: "Disabled", compromised: "Compromised", suspended: "Suspended",
+    invalid_credentials: "Inv. Creds", temporary_locked: "Temp Locked",
+    automated_behaviour_detected: "Auto Behav.", no_internet: "No Internet",
+    email_verification: "Email Verify", phone_validation: "Phone Valid.",
+    password_reset: "Pass Reset", scrape_warning: "Scrape Warn",
+    selfie_verification: "Selfie Verify", own_phone_verification: "Phone Verify",
+    email_connection: "Email Connect", captcha_disabled: "Captcha Off",
+  };
+  return m[s] ?? s;
+}
 
 function parseJarveeFile(buffer: ArrayBuffer): Array<{ host: string; port: number; username: string | null; password: string | null }> {
   const text = new TextDecoder("utf-16le").decode(buffer).replace(/^\ufeff/, "");
@@ -80,7 +107,7 @@ function ProxyRow({
 }: ProxyRowProps) {
   const deleteProxyMutation = useDeleteProxy();
   const updateProxyMutation = useUpdateProxy();
-  const updateProfileMutation = useUpdateProfile();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [hostPort, setHostPort] = useState(`${proxy.host}:${proxy.port}`);
@@ -121,21 +148,36 @@ function ProxyRow({
   const validCount = assigned.filter(p => p.accountStatus === "valid").length;
   const totalCount = assigned.length;
 
-  const handleAssign = (profileId: number) => {
-    updateProfileMutation.mutate({
-      id: profileId,
-      proxyId: proxy.id,
-      ...(keepValid ? { preserveAccountStatus: true } : {}),
-    } as any);
+  const [assignPending, setAssignPending] = useState(false);
+
+  const handleAssign = async (profileId: number) => {
+    setAssignPending(true);
+    try {
+      await fetch(`/api/profiles/${profileId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proxyId: proxy.id, ...(keepValid ? { preserveAccountStatus: true } : {}) }),
+        credentials: "include",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+    } finally { setAssignPending(false); }
   };
 
-  const handleUnassign = (profile: Profile) => {
-    updateProfileMutation.mutate({
-      id: profile.id,
-      proxyId: null,
-      ...(keepValid ? { preserveAccountStatus: true } : {}),
-    } as any);
+  const handleUnassign = async (profile: Profile) => {
+    setAssignPending(true);
+    try {
+      await fetch(`/api/profiles/${profile.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proxyId: null, ...(keepValid ? { preserveAccountStatus: true } : {}) }),
+        credentials: "include",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
+    } finally { setAssignPending(false); }
   };
+
+  const showAcctStatus    = colOrder.includes("acctStatus");
+  const showAcctTrustScore = colOrder.includes("acctTrustScore");
 
   const rowBg = even ? "bg-slate-50/60" : "bg-white";
 
@@ -143,6 +185,7 @@ function ProxyRow({
     <>
       <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
         {colOrder.map(col => {
+          if (col === "acctStatus" || col === "acctTrustScore") return null;
           if (col === "proxy") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
               <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full" placeholder="host:port" />
@@ -206,9 +249,17 @@ function ProxyRow({
             <div key={profile.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent/40 transition-colors group">
               <User className="w-3.5 h-3.5 shrink-0 text-primary" />
               <span className="text-sm font-medium text-foreground truncate flex-1">{profile.username}</span>
+              {showAcctStatus && (
+                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap uppercase shrink-0 ${acctStatusPill(profile.accountStatus ?? "pending")}`}>
+                  {acctStatusLabel(profile.accountStatus ?? "pending")}
+                </span>
+              )}
+              {showAcctTrustScore && (
+                <span className="shrink-0"><TrustScoreBadge profileId={profile.id} /></span>
+              )}
               <button
                 onClick={() => handleUnassign(profile)}
-                disabled={updateProfileMutation.isPending}
+                disabled={assignPending}
                 title="Remove from proxy"
                 className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-all shrink-0"
               >
@@ -221,7 +272,7 @@ function ProxyRow({
               className="mt-1 h-7 w-full rounded border border-dashed border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer hover:border-primary/50 transition-colors"
               value=""
               onChange={e => { if (e.target.value) handleAssign(Number(e.target.value)); }}
-              disabled={updateProfileMutation.isPending}
+              disabled={assignPending}
             >
               <option value="">+ Assign account…</option>
               {unassignedProfiles.map(p => (
@@ -247,7 +298,6 @@ export function ProxiesPage() {
   const { data: creatorProfiles = [] } = useCreatorProfiles();
   const allProfiles = [...profiles, ...creatorProfiles].filter(p => !p.isTemplate);
   const createProxyMutation = useCreateProxy();
-  const updateProfileMutation = useUpdateProfile();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -574,12 +624,14 @@ export function ProxiesPage() {
       }
       if (!assignments.length) { toast({ title: "All proxies are already at the maximum account limit" }); setSplitting(false); return; }
       await Promise.all(
-        assignments.map(a => new Promise<void>((resolve, reject) =>
-          updateProfileMutation.mutate(
-            { id: a.profileId, proxyId: a.proxyId, ...(keepValid ? { preserveAccountStatus: true } : {}) } as any,
-            { onSuccess: () => resolve(), onError: reject }
-          )
-        ))
+        assignments.map(a =>
+          fetch(`/api/profiles/${a.profileId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ proxyId: a.proxyId, ...(keepValid ? { preserveAccountStatus: true } : {}) }),
+            credentials: "include",
+          }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
+        )
       );
       await queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
       const skipped = splitCandidates.length - assignments.length;
@@ -669,6 +721,17 @@ export function ProxiesPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 shrink-0"
+          onClick={handlePingAll}
+          disabled={pingingAll || !proxies.length}
+        >
+          {pingingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+          {pingingAll ? `Pinging… (${testedCount}/${proxies.length})` : "Ping All"}
+        </Button>
       </div>
 
       {/* ── Main card ──────────────────────────────────────────────────────── */}
@@ -677,6 +740,7 @@ export function ProxiesPage() {
         {/* Column header */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
           {proxyColOrder.map(col => {
+            if (col === "acctStatus" || col === "acctTrustScore") return null;
             const isDragTarget = proxyDragOverCol === col;
             const dragProps = {
               draggable: true as const,
@@ -833,15 +897,6 @@ export function ProxiesPage() {
 
         {/* Bottom toolbar */}
         <div className="flex items-center gap-2 px-3 py-2 border-t border-border bg-muted/40 select-none shrink-0 flex-wrap">
-          <button
-            onClick={handlePingAll}
-            disabled={pingingAll || !proxies.length}
-            className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors whitespace-nowrap disabled:opacity-50"
-          >
-            {pingingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-            {pingingAll ? `Pinging… (${testedCount}/${proxies.length})` : "Ping All"}
-          </button>
-          <span className="text-border">|</span>
           <label className="flex items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-sky-500 hover:text-sky-600 transition-colors cursor-pointer whitespace-nowrap">
             <input type="file" accept=".txt" className="hidden" onChange={handleImport} disabled={importing} />
             {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
