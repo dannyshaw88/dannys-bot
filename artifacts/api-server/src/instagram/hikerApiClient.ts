@@ -61,14 +61,36 @@ const USERNAME_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 interface UsernameCacheEntry { data: { pk: string; username: string }; expiresAt: number; }
 const usernameCache = new Map<string, UsernameCacheEntry>();
 
+// Normalise any HikerAPI user-object response shape into a flat user object.
+// HikerAPI has returned user data at multiple levels across versions:
+//   { pk, username, ... }          — legacy flat (v1 old)
+//   { user: { pk, username } }     — wrapped in .user  (v1 current)
+//   { response: { pk, username } } — wrapped in .response
+//   { data: { pk, username } }     — wrapped in .data
+//   { result: { pk, username } }   — wrapped in .result
+function resolveUserObj(j: any): any | null {
+  if (!j || typeof j !== "object") return null;
+  // Try unwrap candidates in priority order
+  const candidates = [j, j.user, j.response, j.data, j.result];
+  for (const c of candidates) {
+    if (c && typeof c === "object" && (c.pk || c.id)) return c;
+  }
+  return null;
+}
+
 export class HikerApiClient {
   constructor(private readonly token: string) {}
 
   async testConnection(): Promise<boolean> {
     try {
       const j = await hikerGet(`/v1/user/by/username?username=instagram`, this.token);
-      return !!(j?.pk);
-    } catch {
+      const topKeys = j && typeof j === "object" ? Object.keys(j) : [];
+      console.log(`[hikerApi] testConnection raw keys: ${JSON.stringify(topKeys)}`);
+      const u = resolveUserObj(j);
+      console.log(`[hikerApi] testConnection resolved pk=${u?.pk ?? u?.id ?? "null"}`);
+      return !!(u?.pk || u?.id);
+    } catch (e: any) {
+      console.error(`[hikerApi] testConnection error: ${e?.message}`);
       return false;
     }
   }
@@ -81,8 +103,9 @@ export class HikerApiClient {
     }
     try {
       const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
-      if (!j?.pk) return null;
-      const data = { pk: String(j.pk), username: String(j.username) };
+      const u = resolveUserObj(j);
+      if (!u?.pk && !u?.id) return null;
+      const data = { pk: String(u.pk ?? u.id), username: String(u.username) };
       usernameCache.set(cacheKey, { data, expiresAt: Date.now() + USERNAME_CACHE_TTL_MS });
       return data;
     } catch (e: any) {
@@ -94,11 +117,12 @@ export class HikerApiClient {
   async getProfileStats(username: string): Promise<{ followersCount: number; followingCount: number; postsCount: number } | null> {
     try {
       const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
-      if (!j?.pk) return null;
+      const u = resolveUserObj(j);
+      if (!u?.pk && !u?.id) return null;
       return {
-        followersCount: Number(j.follower_count ?? j.edge_followed_by?.count ?? 0),
-        followingCount: Number(j.following_count ?? j.edge_follow?.count ?? 0),
-        postsCount:     Number(j.media_count ?? j.edge_owner_to_timeline_media?.count ?? 0),
+        followersCount: Number(u.follower_count ?? u.edge_followed_by?.count ?? 0),
+        followingCount: Number(u.following_count ?? u.edge_follow?.count ?? 0),
+        postsCount:     Number(u.media_count ?? u.edge_owner_to_timeline_media?.count ?? 0),
       };
     } catch (e: any) {
       console.error(`[hikerApi] getProfileStats @${username} error: ${e?.message}`);
@@ -109,10 +133,11 @@ export class HikerApiClient {
   async getUserProfile(username: string): Promise<{ biography: string | null; fullName: string | null } | null> {
     try {
       const j = await hikerGet(`/v1/user/by/username?username=${encodeURIComponent(username)}`, this.token);
-      if (!j?.pk) return null;
+      const u = resolveUserObj(j);
+      if (!u?.pk && !u?.id) return null;
       return {
-        biography: j.biography ?? null,
-        fullName: j.full_name ?? null,
+        biography: u.biography ?? null,
+        fullName: u.full_name ?? null,
       };
     } catch (e: any) {
       console.error(`[hikerApi] getUserProfile @${username} error: ${e?.message}`);
@@ -493,25 +518,50 @@ export class HikerApiClient {
     const amount = Math.min(Math.max(max, 1), 200);
 
     // Extract users from any HikerAPI hashtag response shape.
-    // HikerAPI v1 returns a flat `items` array of media objects (each with a `.user`).
-    // HikerAPI v2 / Instagram internal may return a `sections` array with nested layout_content.
-    const extractFromResponse = (j: any): { users: { pk: string; username: string; fullName: string }[]; nextCursor: string | null } => {
-      const envelope = j?.response ?? j;
+    // Logs response structure so unexpected shapes are visible in server logs.
+    const extractFromResponse = (j: any, endpointLabel: string): { users: { pk: string; username: string; fullName: string }[]; nextCursor: string | null } => {
+      // Log top-level shape for diagnostics
+      const topKeys = j && typeof j === "object" ? Object.keys(j) : [];
+      console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} raw keys: ${JSON.stringify(topKeys).slice(0, 200)}`);
+
+      // Unwrap envelope — try j.response first, then j itself
+      const envelope = (j?.response && typeof j.response === "object") ? j.response : j;
+      const envKeys = envelope && typeof envelope === "object" && !Array.isArray(envelope) ? Object.keys(envelope) : [];
+      if (envKeys.length > 0 && envelope !== j) {
+        console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} envelope keys: ${JSON.stringify(envKeys).slice(0, 200)}`);
+      }
+
+      // Candidate flat arrays — ordered by likelihood for HikerAPI v1
+      const flatItems: any[] = Array.isArray(envelope)              ? envelope
+        : Array.isArray(envelope?.items)                            ? envelope.items
+        : Array.isArray(envelope?.medias)                           ? envelope.medias
+        : Array.isArray(envelope?.data)                             ? envelope.data
+        : Array.isArray(envelope?.results)                          ? envelope.results
+        : Array.isArray(envelope?.feed_items)                       ? envelope.feed_items
+        : Array.isArray(j?.items)                                   ? j.items
+        : Array.isArray(j?.medias)                                  ? j.medias
+        : Array.isArray(j?.data)                                    ? j.data
+        : [];
+
+      if (flatItems.length > 0) {
+        const sample = flatItems[0];
+        const sampleKeys = sample && typeof sample === "object" ? Object.keys(sample) : [];
+        console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} first item keys: ${JSON.stringify(sampleKeys).slice(0, 200)}`);
+        if (sample?.user) console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} first item.user keys: ${JSON.stringify(Object.keys(sample.user)).slice(0, 100)}`);
+      } else {
+        console.log(`[hikerApi] getHashtagUsers #${tag} ${endpointLabel} no flat items found — raw sample: ${JSON.stringify(j)?.slice(0, 300)}`);
+      }
+
       const seen = new Set<string>();
       const users: { pk: string; username: string; fullName: string }[] = [];
 
-      // Shape A: flat items / data array (HikerAPI v1 format)
-      const flatItems: any[] = Array.isArray(envelope)          ? envelope
-        : Array.isArray(envelope?.items)                        ? envelope.items
-        : Array.isArray(envelope?.data)                         ? envelope.data
-        : Array.isArray(j?.items)                               ? j.items
-        : Array.isArray(j?.data)                                ? j.data
-        : [];
-
+      // Shape A: flat items array (HikerAPI v1 format — each item is a media object)
       for (const item of flatItems) {
         if (users.length >= max) break;
         const media = item?.media ?? item;
-        const u = media?.user ?? media?.owner;
+        // User can be nested (.user, .owner) or at the top level of the media
+        const u = media?.user ?? media?.owner
+          ?? (media?.pk && media?.username ? media : null);
         if (!u?.pk || !u?.username) continue;
         if (seen.has(String(u.pk))) continue;
         seen.add(String(u.pk));
@@ -528,7 +578,8 @@ export class HikerApiClient {
           for (const item of medias) {
             if (users.length >= max) break;
             const media = item?.media ?? item;
-            const u = media?.user ?? media?.owner;
+            const u = media?.user ?? media?.owner
+              ?? (media?.pk && media?.username ? media : null);
             if (!u?.pk || !u?.username) continue;
             if (seen.has(String(u.pk))) continue;
             seen.add(String(u.pk));
@@ -539,7 +590,7 @@ export class HikerApiClient {
 
       const nextCursor = (envelope?.more_available && envelope?.next_max_id)
         ? String(envelope.next_max_id)
-        : null;
+        : (j?.next_max_id ? String(j.next_max_id) : null);
       return { users, nextCursor };
     };
 
@@ -556,7 +607,7 @@ export class HikerApiClient {
           continue;
         }
 
-        const result = extractFromResponse(j);
+        const result = extractFromResponse(j, endpoint);
         console.log(`[hikerApi] getHashtagUsers #${tag} (${endpoint}): ${result.users.length} users, nextCursor=${result.nextCursor ?? "none"}`);
 
         // If v1 returned results, use them. If empty, fall through to v2.

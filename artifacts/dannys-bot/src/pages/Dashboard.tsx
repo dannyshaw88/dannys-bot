@@ -62,6 +62,14 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.762",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "HikerAPI token now shows Connected instead of Failed — the test was checking the wrong field in HikerAPI's response after they changed their response format. The fix covers all user lookup methods (username resolve, profile stats, profile info) which were also silently returning nothing." },
+      { category: "Fix", text: "Execution Order and Skip Chance fields in the Human Session Tool embedded Follow, Unfollow, and Contact tool headers are now perfectly right-aligned — previously the different label lengths (Execution Order vs Skip Chance %) caused the input boxes to shift." },
+    ],
+  },
+  {
     version: "1.0.761",
     date: "3 Jun 2026",
     items: [

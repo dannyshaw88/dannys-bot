@@ -1454,9 +1454,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   {followTool.enabled ? "ACTIVE" : "STOPPED"}
                 </label>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Execution Order</span>
                   <Input type="number" min="0" className="w-14 h-7 text-xs"
                     value={(settings as any).followOrderMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, followOrderMin: Number(e.target.value) } as any)}
@@ -1468,7 +1468,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).followSkipMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, followSkipMin: Number(e.target.value) } as any)}
@@ -1507,9 +1507,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   {unfollowTool.enabled ? "ACTIVE" : "STOPPED"}
                 </label>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Execution Order</span>
                   <Input type="number" min="0" className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowOrderMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, unfollowOrderMin: Number(e.target.value) } as any)}
@@ -1521,7 +1521,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).unfollowSkipMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, unfollowSkipMin: Number(e.target.value) } as any)}
@@ -1560,9 +1560,9 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   {contactTool.enabled ? "ACTIVE" : "STOPPED"}
                 </label>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Execution Order</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Execution Order</span>
                   <Input type="number" min="0" className="w-14 h-7 text-xs"
                     value={(settings as any).contactOrderMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, contactOrderMin: Number(e.target.value) } as any)}
@@ -1574,7 +1574,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Skip Chance %</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap w-[116px] text-right">Skip Chance %</span>
                   <Input type="number" min="0" max="100" className="w-14 h-7 text-xs"
                     value={(settings as any).contactSkipMin ?? 0}
                     onChange={(e) => setSettings({ ...settings, contactSkipMin: Number(e.target.value) } as any)}
