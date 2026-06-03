@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.759",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Hashtag sources no longer get marked as exhausted mid-session when a page returns users that are all filtered by dedup — the cursor is already advanced so the next round now correctly fetches the next page instead of stopping." },
+      { category: "Fix", text: "Inject Profile Browsing Before Follow now correctly uses its own dedicated percentage (Before Follow %) instead of the general Inject Profile Browsing percentage." },
+      { category: "New", text: "Abandon Follow after browsing is now fully implemented — when enabled, the engine will skip the follow call after visiting a profile at the configured percentage, matching the UI option that was previously ignored." },
+    ],
+  },
+  {
     version: "1.0.758",
     date: "3 Jun 2026",
     items: [

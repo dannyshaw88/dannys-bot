@@ -3189,11 +3189,12 @@ class AutomationEngine {
       return { followed: 0, scraped: 0, dedupSkipped: 0, filterSkipped: 0, blocked: 0, skipped: 0 };
     }
 
-    const maxPerDay    = randInt(s.maxPerDayMin  ?? 150, s.maxPerDayMax  ?? 200);
-    const maxPerHour   = randInt(s.maxPerHourMin ?? 5,   s.maxPerHourMax ?? 15);
-    const processCount = randInt(s.processMin    ?? 5,   s.processMax    ?? 15);
-    const followMin    = (s.delayAfterFollowMin  ?? 5)   * 1000;
-    const followMax    = (s.delayAfterFollowMax  ?? 15)  * 1000;
+    const maxPerDay      = randInt(s.maxPerDayMin       ?? 150, s.maxPerDayMax       ?? 200);
+    const maxPerHour     = randInt(s.maxPerHourMin      ?? 5,   s.maxPerHourMax      ?? 15);
+    const processCount   = randInt(s.processMin         ?? 5,   s.processMax         ?? 15);
+    const followMin      = (s.delayAfterFollowMin       ?? 5)   * 1000;
+    const followMax      = (s.delayAfterFollowMax       ?? 15)  * 1000;
+    const maxExtraRounds = randInt(s.abortScrapeAfterMin ?? 10,  s.abortScrapeAfterMax ?? 20);
 
     // Fetch global filter settings once per session
     const globalSettings = await storage.getGlobalSettings();
@@ -3343,14 +3344,21 @@ class AutomationEngine {
     const injectSearchMin     = Math.max(0, Math.min(100, s.injectSearchMin ?? 30));
     const injectSearchMax     = Math.max(0, Math.min(100, s.injectSearchMax ?? 50));
 
-    const injectProfileBrowsingEnabled      = !!(s.injectProfileBrowsingEnabled);
-    const injectProfileBrowsingMin          = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 30));
-    const injectProfileBrowsingMax          = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 50));
-    const injectProfileBrowsingFeedMin      = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
-    const injectProfileBrowsingFeedMax      = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
-    const injectProfileBrowsingPostPctMin   = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
-    const injectProfileBrowsingPostPctMax   = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
-    const injectProfileBrowsingBeforeFollow = !!(s.injectProfileBrowsingBeforeFollow);
+    const injectProfileBrowsingEnabled            = !!(s.injectProfileBrowsingEnabled);
+    const injectProfileBrowsingMin                = Math.max(0, Math.min(100, s.injectProfileBrowsingMin ?? 30));
+    const injectProfileBrowsingMax                = Math.max(0, Math.min(100, s.injectProfileBrowsingMax ?? 50));
+    const injectProfileBrowsingFeedMin            = Math.max(1, s.injectProfileBrowsingFeedMin ?? 3);
+    const injectProfileBrowsingFeedMax            = Math.max(1, s.injectProfileBrowsingFeedMax ?? 6);
+    const injectProfileBrowsingPostPctMin         = Math.max(0, s.injectProfileBrowsingPostPctMin ?? 0);
+    const injectProfileBrowsingPostPctMax         = Math.max(0, s.injectProfileBrowsingPostPctMax ?? 0);
+    const injectProfileBrowsingBeforeFollow       = !!(s.injectProfileBrowsingBeforeFollow);
+    // Dedicated before-follow chance — falls back to the general browsing chance if not set
+    const injectProfileBrowsingBeforeFollowPctMin = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMin ?? injectProfileBrowsingMin));
+    const injectProfileBrowsingBeforeFollowPctMax = Math.max(0, Math.min(100, s.injectProfileBrowsingBeforeFollowPctMax ?? injectProfileBrowsingMax));
+    // Abandon-follow after browsing
+    const injectProfileBrowsingAbandonFollow      = !!(s.injectProfileBrowsingAbandonFollow);
+    const injectProfileBrowsingAbandonPctMin      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMin ?? 10));
+    const injectProfileBrowsingAbandonPctMax      = Math.max(0, Math.min(100, s.injectProfileBrowsingAbandonFollowPctMax ?? 20));
 
     // Inject /api/v1/users/search/ before the very first follow of every session —
     // but ONLY when the searchByUsername inject is enabled by the user.
@@ -3509,13 +3517,21 @@ class AutomationEngine {
         }
       }
 
-      // Browse before follow — fires with the same percentage gate as the between-follows
-      // inject.  (Without this gate it was firing 100% of the time regardless of the
-      // configured probability, because the pre-follow path had no Math.random() check.)
+      // Browse before follow — uses dedicated before-follow percentage (falls back to the
+      // general browsing chance when the dedicated fields are not configured).
       if (injectProfileBrowsingEnabled && injectProfileBrowsingBeforeFollow) {
-        const threshold = randInt(injectProfileBrowsingMin, injectProfileBrowsingMax);
+        const threshold = randInt(injectProfileBrowsingBeforeFollowPctMin, injectProfileBrowsingBeforeFollowPctMax);
         if (Math.random() * 100 < threshold) {
           await browseTargetProfile("pre-follow browse", user);
+          // Abandon follow after browsing — skip the follow call at the configured probability
+          if (injectProfileBrowsingAbandonFollow) {
+            const abandonThreshold = randInt(injectProfileBrowsingAbandonPctMin, injectProfileBrowsingAbandonPctMax);
+            if (Math.random() * 100 < abandonThreshold) {
+              engineLog("INFO", `@${profile.username}: abandoned follow @${user.username} after profile browse (abandon chance fired)`);
+              skipped++;
+              continue;
+            }
+          }
         }
       }
 
@@ -3664,7 +3680,7 @@ class AutomationEngine {
     const sourceRoundCount = new Map<string, number>();
     if (!hitHardLimit && followed < processCount && !state.stop.stopped) {
       let extraRound = 0;
-      while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < 20) {
+      while (followed < processCount && !hitHardLimit && !state.stop.stopped && extraRound < maxExtraRounds) {
         extraRound++;
         const availableSources = sameTypeSources.filter(s => !exhaustedSourceIds.has(s.id));
         if (!availableSources.length) break;
@@ -3673,12 +3689,17 @@ class AutomationEngine {
         const rescrapeSource = availableSources[(initialSourceIdx + extraRound) % availableSources.length];
         const needMore = processCount - followed;
         let moreCandidates: { pk: string; username: string; fullName: string }[] = [];
+        // rawApiCount: users returned by the API BEFORE dedup.  Declared here so the
+        // exhaustion check below can see it.  Non-hashtag branches leave it -1, which
+        // triggers the legacy "exhaust on empty" behaviour for those source types.
+        let rawApiCount = -1;
         try {
           if (rescrapeSource.type === "hashtag" && hikerClient) {
             const t0 = Date.now();
             const globalCursor = await storage.getHashtagCursor(rescrapeSource.value);
             const result = await hikerClient.getHashtagUsers(rescrapeSource.value, needMore + 5, globalCursor);
             moreCandidates = result.users;
+            rawApiCount = result.users.length;
             if (result.nextCursor) {
               await storage.setHashtagCursor(rescrapeSource.value, result.nextCursor).catch(() => {});
             } else if (globalCursor) {
@@ -3692,10 +3713,10 @@ class AutomationEngine {
               await storage.addScrapedUsers(fresh).catch(() => {});
               moreCandidates = fresh;
               if (beforeDedup !== moreCandidates.length) {
-                engineLog("INFO", `@${profile.username}: hashtag dedup (rescrape round ${extraRound}) — ${beforeDedup - moreCandidates.length} already-scraped removed from #${rescrapeSource.value}`);
+                engineLog("INFO", `@${profile.username}: hashtag dedup (rescrape round ${extraRound}) — ${beforeDedup - moreCandidates.length} already-scraped removed from #${rescrapeSource.value} (${moreCandidates.length} fresh remaining)`);
               }
             }
-            logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${rescrapeSource.value} via HikerAPI (${moreCandidates.length} users)`, Date.now() - t0);
+            logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${rescrapeSource.value} via HikerAPI (${moreCandidates.length} users, ${rawApiCount} raw)`, Date.now() - t0);
           } else if (rescrapeSource.type === "target_followers" && hikerClient && rescrapeSource.targetUserId) {
             if (!seenFollowerPksBySource.has(rescrapeSource.id)) {
               seenFollowerPksBySource.set(rescrapeSource.id, new Set());
@@ -3719,7 +3740,21 @@ class AutomationEngine {
           }
         } catch { break; }
         if (!moreCandidates.length) {
-          exhaustedSourceIds.add(rescrapeSource.id);
+          // Only mark a hashtag source exhausted when the API itself returned 0 users
+          // (rawApiCount === 0 → truly empty page at this cursor).
+          // If the API DID return users but all were filtered by dedup (rawApiCount > 0),
+          // the cursor was already advanced to the next page — don't exhaust it.
+          // For non-hashtag source types rawApiCount stays -1, so they use the old
+          // "exhaust on empty moreCandidates" behaviour unchanged.
+          // rawApiCount > 0  → API returned users but ALL were filtered by dedup
+          //                    → cursor already advanced, next round fetches next page
+          //                    → do NOT exhaust the source
+          // rawApiCount === 0 → API returned nothing → hashtag feed is truly empty at
+          //                    this cursor → exhaust the source
+          // rawApiCount === -1 → non-hashtag source (legacy path) → exhaust as before
+          if (rawApiCount <= 0) {
+            exhaustedSourceIds.add(rescrapeSource.id);
+          }
           continue;
         }
         engineLog("INFO", `@${profile.username}: re-scrape round ${extraRound} #${rescrapeSource.value} — ${moreCandidates.length} new candidates (need ${needMore} more)`);
