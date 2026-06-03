@@ -153566,7 +153566,12 @@ var InstagramWebClient = class {
       { method: "POST", path: "/api/v1/feed/timeline/", body: "reason=cold_start_fetch&is_pull_to_refresh=0", opName: "ViewTimelineFeed" },
       // server_config_retrieval=1 is the minimum body the real app sends on launcher/sync
       { method: "POST", path: "/api/v1/launcher/sync/", body: "server_config_retrieval=1", opName: "LauncherSync" },
-      { method: "POST", path: "/api/v1/analytics/log/", opName: "AnalyticsLog" }
+      { method: "POST", path: "/api/v1/analytics/log/", opName: "AnalyticsLog" },
+      // Batch query-parameter prefetch — fires unconditionally on every real app open
+      // Minimal surface set (5717 = home feed, 5718 = stories) matches the startup call pattern
+      { method: "POST", path: "/api/v1/qp/batch_fetch_web/", body: `surfaces_to_queries=${encodeURIComponent(JSON.stringify({ "5717": {}, "5718": {} }))}`, opName: "BatchFetchWeb" },
+      // App-launch attribution ping — fires unconditionally on every real app open
+      { method: "POST", path: "/api/v1/attribution/launch/", opName: "AttributionLaunch" }
     ];
     const ordered = randomise ? [...entries].sort(() => Math.random() - 0.5) : entries;
     for (const { path: path6, method, opName, body } of ordered) {
@@ -164421,6 +164426,7 @@ ${err?.stack ?? ""}`);
       "viewTimelineFeedOrderMin",
       "viewTimelineFeedOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         const feedCount = randInt2(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
         const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
         const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
@@ -164601,6 +164607,7 @@ ${err?.stack ?? ""}`);
       "checkTimelineStoriesOrderMin",
       "checkTimelineStoriesOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         const storyCount = randInt2(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
         try {
           const watched = await client.viewTimelineStories(storyCount);
@@ -164636,6 +164643,7 @@ ${err?.stack ?? ""}`);
       "checkDmOrderMin",
       "checkDmOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         let inboxThreads = [];
         let dmOpenCount = randInt2(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
         let dmCount = 0;
@@ -164670,6 +164678,7 @@ ${err?.stack ?? ""}`);
       "likeTimelinePostsOrderMin",
       "likeTimelinePostsOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         console.log(`[engine] @${profile.username}: \u25B6 ENQUEUE FIRED: likeTimelinePosts STANDALONE (likeTimelinePostsEnabled=true). This is the source of any likes logged below.`);
         const likeCount = randInt2(s.likeTimelinePostsMin ?? 0, s.likeTimelinePostsMax ?? 0);
         if (likeCount <= 0) {
@@ -164734,6 +164743,7 @@ ${err?.stack ?? ""}`);
       "repostOrderMin",
       "repostOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         if (repostLocalFolderEnabled) {
           try {
             const IMAGE_EXTS = /* @__PURE__ */ new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);

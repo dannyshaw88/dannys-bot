@@ -2001,6 +2001,11 @@ export class InstagramWebClient {
       // server_config_retrieval=1 is the minimum body the real app sends on launcher/sync
       { method: "POST", path: "/api/v1/launcher/sync/",   body: "server_config_retrieval=1",                                          opName: "LauncherSync"       },
       { method: "POST", path: "/api/v1/analytics/log/",                                                                                opName: "AnalyticsLog"       },
+      // Batch query-parameter prefetch — fires unconditionally on every real app open
+      // Minimal surface set (5717 = home feed, 5718 = stories) matches the startup call pattern
+      { method: "POST", path: "/api/v1/qp/batch_fetch_web/",  body: `surfaces_to_queries=${encodeURIComponent(JSON.stringify({ "5717": {}, "5718": {} }))}`, opName: "BatchFetchWeb" },
+      // App-launch attribution ping — fires unconditionally on every real app open
+      { method: "POST", path: "/api/v1/attribution/launch/",                                                                            opName: "AttributionLaunch"  },
     ];
     const ordered = randomise
       ? [...entries].sort(() => Math.random() - 0.5)
