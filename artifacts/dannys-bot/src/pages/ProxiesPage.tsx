@@ -20,10 +20,10 @@ import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 
 type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
 
-type ProxyCol = "proxy" | "type" | "username" | "password" | "status";
-const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "status"];
-const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", status: "PROXY STATUS" };
+type ProxyCol = "proxy" | "type" | "username" | "password" | "status" | "accounts";
+const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "status", "accounts"];
+const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110, accounts: 100 };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", status: "PROXY STATUS", accounts: "ACCOUNTS" };
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
 function acctStatusPill(s: string): string {
@@ -180,7 +180,18 @@ function ProxyRow({
     <>
       <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
         {colOrder.map(col => {
-          if ((col as string) === "accounts" || (col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
+          if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
+          if (col === "accounts") return (
+            <div key={col} className="shrink-0 flex items-center" style={{ width: colWidths.accounts }}>
+              {assigned.length > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
+                  <User className="w-3 h-3" />{assigned.length}
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground/40">—</span>
+              )}
+            </div>
+          );
           if (col === "proxy") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
               <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full" placeholder="host:port" />
@@ -728,7 +739,7 @@ export function ProxiesPage() {
         {/* Column header */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
           {proxyColOrder.map(col => {
-            if ((col as string) === "accounts" || (col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
+            if ((col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
             const isDragTarget = proxyDragOverCol === col;
             const dragProps = {
               draggable: true as const,
