@@ -2971,6 +2971,11 @@ export function attachWS(profileId: number, ws: WebSocket) {
     } catch {}
   }
   session.ws = ws;
+  // Reset lastUrl so the very first screencast frame always emits a urlChange.
+  // Without this, reconnecting to an existing session whose lastUrl already
+  // equals the current page URL silently skips the urlChange message and the
+  // address bar stays on the stale previous value.
+  session.lastUrl = "";
 
   // Start the screencast BEFORE firing any navigation so Chrome receives the
   // Page.startScreencast CDP command while it is idle.  If we start it after
@@ -3888,6 +3893,39 @@ async function _doStartScreencast(profileId: number, _retry = 0): Promise<void> 
     setTimeout(trySendScreencastStarted, 1500);
   }
 
+  // ── One-shot screenshot seed ──────────────────────────────────────────────────
+  // Chrome's screencast uses a back-pressure protocol: it sends a frame and waits
+  // for the ACK before sending the next one. When reconnecting to an existing
+  // session where the page is already rendered (e.g. a challenge page), Chrome
+  // may take several seconds to deliver the first screencast frame — and if the
+  // page is static (no animations, no DOM changes), it might never send one at all.
+  // Fix: capture a one-shot screenshot immediately after startScreencast confirms
+  // active, and push it as an initial binary frame. The screencast then takes over
+  // for subsequent frames. Also push the current URL so the address bar is correct.
+  Promise.resolve().then(async () => {
+    try {
+      const sShot = sessions.get(profileId);
+      if (!sShot?.ws || sShot.ws.readyState !== WebSocket.OPEN) return;
+      const pageUrl = (() => { try { return sShot.page.url(); } catch { return ""; } })();
+      if (!pageUrl || pageUrl === "about:blank" || pageUrl === "about:newtab") return;
+      // Push current URL immediately so the address bar shows the real URL
+      if (pageUrl !== sShot.lastUrl) {
+        sShot.lastUrl = pageUrl;
+        wsWrite(sShot.ws, { type: "urlChange", url: pageUrl });
+      }
+      // Capture and push a screenshot to seed the canvas
+      const buf = await Promise.race([
+        sShot.page.screenshot({ type: "jpeg", quality: 75 }) as Promise<Buffer | Uint8Array>,
+        new Promise<null>(r => setTimeout(() => r(null), 5000)),
+      ]);
+      if (!buf) return;
+      const sNow2 = sessions.get(profileId);
+      if (sNow2?.ws && sNow2.ws.readyState === WebSocket.OPEN) {
+        sNow2.ws.send(Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+      }
+    } catch {}
+  });
+
   // ── Watchdog: auto-restart if Chrome never delivers a first frame ────────────
   // Under heavy CPU load (5+ simultaneous EBs), Chrome's software compositor can
   // stall and not produce any screencast frames even though Page.startScreencast
@@ -4570,10 +4608,26 @@ export async function closeSession(profileId: number, opts?: { skipCookieSave?: 
   if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}
   // Save cookies before closing so the next open restores the latest session state.
   // Skipped by clearSession / wipeEbSession which deliberately discard cookies.
+  // A 10 s timeout guards against saveCookies hanging on a challenged or
+  // mid-navigation page (Puppeteer's default CDP timeout is 30 s — without the
+  // cap that freezes the event loop and delays the profile-list refetch that
+  // drives the delete UI update).
   if (!opts?.skipCookieSave) {
-    try { await saveCookies(profileId, s.page); } catch {}
+    try {
+      await Promise.race([
+        saveCookies(profileId, s.page),
+        new Promise<void>(r => setTimeout(r, 10_000)),
+      ]);
+    } catch {}
   }
-  await s.browser.close();
+  // Hard cap on browser.close() too — if Chrome is unresponsive the SIGKILL
+  // path in Puppeteer can take up to 30 s; we only wait 8 s then move on.
+  try {
+    await Promise.race([
+      s.browser.close(),
+      new Promise<void>(r => setTimeout(r, 8_000)),
+    ]);
+  } catch {}
   sessions.delete(profileId);
   log(`Chrome closed for profile ${profileId}`, "browser");
 }

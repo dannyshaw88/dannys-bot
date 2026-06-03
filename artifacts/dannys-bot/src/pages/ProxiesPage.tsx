@@ -245,6 +245,15 @@ function ProxyRow({
       {/* Assigned accounts — always visible */}
       <div className="border-b border-border/40 bg-accent/10 px-4 py-2">
         <div className="flex flex-col gap-0.5">
+          {/* Sub-panel column headers — only shown when optional columns are enabled */}
+          {assigned.length > 0 && (showAcctStatus || showAcctTrustScore) && (
+            <div className="flex items-center gap-2 px-2 pb-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 select-none">
+              <span className="flex-1">Account</span>
+              {showAcctStatus && <span>Status</span>}
+              {showAcctTrustScore && <span>Trust</span>}
+              <span className="w-3.5" />
+            </div>
+          )}
           {assigned.map(profile => (
             <div key={profile.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent/40 transition-colors group">
               <User className="w-3.5 h-3.5 shrink-0 text-primary" />
@@ -766,12 +775,12 @@ export function ProxiesPage() {
             const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
             const sortable = col === "proxy" || col === "username" || col === "accounts" || col === "status";
             if (sortable) return (
-              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
+              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-grab active:cursor-grabbing ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
               </button>
             );
             return (
-              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default ${dragStyle}`}>
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-grab active:cursor-grabbing ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}
               </div>
             );

@@ -562,7 +562,10 @@ export async function registerInstagramRoutes(
     const profileId = Number(req.params.id);
     const profile = await storage.getProfile(profileId).catch(() => null);
     await storage.deleteProfile(profileId);
-    closeSession(profileId).catch(() => {});
+    // skipCookieSave: true — the account is gone, no point saving cookies.
+    // Also avoids the saveCookies CDP call (can hang 30 s on a challenged page)
+    // which was starving the profile-list refetch and causing the UI to freeze.
+    closeSession(profileId, { skipCookieSave: true }).catch(() => {});
     if (profile) {
       storage.createSessionAction({
         profileId,

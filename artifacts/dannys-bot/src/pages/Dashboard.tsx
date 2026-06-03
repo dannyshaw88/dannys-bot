@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.746",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Accounts: deleting an account now removes it from the list immediately instead of taking up to 30 seconds — the browser session now closes without blocking the UI update." },
+      { category: "Fix", text: "Browser panel: opening the embedded browser now always shows the correct URL in the address bar and displays the current page immediately, even when reconnecting to an existing session already on a challenge page." },
+      { category: "Fix", text: "Proxy Manager: Status and TrustScore column headers now appear in the account sub-panel when those columns are enabled." },
+      { category: "Improvement", text: "Proxy Manager: column headers now show a grab cursor when hovered, making drag-to-reorder easier to discover." },
+    ],
+  },
+  {
     version: "1.0.745",
     date: "3 Jun 2026",
     items: [
