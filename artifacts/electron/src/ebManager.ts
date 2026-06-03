@@ -1349,10 +1349,12 @@ export async function openEbWindow(opts: {
         const u = new URL(details.url);
         const nextRaw = u.searchParams.get("next");
         if (nextRaw) {
-          const nu = new URL(nextRaw);
-          nu.searchParams.delete("__coig_challenge_redirected");
-          console.warn(`[ebManager:${profileId}] scraping_warning intercepted — redirecting to consent page`);
-          callback({ redirectURL: nu.toString() });
+          // Navigate to 'next' as-is, keeping __coig_challenge_redirected intact.
+          // Stripping this flag caused a redirect loop: Instagram treats a missing flag
+          // as "user hasn't been through the challenge" and shows scraping_warning again.
+          // With the flag present, Instagram marks the challenge complete and loads the feed.
+          console.warn(`[ebManager:${profileId}] scraping_warning intercepted — redirecting to next (${nextRaw.slice(0, 60)}...)`);
+          callback({ redirectURL: nextRaw });
         } else {
           callback({ redirectURL: "https://www.instagram.com/accounts/login/" });
         }
@@ -2100,13 +2102,28 @@ export async function openEbWindow(opts: {
     // After successful 2FA the sessionid cookie already exists, so navigating directly
     // to instagram.com/ bypasses the broken redirect chain and lands on the home feed.
     if (code === -310 && url && url.includes("scraping_warning")) {
-      console.warn(`[ebManager] scraping_warning redirect loop for @${username} — recovering`);
+      console.warn(`[ebManager] scraping_warning redirect loop for @${username} — recovering via next param`);
       await new Promise(r => setTimeout(r, 1500));
       if (!win.isDestroyed()) {
-        const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-        win.webContents.loadURL(
-          recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/",
-        ).catch(() => {});
+        let recoveryUrl = "https://www.instagram.com/accounts/login/";
+        try {
+          // Use the 'next' param from the scraping_warning URL directly.
+          // This carries __coig_challenge_redirected=1, which tells Instagram the
+          // challenge was seen and should not be shown again — navigating to plain
+          // instagram.com/ (without the flag) just restarts the loop.
+          const scrapingUrl = new URL(url);
+          const nextRaw = scrapingUrl.searchParams.get("next");
+          if (nextRaw) {
+            recoveryUrl = nextRaw;
+          } else {
+            const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+            recoveryUrl = recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
+          }
+        } catch {
+          const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+          recoveryUrl = recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
+        }
+        win.webContents.loadURL(recoveryUrl).catch(() => {});
       }
     }
   });

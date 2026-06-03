@@ -152,6 +152,18 @@ const CHANGELOG: { version: string; date: string; items: { category: string; tex
     ],
   },
   {
+    version: "1.0.748",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy Manager: STATUS and TRUSTSCORE columns now appear in the main row alongside PROXY, TYPE, USERNAME, PASSWORD — account statuses are visible inline without expanding the sub-panel." },
+      { category: "Change", text: "Proxy Manager: all column headers are now uppercase. The proxy ping column is now called PROXY STATUS; the account status column is now called STATUS." },
+      { category: "Fix", text: "Ping All now tests proxies against instagram.com directly — fixes false Dead results caused by the previous test target (httpbin.org) being unreachable through some proxies." },
+      { category: "Fix", text: "Dashboard activity log export now shows 'Account @username exported' instead of including the filename." },
+      { category: "Change", text: "Dashboard header now reads 'Equinox started at:' instead of 'Equinox started —'." },
+      { category: "Fix", text: "Embedded browser: scraping_warning redirect loop that caused a blank page for imported accounts — the interceptor now correctly passes the challenge-completion flag so Instagram loads the home feed instead of looping." },
+    ],
+  },
+  {
     version: "1.0.747",
     date: "3 Jun 2026",
     items: [
@@ -4769,7 +4781,7 @@ export function Dashboard() {
         {serverInfo?.startedAt && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70 border border-border/40 rounded px-2 py-0.5 bg-muted/20">
             <RefreshCw className="w-3 h-3" />
-            Equinox started {format(new Date(serverInfo.startedAt), "MMM d yyyy 'at' HH:mm:ss")}
+            Equinox started at: {format(new Date(serverInfo.startedAt), "MMM d yyyy HH:mm:ss")}
           </span>
         )}
       </div>

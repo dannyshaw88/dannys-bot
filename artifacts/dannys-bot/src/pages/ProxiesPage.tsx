@@ -23,7 +23,7 @@ type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
 type ProxyCol = "proxy" | "type" | "username" | "password" | "accounts" | "status" | "acctStatus" | "acctTrustScore";
 const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore"];
 const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, accounts: 76, status: 88, acctStatus: 90, acctTrustScore: 90 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "Proxy", type: "Type", username: "Username", password: "Password", accounts: "Accounts", status: "Status", acctStatus: "Acct Status", acctTrustScore: "TrustScore" };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", accounts: "ACCOUNTS", status: "PROXY STATUS", acctStatus: "STATUS", acctTrustScore: "TRUSTSCORE" };
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
 function acctStatusPill(s: string): string {
@@ -185,7 +185,26 @@ function ProxyRow({
     <>
       <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
         {colOrder.map(col => {
-          if (col === "acctStatus" || col === "acctTrustScore") return null;
+            if (col === "acctStatus") return (
+            <div key={col} className="shrink-0 flex flex-col gap-0.5 justify-center" style={{ width: colWidths.acctStatus }}>
+              {assigned.length === 0
+                ? <span className="text-[10px] text-muted-foreground/40">—</span>
+                : assigned.slice(0, 5).map(p => (
+                    <span key={p.id} className={`inline-flex items-center px-1 py-px text-[9px] font-bold rounded-full border whitespace-nowrap uppercase truncate ${acctStatusPill(p.accountStatus ?? "pending")}`}>
+                      {acctStatusLabel(p.accountStatus ?? "pending")}
+                    </span>
+                  ))
+              }
+              {assigned.length > 5 && <span className="text-[9px] text-muted-foreground/50">+{assigned.length - 5} more</span>}
+            </div>
+          );
+          if (col === "acctTrustScore") return (
+            <div key={col} className="shrink-0 flex flex-col gap-0.5 justify-center" style={{ width: colWidths.acctTrustScore }}>
+              {assigned.slice(0, 5).map(p => (
+                <span key={p.id}><TrustScoreBadge profileId={p.id} /></span>
+              ))}
+            </div>
+          );
           if (col === "proxy") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
               <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full" placeholder="host:port" />

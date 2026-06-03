@@ -317,34 +317,36 @@ export async function registerInstagramRoutes(
     const proxy = (await storage.getProxies()).find(p => p.id === Number(req.params.id));
     if (!proxy) return res.status(404).json({ alive: false, error: "Proxy not found" });
 
-    const http = await import("http");
-
     const auth = proxy.username && proxy.password
       ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}`
       : "";
 
     const start = Date.now();
     try {
-      // Test via plain HTTP CONNECT to detect basic proxy reachability.
-      // HTTPS (CONNECT tunnel) fails on many residential/datacenter proxies that
-      // only forward HTTP traffic — using HTTP gives a reliable alive/dead signal.
+      // Ping via HTTPS CONNECT tunnel to instagram.com — the same target the
+      // automation uses. This gives a reliable alive/dead signal and catches
+      // proxies that block non-Instagram traffic.
+      const https = await import("https");
+      let agent: any;
+      if ((proxy as any).proxyType === "socks5") {
+        const { SocksProxyAgent } = await import("socks-proxy-agent");
+        const proxyUrl = `socks5://${auth ? auth + "@" : ""}${proxy.host}:${proxy.port}`;
+        agent = new SocksProxyAgent(proxyUrl);
+      } else {
+        const { HttpsProxyAgent } = await import("https-proxy-agent");
+        const proxyUrl = `http://${auth ? auth + "@" : ""}${proxy.host}:${proxy.port}`;
+        agent = new HttpsProxyAgent(proxyUrl);
+      }
       await new Promise<void>((resolve, reject) => {
-        const options: import("http").RequestOptions = {
-          host: proxy.host,
-          port: proxy.port,
-          path: "http://httpbin.org/ip",
-          method: "GET",
+        const req2 = https.default.get({
+          hostname: "www.instagram.com",
+          path: "/",
+          agent,
           timeout: 10000,
-          headers: {
-            "Host": "httpbin.org",
-            "User-Agent": "Mozilla/5.0",
-            ...(auth ? { "Proxy-Authorization": "Basic " + Buffer.from(auth).toString("base64") } : {}),
-          },
-        };
-        const req2 = http.request(options, (r) => { r.resume(); resolve(); });
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+        }, (r) => { r.resume(); resolve(); });
         req2.on("error", reject);
         req2.on("timeout", () => { req2.destroy(); reject(new Error("timeout")); });
-        req2.end();
       });
       res.json({ alive: true, latencyMs: Date.now() - start });
     } catch (err: any) {
@@ -3331,7 +3333,7 @@ export async function registerInstagramRoutes(
         sourceValue: "",
         sourceType: "system",
         result: "ok",
-        detail: `Account @${profile?.username} exported as ${safeUsername}.eqx`,
+        detail: `Account @${profile?.username} exported`,
         timestamp: new Date().toISOString(),
       }).catch(() => {});
     } catch (e: any) {
