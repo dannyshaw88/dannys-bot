@@ -1345,6 +1345,16 @@ export async function openEbWindow(opts: {
   ses.webRequest.onBeforeRequest(
     { urls: ["*://www.instagram.com/accounts/scraping_warning/*"] },
     (details, callback) => {
+      // Only intercept main-frame and sub-frame navigations.
+      // Instagram's challenge/suspended pages can load subresources (images,
+      // XHR, scripts) whose URLs happen to fall under the scraping_warning/
+      // path — including CAPTCHA images.  Redirecting those subresource
+      // requests breaks them (e.g. the CAPTCHA image shows as broken).
+      // Pass all non-navigation resource types through immediately.
+      if (details.resourceType !== "mainFrame" && details.resourceType !== "subFrame") {
+        callback({});
+        return;
+      }
       try {
         const u = new URL(details.url);
         const nextRaw = u.searchParams.get("next");

@@ -4379,7 +4379,7 @@ export async function registerInstagramRoutes(
       const row = storage.getLicenseByUsername(username);
       if (!row) return res.json({ ok: false });
       if (hashLicensePwd(username, password) !== row.password_hash) return res.json({ ok: false });
-      const sessionData = { username: row.username, tier: row.tier, accountLimit: row.account_limit, isAdmin: row.is_admin === 1 };
+      const sessionData = { username: row.username, tier: row.tier, accountLimit: row.account_limit, isAdmin: row.is_admin === 1, expiresAt: row.expires_at ?? null };
       await storage.setGlobalSetting("license_session", JSON.stringify(sessionData));
       res.json({ ok: true, ...sessionData });
     } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
@@ -4402,5 +4402,57 @@ export async function registerInstagramRoutes(
       { id: "business",   label: "Business",    price: "£100/mo", accountLimit: 250  },
       { id: "enterprise", label: "Enterprise",  price: "£250/mo", accountLimit: 1000 },
     ]);
+  });
+
+  // ── Admin-only license management ─────────────────────────────────────────
+  const requireAdmin = async (res: any): Promise<boolean> => {
+    const session = await storage.getLicenseSession();
+    if (!session.ok || !session.isAdmin) {
+      res.status(403).json({ ok: false, error: "Admin access required" });
+      return false;
+    }
+    return true;
+  };
+
+  app.get("/api/license/users", async (_req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      res.json(storage.getAllLicenses());
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  app.post("/api/license/users", async (req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      const { username, password, tier, accountLimit, expiresAt } = req.body ?? {};
+      if (!username || !password || !tier) return res.status(400).json({ ok: false, error: "Missing fields" });
+      const passwordHash = hashLicensePwd(username.trim(), password);
+      storage.createLicense(username.trim(), passwordHash, tier, accountLimit ?? 15, expiresAt ?? null);
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  app.put("/api/license/users/:id", async (req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      const id = Number(req.params.id);
+      const { tier, accountLimit, active, expiresAt, password, username } = req.body ?? {};
+      const updates: Parameters<typeof storage.updateLicense>[1] = {};
+      if (tier !== undefined) updates.tier = tier;
+      if (accountLimit !== undefined) updates.accountLimit = Number(accountLimit);
+      if (active !== undefined) updates.active = active ? 1 : 0;
+      if (expiresAt !== undefined) updates.expiresAt = expiresAt || null;
+      if (password && username) updates.passwordHash = hashLicensePwd(username, password);
+      storage.updateLicense(id, updates);
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
+  });
+
+  app.delete("/api/license/users/:id", async (req, res) => {
+    try {
+      if (!await requireAdmin(res)) return;
+      storage.deleteLicense(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) { res.status(500).json({ ok: false, error: String(err) }); }
   });
 }

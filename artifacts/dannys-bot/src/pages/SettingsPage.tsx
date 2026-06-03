@@ -1621,103 +1621,246 @@ const PLAN_TIERS = [
   { id: "enterprise", label: "Enterprise",  price: "£250/mo", limit: 1000, badge: "bg-amber-100 text-amber-700"  },
 ];
 
+type LicenseUser = { id: number; username: string; tier: string; account_limit: number; active: number; is_admin: number; created_at: string; expires_at: string | null };
+
+function AdminUsersSection() {
+  const { toast } = useToast();
+  const [users, setUsers] = useState<LicenseUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [addForm, setAddForm] = useState({ username: "", password: "", tier: "starter", accountLimit: 15, expiresAt: "" });
+  const [editForm, setEditForm] = useState<{ tier: string; accountLimit: number; expiresAt: string; password: string } | null>(null);
+
+  const fetchUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const r = await fetch("/api/license/users", { credentials: "include" });
+      const d = await r.json();
+      setUsers(Array.isArray(d) ? d : []);
+    } catch {}
+    setLoadingUsers(false);
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleCreate = async () => {
+    if (!addForm.username.trim() || !addForm.password) return;
+    try {
+      const r = await fetch("/api/license/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: addForm.username.trim(), password: addForm.password, tier: addForm.tier, accountLimit: addForm.accountLimit, expiresAt: addForm.expiresAt || null }),
+        credentials: "include",
+      });
+      const d = await r.json();
+      if (d.ok) {
+        toast({ title: "User created" });
+        setShowAdd(false);
+        setAddForm({ username: "", password: "", tier: "starter", accountLimit: 15, expiresAt: "" });
+        fetchUsers();
+      } else {
+        toast({ title: d.error ?? "Failed to create user", variant: "destructive" });
+      }
+    } catch { toast({ title: "Error creating user", variant: "destructive" }); }
+  };
+
+  const handleUpdate = async (u: LicenseUser) => {
+    if (!editForm) return;
+    try {
+      const r = await fetch(`/api/license/users/${u.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: u.username, tier: editForm.tier, accountLimit: editForm.accountLimit, expiresAt: editForm.expiresAt || null, ...(editForm.password ? { password: editForm.password } : {}) }),
+        credentials: "include",
+      });
+      const d = await r.json();
+      if (d.ok) { toast({ title: "User updated" }); setEditingId(null); setEditForm(null); fetchUsers(); }
+      else toast({ title: "Failed to update", variant: "destructive" });
+    } catch { toast({ title: "Error", variant: "destructive" }); }
+  };
+
+  const handleDelete = async (u: LicenseUser) => {
+    if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+    try {
+      await fetch(`/api/license/users/${u.id}`, { method: "DELETE", credentials: "include" });
+      toast({ title: "User deleted" });
+      fetchUsers();
+    } catch {}
+  };
+
+  const handleToggleActive = async (u: LicenseUser) => {
+    try {
+      await fetch(`/api/license/users/${u.id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: u.active ? 0 : 1 }), credentials: "include",
+      });
+      fetchUsers();
+    } catch {}
+  };
+
+  const fmtDate = (d: string | null) => {
+    if (!d) return "—";
+    const dt = new Date(d);
+    const days = Math.ceil((dt.getTime() - Date.now()) / 86400000);
+    const label = dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    if (days <= 0) return <span className="text-destructive font-medium">{label} (expired)</span>;
+    if (days <= 7) return <span className="text-amber-500 font-medium">{label} ({days}d)</span>;
+    return <span>{label}</span>;
+  };
+
+  const tierBadge = (tierId: string) => {
+    const t = PLAN_TIERS.find(t => t.id === tierId);
+    return t ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
+             : <span className="text-[10px] text-muted-foreground">{tierId}</span>;
+  };
+
+  return (
+    <div className="space-y-3 pt-2 border-t border-border/60">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">User Management</p>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 px-2.5" onClick={() => setShowAdd(s => !s)}>
+          <Plus className="w-3 h-3" />{showAdd ? "Cancel" : "Add User"}
+        </Button>
+      </div>
+
+      {showAdd && (
+        <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">New User</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[10px] mb-1 block">Username</Label>
+              <Input value={addForm.username} onChange={e => setAddForm(f => ({ ...f, username: e.target.value }))} placeholder="username" className="h-7 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] mb-1 block">Password</Label>
+              <Input type="password" value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="password" className="h-7 text-xs" />
+            </div>
+            <div>
+              <Label className="text-[10px] mb-1 block">Plan</Label>
+              <select value={addForm.tier} onChange={e => { const t = PLAN_TIERS.find(t => t.id === e.target.value); setAddForm(f => ({ ...f, tier: e.target.value, accountLimit: t?.limit ?? f.accountLimit })); }} className="h-7 w-full text-xs border border-border rounded px-2 bg-background">
+                {PLAN_TIERS.map(t => <option key={t.id} value={t.id}>{t.label} – {t.price}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-[10px] mb-1 block">Account Slots</Label>
+              <Input type="number" value={addForm.accountLimit} onChange={e => setAddForm(f => ({ ...f, accountLimit: Number(e.target.value) }))} className="h-7 text-xs" />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-[10px] mb-1 block">Expires (leave blank = never)</Label>
+              <Input type="date" value={addForm.expiresAt} onChange={e => setAddForm(f => ({ ...f, expiresAt: e.target.value }))} className="h-7 text-xs" />
+            </div>
+          </div>
+          <Button size="sm" className="h-7 text-xs" onClick={handleCreate} disabled={!addForm.username.trim() || !addForm.password}>
+            Create User
+          </Button>
+        </div>
+      )}
+
+      {loadingUsers ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-xs py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading users…</div>
+      ) : users.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">No users found.</p>
+      ) : (
+        <div className="space-y-1">
+          {users.map(u => (
+            <div key={u.id} className={`rounded-lg border ${u.active ? "border-border" : "border-border/40 opacity-60"} bg-background`}>
+              {editingId === u.id && editForm ? (
+                <div className="p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px] mb-1 block">Plan</Label>
+                      <select value={editForm.tier} onChange={e => { const t = PLAN_TIERS.find(t => t.id === e.target.value); setEditForm(f => f ? { ...f, tier: e.target.value, accountLimit: t?.limit ?? f.accountLimit } : f); }} className="h-7 w-full text-xs border border-border rounded px-2 bg-background">
+                        {PLAN_TIERS.map(t => <option key={t.id} value={t.id}>{t.label} – {t.price}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] mb-1 block">Slots</Label>
+                      <Input type="number" value={editForm.accountLimit} onChange={e => setEditForm(f => f ? { ...f, accountLimit: Number(e.target.value) } : f)} className="h-7 text-xs" />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] mb-1 block">Expires</Label>
+                      <Input type="date" value={editForm.expiresAt} onChange={e => setEditForm(f => f ? { ...f, expiresAt: e.target.value } : f)} className="h-7 text-xs" />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] mb-1 block">New Password (optional)</Label>
+                      <Input type="password" value={editForm.password} onChange={e => setEditForm(f => f ? { ...f, password: e.target.value } : f)} placeholder="leave blank to keep" className="h-7 text-xs" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" className="h-6 text-xs px-2.5" onClick={() => handleUpdate(u)}>Save</Button>
+                    <Button size="sm" variant="ghost" className="h-6 text-xs px-2.5" onClick={() => { setEditingId(null); setEditForm(null); }}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold truncate">{u.username}</span>
+                      {u.is_admin === 1 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">Admin</span>}
+                      {tierBadge(u.tier)}
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-[10px] text-muted-foreground">{u.account_limit} slots</span>
+                      <span className="text-[10px] text-muted-foreground">Exp: {fmtDate(u.expires_at)}</span>
+                    </div>
+                  </div>
+                  <Switch checked={!!u.active} onCheckedChange={() => handleToggleActive(u)} className="scale-75" />
+                  {u.is_admin === 0 && (
+                    <>
+                      <button onClick={() => { setEditingId(u.id); setEditForm({ tier: u.tier, accountLimit: u.account_limit, expiresAt: u.expires_at ? u.expires_at.split("T")[0] : "", password: "" }); }} className="p-1 hover:bg-muted/50 rounded transition-colors text-muted-foreground hover:text-foreground">
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => handleDelete(u)} className="p-1 hover:bg-muted/50 rounded transition-colors text-muted-foreground hover:text-destructive">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MyAccountTabContent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const { data: me, isLoading: meLoading } = useQuery<{ ok: boolean; username?: string; tier?: string; accountLimit?: number; isAdmin?: boolean }>({
+  const { data: me, isLoading: meLoading } = useQuery<{ ok: boolean; username?: string; tier?: string; accountLimit?: number; isAdmin?: boolean; expiresAt?: string | null }>({
     queryKey: ["/api/license/me"],
     queryFn: async () => { const r = await fetch("/api/license/me", { credentials: "include" }); return r.json(); },
     staleTime: 30_000,
   });
 
-  const handleLogin = async () => {
-    if (!username.trim() || !password) return;
-    setLoading(true);
-    try {
-      const r = await fetch("/api/license/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password }),
-        credentials: "include",
-      });
-      const data = await r.json();
-      if (data.ok) {
-        toast({ title: "Signed in", description: `Welcome back, ${data.username}` });
-        queryClient.invalidateQueries({ queryKey: ["/api/license/me"] });
-        setUsername(""); setPassword("");
-      } else {
-        toast({ title: "Invalid credentials", description: "Check your username and password.", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Sign in failed", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     await fetch("/api/license/logout", { method: "POST", credentials: "include" });
+    try { localStorage.removeItem("equinox:savedLogin"); } catch {}
     queryClient.invalidateQueries({ queryKey: ["/api/license/me"] });
     toast({ title: "Signed out" });
   };
 
   if (meLoading) {
-    return <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span></div>;
+    return <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading…</span></div>;
   }
 
   if (!me?.ok) {
-    return (
-      <div className="max-w-sm space-y-5">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="p-2 rounded-lg bg-primary/10"><UserCircle className="w-5 h-5 text-primary" /></div>
-          <div>
-            <h3 className="text-base font-semibold">Sign in to My Account</h3>
-            <p className="text-xs text-muted-foreground">Enter your Equinox license credentials</p>
-          </div>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs font-medium mb-1.5 block">Username</Label>
-            <Input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" className="h-9" autoComplete="off" />
-          </div>
-          <div>
-            <Label className="text-xs font-medium mb-1.5 block">Password</Label>
-            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="h-9" onKeyDown={e => e.key === "Enter" && handleLogin()} />
-          </div>
-          <Button onClick={handleLogin} disabled={loading || !username.trim() || !password} className="w-full h-9">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
-          </Button>
-        </div>
-        <div className="pt-4 border-t border-border/60">
-          <p className="text-xs text-muted-foreground mb-3 font-medium">Available plans:</p>
-          <div className="space-y-2">
-            {PLAN_TIERS.map(t => (
-              <div key={t.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
-                  <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
-                </div>
-                <span className="text-xs font-medium">{t.price}</span>
-              </div>
-            ))}
-          </div>
-          <Button variant="outline" className="w-full h-9 mt-4 gap-2" disabled>
-            <Crown className="w-3.5 h-3.5" /> Get a License — coming soon
-          </Button>
-        </div>
-      </div>
-    );
+    return <div className="text-sm text-muted-foreground">Not signed in. Please restart Equinox.</div>;
   }
 
   const tier = PLAN_TIERS.find(t => t.id === me.tier) ?? null;
-  const currentTierIndex = PLAN_TIERS.findIndex(t => t.id === me.tier);
+
+  const expiresAt = me.expiresAt ? new Date(me.expiresAt) : null;
+  const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86400000) : null;
+  const isExpired = daysLeft !== null && daysLeft <= 0;
+  const isExpiringSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 7;
 
   return (
-    <div className="space-y-5 max-w-sm">
+    <div className="space-y-5 max-w-md">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10"><UserCircle className="w-5 h-5 text-primary" /></div>
@@ -1726,16 +1869,14 @@ function MyAccountTabContent() {
             {me.isAdmin && <p className="text-xs text-primary font-medium">Administrator</p>}
           </div>
         </div>
-        {tier && (
-          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${tier.badge}`}>
-            {me.isAdmin ? "Owner" : tier.label}
-          </span>
-        )}
-        {!tier && me.isAdmin && (
+        {me.isAdmin ? (
           <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-cyan-100 text-cyan-700">Owner</span>
-        )}
+        ) : tier ? (
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${tier.badge}`}>{tier.label}</span>
+        ) : null}
       </div>
 
+      {/* Plan card */}
       <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Plan</span>
@@ -1745,27 +1886,61 @@ function MyAccountTabContent() {
           <span className="text-muted-foreground">Account slots</span>
           <span className="font-semibold">{me.isAdmin ? "Unlimited" : `${me.accountLimit ?? "—"}`}</span>
         </div>
+        {!me.isAdmin && (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Subscription expires</span>
+            {expiresAt ? (
+              <span className={`font-semibold ${isExpired ? "text-destructive" : isExpiringSoon ? "text-amber-500" : ""}`}>
+                {expiresAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                {isExpiringSoon && !isExpired && <span className="ml-1">({daysLeft}d left)</span>}
+                {isExpired && <span className="ml-1">(expired)</span>}
+              </span>
+            ) : (
+              <span className="text-muted-foreground font-medium">—</span>
+            )}
+          </div>
+        )}
       </div>
 
-      {!me.isAdmin && currentTierIndex < PLAN_TIERS.length - 1 && (
+      {/* Subscription plan tiers — radio buttons, all tiers visible */}
+      {!me.isAdmin && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground font-medium">Upgrade your plan:</p>
-          {PLAN_TIERS.filter((_, i) => i > currentTierIndex).map(t => (
-            <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/30 transition-colors">
-              <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
-                <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium">{t.price}</span>
-                <Button variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1" disabled>
-                  <Crown className="w-3 h-3" /> Upgrade
-                </Button>
-              </div>
-            </div>
-          ))}
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Subscription Plans</p>
+          {PLAN_TIERS.map(t => {
+            const isCurrent = t.id === me.tier;
+            return (
+              <label
+                key={t.id}
+                className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-not-allowed select-none ${isCurrent ? "border-primary/40 bg-primary/5" : "border-border/50 opacity-50"}`}
+              >
+                <input
+                  type="radio"
+                  name="plan-tier"
+                  value={t.id}
+                  checked={isCurrent}
+                  disabled
+                  readOnly
+                  className="accent-primary"
+                />
+                <div className="flex-1 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${t.badge}`}>{t.label}</span>
+                    <span className="text-xs text-muted-foreground">up to {t.limit} accounts</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium ${isCurrent ? "" : "text-muted-foreground"}`}>{t.price}</span>
+                    {isCurrent && <span className="text-[10px] font-bold text-primary uppercase tracking-wide">Current</span>}
+                    {!isCurrent && <span className="text-[10px] text-muted-foreground italic">coming soon</span>}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
         </div>
       )}
+
+      {/* Admin: User Management */}
+      {me.isAdmin && <AdminUsersSection />}
 
       <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground w-fit">
         <LogOut className="w-3.5 h-3.5" /> Sign out

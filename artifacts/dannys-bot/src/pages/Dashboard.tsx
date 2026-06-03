@@ -62,6 +62,18 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.754",
+    date: "3 Jun 2026",
+    items: [
+      { category: "New", text: "Splash screen now shows the Equinox logo and blocks access until you sign in — no part of the software is reachable without valid credentials." },
+      { category: "New", text: "Save Login checkbox on the sign-in screen — tick it once and Equinox will sign you in automatically every time it restarts." },
+      { category: "New", text: "My Account now shows all subscription plans as radio buttons with your current plan highlighted; non-current plans show their monthly price and a 'coming soon' upgrade note." },
+      { category: "New", text: "Subscription expiry date now shown in My Account — turns amber when within 7 days and red when expired." },
+      { category: "New", text: "Admin owners can now manage all users directly from Settings → My Account: create accounts, set plan tiers, account slot limits, expiry dates, passwords, and toggle active status." },
+      { category: "Fix", text: "Statistics page group banners now match the Accounts page style — same background, font weight, and icon-upload button." },
+    ],
+  },
+  {
     version: "1.0.753",
     date: "3 Jun 2026",
     items: [

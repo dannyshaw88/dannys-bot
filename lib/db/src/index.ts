@@ -243,6 +243,7 @@ sqlite.exec(`
 // SQLite does not support IF NOT EXISTS on ALTER TABLE, so we try/catch each.
 const _migrations: string[] = [
   "ALTER TABLE proxies ADD COLUMN proxy_type TEXT DEFAULT 'http'",
+  "ALTER TABLE licenses ADD COLUMN expires_at TEXT",
 ];
 for (const sql of _migrations) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }

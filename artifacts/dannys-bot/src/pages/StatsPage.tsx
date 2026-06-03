@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   User, Heart, MessageCircle, Eye, UserPlus, UserMinus, Mail, Activity,
-  Settings2, ChevronDown, ChevronUp, ChevronRight, Bot, Monitor,
+  Settings2, ChevronDown, ChevronUp, ChevronRight, Bot, Monitor, ImagePlus,
 } from "lucide-react";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
@@ -190,6 +190,34 @@ export function StatsPage() {
 
   const [groupMode, setGroupMode] = useState<boolean>(() => localStorage.getItem("stats:groupMode") === "true");
 
+  // ── Group icons (shared localStorage key with ProfilesPage) ────────────────
+  const [groupIcons, setGroupIcons] = useState<Record<string, string>>(() => {
+    try {
+      const s = localStorage.getItem("profiles:groupIcons");
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+  });
+  const groupIconInputRef = useRef<HTMLInputElement>(null);
+  const groupIconKeyRef   = useRef<string>("");
+
+  const handleGroupIconFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const data = ev.target?.result as string;
+      const key  = groupIconKeyRef.current;
+      if (!data || !key) return;
+      setGroupIcons(prev => {
+        const next = { ...prev, [key]: data };
+        try { localStorage.setItem("profiles:groupIcons", JSON.stringify(next)); } catch {}
+        return next;
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const [collapsedGroups, setCollapsedGroups] = usePersistentSetting<string[]>(
     "stats:collapsedGroups",
     [],
@@ -326,6 +354,15 @@ export function StatsPage() {
 
   return (
     <AppLayout>
+      {/* Hidden file input for group icon upload */}
+      <input
+        ref={groupIconInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleGroupIconFile}
+      />
+
       <div className="mb-3">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Automation Stats</h1>
         <p className="text-muted-foreground mt-1">Daily and lifetime performance metrics for all accounts.</p>
@@ -509,21 +546,35 @@ export function StatsPage() {
                     const isCollapsed = collapsedGroupsSet.has(groupKey);
                     return (
                       <Fragment key={`group-${groupKey}`}>
-                        <tr className="bg-muted/20 border-b border-border sticky top-0 z-10">
-                          <td colSpan={colCount} className="px-4 py-1.5 select-none">
-                            <button
-                              onClick={() => toggleGroupCollapse(groupKey)}
-                              className="flex items-center gap-1.5 hover:text-primary transition-colors"
-                            >
-                              {isCollapsed
-                                ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              }
-                              <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
-                                {groupKey === "__ungrouped__" ? "No Group Assigned" : groupKey}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">({groupProfiles.length})</span>
-                            </button>
+                        <tr className="bg-background border-b border-border sticky top-0 z-10">
+                          <td colSpan={colCount} className="px-3 py-1.5 select-none">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => toggleGroupCollapse(groupKey)}
+                                className="flex items-center gap-2 min-w-0 text-left"
+                              >
+                                {isCollapsed
+                                  ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                  : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                }
+                                <span className={`text-sm font-bold truncate ${groupKey === "__ungrouped__" ? "text-muted-foreground" : "text-foreground"}`}>
+                                  {groupKey === "__ungrouped__" ? "No Group Assigned" : groupKey}
+                                </span>
+                              </button>
+                              {groupKey !== "__ungrouped__" && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); groupIconKeyRef.current = groupKey; groupIconInputRef.current?.click(); }}
+                                  title={groupIcons[groupKey] ? "Change group icon" : "Add group icon"}
+                                  className="shrink-0 w-[18px] h-[18px] rounded border border-dashed border-border/60 hover:border-primary/50 overflow-hidden flex items-center justify-center transition-colors bg-muted/20 hover:bg-muted/50"
+                                >
+                                  {groupIcons[groupKey]
+                                    ? <img src={groupIcons[groupKey]} alt="" className="w-full h-full object-cover" />
+                                    : <ImagePlus className="w-2.5 h-2.5 text-muted-foreground/30" />
+                                  }
+                                </button>
+                              )}
+                              <span className="text-[10px] text-muted-foreground shrink-0">({groupProfiles.length})</span>
+                            </div>
                           </td>
                         </tr>
                         {!isCollapsed && groupProfiles.map(profile => (

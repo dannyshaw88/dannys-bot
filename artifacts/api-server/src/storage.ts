@@ -526,21 +526,50 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: globalSettings.key, set: { value } });
   }
 
-  getLicenseByUsername(username: string): { id: number; username: string; password_hash: string; tier: string; account_limit: number; active: number; is_admin: number } | undefined {
+  getLicenseByUsername(username: string): { id: number; username: string; password_hash: string; tier: string; account_limit: number; active: number; is_admin: number; expires_at: string | null } | undefined {
     return (db as any).$client.prepare(
       "SELECT * FROM licenses WHERE LOWER(username) = LOWER(?) AND active = 1"
     ).get(username) as any;
   }
 
-  async getLicenseSession(): Promise<{ ok: true; username: string; tier: string; accountLimit: number; isAdmin: boolean } | { ok: false }> {
+  async getLicenseSession(): Promise<{ ok: true; username: string; tier: string; accountLimit: number; isAdmin: boolean; expiresAt: string | null } | { ok: false }> {
     const settings = await this.getGlobalSettings();
     const raw = settings["license_session"];
     if (!raw) return { ok: false };
     try {
       const s = JSON.parse(raw);
       if (!s?.username) return { ok: false };
-      return { ok: true, username: s.username, tier: s.tier, accountLimit: s.accountLimit, isAdmin: !!s.isAdmin };
+      return { ok: true, username: s.username, tier: s.tier, accountLimit: s.accountLimit, isAdmin: !!s.isAdmin, expiresAt: s.expiresAt ?? null };
     } catch { return { ok: false }; }
+  }
+
+  getAllLicenses(): Array<{ id: number; username: string; tier: string; account_limit: number; active: number; is_admin: number; created_at: string; expires_at: string | null }> {
+    return (db as any).$client.prepare(
+      "SELECT id, username, tier, account_limit, active, is_admin, created_at, expires_at FROM licenses ORDER BY created_at DESC"
+    ).all() as any[];
+  }
+
+  createLicense(username: string, passwordHash: string, tier: string, accountLimit: number, expiresAt: string | null): void {
+    (db as any).$client.prepare(
+      "INSERT INTO licenses (username, password_hash, tier, account_limit, active, is_admin, created_at, expires_at) VALUES (?, ?, ?, ?, 1, 0, ?, ?)"
+    ).run(username, passwordHash, tier, accountLimit, new Date().toISOString(), expiresAt);
+  }
+
+  updateLicense(id: number, updates: { tier?: string; accountLimit?: number; active?: number; expiresAt?: string | null; passwordHash?: string }): void {
+    const fields: string[] = [];
+    const values: any[] = [];
+    if (updates.tier !== undefined) { fields.push("tier = ?"); values.push(updates.tier); }
+    if (updates.accountLimit !== undefined) { fields.push("account_limit = ?"); values.push(updates.accountLimit); }
+    if (updates.active !== undefined) { fields.push("active = ?"); values.push(updates.active); }
+    if (updates.expiresAt !== undefined) { fields.push("expires_at = ?"); values.push(updates.expiresAt); }
+    if (updates.passwordHash !== undefined) { fields.push("password_hash = ?"); values.push(updates.passwordHash); }
+    if (fields.length === 0) return;
+    values.push(id);
+    (db as any).$client.prepare(`UPDATE licenses SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+  }
+
+  deleteLicense(id: number): void {
+    (db as any).$client.prepare("DELETE FROM licenses WHERE is_admin = 0 AND id = ?").run(id);
   }
 
   async isGloballySkipped(username: string): Promise<boolean> {
