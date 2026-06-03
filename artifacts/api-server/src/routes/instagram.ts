@@ -2174,6 +2174,10 @@ export async function registerInstagramRoutes(
           return;
         }
         const ua = profile.userAgentEmbedded as string;
+        // Send an immediate acknowledgment so the client shows a launching state
+        // rather than a blank spinner while Chrome starts (proxy check + launch
+        // can take several seconds on a first open).
+        ws.send(JSON.stringify({ type: "launching" }));
         await getOrCreateSession(profileId, ua, proxy, profile.userAgentApi);
 
         // ── Dedup guard: prevent reconnect-loop displacement ──────────────
@@ -3189,7 +3193,7 @@ export async function registerInstagramRoutes(
   }
 
   // ── Build a single profile's EQX payload ────────────────────────────────
-  async function buildEqxPayload(id: number): Promise<{ encrypted: Buffer; safeUsername: string } | null> {
+  async function buildEqxPayload(id: number, trustScoreId?: string): Promise<{ encrypted: Buffer; safeUsername: string } | null> {
     const profile = await storage.getProfile(id);
     if (!profile) return null;
     const [allTools, followedUsers, statsData, apiCallsData] = await Promise.all([
@@ -3229,11 +3233,7 @@ export async function registerInstagramRoutes(
       }
     }
 
-    // Trust score is a frontend-only localStorage value.  The export endpoint
-    // accepts it as an optional query param so it round-trips through the EQX file.
-    const trustScoreId = (req as any).query?.trustScoreId
-      ? String((req as any).query.trustScoreId)
-      : undefined;
+    // trustScoreId is passed in from the route handler (frontend-only localStorage value)
 
     const payload = {
       version: 2,
@@ -3284,7 +3284,7 @@ export async function registerInstagramRoutes(
       const ids = raw.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
       if (ids.length === 0) return res.status(400).json({ error: "No valid ids provided" });
 
-      const results = await Promise.all(ids.map(id => buildEqxPayload(id).catch(() => null)));
+      const results = await Promise.all(ids.map(id => buildEqxPayload(id, undefined).catch(() => null)));
       const files: Array<{ name: string; data: Buffer }> = [];
       for (const r of results) {
         if (r) files.push({ name: `${r.safeUsername}.eqx`, data: r.encrypted });
@@ -3304,7 +3304,8 @@ export async function registerInstagramRoutes(
   app.get("/api/profiles/:id/export-eqx", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const result = await buildEqxPayload(id);
+      const trustScoreId = req.query.trustScoreId ? String(req.query.trustScoreId) : undefined;
+      const result = await buildEqxPayload(id, trustScoreId);
       if (!result) return res.status(404).json({ error: "Profile not found" });
 
       const { encrypted, safeUsername } = result;

@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.744",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Accounts: clicking Browser now responds immediately — reduced proxy check timeout and added instant server acknowledgment, eliminating the 5-10 second delay before the browser panel appeared." },
+      { category: "Fix", text: "Human Session copy settings: Follow Tool Start / Stop state was missing from the Embedded Tool States section — it now appears and copies correctly to other accounts." },
+      { category: "Fix", text: "Accounts: Export EQX was silently failing due to a scoping bug — fixed so single and bulk exports now work correctly." },
+    ],
+  },
+  {
     version: "1.0.743",
     date: "3 Jun 2026",
     items: [

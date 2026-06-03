@@ -70,6 +70,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       ]},
     ]},
     { label: "Embedded Tool States", options: [
+      { key: "hs_followEnabled",      label: "Follow Tool — Start / Stop",             description: "Copy the Follow Tool enabled checkbox to other profiles" },
       { key: "hs_unfollowEnabled",    label: "Unfollow Tool — Start / Stop",           description: "Copy the Unfollow Tool enabled checkbox to other profiles" },
       { key: "hs_cnfEnabled",         label: "Contact New Followers — Start / Stop",   description: "Copy the Contact New Followers enabled checkbox" },
       { key: "hs_autoReplyEnabled",   label: "Auto Reply — Start / Stop",              description: "Copy the Auto Reply enabled checkbox" },
@@ -238,6 +239,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
   const handleHumanCopy = async (targetIds: number[], expandedKeys: string[]) => {
     const copyEnabled          = expandedKeys.includes("startStop");
+    const copyFollowEnabled    = expandedKeys.includes("hs_followEnabled");
     const copyUnfollowEnabled  = expandedKeys.includes("hs_unfollowEnabled");
     const copyCnfEnabled       = expandedKeys.includes("hs_cnfEnabled");
     const copyAutoReply        = expandedKeys.includes("hs_autoReplyEnabled");
@@ -245,7 +247,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
     const copyFollowSources    = expandedKeys.includes("hs_followSources");
     const clearFollowSources   = expandedKeys.includes("hs_clearFollowSources");
 
-    const SENTINEL_KEYS = ["startStop", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources", "hs_clearFollowSources"];
+    const SENTINEL_KEYS = ["startStop", "hs_followEnabled", "hs_unfollowEnabled", "hs_cnfEnabled", "hs_autoReplyEnabled", "hs_contactUsersEnabled", "hs_followSources", "hs_clearFollowSources"];
     const keysToSend = expandedKeys.filter(k => !SENTINEL_KEYS.includes(k) && !k.includes(":"));
 
     const willEnable    = copyEnabled && tool.enabled;
@@ -261,6 +263,25 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
       await copyToolSettingsToProfiles(settings as Record<string,unknown>, tool.type, targetIds, keysToSend, copyEnabled ? tool.enabled : undefined, staggerOffsets);
     } catch (err) {
       console.error("[copySettings] Failed to copy human session settings:", err);
+    }
+
+    // ── Copy follow tool enabled state ───────────────────────────────────────
+    if (copyFollowEnabled && followTool) {
+      await Promise.all(targetIds.map(async (profileId) => {
+        try {
+          const res = await fetch(`/api/profiles/${profileId}/tools`, { credentials: "include" });
+          if (!res.ok) return;
+          const tools: { id: number; type: string }[] = await res.json();
+          const t = tools.find(t => t.type === "follow");
+          if (!t) return;
+          await fetch(`/api/tools/${t.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: followTool.enabled }),
+            credentials: "include",
+          });
+        } catch {}
+      }));
     }
 
     // ── Copy unfollow tool enabled state ──────────────────────────────────────

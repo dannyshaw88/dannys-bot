@@ -392,6 +392,12 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               }
             }
             break;
+          case "launching":
+            // Server confirmed it received the open request and is launching Chrome.
+            // Keep waitingFirstFrame=true (spinner stays) but update the overlay
+            // label so the user sees meaningful feedback instead of a blank spinner.
+            setWaitingFirstFrame(true);
+            break;
           case "error":
             setErrorMsg(msg.message ?? "Unknown error");
             setStatusSafe("error");

@@ -80,7 +80,7 @@ function classifyEbChallengeUrl(url: string): string | null {
 // A dead or unreachable proxy causes Chrome to hang completely (its renderer
 // thread blocks on the CONNECT tunnel) making even screenshots time out.
 // Detecting this upfront avoids the 40-second crash loop entirely.
-function testProxyReachable(host: string, port: number, timeoutMs = 6000): Promise<{ ok: boolean; errorCode?: string }> {
+function testProxyReachable(host: string, port: number, timeoutMs = 2500): Promise<{ ok: boolean; errorCode?: string }> {
   return new Promise((resolve) => {
     const sock = net.createConnection({ host, port });
     const timer = setTimeout(() => {
