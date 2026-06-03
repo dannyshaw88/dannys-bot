@@ -91,6 +91,7 @@ function expandToSettingKeys(groups: CopyOptionGroup[], selected: Set<string>): 
 export function CopySettingsDialog({ open, onOpenChange, title, profiles, optionGroups, onCopy }: Props) {
   const [targets, setTargets]    = useState<Set<number>>(new Set());
   const [search, setSearch]      = useState("");
+  const [settingsSearch, setSettingsSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy]      = useState<SortBy>("name");
   const [sortDir, setSortDir]    = useState<SortDir>("asc");
@@ -168,6 +169,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
       } catch { setExpandedOptions(new Set()); }
 
       setSearch("");
+      setSettingsSearch("");
       setStatusFilter("");
       setSortBy("name");
       setSortDir("asc");
@@ -333,6 +335,27 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
   };
 
   const canCopy = targets.size > 0 && selected.size > 0 && status === "idle";
+
+  // Filter option groups/options based on settingsSearch
+  const filteredOptionGroups = useMemo(() => {
+    const q = settingsSearch.trim().toLowerCase();
+    if (!q) return optionGroups;
+    return optionGroups
+      .map(group => {
+        const matchGroup = group.label.toLowerCase().includes(q);
+        const filteredOptions = group.options.filter(opt => {
+          if (matchGroup) return true;
+          if (opt.label.toLowerCase().includes(q)) return true;
+          if (opt.description?.toLowerCase().includes(q)) return true;
+          if (opt.subOptions?.some(s =>
+            s.label.toLowerCase().includes(q) || s.description?.toLowerCase().includes(q)
+          )) return true;
+          return false;
+        });
+        return { ...group, options: filteredOptions };
+      })
+      .filter(g => g.options.length > 0);
+  }, [optionGroups, settingsSearch]);
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) setStatus("idle"); onOpenChange(v); }}>
@@ -513,25 +536,42 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
           </div>
 
           {/* RIGHT settings */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-            <div className="flex items-center justify-between mb-1">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Settings to Copy</Label>
-              <div className="flex items-center gap-2">
-                <button className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide" onClick={() => {
-                  setSelected(buildAllSelected(optionGroups));
-                  const exp = new Set<string>();
-                  optionGroups.forEach(g => g.options.forEach(o => { if (o.subOptions?.length) exp.add(o.key); }));
-                  setExpandedOptions(exp);
-                }}>
-                  Select All
-                </button>
-                <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide" onClick={() => { setSelected(new Set()); setExpandedOptions(new Set()); }}>
-                  Select None
-                </button>
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* Settings search + select all/none */}
+            <div className="px-5 pt-4 pb-2 border-b border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Settings to Copy</Label>
+                <div className="flex items-center gap-2">
+                  <button className="text-[11px] text-primary hover:underline font-bold uppercase tracking-wide" onClick={() => {
+                    setSelected(buildAllSelected(optionGroups));
+                    const exp = new Set<string>();
+                    optionGroups.forEach(g => g.options.forEach(o => { if (o.subOptions?.length) exp.add(o.key); }));
+                    setExpandedOptions(exp);
+                  }}>
+                    Select All
+                  </button>
+                  <button className="text-[11px] text-muted-foreground hover:text-foreground hover:underline font-bold uppercase tracking-wide" onClick={() => { setSelected(new Set()); setExpandedOptions(new Set()); }}>
+                    Select None
+                  </button>
+                </div>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search settings…"
+                  value={settingsSearch}
+                  onChange={e => setSettingsSearch(e.target.value)}
+                  className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
               </div>
             </div>
 
-            {optionGroups.map(group => (
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            {filteredOptionGroups.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-6">No settings match.</p>
+            )}
+            {filteredOptionGroups.map(group => (
               <div key={group.label} className="rounded-lg border border-border overflow-hidden">
                 <div className="px-4 py-2 bg-muted/30 border-b border-border">
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{group.label}</span>
@@ -605,6 +645,7 @@ export function CopySettingsDialog({ open, onOpenChange, title, profiles, option
                 </div>
               </div>
             ))}
+            </div>
           </div>
         </div>
 

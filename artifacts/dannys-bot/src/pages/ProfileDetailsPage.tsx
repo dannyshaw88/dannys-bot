@@ -11,7 +11,7 @@ import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { TrustScoreBadge, getTrustScore, getTrustLevels } from "@/components/TrustScoreBadge";
 import * as Tabs from "@radix-ui/react-tabs";
 import { 
-  ArrowLeft, Settings, Shield, User, Lock, Globe, Zap, Instagram, Activity, Monitor,
+  Settings, Shield, User, Lock, Globe, Zap, Instagram, Activity, Monitor,
   CheckCircle2, XCircle, Loader2, ShieldCheck,
   Ban, ScanFace, Mail, Phone, KeyRound, PowerOff, LogOut, ChevronDown, ChevronLeft, ChevronRight,
   Tag, Calendar, FileText, Server, X, Clock, Copy, Search,
@@ -830,55 +830,6 @@ export function ProfileDetailsPage() {
                   <ChevronRight className="w-4 h-4" />
                 </button>
                 <TrustScoreBadge profileId={profileId} />
-                {/* Navigation links — right of TrustScore pill */}
-                <span className="text-border mx-1 select-none shrink-0">|</span>
-                <Link href={profile?.creatorMode ? "/create-account" : "/profiles"} className="inline-flex items-center gap-1 text-xs font-medium transition-colors shrink-0">
-                  <ArrowLeft className="w-3 h-3 text-red-500 shrink-0" />
-                  <span className="text-blue-500 hover:text-blue-600 uppercase">{profile?.creatorMode ? "Back to Creator" : "Accounts"}</span>
-                </Link>
-                {!profile?.creatorMode && (
-                  <>
-                    <span className="text-border mx-1 select-none shrink-0">|</span>
-                    <Link
-                      href="/"
-                      onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors shrink-0"
-                    >
-                      <BarChart2 className="w-3 h-3" />
-                      Dash
-                    </Link>
-                    <span className="text-border mx-1 select-none shrink-0">|</span>
-                    <button
-                      onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-500 hover:text-blue-600 uppercase transition-colors shrink-0"
-                    >
-                      <Monitor className="w-3 h-3" />
-                      Browser
-                    </button>
-                    {activeTab === "settings" && (
-                      <>
-                        <span className="text-border mx-1 select-none shrink-0">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
-                          onClick={() => setCopyDialogOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                    {activeTab === "human-session" && getTool('human_sessions') && (
-                      <>
-                        <span className="text-border mx-1 select-none shrink-0">|</span>
-                        <button
-                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 transition-colors cursor-pointer uppercase shrink-0"
-                          onClick={() => setHumanCopyOpen(true)}
-                        >
-                          <Copy className="w-3 h-3" /> Copy Settings
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
               </div>
             </div>
           </div>
@@ -887,9 +838,9 @@ export function ProfileDetailsPage() {
           {!profile?.creatorMode && (
             <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
               {([
-                { value: "settings",      label: "ACCOUNT SETTINGS",         icon: Settings      },
-                { value: "human-session", label: "HUMAN SESSION EMULATION",   icon: Fingerprint   },
-                { value: "session-log",   label: "SESSION LOG",               icon: Activity      },
+                { value: "settings",      label: "ACCOUNT SETTINGS", icon: Settings   },
+                { value: "human-session", label: "HUMAN SESSION",     icon: Fingerprint },
+                { value: "session-log",   label: "SESSION LOG",       icon: Activity   },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -905,6 +856,37 @@ export function ProfileDetailsPage() {
                   {label}
                 </button>
               ))}
+              {/* Action buttons — right side of tab bar */}
+              <div className="ml-auto flex items-center border-l border-border/50">
+                <Link
+                  href="/"
+                  onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-blue-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                >
+                  <BarChart2 className="w-3.5 h-3.5 shrink-0" />
+                  DASH
+                </Link>
+                <button
+                  onClick={() => openWindow(profile.id, profile.username, profile.userAgentEmbedded || "")}
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-blue-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                >
+                  <Monitor className="w-3.5 h-3.5 shrink-0" />
+                  BROWSER
+                </button>
+                <button
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold text-blue-500 border-b-2 border-transparent hover:border-border whitespace-nowrap shrink-0 transition-all"
+                  onClick={() => {
+                    if (activeTab === "human-session" && getTool('human_sessions')) {
+                      setHumanCopyOpen(true);
+                    } else {
+                      setCopyDialogOpen(true);
+                    }
+                  }}
+                >
+                  <Copy className="w-3.5 h-3.5 shrink-0" />
+                  COPY SETTINGS
+                </button>
+              </div>
             </div>
           )}
 
@@ -1323,19 +1305,19 @@ export function ProfileDetailsPage() {
                     <div className="flex gap-2 items-end">
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Math.min(Number(e.target.value), formData.apiLimits.requestsMax ?? Infinity)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMin: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(Number(e.target.value), formData.apiLimits.requestsMin ?? 0)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(Number(e.target.value), formData.apiLimits.requestsMin ?? 0)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Math.min(Number(e.target.value), formData.apiLimits.everySecondsMax ?? Infinity)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMin ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMin: Number(e.target.value)} })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(Number(e.target.value), formData.apiLimits.everySecondsMin ?? 0)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(Number(e.target.value), formData.apiLimits.everySecondsMin ?? 0)} })} />
                       </div>
                       <div className="flex items-end gap-2">
                         <Button

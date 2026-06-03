@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.760",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Limits & Control — Min fields no longer get clamped to the Max value while typing, making it possible to freely type a higher Min and then raise Max independently." },
+      { category: "New", text: "Copy Settings dialog now has a search box on the settings side so you can filter down to a specific setting group by name." },
+      { category: "Improvement", text: "Dash, Browser, and Copy Settings are now on the same row as the Account Settings / Human Session / Session Log tabs — the top navigation no longer has any text buttons." },
+      { category: "Improvement", text: "Removed the redundant Accounts back button from the top of the account detail page." },
+    ],
+  },
+  {
     version: "1.0.759",
     date: "3 Jun 2026",
     items: [
