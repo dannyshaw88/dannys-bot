@@ -20,10 +20,10 @@ import { TrustScoreBadge } from "@/components/TrustScoreBadge";
 
 type PingResult = { alive: boolean; latencyMs: number; error?: string } | null;
 
-type ProxyCol = "proxy" | "type" | "username" | "password" | "accounts" | "status" | "acctStatus" | "acctTrustScore";
-const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "accounts", "status", "acctStatus", "acctTrustScore"];
-const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, accounts: 76, status: 88, acctStatus: 90, acctTrustScore: 90 };
-const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", accounts: "ACCOUNTS", status: "PROXY STATUS", acctStatus: "STATUS", acctTrustScore: "TRUSTSCORE" };
+type ProxyCol = "proxy" | "type" | "username" | "password" | "status";
+const DEFAULT_PROXY_COL_ORDER: ProxyCol[] = ["proxy", "type", "username", "password", "status"];
+const DEFAULT_PROXY_COL_WIDTHS: Record<ProxyCol, number> = { proxy: 210, type: 90, username: 120, password: 120, status: 110 };
+const PROXY_COL_LABELS: Record<ProxyCol, string> = { proxy: "PROXY", type: "TYPE", username: "USERNAME", password: "PASSWORD", status: "PROXY STATUS" };
 
 // Lightweight status pill for the proxy page (mirrors the full STATUS_META in ProfilesPage)
 function acctStatusPill(s: string): string {
@@ -145,8 +145,6 @@ function ProxyRow({
   }, [hostPort, username, password, proxyType, proxy, updateProxyMutation, toast]);
 
   const assigned = allProfiles.filter(p => p.proxyId === proxy.id);
-  const validCount = assigned.filter(p => p.accountStatus === "valid").length;
-  const totalCount = assigned.length;
 
   const [assignPending, setAssignPending] = useState(false);
 
@@ -176,35 +174,13 @@ function ProxyRow({
     } finally { setAssignPending(false); }
   };
 
-  const showAcctStatus    = colOrder.includes("acctStatus");
-  const showAcctTrustScore = colOrder.includes("acctTrustScore");
-
   const rowBg = even ? "bg-slate-50/60" : "bg-white";
 
   return (
     <>
       <div className={`flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-b-0 transition-colors hover:bg-slate-100/60 ${rowBg}`}>
         {colOrder.map(col => {
-            if (col === "acctStatus") return (
-            <div key={col} className="shrink-0 flex flex-col gap-0.5 justify-center" style={{ width: colWidths.acctStatus }}>
-              {assigned.length === 0
-                ? <span className="text-[10px] text-muted-foreground/40">—</span>
-                : assigned.slice(0, 5).map(p => (
-                    <span key={p.id} className={`inline-flex items-center px-1 py-px text-[9px] font-bold rounded-full border whitespace-nowrap uppercase truncate ${acctStatusPill(p.accountStatus ?? "pending")}`}>
-                      {acctStatusLabel(p.accountStatus ?? "pending")}
-                    </span>
-                  ))
-              }
-              {assigned.length > 5 && <span className="text-[9px] text-muted-foreground/50">+{assigned.length - 5} more</span>}
-            </div>
-          );
-          if (col === "acctTrustScore") return (
-            <div key={col} className="shrink-0 flex flex-col gap-0.5 justify-center" style={{ width: colWidths.acctTrustScore }}>
-              {assigned.slice(0, 5).map(p => (
-                <span key={p.id}><TrustScoreBadge profileId={p.id} /></span>
-              ))}
-            </div>
-          );
+          if ((col as string) === "accounts" || (col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
           if (col === "proxy") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.proxy }}>
               <Input value={hostPort} onChange={e => setHostPort(e.target.value)} onBlur={() => saveField("hostPort")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="text-xs h-7 w-full" placeholder="host:port" />
@@ -232,13 +208,6 @@ function ProxyRow({
               <Input value={password} onChange={e => setPassword(e.target.value)} onBlur={() => saveField("password")} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} placeholder="password" className="text-xs h-7 w-full" />
             </div>
           );
-          if (col === "accounts") return (
-            <div key={col} className="shrink-0 flex justify-center" style={{ width: colWidths.accounts }}>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${totalCount === 0 ? "bg-slate-100 text-slate-400" : validCount === totalCount ? "bg-emerald-50 text-emerald-700" : validCount === 0 ? "bg-slate-100 text-slate-500" : "bg-yellow-50 text-yellow-700"}`}>
-                <User className="w-3 h-3" />{totalCount === 0 ? "0" : `${validCount}/${totalCount}`}
-              </span>
-            </div>
-          );
           if (col === "status") return (
             <div key={col} className="shrink-0" style={{ width: colWidths.status }}>
               {pingResult ? (
@@ -264,12 +233,11 @@ function ProxyRow({
       {/* Assigned accounts — always visible */}
       <div className="border-b border-border/40 bg-accent/10 px-4 py-2">
         <div className="flex flex-col gap-0.5">
-          {/* Sub-panel column headers — only shown when optional columns are enabled */}
-          {assigned.length > 0 && (showAcctStatus || showAcctTrustScore) && (
+          {assigned.length > 0 && (
             <div className="flex items-center gap-2 px-2 pb-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 select-none">
               <span className="flex-1">Account</span>
-              {showAcctStatus && <span>Status</span>}
-              {showAcctTrustScore && <span>Trust</span>}
+              <span>Status</span>
+              <span>Trust</span>
               <span className="w-3.5" />
             </div>
           )}
@@ -277,14 +245,10 @@ function ProxyRow({
             <div key={profile.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent/40 transition-colors group">
               <User className="w-3.5 h-3.5 shrink-0 text-primary" />
               <span className="text-sm font-medium text-foreground truncate flex-1">{profile.username}</span>
-              {showAcctStatus && (
-                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap uppercase shrink-0 ${acctStatusPill(profile.accountStatus ?? "pending")}`}>
-                  {acctStatusLabel(profile.accountStatus ?? "pending")}
-                </span>
-              )}
-              {showAcctTrustScore && (
-                <span className="shrink-0"><TrustScoreBadge profileId={profile.id} /></span>
-              )}
+              <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full border whitespace-nowrap uppercase shrink-0 ${acctStatusPill(profile.accountStatus ?? "pending")}`}>
+                {acctStatusLabel(profile.accountStatus ?? "pending")}
+              </span>
+              <span className="shrink-0"><TrustScoreBadge profileId={profile.id} /></span>
               <button
                 onClick={() => handleUnassign(profile)}
                 disabled={assignPending}
@@ -342,11 +306,11 @@ export function ProxiesPage() {
   const [search, setSearch] = useState("");
   const [splitGroup, setSplitGroup] = useState<string>("");
 
-  type SortKey = "proxy" | "username" | "accounts" | "status" | null;
+  type SortKey = "proxy" | "username" | "status" | null;
   type SortDir = "asc" | "desc";
   const [sortKey, setSortKey] = useState<SortKey>(() => {
     const v = localStorage.getItem("proxies:sortKey");
-    return (v === "proxy" || v === "username" || v === "accounts" || v === "status") ? v : null;
+    return (v === "proxy" || v === "username" || v === "status") ? v : null;
   });
   const [sortDir, setSortDir] = useState<SortDir>(() =>
     (localStorage.getItem("proxies:sortDir") as SortDir) === "desc" ? "desc" : "asc"
@@ -455,10 +419,6 @@ export function ProxiesPage() {
         cmp = `${a.host}:${a.port}`.localeCompare(`${b.host}:${b.port}`);
       } else if (sortKey === "username") {
         cmp = (a.username ?? "").localeCompare(b.username ?? "");
-      } else if (sortKey === "accounts") {
-        const ac = allProfiles.filter(p => p.proxyId === a.id).length;
-        const bc = allProfiles.filter(p => p.proxyId === b.id).length;
-        cmp = ac - bc;
       } else if (sortKey === "status") {
         const ar = pingResults[a.id];
         const br = pingResults[b.id];
@@ -768,7 +728,7 @@ export function ProxiesPage() {
         {/* Column header */}
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 text-[12px] font-bold uppercase tracking-wide text-foreground select-none shrink-0">
           {proxyColOrder.map(col => {
-            if (col === "acctStatus" || col === "acctTrustScore") return null;
+            if ((col as string) === "accounts" || (col as string) === "acctStatus" || (col as string) === "acctTrustScore") return null;
             const isDragTarget = proxyDragOverCol === col;
             const dragProps = {
               draggable: true as const,
@@ -792,14 +752,14 @@ export function ProxiesPage() {
               onDragEnd: () => { proxyDragColRef.current = null; setProxyDragOverCol(null); },
             };
             const dragStyle = isDragTarget ? "border-l-2 border-primary bg-primary/5" : "";
-            const sortable = col === "proxy" || col === "username" || col === "accounts" || col === "status";
+            const sortable = col === "proxy" || col === "username" || col === "status";
             if (sortable) return (
-              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
+              <button key={col} {...dragProps} onClick={() => handleSort(col as SortKey)} style={{ width: proxyColWidths[col] }} className={`shrink-0 flex items-center gap-0.5 hover:text-primary transition-colors cursor-default whitespace-nowrap ${sortKey === col ? "text-primary" : ""} ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}<SortIcon col={col as SortKey} />
               </button>
             );
             return (
-              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default ${dragStyle}`}>
+              <div key={col} {...dragProps} style={{ width: proxyColWidths[col] }} className={`shrink-0 cursor-default whitespace-nowrap ${dragStyle}`}>
                 {PROXY_COL_LABELS[col]}
               </div>
             );

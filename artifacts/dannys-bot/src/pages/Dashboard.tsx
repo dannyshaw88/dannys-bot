@@ -62,6 +62,17 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.749",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "Proxy Manager: STATUS and TRUSTSCORE columns are no longer duplicated — they now appear only in the per-account sub-panel, not as separate main-row columns." },
+      { category: "Fix", text: "Proxy Manager: ACCOUNTS column removed from main row — account count and per-account status/trust score are in the sub-panel below each proxy." },
+      { category: "Fix", text: "Proxy Manager: PROXY STATUS column header now stays on one line." },
+      { category: "Fix", text: "Embedded browser: challenge pages (Automated behaviour detected) now load correctly — the challenge screen shows so you can click the dismiss button, instead of showing a Facebook error page." },
+      { category: "Fix", text: "Embedded browser: browser panel now opens instantly when clicking the Browser button, instead of taking 5 seconds." },
+    ],
+  },
+  {
     version: "1.0.746",
     date: "3 Jun 2026",
     items: [

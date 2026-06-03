@@ -2298,12 +2298,12 @@ export async function getOrCreateSession(
   // also zero overhead, handled natively inside Chrome.
   const fetchCdp = await page.createCDPSession();
 
-  // Intercept ONLY the challenge redirect URL — needed so startApprovalPolling can
-  // capture the freshest token on each hop.  No image/font/media blocking here;
-  // those restrictions caused pages to hang and white-screen.
+  // Intercept the challenge redirect URL and the scraping_warning consent loop.
+  // No image/font/media blocking here — those restrictions caused pages to hang.
   await fetchCdp.send("Fetch.enable", {
     patterns: [
       { urlPattern: "*update_risky_contactpoint*", requestStage: "Request" },
+      { urlPattern: "*accounts/scraping_warning/*", requestStage: "Request" },
     ]
   });
 
@@ -2319,10 +2319,32 @@ export async function getOrCreateSession(
         (sc as any)._challengeRedirectInterceptor(request.url);
       }
       fetchCdp.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => {});
-    } else {
-      // First navigation to the challenge URL — let Chrome follow it normally.
-      fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
+      return;
     }
+
+    // ── scraping_warning intercept ────────────────────────────────────────────
+    // Instagram's cookie-consent loop: scraping_warning → consent/?flow=... → loop.
+    // Only intercept when 'next' points to /consent/ (the loop case).
+    // For interactive challenges (e.g. "Automated behaviour detected") where next
+    // points to the home feed, let Chrome load the page so the user can dismiss it.
+    if (request.url.includes("accounts/scraping_warning")) {
+      try {
+        const u = new URL(request.url);
+        const nextRaw = u.searchParams.get("next") ?? "";
+        if (nextRaw.includes("/consent/")) {
+          log(`[scraping:${profileId}] scraping_warning (cookie-consent loop) — redirecting to consent: ${nextRaw.slice(0, 80)}`, "browser");
+          fetchCdp.send("Fetch.continueRequest", { requestId, url: nextRaw }).catch(() => {
+            fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
+          });
+          return;
+        }
+        // Interactive challenge — let Chrome load the scraping_warning page normally.
+        log(`[scraping:${profileId}] scraping_warning (interactive challenge) — letting Chrome load it`, "browser");
+      } catch { /* fall through */ }
+    }
+
+    // All other intercepted requests — let Chrome follow normally.
+    fetchCdp.send("Fetch.continueRequest", { requestId }).catch(() => {});
   });
 
   // Auto-dismiss cookie banners + post-login popups + save cookies on every main-frame navigation
@@ -2450,6 +2472,32 @@ export async function getOrCreateSession(
     const sc = sessions.get(profileId);
     if (err === "net::ERR_TOO_MANY_REDIRECTS") {
       if (!sc || !url.includes("instagram.com")) return;
+
+      // ── scraping_warning redirect loop ────────────────────────────────────────
+      // ERR_TOO_MANY_REDIRECTS on scraping_warning: only auto-recover for the
+      // cookie-consent loop (next → /consent/).  For interactive challenges like
+      // "Automated behaviour detected", navigate to the page itself so the user
+      // can see and dismiss it; do NOT redirect to the home feed (that causes a
+      // Facebook/Meta error page because Instagram rejects the flagged request).
+      if (url.includes("scraping_warning")) {
+        log(`[reqfail:${profileId}] scraping_warning ERR_TOO_MANY_REDIRECTS — recovering`, "browser");
+        setTimeout(async () => {
+          try {
+            const scrapingUrl = new URL(url);
+            const nextRaw = scrapingUrl.searchParams.get("next") ?? "";
+            if (nextRaw.includes("/consent/")) {
+              // Cookie-consent loop: jump to consent page to break the cycle.
+              await page.goto(nextRaw, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+            } else {
+              // Interactive challenge: reload the scraping_warning page itself.
+              await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+            }
+          } catch {
+            await page.goto("https://www.instagram.com/", { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+          }
+        }, 1500);
+        return;
+      }
 
       // ── update_risky_contactpoint (device-approval polling challenge) ─────────
       // Instagram's device-approval flow works by issuing a redirect loop at
@@ -2814,6 +2862,30 @@ export async function getOrCreateSession(
   // about:blank in some cases). Instead we store the target in session.pendingInitUrl
   // so attachSSE is the single source of truth for the initial navigation.
   let cookiesLoaded = await loadCookies(profileId, page);
+
+  // ── ig_nrcb pre-seed ───────────────────────────────────────────────────────
+  // ig_nrcb tells Instagram this device has previously accepted cookies.  On a
+  // fresh or cleared session it may be absent, which triggers:
+  //   scraping_warning → consent/?flow=user_cookie_choice_v2 → scraping_warning (loop)
+  // Only set when absent — never overwrite a real value (device fingerprint continuity).
+  try {
+    const existingNrcb = ((await (page as any).cookies(
+      "https://www.instagram.com",
+    ).catch(() => [])) as any[]).filter((c: any) => c.name === "ig_nrcb");
+    if (existingNrcb.length === 0) {
+      await (page as any).setCookie({
+        name:    "ig_nrcb",
+        value:   "1",
+        domain:  ".instagram.com",
+        path:    "/",
+        secure:  true,
+        httpOnly: false,
+        sameSite: "Lax",
+        expires: Math.floor(Date.now() / 1000) + 365 * 24 * 3600,
+      }).catch(() => {});
+      log(`[cookies:${profileId}] ig_nrcb pre-seeded (absent on fresh/cleared session)`, "browser");
+    }
+  } catch { /* non-fatal */ }
 
   // ── DB fallback: re-seed the JSON file from igApiCookies when the file is absent ──
   // The JSON seed file can be deleted by browserAutoLogin (proxy/network error causes

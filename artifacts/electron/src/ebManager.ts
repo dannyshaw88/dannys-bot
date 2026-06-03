@@ -1348,15 +1348,18 @@ export async function openEbWindow(opts: {
       try {
         const u = new URL(details.url);
         const nextRaw = u.searchParams.get("next");
-        if (nextRaw) {
-          // Navigate to 'next' as-is, keeping __coig_challenge_redirected intact.
-          // Stripping this flag caused a redirect loop: Instagram treats a missing flag
-          // as "user hasn't been through the challenge" and shows scraping_warning again.
-          // With the flag present, Instagram marks the challenge complete and loads the feed.
-          console.warn(`[ebManager:${profileId}] scraping_warning intercepted — redirecting to next (${nextRaw.slice(0, 60)}...)`);
+        if (nextRaw && nextRaw.includes("/consent/")) {
+          // Cookie-consent loop: scraping_warning → consent/?flow=user_cookie_choice_v2 → scraping_warning.
+          // Break the loop by jumping directly to the consent page.
+          // Keep __coig_challenge_redirected intact — stripping it causes recurrence.
+          console.warn(`[ebManager:${profileId}] scraping_warning (cookie-consent loop) — redirecting to consent page`);
           callback({ redirectURL: nextRaw });
         } else {
-          callback({ redirectURL: "https://www.instagram.com/accounts/login/" });
+          // Not a cookie-consent loop (e.g. "Automated behaviour detected" challenge).
+          // Let Chrome load the scraping_warning page normally so the user can see
+          // and interact with the challenge (e.g. click the blue dismiss button).
+          console.warn(`[ebManager:${profileId}] scraping_warning (interactive challenge) — letting Chrome load it`);
+          callback({});
         }
       } catch {
         callback({ redirectURL: "https://www.instagram.com/accounts/login/" });
@@ -2102,28 +2105,27 @@ export async function openEbWindow(opts: {
     // After successful 2FA the sessionid cookie already exists, so navigating directly
     // to instagram.com/ bypasses the broken redirect chain and lands on the home feed.
     if (code === -310 && url && url.includes("scraping_warning")) {
-      console.warn(`[ebManager] scraping_warning redirect loop for @${username} — recovering via next param`);
-      await new Promise(r => setTimeout(r, 1500));
-      if (!win.isDestroyed()) {
-        let recoveryUrl = "https://www.instagram.com/accounts/login/";
-        try {
-          // Use the 'next' param from the scraping_warning URL directly.
-          // This carries __coig_challenge_redirected=1, which tells Instagram the
-          // challenge was seen and should not be shown again — navigating to plain
-          // instagram.com/ (without the flag) just restarts the loop.
-          const scrapingUrl = new URL(url);
-          const nextRaw = scrapingUrl.searchParams.get("next");
-          if (nextRaw) {
-            recoveryUrl = nextRaw;
-          } else {
-            const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-            recoveryUrl = recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
-          }
-        } catch {
-          const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
-          recoveryUrl = recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/";
+      try {
+        const scrapingUrl = new URL(url);
+        const nextRaw = scrapingUrl.searchParams.get("next") ?? "";
+        if (nextRaw.includes("/consent/")) {
+          // Cookie-consent loop: redirect to the consent page to break the cycle.
+          console.warn(`[ebManager] scraping_warning (cookie-consent loop) for @${username} — navigating to consent`);
+          await new Promise(r => setTimeout(r, 1500));
+          if (!win.isDestroyed()) win.webContents.loadURL(nextRaw).catch(() => {});
+        } else {
+          // Interactive challenge (e.g. "Automated behaviour detected").
+          // Navigate to the scraping_warning page itself so the user can see it.
+          console.warn(`[ebManager] scraping_warning (interactive challenge) for @${username} — loading challenge page`);
+          await new Promise(r => setTimeout(r, 1500));
+          if (!win.isDestroyed()) win.webContents.loadURL(url).catch(() => {});
         }
-        win.webContents.loadURL(recoveryUrl).catch(() => {});
+      } catch {
+        const recoveryCks = await ses.cookies.get({ name: "sessionid", domain: ".instagram.com" });
+        await new Promise(r => setTimeout(r, 1500));
+        if (!win.isDestroyed()) win.webContents.loadURL(
+          recoveryCks.length > 0 ? "https://www.instagram.com/" : "https://www.instagram.com/accounts/login/"
+        ).catch(() => {});
       }
     }
   });
@@ -2955,7 +2957,12 @@ export function startEbIpcServer(
         const parsedFp: EbFingerprintLite | null = body.ebFingerprint
           ? (typeof body.ebFingerprint === "string" ? JSON.parse(body.ebFingerprint) : body.ebFingerprint)
           : null;
-        await openEbWindow({
+        // Fire-and-forget: respond immediately so the React browser panel can
+        // open without waiting for the full Electron window setup (proxy double-set,
+        // cookie loading, event handler registration, initial navigation).
+        // The window shows via ready-to-show as soon as Chromium is ready.
+        // Errors are logged to the console — they don't block the UI.
+        openEbWindow({
           profileId: pid,
           username:  body.username  ?? String(pid),
           password:  body.password,
@@ -2965,7 +2972,7 @@ export function startEbIpcServer(
           apiUA:     body.apiUA,
           ebFingerprint: parsedFp,
           initialUrl: body.initialUrl ?? undefined,
-        });
+        }).catch(err => console.error(`[eb:open:${pid}] openEbWindow error:`, err?.message ?? err));
         return send(res, 200, { ok: true });
       }
 
