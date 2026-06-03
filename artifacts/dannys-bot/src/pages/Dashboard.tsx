@@ -62,6 +62,15 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.755",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "White screen on startup fixed — a missing import caused the app to crash before showing anything." },
+      { category: "Fix", text: "Login screen now shows a white background with black text and borders regardless of theme setting." },
+      { category: "Fix", text: "Login screen now uses the correct Equinox logo (same as the top-left of the sidebar)." },
+    ],
+  },
+  {
     version: "1.0.754",
     date: "3 Jun 2026",
     items: [

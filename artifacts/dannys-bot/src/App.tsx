@@ -25,9 +25,6 @@ import { BrowserTaskbar } from "@/components/BrowserTaskbar";
 import { queryClient } from "@/lib/queryClient";
 import { useStatusEvents } from "@/hooks/use-profiles";
 import { Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 
 const SAVED_LOGIN_KEY = "equinox:savedLogin";
 
@@ -134,40 +131,51 @@ function LoginSplash() {
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-background z-50">
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "#ffffff" }}>
       <div className="w-full max-w-sm mx-auto px-6">
         <div className="flex flex-col items-center mb-8">
           <img
-            src="/equinox-logo.png"
+            src="/bot-logo.png"
             alt="Equinox"
-            className="w-16 h-16 rounded-2xl mb-4 shadow-lg object-contain"
-            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+            className="w-16 h-16 mb-4 object-contain"
           />
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Equinox</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to your account</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#111827" }}>Equinox</h1>
+          <p className="text-sm mt-1" style={{ color: "#6b7280" }}>Sign in to your account</p>
         </div>
 
         <div className="space-y-3">
           <div>
-            <Label className="text-xs font-medium mb-1.5 block">Username</Label>
-            <Input
+            <label className="text-xs font-medium mb-1.5 block" style={{ color: "#111827" }}>Username</label>
+            <input
               value={username}
               onChange={e => { setUsername(e.target.value); setError(""); }}
               placeholder="Username"
-              className="h-10"
               autoComplete="off"
               onKeyDown={e => e.key === "Enter" && handleLogin()}
+              style={{
+                display: "block", width: "100%", height: "40px",
+                padding: "0 12px", fontSize: "14px",
+                border: "1px solid #d1d5db", borderRadius: "6px",
+                background: "#ffffff", color: "#111827", outline: "none",
+                boxSizing: "border-box",
+              }}
             />
           </div>
           <div>
-            <Label className="text-xs font-medium mb-1.5 block">Password</Label>
-            <Input
+            <label className="text-xs font-medium mb-1.5 block" style={{ color: "#111827" }}>Password</label>
+            <input
               type="password"
               value={password}
               onChange={e => { setPassword(e.target.value); setError(""); }}
               placeholder="Password"
-              className="h-10"
               onKeyDown={e => e.key === "Enter" && handleLogin()}
+              style={{
+                display: "block", width: "100%", height: "40px",
+                padding: "0 12px", fontSize: "14px",
+                border: "1px solid #d1d5db", borderRadius: "6px",
+                background: "#ffffff", color: "#111827", outline: "none",
+                boxSizing: "border-box",
+              }}
             />
           </div>
 
@@ -176,20 +184,26 @@ function LoginSplash() {
               type="checkbox"
               checked={saveLogin}
               onChange={e => setSaveLogin(e.target.checked)}
-              className="w-3.5 h-3.5 accent-primary"
+              className="w-3.5 h-3.5"
             />
-            <span className="text-xs text-muted-foreground">Save login — stay signed in when Equinox restarts</span>
+            <span className="text-xs" style={{ color: "#6b7280" }}>Save login — stay signed in when Equinox restarts</span>
           </label>
 
-          {error && <p className="text-xs text-destructive font-medium">{error}</p>}
+          {error && <p className="text-xs font-medium" style={{ color: "#dc2626" }}>{error}</p>}
 
-          <Button
+          <button
             onClick={handleLogin}
             disabled={loading || !username.trim() || !password}
-            className="w-full h-10 mt-1"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: "100%", height: "40px", marginTop: "4px",
+              background: loading || !username.trim() || !password ? "#93c5fd" : "#2563eb",
+              color: "#ffffff", fontWeight: 600, fontSize: "14px",
+              border: "none", borderRadius: "6px", cursor: loading || !username.trim() || !password ? "not-allowed" : "pointer",
+            }}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
-          </Button>
+          </button>
         </div>
       </div>
     </div>
@@ -208,15 +222,14 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background">
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: "#ffffff" }}>
         <div className="flex flex-col items-center gap-3">
           <img
-            src="/equinox-logo.png"
+            src="/bot-logo.png"
             alt="Equinox"
-            className="w-12 h-12 rounded-xl object-contain"
-            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+            className="w-12 h-12 object-contain"
           />
-          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#6b7280" }} />
         </div>
       </div>
     );
