@@ -2566,6 +2566,7 @@ class AutomationEngine {
       "viewTimelineFeedNotUsedMin", "viewTimelineFeedNotUsedMax",
       "viewTimelineFeedOrderMin",   "viewTimelineFeedOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         const feedCount = randInt(s.viewTimelineFeedMin ?? 3, s.viewTimelineFeedMax ?? 8);
         const reelWatchPctMin = Number(s.reelWatchPercentMin ?? 0);
         const reelWatchPctMax = Number(s.reelWatchPercentMax ?? 0);
@@ -2768,6 +2769,7 @@ class AutomationEngine {
       "checkTimelineStoriesNotUsedMin", "checkTimelineStoriesNotUsedMax",
       "checkTimelineStoriesOrderMin",   "checkTimelineStoriesOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         const storyCount = randInt(s.checkTimelineStoriesMin ?? 3, s.checkTimelineStoriesMax ?? 8);
         try {
           const watched = await client.viewTimelineStories(storyCount);
@@ -2802,6 +2804,7 @@ class AutomationEngine {
       "checkDmNotUsedMin", "checkDmNotUsedMax",
       "checkDmOrderMin",   "checkDmOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         let inboxThreads: { threadId: string; username: string; userId: string; firstName: string; items: { itemId: string; text: string; fromMe: boolean }[] }[] = [];
         let dmOpenCount = randInt(Number(s.checkDmMin ?? 1), Number(s.checkDmMax ?? 5));
         let dmCount = 0;
@@ -2845,6 +2848,7 @@ class AutomationEngine {
       "likeTimelinePostsNotUsedMin", "likeTimelinePostsNotUsedMax",
       "likeTimelinePostsOrderMin",   "likeTimelinePostsOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         console.log(`[engine] @${profile.username}: ▶ ENQUEUE FIRED: likeTimelinePosts STANDALONE (likeTimelinePostsEnabled=true). This is the source of any likes logged below.`);
         const likeCount = randInt(s.likeTimelinePostsMin ?? 0, s.likeTimelinePostsMax ?? 0);
         if (likeCount <= 0) {
@@ -2918,6 +2922,7 @@ class AutomationEngine {
       "repostNotUsedMin", "repostNotUsedMax",
       "repostOrderMin",   "repostOrderMax",
       async () => {
+        client.setApiCallSource("Human Session Emulation");
         // ── Local folder source ───────────────────────────────────────────────
         if (repostLocalFolderEnabled) {
           try {
