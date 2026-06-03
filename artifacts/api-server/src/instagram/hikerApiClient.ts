@@ -489,38 +489,86 @@ export class HikerApiClient {
     max = 50,
     cursor = "",
   ): Promise<{ users: { pk: string; username: string; fullName: string }[]; nextCursor: string | null }> {
-    try {
-      const tag = hashtag.replace(/^#/, "");
-      const amount = Math.min(Math.max(max, 1), 200);
-      const qs = new URLSearchParams({ name: tag, amount: String(amount) });
-      if (cursor) qs.set("next_max_id", cursor);
-      const j = await hikerGet(`/v2/hashtag/medias/recent?${qs}`, this.token);
-      const response = j?.response ?? j;
-      const sections: any[] = Array.isArray(response?.sections) ? response.sections : [];
+    const tag = hashtag.replace(/^#/, "");
+    const amount = Math.min(Math.max(max, 1), 200);
+
+    // Extract users from any HikerAPI hashtag response shape.
+    // HikerAPI v1 returns a flat `items` array of media objects (each with a `.user`).
+    // HikerAPI v2 / Instagram internal may return a `sections` array with nested layout_content.
+    const extractFromResponse = (j: any): { users: { pk: string; username: string; fullName: string }[]; nextCursor: string | null } => {
+      const envelope = j?.response ?? j;
       const seen = new Set<string>();
       const users: { pk: string; username: string; fullName: string }[] = [];
-      for (const section of sections) {
-        const lc = section?.layout_content ?? {};
-        const medias: any[] = lc.medias ?? lc.fill_items ?? [];
-        for (const item of medias) {
-          const media = item?.media ?? item;
-          const u = media?.user ?? media?.owner;
-          if (!u?.pk || !u?.username) continue;
-          if (seen.has(String(u.pk))) continue;
-          seen.add(String(u.pk));
-          users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
-          if (users.length >= max) break;
-        }
+
+      // Shape A: flat items / data array (HikerAPI v1 format)
+      const flatItems: any[] = Array.isArray(envelope)          ? envelope
+        : Array.isArray(envelope?.items)                        ? envelope.items
+        : Array.isArray(envelope?.data)                         ? envelope.data
+        : Array.isArray(j?.items)                               ? j.items
+        : Array.isArray(j?.data)                                ? j.data
+        : [];
+
+      for (const item of flatItems) {
         if (users.length >= max) break;
+        const media = item?.media ?? item;
+        const u = media?.user ?? media?.owner;
+        if (!u?.pk || !u?.username) continue;
+        if (seen.has(String(u.pk))) continue;
+        seen.add(String(u.pk));
+        users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
       }
-      const nextCursor = (response?.more_available && response?.next_max_id)
-        ? String(response.next_max_id)
+
+      // Shape B: sections / layout_content (Instagram internal / HikerAPI v2 format)
+      if (users.length === 0) {
+        const sections: any[] = Array.isArray(envelope?.sections) ? envelope.sections : [];
+        for (const section of sections) {
+          if (users.length >= max) break;
+          const lc = section?.layout_content ?? {};
+          const medias: any[] = lc.medias ?? lc.fill_items ?? [];
+          for (const item of medias) {
+            if (users.length >= max) break;
+            const media = item?.media ?? item;
+            const u = media?.user ?? media?.owner;
+            if (!u?.pk || !u?.username) continue;
+            if (seen.has(String(u.pk))) continue;
+            seen.add(String(u.pk));
+            users.push({ pk: String(u.pk), username: String(u.username), fullName: String(u.full_name ?? "") });
+          }
+        }
+      }
+
+      const nextCursor = (envelope?.more_available && envelope?.next_max_id)
+        ? String(envelope.next_max_id)
         : null;
-      console.error(`[hikerApi] getHashtagUsers #${tag}: ${users.length} users, nextCursor=${nextCursor ?? "none"}`);
       return { users, nextCursor };
-    } catch (e: any) {
-      console.error(`[hikerApi] getHashtagUsers #${hashtag} error: ${e?.message}`);
-      return { users: [], nextCursor: null };
+    };
+
+    // Try v1 first (correct/stable HikerAPI endpoint), fall back to v2.
+    for (const endpoint of ["/v1/hashtag/medias/recent", "/v2/hashtag/medias/recent"]) {
+      try {
+        const qs = new URLSearchParams({ name: tag, amount: String(amount) });
+        if (cursor) qs.set("next_max_id", cursor);
+        const j = await hikerGet(`${endpoint}?${qs}`, this.token);
+
+        if (j && !Array.isArray(j) && (j.detail || j.exc_type)) {
+          const detail: string = j.detail ?? j.exc_type ?? JSON.stringify(j);
+          console.warn(`[hikerApi] getHashtagUsers #${tag} ${endpoint}: API error — "${detail}", trying next endpoint`);
+          continue;
+        }
+
+        const result = extractFromResponse(j);
+        console.log(`[hikerApi] getHashtagUsers #${tag} (${endpoint}): ${result.users.length} users, nextCursor=${result.nextCursor ?? "none"}`);
+
+        // If v1 returned results, use them. If empty, fall through to v2.
+        if (result.users.length > 0 || endpoint === "/v2/hashtag/medias/recent") {
+          return { users: result.users.slice(0, max), nextCursor: result.nextCursor };
+        }
+        console.warn(`[hikerApi] getHashtagUsers #${tag} ${endpoint}: 0 users, trying next endpoint`);
+      } catch (e: any) {
+        console.error(`[hikerApi] getHashtagUsers #${tag} ${endpoint} error: ${e?.message}`);
+      }
     }
+
+    return { users: [], nextCursor: null };
   }
 }

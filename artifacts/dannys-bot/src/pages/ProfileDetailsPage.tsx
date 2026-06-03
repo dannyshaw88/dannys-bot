@@ -839,7 +839,7 @@ export function ProfileDetailsPage() {
             <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto [&::-webkit-scrollbar]:h-0 [scrollbar-width:none]">
               {([
                 { value: "settings",      label: "ACCOUNT SETTINGS", icon: Settings   },
-                { value: "human-session", label: "HUMAN SESSION",     icon: Fingerprint },
+                { value: "human-session", label: "HUMAN SESSION TOOL", icon: Fingerprint },
                 { value: "session-log",   label: "SESSION LOG",       icon: Activity   },
               ] as { value: string; label: string; icon: React.ElementType }[]).map(({ value, label, icon: Icon }) => (
                 <button
@@ -856,8 +856,8 @@ export function ProfileDetailsPage() {
                   {label}
                 </button>
               ))}
-              {/* Action buttons — right side of tab bar */}
-              <div className="ml-auto flex items-center border-l border-border/50">
+              {/* Action buttons — inline after SESSION LOG */}
+              <div className="flex items-center border-l border-border/50">
                 <Link
                   href="/"
                   onClick={() => sessionStorage.setItem("dashboard:profileId", String(profile.id))}
@@ -1309,7 +1309,7 @@ export function ProfileDetailsPage() {
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max Calls</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Math.max(Number(e.target.value), formData.apiLimits.requestsMin ?? 0)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.requestsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, requestsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.requestsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, requestsMax: min} }); }} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min (ms)</Label>
@@ -1317,7 +1317,7 @@ export function ProfileDetailsPage() {
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Max (ms)</Label>
-                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Math.max(Number(e.target.value), formData.apiLimits.everySecondsMin ?? 0)} })} />
+                        <Input type="number" className="h-7 text-xs w-[68px]" value={formData.apiLimits.everySecondsMax ?? ""} onChange={e => updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: Number(e.target.value)} })} onBlur={e => { const v = Number(e.target.value); const min = formData.apiLimits.everySecondsMin ?? 0; if (v < min) updateField({ apiLimits: {...formData.apiLimits, everySecondsMax: min} }); }} />
                       </div>
                       <div className="flex items-end gap-2">
                         <Button

@@ -62,6 +62,16 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string }[] }[] = [
   {
+    version: "1.0.761",
+    date: "3 Jun 2026",
+    items: [
+      { category: "Fix", text: "API Limits & Control — Max Calls and Max (ms) fields now let you type freely; the minimum constraint is only enforced when you leave the field, not on every keystroke." },
+      { category: "Fix", text: "Hashtag scraping in the Follow tool now correctly calls the v1/hashtag endpoint on HikerAPI. Previously the code called v2 and tried to parse a sections structure that v2 does not return, so no users were ever extracted." },
+      { category: "Improvement", text: "Dash, Browser, and Copy Settings buttons are now positioned immediately next to Session Log in the tab bar instead of being pushed to the far right." },
+      { category: "Improvement", text: "Human Session tab renamed to Human Session Tool." },
+    ],
+  },
+  {
     version: "1.0.760",
     date: "3 Jun 2026",
     items: [
